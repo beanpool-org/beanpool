@@ -18,7 +18,7 @@ import {
  * answer in the node's own words. The one thing it does read locally is who is looking, to decide whether to
  * offer the add/remove controls at all (the server refuses them to an admin anyway).
  *
- * Operator manual text for this screen: docs/node-manual/owners-and-admins.md — keep the two in step.
+ * Operator manual text for this screen: packages/beanpool-guide/operators/people/roles.md — keep the two in step.
  */
 
 /** Who is looking at /settings: the admin password counts as owner level (admin-surface.md §2.5). */

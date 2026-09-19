@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { HelpLink } from '../manual/Manual';
 import { getMemberDisplayName, getMemberAvatar, getMemberRawAvatar, fmtDate, fmtLastActive } from './MembersModule';
 import { PruneBranchModal } from './PruneBranchModal';
 import { Avatar } from '../common/Avatar';
@@ -243,6 +244,7 @@ export function MemberDetailModal({
                         <div>
                             <h3 className="text-lg font-black text-white m-0 tracking-tight flex items-center gap-2">
                                 <span>{displayName}</span>
+                                <HelpLink screen="member-detail" />
                                 {member?.platform && member.platform !== 'unknown' && (
                                     <span
                                         className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${

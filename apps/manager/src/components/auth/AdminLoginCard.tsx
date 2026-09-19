@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { HelpLink } from '../manual/Manual';
 import { loginToNode, resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 
 interface AdminLoginCardProps {
@@ -87,12 +88,13 @@ export function AdminLoginCard({ nodeUrl, onAuthenticated }: AdminLoginCardProps
                     <div className="w-12 h-12 shrink-0 rounded-2xl bg-terra-500/20 border border-terra-500/30 flex items-center justify-center text-2xl text-terra-400 font-bold">
                         ⚙️
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                         <h2 className="text-xl font-black text-white m-0 tracking-tight">Node Settings</h2>
                         <p className="text-xs text-nature-400 m-0 mt-0.5 font-medium">
                             Operator administration &amp; community governance
                         </p>
                     </div>
+                    <HelpLink screen="login" />
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">

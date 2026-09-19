@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { HelpLink } from '../manual/Manual';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse, GatewayConfig, SnapshotItem, SnapshotScheduleConfig, BackupVerificationResult, DiskHealth, StorageCleanPreview, StorageCleanResult } from '../../lib/node-client';
 import {
@@ -540,6 +541,7 @@ export function ApplianceSection({
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>⚙️</span>
                         <span>Appliance &amp; Data</span>
+                        <HelpLink screen={`appliance/${subTab}`} />
                     </h2>
                     <p className="text-xs text-nature-400 m-0 mt-1">
                         Backups &amp; restore wizard, logs, ledger conservation, network, identity, and access

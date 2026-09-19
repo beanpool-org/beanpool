@@ -146,9 +146,10 @@ liked. We found this on the test node on 2026-09-19. It was replaced by this bra
     these is refused, a free check is **held for it** for 5 minutes, and the ranks below can't take it. So the
     owner is checked on the first retry after a check frees. That is **not** always within a minute. Typo-rank
     sources don't wait for each other, so an attacker can fill 11 checks a minute from a dirty block and spend
-    one typo-rank check on the 12th, which keeps the owner out for that minute. Each clean /48 or /24 gives it at
-    most 2 of those a day. Measured (`test-password-brake-fairness.ts` part 1b; the owner mistyped once and
-    honours `Retry-After`):
+    one typo-rank check on the 12th, which keeps the owner out for that minute. Each clean /48 or /24 gives it 2
+    of those on the attacker's first day, and up to 4 a day if it primed sources the day before (a prefix's day
+    runs from its first failure, a source's from its last; Fable's delta review of #948, O1). Measured
+    (`test-password-brake-fairness.ts` part 1b; the owner mistyped once and honours `Retry-After`):
 
     | Attacker: one dirty /48, plus | Owner let in after | Before #948's review round 1 (typo rank up to 20 failures) |
     |---|---|---|
@@ -158,9 +159,14 @@ liked. We found this on the test node on 2026-09-19. It was replaced by this bra
     | 5 clean /48s | 11 min | 66 min |
     | 28 clean /48s | 57 min | 365 min |
 
-    So against N clean /48s or /24s the owner waits about 1 + 2N minutes, once per day of the attacker's
-    supply. On main before #948 the same owner never got in. A network with no failures today is never held up
-    at all, so the quick way in is still another network or key sign-in.
+    Those rows are the attacker's first day. Primed the day before, the same attack measured 5 min, 9 min,
+    21 min and 113 min for 1, 2, 5 and 28 clean /48s. So against N clean /48s or /24s the owner waits about
+    1 + 2N to 1 + 4N minutes, once per day of the attacker's supply. On main before #948 the same owner never
+    got in. A network with no failures today is never held up at all, so the quick way in is still another
+    network or key sign-in.
+  - **Someone on your own /24 or /48** can take the held check away with 3 wrong passwords (2 if you mistyped
+    twice): that puts the prefix over 3, so your source ranks as "few" and nothing is held for it (Fable's delta
+    review of #948, O2). The way out is another network or key sign-in from the app.
   - **After 3 or more mistypes** a source ranks as "few", and nothing is held for it. An attacker with a dirty
     block can keep it out for as long as it keeps guessing (as on main). Holding a claim costs the attacker
     nothing: twelve once-failed addresses keep their claims by retrying when they lapse, which shuts out the few
@@ -212,7 +218,8 @@ in any useful time. A weak human-chosen one isn't, so the pre-launch password ro
 
 1. **Use another network**, such as mobile data instead of home Wi-Fi. A source with no failures is always checked.
 2. **Wait.** A source's wait is never more than an hour (10 minutes behind an untrusted proxy). The node-wide cap
-   frees within a minute, and after one or two mistypes a check is held for you. Under a determined attack that
+   frees within a minute, and after one or two mistypes a check is held for you, as long as your /24 or /48 has
+   had at most 3 wrong passwords today (someone on your own network can spoil that). Under a determined attack that
    can still take several minutes (§2.6 above), and after three or more mistypes it may not come at all; then use
    another network or your key. The 429 says how long each wait is.
 3. **Restart the node.** The brake is kept in memory, so a restart clears it completely. This needs shell access
@@ -221,12 +228,11 @@ in any useful time. A weak human-chosen one isn't, so the pre-launch password ro
    `scripts/rotate-node-env.sh` clears the `isLocked` flag for you. Also needs shell access, not the old password.
    See `docs/secrets-rotation-runbook.md`.
 
-**Operator manual: to carry over.** The node manual (#945, `feat/node-manual`) hadn't merged when this was
-written. Its "The admin password brake" section in `packages/beanpool-guide/operators/server/rate-limits.md`
-still describes #937's brake: node-wide, 10 free, up to 10 minutes, for everyone. Its lockout lines in
-`help/troubleshooting.md` and `setup/signing-in.md` say "for everyone" too. Once it merges, replace that section
-with the text below. Then change those lockout lines to "from your network; try another network, or sign in
-from the app", and regenerate.
+**Operator manual: carried over.** #945's review round 2 rewrote the draft below, adding the 1 + 2N to 1 + 4N
+wait, the own-/24-or-/48 sentence and the 2FA note, into "The admin password brake" in
+`packages/beanpool-guide/operators/server/rate-limits.md`. The lockout lines in `help/troubleshooting.md` and
+`setup/signing-in.md` already say "try another network, or sign in from the app". Keep them in step with this
+section.
 
 > **The admin password brake.** Wrong admin passwords are counted per internet address. Each address gets 5
 > free. After that it waits 2 seconds, then 4, 8 and so on, up to an hour. Only that address waits. A right

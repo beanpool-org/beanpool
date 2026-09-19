@@ -7,7 +7,7 @@ import { eventCacheColumns, rsvpSignedMessage, type EventEditPatch, type EventRs
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
-import { parseArchetype } from '@beanpool/core';
+import { parseArchetype, TIER_LEVELS } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -1242,8 +1242,8 @@ export async function refreshBalanceFromServer(pubkey: string) {
         }
         
         if (balData.tier || balData.floor !== undefined) {
-            const floor = -100;
-            const tier = { name: 'Ghost', emoji: '👻', canGift: false, canInvite: false };
+            const floor = 0;   // no baked-in credit: a floor is only ever what the node reports
+            const tier = { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji };
             const newTierStr = JSON.stringify({
                 tier: balData.tier || tier,
                 floor: balData.floor ?? floor,
@@ -1286,9 +1286,9 @@ export async function getBalance(pubkey: string) {
     const commons = await database.getFirstAsync<any>('SELECT balance FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
     
     // Store enriched data from server response
-    let tier = { name: 'Ghost', emoji: '👻', canGift: false, canInvite: false };
+    let tier: { name: string; emoji: string } = { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji };
 
-    let floor = -100;
+    let floor = 0;     // no baked-in credit until the node reports one
     let earnedCredit = 0;
     let grantedCredit = 0;
     let qualifiedValue = 0;

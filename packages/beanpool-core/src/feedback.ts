@@ -9,6 +9,13 @@
 
 export const FEEDBACK_ENDPOINT = 'https://beanpool.org/api/feedback';
 
+/**
+ * Whether the Worker behind FEEDBACK_ENDPOINT is deployed. Every "Suggest a change" entry point hides while this is
+ * false, so no build sends suggestions into the website's HTML fallback. Flip it to true in the same change that
+ * deploys apps/feedback (release checklist).
+ */
+export const FEEDBACK_LIVE = false;
+
 export const FEEDBACK_TEXT_MIN = 10;
 export const FEEDBACK_TEXT_MAX = 2000;
 export const FEEDBACK_COMMUNITY_MAX = 80;

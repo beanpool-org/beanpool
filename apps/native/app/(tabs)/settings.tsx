@@ -22,6 +22,7 @@ import Constants from 'expo-constants';
 import appConfig from '../../app.json';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
+import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference';
 import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../utils/LocalAuth';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
@@ -30,7 +31,7 @@ import { protectionFrom } from '../../utils/protection-state';
 import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
 import type { SsoProvider } from '../../utils/sso-signin';
 import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../../utils/node-post';
-import { parseArchetype, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, type QuizResult } from '@beanpool/core';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 
 
@@ -58,7 +59,7 @@ function getDatabaseFilePaths(dbFilename: string): string[] {
 }
 
 export default function SettingsScreen() {
-    const { theme, colors, toggleTheme, lightPalette, setLightPalette } = useTheme();
+    const { theme, colors, themePreference, setThemePreference, lightPalette, setLightPalette } = useTheme();
     const { identity, setIdentity } = useIdentity();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -152,6 +153,29 @@ export default function SettingsScreen() {
             shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
         },
         toggleThumbOn: { transform: [{ translateX: 22 }] },
+
+        // ─── Appearance (Same as phone / Light / Dark) ───
+        // Three equal segments that wrap rather than truncate: "Same as phone" takes two lines at
+        // 320dp + 1.3x text, and every segment keeps a 48dp touch target.
+        appearanceBlock: {
+            padding: 14,
+            borderBottomWidth: 1, borderBottomColor: colors.surface.subtle,
+        },
+        appearanceHeader: { flexDirection: 'row', alignItems: 'center' },
+        segmentRow: {
+            flexDirection: 'row', marginTop: 12, padding: 3, gap: 3,
+            borderRadius: 12, backgroundColor: colors.surface.subtle,
+        },
+        segment: {
+            flex: 1, minHeight: 48, borderRadius: 9,
+            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 6,
+        },
+        segmentSelected: {
+            backgroundColor: colors.surface.card,
+            borderWidth: 1, borderColor: colors.brand.primary,
+        },
+        segmentText: { fontSize: 13, fontWeight: '500', color: colors.text.secondary, textAlign: 'center' },
+        segmentTextSelected: { fontWeight: '700', color: colors.text.heading },
 
         // ─── Light Color Schemes ───
         colorSchemeContainer: {
@@ -1478,22 +1502,32 @@ export default function SettingsScreen() {
                 {/* ─── App Settings ─── */}
                 <Text style={styles.sectionHeader}>APP SETTINGS</Text>
                 <View style={styles.menuGroup}>
-                    {/* Dark Mode Switch */}
-                    <View style={styles.menuBtn}>
-                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌙</Text></View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Dark Mode</Text>
-                            <Text style={styles.menuSub}>Toggle dark appearance</Text>
+                    {/* Appearance: follow the phone, or always light / dark */}
+                    <View style={styles.appearanceBlock}>
+                        <View style={styles.appearanceHeader}>
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌙</Text></View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>Appearance</Text>
+                                <Text style={styles.menuSub}>Light or dark, or the same as your phone</Text>
+                            </View>
                         </View>
-                        <Pressable 
-                            style={[styles.toggle, theme === 'dark' && styles.toggleOn]} 
-                            accessibilityRole="button" 
-                            accessibilityLabel="Toggle dark mode" 
-                            accessibilityState={{ checked: theme === 'dark' }} 
-                            onPress={toggleTheme}
-                        >
-                            <View style={[styles.toggleThumb, theme === 'dark' && styles.toggleThumbOn]} />
-                        </Pressable>
+                        <View style={styles.segmentRow} accessibilityRole="radiogroup" accessibilityLabel="Appearance">
+                            {THEME_PREFERENCE_OPTIONS.map(({ value, label }) => {
+                                const selected = themePreference === value;
+                                return (
+                                    <Pressable
+                                        key={value}
+                                        style={[styles.segment, selected && styles.segmentSelected]}
+                                        accessibilityRole="radio"
+                                        accessibilityLabel={label}
+                                        accessibilityState={{ checked: selected }}
+                                        onPress={() => setThemePreference(value)}
+                                    >
+                                        <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{label}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
                     </View>
 
                     {/* App Lock Switch */}
@@ -1623,14 +1657,32 @@ export default function SettingsScreen() {
                     </View>
                 </View>
 
-                {/* ─── The members' BeanPool sheet: your community, guides, Suggest a change, what's new ─── */}
+                {/* ─── BeanPool: the members' sheet, Suggest a change (goes to beanpool.org, not this community's node), the website ─── */}
                 <Text style={styles.sectionHeader}>BEANPOOL</Text>
                 <View style={styles.menuGroup}>
-                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => router.push('/beanpool')} accessibilityRole="button" accessibilityLabel="BeanPool: help and how it works">
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/beanpool')} accessibilityRole="button" accessibilityLabel="BeanPool: help and how it works">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🫘</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>BeanPool: help & how it works</Text>
-                            <Text style={styles.menuSub}>Guides, the rules, questions, what's new, Suggest a change</Text>
+                            <Text style={styles.menuText}>Help & how it works</Text>
+                            <Text style={styles.menuSub}>Guides, the rules, questions, what's new</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+                    {FEEDBACK_LIVE && (
+                        <Pressable style={styles.menuBtn} onPress={() => router.push('/suggest-change')} accessibilityRole="button" accessibilityLabel="Suggest a change to BeanPool">
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>Suggest a change to BeanPool</Text>
+                                <Text style={styles.menuSub}>Ideas and problems go to the project team</Text>
+                            </View>
+                            <Text style={styles.menuChevron}>›</Text>
+                        </Pressable>
+                    )}
+                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => Linking.openURL('https://beanpool.org')} accessibilityRole="link" accessibilityLabel="beanpool.org, opens in your browser">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌐</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>beanpool.org</Text>
+                            <Text style={styles.menuSub}>The BeanPool project website</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>

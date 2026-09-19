@@ -16,6 +16,7 @@
  * screen: a filter the member cannot see never hides a post.
  */
 
+import { tierIndexForCredit } from '@beanpool/core';
 import { normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
@@ -137,12 +138,13 @@ export function feedPostVisible(p: any, state: MarketFilterState, ctx: MarketFil
     if (show.beans && state.beansOnly && (type === 'poll' || type === 'event' || p.cash_also_needed === 1)) return false;
 
     if (show.trust && state.trust !== 'all') {
-        const cycled = p.author_energy_cycled ?? 0;
+        // author_energy_cycled is the author's tier credit; 'resident' / 'steward' / 'elder' mean "at least".
+        const tierIdx = tierIndexForCredit(p.author_energy_cycled ?? 0);
         if (state.trust === 'founding' && (type === 'poll' || type === 'event' || !p.authorFoundingNeeded)) return false;
-        if (state.trust === 'new' && cycled >= 120) return false;
-        if (state.trust === 'resident' && cycled < 120) return false;
-        if (state.trust === 'steward' && cycled < 520) return false;
-        if (state.trust === 'elder' && cycled < 1320) return false;
+        if (state.trust === 'new' && tierIdx > 0) return false;
+        if (state.trust === 'resident' && tierIdx < 1) return false;
+        if (state.trust === 'steward' && tierIdx < 2) return false;
+        if (state.trust === 'elder' && tierIdx < 3) return false;
     }
 
     // A post with no location is kept, as before: the radius cannot place it.

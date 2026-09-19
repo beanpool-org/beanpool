@@ -16,7 +16,7 @@ import {
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
     getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, type MemberNodeRole,
-    canVouch,
+    canVouch, getMemberTrustProfile,
     getMemberStats,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
     getNodeConfig, updateNodeConfig,
@@ -574,11 +574,10 @@ router.post('/api/local/admin/data', async (ctx) => {
     ctx.body = {
         members: getAllMembers().filter(m => m.status !== 'pruned').map(m => {
             const isVoucher = canVouch(m.publicKey);
-            const earned = m.earnedCredit || 0;
-            let tier = earned >= 1400 ? 'Elder' : earned >= 600 ? 'Steward' : earned >= 200 ? 'Resident' : 'Newcomer';
-            if (isVoucher && tier === 'Newcomer') {
-                tier = 'Elder';
-            }
+            // The member's real tier, from the same profile their own app shows. `m.earnedCredit` is only
+            // the granted lane (it leaves out earned trade and vouches), and vouching is a capability
+            // shown by canVouch, not a tier.
+            const tier = getMemberTrustProfile(m.publicKey).tier.name;
             return {
                 ...m,
                 // Admins see the day too: a node admin could otherwise match secret-ballot votes to voters.

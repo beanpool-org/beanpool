@@ -32,10 +32,10 @@ import {
     approvePostRequest,
     completePostTransaction,
     adminPruneUser,
+    usableFloor,
 } from './state-engine.js';
 import {
     liveOfferCount,
-    usableFloor,
     hasListedOffer
 } from '@beanpool/engine';
 
@@ -149,7 +149,7 @@ async function main() {
     // Offer counting & credit covenant isolation
     assert(liveOfferCount(db, 'pub-alice') === 0, 'liveOfferCount does NOT count polls');
     assert(hasListedOffer(db, 'pub-alice') === false, 'hasListedOffer is false (poll is not an offer)');
-    assert(usableFloor(db, 'pub-alice') === 0, 'usableFloor is not widened by polls');
+    assert(usableFloor('pub-alice') === 0, 'usableFloor is not widened by polls');
 
     // Need covenant check: Alice cannot post a Need without an Offer
     errThrew = false;

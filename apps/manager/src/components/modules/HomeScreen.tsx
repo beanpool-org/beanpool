@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { DiagnosticsResponse, NodeDataPayload, MemberItem } from '../../lib/node-client';
+import { FEEDBACK_LIVE } from '@beanpool/core';
 import { SuggestChangePanel } from './SuggestChangePanel';
 
 interface HomeScreenProps {
@@ -460,7 +461,7 @@ export function HomeScreen({
                 )}
             </div>
 
-            <SuggestChangePanel appVersion={version} />
+            {FEEDBACK_LIVE && <SuggestChangePanel appVersion={version} />}
         </div>
     );
 }

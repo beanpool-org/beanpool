@@ -21,26 +21,17 @@ import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
-import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndexForCredit, tierIndexForName, type TierName } from '@beanpool/core';
 
-// ── Trust model constants (mirrors beanpool-core/protocol.ts) ──
+// ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
 //   earned = floor(CREDIT_MAX_EARNED × V / (V + TRUST_CURVE_K))
-// There is NO baked-in floor: floor = -(earned + granted), so it slides
+// There is NO baked-in floor: floor = -(vouch + earned + granted), so it slides
 // continuously from 0 down to -2000. Tiers are recognition milestones (they don't set the floor).
-const CREDIT_MAX_EARNED = 1920;      // asymptote of the earned-trust curve
-const TRUST_CURVE_K = 5000;          // curve constant (higher = stricter)
+const { CREDIT_MAX_EARNED, TRUST_CURVE_K, CREDIT_BASE_FLOOR } = PROTOCOL_CONSTANTS;
 const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP;   // diversity: value with any ONE partner counts at most this much (canonical 500 from @beanpool/core)
 const CIRC_TICKS = [200, 500, 1000]; // circulation rate change points
 
-// Tier credit thresholds (earned+granted). They map to the floor breakpoints
-// -200/-600/-1400 the server uses in getTier(), given floor = -(earned + granted).
-function getTierIndex(credit: number) {
-    if (credit >= 1380) return 3;
-    if (credit >= 580)  return 2;
-    if (credit >= 180)  return 1;
-    return 0;
-}
 // Inverse of the curve: qualified value needed to reach a target earned credit.
 function valueForEarned(target: number): number {
     if (target <= 0) return 0;
@@ -53,22 +44,30 @@ export default function LedgerScreen() {
     const { identity } = useIdentity();
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-    // Tiers are recognition milestones. `floor` is the credit floor you reach on ENTERING
-    // the tier (floors slide continuously between them). `min` = earned+granted credit needed.
-    const TIERS = useMemo(() => [
-        { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: 0,
-          blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
-          perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
-        { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 180,  floor: -200,
-          blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
-          perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
-        { name: 'Steward',  emoji: '🏛️', color: colors.trust.steward.fg, bg: colors.trust.steward.bg, border: colors.trust.steward.border, min: 580,  floor: -600,
-          blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
-          perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
-        { name: 'Elder',    emoji: '⛰️', color: colors.trust.elder.fg, bg: colors.trust.elder.bg, border: colors.trust.elder.border, min: 1380, floor: -1400,
-          blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
-          perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
-    ], [colors]);
+    // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
+    // `min` = the credit backing the floor (vouch + earned + granted); `floor` = the floor on ENTERING
+    // the tier (floors slide continuously between them). Only presentation lives here.
+    const TIERS = useMemo(() => {
+        const look: Record<TierName, { tone: { fg: string; bg: string; border: string }; blurb: string; perks: string[] }> = {
+            Newcomer: { tone: colors.trust.newcomer,
+                blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
+                perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
+            Resident: { tone: colors.trust.resident,
+                blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
+                perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
+            Steward: { tone: colors.trust.steward,
+                blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
+                perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
+            Elder: { tone: colors.trust.elder,
+                blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
+                perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
+        };
+        return TIER_LEVELS.map(t => {
+            const { tone, blurb, perks } = look[t.name];
+            return { name: t.name, emoji: t.emoji, color: tone.fg, bg: tone.bg, border: tone.border,
+                min: t.minCredit, floor: CREDIT_BASE_FLOOR - t.minCredit, blurb, perks };
+        });
+    }, [colors]);
 
     React.useEffect(() => {
         const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
@@ -78,7 +77,7 @@ export default function LedgerScreen() {
     const [txns, setTxns] = useState<any[]>([]);
     const [balanceState, setBalanceState] = useState<any>({
         balance: 0, floor: 0,
-        tier: { name: 'Ghost', emoji: '👻', canGift: false, canInvite: false },
+        tier: { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji },
         earnedCredit: 0, commons: 0, trustStats: null,
     });
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -405,9 +404,11 @@ export default function LedgerScreen() {
 
     // Trust calculations (value-based)
     const earned = balanceState.earnedCredit || 0;   // from the saturating value curve
-    const granted = balanceState.grantedCredit || 0; // vouch/genesis/admin (separate lane)
-    const totalCredit = Math.min(CREDIT_MAX_EARNED, earned + granted); // this is what backs the floor & tier
+    // What backs the floor & tier: vouch + earned + granted = CREDIT_BASE_FLOOR − floor, the same
+    // quantity the node's getTier reads. (earned + granted alone left out the vouch.)
+    const totalCredit = Math.max(0, CREDIT_BASE_FLOOR - (balanceState.floor ?? 0));
     const ec = totalCredit;                            // "trust" shown to the user
+    const notEarned = Math.max(0, totalCredit - earned); // vouch + grants — fixed, not grown by trading
     const qualifiedValue = balanceState.qualifiedValue || 0;
     const avgRating = balanceState.avgRating || 0;
     const reviewCount = balanceState.reviewCount || 0;
@@ -416,9 +417,8 @@ export default function LedgerScreen() {
     const uniquePartners = ts?.uniquePartners || 0;
 
     // Tier: trust the server's authoritative tier name; fall back to the credit threshold.
-    const TIER_NAMES = ['Newcomer', 'Resident', 'Steward', 'Elder'];
-    const serverIdx = TIER_NAMES.indexOf(balanceState.tier?.name);
-    const tierIdx = serverIdx >= 0 ? serverIdx : getTierIndex(totalCredit);
+    const serverIdx = tierIndexForName(balanceState.tier?.name);
+    const tierIdx = serverIdx >= 0 ? serverIdx : tierIndexForCredit(totalCredit);
     const tier = TIERS[tierIdx];
     const nextTier = TIERS[tierIdx + 1] || null;
     const ELDER_MIN = TIERS[TIERS.length - 1].min;
@@ -426,9 +426,9 @@ export default function LedgerScreen() {
     const creditsToNext = nextTier ? Math.max(0, nextTier.min - totalCredit) : 0;
 
     // Value needed for the next tier: invert the curve for the earned credit that tier
-    // requires (granted credit is fixed), minus the value already traded. Then translate
+    // requires (vouch + grants are fixed), minus the value already traded. Then translate
     // to a rough "new partners" count (value with any one partner is diversity-capped).
-    const targetEarned = nextTier ? Math.max(0, nextTier.min - granted) : 0;
+    const targetEarned = nextTier ? Math.max(0, nextTier.min - notEarned) : 0;
     const valueToNext = nextTier ? Math.max(0, valueForEarned(targetEarned) - qualifiedValue) : 0;
     const partnersToNext = nextTier && Number.isFinite(valueToNext)
         ? Math.max(1, Math.ceil(valueToNext / PER_COUNTERPARTY_CAP)) : 0;
@@ -616,7 +616,7 @@ export default function LedgerScreen() {
             <Text style={styles.sectionLabel}>WHAT BUILDS YOUR TRUST</Text>
             <View style={styles.achieveRow}>
                 {[
-                    { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1380)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
+                    { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
                     { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: palette.blue500, trackBg: theme === 'dark' ? 'rgba(59,130,246,0.15)' : palette.blue50 },
                     { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: palette.orange500, trackBg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : palette.orange50 },
                 ].map(a => (

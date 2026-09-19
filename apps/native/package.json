@@ -1,7 +1,7 @@
 {
   "name": "beanpool-pillar",
   "main": "expo-router/entry",
-  "version": "1.2.37",
+  "version": "1.2.38",
   "description": "BeanPool Pillar Toggle — Background Mesh State Mirror",
   "private": true,
   "scripts": {
@@ -47,6 +47,7 @@
     "expo-linking": "~55.0.16",
     "expo-local-authentication": "~55.0.15",
     "expo-location": "~55.1.11",
+    "expo-navigation-bar": "~55.0.14",
     "expo-notifications": "~55.0.24",
     "expo-router": "~55.0.16",
     "expo-secure-store": "^55.0.15",

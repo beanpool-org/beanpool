@@ -13,11 +13,11 @@ import {
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
-import { type Theme } from '../lib/useTheme';
+import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
-import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, type QuizResult } from '@beanpool/core';
 import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
 
@@ -25,8 +25,8 @@ interface Props {
     identity: BeanPoolIdentity;
     onIdentityUpdated: (identity: BeanPoolIdentity) => void;
     onBack: () => void;
-    theme: Theme;
-    onToggleTheme: () => void;
+    themePreference: ThemePreference;
+    onThemePreferenceChange: (preference: ThemePreference) => void;
     initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest';
     onReRunSetup?: () => void;
     /** Version reported by the connected node, when its health check has answered. */
@@ -74,7 +74,7 @@ function ToggleSwitch({
     );
 }
 
-export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode, onReRunSetup, nodeVersion }: Props) {
+export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, onReRunSetup, nodeVersion }: Props) {
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest'>(initialMode || 'menu');
 
     useEffect(() => {
@@ -658,22 +658,34 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 APP SETTINGS
                             </div>
                             <div className="space-y-2.5">
-                                {/* Dark Mode Switch */}
-                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
+                                {/* Appearance: follow the device, or always light / dark */}
+                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800">
                                     <div className="flex items-center gap-3">
-                                        <span className="text-xl">{theme === 'dark' ? '🌙' : '☀️'}</span>
+                                        <span className="text-xl">🌙</span>
                                         <div>
-                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Dark Appearance</div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">Toggle dark mode</div>
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Appearance</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">Light or dark, or the same as your device</div>
                                         </div>
                                     </div>
-                                    <ToggleSwitch
-                                        checked={theme === 'dark'}
-                                        onChange={onToggleTheme}
-                                        label="Dark Appearance"
-                                        activeBgClass="bg-slate-700 border-slate-600"
-                                        inactiveBgClass="bg-terra-100 border-terra-200"
-                                    />
+                                    <div role="radiogroup" aria-label="Appearance" className="mt-3 flex gap-1 p-1 rounded-xl bg-nature-100 dark:bg-nature-800">
+                                        {THEME_PREFERENCE_OPTIONS.map(({ value, label }) => {
+                                            const selected = themePreference === value;
+                                            return (
+                                                <button
+                                                    key={value}
+                                                    type="button"
+                                                    role="radio"
+                                                    aria-checked={selected}
+                                                    onClick={() => onThemePreferenceChange(value)}
+                                                    className={`flex-1 min-h-[48px] px-1.5 py-1.5 rounded-lg text-[13px] text-center leading-tight cursor-pointer transition-colors ${selected
+                                                        ? 'bg-white dark:bg-nature-950 border border-nature-500 font-bold text-nature-900 dark:text-white'
+                                                        : 'border border-transparent font-medium text-nature-600 dark:text-nature-300'}`}
+                                                >
+                                                    {label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
 
                                 {/* Notification Preferences */}
@@ -729,7 +741,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                         </div>
 
                         {/* ─── BEANPOOL PROJECT (goes to beanpool.org, not to this community's node) ─── */}
-                        <div>
+                        {FEEDBACK_LIVE && <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
                                 BEANPOOL PROJECT
                             </div>
@@ -745,7 +757,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 </div>
                                 <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
                             </button>
-                        </div>
+                        </div>}
 
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>

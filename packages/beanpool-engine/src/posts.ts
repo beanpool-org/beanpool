@@ -1,12 +1,10 @@
-// Marketplace Posts pure database reads, search keyword generators, and offer covenant calculations.
+// Marketplace Posts pure database reads and search keyword generators.
 //
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
 import {
-    OFFER_BANDS,
-    getTier,
-    grantedCreditForTier,
+    PROTOCOL_CONSTANTS,
     parseReachPeers,
     type PostReach,
     type AudienceScope
@@ -69,6 +67,11 @@ export interface MarketplacePost {
     reach?: PostReach;
     /** Peer ids named when `reach === 'peers'`. Empty for every other reach. */
     reachPeers?: string[];
+    /**
+     * The credit backing the author's floor (vouch + earned + granted = CREDIT_BASE_FLOOR − floor) — the
+     * quantity tierForCredit takes, so a card's badge matches the author's real tier. The name is historical:
+     * it is not beans sent.
+     */
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
     authorAvatarUrl?: string | null;
@@ -234,12 +237,13 @@ export function generateSearchKeywords(title: string, description: string, categ
 
 export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): MarketplacePost {
     const postPhotos = photosByPost.get(row.id) || [];
+    // The author's tier credit, from the same profile their own tier comes from. The earned lane alone
+    // left out grants and vouches, so an admin-badged Elder showed as a Newcomer on their cards.
     let trustPoints = 0;
     try {
-        const trustProfile = getMemberTrustProfile(db, row.author_pubkey);
-        trustPoints = trustProfile.earnedCredit;
+        trustPoints = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - getMemberTrustProfile(db, row.author_pubkey).floor;
     } catch (e) {
-        trustPoints = row.author_energy_cycled ?? 0;
+        trustPoints = 0;
     }
 
     return {
@@ -311,27 +315,10 @@ export function liveOfferCount(db: Db, publicKey: string): number {
     return row?.c || 0;
 }
 
-export function usableFloor(db: Db, publicKey: string): number {
-    const member = db.prepare("SELECT credit_frozen, vouch_credit, earned_credit, status, joined_at FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!member || member.credit_frozen) return 0;
-
-    const count = liveOfferCount(db, publicKey);
-    const bandLimit = OFFER_BANDS[Math.min(count, OFFER_BANDS.length - 1)];
-
-    const tier = getTier(member);
-    const granted = grantedCreditForTier(tier.name);
-    const earned = member.earned_credit || 0;
-    const vouch = member.vouch_credit || 0;
-
-    const totalCalculated = Math.max(vouch + earned, granted);
-    return Math.min(bandLimit, totalCalculated);
-}
-
 export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
                g.name as target_group_name,
-               COALESCE((SELECT SUM(amount) FROM transactions WHERE from_pubkey = m.public_key), 0) as author_energy_cycled,
                COALESCE(m.earned_credit, 0) as author_earned_credit,
                (
                  COALESCE((SELECT COUNT(*) FROM transactions t

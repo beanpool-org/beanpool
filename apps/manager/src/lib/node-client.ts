@@ -1814,6 +1814,8 @@ export interface TakeoverStatus {
     /** Owners the lock could not include, and why. */
     skippedOwners: (TakeoverOwner & { why: string })[];
     recoveryCode: { codeId: number; createdAt: string } | null;
+    /** After a take-over by code: that code is spent until a new one is made (sealed keys slice 5). */
+    codeUsed?: { codeId: number; at: string; message: string } | null;
 }
 
 /** Whether the next backup leaves locked (backup-status → backupLock, sealed backups #968). */

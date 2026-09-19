@@ -77,6 +77,18 @@ describe('TakeoverLockPanel — the status', () => {
         expect(screen.getByTestId('recovery-code-line')).toHaveTextContent(/Recovery code #2, made .*2026/);
     });
 
+    it('after a take-over by code: "your recovery code was used, make a new one"; not shown otherwise', async () => {
+        const used = { codeId: 2, at: '2026-09-20T01:00:00.000Z', message: 'Your recovery code #2 was used to take over on 2026-09-20T01:00:00.000Z. Make a new one: whoever has that paper can open this community\'s keys.' };
+        mockNode({ [statusRoute]: { json: { ...SEALED, codeUsed: used } }, [backupRoute]: { json: { role: 'primary', backupLock: LOCKED } } });
+        const { unmount } = render(<TakeoverLockPanel activeNode={node} />);
+        expect(await screen.findByTestId('takeover-code-used')).toHaveTextContent(/recovery code #2 was used .*Make a new one/);
+        unmount();
+        mockNode({ [statusRoute]: { json: { ...SEALED, codeUsed: null } }, [backupRoute]: { json: { role: 'primary', backupLock: LOCKED } } });
+        render(<TakeoverLockPanel activeNode={node} />);
+        await waitFor(() => expect(screen.getByTestId('takeover-state')).toHaveTextContent('Locked.'));
+        expect(screen.queryByTestId('takeover-code-used')).toBeNull();
+    });
+
     it('not locked yet: says why, and that backups are not locked', async () => {
         mockNode({
             [statusRoute]: { json: { ...NO_CODE, state: 'no-recipients', envelopeId: null, sealedAt: null, recipients: { owners: [], codes: [] },

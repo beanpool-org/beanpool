@@ -1,7 +1,7 @@
 ---
 slug: backups-and-replicas
 title: Backups and replicas
-summary: What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words, restoring, and running a second server as a standby.
+summary: What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words, restoring, running a second server as a standby, and taking over on it.
 related: updates-and-health, troubleshooting, what-the-server-sees, first-time-setup
 ---
 
@@ -144,6 +144,51 @@ A second server can follow yours as a read-only standby, copying changes about e
 - On the standby, **Live Backup Server** says what it holds: when the newest copy was locked and who can open it. If the owners or the recovery code changed since the copy before, it says who was added or removed.
 - On your server, **Replication Access** says which standby holds which copy. When an owner is added or removed, a standby shows as holding keys "from before the latest change" until it next copies, about a minute later.
 - A main server running a BeanPool from before this has nothing to send. The standby says "the main server is too old to send a take-over envelope" and keeps copying the database as before. A server with no owner and no recovery code has nothing to send either, and the standby says that instead.
-- Taking over with these keys comes in a later update. Until then, making a standby the main server works as below.
-- **A standby is not a complete copy.** It does not copy Decisions and their votes, who holds which role, enterprise pledges and keeper changes, invites, or members' notification settings. Keep file backups as well.
-- Making a standby the main server uses scripts in the BeanPool source code, not in the server image, and the first start after needs PROMOTED_FROM_BACKUP=true.
+- **A standby is not a complete copy.** It does not copy Decisions and their votes, who holds which role, enterprise pledges and keeper changes, invites, or members' notification settings. Keep file backups as well. (The roles come back when it takes over: they are in the locked keys.)
+- If your main server is gone for good, the standby can take over as the main server. See the next part.
+
+## Taking over on the standby
+
+If the main server is gone for good (a dead disk, a lost machine), the standby can become the community's main server with the printed recovery code. The community stays itself: the same identity, the same owners and admins, the same links with other communities, the same admin password and two-factor sign-in, and the same web address. Members change nothing.
+
+Do this only when the main server is really gone. Two servers with one identity compete with each other, so **never start the old main server again** afterwards.
+
+You need:
+
+- the standby's own Settings (its own admin password);
+- the paper with the recovery code. The code on it must be one the standby's copy of the keys was locked to: the screen says which number it needs.
+
+On the standby: **Appliance & Data**, then **Backups & Restore**, then **Take over as the main server** at the bottom.
+
+- **Step 1.** The first screen says what will happen and **what will be missing**: Decisions and their votes, enterprise pledges and keeper changes, invites, members' notification settings, settings the main server kept in its own database other than its web address (such as what it lists in the directory), and anything that changed after the standby last copied. Press **I understand, continue**.
+- **Step 2.** Type the recovery code and press **Open the keys**. A mistyped letter is caught at once. A wrong code counts like a wrong password, and after a few the standby makes you wait before the next try, whatever admin password you signed in with.
+- **Step 3.** The next screen shows what the keys hold: when they were locked, the identity the server will keep, the owners, how many admins, how many links with other communities, the web address, whether the tunnel for it comes back, whether the main server still answers, and when the standby last copied from it. If the main server still answers, it says so in amber: stop and check. Tick **The main server is gone, and nobody will start it again**, then press **Take over now**.
+- **Step 4.** The standby works through its steps, restarts itself, and carries on after the restart. The screen follows each step and says "restarting" while the server is starting again. At the end it says **This server is now the community's main server**, whether the ledger adds up, and what to do next.
+
+What the standby does, in order. Each step is written to data/takeover-journal.json before the next starts. If the power goes or the server stops part-way, it carries on from the first step not done the next time it starts; nothing is done twice.
+
+- keeps a copy of its own keys and settings in a folder named pre-takeover- and the date, in its data folder;
+- writes the main server's node key (libp2p_key), so it keeps the main server's identity, and its genesis, community key and links with other communities. Its own link to the old main server goes;
+- installs the community's admin password and two-factor sign-in, and the record of the recovery code;
+- brings back the owners and admins (their member accounts must be in the standby's copy of the database; any that are not are named on the result screen);
+- brings back the web address, with its tunnel token;
+- becomes the main server in its own settings (local-config.json), so NODE_ROLE=backup left in its .env does not matter and a later update cannot turn it back into a standby;
+- stops copying from the old main server, and restarts;
+- checks once that the ledger adds up, before members trade on it;
+- posts a notice, "This community moved to a new server", with the date and the code's number. Only people connected at that moment see it live; there are no push notifications, because a standby has no copy of phones' notification tokens;
+- locks the keys again, on this server, to the owners and the same recovery code, and deletes the copies it held from the old main server;
+- starts the tunnel for the web address.
+
+Afterwards:
+
+- Sign in to Settings with **the community's** admin password, or an owner's key. The standby's own admin password no longer works.
+- **Make a new recovery code.** The one you typed is spent: until you replace it, Who can unlock this community says "Your recovery code was used. Make a new one". Anyone holding that paper can open the community's keys.
+- If the result says the tunnel did not come back, the keys had no tunnel token. With PUBLIC_ADDRESS_NAME set, the server asks for the address again within a few minutes: it has the same identity, so the name is still its own. Otherwise claim the address again under Public Address. The standby looks in the older copies it held for a token before giving up.
+- Other standbys trust the new main server already, because it has the same identity. Make a replication token on it and paste it into each of them.
+- Keep making file backups.
+
+If something went wrong, the standby's own files from before are in the pre-takeover- folder. The step that failed is named on the screen and in data/takeover-journal.json.
+
+The standby refuses to take over if the keys it holds are for another community, or are not signed by the main server it copies from. It then writes nothing.
+
+The old way, the script scripts/restore-primary.mjs in the BeanPool source code, still works for now, but it gives the server a new identity: its web address has to be claimed again, and every link with another community made again. Use the take-over above instead.

@@ -250,6 +250,12 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                 </button>
             </div>
 
+            {status?.codeUsed && (
+                <div role="alert" data-testid="takeover-code-used" className="p-3 rounded-xl border bg-amber-950/70 border-amber-800 text-amber-200 text-xs leading-relaxed" style={{ overflowWrap: 'anywhere' }}>
+                    ⚠️ {status.codeUsed.message}
+                </div>
+            )}
+
             {stateLine && (
                 <div role="status" data-testid="takeover-state" className={`p-3 rounded-xl border text-xs leading-relaxed ${stateTone}`}>
                     {stateLine}

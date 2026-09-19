@@ -9,6 +9,14 @@
  *   GET  /api/local/admin/takeover-envelope             token/admin  the sealed bytes, ETag = envelopeId
  *   GET  /api/node/takeover-envelope/header             owner, signed the public header, for an owner's app (§7)
  *
+ * Take-over on a standby, by recovery code (§5.3, §5.4; slice 5; services/takeover.ts does the work):
+ *   POST /api/local/admin/takeover/open                 owner        type the code: opens the held keys in memory,
+ *                                                                    answers what will happen and what will be missing
+ *   POST /api/local/admin/takeover/confirm              owner        the second step: runs the journaled promotion,
+ *                                                                    restarts; returns a progress token ONCE
+ *   POST /api/local/admin/takeover/cancel               owner        forget an open session
+ *   POST /api/local/admin/takeover/progress             admin, or the progress token (X-Takeover-Progress)
+ *
  * No route here returns a plaintext field of the bundle. The envelope route returns the sealed bytes as they
  * are on disk; the header route returns the header, which is public by design (recipients, code number, sig).
  */
@@ -27,7 +35,23 @@ import {
 } from '../services/takeover-envelope.js';
 import { getHeldEnvelopesStatus } from '../services/standby-envelopes.js';
 import { getNodeRole } from '../state-engine.js';
+import {
+    TakeoverError, takeoverPreconditions, parseTypedCode, pickEnvelope, codeMatches, openTakeoverSession,
+    confirmTakeover, discardTakeoverSession, getTakeoverProgress, progressTokenMatches,
+} from '../services/takeover.js';
 import type { RouteDeps } from './types.js';
+
+const TAKEOVER_OWNER_ONLY = 'Only an owner of this standby can take over as the main server.';
+
+function answerTakeoverError(ctx: any, e: unknown): void {
+    if (e instanceof TakeoverError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message, ...e.extra };
+        return;
+    }
+    ctx.status = 500;
+    ctx.body = { error: 'The take-over could not start: ' + ((e as any)?.message || 'unknown error') };
+}
 
 const OWNER_ONLY = 'Only an owner can make or check the recovery code.';
 
@@ -50,6 +74,8 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
             // Main server: which standby last fetched which envelope. Standby: the main server's envelopes it holds.
             standbys: standby ? [] : getEnvelopeHolders(),
             held: standby ? getHeldEnvelopesStatus() : null,
+            // After a take-over by code: "Your recovery code was used. Make a new one" until a new one is made.
+            codeUsed: getTakeoverProgress().codeUsed,
         };
     });
 
@@ -219,6 +245,83 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
         }
         const mine = got.header.recipients.some((r) => r.type === 'owner' && r.pubkey === signer.toLowerCase());
         ctx.body = { envelopeId: got.envelopeId, header: got.header, youAreARecipient: mine };
+    });
+
+    // ── Take-over on a standby (§5.3) ──────────────────────────────────────────────────────
+
+    // Step one: the printed recovery code. A typo is answered from the check characters, free. A well-formed code
+    // is a guess at a secret, so it goes through the password brake under its own name ("takeover:" + the source):
+    // the admin password clears the source's plain record on every request (password-brake.ts), which would
+    // otherwise wipe the count of wrong codes between guesses. A right code clears nothing either.
+    router.post('/api/local/admin/takeover/open', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        if (!requireAdminRole(ctx, ['owner'], TAKEOVER_OWNER_ONLY)) return;
+        ctx.set('Cache-Control', 'no-store');
+        const code = (ctx as any).requestBody?.code;
+        try {
+            takeoverPreconditions();
+            const { codeId } = parseTypedCode(code);
+            const candidate = pickEnvelope(codeId);
+            const key = 'takeover:' + clientLimiterKey(ctx);
+            const admission = await acquirePasswordAttempt(key);
+            if (!admission.admitted) {
+                refuseBraked(ctx, admission);
+                ctx.body = { ...(ctx.body as Record<string, unknown>), error: `Too many wrong recovery codes from your network. Try again in ${admission.retryAfter}s.` };
+                return;
+            }
+            let matches = false;
+            try {
+                matches = await codeMatches(String(code), candidate.stanza);
+            } finally {
+                settlePasswordAttempt(key, matches, false);
+            }
+            if (!matches) {
+                ctx.status = 403;
+                ctx.body = { error: `That is not recovery code #${candidate.stanza.codeId}. Check the paper and try again.`, wrongCode: true };
+                return;
+            }
+            ctx.body = { success: true, preview: await openTakeoverSession(String(code), candidate) };
+        } catch (e) {
+            answerTakeoverError(ctx, e);
+        }
+    });
+
+    // Step two: the confirm. The standby's own admin password stops working part-way (the community's is installed),
+    // so the answer carries a progress token the screen uses to follow the steps across the restart.
+    router.post('/api/local/admin/takeover/confirm', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        if (!requireAdminRole(ctx, ['owner'], TAKEOVER_OWNER_ONLY)) return;
+        ctx.set('Cache-Control', 'no-store');
+        const body = (ctx as any).requestBody || {};
+        if (body.confirm !== true) {
+            ctx.status = 400;
+            ctx.body = { error: 'Confirm the take-over to go on.' };
+            return;
+        }
+        try {
+            const { progressToken, journalId } = confirmTakeover(body.sessionId);
+            ctx.body = { success: true, progressToken, journalId, progress: getTakeoverProgress() };
+        } catch (e) {
+            answerTakeoverError(ctx, e);
+        }
+    });
+
+    router.post('/api/local/admin/takeover/cancel', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        if (!requireAdminRole(ctx, ['owner'], TAKEOVER_OWNER_ONLY)) return;
+        discardTakeoverSession();
+        ctx.body = { success: true };
+    });
+
+    // The steps, for the progress and result screen. The progress token (from confirm) is enough on its own; the
+    // rest of the time it is an admin read.
+    router.post('/api/local/admin/takeover/progress', async (ctx) => {
+        const token = ctx.request.header['x-takeover-progress'];
+        if (!(token && progressTokenMatches(String(token)))) {
+            if (!(await checkAdminAuth(ctx as any))) return;
+        }
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = getTakeoverProgress();
     });
 
     return router;

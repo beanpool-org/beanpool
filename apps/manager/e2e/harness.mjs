@@ -269,6 +269,12 @@ export const ALL_MODALS = [
     { name: 'reset-tunnel', screen: { tab: 'appliance', sub: 'network' }, steps: [{ in: 'main', button: /Reset Tunnel/ }] },
     { name: 'take-offline', screen: { tab: 'appliance', sub: 'network' }, steps: [{ in: 'main', button: /Take offline/ }] },
     { name: 'generate-replication-token', screen: { tab: 'appliance', sub: 'backups' }, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /Generate \/ rotate token/ }] },
+    { name: 'takeover-explain', screen: { tab: 'appliance', sub: 'backups' }, steps: [{ in: 'main', button: /^Take over as the main server$/ }] },
+    { name: 'takeover-code', screen: { tab: 'appliance', sub: 'backups' }, steps: [{ in: 'main', button: /^Take over as the main server$/ }, { in: 'modal', button: /I understand, continue/ }] },
+    { name: 'takeover-preview', screen: { tab: 'appliance', sub: 'backups' }, steps: [
+        { in: 'main', button: /^Take over as the main server$/ }, { in: 'modal', button: /I understand, continue/ },
+        { in: 'modal', fill: '#takeover-code', value: 'BPRC-2 0000-0000-0000-0000-0000-0000-0000' }, { in: 'modal', button: /^Open the keys$/ },
+    ] },
     { name: 'remove-replication-token', screen: { tab: 'appliance', sub: 'backups' }, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /^Remove Token$/ }] },
     // The recovery code (sealed keys). The code is shown once, so its card `holdsOpen`: the backdrop, Escape and Back
     // must NOT close it (only its ✕ and Done do). phone-width.mjs checks the opposite of the usual for these.
@@ -292,6 +298,14 @@ export function topModal(page) {
 export async function openModal(page, modal) {
     for (const step of modal.steps) {
         const scope = step.in === 'modal' ? topModal(page).card : page.locator('main');
+        if (step.fill) {
+            // A field the next button needs (it stays disabled while empty), typed as a person would.
+            const field = scope.locator(step.fill).first();
+            if (!(await field.count())) throw new Error(`${modal.name}: no field ${step.fill} in ${step.in}`);
+            await field.fill(step.value);
+            await settle(page);
+            continue;
+        }
         const target = step.title
             ? scope.locator(`button[title="${step.title}"]`).first()
             : scope.getByRole('button', { name: step.button }).first();

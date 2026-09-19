@@ -86,6 +86,17 @@ export interface LocalConfig {
     recoveryCode?: RecoveryCodeRecord | null;
     // The highest code number ever issued, so a new code never reuses a number printed on older paper.
     recoveryCodeLastId?: number | null;
+    // --- Take-over (sealed-keys.md §5.3, §5.4; services/takeover.ts) ---
+    // This server's role, written by a take-over. When set it wins over NODE_ROLE in .env (engine/sync.ts), so a
+    // promoted standby needs no .env edit and a redeploy with the old .env cannot demote it.
+    nodeRole?: 'primary' | 'backup' | null;
+    // Set by a take-over: the next boot runs the ledger conservation audit once, then clears it.
+    promotionAuditPending?: boolean;
+    // What that audit found, so Settings can show it after the restart.
+    lastPromotionAudit?: { at: string; ok: boolean; sumBalances: number; drift: number; strandedEscrows: number } | null;
+    // The recovery code a take-over was opened with. While recoveryCode is still that code, Settings says "Your
+    // recovery code was used. Make a new one" (a used code is a spent code, §5.3). Making a new code ends it.
+    recoveryCodeUsed?: { codeId: number; at: string } | null;
 }
 
 export interface Thresholds {

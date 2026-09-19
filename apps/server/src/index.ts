@@ -49,6 +49,7 @@ import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
+import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
@@ -90,11 +91,15 @@ async function main() {
     // Wired after initStateEngine() so the DB connection + node_config exist.
     initSnapshotScheduler();
 
-    // Step 2.6: Failover promotion sanity check (one-directional backup topology).
-    // When a backup is restarted as the new primary, the operator sets
-    // PROMOTED_FROM_BACKUP=true for that one boot; confirm the replicated ledger
-    // is conservation-consistent BEFORE it starts taking live writes.
-    if (process.env.PROMOTED_FROM_BACKUP === 'true') {
+    // Step 2.6: Take-over (sealed-keys.md §5.4). BEFORE the node key is loaded (step 7) and before anything else
+    // reads the role: finish any take-over step a crash interrupted, take the role from local-config.json (over
+    // NODE_ROLE in .env), and run the ledger conservation audit once if a take-over left it pending. Never blocks
+    // the boot; a failure is in data/takeover-journal.json and Settings.
+    const takeover = resumeTakeoverAtBoot();
+
+    // Step 2.61: The same audit for a promotion done by hand with scripts/restore-primary.mjs, where the operator
+    // sets PROMOTED_FROM_BACKUP=true for that one boot. Not twice in one boot.
+    if (process.env.PROMOTED_FROM_BACKUP === 'true' && !takeover.auditRan) {
         promotionSanityCheck();
     }
 
@@ -117,7 +122,10 @@ async function main() {
     // code. After libp2p, which creates data/libp2p_key on first boot. Never blocks boot: a failure is logged and
     // shown in the status. A standby seals nothing of its own.
     startTakeoverEnvelopeService({ standby: getNodeRole() === 'backup' })
-        .catch((e) => console.warn('[Takeover] Envelope check at boot failed:', e?.message || e));
+        .catch((e) => console.warn('[Takeover] Envelope check at boot failed:', e?.message || e))
+        // Step 7.2: after a take-over: tell the community, lock the keys again here, bring the tunnel back.
+        .then(() => finishTakeoverAfterBoot())
+        .catch((e) => console.warn('[Takeover] Finishing the take-over failed:', e?.message || e));
 
     // Step 8: Connector manager + Handshake + Federation protocols
     initConnectorManager(p2pNode);

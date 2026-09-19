@@ -17,7 +17,7 @@ import { useTheme } from './ThemeContext';
 import { palette } from '../constants/colors';
 import { NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
 import {
-    readUnlockScan, unlockTextFromParams, scanProblemMessage, lookupUnlock, approveUnlock, readLockPin,
+    readUnlockScan, unlockTextFromParams, scanProblemMessage, openedFromLinkWarning, lookupUnlock, approveUnlock, readLockPin,
     type UnlockLookup, type UnlockOutcome,
 } from '../utils/takeover-unlock';
 import type { OwnerUnlockQr } from '@beanpool/core';
@@ -149,7 +149,7 @@ export default function UnlockKeysScreen() {
                             </Pressable>
                         </View>
                     ) : found ? (
-                        <UnlockDetails found={found} communityName={communityName} callsign={identity?.callsign} busy={busy}
+                        <UnlockDetails found={found} communityName={communityName} callsign={identity?.callsign} busy={busy} fromLink={!!fromLink}
                             onApprove={approve} onCancel={() => (fromLink ? router.back() : resumeScanning())} />
                     ) : null}
                 </ScrollView>
@@ -217,8 +217,8 @@ export default function UnlockKeysScreen() {
     );
 }
 
-function UnlockDetails({ found, communityName, callsign, busy, onApprove, onCancel }: {
-    found: Found; communityName: string; callsign?: string; busy: boolean; onApprove: () => void; onCancel: () => void;
+function UnlockDetails({ found, communityName, callsign, busy, fromLink, onApprove, onCancel }: {
+    found: Found; communityName: string; callsign?: string; busy: boolean; fromLink: boolean; onApprove: () => void; onCancel: () => void;
 }) {
     const { colors } = useTheme();
     const { look } = found;
@@ -236,6 +236,13 @@ function UnlockDetails({ found, communityName, callsign, busy, onApprove, onCanc
                     ? 'Do this only if your main server is really down. That server then becomes your community\'s main server, with the same identity, owners and web address.'
                     : `That server restores the backup locked ${day(look.described.restore?.backup?.createdAt ?? look.check.header.createdAt)} and becomes your community's server.`}
             </Text>
+            {fromLink && (
+                <View style={[styles.warnBox, { borderColor: colors.feedback.danger.solid }]} accessibilityRole="alert">
+                    <Text style={[styles.infoLine, { color: colors.feedback.danger.solid, fontWeight: '700' }]}>
+                        {openedFromLinkWarning(takeover ? 'takeover' : 'restore', look.host)}
+                    </Text>
+                </View>
+            )}
             {takeover && mainAnswers && (
                 <View style={[styles.warnBox, { borderColor: colors.feedback.danger.solid }]} accessibilityRole="alert">
                     <Text style={[styles.infoLine, { color: colors.feedback.danger.solid, fontWeight: '700' }]}>

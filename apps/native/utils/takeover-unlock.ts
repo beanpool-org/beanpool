@@ -105,6 +105,16 @@ export function isUnlockLink(url: string): boolean {
     return /^beanpool:\/\/+unlock-keys(?:[/?]|$)/i.test(url.trim());
 }
 
+/**
+ * The sheet's warning when it was opened from a link rather than a scan. Any web page or message can fire a
+ * `beanpool://unlock-keys` link, so for a link the owner is the only check that they started this themselves.
+ */
+export function openedFromLinkWarning(purpose: 'takeover' | 'restore', host: string): string {
+    return purpose === 'restore'
+        ? `You opened this from a link, not by scanning a server's screen. Unlock only if you are restoring a backup on ${host} yourself, right now. If a message or a web page sent you here, choose “Not now”: whoever runs ${host} would get your community's backup.`
+        : `You opened this from a link, not by scanning a server's screen. Unlock only if you started the take-over on ${host} yourself, right now. If a message or a web page sent you here, choose “Not now”.`;
+}
+
 export function scanProblemMessage(r: Exclude<UnlockScan, { kind: 'ok' }>): { title: string; message: string } {
     switch (r.kind) {
         case 'cleartext':

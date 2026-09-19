@@ -1,7 +1,7 @@
 ---
 slug: backups-and-replicas
 title: Backups and replicas
-summary: What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words, restoring, running a second server as a standby, and taking over on it.
+summary: What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words, restoring, running a second server as a standby, taking over on it, and what happens if the old server comes back.
 related: updates-and-health, troubleshooting, what-the-server-sees, first-time-setup
 ---
 
@@ -151,7 +151,7 @@ A second server can follow yours as a read-only standby, copying changes about e
 
 If the main server is gone for good (a dead disk, a lost machine), the standby can become the community's main server with the printed recovery code. The community stays itself: the same identity, the same owners and admins, the same links with other communities, the same admin password and two-factor sign-in, and the same web address. Members change nothing.
 
-Do this only when the main server is really gone. Two servers with one identity compete with each other, so **never start the old main server again** afterwards.
+Do this only when the main server is really gone. Two servers with one identity compete with each other, so **never start the old main server again** afterwards (if it starts anyway, see If the old main server comes back).
 
 You need:
 
@@ -191,4 +191,18 @@ If something went wrong, the standby's own files from before are in the pre-take
 
 The standby refuses to take over if the keys it holds are for another community, or are not signed by the main server it copies from. It then writes nothing.
 
-The old way, the script scripts/restore-primary.mjs in the BeanPool source code, still works for now, but it gives the server a new identity: its web address has to be claimed again, and every link with another community made again. Use the take-over above instead.
+## If the old main server comes back
+
+A take-over keeps the community's identity, so the old main server, started again, would be a second server claiming to be the same community. Don't start it again. If it starts anyway (a machine that was only switched off, a host that brings it back), it checks for itself:
+
+- Each take-over raises a number, the identity epoch, and the new main server shows it at a public address, signed with the community's key. A server that never took over is at 0; the first take-over makes it 1.
+- A main server asks its own web address for that number when it starts and every hour after.
+- If the address answers with a **higher** number, signed with its own key, another server has taken over from it and the web address now leads there. It goes **read-only**: members' posts, trades, messages and every other change are refused with "This server was replaced on (date). It is now read-only." It still starts, and its Settings still work: **Take over as the main server** shows the same words in red, and its log says so at every start. It stays read-only after a restart.
+- If its web address doesn't answer (the tunnel is gone, no internet, no web address at all), it carries on as the main server. So does a server whose address answers from a BeanPool older than this.
+- An answer not signed with its own key is ignored, and its log gets a line saying so. Nobody can push your main server aside without the community's key.
+
+This check is a safety net, not a lock. An old server with no way to reach its own web address won't know, and until it next asks, it takes writes. So still: after a take-over, don't start the old main server again. Wipe its data folder, or keep it switched off.
+
+Read-only means members can't change anything there, but Settings can. Anything done in its Settings stays on that machine; it never reaches the new main server.
+
+To use the old machine again, set it up from scratch as a standby of the new main server: it needs a new identity of its own. Before this update the way back was a script, scripts/restore-primary.mjs; it is gone, and the take-over above does its job without changing the community's identity.

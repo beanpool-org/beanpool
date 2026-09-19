@@ -30,7 +30,7 @@ import { protectionFrom } from '../../utils/protection-state';
 import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
 import type { SsoProvider } from '../../utils/sso-signin';
 import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../../utils/node-post';
-import { parseArchetype, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, type QuizResult } from '@beanpool/core';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 
 
@@ -1624,6 +1624,7 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* ─── The BeanPool project (goes to beanpool.org, not to this community's node) ─── */}
+                {FEEDBACK_LIVE && (<>
                 <Text style={styles.sectionHeader}>BEANPOOL PROJECT</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => router.push('/suggest-change')} accessibilityRole="button" accessibilityLabel="Suggest a change to BeanPool">
@@ -1635,6 +1636,7 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
                 </View>
+                </>)}
 
                 {/* ─── Legal & Privacy ─── */}
                 <Text style={styles.sectionHeader}>LEGAL & PRIVACY</Text>

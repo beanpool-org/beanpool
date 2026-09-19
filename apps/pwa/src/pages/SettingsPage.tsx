@@ -17,7 +17,7 @@ import { type Theme } from '../lib/useTheme';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
-import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, type QuizResult } from '@beanpool/core';
 import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
 
@@ -729,7 +729,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                         </div>
 
                         {/* ─── BEANPOOL PROJECT (goes to beanpool.org, not to this community's node) ─── */}
-                        <div>
+                        {FEEDBACK_LIVE && <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
                                 BEANPOOL PROJECT
                             </div>
@@ -745,7 +745,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 </div>
                                 <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
                             </button>
-                        </div>
+                        </div>}
 
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 9,
-  "hash": "cb1ec15375124c420e6ee003119568836ae1babda21e4f14c8cf63b175e65791",
+  "version": 10,
+  "hash": "7e5cbad7204cdc0f65315c5dd1b534cf6176344e37eda798bed303fb9efa9e01",
   "sections": [
     {
       "id": "setup",
@@ -1152,10 +1152,14 @@
         {
           "type": "ul",
           "items": [
-            "On your server, **Replication Access** (under Backups & Restore) makes a replication token. It is shown once. Token-only mode then refuses the admin password for copying, which is safer.",
-            "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server**. If you give it the admin password instead, it is stored in plain text on the standby.",
+            "On your server, **Replication Access** (under Backups & Restore) makes a replication token. It is shown once. There is one token per server: making a new one stops every standby using the old one until you paste the new one in.",
+            "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server** (or as BACKUP_REPLICATION_TOKEN in its .env). A standby only takes a token. It never takes your admin password, so its disk and its backups never hold it.",
+            "**Token-only** refuses the admin password for copying. A new server starts with it on. A server set up before this change has it off, so an older standby keeps working; Replication Access says so, and tells you when a standby last copied with the admin password. Tick **Require token** once every standby has the token.",
+            "An older standby that still holds your admin password swaps it for a token by itself when it starts, if your server has no token yet: it uses the password once, keeps the token and deletes the password. If it cannot, it keeps the password, warns in its log at every start, and shows a red notice under **Live Backup Server** saying why and whether it is still copying.",
+            "That standby is **not copying** if your server has two-factor sign-in on, has token-only on, or no longer takes that password. It still copies with the password only if your server already has a token and token-only is off.",
+            "To fix it either way: if you saved your server's token, paste it under **Live Backup Server** on the standby and save. If not, make a new one under **Replication Access** and paste it into every standby. The standby then deletes the password. If the password came from BACKUP_ADMIN_PASSWORD in the standby's .env, delete that line too.",
             "Copying goes one way only. Your main server never takes data from the standby.",
-            "**A standby is not a complete copy.** It does not copy Decisions and their votes, or who holds which role. Keep file backups as well.",
+            "**A standby is not a complete copy.** It does not copy Decisions and their votes, who holds which role, enterprise pledges and keeper changes, invites, or members' notification settings. Keep file backups as well.",
             "Making a standby the main server uses scripts in the BeanPool source code, not in the server image, and the first start after needs PROMOTED_FROM_BACKUP=true."
           ]
         }

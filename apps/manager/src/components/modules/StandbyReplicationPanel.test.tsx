@@ -365,4 +365,44 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
         // Modal remains open so operator can read error
         expect(screen.getByText('Confirm Full Replication Resync')).toBeInTheDocument();
     });
+
+    it('never asks for the main server admin password, and shows the legacy-password warning', async () => {
+        const warning = "This standby is NOT copying: the main server refuses its stored admin password. The password is still kept in plain text in local-config.json.";
+        const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+            if (url.includes('/api/local/admin/backup-status')) {
+                return { ok: true, json: async () => ({ role: 'backup', primaryUrl: 'https://primary.example.com' }) };
+            }
+            if (url.includes('/api/local/admin/replication-config/get')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        primaryUrl: 'https://primary.example.com',
+                        hasPassword: true,
+                        hasToken: false,
+                        credential: { using: 'password', passwordStored: true, passwordInEnv: false, warning, lastSwap: 'failed' },
+                    }),
+                };
+            }
+            return { ok: true, json: async () => ({ success: true }) };
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        render(<StandbyReplicationPanel activeNode={mockNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(/This standby is NOT copying: the main server refuses its stored admin password/);
+        });
+        expect(screen.queryByLabelText(/Admin Password/i)).not.toBeInTheDocument();
+
+        await userEvent.type(screen.getByLabelText(/Primary Replication Token/i), 'pasted-token');
+        await userEvent.click(screen.getByRole('button', { name: /Save Connection/i }));
+
+        await waitFor(() => {
+            const saveCall = fetchMock.mock.calls.find(([u]) => String(u).includes('/replication-config/save'));
+            expect(saveCall).toBeTruthy();
+            const body = JSON.parse(String((saveCall![1] as RequestInit).body));
+            expect(body.primaryToken).toBe('pasted-token');
+            expect(body).not.toHaveProperty('primaryPassword');
+        });
+    });
 });

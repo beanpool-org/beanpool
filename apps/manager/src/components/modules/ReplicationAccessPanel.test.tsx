@@ -161,8 +161,10 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
                 expect.stringContaining('/api/local/admin/replication-token/clear'),
                 expect.any(Object)
             );
+            // Token-only was switched on above and clearing leaves it on: the admin
+            // password is refused too, so nothing can copy (the old text said the password was in use).
             const tokenState = document.getElementById('rep-token-state');
-            expect(tokenState?.textContent).toBe('not set (admin password in use)');
+            expect(tokenState?.textContent).toBe('not set · nothing can copy until you make a token');
         });
     });
 
@@ -176,7 +178,7 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
 
         expect(screen.getByText('Replication Access')).toBeInTheDocument();
         const tokenState = document.getElementById('rep-token-state');
-        expect(tokenState?.textContent).toBe('not set (admin password in use)');
+        expect(tokenState?.textContent).toBe('not set · standbys copy with the admin password');
 
         const totalPulls = document.getElementById('rep-total-pulls');
         expect(totalPulls?.textContent).toBe('0');
@@ -314,5 +316,38 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
         await userEvent.click(closeClearBtn);
         expect(screen.queryByText(/Remove Replication Token\?/i)).not.toBeInTheDocument();
     });
-});
 
+    it('a fresh install (token-only, no token) says nothing can copy, with no token-only-off notice', () => {
+        render(
+            <ReplicationAccessPanel
+                activeNode={mockNode}
+                initialData={{ hasToken: false, tokenOnly: true, totalPulls: 0 }}
+            />
+        );
+        const tokenState = document.getElementById('rep-token-state');
+        expect(tokenState?.textContent).toBe('not set · nothing can copy until you make a token');
+        expect(tokenState?.textContent).not.toMatch(/admin password in use/);
+        expect(document.getElementById('rep-token-only-notice')).toBeNull();
+    });
+
+    it('shows the token-only-off notice, naming a standby that last copied with the admin password', () => {
+        const { rerender } = render(
+            <ReplicationAccessPanel
+                activeNode={mockNode}
+                initialData={{ hasToken: true, tokenOnly: false, lastPullAuth: 'admin-pw' }}
+            />
+        );
+        expect(document.getElementById('rep-token-only-notice')?.textContent)
+            .toMatch(/A standby last copied with the admin password.*tick "Require token"/);
+
+        rerender(
+            <ReplicationAccessPanel
+                key="token-pulls"
+                activeNode={mockNode}
+                initialData={{ hasToken: true, tokenOnly: false, lastPullAuth: 'token' }}
+            />
+        );
+        expect(document.getElementById('rep-token-only-notice')?.textContent)
+            .toBe('Standbys can still copy with the admin password. Once every standby uses a token, tick "Require token".');
+    });
+});

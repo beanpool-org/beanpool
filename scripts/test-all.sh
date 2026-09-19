@@ -243,6 +243,7 @@ run_federation_suites() {
       test-backup-hardening
       test-backup-identity-bundle
       test-backup-topology
+      test-standby-token-only
       test-cash-also-needed
       test-posts-ignore-archetypes
       test-crowdfund-ledger-sync

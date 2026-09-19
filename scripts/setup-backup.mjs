@@ -11,16 +11,21 @@
  * State only ever flows primary → backup. The primary imports from nobody.
  *
  * Usage:
- *   node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--data-dir <path>]
+ *   node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--token <token>] [--data-dir <path>]
  *
  *   --primary    Required. The primary's public HTTPS base URL,
  *                e.g. https://test.beanpool.org  (http:// only allowed for localhost)
- *   --admin-pw   Required. The primary's admin password (shared operator secret).
- *                Also stored locally as BACKUP_ADMIN_PASSWORD so the puller can pull.
+ *   --admin-pw   Required. The primary's admin password. Used ONCE, in memory, to fetch the
+ *                community identity. It is NEVER written to this machine: a standby that kept
+ *                it held the main server's admin password in plain text.
+ *   --token      The primary's replication token (Settings → Replication Access), written to
+ *                .env as BACKUP_REPLICATION_TOKEN; the standby copies with it. If omitted and
+ *                the primary has no token yet, one is made; if the primary already has one,
+ *                pass it (making a new one would cut off any standby already using it).
  *   --data-dir   Optional. The node's data directory. Default: ./data
  *
  * Example:
- *   node scripts/setup-backup.mjs --primary https://test.beanpool.org --admin-pw 'S3cr3t!pass'
+ *   node scripts/setup-backup.mjs --primary https://test.beanpool.org --admin-pw 'S3cr3t!pass' --token '<token>'
  *
  * After it finishes, set NODE_ROLE=backup is written to a sibling .env — then
  * RESTART the node. On next boot it generates a fresh PeerId, rebuilds state.db,
@@ -93,14 +98,42 @@ function upsertEnv(envPath, kv) {
     fs.writeFileSync(envPath, out.join('\n').replace(/\n{3,}/g, '\n\n'));
 }
 
+/**
+ * No --token given: make one on the primary, but only if it has none. Making a token replaces
+ * the primary's current one, which would cut off any standby already copying with it.
+ */
+async function mintTokenIfNone(primary, adminPw) {
+    const post = async (p) => {
+        const res = await fetch(`${primary}${p}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPw },
+            body: JSON.stringify({ password: adminPw }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) die(`Primary refused ${p} (HTTP ${res.status}). ${body?.totpRequired ? 'Two-factor sign-in is on: make a token in Settings → Replication Access and pass it with --token.' : ''}`);
+        return body;
+    };
+    const status = await post('/api/local/admin/replication-token/status');
+    if (status.hasToken) {
+        die('The primary already has a replication token, and it shows a token only once. If you saved it when it was made, pass it with --token.\n' +
+            'If not, make a new one in Settings → Replication Access, paste it into every standby of that primary, and pass it here with --token.\n' +
+            '(This script will not make one itself: that would cut off any standby already using the current one.)');
+    }
+    const gen = await post('/api/local/admin/replication-token/generate');
+    if (!gen.token) die('The primary did not return a replication token.');
+    console.log('  • made a replication token on the primary (it has none before). It is saved in this machine\'s .env only.');
+    return gen.token;
+}
+
 async function main() {
     const args = parseArgs(process.argv.slice(2));
     const primary = typeof args.primary === 'string' ? args.primary.replace(/\/$/, '') : null;
     const adminPw = typeof args['admin-pw'] === 'string' ? args['admin-pw'] : null;
+    let replicationToken = typeof args.token === 'string' ? args.token.trim() : null;
     const dataDir = path.resolve(typeof args['data-dir'] === 'string' ? args['data-dir'] : './data');
 
     if (!primary || !adminPw) {
-        die('Usage: node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--data-dir <path>]');
+        die('Usage: node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--token <token>] [--data-dir <path>]');
     }
     if (!isAllowedPrimaryUrl(primary)) {
         die(`--primary must be an https:// URL (http:// allowed only for localhost). Got: ${primary}\n` +
@@ -135,6 +168,9 @@ async function main() {
         die('Enrollment bundle is incomplete (missing genesis or primaryPeerId). Is the primary fully booted?');
     }
     console.log(`✅ Enrolled into community ${communityId} (primary PeerId ${primaryPeerId.slice(0, 16)}…)\n`);
+
+    // 1b. The standby copies with a replication token, never the admin password.
+    replicationToken = replicationToken || await mintTokenIfNone(primary, adminPw);
 
     // 2. Ensure the data dir exists.
     fs.mkdirSync(dataDir, { recursive: true });
@@ -186,9 +222,11 @@ async function main() {
     upsertEnv(envPath, {
         NODE_ROLE: 'backup',
         BACKUP_PRIMARY_URL: primaryUrl || primary,
-        BACKUP_ADMIN_PASSWORD: adminPw,
+        BACKUP_REPLICATION_TOKEN: replicationToken,
+        // Blank any password an older version of this script wrote.
+        BACKUP_ADMIN_PASSWORD: '',
     });
-    console.log(`  • updated ${envPath} (NODE_ROLE=backup, BACKUP_PRIMARY_URL, BACKUP_ADMIN_PASSWORD)\n`);
+    console.log(`  • updated ${envPath} (NODE_ROLE=backup, BACKUP_PRIMARY_URL, BACKUP_REPLICATION_TOKEN; no admin password)\n`);
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('✅ Backup enrolled. NEXT STEPS:\n');

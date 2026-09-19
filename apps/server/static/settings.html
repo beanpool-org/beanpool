@@ -1770,6 +1770,9 @@
                     A <em>separate, optional</em> hot-standby for failover (HA). A second machine (a <strong>backup</strong> server) continuously pulls a signed read-only snapshot from this <strong>primary</strong> over HTTPS. State only ever flows primary → backup. You do <strong>not</strong> need this for the local snapshots above.
                 </p>
 
+                <!-- Standby still holding the main server's admin password (filled by loadBackupStatus) -->
+                <div id="standby-credential-banner" role="alert" style="display:none;background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.5);border-radius:12px;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.78rem;color:#fecaca;line-height:1.5;"></div>
+
                 <!-- Role -->
                 <div style="background: rgba(15,23,42,0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
                     <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">This Node's Role</div>
@@ -1788,13 +1791,9 @@
                                 <input type="text" id="rep-primary-url" placeholder="https://test.beanpool.org" style="background:#090d16;border:1px solid #1e293b;color:#e2e8f0;font-family:monospace;font-size:0.8rem;padding:0.4rem;width:100%;border-radius:6px;box-sizing:border-box;" />
                             </div>
                             <div class="form-group" style="margin-bottom:0.75rem;">
-                                <label style="display:block;font-size:0.65rem;color:#94a3b8;text-transform:uppercase;margin-bottom:0.25rem;">Primary Admin Password</label>
-                                <input type="password" id="rep-primary-pw" placeholder="Leave blank to keep current password" style="background:#090d16;border:1px solid #1e293b;color:#e2e8f0;font-size:0.8rem;padding:0.4rem;width:100%;border-radius:6px;box-sizing:border-box;" />
-                            </div>
-                            <div class="form-group" style="margin-bottom:0.75rem;">
-                                <label style="display:block;font-size:0.65rem;color:#94a3b8;text-transform:uppercase;margin-bottom:0.25rem;">Primary Replication Token <span style="color:#10b981;text-transform:none;">(recommended)</span></label>
+                                <label style="display:block;font-size:0.65rem;color:#94a3b8;text-transform:uppercase;margin-bottom:0.25rem;">Primary Replication Token</label>
                                 <input type="password" id="rep-primary-token" placeholder="Paste the token shown on the primary" style="background:#090d16;border:1px solid #1e293b;color:#e2e8f0;font-family:monospace;font-size:0.8rem;padding:0.4rem;width:100%;border-radius:6px;box-sizing:border-box;" />
-                                <div style="font-size:0.62rem;color:#64748b;margin-top:0.25rem;">Scoped read-only credential for snapshot pulls. Leave blank to keep current; when set it is used instead of the admin password.</div>
+                                <div style="font-size:0.62rem;color:#64748b;margin-top:0.25rem;">Make it on the main server under Replication Access. Leave blank to keep the current token. A standby never takes the main server's admin password.</div>
                             </div>
                             <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
                                 <button class="btn btn-primary" onclick="saveReplicationConfig()" style="font-size:0.7rem;padding:4px 12px;cursor:pointer;">Save Connection</button>
@@ -1863,6 +1862,8 @@
                         <input type="checkbox" id="rep-token-only" onchange="setTokenOnlyMode()" style="cursor:pointer;" />
                         Require token — reject admin-password pulls (enable only after the token is set on every backup)
                     </label>
+                    <!-- Shown while admin-password pulls are still allowed (filled by loadReplicationAccess) -->
+                    <div id="rep-token-only-notice" style="display:none;margin-top:0.6rem;padding:0.6rem 0.75rem;border-radius:8px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.4);font-size:0.72rem;color:#fcd34d;line-height:1.5;"></div>
                     <!-- Shown once after generation -->
                     <div id="rep-token-reveal" style="display:none;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #1e293b;">
                         <div style="font-size:0.7rem;color:#f59e0b;font-weight:600;margin-bottom:0.4rem;">⚠️ Copy this token now — it is shown only once. Paste it into each backup's connection settings.</div>
@@ -1912,7 +1913,7 @@
                         <button onclick="copyBackupCommand()" style="position:absolute;top:0.5rem;right:0.5rem;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:0.2rem 0.4rem;cursor:pointer;font-size:0.65rem;" title="Copy command">📋</button>
                     </div>
                     <p style="font-size:0.72rem;color:#64748b;margin:0.5rem 0 0;">
-                        Replace <code style="color:#f59e0b;">&lt;ADMIN_PASSWORD&gt;</code> with this node's admin password (not shown here for safety). After it finishes on the other machine, restart that node — it will begin pulling within ~60s and appear in the health tile above.
+                        Replace <code style="color:#f59e0b;">&lt;ADMIN_PASSWORD&gt;</code> with this node's admin password and <code style="color:#f59e0b;">&lt;REPLICATION_TOKEN&gt;</code> with the token from Replication Access above (neither is shown here). The password is used once, to fetch the community's identity, and is not kept on the backup; the backup copies with the token. After it finishes on the other machine, restart that node — it will begin pulling within ~60s.
                     </p>
                 </div>
                 <div class="status-msg" id="backup-enroll-status"></div>

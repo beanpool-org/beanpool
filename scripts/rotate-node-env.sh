@@ -320,7 +320,7 @@ for k in order:
 
 if dry_run:
     if "ADMIN_PASSWORD" in updates:
-        print("  [dry-run] Would reset isLocked in data/local-config.json for password rotation")
+        print("  [dry-run] Would reset isLocked in data/local-config.json for password rotation (token-only setting kept)")
     print(f"  [dry-run] Would write updated .env to {env_path} (mode 0600)")
     print(f"  [dry-run] Would run: cd {project_dir} && docker compose -p {proj_name} up -d --no-deps --force-recreate beanpool-node")
     sys.exit(0)
@@ -350,6 +350,11 @@ try:
                 with open(cfg_path, "r") as f:
                     cfg = json.load(f)
                 cfg["isLocked"] = False
+                # Keep this server's token-only setting. An unset flag reads as off, but the
+                # unlocked first-boot path would turn it ON (the new-install default) and
+                # refuse any standby still copying with the admin password.
+                if "replicationTokenOnly" not in cfg:
+                    cfg["replicationTokenOnly"] = False
                 cfg.pop("adminHash", None)
                 cfg.pop("salt", None)
                 cfg_tmp = f"{cfg_path}.tmp.{os.getpid()}"

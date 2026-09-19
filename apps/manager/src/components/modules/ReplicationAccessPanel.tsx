@@ -131,13 +131,14 @@ export function ReplicationAccessPanel({
             setShowClearConfirm(false);
             setRevealedToken(null);
             setStatusMsg({
-                text: 'Replication token cleared. Replicas now require admin password.',
+                text: 'Replication token cleared. Standbys cannot copy until you make a new token and paste it into each one.',
                 isError: false,
             });
+            // Token-only mode is left as it was: clearing the token no longer lets the
+            // admin password back in.
             setAccessData((prev) => ({
                 ...prev,
                 hasToken: false,
-                tokenOnly: false,
             }));
             onRefreshDiag?.();
         } catch (err: unknown) {
@@ -228,7 +229,20 @@ export function ReplicationAccessPanel({
         ? tokenOnly
             ? 'set · token-only enforced'
             : 'set · admin-password fallback active'
-        : 'not set (admin password in use)';
+        : tokenOnly
+            // Token-only with no token (a new install, or a cleared token): the admin
+            // password is refused too, so no standby can copy.
+            ? 'not set · nothing can copy until you make a token'
+            : 'not set · standbys copy with the admin password';
+
+    // Older installs still let a standby copy with the admin password. Not flipped
+    // automatically (it would stop such a standby); say what to do instead. Same text as
+    // node Settings (static/settings.js loadReplicationAccess).
+    const tokenOnlyNotice = tokenOnly
+        ? null
+        : accessData?.lastPullAuth === 'admin-pw'
+            ? '⚠️ A standby last copied with the admin password, so it keeps that password in plain text on its disk. Make a token here, paste it into that standby under Live Backup Server, then tick "Require token".'
+            : 'Standbys can still copy with the admin password. Once every standby uses a token, tick "Require token".';
 
     // Compute last pull text safely
     const lastPullAtStr = typeof accessData?.lastPullAt === 'string' ? accessData.lastPullAt : null;
@@ -315,7 +329,7 @@ export function ReplicationAccessPanel({
                         <strong
                             id="rep-token-state"
                             className={`font-semibold ml-1 ${
-                                hasToken ? 'text-emerald-400' : 'text-amber-400'
+                                hasToken ? 'text-emerald-400' : tokenOnly ? 'text-red-400' : 'text-amber-400'
                             }`}
                         >
                             {tokenStateText}
@@ -361,6 +375,15 @@ export function ReplicationAccessPanel({
                         </span>
                     </span>
                 </label>
+
+                {accessData && tokenOnlyNotice && (
+                    <div
+                        id="rep-token-only-notice"
+                        className="p-3 rounded-xl bg-amber-950/30 border border-amber-800/60 text-xs text-amber-300 leading-relaxed"
+                    >
+                        {tokenOnlyNotice}
+                    </div>
+                )}
 
                 {/* Newly Generated Token Reveal Box */}
                 {revealedToken && (
@@ -579,7 +602,7 @@ export function ReplicationAccessPanel({
                             </button>
                         </div>
                         <p className="text-xs text-nature-300 leading-relaxed m-0">
-                            Removing the token turns off token authentication. Replicas will only be able to authenticate using the master admin password if token-only mode is disabled.
+                            Removing the token stops every standby that copies with it. With token-only mode on, nothing can copy until you make a new token; with it off, only a standby using the admin password still can.
                         </p>
                         <div className="flex items-center justify-end gap-3 pt-2">
                             <button

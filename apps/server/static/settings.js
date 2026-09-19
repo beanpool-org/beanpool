@@ -2854,6 +2854,14 @@
                 const restoreWizard = document.getElementById('backup-restore-wizard');
                 const healthTile = document.getElementById('backup-health-tile');
 
+                // A standby still holding the main server's admin password says so, with the fix.
+                const credBanner = document.getElementById('standby-credential-banner');
+                if (credBanner) {
+                    const warning = isBackup && d.credential && d.credential.warning;
+                    credBanner.textContent = warning ? '⚠️ ' + warning : '';
+                    credBanner.style.display = warning ? 'block' : 'none';
+                }
+
                 const accessPanel = document.getElementById('replication-access-panel');
                 if (!isBackup) {
                     // A primary runs no puller — the health metrics don't apply, but the
@@ -2887,8 +2895,8 @@
                 if (badge) { badge.textContent = label; badge.style.background = bg; badge.style.color = color; }
                 if (note) {
                     if (state === 'red') note.textContent = d.running
-                        ? `Pulls are failing (${d.consecutiveFailures} in a row). Check the primary URL, admin password, and TLS/CA.`
-                        : 'The backup puller is not running. Set NODE_ROLE=backup + BACKUP_PRIMARY_URL + BACKUP_ADMIN_PASSWORD and restart.';
+                        ? `Pulls are failing (${d.consecutiveFailures} in a row). Check the primary URL, the replication token, and TLS/CA.`
+                        : 'The backup puller is not running. Set NODE_ROLE=backup + BACKUP_PRIMARY_URL, save the replication token under Edit Connection, and restart.';
                     else if (state === 'amber') note.textContent = 'Waiting to converge or last pull is stale — this is normal right after boot.';
                     else note.textContent = 'Replication healthy — snapshots are being pulled on schedule.';
                 }
@@ -2961,8 +2969,8 @@
                     throw new Error(err.error || `HTTP ${res.status}`);
                 }
                 const d = await res.json();
-                // Prefill the primary URL; NEVER echo the admin password into the page.
-                const cmd = `node scripts/setup-backup.mjs --primary ${d.primaryUrl} --admin-pw '<ADMIN_PASSWORD>'`;
+                // Prefill the primary URL; NEVER echo the admin password or token into the page.
+                const cmd = `node scripts/setup-backup.mjs --primary ${d.primaryUrl} --admin-pw '<ADMIN_PASSWORD>' --token '<REPLICATION_TOKEN>'`;
                 document.getElementById('backup-setup-command').textContent = cmd;
                 document.getElementById('backup-enroll-result').style.display = '';
             } catch (e) {
@@ -3031,10 +3039,6 @@
                     if (res.ok) {
                         const config = await res.json();
                         document.getElementById('rep-primary-url').value = config.primaryUrl || '';
-                        document.getElementById('rep-primary-pw').value = '';
-                        document.getElementById('rep-primary-pw').placeholder = config.hasPassword
-                            ? '•••••••• (Leave blank to keep current)'
-                            : 'Enter primary admin password';
                         const tokInput = document.getElementById('rep-primary-token');
                         if (tokInput) {
                             tokInput.value = '';
@@ -3052,13 +3056,11 @@
 
         async function saveReplicationConfig() {
             const urlInput = document.getElementById('rep-primary-url');
-            const pwInput = document.getElementById('rep-primary-pw');
             const tokInput = document.getElementById('rep-primary-token');
             const statusEl = document.getElementById('rep-config-status');
-            if (!urlInput || !pwInput || !statusEl) return;
+            if (!urlInput || !statusEl) return;
 
             const primaryUrl = urlInput.value.trim();
-            const primaryPassword = pwInput.value;
             const primaryToken = tokInput ? tokInput.value.trim() : '';
 
             statusEl.textContent = '⏳ Saving connection...';
@@ -3066,7 +3068,7 @@
             statusEl.classList.add('show');
 
             try {
-                const body = { password: authToken, primaryUrl, primaryPassword };
+                const body = { password: authToken, primaryUrl };
                 // Only send the token when the operator typed one — a blank field keeps
                 // the current token rather than clearing it.
                 if (primaryToken) body.primaryToken = primaryToken;
@@ -3081,7 +3083,6 @@
                 }
                 statusEl.textContent = '✅ Connection saved successfully!';
                 statusEl.style.color = '#10b981';
-                pwInput.value = ''; // Clear password field
                 if (tokInput) tokInput.value = '';
                 
                 // Reload backup status to reflect the new primary URL
@@ -3187,11 +3188,28 @@
                 if (stateEl) {
                     stateEl.textContent = d.hasToken
                         ? (d.tokenOnly ? 'set · token-only enforced' : 'set · admin-password fallback active')
-                        : 'not set (admin password in use)';
-                    stateEl.style.color = d.hasToken ? '#10b981' : '#f59e0b';
+                        : (d.tokenOnly
+                            // Token-only with no token (a new install, or a cleared token): the
+                            // admin password is refused too, so no standby can copy.
+                            ? 'not set · nothing can copy until you make a token'
+                            : 'not set · standbys copy with the admin password');
+                    stateEl.style.color = d.hasToken ? '#10b981' : d.tokenOnly ? '#ef4444' : '#f59e0b';
                 }
                 const cb = document.getElementById('rep-token-only');
                 if (cb) cb.checked = !!d.tokenOnly;
+                // Older installs still let a standby copy with the admin password. Not flipped
+                // automatically (it would stop such a standby); say what to do instead.
+                const notice = document.getElementById('rep-token-only-notice');
+                if (notice) {
+                    let text = '';
+                    if (!d.tokenOnly) {
+                        text = d.lastPullAuth === 'admin-pw'
+                            ? '⚠️ A standby last copied with the admin password, so it keeps that password in plain text on its disk. Make a token here, paste it into that standby under Live Backup Server, then tick "Require token".'
+                            : 'Standbys can still copy with the admin password. Once every standby uses a token, tick "Require token".';
+                    }
+                    notice.textContent = text;
+                    notice.style.display = text ? 'block' : 'none';
+                }
                 const lastPull = document.getElementById('rep-last-pull');
                 if (lastPull) lastPull.textContent = d.lastPullAt
                     ? `${relativeTime(d.lastPullAt)}${d.lastPullIp ? ' · ' + d.lastPullIp : ''}${d.lastPullAuth ? ' · ' + d.lastPullAuth : ''}`

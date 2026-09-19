@@ -31,9 +31,9 @@ export function StandbyReplicationPanel({
     const [statusData, setStatusData] = useState<BackupStatusData | null>(null);
     const [loadingStatus, setLoadingStatus] = useState(false);
     const [primaryUrl, setPrimaryUrl] = useState('');
-    const [primaryPassword, setPrimaryPassword] = useState('');
     const [primaryToken, setPrimaryToken] = useState('');
-    const [hasExistingPassword, setHasExistingPassword] = useState(false);
+    // Set when this standby still holds the main server's admin password (legacy set-up).
+    const [credentialWarning, setCredentialWarning] = useState<string | null>(null);
     const [hasExistingToken, setHasExistingToken] = useState(false);
     const [clearExistingToken, setClearExistingToken] = useState(false);
     const [savingConfig, setSavingConfig] = useState(false);
@@ -91,7 +91,8 @@ export function StandbyReplicationPanel({
                 if (cfg.primaryUrl && typeof cfg.primaryUrl === 'string') {
                     setPrimaryUrl(cfg.primaryUrl);
                 }
-                setHasExistingPassword(Boolean(cfg.hasPassword));
+                const warning = cfg.credential && typeof cfg.credential.warning === 'string' ? cfg.credential.warning : null;
+                setCredentialWarning(warning);
                 setHasExistingToken(Boolean(cfg.hasToken));
             }
         } catch (err: unknown) {
@@ -115,9 +116,6 @@ export function StandbyReplicationPanel({
                 password: activeNode.adminPassword,
                 primaryUrl: primaryUrl.trim(),
             };
-            if (primaryPassword) {
-                body.primaryPassword = primaryPassword;
-            }
             if (primaryToken.trim()) {
                 body.primaryToken = primaryToken.trim();
             } else if (clearExistingToken) {
@@ -132,10 +130,8 @@ export function StandbyReplicationPanel({
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
                 setConfigMsg({ text: 'Replication configuration saved successfully.', isError: false });
-                setPrimaryPassword('');
                 setPrimaryToken('');
                 setClearExistingToken(false);
-                setHasExistingPassword(true);
                 if (body.primaryToken === '') {
                     setHasExistingToken(false);
                 } else if (primaryToken.trim()) {
@@ -301,6 +297,16 @@ export function StandbyReplicationPanel({
                     </div>
                 )}
 
+                {credentialWarning && (
+                    <div
+                        role="alert"
+                        id="standby-credential-banner"
+                        className="p-3 rounded-xl border bg-red-950 border-red-800 text-red-200 text-xs font-semibold"
+                    >
+                        ⚠️ {credentialWarning}
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
                         <label htmlFor="rep-primary-url" className="block text-xs font-bold text-nature-300 mb-1">
@@ -316,25 +322,13 @@ export function StandbyReplicationPanel({
                         />
                     </div>
 
-                    <div>
-                        <label htmlFor="rep-primary-pw" className="block text-xs font-bold text-nature-300 mb-1">
-                            Primary Admin Password
-                        </label>
-                        <input
-                            id="rep-primary-pw"
-                            type="password"
-                            value={primaryPassword}
-                            onChange={(e) => setPrimaryPassword(e.target.value)}
-                            placeholder={hasExistingPassword ? '•••••••• (Leave blank to keep current)' : 'Enter primary admin password'}
-                            autoComplete="off"
-                            className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
-                        />
-                    </div>
-
-                    <div>
+                    <div className="sm:col-span-2">
                         <label htmlFor="rep-primary-token" className="block text-xs font-bold text-nature-300 mb-1">
-                            Primary Replication Token <span className="text-emerald-400 font-normal">(Scoped, recommended)</span>
+                            Primary Replication Token
                         </label>
+                        <p className="text-[11px] text-nature-400 m-0 mb-1.5">
+                            Make it on the main server under Replication Access. A standby never takes the main server&apos;s admin password.
+                        </p>
                         <input
                             id="rep-primary-token"
                             type="password"
@@ -361,7 +355,7 @@ export function StandbyReplicationPanel({
                                         }}
                                         className="rounded border-nature-700 bg-nature-900 text-terra-600 focus:ring-terra-500"
                                     />
-                                    <span>Clear existing replication token (revert to master password auth)</span>
+                                    <span>Clear existing replication token (copying stops until a new one is saved)</span>
                                 </label>
                             </div>
                         )}

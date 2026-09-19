@@ -58,6 +58,15 @@ import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
+import { requireAdminRole, type AdminRole } from '../admin-auth.js';
+
+/**
+ * Who may do what on the routes below. Every admin route takes checkAdminAuth (a key-signed session of an owner or
+ * admin, or the password plus 2FA when it is on, under break-glass rules) and then one of these. Owner-only: what
+ * can lock the other admins out or wipe the node. Owner or admin: running the node from day to day.
+ */
+const OWNER_ONLY: readonly AdminRole[] = ['owner'];
+const OWNER_OR_ADMIN: readonly AdminRole[] = ['owner', 'admin'];
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -94,9 +103,9 @@ router.post('/api/local/verify-password', async (ctx) => {
     }
 
     const pw = password || headerPass;
-    // Under 2FA the brake lets go only once the code is right too (password-brake.ts).
-    const totpOn = !!(config.totpEnabled && config.totpSecret);
-    const pwCheck = await checkAdminPassword(ctx, pw, { reset: !totpOn });
+    // Under 2FA a right password alone clears nothing: the brake lets go only once the code is right too
+    // (checkAdminPassword and notePasswordSuccess below).
+    const pwCheck = await checkAdminPassword(ctx, pw);
     if (pwCheck === 'braked') return;
     if (pwCheck !== 'ok') {
         logger.security('AUTH', 'Failed administrative login attempt.');
@@ -227,15 +236,10 @@ router.post('/api/admin/seed-invite', async (ctx) => {
 router.post('/api/local/update-identity', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { password, callsign, lat, lng, communityName, contactEmail, contactPhone } = (ctx as any).requestBody || {};
+    const { callsign, lat, lng, communityName, contactEmail, contactPhone } = (ctx as any).requestBody || {};
 
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its name, place or contact details')) return;
 
     if (callsign !== undefined) config.callsign = (callsign || '').slice(0, 20);
     if (lat !== undefined && lng !== undefined && lat !== null && lng !== null) {
@@ -308,8 +312,21 @@ router.post('/api/funnel-event', async (ctx) => {
 router.post('/api/local/change-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { currentPassword, newPassword } = (ctx as any).requestBody || {};
+    const body = (ctx as any).requestBody || {};
+    const { currentPassword, newPassword } = body;
 
+    // Clients that send only { currentPassword, newPassword } sign in with that same password: it still has to
+    // pass checkAdminAuth, 2FA included.
+    const headerPass = (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-password') : null)
+        || ctx.request?.headers?.['x-admin-password'];
+    if (!body.password && !headerPass && currentPassword) body.password = currentPassword;
+
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can change its password')) return;
+
+    // The current password is asked for even under a key session. A key session proves who you are, not that you
+    // know the password; without this, a phone left signed in could set a password its holder has never known, and
+    // with it sign in anywhere the password works.
     const pwCheck = await checkAdminPassword(ctx, currentPassword);
     if (pwCheck === 'braked') return;
     if (pwCheck !== 'ok') {
@@ -358,15 +375,10 @@ router.get('/api/local/connectors', async (ctx) => {
 router.post('/api/local/connectors', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { password, address, trustLevel, callsign, enabled, publicUrl } = (ctx as any).requestBody || {};
+    const { address, trustLevel, callsign, enabled, publicUrl } = (ctx as any).requestBody || {};
 
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
 
     if (!address) {
         ctx.status = 400;
@@ -419,15 +431,10 @@ router.post('/api/local/connectors', async (ctx) => {
 router.post('/api/local/connectors/connect', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { password, address } = (ctx as any).requestBody || {};
+    const { address } = (ctx as any).requestBody || {};
 
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
 
     if (!address) {
         ctx.status = 400;
@@ -458,15 +465,10 @@ router.post('/api/local/connectors/credit-cap', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
     const body = (ctx as any).requestBody || {};
-    const { password, address } = body;
+    const { address } = body;
 
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can set a peer credit cap')) return;
 
     if (!address) {
         ctx.status = 400;
@@ -588,15 +590,10 @@ router.post('/api/local/federation/links/ceiling', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
     const body = (ctx as any).requestBody || {};
-    const { password, peerId } = body;
+    const { peerId } = body;
 
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can set a commissioning ceiling')) return;
     if (!peerId || typeof peerId !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'peerId is required' };
@@ -628,15 +625,10 @@ router.post('/api/local/federation/links/ceiling', async (ctx) => {
 router.post('/api/local/connectors/disconnect', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { password, address } = (ctx as any).requestBody || {};
+    const { address } = (ctx as any).requestBody || {};
 
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
 
     if (!address) {
         ctx.status = 400;
@@ -651,15 +643,10 @@ router.post('/api/local/connectors/disconnect', async (ctx) => {
 router.post('/api/local/connectors/remove', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { password, address } = (ctx as any).requestBody || {};
+    const { address } = (ctx as any).requestBody || {};
 
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its peer links')) return;
 
     if (!address) {
         ctx.status = 400;
@@ -677,15 +664,9 @@ router.post('/api/local/connectors/remove', async (ctx) => {
 router.post('/api/local/reset', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { password } = (ctx as any).requestBody || {};
 
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can reset it')) return;
 
     saveLocalConfig({
         isLocked: false,

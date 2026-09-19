@@ -15,8 +15,9 @@ Any member can make invites from their app, and most people will join that way. 
 
 Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing.
 
-- These invites need the **admin password**. If you signed in from the app's Manage button, Settings cannot make them, and shows made-up codes that the server will not accept. Sign in with the password, or make invites from your own app.
-- Every invite made in Settings is recorded as coming from the first member, Admin, not from you.
+- Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button. A moderator cannot.
+- If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server.
+- In the community's invite tree, every invite made in Settings comes from the first member, Admin. The server also records which owner or admin made it (or "the admin password"), in its security log.
 
 ## A member's page
 

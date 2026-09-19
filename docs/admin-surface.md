@@ -194,8 +194,12 @@ liked. We found this on the test node on 2026-09-19. It was replaced by this bra
   dropped, and that costs about a microsecond, not a rescan.
 - Parallel guesses from one source are checked one at a time, so a burst can't all pass the gate before the first
   one fails. A dashboard sending several right passwords at once is served in turn, not refused.
-- Every password check goes through it: `checkAdminAuth`, every route that calls `checkAdminPassword`, and
-  `/ws/logs?auth=`. Key sign-in never does.
+- Every password check goes through it: `checkAdminAuth`, sign-in (`verify-password`), and `/ws/logs?auth=`
+  (refused outright under 2FA or in break-glass mode). Key sign-in never does.
+- Under 2FA a right password alone clears nothing; only a right code does. Until 2026-09-19 the admin routes
+  that took the password alone cleared a source's record, so someone who knew the password could guess 2FA codes
+  without limit by sending it between guesses. Every admin route now goes through `checkAdminAuth` (seed-invite
+  with #950), and `checkAdminPassword` never clears under 2FA.
 - The existing per-address limiters still apply on top: 15 auth attempts a minute on `verify-password`, and 300
   admin requests a minute.
 

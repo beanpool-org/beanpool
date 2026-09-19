@@ -132,6 +132,9 @@ export function ApplianceSection({
     // 2FA state
     const [tfaStatus, setTfaStatus] = useState<{ enabled: boolean; qrDataUrl?: string; secret?: string } | null>(null);
     const [totpVerifyCode, setTotpVerifyCode] = useState('');
+    // Turning 2FA off asks for a code from the authenticator (or a backup code) right now: the node refuses it on
+    // the strength of an earlier sign-in alone.
+    const [totpDisableCode, setTotpDisableCode] = useState('');
     const [tfaMessage, setTfaMessage] = useState<string | null>(null);
 
     // Update check state
@@ -255,6 +258,10 @@ export function ApplianceSection({
                     ...data,
                     enabled: Boolean(data.totpEnabled ?? data.enabled),
                 });
+            } else if (res.status === 401) {
+                // The status is held to 2FA like every admin route: a 401 asking for a code means 2FA is on.
+                const err = await res.json().catch(() => ({}));
+                if (err?.totpRequired) setTfaStatus({ enabled: true });
             }
         } catch {}
     };
@@ -487,19 +494,29 @@ export function ApplianceSection({
     };
 
     const handleDisable2FA = async () => {
+        const code = totpDisableCode.trim();
+        if (!code) {
+            setTfaMessage('Enter a current code from your authenticator app (or a backup code) to turn 2FA off.');
+            return;
+        }
         if (!confirm('Disable 2FA protection for this node admin account?')) return;
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/disable');
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ code }),
             });
             if (res.ok) {
                 setTfaMessage('2FA disabled.');
+                setTotpDisableCode('');
                 setTfaSessionToken(activeNode.id, undefined);
                 sessionStorage.removeItem('bp_tfa_session_local-node');
                 sessionStorage.removeItem('bp-2fa-session');
                 await load2faStatus();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setTfaMessage(`2FA was not turned off: ${err.error || `HTTP ${res.status}`}`);
             }
         } catch (e: unknown) {
             alert(e instanceof Error ? e.message : String(e));
@@ -1370,13 +1387,25 @@ export function ApplianceSection({
                         )}
 
                         {tfaStatus?.enabled && (
-                            <button
-                                type="button"
-                                onClick={handleDisable2FA}
-                                className="px-5 py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all"
-                            >
-                                Disable 2FA
-                            </button>
+                            <div className="flex flex-wrap gap-2">
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="one-time-code"
+                                    value={totpDisableCode}
+                                    onChange={(e) => setTotpDisableCode(e.target.value)}
+                                    placeholder="Current 2FA or backup code"
+                                    aria-label="Current 2FA or backup code"
+                                    className="flex-1 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleDisable2FA}
+                                    className="min-h-[48px] px-5 py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all"
+                                >
+                                    Disable 2FA
+                                </button>
+                            </div>
                         )}
                     </div>
 

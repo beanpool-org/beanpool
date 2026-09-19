@@ -423,6 +423,27 @@ describe('NodeIdentityPanel Component', () => {
         }
     });
 
+    // The node holds update-identity to 2FA now, like every admin route: the save must carry the 2FA session.
+    it('sends the 2FA session with the identity save', async () => {
+        sessionStorage.setItem(`bp_tfa_session_${mockProfile.id}`, 'tfa-identity-token');
+        try {
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            const updateCall = (global.fetch as any).mock.calls.find((call: any[]) =>
+                call[0].includes('/api/local/update-identity')
+            );
+            expect(updateCall).toBeDefined();
+            expect(updateCall[1].headers['X-Admin-2FA-Session']).toBe('tfa-identity-token');
+            expect(updateCall[1].headers['X-Admin-Password']).toBe(mockProfile.adminPassword);
+        } finally {
+            sessionStorage.removeItem(`bp_tfa_session_${mockProfile.id}`);
+        }
+    });
+
     it('saves identity and node config with full payload parity when submitting form', async () => {
         const onRefreshDiag = vi.fn();
         await act(async () => {

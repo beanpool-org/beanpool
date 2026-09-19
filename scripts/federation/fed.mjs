@@ -66,15 +66,38 @@ export function newIdentity(callsign) {
 }
 
 /** Plain request — for the /api/local/ and /api/invite/ paths, which bypass the signature middleware. */
-export async function plain(node, method, path, body) {
+export async function plain(node, method, path, body, headers = {}) {
     const res = await fetch(`${base(node)}${path}`, {
         method,
-        headers: body ? { 'Content-Type': 'application/json' } : {},
+        headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
         body: body ? JSON.stringify(body) : undefined,
     });
+    rememberTfaSession(node, res);
     let json = null;
     try { json = await res.json(); } catch { /* non-json */ }
     return { status: res.status, json };
+}
+
+/*
+ * 2FA. Every admin route asks a node with 2FA on for a 2FA session as well as the password. Give one per node in
+ * ADMIN_2FA_SESSION_<NODE> (e.g. ADMIN_2FA_SESSION_GIPPSLAND, from signing in to /settings), or a current code in
+ * ADMIN_TOTP_<NODE>: the first admin call sends it and keeps the session the node hands back.
+ */
+const tfaSessions = {};
+const envFor = (prefix, node) => process.env[`${prefix}_${node.toUpperCase()}`];
+
+function rememberTfaSession(node, res) {
+    const issued = res.headers.get('x-admin-2fa-session');
+    if (issued) tfaSessions[node] = issued;
+}
+
+/** The admin headers for `node`: the password, and the node's 2FA session (or a code to get one) when there is one. */
+export function adminHeaders(node) {
+    const h = { 'X-Admin-Password': ADMIN_PASSWORD };
+    const session = tfaSessions[node] || envFor('ADMIN_2FA_SESSION', node);
+    if (session) h['X-Admin-2FA-Session'] = session;
+    else if (envFor('ADMIN_TOTP', node)) h['X-Admin-TOTP'] = envFor('ADMIN_TOTP', node);
+    return h;
 }
 
 /**
@@ -109,7 +132,7 @@ export async function signed(node, identity, method, path, body) {
     return { status: res.status, json };
 }
 
-export const admin = (node, path, body) => plain(node, 'POST', path, { password: ADMIN_PASSWORD, ...body });
+export const admin = (node, path, body) => plain(node, 'POST', path, { ...body }, adminHeaders(node));
 
 export async function balanceOf(node, publicKey) {
     const r = await plain(node, 'GET', `/api/ledger/balance/${publicKey}`);

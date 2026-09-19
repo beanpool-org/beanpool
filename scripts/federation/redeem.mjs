@@ -22,7 +22,7 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 import crypto from 'node:crypto';
-import { NODES, plain, signed, admin, newIdentity, postOffer, seedElder, setAvatar, loadState, saveState } from './fed.mjs';
+import { NODES, plain, signed, admin, adminHeaders, newIdentity, postOffer, seedElder, setAvatar, loadState, saveState } from './fed.mjs';
 
 /**
  * A member who is definitely NOT one we already have.
@@ -55,7 +55,6 @@ async function makeFreshMember(node, callsign, stateKey) {
     return identity;
 }
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const phase = process.argv[2] ?? 'report';
 
 /*
@@ -185,7 +184,7 @@ async function phase4() {
 
     if (!(link.keepers ?? []).some(k => (k.publicKey ?? k) === keeper.publicKey)) {
         const a = await plain('gippsland', 'POST', `/api/local/admin/treasury/${link.publicKey}/operators`,
-            { password: ADMIN_PASSWORD, pubkey: keeper.publicKey });
+            { pubkey: keeper.publicKey }, adminHeaders('gippsland'));
         console.log(`  assign keeper → ${a.status} ${JSON.stringify(a.json).slice(0, 160)}`);
     }
 

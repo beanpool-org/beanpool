@@ -216,6 +216,7 @@ run_federation_suites() {
       test-password-brake-fairness
       test-csrf-protection
       test-totp-admin-2fa
+      test-2fa-covers-admin-routes
       test-totp-helpers
       test-moderation-admin
       test-report-dedup-and-sync

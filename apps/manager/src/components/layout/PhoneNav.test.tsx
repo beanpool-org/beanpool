@@ -64,12 +64,14 @@ describe('Settings on a phone', () => {
         let menu = screen.getByRole('dialog', { name: 'Settings menu' });
 
         await act(async () => { fireEvent.click(within(menu).getByRole('button', { name: /appliance & data/i })); });
+        await act(async () => { fireEvent.click(within(menu).getByRole('button', { name: 'Diagnostics & Logs' })); });
         expect(screen.queryByRole('dialog', { name: 'Settings menu' })).not.toBeInTheDocument();
         expect(topBar().textContent).toContain('Appliance & Data › Diagnostics & Logs');
 
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Menu' })); });
         menu = screen.getByRole('dialog', { name: 'Settings menu' });
-        // The current section's screens are listed under it.
+        // The current section starts open, its screens listed under it.
+        expect(within(menu).getByRole('button', { name: /appliance & data/i }).getAttribute('aria-expanded')).toBe('true');
         await act(async () => { fireEvent.click(within(menu).getByRole('button', { name: 'Public Address' })); });
         expect(topBar().textContent).toContain('Appliance & Data › Public Address');
 
@@ -78,6 +80,48 @@ describe('Settings on a phone', () => {
         expect(topBar().textContent).toContain('Appliance & Data › Diagnostics & Logs');
         await back();
         expect(topBar().textContent).toContain('Home');
+    });
+
+    it('a section opens in place and the menu stays up; only a screen, or Home, navigates and closes it', async () => {
+        await act(async () => { render(<App isFleetMode={false} />); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Menu' })); });
+        const menu = screen.getByRole('dialog', { name: 'Settings menu' });
+        const people = within(menu).getByRole('button', { name: /people & safety/i });
+        const economy = within(menu).getByRole('button', { name: /shared projects & economy/i });
+        expect(people.getAttribute('aria-expanded')).toBe('false');
+        expect(within(menu).getByRole('button', { name: /^\W*Home$/ }).hasAttribute('aria-expanded')).toBe(false);
+        expect(within(menu).queryByRole('button', { name: 'Owners & admins' })).toBeNull();
+
+        await act(async () => { fireEvent.click(people); });
+        expect(screen.getByRole('dialog', { name: 'Settings menu' })).toBeInTheDocument();
+        expect(people.getAttribute('aria-expanded')).toBe('true');
+        expect(within(menu).getByRole('button', { name: 'Owners & admins' })).toBeTruthy();
+        expect(topBar().textContent).toContain('Home');
+
+        // One section open at a time.
+        await act(async () => { fireEvent.click(economy); });
+        expect(people.getAttribute('aria-expanded')).toBe('false');
+        expect(economy.getAttribute('aria-expanded')).toBe('true');
+        expect(within(menu).queryByRole('button', { name: 'Owners & admins' })).toBeNull();
+        expect(within(menu).getByRole('button', { name: 'Escrow Disputes' })).toBeTruthy();
+        // Tapping it again shuts it.
+        await act(async () => { fireEvent.click(economy); });
+        expect(economy.getAttribute('aria-expanded')).toBe('false');
+        expect(within(menu).queryByRole('button', { name: 'Escrow Disputes' })).toBeNull();
+        expect(topBar().textContent).toContain('Home');
+
+        await act(async () => { fireEvent.click(people); });
+        await act(async () => { fireEvent.click(within(menu).getByRole('button', { name: 'Owners & admins' })); });
+        expect(screen.queryByRole('dialog', { name: 'Settings menu' })).not.toBeInTheDocument();
+        expect(topBar().textContent).toContain('People & Safety › Owners & admins');
+
+        // Home has no screens of its own: it navigates and closes at once.
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Menu' })); });
+        await act(async () => { fireEvent.click(within(screen.getByRole('dialog', { name: 'Settings menu' })).getByRole('button', { name: /^\W*Home$/ })); });
+        expect(screen.queryByRole('dialog', { name: 'Settings menu' })).not.toBeInTheDocument();
+        expect(topBar().textContent).toContain('Home');
+        await back();
+        expect(topBar().textContent).toContain('People & Safety › Owners & admins');
     });
 
     it('Back closes the open menu, and ✕ closes it without costing a Back', async () => {
@@ -112,5 +156,13 @@ describe('Settings on a phone', () => {
         expect(topBar().textContent).toContain('People & Safety');
         await back();
         expect(topBar().textContent).toContain('Home');
+    });
+
+    it('with the desktop sidebar hidden, Log Out is still one press away', async () => {
+        localStorage.setItem('bp-settings-sidebar', 'hidden');
+        await act(async () => { render(<App isFleetMode={false} />); });
+        const bar = screen.getByRole('button', { name: 'Show menu' }).parentElement as HTMLElement;
+        await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: 'Log Out' })); });
+        expect(sessionStorage.getItem('bp-admin-token')).toBeNull();
     });
 });

@@ -51,8 +51,9 @@ function asRole(r: unknown): 'owner' | 'admin' | null {
  */
 export async function startKeySession(win: Pick<Window, 'location' | 'history'> = window): Promise<KeySessionStart> {
     const { token, section } = parseHandoffFragment(win.location.hash || '');
-    if (win.location.hash && /(^|[#&])(handoff|section)=/.test(win.location.hash)) {
+    if (win.location.hash && /(^|[#&])(handoff|section|from)=/.test(win.location.hash)) {
         // Out of the address bar (and so out of history, bookmarks and screenshots) before anything else.
+        // `from` (lib/came-from.ts, read before this runs) goes with it.
         win.history.replaceState(null, '', win.location.pathname + win.location.search);
     }
 

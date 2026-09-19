@@ -1,5 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
-import { DeviceEventEmitter } from 'react-native';
+import { DeviceEventEmitter, Platform } from 'react-native';
+import { linkRoutePath, isReturnFromSettings } from '../utils/settings-return';
 
 /**
  * Intercept incoming native deep links before Expo Router matches routes.
@@ -14,12 +15,15 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     // normalisers add trailing slashes and query strings freely, and an exact match that missed
     // would fall through and navigate to a route that does not exist — an Unmatched Route screen
     // in place of the screen the member was on, which is worse than the problem being solved.
-    const foregroundPath = path
-        .replace(/^[a-zA-Z0-9_-]+:\/\//, '')
-        .split('?')[0]
-        .split('#')[0]
-        .replace(/\/+$/, '')
-        .replace(/^\//, '');
+    const foregroundPath = linkRoutePath(path);
+
+    // Node Settings' "Back to the BeanPool app" and "View my profile" (utils/settings-return.ts). On iOS
+    // Settings is an SFSafariViewController presented inside the app, which would stay on top of wherever the
+    // link lands; close it. (Android: our activity coming forward already backgrounds the Custom Tab.)
+    if (Platform.OS === 'ios' && isReturnFromSettings(path)) {
+        WebBrowser.dismissBrowser().catch(() => {});
+    }
+
     if (foregroundPath === 'foreground') {
         // `null` cancels navigation, which keeps the member where they were — but only makes sense
         // once something is mounted. On a cold start there is no current route to stay on, so send

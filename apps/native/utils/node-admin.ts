@@ -183,10 +183,15 @@ export async function requestSettingsLink(nodeUrl: string, identity: BeanPoolIde
     }
 }
 
-/** `<node>/settings#handoff=<token>[&section=<id>]`. The token is in the fragment, never the query. */
+/**
+ * `<node>/settings#handoff=<token>[&section=<id>]&from=app`. The token is in the fragment, never the query.
+ * `from=app` tells Settings to offer "Back to the BeanPool app" (a `beanpool://` link, see
+ * utils/settings-return.ts) rather than sending the member to a web app they never set up.
+ */
 export function buildSettingsHandoffUrl(nodeUrl: string, token: string, section?: string): string {
     const parts = [`handoff=${encodeURIComponent(token)}`];
     if (section && (SETTINGS_SECTIONS as readonly string[]).includes(section)) parts.push(`section=${section}`);
+    parts.push('from=app');
     return `${base(nodeUrl)}/settings#${parts.join('&')}`;
 }
 

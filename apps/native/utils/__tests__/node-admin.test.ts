@@ -196,7 +196,7 @@ describe("the phone's own unlock comes first", () => {
         expect(LocalAuthentication.authenticateAsync).toHaveBeenCalledBefore(globalThis.fetch as any);
         const verifyBody = JSON.parse(calls[1].init!.body as string);
         expect(verifyBody).toEqual({ challengeId: 'c1', memberPubkey: identity.publicKey, signature: 'AQID' });
-        expect(openUrl).toHaveBeenCalledWith('https://mullum.beanpool.org/settings#handoff=tok123&section=moderation');
+        expect(openUrl).toHaveBeenCalledWith('https://mullum.beanpool.org/settings#handoff=tok123&section=moderation&from=app');
     });
 });
 
@@ -222,7 +222,7 @@ describe('the node’s own 2FA still applies', () => {
         expect(LocalAuthentication.authenticateAsync).toHaveBeenCalledTimes(1);
         const lastVerify = calls.filter(c => c.url.endsWith('/verify-challenge')).pop()!;
         expect(JSON.parse(lastVerify.init!.body as string).totpCode).toBe('123456');
-        expect(openUrl).toHaveBeenCalledWith('https://mullum.beanpool.org/settings#handoff=tok9');
+        expect(openUrl).toHaveBeenCalledWith('https://mullum.beanpool.org/settings#handoff=tok9&from=app');
     });
 });
 
@@ -249,10 +249,16 @@ describe('buildSettingsHandoffUrl', () => {
         const u = new URL(buildSettingsHandoffUrl('https://test.beanpool.org', 'a/b+c'));
         expect(u.search).toBe('');
         expect(u.pathname).toBe('/settings');
-        expect(u.hash).toBe('#handoff=a%2Fb%2Bc');
+        expect(u.hash).toBe('#handoff=a%2Fb%2Bc&from=app');
+    });
+    it('says it came from the app, in the fragment and never the query', () => {
+        const u = new URL(buildSettingsHandoffUrl('https://test.beanpool.org', 't', 'moderation'));
+        expect(u.search).toBe('');
+        expect(new URLSearchParams(u.hash.slice(1)).get('from')).toBe('app');
+        expect(u.searchParams.has('from')).toBe(false);
     });
     it('drops sections /settings does not know', () => {
-        expect(buildSettingsHandoffUrl('https://test.beanpool.org/', 't', 'evil')).toBe('https://test.beanpool.org/settings#handoff=t');
-        expect(buildSettingsHandoffUrl('https://test.beanpool.org/', 't', 'disputes')).toBe('https://test.beanpool.org/settings#handoff=t&section=disputes');
+        expect(buildSettingsHandoffUrl('https://test.beanpool.org/', 't', 'evil')).toBe('https://test.beanpool.org/settings#handoff=t&from=app');
+        expect(buildSettingsHandoffUrl('https://test.beanpool.org/', 't', 'disputes')).toBe('https://test.beanpool.org/settings#handoff=t&section=disputes&from=app');
     });
 });

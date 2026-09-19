@@ -7,6 +7,8 @@
  * on) or the app's one-time key link. The web app deliberately does NOT mint that key link itself — the phone
  * gates it behind its own unlock, and a browser has no equivalent, so doing it here would turn anyone with
  * this browser profile into an admin. The link says so, and points to the app for password-free sign-in.
+ *
+ * `#from=pwa` (a fragment, so no server sees it) tells Settings to offer "← Back to BeanPool" to this web app.
  */
 import { useEffect, useState } from 'react';
 import { request, getNodeApiUrl } from '../lib/api';
@@ -39,7 +41,7 @@ export function NodeAdminLink() {
             </div>
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden">
                 <a
-                    href={`${getNodeApiUrl()}/settings`}
+                    href={`${getNodeApiUrl()}/settings#from=pwa`}
                     className="min-h-[48px] p-4 text-nature-900 dark:text-white flex items-center justify-between gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline"
                 >
                     <span className="flex items-start gap-3 min-w-0">

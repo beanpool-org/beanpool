@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { singleNodeNavItems, type TabId } from './FleetSidebar';
 import { subTabLabel } from '../../lib/sections';
+import type { BackLink } from '../../lib/came-from';
+import { PhoneReturnLink } from './ReturnLinks';
 
 /**
  * Node Settings on a phone (below `lg`): a top bar that always names the screen you are on, and the section menu in
@@ -8,12 +10,14 @@ import { subTabLabel } from '../../lib/sections';
  * phone's in-app browser, so this is the layout most of them see.
  */
 
-export function PhoneTopBar({ communityName, tab, sub, menuOpen, onOpenMenu }: {
+export function PhoneTopBar({ communityName, tab, sub, menuOpen, onOpenMenu, back }: {
     communityName: string;
     tab: TabId;
     sub?: string;
     menuOpen: boolean;
     onOpenMenu: () => void;
+    /** Back to where the member came from (lib/came-from.ts); the menu repeats it in full with "View my profile". */
+    back?: BackLink;
 }) {
     const item = singleNodeNavItems.find(i => i.id === tab);
     const subLabel = subTabLabel(tab, sub);
@@ -21,7 +25,7 @@ export function PhoneTopBar({ communityName, tab, sub, menuOpen, onOpenMenu }: {
     const where = item ? `${item.icon} ${item.label}${subLabel ? ` › ${subLabel}` : ''}` : '';
     return (
         <header className="lg:hidden sticky top-0 z-40 bg-nature-900/95 backdrop-blur-md border-b border-nature-800">
-            <div className="flex items-center gap-1 pl-1 pr-3 min-h-[56px]">
+            <div className={`flex items-center gap-1 pl-1 ${back ? 'pr-1' : 'pr-3'} min-h-[56px]`}>
                 <button
                     type="button"
                     onClick={onOpenMenu}
@@ -37,6 +41,7 @@ export function PhoneTopBar({ communityName, tab, sub, menuOpen, onOpenMenu }: {
                     <p className="text-xs font-semibold text-terra-400 m-0 truncate">{`${communityName || 'BeanPool'} · Settings`}</p>
                     <p className="text-sm font-bold text-white m-0 truncate" aria-live="polite">{where}</p>
                 </div>
+                {back && <PhoneReturnLink back={back} />}
             </div>
         </header>
     );

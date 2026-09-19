@@ -2,7 +2,8 @@
  * The take-over envelope and the recovery code — main-server routes (sealed-keys.md §2.6, §4, §7; slice 2a).
  * services/takeover-envelope.ts does the work; this file is who may ask.
  *
- *   POST /api/local/admin/takeover/status               admin        who the keys are locked to, or why they are not
+ *   POST /api/local/admin/takeover/status               admin        who the keys are locked to, or why they are not;
+ *                                                                    which standby holds which (main), what it holds (standby)
  *   POST /api/local/admin/takeover/recovery-code        owner        make / replace the code; returned ONCE
  *   POST /api/local/admin/takeover/recovery-code/check  owner        does this typed code match? under the password brake
  *   GET  /api/local/admin/takeover-envelope             token/admin  the sealed bytes, ETag = envelopeId
@@ -22,8 +23,10 @@ import { recordReplicationAccess } from '../state-engine.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import {
     getTakeoverStatus, getSealedTakeoverEnvelope, makeRecoveryCode, checkCurrentRecoveryCode, parseRecoveryCode,
-    RecoveryCodeExistsError, RecoveryCodeOnStandbyError,
+    RecoveryCodeExistsError, RecoveryCodeOnStandbyError, noteEnvelopeFetch, getEnvelopeHolders,
 } from '../services/takeover-envelope.js';
+import { getHeldEnvelopesStatus } from '../services/standby-envelopes.js';
+import { getNodeRole } from '../state-engine.js';
 import type { RouteDeps } from './types.js';
 
 const OWNER_ONLY = 'Only an owner can make or check the recovery code.';
@@ -41,7 +44,13 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
     router.post('/api/local/admin/takeover/status', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         ctx.set('Cache-Control', 'no-store');
-        ctx.body = await getTakeoverStatus();
+        const standby = getNodeRole() === 'backup';
+        ctx.body = {
+            ...(await getTakeoverStatus()),
+            // Main server: which standby last fetched which envelope. Standby: the main server's envelopes it holds.
+            standbys: standby ? [] : getEnvelopeHolders(),
+            held: standby ? getHeldEnvelopesStatus() : null,
+        };
     });
 
     // Make or replace the printed recovery code. The code is in this one response and nowhere else: not on disk,
@@ -166,11 +175,17 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
         ctx.set('ETag', `"${got.envelopeId}"`);
         ctx.set('X-Envelope-Id', got.envelopeId);
         if (matchesEtag(ctx.request.header['if-none-match'], got.envelopeId)) {
-            if (viaToken) recordReplicationAccess({ at: Date.now(), ip, auth: 'token', reason: `takeover envelope ${got.envelopeId.slice(0, 8)}: not modified (304)` });
+            if (viaToken) {
+                recordReplicationAccess({ at: Date.now(), ip, auth: 'token', reason: `takeover envelope ${got.envelopeId.slice(0, 8)}: not modified (304)` });
+                noteEnvelopeFetch(ip, got.envelopeId, got.header.createdAt, 'confirmed');
+            }
             ctx.status = 304;
             return;
         }
-        if (viaToken) recordReplicationAccess({ at: Date.now(), ip, auth: 'token', reason: `takeover envelope ${got.envelopeId.slice(0, 8)}` });
+        if (viaToken) {
+            recordReplicationAccess({ at: Date.now(), ip, auth: 'token', reason: `takeover envelope ${got.envelopeId.slice(0, 8)}` });
+            noteEnvelopeFetch(ip, got.envelopeId, got.header.createdAt, 'sent');
+        }
         ctx.set('Content-Type', 'application/octet-stream');
         ctx.set('Content-Disposition', 'attachment; filename="takeover-envelope.bpseal"');
         ctx.body = got.bytes;

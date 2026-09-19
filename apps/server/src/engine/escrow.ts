@@ -117,6 +117,16 @@ function assertNotOnHoliday(publicKey: string): void {
     if (isOnHoliday(publicKey)) throw new Error(HOLIDAY_MODE_ERROR);
 }
 
+/**
+ * A group post this caller cannot see in any feed (getPosts: only its author and the group's active members), so the
+ * trade routes must answer exactly as for an id nobody has. The old "Must be an active member of the group" told
+ * a non-member holding the id that it was a group post, and of which group — an invite-only one included.
+ */
+function cannotSeeGroupPost(scope: string | null | undefined, groupId: string | null | undefined, authorPubkey: string, caller: string): boolean {
+    if (scope !== 'group' || !groupId || authorPubkey === caller) return false;
+    return !db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(groupId, caller);
+}
+
 export function requestPost(
     cb: EscrowCallbacks,
     postId: string,
@@ -127,7 +137,9 @@ export function requestPost(
     assertProfileComplete(requesterPublicKey);
     assertNotOnHoliday(requesterPublicKey);
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
-    if (!post) throw new Error('Post not found');
+    if (!post || cannotSeeGroupPost(post.audience_scope, post.target_group_id, post.author_pubkey, requesterPublicKey)) {
+        throw new Error('Post not found');
+    }
     if (post.status !== 'active') throw new Error('Post is not active');
     assertMemberActive(post.author_pubkey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.author_pubkey) as any;
@@ -488,7 +500,9 @@ export function acceptPost(
     assertMemberActive(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
-    if (!post) throw new Error('Post not found or not active');
+    if (!post || cannotSeeGroupPost(post.audienceScope, post.targetGroupId, post.authorPublicKey, buyerPublicKey)) {
+        throw new Error('Post not found or not active');
+    }
     assertMemberActive(post.authorPublicKey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.authorPublicKey) as any;
     if (authorMember?.is_treasury) {

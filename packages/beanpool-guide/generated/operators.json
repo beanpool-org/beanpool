@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 22,
-  "hash": "2a6b710e14f683ea7070ba41bae388c44b7683707f0585123f9ec56187ad2e28",
+  "version": 25,
+  "hash": "c8ecc4c0310251c245fa79634e59426ea54d59fd86d2241110b832ecbda7a601",
   "sections": [
     {
       "id": "setup",
@@ -263,7 +263,7 @@
         {
           "type": "ul",
           "items": [
-            "First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://mullum.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.",
+            "First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://yourtown.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.",
             "Then, in the phone app, open **Settings** and tap **Sign in on a computer** (next to Manage or Moderate; owners, admins and moderators only). Point the camera at the QR code.",
             "The phone shows the 6-character code, your community and which browser asked (for example \"Firefox on Windows\"). Check the code matches the one on the computer. If it doesn't, or it isn't your computer, tap **No, that's not my computer**.",
             "Tap **Sign in**. The phone asks for its own unlock, and the 6-digit code if your server has two-factor sign-in on. The computer opens Settings, signed in as you."
@@ -724,8 +724,8 @@
           "type": "ul",
           "items": [
             "read every report, filtered by open, handled or dismissed, with what the post says and who reported it;",
-            "take down the reported post, with a reason the author reads;",
-            "take a reported Pulse item off the Pulse;",
+            "take down the reported post while its report is still open, with a reason the author reads;",
+            "take a reported Pulse item off the Pulse, again while its report is still open;",
             "dismiss a report, or mark it handled."
           ]
         },
@@ -736,6 +736,10 @@
         {
           "type": "p",
           "text": "A moderator whose role is taken away, or changed, is signed out straight away."
+        },
+        {
+          "type": "p",
+          "text": "If the server's two-factor sign-in is on (see Access and security), a moderator's key sign-in also asks for the server's 6-digit code, exactly as an admin's does, so they need it from whoever keeps the authenticator. The server has one set of backup codes, not one per person: a backup code a moderator uses is spent, and nobody can use it again. The code on its own opens nothing; it only works alongside a key that holds a role."
         },
         {
           "type": "h2",
@@ -997,8 +1001,8 @@
         {
           "type": "ul",
           "items": [
-            "The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.",
-            "It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter."
+            "In **Triage & Moderation** the list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.",
+            "Each row shows which post the report is about, who wrote it, and whether it has already been removed."
           ]
         },
         {
@@ -1040,7 +1044,7 @@
         },
         {
           "type": "p",
-          "text": "The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post that someone has reported."
+          "text": "The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post, or a Pulse item, while a report on it is still open, whichever button they use: once its reports are dismissed or handled, only an owner or admin can remove it. Marking a report handled never removes anything, so a moderator can still do that."
         },
         {
           "type": "h2",
@@ -1200,7 +1204,7 @@
         },
         {
           "type": "p",
-          "text": "The list also shows ordinary finished deals older than that, marked Resolved, and shows at most 50, oldest first. Look for the ones still held."
+          "text": "Only real disputes that needed an admin ruling appear in the Resolved history; ordinary finished deals do not. The list pages through disputes 50 at a time, so you can reach every dispute on the node."
         },
         {
           "type": "p",
@@ -1702,6 +1706,13 @@
             "That standby is **not copying** if your server has two-factor sign-in on, has token-only on, or no longer takes that password. It still copies with the password only if your server already has a token and token-only is off.",
             "To fix it either way: if you saved your server's token, paste it under **Live Backup Server** on the standby and save. If not, make a new one under **Replication Access** and paste it into every standby. The standby then deletes the password. If the password came from BACKUP_ADMIN_PASSWORD in the standby's .env, delete that line too.",
             "Copying goes one way only. Your main server never takes data from the standby.",
+            "**The standby keeps the locked take-over keys.** Each time it copies, it also asks your server for takeover-envelope.json, with the token only. If nothing changed, your server answers \"no change\" and nothing is sent. The standby keeps the last 5 in the folder data/held-takeover-envelopes on its own disk. A sixth deletes only the oldest, so a bad copy from your server can't wipe out a good one.",
+            "The standby **can't open them**. It has no owner's key and no recovery code. Only an owner or the recovery code opens them, as with a locked backup. It keeps the files exactly as they came, and nothing from inside them is ever on the standby's disk.",
+            "The standby only keeps a copy signed by the server it copies from (the one it was set up to trust). It refuses any other copy, keeps what it had, and writes a line to its log starting \"Refused a take-over envelope\".",
+            "On the standby, **Live Backup Server** says what it holds: when the newest copy was locked and who can open it. If the owners or the recovery code changed since the copy before, it says who was added or removed.",
+            "On your server, **Replication Access** says which standby holds which copy. When an owner is added or removed, a standby shows as holding keys \"from before the latest change\" until it next copies, about a minute later.",
+            "A main server running a BeanPool from before this has nothing to send. The standby says \"the main server is too old to send a take-over envelope\" and keeps copying the database as before. A server with no owner and no recovery code has nothing to send either, and the standby says that instead.",
+            "Taking over with these keys comes in a later update. Until then, making a standby the main server works as below.",
             "**A standby is not a complete copy.** It does not copy Decisions and their votes, who holds which role, enterprise pledges and keeper changes, invites, or members' notification settings. Keep file backups as well.",
             "Making a standby the main server uses scripts in the BeanPool source code, not in the server image, and the first start after needs PROMOTED_FROM_BACKUP=true."
           ]

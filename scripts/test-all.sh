@@ -256,6 +256,7 @@ run_federation_suites() {
       test-takeover-envelope
       test-backup-topology
       test-standby-token-only
+      test-standby-envelopes
       test-cash-also-needed
       test-posts-ignore-archetypes
       test-crowdfund-ledger-sync
@@ -334,6 +335,7 @@ run_federation_suites() {
       test-groups-isolation
       test-groups-routes
       test-groups-invite-only-hidden
+      test-group-existence-leaks
       test-groups-patch-http
       test-groups-sync-and-removal
       test-groups-chat

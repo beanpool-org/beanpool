@@ -19,8 +19,8 @@ The report form tells members their note goes to moderators. It goes to everyone
 
 Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators: **Reports**, the only screen they have (below).
 
-- The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.
-- It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter.
+- In **Triage & Moderation** the list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.
+- Each row shows which post the report is about, who wrote it, and whether it has already been removed.
 
 ![The Triage and Moderation screen in Settings](images/people-moderation.webp)
 
@@ -42,7 +42,7 @@ You open Settings from the app's **🛡️ Moderate** button, or on a computer b
 - **Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.
 - **Mark handled** (for a report about a member, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.
 
-The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post that someone has reported.
+The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post, or a Pulse item, while a report on it is still open, whichever button they use: once its reports are dismissed or handled, only an owner or admin can remove it. Marking a report handled never removes anything, so a moderator can still do that.
 
 ## Taking a post down
 

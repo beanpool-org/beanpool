@@ -128,7 +128,7 @@ async function main() {
     }
 
     // --- GET /api/groups/:id (by id and by slug) ---
-    for (const ref of [g.id, 'quiet-circle']) {
+    for (const ref of [g.id, g.slug]) {
         const label = ref === g.id ? 'by id' : 'by slug';
         for (const [who, pk] of HIDDEN) assert(notFound(await call(groups, 'GET', `/api/groups/${ref}`, pk)), `GET /:id ${label}: ${who} gets 404`);
         assert(notFound(await call(groups, 'GET', `/api/groups/${ref}`, undefined)), `GET /:id ${label}: signed-out gets 404`);

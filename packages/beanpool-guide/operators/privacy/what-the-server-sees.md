@@ -30,7 +30,8 @@ So every owner and admin can read how each member voted: all of them can downloa
 
 - Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.
 - Some things are public on purpose: the market's list of posts, the Pulse, the community's health summary, profile pictures and post photos.
-- The live-updates channel, which carries changes as they happen, is open to anyone who can reach your server unless ENFORCE_WS_AUTH=true. Before you switch it on, check with the BeanPool project that the apps your members use sign their connection, or they stop getting live updates.
+- The live-updates channel tells the apps about changes as they happen. Only members get the full stream: every version of the BeanPool app signs its connection. Anyone else who connects is told only that something public changed, such as a post on the market or a pin on the map. They are never told what changed or who changed it. This is on by default.
+- The setting is ENFORCE_WS_AUTH. The value true goes further and turns away anyone who is not a signed-in member. The value false opens the full stream to anyone who can reach your server, as it was before. Do not use false.
 
 ## What admins see in Settings
 

@@ -7,11 +7,13 @@
  * updates. This suite starts both servers (HTTP first, as index.ts does) and checks that both ports
  * give the same answer for every upgrade path:
  *
- *   /ws           → 101, and a broadcast reaches the socket
+ *   /ws signed by a member → 101, and a broadcast reaches the socket
+ *   /ws unsigned (default) → 101, and gets a public change as a bare doorbell but not a member event
  *   /ws (ENFORCE_WS_AUTH=true) unsigned → 401, validly signed → 101
  *   /ws/logs      without admin auth → 401; with a valid ticket → 101
  *   anything else → socket destroyed, no response
  *
+ * test-ws-auth-default covers what each kind of socket gets in detail.
  * ENFORCE_WS_AUTH is a module const read at import, so run it once per value:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-ws-http-port.ts
  *   ENFORCE_WS_AUTH=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-ws-http-port.ts
@@ -30,6 +32,7 @@ import { issueWsTicket } from './admin-auth.js';
 import { db } from './db/db.js';
 
 const ENFORCE_WS_AUTH = process.env.ENFORCE_WS_AUTH === 'true';
+const OPEN_FEED = process.env.ENFORCE_WS_AUTH === 'false';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -113,10 +116,11 @@ async function main() {
     for (const p of ports) {
         console.log(`\n— ${p.name} —`);
 
-        // /ws: the member's live feed.
-        const query = ENFORCE_WS_AUTH ? `?${signedWsQuery(member)}` : '';
+        // /ws: the member's live feed. Signed in every mode except the open feed, where an unsigned
+        // socket gets every community-wide event.
+        const query = OPEN_FEED ? '' : `?${signedWsQuery(member)}`;
         const feed = await upgrade(`${p.base}/ws${query}`, tunnelHeaders);
-        assert(feed.kind === 'open', `${p.name}: /ws${ENFORCE_WS_AUTH ? ' (signed)' : ''} upgrade → 101 (got ${describe(feed)})`);
+        assert(feed.kind === 'open', `${p.name}: /ws${OPEN_FEED ? '' : ' (signed)'} upgrade → 101 (got ${describe(feed)})`);
         if (feed.kind === 'open') {
             await sleep(100);
             assert(feed.events.some(e => e.type === 'state_snapshot'), `${p.name}: /ws sends the initial state_snapshot`);
@@ -126,6 +130,23 @@ async function main() {
             await sleep(200);
             assert(feed.events.some(e => e.type === 'test_ping' && e.marker === marker), `${p.name}: a broadcast reaches the /ws socket`);
             feed.ws.close();
+        }
+
+        if (!ENFORCE_WS_AUTH && !OPEN_FEED) {
+            // The default: a stranger's socket is accepted, but only public changes reach it.
+            const anon = await upgrade(`${p.base}/ws`, tunnelHeaders);
+            assert(anon.kind === 'open', `${p.name}: unsigned /ws by default → 101 (got ${describe(anon)})`);
+            if (anon.kind === 'open') {
+                await sleep(100);
+                anon.events.length = 0;
+                broadcast({ type: 'test_ping', marker: 'member-only' });
+                broadcast({ type: 'new_post', post: { id: 'p1', title: 'Spare lemons' } });
+                await sleep(200);
+                assert(!anon.events.some(e => e.type === 'test_ping'), `${p.name}: unsigned /ws does not get a member event`);
+                assert(anon.events.some(e => e.type === 'new_post' && Object.keys(e).length === 1),
+                    `${p.name}: unsigned /ws gets a public change as a bare doorbell`);
+                anon.ws.close();
+            }
         }
 
         if (ENFORCE_WS_AUTH) {

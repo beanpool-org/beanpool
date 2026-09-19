@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 4,
-  "hash": "98b43970d4a987f5d8d9bcc2bee73db924a2bf5d5dca0873f9e6110595098769",
+  "version": 5,
+  "hash": "da97c9d591249cba69d6219fb92304de40257c4ef32f1132665ebceccd736ccd",
   "sections": [
     {
       "id": "setup",
@@ -1483,7 +1483,8 @@
           "items": [
             "Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.",
             "Some things are public on purpose: the market's list of posts, the Pulse, the community's health summary, profile pictures and post photos.",
-            "The live-updates channel, which carries changes as they happen, is open to anyone who can reach your server unless ENFORCE_WS_AUTH=true. Before you switch it on, check with the BeanPool project that the apps your members use sign their connection, or they stop getting live updates."
+            "The live-updates channel tells the apps about changes as they happen. Only members get the full stream: every version of the BeanPool app signs its connection. Anyone else who connects is told only that something public changed, such as a post on the market or a pin on the map. They are never told what changed or who changed it. This is on by default.",
+            "The setting is ENFORCE_WS_AUTH. The value true goes further and turns away anyone who is not a signed-in member. The value false opens the full stream to anyone who can reach your server, as it was before. Do not use false."
           ]
         },
         {

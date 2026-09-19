@@ -260,6 +260,7 @@ run_federation_suites() {
       test-standby-envelopes
       test-takeover-by-code
       test-takeover-crash-resume
+      test-takeover-by-phone
       test-cash-also-needed
       test-posts-ignore-archetypes
       test-crowdfund-ledger-sync

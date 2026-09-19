@@ -11,6 +11,10 @@
  *     owners and admins by key session, the admin password too; unauthenticated → 401; a removed owner drops off.
  *  4. A never-checked owner can still do everything: their owner routes answer 200.
  *  5. Nothing gates on the record: no server source outside this feature reads the table.
+ *  6. The silent open check (slice 6): an owner's app reads the current lock's header (signed), opens its own stanza
+ *     with its key — here the web app's PKCS8 form — and reports it; the list shows "opened the current lock" with
+ *     the date. A report on an older lock shows as not current; a device that could NOT open it says so. Owners only,
+ *     signed, one statement; nothing gates on it either.
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  *
@@ -100,6 +104,13 @@ async function keySession(who: Identity): Promise<string> {
 async function main() {
     console.log('Running owner "check your 12 words" tests (real HTTPS)...\n');
     await initTls();
+    // A node key and a genesis, so this server seals a real take-over lock to its owners (section 6).
+    const dataDir = process.env.BEANPOOL_DATA_DIR!;
+    const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
+    fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')), { mode: 0o600 });
+    if (!fs.existsSync(path.join(dataDir, 'genesis.json'))) {
+        fs.writeFileSync(path.join(dataDir, 'genesis.json'), JSON.stringify({ communityId: 'wordscheck000001', publicKey: '00', genesisHash: '00', createdAt: new Date().toISOString() }));
+    }
     initStateEngine();
 
     const anna = keypair();   // owner who checks
@@ -221,6 +232,51 @@ async function main() {
         assert(cfg.status === 200, `moderation reports → 200 (got ${cfg.status})`);
     }
 
+    // ── 6. The silent open check (slice 6) ──
+    console.log('\n6. the silent open check');
+    {
+        const core = await import('@beanpool/core');
+        const OPEN = core.OWNER_LOCK_OPEN_CHECK_PATH;
+        const before = await admin('POST', LIST, { 'x-admin-password': adminPass });
+        const current = before.body.lock?.envelopeId as string | null;
+        assert(typeof current === 'string' && /^[0-9a-f]{32}$/.test(current), `this server holds a take-over lock (${current})`);
+        assert(before.body.owners.every((o: any) => o.lockOpen === null), 'before any report, no owner has one');
+
+        // Anna's app, as it does it: the header from her own server, her stanza opened with her key, the key dropped.
+        const got = await signed('GET', core.TAKEOVER_HEADER_PATH, anna);
+        assert(got.status === 200 && got.body.youAreARecipient === true, 'the owner reads the current header, and is in it');
+        const annaPkcs8 = anna.priv.export({ type: 'pkcs8', format: 'der' }) as Buffer;
+        const opened = core.canOpenAsOwner(core.validateSealedHeader(got.body.header), annaPkcs8.toString('hex'));
+        assert(opened === true, "her key in the web app's PKCS8 form opens her stanza");
+        const ts = Date.now();
+        const ok = await signed('POST', OPEN, anna, { envelopeId: got.body.envelopeId, opened }, ts);
+        assert(ok.status === 200 && ok.body.checkedAt === ts, `the report is stored with the signed date (got ${ok.status})`);
+        const cannot = await signed('POST', OPEN, ben, { envelopeId: 'cd'.repeat(16), opened: false });
+        assert(cannot.status === 200, 'a device that could not open an (older) lock can say so too');
+
+        const anon = await signed('POST', OPEN, undefined, { envelopeId: current, opened: true });
+        assert(anon.status === 401, `unsigned → 401 (got ${anon.status})`);
+        const m = await signed('POST', OPEN, mem, { envelopeId: current, opened: true });
+        assert(m.status === 403, `a member → 403 (got ${m.status})`);
+        const nonOwnerAdmin = await signed('POST', OPEN, mo, { envelopeId: current, opened: true });
+        assert(nonOwnerAdmin.status === 403, `an admin who is not an owner → 403 (got ${nonOwnerAdmin.status})`);
+        for (const bad of [{}, { envelopeId: current }, { envelopeId: 'xyz', opened: true }, { envelopeId: current, opened: 'yes' }, { envelopeId: current, opened: true, dataKey: 'ab' }]) {
+            const r = await signed('POST', OPEN, anna, bad);
+            assert(r.status === 400, `body ${JSON.stringify(bad)} → 400 (got ${r.status})`);
+        }
+
+        const list = await admin('POST', LIST, { 'x-admin-password': adminPass });
+        const byName = Object.fromEntries((list.body.owners as any[]).map((o) => [o.callsign, o]));
+        assert(byName.wcAnna.lockOpen?.opened === true && byName.wcAnna.lockOpen.current === true && byName.wcAnna.lockOpen.checkedAt === ts,
+            `Who can unlock: @wcAnna's device opened the current lock (${JSON.stringify(byName.wcAnna.lockOpen)})`);
+        assert(byName.wcBen.lockOpen?.opened === false && byName.wcBen.lockOpen.current === false,
+            `@wcBen's last report is about another lock, and says it did not open (${JSON.stringify(byName.wcBen.lockOpen)})`);
+        assert(!JSON.stringify(list.body).includes('signature') && !JSON.stringify(list.body).includes('signed_payload'), 'the list carries the date only');
+        const row = db.prepare('SELECT signature, signed_payload FROM owner_lock_opens WHERE member_pubkey = ?').get(anna.pub) as any;
+        assert(crypto.verify(null, Buffer.from(row.signed_payload), anna.pubObj, Buffer.from(row.signature, 'base64')),
+            "the stored report re-verifies against the owner's key");
+    }
+
     // ── 3b. A removed owner drops off the list ──
     revokeNodeRole(anna.pub, 'owner', ben.pub);
     {
@@ -249,6 +305,22 @@ async function main() {
         };
         walk(srcDir);
         assert(hits.length === 0, `no other server source reads it (found: ${hits.join(', ') || 'none'})`);
+
+        // The open-check records, likewise: written by their route, read only by the list.
+        const openAllowed = new Set(['engine/owner-lock-opens.ts', 'engine/owner-words-checks.ts', 'routes/owner-unlock.ts', 'test-owner-words-check.ts']);
+        const openHits: string[] = [];
+        const walkOpen = (dir: string) => {
+            for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, e.name);
+                if (e.isDirectory()) { walkOpen(full); continue; }
+                if (!e.name.endsWith('.ts')) continue;
+                const rel = path.relative(srcDir, full);
+                if (openAllowed.has(rel)) continue;
+                if (/owner_lock_opens|owner-lock-opens|recordOwnerLockOpen/.test(fs.readFileSync(full, 'utf8'))) openHits.push(rel);
+            }
+        };
+        walkOpen(srcDir);
+        assert(openHits.length === 0, `no other server source reads the open-check records (found: ${openHits.join(', ') || 'none'})`);
     }
 
     console.log(`\n${passed}/${run} owner words-check tests passed`);

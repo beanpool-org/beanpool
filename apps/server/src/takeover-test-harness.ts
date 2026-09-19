@@ -123,6 +123,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { startTakeoverEnvelopeService } = await import('./services/takeover-envelope.js');
     const { createBackupRoutes } = await import('./routes/backup.js');
     const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
+    const { createOwnerUnlockRoutes } = await import('./routes/owner-unlock.js');
     const { checkAdminAuth } = await import('./admin-auth.js');
 
     await ensureGenesis();
@@ -153,6 +154,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     });
     app.use(createBackupRoutes(deps).routes());
     app.use(createTakeoverEnvelopeRoutes(deps).routes());
+    app.use(createOwnerUnlockRoutes(deps).routes());
     const server = http.createServer(app.callback());
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
 

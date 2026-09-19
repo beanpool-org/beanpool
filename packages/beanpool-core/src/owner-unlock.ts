@@ -597,3 +597,10 @@ export class OwnerUnlockSessions<T> {
         for (const id of [...this.sessions.keys()]) this.forget(id);
     }
 }
+
+// ── The silent open check (§7) ─────────────────────────────────────────────────────────────
+
+/** Signed GET on the main server: the current take-over header, for an owner (routes/takeover-envelope.ts). */
+export const TAKEOVER_HEADER_PATH = '/api/node/takeover-envelope/header';
+/** Signed POST on the main server: `{ envelopeId, opened }` — this owner's device could (not) open that lock. */
+export const OWNER_LOCK_OPEN_CHECK_PATH = '/api/node/owner/lock-open-check';

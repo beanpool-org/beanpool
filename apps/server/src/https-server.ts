@@ -102,6 +102,7 @@ import { createAdminRoutes } from './routes/admin.js';
 import { createBackupRoutes } from './routes/backup.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
+import { createOwnerUnlockRoutes } from './routes/owner-unlock.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createGroupRoutes } from './routes/groups.js';
 import { createFederationPurchaseRoutes } from './routes/federation-purchase.js';
@@ -760,6 +761,13 @@ export async function startHttpsServer(port: number): Promise<void> {
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+            } else if (/^\/api\/local\/admin\/unlock\/[0-9a-f]{64}$/.test(ctx.path)) {
+                // An owner's web app unlocking a standby or a restore with its key (slice 6, routes/owner-unlock.ts):
+                // it runs on the community's own address, never this server's. These two calls carry no cookie and
+                // no credential — the owner's signature is inside the body — so any origin may make them.
+                ctx.set('Access-Control-Allow-Origin', '*');
+                ctx.set('Access-Control-Allow-Headers', 'Content-Type');
+                ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
             }
         }
 
@@ -1166,6 +1174,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createBackupRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),
         createOwnerWordsCheckRoutes(deps),
+        createOwnerUnlockRoutes(deps),
         createMarketplaceRoutes(deps),
         createGroupRoutes(deps),
         createFederationPurchaseRoutes(deps),

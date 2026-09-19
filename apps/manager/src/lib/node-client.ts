@@ -278,6 +278,17 @@ export async function loginToNode(
 }
 
 /**
+ * CSRF token for a key sign-in (lib/key-session.ts). The key session rides in an httpOnly cookie that the
+ * browser attaches by itself, so the node refuses cookie-authenticated changes without this header. Held in
+ * memory only; a reload fetches a new one. Null under password sign-in, which sends no header at all.
+ */
+let keySessionCsrfToken: string | null = null;
+
+export function setKeySessionCsrfToken(token: string | null): void {
+    keySessionCsrfToken = token;
+}
+
+/**
  * Build headers with admin password and optional 2FA session token for node API calls.
  * Every fetch helper below uses this so TOTP-enabled nodes work transparently.
  */
@@ -285,6 +296,7 @@ export function buildAdminHeaders(adminPassword?: string, tfaSessionToken?: stri
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) headers['X-Admin-Password'] = adminPassword;
     if (tfaSessionToken) headers['X-Admin-2FA-Session'] = tfaSessionToken;
+    if (keySessionCsrfToken) headers['X-CSRF-Token'] = keySessionCsrfToken;
     return headers;
 }
 

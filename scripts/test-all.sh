@@ -232,6 +232,7 @@ run_federation_suites() {
       test-federation-settlement
       test-admin-auth
       test-admin-key-auth
+      test-app-admin-handoff
       test-backend-monitors
       test-backup-hardening
       test-backup-identity-bundle

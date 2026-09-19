@@ -349,8 +349,10 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
         return { ok: false, error: 'Session epoch revoked', revoked: true };
     }
 
-    // Node role check
-    if (!isNodeAdmin(entry.memberPubkey)) {
+    // Node role check, against the role held NOW rather than the one recorded when the token was minted:
+    // an owner demoted to admin in the seconds between must not open an owner-level session.
+    const liveRole = nodeRoleOf(entry.memberPubkey);
+    if (!liveRole || !isNodeAdmin(entry.memberPubkey)) {
         return { ok: false, error: 'Member no longer holds an admin role' };
     }
 
@@ -359,7 +361,7 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
     const session: AdminSession = {
         sessionId,
         memberPubkey: entry.memberPubkey,
-        role: entry.role,
+        role: liveRole,
         sessionEpoch: entry.sessionEpoch,
         createdAt: now,
         lastActiveAt: now,
@@ -370,7 +372,7 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
 
     const csrfToken = issueCsrfToken();
 
-    logger.info('AUTH', `Minted admin browser session for ${entry.memberPubkey} (role: ${entry.role})`);
+    logger.info('AUTH', `Minted admin browser session for ${entry.memberPubkey} (role: ${liveRole})`);
 
     return {
         ok: true,
@@ -378,7 +380,7 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
         session,
         csrfToken,
         memberPubkey: entry.memberPubkey,
-        role: entry.role,
+        role: liveRole,
         hardExpiresAt: session.hardExpiresAt,
         idleExpiresAt: session.idleExpiresAt,
     };
@@ -435,11 +437,15 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
         return { valid: false, error: 'Session revoked via epoch bump', revoked: true };
     }
 
-    // Role check
-    if (!isNodeAdmin(session.memberPubkey)) {
+    // Role check. The session's role follows node_roles on every request: checkAdminAuth hands it to the
+    // routes as ctx.state.adminRole, so an owner demoted to admin mid-session would otherwise keep
+    // owner-only powers (enrol an owner, toggle break-glass) until the session ran out.
+    const liveRole = nodeRoleOf(session.memberPubkey);
+    if (!liveRole || !isNodeAdmin(session.memberPubkey)) {
         adminSessions.delete(sessionId);
         return { valid: false, error: 'Member no longer holds an admin role' };
     }
+    session.role = liveRole;
 
     // Sliding window for idle timeout
     session.lastActiveAt = now;

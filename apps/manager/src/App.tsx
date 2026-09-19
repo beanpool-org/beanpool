@@ -32,6 +32,7 @@ import {
     buildAdminHeaders,
     getTfaSessionToken,
     setTfaSessionToken,
+    setKeySessionCsrfToken,
     normalizeNodeUrl,
     type DiagnosticsResponse,
     type GatewayConfig,
@@ -65,6 +66,7 @@ import { ApplianceSection } from './components/modules/ApplianceSection';
 import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
+import { startKeySession, endKeySession, sectionTarget, type KeySession } from './lib/key-session';
 
 /**
  * Does this error mean "wrong password" rather than "node unreachable"?
@@ -129,6 +131,15 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
             return null;
         }
     });
+
+    /**
+     * Signed in with a member key via the app's one-time link (lib/key-session.ts) rather than the
+     * password. The session itself is the node's httpOnly cookie; this is only who and which role.
+     */
+    const [keySession, setKeySession] = useState<KeySession | null>(null);
+    const [keySessionCsrf, setKeySessionCsrf] = useState<string | null>(null);
+    const [keySessionChecked, setKeySessionChecked] = useState<boolean>(isFleetMode);
+    const [keySessionNotice, setKeySessionNotice] = useState<string | null>(null);
 
     const singleNodeOrigin = typeof window !== 'undefined' && window.location
         ? normalizeNodeUrl(window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin)
@@ -223,6 +234,12 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
     };
 
     const handleLogout = () => {
+        if (keySession) {
+            void endKeySession(keySessionCsrf);
+            setKeySessionCsrfToken(null);
+            setKeySessionCsrf(null);
+            setKeySession(null);
+        }
         try {
             sessionStorage.removeItem('bp-admin-token');
             sessionStorage.removeItem('bp-2fa-session');
@@ -725,6 +742,33 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
         if (refreshToken > 0) refreshAll();
     }, [refreshToken]);
 
+    // Single-node /settings: finish a key sign-in from the app's one-time link, or pick up a live one.
+    useEffect(() => {
+        if (isFleetMode || typeof window === 'undefined') return;
+        let cancelled = false;
+        startKeySession().then((res) => {
+            if (cancelled) return;
+            if (res.section) {
+                const target = sectionTarget(res.section);
+                setActiveTab(target.tab);
+                setNavSubTab(target.subTab);
+            }
+            if (res.kind === 'session') {
+                setKeySessionCsrfToken(res.csrfToken);
+                setKeySessionCsrf(res.csrfToken);
+                setKeySession(res.session);
+                // The first automatic poll ran before the cookie existed and was refused; clear that
+                // block so polling resumes, then fetch everything with the session.
+                authBlockedRef.current = {};
+                setRefreshToken((n) => n + 1);
+            } else if (res.kind === 'failed') {
+                setKeySessionNotice(res.message);
+            }
+            setKeySessionChecked(true);
+        });
+        return () => { cancelled = true; };
+    }, [isFleetMode]);
+
     useEffect(() => {
         refreshFleetDiagnostics();
         const interval = setInterval(() => {
@@ -876,8 +920,22 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
         ai: { critical: 0, warning: 0 },
     };
 
-    if (!isFleetMode && !adminToken) {
+    if (!isFleetMode && !adminToken && !keySession && !keySessionChecked) {
         return (
+            <div className="min-h-screen bg-nature-950 text-nature-300 flex items-center justify-center font-sans" role="status">
+                Signing in…
+            </div>
+        );
+    }
+
+    if (!isFleetMode && !adminToken && !keySession) {
+        return (
+            <>
+            {keySessionNotice && (
+                <div role="alert" className="bg-terra-600 text-white text-sm px-4 py-3 text-center">
+                    {keySessionNotice}
+                </div>
+            )}
             <AdminLoginCard
                 nodeUrl={activeNode?.url || (typeof window !== 'undefined' ? window.location.origin : '')}
                 onAuthenticated={(pwd, sessionToken) => {
@@ -891,6 +949,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                     setRefreshToken((n) => n + 1);
                 }}
             />
+            </>
         );
     }
 

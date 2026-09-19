@@ -112,6 +112,7 @@ import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createChannelRoutes } from './routes/channels.js';
+import { createNodeAdminRoutes } from './routes/node-admin.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
@@ -1143,6 +1144,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
         createChannelRoutes(deps),
+        createNodeAdminRoutes(deps),
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),

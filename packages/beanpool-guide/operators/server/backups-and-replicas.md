@@ -23,24 +23,51 @@ The simplest complete backup: stop the server, copy the whole data folder somewh
 
 A backup from Settings is **locked** only when the server has a printed recovery code. Today the recovery code is the only way to open a locked backup; opening one with an owner's phone comes in a later update. So until you make a recovery code, the server keeps making the backups it always made: **not locked**, readable by anyone who has the file.
 
-A server with no recovery code says so every time. The download carries the words "Backups are not locked yet: make a recovery code to lock them." and the server's log repeats them. The fleet manager shows that server as "Partial: database, no keys", with "Make a recovery code on the node to lock its backups." The Settings screen does not show the words yet: it still says "✅ Backup downloaded", which is true, because the file opens.
+A server with no recovery code says so every time. The download carries the words "Backups are not locked yet: make a recovery code to lock them." and the server's log repeats them. The fleet manager shows that server as "Partial: database, no keys", with "Make a recovery code on the node to lock its backups." In Settings, the **Who can unlock this community** card shows the same words (see below). The download button itself still says "✅ Backup downloaded", which is true, because the file opens.
+
+## Who can unlock this community
+
+**Appliance & Data**, then **Backups & Restore**. The first card shows:
+
+![The Who can unlock this community card in Settings](images/appliance-backups.webp)
+
+- **Locked** (green), and who can open the server's take-over keys: each owner by name, and the recovery code by its number. Any one of them alone is enough. Under it, when the keys were last locked again and why (an owner added or removed, a new code, a changed setting).
+- **Not locked yet** (amber), and why: no owner and no recovery code, or the server has not made its keys yet. Make someone an owner, or make a recovery code.
+- **Error** (red), with the reason. The locked copy from before the change is kept but not handed out.
+- A standby says it holds no take-over keys of its own. Make the recovery code on the main server.
+- If an owner is left out of the lock, a line names them and says why.
+- Whether backups are locked, and if not, why.
+- The recovery code's number and the day it was made, or "No printed recovery code".
+
+Admins see all of this. Only an owner, or someone signed in with the admin password (which counts as an owner), sees the buttons below.
 
 ## Make a recovery code
 
-Until the Settings card for it arrives, an owner makes the code with one command on the server's own machine:
+In the **Who can unlock this community** card, press **Make a recovery code**.
+
+- The code appears once, in large letters: BPRC- and a number, then groups of letters and digits. It is kept nowhere on the server, and Settings does not keep it either. Close the card and it is gone.
+- Press **Print** for a plain page with the code, the community's name, the date, and what the code is for, then **Print this page**. Or copy it onto paper by hand.
+- Tick **I've printed it or written it down**, then press **Done**. Tapping beside the card, Escape and the phone's Back button do not close it, so a stray tap cannot lose the code. The ✕ does close it: if you had not written it down by then, make a new code.
+- Keep the paper away from the server. Anyone holding it can open your locked backups.
+- From then on every backup is locked, and takeover-envelope.json is locked to the code as well.
+
+**Check a code** proves a paper is right: type the code from it and press **Check**. The answer is yes or no. A mistyped letter is caught at once. A wrong code counts like a wrong password (see Rate limits). Capitals or small letters both work, and the dashes are optional.
+
+**Replace it** makes a new code in place of the old one. Settings warns first: from then on the take-over keys and new backups are locked to the owners and the new code, and the old code stops opening them. **Backups made before stay locked to the old code as well as the owners**, so keep the old paper until those backups are destroyed. Then the new code is shown once, as above.
+
+On a standby the buttons are not shown, and the server refuses to make a code there: a standby locks nothing of its own, so the code would open nothing.
+
+Instead of Settings, an owner can make the code with one command on the server's own machine:
 
 curl -k -X POST -H "X-Admin-Password: PASSWORD" -H "Content-Type: application/json" -d '{}' https://localhost:8443/api/local/admin/takeover/recovery-code
 
 - Put the server's admin password for PASSWORD. The admin password counts as an owner. With two-factor sign-in on, add -H "X-Admin-TOTP: 123456" with the code the authenticator shows.
-- The answer holds "code": BPRC- followed by a number and groups of letters. That is the recovery code. It is shown **once** and kept nowhere on the server. Write it on paper, check it, and keep the paper away from the server.
-- If the server already has a code, the answer says so and changes nothing. To replace it, send -d '{"replace":true}' instead. The old paper still opens backups made before, so keep it until those backups are gone.
-- From then on every backup is locked, and takeover-envelope.json is locked to the code as well.
+- The answer holds "code": that is the recovery code, shown **once**.
+- If the server already has a code, the answer says so and changes nothing. To replace it, send -d '{"replace":true}' instead.
 
 ## Backups from Settings
 
 **Appliance & Data**, then **Backups & Restore**.
-
-![Backups and restore options in Settings](images/appliance-backups.webp)
 
 **Download Sovereign Database**:
 
@@ -57,7 +84,7 @@ curl -k -X POST -H "X-Admin-Password: PASSWORD" -H "Content-Type: application/js
 
 A locked backup is still private: whoever opens it can read everything in it, including how each member voted (see Privacy and what your server can see). It is locked to each owner of the day it was made: once opening with a phone arrives, an owner removed later can still open backups made while they were one.
 
-If the recovery code is lost, no locked backup can be opened today. While the server is running that costs little: make a new code (with "replace"), then download a new backup. Keep the paper somewhere away from the server.
+If the recovery code is lost, no locked backup can be opened today. While the server is running that costs little: press **Replace it** in the Who can unlock this community card, then download a new backup. Keep the paper somewhere away from the server.
 
 ## Backups that are not locked
 

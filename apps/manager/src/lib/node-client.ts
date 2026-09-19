@@ -1767,6 +1767,97 @@ export async function clearReplicationToken(
     return res.json();
 }
 
+// ======================== TAKE-OVER LOCK & RECOVERY CODE ========================
+// sealed-keys.md §2.6, §7. The recovery code comes back from makeRecoveryCode ONCE: callers keep it in component
+// state only (never localStorage, sessionStorage, IndexedDB or a log) and drop it when the card closes.
+
+export interface TakeoverOwner { pubkey: string; callsign: string }
+
+export interface TakeoverStatus {
+    state: 'sealed' | 'no-recipients' | 'no-identity' | 'no-genesis' | 'standby' | 'error';
+    /** One sentence from the node, safe to show as it is. */
+    message: string;
+    envelopeId: string | null;
+    /** When the take-over keys were last locked (re-sealed). */
+    sealedAt: string | null;
+    sealReason: string | null;
+    recipients: { owners: TakeoverOwner[]; codes: { codeId: number; createdAt: string }[] };
+    /** Owners the lock could not include, and why. */
+    skippedOwners: (TakeoverOwner & { why: string })[];
+    recoveryCode: { codeId: number; createdAt: string } | null;
+}
+
+/** Whether the next backup leaves locked (backup-status → backupLock, sealed backups #968). */
+export type BackupLockStatus =
+    | { locked: true; codeId: number; message: string }
+    | { locked: false; reason: string; message: string };
+
+export interface MadeRecoveryCode {
+    /** The code itself. Shown once; never stored. */
+    code: string;
+    codeId: number;
+    createdAt: string;
+    replacedCodeId: number | null;
+    status: TakeoverStatus;
+}
+
+/** A refusal from a take-over route, carrying the node's own sentence. */
+export class TakeoverRequestError extends Error {
+    constructor(message: string, public readonly status: number, public readonly body: Record<string, unknown>) {
+        super(message);
+        this.name = 'TakeoverRequestError';
+    }
+}
+
+async function takeoverPost(nodeUrl: string, apiPath: string, body: Record<string, unknown>, adminPassword?: string, tfaToken?: string): Promise<Record<string, unknown>> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, apiPath), {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...body, password: adminPassword }),
+    });
+    const json = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) {
+        throw new TakeoverRequestError(typeof json.error === 'string' && json.error ? json.error : `HTTP ${res.status}`, res.status, json);
+    }
+    return json;
+}
+
+export async function fetchTakeoverStatus(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<TakeoverStatus> {
+    return await takeoverPost(nodeUrl, '/api/local/admin/takeover/status', {}, adminPassword, tfaToken) as unknown as TakeoverStatus;
+}
+
+/** Null when the node is too old to say (before #968). */
+export async function fetchBackupLock(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<BackupLockStatus | null> {
+    const json = await takeoverPost(nodeUrl, '/api/local/admin/backup-status', {}, adminPassword, tfaToken);
+    const lock = json.backupLock as BackupLockStatus | undefined;
+    return lock && typeof lock.locked === 'boolean' && typeof lock.message === 'string' ? lock : null;
+}
+
+/** Make the recovery code, or with `replace` a new one in place of the current one. Owners only. */
+export async function makeRecoveryCode(nodeUrl: string, replace: boolean, adminPassword?: string, tfaToken?: string): Promise<MadeRecoveryCode> {
+    const json = await takeoverPost(nodeUrl, '/api/local/admin/takeover/recovery-code', { replace }, adminPassword, tfaToken);
+    if (typeof json.code !== 'string' || !json.code) throw new TakeoverRequestError('The node did not return a code.', 500, {});
+    return json as unknown as MadeRecoveryCode;
+}
+
+/**
+ * Does a typed code match this node's current recovery code? `typo` when the check characters already say it was
+ * mistyped (the node answers that before any guess is counted).
+ */
+export async function checkRecoveryCodeApi(
+    nodeUrl: string, code: string, adminPassword?: string, tfaToken?: string,
+): Promise<{ matches: boolean; codeId: number | null; typo?: boolean; message?: string }> {
+    try {
+        const json = await takeoverPost(nodeUrl, '/api/local/admin/takeover/recovery-code/check', { code }, adminPassword, tfaToken);
+        return { matches: json.matches === true, codeId: typeof json.codeId === 'number' ? json.codeId : null };
+    } catch (e) {
+        if (e instanceof TakeoverRequestError && e.status === 400 && e.body.typo) {
+            return { matches: false, codeId: null, typo: true, message: e.message };
+        }
+        throw e;
+    }
+}
+
 export async function getReplicationAccess(
     nodeUrl: string,
     adminPassword?: string,

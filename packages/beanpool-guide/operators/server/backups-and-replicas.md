@@ -1,7 +1,7 @@
 ---
 slug: backups-and-replicas
 title: Backups and replicas
-summary: What to back up, the backups Settings makes (locked once you make a recovery code), restoring, and running a second server as a standby.
+summary: What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words, restoring, and running a second server as a standby.
 related: updates-and-health, troubleshooting, what-the-server-sees, first-time-setup
 ---
 
@@ -85,6 +85,16 @@ curl -k -X POST -H "X-Admin-Password: PASSWORD" -H "Content-Type: application/js
 A locked backup is still private: whoever opens it can read everything in it, including how each member voted (see Privacy and what your server can see). It is locked to each owner of the day it was made: once opening with a phone arrives, an owner removed later can still open backups made while they were one.
 
 If the recovery code is lost, no locked backup can be opened today. While the server is running that costs little: press **Replace it** in the Who can unlock this community card, then download a new backup. Keep the paper somewhere away from the server.
+
+## Owners' 12 words
+
+A locked backup and the locked take-over keys are locked to each owner's key, and will open for any one owner once opening with a phone arrives. Today only the recovery code opens them, so keep the printed code. An owner who loses their phone gets that key back from their 12 words. So each owner's 12 words matter most on the day the server itself is lost.
+
+- **Backups & Restore** in Settings lists each owner with **12 words checked:** and a date, or **not yet**, and a line such as "1 of 3 owners have checked their 12 words in the last year".
+- An owner checks their words in the BeanPool app (phone or web), under **Settings**, **Community keys**. The app asks them once when they become an owner and again a year after their last check. They can always say Later.
+- The words are checked on the owner's own device and never reach the server. The server keeps only the owner's signed statement that they checked, and when. It cannot check the words itself, so the date is what the owner reported, nothing more.
+- Nothing waits on it: an owner who never checks can still do everything an owner does.
+- Removing an owner takes them off the list. Their date stays with their account, and shows again if they are made an owner again.
 
 ## Backups that are not locked
 

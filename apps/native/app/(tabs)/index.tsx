@@ -22,6 +22,7 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
+import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock, ActiveFilterChip } from '../../components/QuickReturn';
 import { composeTargetFor } from '../../utils/compose-options';
@@ -1194,6 +1195,8 @@ export default function MarketScreen() {
                 )
             )}
 
+            {/* Owners only, on its own cadence, always dismissible: "Check your 12 words" (sealed-keys.md §7). */}
+            {!categoryPanel.open && <OwnerWordsPrompt />}
             {/* Freshness Social Proof Banner */}
             {shouldShowFreshBanner && !categoryPanel.open && (
                 <Pressable

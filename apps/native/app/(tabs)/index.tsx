@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList, Pressable, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -22,14 +22,15 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
-import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { useQuickReturn, QuickReturnBlock, ActiveFilterChip } from '../../components/QuickReturn';
 import { composeTargetFor } from '../../utils/compose-options';
 import { EVENT_TYPES_QUERY, type EventWindow } from '../../utils/events';
 import { FilterChipRow, FilterChipBar } from '../../components/FilterChipRow';
 import { FilterChipButton, FilterChipPanel } from '../../components/FilterChipPicker';
 import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '../../utils/map-filters';
 import {
-    MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, distanceChipLabel, trustChipLabel, beansChipLabel,
+    MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
 } from '../../utils/market-filters';
 import { feedSections, localDaysAgo } from '../../utils/feed-sections';
@@ -97,11 +98,13 @@ export const MARKETPLACE_CATEGORIES = [
 // ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
 export const MARKETPLACE_CATEGORIES_BY_ID = new Map(MARKETPLACE_CATEGORIES.map(c => [c.id, c]));
 
-const HEADER_PAD_TOP = 8;
 const MIN_FEED_UNDER_PANEL = 48;
 
 export default function MarketScreen() {
     const { theme, colors } = useTheme();
+    // At 320dp with large text the field has room for one word; the long placeholder wrapped or was cut.
+    const { width: winW, fontScale } = useWindowDimensions();
+    const searchPlaceholder = winW / Math.min(fontScale, 1.3) < 360 ? 'Search' : 'Search marketplace...';
     const { identity } = useIdentity();
 
     // Contributions-First quest card: shown until the member has listed their
@@ -138,8 +141,9 @@ export default function MarketScreen() {
 
         // Search row
         searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
-        searchWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 19, paddingHorizontal: 14, height: 38, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
-        searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: colors.text.body, fontWeight: '500' },
+        searchTarget: { flex: 1, minHeight: 48, justifyContent: 'center' },
+        searchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 20, paddingHorizontal: 14, height: 40, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
+        searchInput: { flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: 14, color: colors.text.body, fontWeight: '500', includeFontPadding: false, textAlignVertical: 'center' },
         iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
         dealsIconBtn: {
             paddingHorizontal: 14, height: 38, borderRadius: 19,
@@ -463,13 +467,9 @@ export default function MarketScreen() {
     const [favCategories, setFavCategories] = useState<string[]>([]);
     const [isCustomizerExpanded, setIsCustomizerExpanded] = useState(true);
 
-    // Fresh listings banner dismissal and scroll tracking states
+    // Fresh listings banner dismissal. The banner is the list's first row, so it scrolls away with it.
     const [dismissedFreshCount, setDismissedFreshCount] = useState<number>(0);
-    const [showFreshBannerOnScroll, setShowFreshBannerOnScroll] = useState(true);
-    // Large "Market" title above the pinned search/filters; folds away once the feed scrolls.
-    const pageTitle = useCollapsingTitle();
     const listRef = useRef<FlatList>(null);
-    useTabRetapScrollTop(listRef);
 
     const [refreshing, setRefreshing] = useState(false);
 
@@ -537,9 +537,18 @@ export default function MarketScreen() {
     const [screenH, setScreenH] = useState(0);
     const [filterBlockY, setFilterBlockY] = useState(0);
     const [filterRowsBottom, setFilterRowsBottom] = useState(0);
-    // The large title brings its own top gap, so the block's padding applies only while it is folded away.
-    const headerPadTop = pageTitle.collapsed ? HEADER_PAD_TOP : 0;
-    const rowsBottom = headerPadTop + filterBlockY + filterRowsBottom;
+    const searchInputRef = useRef<TextInput>(null);
+    const [searchFocused, setSearchFocused] = useState(false);
+    /**
+     * The title and the controls (search, type pills, filter row, group pills) ride away as the feed scrolls
+     * down and come back on any scroll up (components/QuickReturn). They stay while in use: the category
+     * panel open, or the search field focused (typing narrows the list under the keyboard).
+     */
+    const qr = useQuickReturn({ pinned: categoryPanel.open || searchFocused, resetKey: viewMode });
+    // Tapping Market again scrolls to the top, and brings the controls with it.
+    useTabRetapScrollTop(listRef, qr.show);
+    // Measured with the title showing: at worst that leaves the panel a title's height shorter than it could be.
+    const rowsBottom = qr.titleHeight + filterBlockY + filterRowsBottom;
     const panelMaxHeight = screenH && filterRowsBottom ? Math.max(120, screenH - rowsBottom - 6 - MIN_FEED_UNDER_PANEL) : undefined;
     const [groupFilter, setGroupFilter] = useState('all');
     const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
@@ -858,8 +867,8 @@ export default function MarketScreen() {
         return Number.isFinite(postTime) && localDaysAgo(postTime, Date.now()) === 0;
     }).length;
 
-    // Display banner only if fresh postings count is greater than the dismissed count and scroll visibility is active
-    const shouldShowFreshBanner = freshTodayCount > 0 && freshTodayCount > dismissedFreshCount && showFreshBannerOnScroll;
+    // Display banner only if fresh postings count is greater than the dismissed count
+    const shouldShowFreshBanner = freshTodayCount > 0 && freshTodayCount > dismissedFreshCount;
 
     const dismissFreshBanner = async () => {
         const { LayoutAnimation } = require('react-native');
@@ -870,41 +879,36 @@ export default function MarketScreen() {
         } catch (e) {}
     };
 
-    const onScrollHandler = (event: any) => {
-        pageTitle.onScroll(event);
-        const offsetY = event.nativeEvent.contentOffset.y;
-        if (offsetY > 15) {
-            if (showFreshBannerOnScroll) {
-                const { LayoutAnimation } = require('react-native');
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                setShowFreshBannerOnScroll(false);
-            }
-        } else if (offsetY <= 5) {
-            if (!showFreshBannerOnScroll) {
-                const { LayoutAnimation } = require('react-native');
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                setShowFreshBannerOnScroll(true);
-            }
-        }
-    };
-
-    const HeaderComponent = (
-        <View>
-            {/* Inside this block, not above it, so the filter rows' measured offsets (panelMaxHeight) include it. */}
-            <PageTitle title="Market" collapsed={pageTitle.collapsed} />
-            {/* Top row: Search + My Deals + View Toggle */}
+    // The block that rides over the top of the feed (components/QuickReturn): search row, type pills, filter row
+    // and group pills. Everything else above the listings is the list's own header and scrolls with it.
+    const controls = (
+        <View style={{ paddingBottom: 2 }}>
+            {/* Top row: Search + My Deals + View Toggle. The field is 40dp to look at, inside a 48dp target
+                that focuses it; its text is capped at 1.3x so the placeholder is never cut top and bottom. */}
             <View style={[styles.searchRow, { paddingHorizontal: 16 }]}>
+                <Pressable
+                    style={styles.searchTarget}
+                    onPress={() => searchInputRef.current?.focus()}
+                    accessible={false}
+                >
                 <View style={styles.searchWrap}>
-                    <Text style={{ opacity: 0.4, fontSize: 14 }}>🔍</Text>
+                    <Text style={{ opacity: 0.4, fontSize: 14 }} maxFontSizeMultiplier={1.3}>🔍</Text>
                     <TextInput
+                        ref={searchInputRef}
                         style={styles.searchInput}
-                        placeholder="Search marketplace..."
+                        placeholder={searchPlaceholder}
                         placeholderTextColor={colors.text.muted}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
+                        numberOfLines={1}
+                        onFocus={() => setSearchFocused(true)}
+                        onBlur={() => setSearchFocused(false)}
+                        returnKeyType="search"
+                        maxFontSizeMultiplier={1.3}
                         accessibilityLabel="Search marketplace"
                     />
                 </View>
+                </Pressable>
                 <Pressable
                     onPress={() => setShowDealsSheet(true)}
                     style={styles.dealsIconBtn}
@@ -945,7 +949,8 @@ export default function MarketScreen() {
                     onSelect={selectType}
                     activeColor={typeColors[filter]}
                     fill
-                    wrap
+                    // One line that scrolls sideways at 320dp + 1.3x text (wrapping cost a second 38dp line).
+                    moreHint
                     // 8dp sides, not 12: the six pills fit one line on a normal phone (~338dp of 379).
                     chipStyle={styles.typePill}
                     style={styles.filterRow}
@@ -1017,20 +1022,8 @@ export default function MarketScreen() {
                 )}
                 </View>
 
-                {categoryPanel.open && secondRow.kind === 'filters' && secondRow.category && (
-                    <FilterChipPanel
-                        chips={CATEGORY_FILTER_CHIPS}
-                        selected={categoryFilter}
-                        onSelect={(id) => dispatchCategoryPanel({ kind: 'pick', category: id })}
-                        activeColor={filterColor}
-                        panelMaxHeight={panelMaxHeight}
-                        // The map's 8dp gutter, not the feed's 16: four tiles a row at 320dp + 1.3x, not three.
-                        style={{ marginHorizontal: -8 }}
-                    />
-                )}
-
                 {/* Row 4: Group Filter Chips (Item 10) */}
-                {userGroups.length > 0 && !categoryPanel.open && (
+                {userGroups.length > 0 && (
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -1069,6 +1062,73 @@ export default function MarketScreen() {
                 )}
             </View>
 
+        </View>
+    );
+
+    // The category tiles open over the feed from under the filter row, covering the group pills, so opening
+    // them never moves the list.
+    const categoryPanelOverlay = (
+        <View style={{ position: 'absolute', left: 0, right: 0, top: rowsBottom, paddingHorizontal: 16 }}>
+            {categoryPanel.open && secondRow.kind === 'filters' && secondRow.category && (
+                <FilterChipPanel
+                    chips={CATEGORY_FILTER_CHIPS}
+                    selected={categoryFilter}
+                    onSelect={(id) => dispatchCategoryPanel({ kind: 'pick', category: id })}
+                    activeColor={filterColor}
+                    panelMaxHeight={panelMaxHeight}
+                    // The map's 8dp gutter, not the feed's 16: four tiles a row at 320dp + 1.3x, not three.
+                    style={{ marginHorizontal: -8 }}
+                />
+            )}
+        </View>
+    );
+
+    const filterSummary = marketFilterSummary(filterState, searchQuery, {
+        trustLabel: id => TRUST_FILTERS.find(t => t.id === id)?.label,
+        groupName: id => userGroups.find(g => g.id === id)?.name,
+    });
+    const clearAllFilters = () => {
+        setSearchQuery('');
+        setFilter('all');
+        dispatchCategoryPanel({ kind: 'pick', category: 'all' });
+        setEventWindow('all');
+        setRadiusKm(null);
+        setLocationCenter(null);
+        setTrustFilter('all');
+        setBeansOnly(false);
+        setGroupFilter('all');
+    };
+    const showControls = () => {
+        qr.show();
+        // A search is what the member most likely came back to change.
+        if (searchQuery.trim()) searchInputRef.current?.focus();
+    };
+
+    // Out of the list's 16dp gutter: these rows bring their own 16dp margins, as they did above the list.
+    const ListHeader = (
+        <View style={{ marginHorizontal: -16 }}>
+            {showFirstOfferQuest && !categoryPanel.open && (
+                <View style={{ marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.4)', backgroundColor: 'rgba(245, 158, 11, 0.10)', padding: 14 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.heading, flex: 1 }}>
+                            🫘 Welcome{identity?.callsign ? `, ${identity.callsign}` : ''}! One step to unlock trading
+                        </Text>
+                        <Pressable onPress={dismissFirstOfferQuest} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
+                            <Text style={{ fontSize: 15, color: colors.text.secondary, fontWeight: '700', paddingLeft: 8 }}>✕</Text>
+                        </Pressable>
+                    </View>
+                    <Text style={{ fontSize: 13.5, color: colors.text.body, lineHeight: 19, marginTop: 4 }}>
+                        List one Offer — anything you can give: a skill, produce, tools, a lift. That unlocks accepting Offers and posting Needs.
+                    </Text>
+                    <Pressable
+                        style={{ marginTop: 10, backgroundColor: palette.amber500, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
+                        onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                        accessibilityRole="button"
+                    >
+                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>➕ Post your first Offer</Text>
+                    </Pressable>
+                </View>
+            )}
             {/* Interests Tag Cloud when in For You mode */}
             {filter === 'for-you' && !categoryPanel.open && (
                 isCustomizerExpanded ? (
@@ -1464,50 +1524,31 @@ export default function MarketScreen() {
 
     return (
         <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
-            <View style={{ paddingTop: headerPadTop, paddingBottom: 0 }}>
-                {HeaderComponent}
-            </View>
-            {showFirstOfferQuest && !categoryPanel.open && (
-                <View style={{ marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.4)', backgroundColor: 'rgba(245, 158, 11, 0.10)', padding: 14 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                        <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.heading, flex: 1 }}>
-                            🫘 Welcome{identity?.callsign ? `, ${identity.callsign}` : ''}! One step to unlock trading
-                        </Text>
-                        <Pressable onPress={dismissFirstOfferQuest} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
-                            <Text style={{ fontSize: 15, color: colors.text.secondary, fontWeight: '700', paddingLeft: 8 }}>✕</Text>
-                        </Pressable>
-                    </View>
-                    <Text style={{ fontSize: 13.5, color: colors.text.body, lineHeight: 19, marginTop: 4 }}>
-                        List one Offer — anything you can give: a skill, produce, tools, a lift. That unlocks accepting Offers and posting Needs.
-                    </Text>
-                    <Pressable
-                        style={{ marginTop: 10, backgroundColor: palette.amber500, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
-                        onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
-                        accessibilityRole="button"
-                    >
-                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>➕ Post your first Offer</Text>
-                    </Pressable>
-                </View>
-            )}
-            <View style={{ flex: 1 }}>
-            <FlatList
+            {/* The feed and, riding over its top, the controls. Clipped, so the block slides up under the tab bar. */}
+            <View style={{ flex: 1, overflow: 'hidden' }}>
+            <Animated.FlatList
                 ref={listRef}
                 key={viewMode}
                 numColumns={viewMode === 'grid' ? 2 : 1}
                 data={listData}
-                keyExtractor={item => item.id}
+                keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
-                contentContainerStyle={styles.listContent}
+                ListHeaderComponent={ListHeader}
+                contentContainerStyle={[styles.listContent, { paddingTop: qr.blockHeight }]}
                 columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
                 showsVerticalScrollIndicator={false}
-                onScroll={onScrollHandler}
-                scrollEventThrottle={16}
+                {...qr.listProps}
+                keyboardShouldPersistTaps="handled"
+                // Dragging the feed puts the keyboard away and blurs the search, which lets the controls go again.
+                keyboardDismissMode="on-drag"
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
                         colors={[colors.brand.primary]}
                         tintColor={colors.brand.primary}
+                        // Below the controls, not behind them.
+                        progressViewOffset={qr.blockHeight}
                     />
                 }
                 ListEmptyComponent={
@@ -1578,6 +1619,12 @@ export default function MarketScreen() {
                     accessibilityLabel="Close categories"
                     onPress={closeCategoryPanel}
                 />
+            )}
+            <QuickReturnBlock qr={qr} title={<PageTitle title="Market" />} below={categoryPanelOverlay}>
+                {controls}
+            </QuickReturnBlock>
+            {qr.hidden && filterSummary && (
+                <ActiveFilterChip label={filterSummary} onPress={showControls} onClear={clearAllFilters} />
             )}
             </View>
             {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. */}

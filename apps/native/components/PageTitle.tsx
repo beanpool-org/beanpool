@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, LayoutAnimation, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useNavigation } from 'expo-router';
 import { useTheme } from '../app/ThemeContext';
@@ -69,14 +69,19 @@ type Scrollable = { scrollToOffset?: (p: { offset: number; animated?: boolean })
 /**
  * Tapping the tab you are already on scrolls the page back to the top — what React Navigation's
  * useScrollToTop does, written against expo-router's navigation so the app needs no new direct
- * dependency. The ref may point at whichever list the page is currently rendering.
+ * dependency. The ref may point at whichever list the page is currently rendering. `onRetap` runs on
+ * the same tap (a quick-return page shows its controls).
  */
-export function useTabRetapScrollTop(ref: React.RefObject<Scrollable | null>) {
+export function useTabRetapScrollTop(ref: React.RefObject<Scrollable | null>, onRetap?: () => void) {
     const navigation = useNavigation();
+    const onRetapRef = useRef(onRetap);
+    onRetapRef.current = onRetap;
     useEffect(() => {
         const unsub = (navigation as any).addListener('tabPress', () => {
             // tabPress fires before the switch, so a focused screen means a re-tap.
             if (!navigation.isFocused()) return;
+            // e.g. bring a quick-return page's controls back with the top of the list.
+            onRetapRef.current?.();
             const list = ref.current;
             if (!list) return;
             if (list.scrollToOffset) list.scrollToOffset({ offset: 0, animated: true });

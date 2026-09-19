@@ -46,7 +46,9 @@ export function FilterChipBar({ children, style, fill, wrap, moreHint, accessibi
         content: { alignItems: 'center', padding: 2, gap: 2 },
         contentFill: { flexGrow: 1 },
         wrapped: { flexDirection: 'row', flexWrap: 'wrap' },
-        more: { position: 'absolute', top: 0, bottom: 0, right: 0, width: 40, borderTopRightRadius: 26, borderBottomRightRadius: 26, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 8 },
+        // Narrow, so it sits over a chip's side padding rather than the end of its label (it cut 'Distance ▾'
+        // at 320dp + 1.3x): a short fade, then the › on the backing colour.
+        more: { position: 'absolute', top: 0, bottom: 0, right: 0, width: 26, borderTopRightRadius: 26, borderBottomRightRadius: 26, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 7 },
         moreText: { fontSize: 20, fontWeight: '800' },
     }));
     if (wrap) {
@@ -81,7 +83,7 @@ export function FilterChipBar({ children, style, fill, wrap, moreHint, accessibi
                 <LinearGradient
                     colors={[backing.replace('0.95', '0'), backing]}
                     start={{ x: 0, y: 0.5 }}
-                    end={{ x: 0.6, y: 0.5 }}
+                    end={{ x: 0.35, y: 0.5 }}
                     style={styles.more}
                     pointerEvents="none"
                 >

@@ -17,7 +17,7 @@
  */
 
 import { tierIndexForCredit } from '@beanpool/core';
-import { normalizeCategory } from '../constants/categories';
+import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
 
@@ -182,4 +182,43 @@ export function trustChipLabel(trust: { id: string; emoji: string; label: string
 
 export function beansChipLabel(beansOnly: boolean): string {
     return beansOnly ? '🫘 Beans only ✓' : '🫘 Beans only';
+}
+
+/** Longest the search term may run in the active-filter chip before it is cut with an ellipsis. */
+const SUMMARY_SEARCH_MAX = 16;
+
+export interface MarketFilterSummaryLabels {
+    /** Trust filter label by id (TRUST_FILTERS lives with its React Native sheet). */
+    trustLabel?: (id: string) => string | undefined;
+    /** Group name by id. */
+    groupName?: (id: string) => string | undefined;
+}
+
+/**
+ * The one line for the chip that stays on screen while the Market's controls are scrolled away, e.g.
+ * "🔍 honey · Offers · Food · 5km". Null when nothing narrows the feed, so the chip never shows then.
+ * Only filters whose chip is on screen count, as in marketFiltersActive: a remembered filter that is not
+ * hiding anything is not named.
+ */
+export function marketFilterSummary(state: MarketFilterState, search: string, labels: MarketFilterSummaryLabels = {}): string | null {
+    const show = onScreen(state);
+    const parts: string[] = [];
+    const q = search.trim().replace(/\s+/g, ' ');
+    if (q) parts.push(`🔍 ${q.length > SUMMARY_SEARCH_MAX ? `${q.slice(0, SUMMARY_SEARCH_MAX - 1).trimEnd()}…` : q}`);
+    if (state.type !== 'all') {
+        const pill = MARKET_TYPE_PILLS.find(p => p.id === state.type);
+        if (pill) parts.push(pill.label);
+    }
+    if (show.category && state.category !== 'all') parts.push(CATEGORY_META[state.category]?.label ?? state.category);
+    if (show.eventWindow && state.eventWindow !== 'all') {
+        const w = EVENT_WINDOWS.find(e => e.id === state.eventWindow);
+        if (w) parts.push(w.label);
+    }
+    if (show.distance && state.radiusKm !== null) {
+        parts.push(state.radiusKm < 1 ? `${Math.round(state.radiusKm * 1000)}m` : `${state.radiusKm}km`);
+    }
+    if (show.trust && state.trust !== 'all') parts.push(labels.trustLabel?.(state.trust) ?? state.trust);
+    if (show.beans && state.beansOnly) parts.push('Beans only');
+    if (state.groupId !== 'all') parts.push(labels.groupName?.(state.groupId) ?? 'Group');
+    return parts.length ? parts.join(' · ') : null;
 }

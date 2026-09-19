@@ -31,6 +31,7 @@ import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
 import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
+import { takeProfileFragment } from './lib/profile-link';
 
 function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
     return (
@@ -226,6 +227,15 @@ export function App() {
         if (tab === 'messages' && contextId) setOpenConversationId(contextId);
         if (tab === 'marketplace' && contextId) setOpenMarketPostId(contextId);
     }
+
+    // `/app#profile=<key>` (node Settings' "View my profile"): read once on load, opened once the identity has loaded.
+    const [linkedProfile, setLinkedProfile] = useState<string | null>(null);
+    useEffect(() => { setLinkedProfile(takeProfileFragment()); }, []);
+    useEffect(() => {
+        if (!identity || !linkedProfile) return;
+        setOpenProfilePubkey(linkedProfile);
+        setLinkedProfile(null);
+    }, [identity, linkedProfile]);
 
     // Load existing identity and initial community health on mount
     useEffect(() => {

@@ -12,11 +12,15 @@ vi.mock('../lib/api', () => ({
 describe('NodeAdminLink', () => {
     beforeEach(() => vi.clearAllMocks());
 
-    it('asks the node (signed request) and shows Manage to an owner, linking to /settings', async () => {
+    it('asks the node (signed request) and shows Manage to an owner, linking to /settings#from=pwa', async () => {
         vi.mocked(request).mockResolvedValue({ role: 'owner', communityName: 'Mullum' });
         render(<NodeAdminLink />);
         const link = await screen.findByRole('link', { name: /Manage Mullum/ });
-        expect(link.getAttribute('href')).toBe('/settings');
+        expect(link.getAttribute('href')).toBe('/settings#from=pwa');
+        // In the fragment, never the query: Settings reads it there, and no server or log sees it.
+        const u = new URL(link.getAttribute('href')!, 'https://test.beanpool.org');
+        expect(u.search).toBe('');
+        expect(new URLSearchParams(u.hash.slice(1)).get('from')).toBe('pwa');
         expect(request).toHaveBeenCalledWith('GET', '/api/node-admin/me');
     });
 

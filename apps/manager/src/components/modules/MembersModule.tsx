@@ -1056,7 +1056,7 @@ export function MembersModule({
                                 <label className="block text-nature-300 font-semibold mb-2">Select Standing / Tier Badge:</label>
                                 <div className="space-y-2">
                                     {[
-                                        { id: 'Newcomer', name: '🥚 NEWCOMER', desc: 'Entry floor (0 granted credit limit)' },
+                                        { id: 'Newcomer', name: '🌱 NEWCOMER', desc: 'Entry floor (0 granted credit limit)' },
                                         { id: 'Resident', name: '🏠 RESIDENT', desc: '-200 granted credit floor (verified community member)' },
                                         { id: 'Steward', name: '🏛️ STEWARD', desc: '-600 granted credit floor (active steward & voucher)' },
                                         { id: 'Elder', name: '⛰️ ELDER', desc: '-1400 granted credit floor (founding governance tier)' },

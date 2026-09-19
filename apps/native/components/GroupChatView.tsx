@@ -301,7 +301,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                             style={styles.input}
                             value={draft}
                             onChangeText={(t) => { draftRef.current = t; setDraft(t); }}
-                            placeholder={`Message ${name}…`}
+                            // A long name wrapped the placeholder to three lines at 320dp; short ones read better named.
+                            placeholder={name.length <= 18 ? `Message ${name}…` : (kind === 'group' ? 'Message the group…' : 'Message the keepers…')}
                             placeholderTextColor={colors.text.muted}
                             accessibilityLabel={`Message ${name}`}
                             multiline

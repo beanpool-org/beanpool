@@ -96,11 +96,11 @@ export default function ChatsScreen() {
             shadowOffset: { width: 0, height: 1 },
             elevation: 2,
         },
-        talkTabInner: { flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: '100%' },
-        talkTabText: { flexShrink: 1, fontSize: 13, fontWeight: '600', color: colors.text.secondary },
+        talkTabText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
         talkTabBadge: {
-            minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, flexShrink: 0,
+            position: 'absolute', top: -4, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
             backgroundColor: colors.accent.primary, alignItems: 'center', justifyContent: 'center',
+            borderWidth: 1.5, borderColor: colors.surface.subtle,
         },
         talkTabBadgeText: { color: colors.text.inverse, fontSize: 10, fontWeight: '800' },
         talkTabTextActive: { color: colors.text.heading, fontWeight: '800' },
@@ -576,16 +576,16 @@ export default function ChatsScreen() {
                         accessibilityState={{ selected: active }}
                         accessibilityLabel={t.count ? `${t.label}, ${t.count} unread` : t.label}
                     >
-                        <View style={styles.talkTabInner}>
-                            <Text style={[styles.talkTabText, active && styles.talkTabTextActive]} numberOfLines={1}>
-                                {t.label}
-                            </Text>
-                            {t.count > 0 && (
-                                <View style={styles.talkTabBadge}>
-                                    <Text style={styles.talkTabBadgeText} maxFontSizeMultiplier={1.1}>{unreadLabel(t.count)}</Text>
-                                </View>
-                            )}
-                        </View>
+                        <Text style={[styles.talkTabText, active && styles.talkTabTextActive]} numberOfLines={1}>
+                            {t.label}
+                        </Text>
+                        {/* On the tab's corner, not beside the label: at 320dp and 1.3x text a badge in the row
+                            squeezed "Groups" to "Grou…". */}
+                        {t.count > 0 && (
+                            <View style={styles.talkTabBadge} pointerEvents="none">
+                                <Text style={styles.talkTabBadgeText} maxFontSizeMultiplier={1.1}>{unreadLabel(t.count)}</Text>
+                            </View>
+                        )}
                     </Pressable>
                 );
             })}
@@ -712,7 +712,8 @@ export default function ChatsScreen() {
         const hasAny = (yourGroups?.length ?? 0) > 0;
         return (
             <View style={styles.safeArea}>
-                <Animated.ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+                {/* Keyed on empty/non-empty so flipping between them starts from the top. */}
+                <Animated.ScrollView key={hasAny ? 'list' : 'empty'} contentContainerStyle={{ paddingBottom: 100 }}>
                     <PageTitle title="Talk" />
                     {talkSwitch}
                     {hasAny && (

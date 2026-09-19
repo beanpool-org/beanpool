@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 3,
-  "hash": "3a7729aa6dca2263c6c5e342b72d69b1c67c670a2f4fad54e3cbf551ce0a32d9",
+  "version": 4,
+  "hash": "98b43970d4a987f5d8d9bcc2bee73db924a2bf5d5dca0873f9e6110595098769",
   "sections": [
     {
       "id": "setup",
@@ -152,9 +152,9 @@
         {
           "type": "ul",
           "items": [
-            "**Step 2** shows an owner-pairing QR, an authenticator secret and an \"emergency seed\". None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access & Security.",
+            "**Step 2** shows an owner-pairing QR, an authenticator secret and an \"emergency seed\". The authenticator secret comes from the server, but the wizard never asks for a code, so two-factor sign-in is not switched on until you finish it in Access & Security. The emergency seed is made up on this screen and is not a working recovery code, and scanning the QR does nothing.",
             "**Step 4** says it seeds the commons, but it does not move any beans.",
-            "If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People & Safety."
+            "If the server refuses or cannot be reached, step 5 stops and shows the reason, with no code. Try again, or make invites later under People & Safety."
           ]
         },
         {
@@ -588,8 +588,9 @@
         {
           "type": "ul",
           "items": [
-            "These invites need the **admin password**. If you signed in from the app's Manage button, Settings cannot make them, and shows made-up codes that the server will not accept. Sign in with the password, or make invites from your own app.",
-            "Every invite made in Settings is recorded as coming from the first member, Admin, not from you."
+            "Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button. A moderator cannot.",
+            "If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server.",
+            "In the community's invite tree, every invite made in Settings comes from the first member, Admin. The server also records which owner or admin made it (or \"the admin password\"), in its security log."
           ]
         },
         {

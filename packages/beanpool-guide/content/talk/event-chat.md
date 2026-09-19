@@ -7,7 +7,7 @@ related: events, messages, pin-locations, reporting
 
 ## Who is in it
 
-Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. If you change to **Interested** or **Not going**, you leave the chat. The host is always in it.
+Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. If you change to **Interested**, or tap **Going** again to clear it, you leave the chat. The host is always in it.
 
 ## Opening it
 

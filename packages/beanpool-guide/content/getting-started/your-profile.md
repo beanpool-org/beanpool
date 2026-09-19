@@ -32,6 +32,8 @@ Once you add one, choose **Who can see this?**:
 - **Friends:** people you have added as friends.
 - **Community:** every member of your community.
 
+Today the web app can show your contact details on your posts. The phone app does not show other members' contact details yet.
+
 ## What others see
 
 Tap the round picture at the top right of the screen to see your own profile. Other members see much the same:

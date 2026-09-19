@@ -12,7 +12,7 @@ related: event-chat, pin-locations, map-pins, polls
 
 ## Going
 
-On an event, tap **Going** or **Interested**. Tap it again to take it back.
+On an event, tap **Going** or **Interested**. Tap your choice again to clear it.
 
 When you are **Going**:
 

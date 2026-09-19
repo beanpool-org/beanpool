@@ -10,7 +10,7 @@ related: people, blocking, event-chat, groups
 Tap **Talk** in the row of tabs, then **Messages**. Your chats are listed under **Inbox**. Deals that need you are at the top, under **Action Required**.
 
 - Search with **Search chats, posts, partners...**.
-- The filter button sorts by newest or unread, and can show only unread chats or only friends.
+- The filter button sorts by **Recent**, **Unread** or credits, and can show **Unread Only** or **Friends Only**.
 
 ## Starting a chat
 
@@ -21,7 +21,7 @@ Tap **Talk** in the row of tabs, then **Messages**. Your chats are listed under 
 ## Sending
 
 - Type in **Message...** and tap the send button.
-- To send a photo, tap **+**, then **Send Photo**, then **Camera** or **Gallery**. Photos can only be sent in chats between two people.
+- To send a photo, tap **+**, then **Camera** or **Gallery**. Photos can only be sent in chats between two people.
 
 The ticks under your message:
 
@@ -43,4 +43,4 @@ Sent messages cannot be deleted. Think before you send.
 
 ## Blocking someone from a chat
 
-Tap their name at the top of the chat. Their profile opens. Tap **Block**. See "Blocking someone".
+Tap their name at the top of the chat. Their profile opens. Tap **Block**, then **Block User**. See "Blocking someone".

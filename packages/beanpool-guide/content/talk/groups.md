@@ -17,7 +17,9 @@ Open a group, then:
 
 - **Join Group** if it is open to anyone;
 - **Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do;
-- groups marked **Invite Only** take new members by invitation. The screen for invitations is coming soon.
+- an **Invite Only** group is hidden from everyone who is not in it, and takes new members only by invitation. The screen for invitations is coming soon.
+
+If a convenor removed you from a group, you cannot join it again by yourself.
 
 To leave, open the group and tap **Leave Group**.
 
@@ -27,7 +29,7 @@ Open the group and tap **Post to** and its name. Only the group's members see th
 
 ## Starting a group
 
-- Tap **+ Create a Group** in **Groups**.
+- In **Groups**, tap the round **+** button (or **+ Create a Group** if there are no groups yet).
 - Give it a **Group Name** and a **Purpose / Description**.
 - Choose a **Category**.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
@@ -42,7 +44,7 @@ A convenor looks after the group. Under **Convenor Tools** they can:
 - change a member's role to convenor, member or observer;
 - remove a member.
 
-A group always keeps at least one convenor.
+The last convenor cannot step down or leave while anyone else is still in the group.
 
 ## Coming soon
 

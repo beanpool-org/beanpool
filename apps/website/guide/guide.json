@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "version": 2,
-  "hash": "f64a844c25ebe511a5e72f506b75916ad6b33b7ae329922d9fcf32e956fa9103",
+  "hash": "3bb9c5dfeee96cf2c58e4bac4434b709428a283f95f639bf6129fb2bdbde8bbe",
   "sections": [
     {
       "id": "about",
@@ -1013,6 +1013,10 @@
           ]
         },
         {
+          "type": "p",
+          "text": "Today the web app can show your contact details on your posts. The phone app does not show other members' contact details yet."
+        },
+        {
           "type": "h2",
           "text": "What others see"
         },
@@ -1982,7 +1986,7 @@
           "type": "ul",
           "items": [
             "Search with **Search chats, posts, partners...**.",
-            "The filter button sorts by newest or unread, and can show only unread chats or only friends."
+            "The filter button sorts by **Recent**, **Unread** or credits, and can show **Unread Only** or **Friends Only**."
           ]
         },
         {
@@ -2005,7 +2009,7 @@
           "type": "ul",
           "items": [
             "Type in **Message...** and tap the send button.",
-            "To send a photo, tap **+**, then **Send Photo**, then **Camera** or **Gallery**. Photos can only be sent in chats between two people."
+            "To send a photo, tap **+**, then **Camera** or **Gallery**. Photos can only be sent in chats between two people."
           ]
         },
         {
@@ -2050,7 +2054,7 @@
         },
         {
           "type": "p",
-          "text": "Tap their name at the top of the chat. Their profile opens. Tap **Block**. See \"Blocking someone\"."
+          "text": "Tap their name at the top of the chat. Their profile opens. Tap **Block**, then **Block User**. See \"Blocking someone\"."
         }
       ]
     },
@@ -2079,7 +2083,7 @@
           "items": [
             "**Friends:** people you have added.",
             "**Community:** every member. Search by name, and sort by **Newest**, **Name**, **Friends**, **Trusted** or **Active**.",
-            "**Invites:** invite someone new. See \"Joining with an invite\"."
+            "**Invites:** invite someone new. See \"Joining with an invite\". If you have not joined yet, this button says **Register**."
           ]
         },
         {
@@ -2093,13 +2097,13 @@
         {
           "type": "ul",
           "items": [
-            "In **Community**, tap **+ Add** next to a name. It changes to **Added**.",
+            "In **Community**, tap **+ Add** next to a name. It changes to **Added**. Tap **Added** to take them off again.",
             "In **Friends**, tap the message button to start a chat, or the remove button, then **Remove**, to take someone off."
           ]
         },
         {
           "type": "p",
-          "text": "Friends are a shortcut for you. If you choose, they can also see your contact details. See \"Your profile\"."
+          "text": "Friends are a shortcut for you. If you choose **Friends** for your contact details, only they can see them. See \"Your profile\"."
         },
         {
           "type": "h2",
@@ -2107,7 +2111,7 @@
         },
         {
           "type": "p",
-          "text": "Some members are chosen by the community to welcome newcomers. They can vouch for a new member, which gives that person a small credit line to start with. On the person's profile, they tap **Vouch for Member** and choose how much: 25, 50 or 100 beans."
+          "text": "Some members are chosen by the community to welcome newcomers. They can vouch for a new member, which gives that person a small credit line to start with. On the person's profile, they tap **Vouch for Member** and choose **Light** (25), **Standard** (50) or **Deep** (100). No beans leave the voucher's own wallet."
         },
         {
           "type": "p",
@@ -2152,8 +2156,12 @@
           "items": [
             "**Join Group** if it is open to anyone;",
             "**Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do;",
-            "groups marked **Invite Only** take new members by invitation. The screen for invitations is coming soon."
+            "an **Invite Only** group is hidden from everyone who is not in it, and takes new members only by invitation. The screen for invitations is coming soon."
           ]
+        },
+        {
+          "type": "p",
+          "text": "If a convenor removed you from a group, you cannot join it again by yourself."
         },
         {
           "type": "p",
@@ -2174,7 +2182,7 @@
         {
           "type": "ul",
           "items": [
-            "Tap **+ Create a Group** in **Groups**.",
+            "In **Groups**, tap the round **+** button (or **+ Create a Group** if there are no groups yet).",
             "Give it a **Group Name** and a **Purpose / Description**.",
             "Choose a **Category**.",
             "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
@@ -2200,7 +2208,7 @@
         },
         {
           "type": "p",
-          "text": "A group always keeps at least one convenor."
+          "text": "The last convenor cannot step down or leave while anyone else is still in the group."
         },
         {
           "type": "h2",
@@ -2242,7 +2250,7 @@
         },
         {
           "type": "p",
-          "text": "Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. If you change to **Interested** or **Not going**, you leave the chat. The host is always in it."
+          "text": "Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. If you change to **Interested**, or tap **Going** again to clear it, you leave the chat. The host is always in it."
         },
         {
           "type": "h2",
@@ -2780,7 +2788,7 @@
         },
         {
           "type": "p",
-          "text": "On an event, tap **Going** or **Interested**. Tap it again to take it back."
+          "text": "On an event, tap **Going** or **Interested**. Tap your choice again to clear it."
         },
         {
           "type": "p",

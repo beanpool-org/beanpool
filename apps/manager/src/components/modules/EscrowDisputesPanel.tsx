@@ -183,8 +183,8 @@ export function EscrowDisputesPanel({
             {/* Header & Governance Transparency Notice */}
             <div className="bg-nature-900/80 border border-nature-800 rounded-3xl p-6 shadow-xl backdrop-blur-md">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
                             <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2">
                                 <span>⚖️</span> Escrow Dispute Resolution
                             </h2>
@@ -537,8 +537,8 @@ export function EscrowDisputesPanel({
                         className="m-auto bg-nature-900 border border-nature-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up font-sans"
                     >
                         {/* Modal Header */}
-                        <div className="flex items-start justify-between">
-                            <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1 min-w-0 flex-1">
                                 <h3 id="resolve-dialog-title" className="text-lg font-black text-white m-0 flex items-center gap-2">
                                     <span>⚖️</span> Confirm Escrow Resolution
                                 </h3>

@@ -550,8 +550,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
                     {/* Nodes Table */}
                     <div className="bg-nature-950/60 border border-nature-800 rounded-2xl overflow-hidden">
-                        <div className="px-5 py-4 border-b border-nature-800 flex items-center justify-between">
-                            <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
+                        <div className="px-5 py-4 border-b border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+                            <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0 min-w-0">
                                 Harvested Node Replicas & Identity Bundles
                             </h4>
                             <span className="text-xs text-nature-400 font-mono">Auto-prunes history archives &gt;30d</span>
@@ -1015,8 +1015,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
                     {/* SECTION 1: PENDING DOMAIN CLAIMS */}
                     <div className="bg-nature-950/60 border border-nature-800 rounded-2xl overflow-hidden shadow-md">
-                        <div className="px-5 py-4 border-b border-nature-800 flex items-center justify-between bg-nature-900/30">
-                            <div className="flex items-center gap-2">
+                        <div className="px-5 py-4 border-b border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 bg-nature-900/30">
+                            <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-base">⏳</span>
                                 <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider m-0">
                                     Pending Name Claims (Tier: Gated / Awaiting Approval)
@@ -1141,8 +1141,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
                     {/* SECTION 2: ACTIVE ALLOCATIONS */}
                     <div className="bg-nature-950/60 border border-nature-800 rounded-2xl overflow-hidden shadow-md">
-                        <div className="px-5 py-4 border-b border-nature-800 flex items-center justify-between bg-nature-900/30">
-                            <div className="flex items-center gap-2">
+                        <div className="px-5 py-4 border-b border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 bg-nature-900/30">
+                            <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-base">🌐</span>
                                 <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
                                     Active Registrar Allocations
@@ -1272,8 +1272,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             {selectedHistoryNode && (
                 <div className="fixed inset-0 overflow-y-auto z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl animate-scale-in">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <h4 className="text-sm font-bold text-white m-0">
+                        <div className="flex items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                            <h4 className="text-sm font-bold text-white m-0 min-w-0 flex-1">
                                 📅 30-Day Historical Archives ({selectedHistoryNode.name})
                             </h4>
                             <button

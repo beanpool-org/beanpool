@@ -887,8 +887,8 @@ export function ApplianceSection({
 
                     {/* Ledger Conservation Audit Panel */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>⚖️</span>
                                     <span>Ledger Conservation Audit</span>
@@ -1001,8 +1001,8 @@ export function ApplianceSection({
 
                     {/* Automated Backup Schedule Card */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>⏱️</span>
                                     <span>Automated Backup Schedule</span>
@@ -1087,8 +1087,8 @@ export function ApplianceSection({
 
                     {/* Database Integrity Verification Card */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>🔍</span>
                                     <span>Database Integrity Verification</span>
@@ -1135,8 +1135,8 @@ export function ApplianceSection({
 
                     {/* Snapshots Management */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>📸</span>
                                     <span>Point-in-Time Snapshots ({snapshots.length})</span>
@@ -1326,8 +1326,8 @@ export function ApplianceSection({
 
                     {/* 2FA / TOTP Card */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>🛡️</span>
                                     <span>Two-Factor Authentication (2FA)</span>
@@ -1411,8 +1411,8 @@ export function ApplianceSection({
 
                     {/* Break-Glass Emergency Recovery Card (per admin-surface §2.2) */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>🚨</span>
                                     <span>Break-Glass Emergency Recovery</span>
@@ -1494,8 +1494,8 @@ export function ApplianceSection({
                     className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
                     <div className="m-auto bg-nature-900 border border-nature-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-white">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <h3 id="clean-storage-title" className="text-base font-bold m-0 flex items-center gap-2">
+                        <div className="flex items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                            <h3 id="clean-storage-title" className="text-base font-bold m-0 flex items-center gap-2 min-w-0 flex-1">
                                 <span>🧹</span>
                                 <span>Clean Orphaned Media &amp; Compress Logs</span>
                             </h3>

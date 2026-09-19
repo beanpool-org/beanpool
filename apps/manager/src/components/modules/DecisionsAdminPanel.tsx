@@ -75,8 +75,8 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
 
     return (
         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-            <div className="flex items-center justify-between gap-3">
-                <div>
+            <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+                <div className="min-w-0">
                     <h3 className="text-base font-bold text-white m-0">Community Decisions ({decisions.length})</h3>
                     <p className="text-xs text-nature-400 m-0 mt-0.5">
                         Open votes and removals waiting out their 7 days. Halting stops one; your reason is shown to members.

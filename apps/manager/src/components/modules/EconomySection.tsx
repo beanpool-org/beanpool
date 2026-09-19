@@ -493,8 +493,8 @@ export function EconomySection({
             {/* Subtab: Enterprises */}
             {subTab === 'enterprises' && (
                 <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <div>
+                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+                        <div className="min-w-0">
                             <h3 className="text-base font-bold text-white m-0">Shared Community Enterprises</h3>
                             <p className="text-xs text-nature-400 m-0 mt-0.5">
                                 Co-operatives, shared tools, community garden, and food initiatives
@@ -706,9 +706,9 @@ export function EconomySection({
                                 {commonsData.proposed.map((p) => (
                                     <div
                                         key={p.id}
-                                        className="p-4 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between gap-3"
+                                        className="p-4 rounded-xl bg-nature-950 border border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3"
                                     >
-                                        <div>
+                                        <div className="min-w-0 break-words">
                                             <h4 className="text-sm font-bold text-white m-0">{p.title}</h4>
                                             <p className="text-xs text-nature-400 m-0 mt-0.5">{p.description}</p>
                                             {p.requestedAmount && (
@@ -911,7 +911,7 @@ export function EconomySection({
                 <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="m-auto w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <div>
+                            <div className="min-w-0 flex-1">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>{manageKeepersTreasury.avatar || '🌾'}</span>
                                     <span>Manage Keepers — {manageKeepersTreasury.name}</span>

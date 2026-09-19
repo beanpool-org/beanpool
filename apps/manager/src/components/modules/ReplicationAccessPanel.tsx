@@ -500,7 +500,7 @@ export function ReplicationAccessPanel({
                 >
                     <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <div className="flex items-center gap-3 text-amber-400">
+                            <div className="flex items-center gap-3 text-amber-400 min-w-0 flex-1">
                                 <span className="text-2xl">⚠️</span>
                                 <h3 id="gen-token-title" className="text-base font-bold m-0 text-white">
                                     Generate / Rotate Replication Token?
@@ -562,7 +562,7 @@ export function ReplicationAccessPanel({
                 >
                     <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <div className="flex items-center gap-3 text-red-400">
+                            <div className="flex items-center gap-3 text-red-400 min-w-0 flex-1">
                                 <span className="text-2xl">🗑️</span>
                                 <h3 id="clear-token-title" className="text-base font-bold m-0 text-white">
                                     Remove Replication Token?

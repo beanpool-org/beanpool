@@ -62,8 +62,8 @@ export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps
         >
             <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="totp-title" aria-describedby="totp-desc"
                  className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
-                <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                    <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <div aria-hidden="true" className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-lg font-bold">
                             🔐
                         </div>

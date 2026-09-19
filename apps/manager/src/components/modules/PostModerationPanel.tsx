@@ -320,7 +320,7 @@ export function PostModerationPanel({
                 >
                     <div className="m-auto bg-nature-900 border border-red-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <h3 id="delete-post-dialog-title" className="text-base font-bold text-red-300 flex items-center gap-2 m-0">
+                            <h3 id="delete-post-dialog-title" className="text-base font-bold text-red-300 flex items-center gap-2 m-0 min-w-0 flex-1">
                                 <span>⚠️</span>
                                 <span>Confirm Post Deletion</span>
                             </h3>

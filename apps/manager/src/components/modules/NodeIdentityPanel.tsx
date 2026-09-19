@@ -579,13 +579,13 @@ export function NodeIdentityPanel({
 
                 {/* Directory Publishing */}
                 <div className="pt-6 border-t border-nature-800/80 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold text-white m-0">Directory Publishing</h4>
+                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+                        <h4 className="text-sm font-bold text-white m-0 min-w-0">Directory Publishing</h4>
                         <a
                             href={resolveNodeApiUrl(activeNode.url, '/api/directory/info')}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-sky-400 hover:text-sky-300 font-semibold inline-flex items-center gap-1 transition-colors"
+                            className="text-xs text-sky-400 hover:text-sky-300 font-semibold inline-flex items-center gap-1 min-h-[48px] lg:min-h-0 transition-colors"
                         >
                             <span>🔍 Preview Public Output</span>
                         </a>
@@ -596,7 +596,7 @@ export function NodeIdentityPanel({
                             href="https://beanpool.org"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sky-400 font-semibold hover:underline"
+                            className="inline-flex items-center min-h-[48px] lg:min-h-0 align-middle text-sky-400 font-semibold hover:underline"
                         >
                             beanpool.org ↗
                         </a>{' '}

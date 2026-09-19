@@ -464,7 +464,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                     href={hostname ? `https://${hostname}` : '#'}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="text-terra-400 hover:text-terra-300 font-bold font-mono underline break-all"
+                                    className="inline-flex items-center min-h-[48px] lg:min-h-0 min-w-0 text-terra-400 hover:text-terra-300 font-bold font-mono underline break-all"
                                 >
                                     {hostname || 'your-node.beanpool.org'}
                                 </a>
@@ -574,8 +574,8 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
             {/* Real-time Propagation Monitor Terminal */}
             <div className="p-5 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-3">
-                <div className="flex items-center justify-between gap-2 border-b border-nature-800 pb-2.5">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 border-b border-nature-800 pb-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
                         <span className="text-sm">📡</span>
                         <h4 className="text-xs font-bold text-white uppercase tracking-wider m-0">
                             Real-time DNS &amp; Edge Propagation Monitor

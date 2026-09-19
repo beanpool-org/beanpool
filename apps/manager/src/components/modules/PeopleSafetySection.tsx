@@ -270,8 +270,8 @@ export function PeopleSafetySection({
                 <div className="space-y-6">
                     {/* Pending Reports List */}
                     <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>⚠️</span>
                                     <span>Community Report Triage</span>
@@ -338,7 +338,7 @@ export function PeopleSafetySection({
                                                             href={report.pulseItem.url}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="text-terra-300 underline break-all"
+                                                            className="inline-flex items-center min-h-[48px] lg:min-h-0 min-w-0 text-terra-300 underline break-all"
                                                         >
                                                             {report.pulseItem.title || report.pulseItem.url}
                                                         </a>

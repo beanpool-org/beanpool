@@ -204,15 +204,15 @@ export function FleetSidebar({
                 : `w-72 bg-nature-900 border-r border-nature-800 ${isFleetMode ? 'flex' : 'hidden lg:flex'} flex-col shrink-0 h-screen sticky top-0 font-sans z-30 select-none`}
         >
             {/* Header Brand */}
-            <div className="p-5 border-b border-nature-800/80 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            <div className="p-5 border-b border-nature-800/80 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
-                        className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"
+                        className="w-10 h-10 shrink-0 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"
                         aria-hidden="true"
                     >
                         🌱
                     </div>
-                    <div>
+                    <div className="min-w-0">
                         <h1 className="text-base font-extrabold tracking-tight text-white m-0 leading-tight truncate max-w-[170px]" title={isFleetMode ? 'BeanPool' : (communityName || 'BeanPool')}>
                             {isFleetMode ? 'BeanPool' : (communityName || 'BeanPool')}
                         </h1>
@@ -227,7 +227,7 @@ export function FleetSidebar({
                         onClick={onClose}
                         data-autofocus
                         aria-label="Close menu"
-                        className="min-w-[48px] min-h-[48px] -mr-2 rounded-xl text-xl text-nature-300 hover:text-white hover:bg-nature-800/60 flex items-center justify-center"
+                        className="shrink-0 min-w-[48px] min-h-[48px] -mr-2 rounded-xl text-xl text-nature-300 hover:text-white hover:bg-nature-800/60 flex items-center justify-center"
                     >
                         ✕
                     </button>

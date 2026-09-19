@@ -409,7 +409,7 @@ export function StandbyReplicationPanel({
                 >
                     <div className="m-auto bg-nature-900 border border-amber-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <h3 id="resync-dialog-title" className="text-base font-bold text-amber-300 flex items-center gap-2 m-0">
+                            <h3 id="resync-dialog-title" className="text-base font-bold text-amber-300 flex items-center gap-2 m-0 min-w-0 flex-1">
                                 <span>⚠️</span>
                                 <span>Confirm Full Replication Resync</span>
                             </h3>

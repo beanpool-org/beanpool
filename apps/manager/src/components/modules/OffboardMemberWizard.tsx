@@ -133,8 +133,8 @@ export function OffboardMemberWizard({
             <div className="m-auto bg-nature-950 border border-nature-800 rounded-3xl p-6 max-w-lg w-full space-y-6 shadow-2xl overflow-hidden relative">
                 
                 {/* Header */}
-                <div className="flex items-start justify-between border-b border-nature-800 pb-4">
-                    <div className="flex items-center gap-3">
+                <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-4">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div className="w-10 h-10 rounded-2xl bg-red-950/60 border border-red-800/80 flex items-center justify-center text-xl">
                             🚪
                         </div>

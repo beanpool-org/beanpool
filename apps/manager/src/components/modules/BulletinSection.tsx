@@ -299,8 +299,8 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
             {/* Subtab: Pulse Channels */}
             {subTab === 'pulse' && (
                 <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <div>
+                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+                        <div className="min-w-0">
                             <h3 className="text-base font-bold text-white m-0">Curated Pulse RSS Channels</h3>
                             <p className="text-xs text-nature-400 m-0 mt-0.5">
                                 Feeds distributed through the community Pulse reader tab

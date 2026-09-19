@@ -27,7 +27,7 @@ About the Commons:
 
 ## Who can start a Decision
 
-Any active member whose credit is not frozen, and who has traded in the market or holds trust their community gave them. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.
+Any active member whose credit is not frozen, and who has traded in the market or was given a trust badge by an admin. A vouch on its own is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.
 
 ## Who can vote
 

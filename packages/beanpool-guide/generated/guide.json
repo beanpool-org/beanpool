@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "version": 1,
-  "hash": "a0ea0fbbbc0e36d38be06f02c80585223f58551cb4e19d99543ff7585c500f1d",
+  "hash": "ff75a7b17c44b581ea7fc563994d2b5dcbe2803a605ab057f067a065fba1bab8",
   "guides": [
     {
       "slug": "how-it-works",
@@ -228,7 +228,7 @@
         },
         {
           "type": "p",
-          "text": "Any active member whose credit is not frozen, and who has traded in the market or holds trust their community gave them. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters."
+          "text": "Any active member whose credit is not frozen, and who has traded in the market or was given a trust badge by an admin. A vouch on its own is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters."
         },
         {
           "type": "h2",

@@ -9,7 +9,7 @@
  *   2. The owner scans it in the app, compares the short code, passes the phone's own unlock, and posts an
  *      approval signed with their member key over `beanpool-settings-signin:v1:approve:<id>:<code>`.
  *      The node runs the same signer checks as the app's one-time link (authorizeKeySigner: active member,
- *      owner/admin in node_roles, signature, the node's 2FA code when on) and mints the same 60-second
+ *      owner, admin or moderator in node_roles, signature, the node's 2FA code when on) and mints the same 60-second
  *      handshake token — but keeps it here, bound to the pairing. It is never sent to the phone or the page.
  *   3. The browser, long-polling with its binding cookie, redeems that token through consumeHandshakeToken and
  *      gets the same admin_session a key sign-in gets. A photographed QR is useless elsewhere: without the
@@ -224,7 +224,7 @@ export function approvePairing(params: {
     const memberPubkey = String(params.memberPubkey || '').trim();
     const message = pairingMessage('approve', p.id, p.shortCode);
     // The signature is checked FIRST here (authorizeKeySigner checks it after the role): only a real key holder
-    // may cause a "not an owner or admin" notice on the waiting page.
+    // may cause a "holds no role here" notice on the waiting page.
     if (!verifyEd25519Signature(message, params.signature, memberPubkey)) {
         refuse(p);
         return { ok: false, status: 403, error: 'Invalid cryptographic signature', reason: 'bad-signature' };
@@ -241,11 +241,11 @@ export function approvePairing(params: {
         }
         if (signer.notAdmin) {
             p.notice = 'not-admin';
-            logger.warn('AUTH', `Settings sign-in by phone refused: ${who(memberPubkey)} is not an owner or admin (pairing ${p.id.slice(0, 8)})`);
+            logger.warn('AUTH', `Settings sign-in by phone refused: ${who(memberPubkey)} holds no node role (pairing ${p.id.slice(0, 8)})`);
         }
         refuse(p);
         if (signer.wrongTotp) return { ok: false, status: 401, error: signer.error, totpRequired: true, reason: 'totp' };
-        if (signer.notAdmin) return { ok: false, status: 403, error: 'You are not an owner or admin of this community.', reason: 'not-admin' };
+        if (signer.notAdmin) return { ok: false, status: 403, error: 'You are not an owner, admin or moderator of this community.', reason: 'not-admin' };
         return { ok: false, status: 403, error: signer.error, reason: 'inactive' };
     }
 

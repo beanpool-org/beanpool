@@ -58,7 +58,7 @@ export const PHONE_SIGNIN_MESSAGES = {
     refused: 'Too many refused attempts on that code. Get a new code to try again.',
     used: 'That code was already used. Get a new code.',
     wrongBrowser: 'That code belongs to another browser or tab. Get a new code here.',
-    notAdmin: "The phone that scanned isn't an owner or admin of this community. Scan with an owner's or admin's phone.",
+    notAdmin: "The phone that scanned isn't an owner, admin or moderator of this community. Scan with the phone of someone who is.",
     failed: 'The sign-in was not accepted. Get a new code to try again.',
 } as const;
 

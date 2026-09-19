@@ -1176,13 +1176,18 @@ export async function getDealsBetween(myPubkey: string, peerPubkey: string): Pro
 // every poll tick; one POST per conversation per 10s is plenty for read receipts.
 const _lastReadPushAt: Record<string, number> = {};
 
-export async function markConversationRead(conversationId: string, myPubkey: string) {
+/** The phone's own read marker (the Talk tab's badge counts from it); no request. */
+export async function markConversationReadLocally(conversationId: string, myPubkey: string) {
     const database = await getDb();
     const now = new Date().toISOString();
     await database.runAsync(
         'UPDATE conversation_participants SET last_read_at = ? WHERE conversation_id = ? AND public_key = ?',
         [now, conversationId, myPubkey]
     );
+}
+
+export async function markConversationRead(conversationId: string, myPubkey: string) {
+    await markConversationReadLocally(conversationId, myPubkey);
 
     // Push the read cursor to the server so the PEER's device can render the
     // double-tick. Without this the receipt loop never leaves this phone.
@@ -4926,6 +4931,8 @@ export interface GroupItem {
     memberCount?: number;
     viewerRole?: GroupRole | null;
     viewerStatus?: GroupMemberStatus | null;
+    /** The viewer's own open invitation: who sent it. */
+    viewerInvitedBy?: { pubkey: string; callsign?: string; avatarUrl?: string };
     convenorPubkey?: string;
     convenorCallsign?: string;
     convenorAvatarUrl?: string | null;
@@ -5164,3 +5171,94 @@ export async function deleteGroupPostApi(groupId: string, postId: string): Promi
     return Boolean(res?.success);
 }
 
+// ===================== YOUR GROUPS & GROUP CHAT (groups slice 2) =====================
+// Every call is signed and served only to the member; nothing here is cached on the phone.
+
+/** GET /api/your-groups: every group, enterprise and event chat the member is in, newest first. */
+export async function fetchYourGroups(): Promise<import('./your-groups').YourChatsResponse> {
+    const res = await signedGet('/api/your-groups');
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || 'Could not load your groups.');
+    return { items: Array.isArray(body?.items) ? body.items : [], totalUnread: Number(body?.totalUnread || 0) };
+}
+
+/** A group's chat as the member sees it. Throws the node's own message. */
+export async function getGroupChat(groupId: string, limit = 50, offset = 0): Promise<any> {
+    const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}&offset=${offset}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || 'Could not open this group chat.');
+    return body;
+}
+
+export async function postGroupChatMessage(groupId: string, text: string, clientId?: string): Promise<any> {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId });
+}
+
+/** An enterprise's discussion thread — public to every member of the community, not only its keepers. */
+export async function getEnterpriseChat(treasury: string, limit = 50): Promise<any> {
+    const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/thread?limit=${limit}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || 'Could not open this enterprise chat.');
+    return body;
+}
+
+export async function postEnterpriseChatMessage(treasury: string, text: string, clientId?: string): Promise<any> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
+}
+
+/**
+ * People who can be invited to a group: the node's own directory (it already leaves out enterprises and other
+ * treasury accounts), without the system account. Falls back to the phone's copy when offline.
+ */
+export async function getInvitablePeople(): Promise<{ publicKey: string; callsign: string; avatarUrl: string | null }[]> {
+    const notPeople = (pk: string) => pk === 'SYSTEM' || pk.startsWith('escrow_');
+    try {
+        const res = await signedGet('/api/community/members');
+        if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows)) {
+                return rows
+                    .filter((m: any) => m?.publicKey && !notPeople(m.publicKey) && m.status !== 'pruned')
+                    .map((m: any) => ({ publicKey: m.publicKey, callsign: m.callsign || m.publicKey.slice(0, 8), avatarUrl: m.avatarUrl ?? null }))
+                    .sort((a, b) => a.callsign.localeCompare(b.callsign, undefined, { sensitivity: 'base' }));
+            }
+        }
+    } catch { /* offline: the phone's copy below */ }
+    const local = await getAllCommunityMembers();
+    return local.filter(m => !notPeople(m.publicKey)).map(m => ({ ...m, avatarUrl: null }));
+}
+
+/** Mute one chat for 8 hours, a week or always, or unmute it (groups decision 12). */
+export async function muteChatApi(conversationId: string, duration: '8h' | '1w' | 'always' | 'off'): Promise<any> {
+    return _signedRequest('/api/messages/mute', { conversationId, duration });
+}
+
+/**
+ * One group as the member sees it, for the invite landing: null when the node says not found, and the node's own
+ * message (or "could not reach") thrown otherwise, so the page can tell "not available" from "no signal".
+ */
+export async function getGroupForLanding(id: string): Promise<GroupItem | null> {
+    const res = await signedGet(`/api/groups/${encodeURIComponent(id)}`);
+    if (res.status === 404) return null;
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body || typeof body !== 'object') throw new Error(body?.error || 'Could not reach the node.');
+    return body as GroupItem;
+}
+
+/** A group's active members (the faces on the invite landing). Throws when the node could not be reached. */
+export async function getGroupActiveMembers(id: string): Promise<GroupMemberItem[]> {
+    const res = await signedGet(`/api/groups/${encodeURIComponent(id)}/members?status=active`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(body?.error || 'Could not load the members.');
+    return Array.isArray(body) ? body : [];
+}
+
+/**
+ * Move this member's read marker on a node-readable chat (group, enterprise) to now. Unlike markConversationRead
+ * it is not throttled — callers send it only when there is something new to read — and it resolves once the node
+ * has it, so "Your groups" can drop the count knowing a later refresh agrees.
+ */
+export async function markThreadReadOnNode(conversationId: string, myPubkey: string): Promise<void> {
+    markConversationReadLocally(conversationId, myPubkey).catch(() => { });
+    await _signedRequest('/api/messages/mark-read', { pubkey: myPubkey, conversationId });
+}

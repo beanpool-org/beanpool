@@ -30,7 +30,7 @@ import { db } from './db/db.js';
 import {
     initStateEngine, createGroup, joinGroup, approveGroupMember, inviteGroupMember, removeGroupMember,
     setMemberRole, updateGroup, createPost, createTreasury, adminAssignTreasuryOperator, createConversation,
-    getUnreadCounts, markConversationRead, listYourChats,
+    getUnreadCounts, markConversationRead, listYourChats, getGroup,
 } from './state-engine.js';
 import { rsvpEvent } from './engine/posts.js';
 import {
@@ -181,6 +181,12 @@ async function main(): Promise<void> {
     // ── 3. Who reads and who posts ──────────────────────────────────────────────────────────
     console.log('\n--- 3. Read and post, re-checked against the group ---');
     inviteGroupMember(garden.id, alice, hugo);
+    // The invite landing (slice 2) names who asked: the invitee sees their own inviter, nobody else sees one.
+    const asHugo = getGroup(garden.id, hugo) as any;
+    assert(asHugo?.viewerStatus === 'invited' && asHugo?.viewerInvitedBy?.pubkey === alice && asHugo?.viewerInvitedBy?.callsign === 'Alice',
+        'an invitee reading the group sees who invited them');
+    assert((getGroup(garden.id, bob) as any)?.viewerInvitedBy === undefined, 'a member is shown no inviter');
+    assert((getGroup(garden.id, erin) as any)?.viewerInvitedBy === undefined, 'an outsider is shown no inviter');
     const chatPath = `/api/groups/${garden.id}/chat`;
     const read = async (pk?: string) => (await get(chatPath, pk)).status ?? 200;
     assert(await read(alice) === 200 && await read(bob) === 200, 'the convenor and a member read the chat');

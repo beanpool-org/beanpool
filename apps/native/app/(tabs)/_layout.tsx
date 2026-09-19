@@ -258,6 +258,7 @@ export default function TabLayout() {
                     options={{
                         title: 'Market',
                         tabBarAccessibilityLabel: 'Market',
+                        tabBarButtonTestID: 'tab-market',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Market" icon="🤝" focused={focused} color={color} count={dealsCount} />
                     }}
                 />
@@ -266,6 +267,7 @@ export default function TabLayout() {
                     options={{
                         title: 'Map',
                         tabBarAccessibilityLabel: 'Map',
+                        tabBarButtonTestID: 'tab-map',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Map" icon="🗺️" focused={focused} color={color} />
                     }}
                 />
@@ -277,6 +279,7 @@ export default function TabLayout() {
                     options={{
                         title: 'Talk',
                         tabBarAccessibilityLabel: 'Talk',
+                        tabBarButtonTestID: 'tab-talk',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Talk" icon="💬" focused={focused} color={color} count={unread} />
                     }}
                 />
@@ -296,22 +299,25 @@ export default function TabLayout() {
                     options={{
                         title: 'Pulse',
                         tabBarAccessibilityLabel: 'Pulse',
+                        tabBarButtonTestID: 'tab-pulse',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Pulse" icon="📡" focused={focused} color={color} />
                     }}
                 />
-                <Tabs.Screen 
-                    name="projects" 
-                    options={{ 
+                <Tabs.Screen
+                    name="projects"
+                    options={{
                         title: 'Commons',
                         tabBarAccessibilityLabel: 'Commons',
+                        tabBarButtonTestID: 'tab-commons',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Commons" icon={Platform.OS === 'ios' ? '🌱' : '🌳'} focused={focused} color={color} /> 
                     }} 
                 />
-                <Tabs.Screen 
-                    name="ledger" 
-                    options={{ 
+                <Tabs.Screen
+                    name="ledger"
+                    options={{
                         title: 'Ledger',
                         tabBarAccessibilityLabel: 'Ledger',
+                        tabBarButtonTestID: 'tab-ledger',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Ledger" icon="📊" focused={focused} color={color} /> 
                     }} 
                 />

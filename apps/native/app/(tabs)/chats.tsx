@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter, RefreshControl } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
@@ -14,11 +14,14 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
+import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState } from '../../utils/your-groups';
+import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
+import { useYourGroups } from '../../components/useYourGroups';
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
     const { identity } = useIdentity();
-    // Talk = Messages + People. People is rendered inline rather than as its own route so the
+    // Talk = Messages | Groups | People (groups decision 6). People is rendered inline rather than as its own route so the
     // Talk tab stays highlighted; /people survives for the deep links that pass a `view` param,
     // and PeopleScreen reads that param off whichever route it is mounted on.
     const talkParams = useLocalSearchParams<{ view?: string; filter?: string }>();
@@ -27,12 +30,20 @@ export default function ChatsScreen() {
     React.useEffect(() => {
         if (talkParams.view === 'people') {
             setTalkView('people');
+        } else if (talkParams.view === 'groups') {
+            setTalkView('groups');
         } else if (talkParams.view === 'messages') {
             setTalkView('messages');
         }
     }, [talkParams.view]);
 
     const [conversations, setConversations] = useState<any[]>([]);
+    // "Your groups" (slice 1 API): groups, enterprises kept, events going to — the one copy Commons shares, refreshed
+    // with the conversations so the switch can show the Groups unread total while Messages is open.
+    const yourGroupsLive = useYourGroups(identity?.publicKey);
+    const yourGroups = yourGroupsLive.items;
+    // A muted chat keeps its own grey count but does not add to the switch's total (WhatsApp's rule).
+    const groupsUnread = React.useMemo(() => groupsUnreadTotal(yourGroups), [yourGroups]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
@@ -56,6 +67,7 @@ export default function ChatsScreen() {
     const qr = useQuickReturn({ pinned: showOptions || searchFocused, resetKey: talkView });
     const listRef = useRef<FlatList>(null);
     useTabRetapScrollTop(listRef, qr.show);
+    const createGroup = useCreateGroupFlow();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
@@ -72,7 +84,9 @@ export default function ChatsScreen() {
             flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
-            paddingVertical: 9,
+            minHeight: 44,
+            paddingVertical: 6,
+            paddingHorizontal: 4,
             borderRadius: 9,
         },
         talkTabActive: {
@@ -84,11 +98,18 @@ export default function ChatsScreen() {
             elevation: 2,
         },
         talkTabText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
+        talkTabBadge: {
+            position: 'absolute', top: -4, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
+            backgroundColor: colors.accent.primary, alignItems: 'center', justifyContent: 'center',
+            borderWidth: 1.5, borderColor: colors.surface.subtle,
+        },
+        talkTabBadgeText: { color: colors.text.inverse, fontSize: 10, fontWeight: '800' },
         talkTabTextActive: { color: colors.text.heading, fontWeight: '800' },
         header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
         title: { fontSize: 32, fontWeight: '800', color: colors.text.body, letterSpacing: -0.5 },
         newChatBtn: { padding: 8, backgroundColor: colors.accent.tint, borderRadius: 12 },
         list: { paddingTop: 4, paddingBottom: 100 },
+        groupsActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
         chatRow: {
             flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12,
             marginHorizontal: 16, marginVertical: 4, borderRadius: 14,
@@ -288,6 +309,8 @@ export default function ChatsScreen() {
                     getConversations(identity.publicKey)
                         .then(res => {
                             const filtered = (res || []).filter((c: any) => {
+                                // Group, enterprise and event chats live under Groups now (decision 6).
+                                if (c.type === 'group_thread' || c.type === 'event_thread' || c.type === 'enterprise_thread') return false;
                                 const pk = getPeerKey(c);
                                 return !pk || !blocked.includes(pk);
                             });
@@ -303,6 +326,8 @@ export default function ChatsScreen() {
                             if (active) setDeals(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);
+                    // Sync nudges come in bursts; overlapping asks share one request (utils/your-groups-store).
+                    yourGroupsLive.refresh();
                     getFriendsLocal(identity.publicKey)
                         .then(res => {
                             if (active) setFriendPubkeys(prev => {
@@ -533,8 +558,9 @@ export default function ChatsScreen() {
     const talkSwitch = (
         <View style={styles.talkBar}>
             {([
-                { id: 'messages' as const, label: 'Messages', icon: '\u{1F4AC}' },
-                { id: 'people' as const, label: 'People', icon: '\u{1F465}' },
+                { id: 'messages' as const, label: 'Messages', count: 0 },
+                { id: 'groups' as const, label: 'Groups', count: groupsUnread },
+                { id: 'people' as const, label: 'People', count: 0 },
             ]).map(t => {
                 const active = talkView === t.id;
                 return (
@@ -544,11 +570,18 @@ export default function ChatsScreen() {
                         style={[styles.talkTab, active && styles.talkTabActive]}
                         accessibilityRole="radio"
                         accessibilityState={{ selected: active }}
-                        accessibilityLabel={t.label}
+                        accessibilityLabel={t.count ? `${t.label}, ${t.count} unread` : t.label}
                     >
-                        <Text style={[styles.talkTabText, active && styles.talkTabTextActive]}>
-                            {t.icon}  {t.label}
+                        <Text style={[styles.talkTabText, active && styles.talkTabTextActive]} numberOfLines={1}>
+                            {t.label}
                         </Text>
+                        {/* On the tab's corner, not beside the label: at 320dp and 1.3x text a badge in the row
+                            squeezed "Groups" to "Grou…". */}
+                        {t.count > 0 && (
+                            <View style={styles.talkTabBadge} pointerEvents="none">
+                                <Text style={styles.talkTabBadgeText} maxFontSizeMultiplier={1.1}>{unreadLabel(t.count)}</Text>
+                            </View>
+                        )}
                     </Pressable>
                 );
             })}
@@ -671,10 +704,38 @@ export default function ChatsScreen() {
         </View>
     ) : null;
 
+    if (talkView === 'groups') {
+        const paneState = yourGroupsPaneState(yourGroups, yourGroupsLive.error);
+        const hasAny = paneState === 'list';
+        return (
+            <View style={styles.safeArea}>
+                {/* Keyed on empty/non-empty so flipping between them starts from the top. */}
+                <Animated.ScrollView
+                    key={hasAny ? 'list' : 'empty'}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                    refreshControl={<RefreshControl refreshing={false} onRefresh={yourGroupsLive.refresh} tintColor={colors.brand.primary} colors={[colors.brand.primary]} />}
+                >
+                    <PageTitle title="Talk" />
+                    {talkSwitch}
+                    {hasAny && (
+                        <View style={styles.groupsActions}>
+                            <NewGroupButton onPress={createGroup.open} compact />
+                        </View>
+                    )}
+                    {paneState === 'loading' && <YourGroupsLoading />}
+                    {paneState === 'error' && <YourGroupsError message={yourGroupsLive.error || 'Could not load your groups.'} onRetry={yourGroupsLive.refresh} />}
+                    {paneState === 'list' && <YourGroupsRows items={yourGroups || []} myPubkey={identity?.publicKey} showUnread />}
+                    {paneState === 'empty' && <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push({ pathname: '/(tabs)/projects', params: { section: 'groups' } })} />}
+                </Animated.ScrollView>
+                {createGroup.modal}
+            </View>
+        );
+    }
+
     if (talkView === 'people') {
         return (
             <View style={styles.safeArea}>
-                <PageTitle title="Talk" />
+                <PageTitle title="Talk" testID="page-title-talk" />
                 {talkSwitch}
                 <PeopleScreen />
             </View>
@@ -687,7 +748,7 @@ export default function ChatsScreen() {
                 and the search row sit over the list and ride away with it (QuickReturnBlock); the
                 compose button lives in the search row, so it comes back with the first scroll up. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title="Talk" />} below={optionsDrawer}>
+            <QuickReturnBlock qr={qr} title={<PageTitle title="Talk" testID="page-title-talk" />} below={optionsDrawer}>
             {talkSwitch}
             {/* Search, Sort, and Filter row */}
             <View style={styles.searchBarRow}>

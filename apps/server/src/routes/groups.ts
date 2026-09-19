@@ -35,7 +35,7 @@ import {
     getGroupSuccession,
     listYourChats,
 } from '../state-engine.js';
-import { groupChatRefusal } from '../engine/group-thread.js';
+import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
 import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
 
@@ -66,6 +66,21 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         ctx.status = refusal.status;
         ctx.body = { error: refusal.error };
         return false;
+    }
+
+    /**
+     * The #828 rule on every route that names a group: an invite-only group the caller has no live row in (not a
+     * member, not invited, not asking; removed counts as none) answers 404 with the same words as an id nobody has,
+     * so no route can be used to learn that it exists. The actor is the authenticated one or nobody. Returns the
+     * group when the caller may go on.
+     */
+    function requireVisibleGroup(ctx: any, actor: string | undefined, opts: { byIdOnly?: boolean } = { byIdOnly: true }): VisibleGroup | null {
+        const group = visibleGroup(ctx.params.id, actor, opts);
+        if (!group) {
+            ctx.status = 404;
+            ctx.body = { error: GROUP_NOT_FOUND };
+        }
+        return group;
     }
 
     /** Refusals from the group chat and succession engines, as statuses. */
@@ -123,8 +138,10 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     });
 
     // 2. Get group by ID or slug
+    // An invitee sees the group itself — its card is the invite landing — but not who is in it (5, below).
     router.get('/api/groups/:id', async (ctx) => {
         const viewerPubkey = ctx.state?.actor as string | undefined;
+        if (!requireVisibleGroup(ctx, viewerPubkey, { byIdOnly: false })) return;
         const group = getGroup(ctx.params.id, viewerPubkey);
         if (!group) {
             ctx.status = 404;
@@ -171,6 +188,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     router.post('/api/groups/:id/join', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
 
         try {
             const member = joinGroup(ctx.params.id, actor);
@@ -187,6 +205,15 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         const status = ctx.query.status as any;
         const role = ctx.query.role as any;
         const viewerPubkey = ctx.state?.actor as string | undefined;
+        const group = requireVisibleGroup(ctx, viewerPubkey);
+        if (!group) return;
+        // Who is in an invite-only group is for its members. Someone invited or asking already knows the group
+        // exists (they can open its card), so they get a plain refusal rather than a 404.
+        if (group.joinPolicy === 'invite_only' && group.relation !== 'active') {
+            ctx.status = 403;
+            ctx.body = { error: 'Only members of this group can see who is in it' };
+            return;
+        }
         const isConvenor = Boolean(viewerPubkey && isGroupConvenor(ctx.params.id, viewerPubkey));
         if (status && status !== 'active') {
             if (!isConvenor) {
@@ -206,6 +233,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     router.post('/api/groups/:id/members', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
 
         const body = (ctx as any).requestBody || {};
         const memberPubkey = body.targetPubkey || body.memberPubkey;
@@ -239,6 +267,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     router.patch('/api/groups/:id/members/:pubkey', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
 
         const body = (ctx as any).requestBody || {};
         const { role } = body;
@@ -264,6 +293,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     router.delete('/api/groups/:id/members/:pubkey', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
 
         try {
             const removed = removeGroupMember(ctx.params.id, actor, ctx.params.pubkey);
@@ -280,6 +310,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     router.patch('/api/groups/:id', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
 
         const body = (ctx as any).requestBody || {};
         const { name, description, avatarUrl, category, joinPolicy } = body;
@@ -436,6 +467,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     router.delete('/api/groups/:id/posts/:postId', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
 
         try {
             const deleted = deleteGroupPost(ctx.params.id, actor, ctx.params.postId);

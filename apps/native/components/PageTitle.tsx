@@ -14,7 +14,7 @@ export const PAGE_TITLE_TOP = 4;
 export const PAGE_TITLE_BOTTOM = 8;
 const PAGE_TITLE_LINE = 36;
 
-export function PageTitle({ title, right, collapsed = false, inset = 16 }: {
+export function PageTitle({ title, right, collapsed = false, inset = 16, testID }: {
     title: string;
     /** Page action drawn on the title's line (e.g. Talk's compose button). */
     right?: React.ReactNode;
@@ -22,12 +22,15 @@ export function PageTitle({ title, right, collapsed = false, inset = 16 }: {
     collapsed?: boolean;
     /** Horizontal padding; 0 when the page's own container already pads 16 (Commons' list). */
     inset?: number;
+    /** e2e selector for the title text (Maestro smoke flow). */
+    testID?: string;
 }) {
     const { colors } = useTheme();
     if (collapsed) return null;
     return (
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: inset, paddingTop: PAGE_TITLE_TOP, paddingBottom: PAGE_TITLE_BOTTOM }}>
             <Text
+                testID={testID}
                 accessibilityRole="header"
                 numberOfLines={1}
                 maxFontSizeMultiplier={1.3}

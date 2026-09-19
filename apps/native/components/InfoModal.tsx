@@ -15,9 +15,11 @@ export interface InfoModalProps {
     icon: React.ReactNode;
     tabs: InfoModalTab[];
     defaultTab?: string;
+    /** e2e selector root (Maestro smoke flow); the close button gets `${testID}-close`. */
+    testID?: string;
 }
 
-export function InfoModal({ isOpen, onClose, title, icon, tabs, defaultTab }: InfoModalProps) {
+export function InfoModal({ isOpen, onClose, title, icon, tabs, defaultTab, testID }: InfoModalProps) {
     const [activeTab, setActiveTab] = useState<string>(defaultTab || (tabs.length > 0 ? tabs[0].id : ''));
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
@@ -124,14 +126,14 @@ export function InfoModal({ isOpen, onClose, title, icon, tabs, defaultTab }: In
                     <View style={styles.backdrop} />
                 </TouchableWithoutFeedback>
 
-                <View style={styles.modalContainer}>
+                <View style={styles.modalContainer} testID={testID}>
                     {/* Header */}
                     <View style={styles.header}>
                         <View style={styles.headerTitleContainer}>
                             <View style={styles.headerIconContainer}>{icon}</View>
                             <Text style={styles.headerTitle}>{title}</Text>
                         </View>
-                        <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.closeButton}>
+                        <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" testID={testID ? `${testID}-close` : undefined} style={styles.closeButton}>
                             <Text style={styles.closeButtonText}>✕</Text>
                         </TouchableOpacity>
                     </View>

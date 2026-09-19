@@ -47,11 +47,16 @@ function go(target: Exclude<NeedsYouTarget, { to: 'admin' }>) {
         case 'my-deals': return router.push({ pathname: '/(tabs)/', params: { tab: 'deals' } });
         // Commons has no route or param for one Decision, so every vote lands on its Decide section.
         case 'decide': return router.push({ pathname: '/(tabs)/projects', params: { section: 'decide' } });
+        // The chat screen is told its kind on the way in, so it never waits on a lookup to decide.
         case 'chat': return router.push(target.event
             ? { pathname: '/chat/[id]', params: { id: target.conversationId, event: '1' } }
-            : { pathname: '/chat/[id]', params: { id: target.conversationId } });
-        // Talk → Messages lists direct and group chats together; the Unread filter narrows it to these.
+            : target.thread
+                ? { pathname: '/chat/[id]', params: { id: target.conversationId, [target.thread]: '1' } }
+                : { pathname: '/chat/[id]', params: { id: target.conversationId } });
+        // Talk → Messages lists chats with people; the Unread filter narrows it to these.
         case 'unread-messages': return router.push({ pathname: '/(tabs)/chats', params: { view: 'messages', filter: 'unread' } });
+        // Group, enterprise and event chats live in Talk → Groups (groups slice 2), with their counts.
+        case 'your-groups': return router.push({ pathname: '/(tabs)/chats', params: { view: 'groups' } });
     }
 }
 

@@ -18,6 +18,7 @@ import {
     View, Text, StyleSheet, Pressable, FlatList, TextInput, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
@@ -25,6 +26,8 @@ import { useIdentity } from '../app/IdentityContext';
 import { getEventChat, postEventChatMessage, removeEventChatMessage, markConversationRead } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import { EVENT_ACCENT } from './EventCard';
+import { ChatOwnerHeader } from './ChatOwnerHeader';
+import { yourGroupsStore } from './useYourGroups';
 import { decodeEventChatText, trimEventChatDraft, EVENT_CHAT_MESSAGE_MAX } from '../utils/events';
 
 interface Props {
@@ -34,7 +37,7 @@ interface Props {
 
 export function EventChatView({ eventId }: Props) {
     const insets = useSafeAreaInsets();
-    const { colors } = useTheme();
+    const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
 
@@ -52,6 +55,8 @@ export function EventChatView({ eventId }: Props) {
             setView(res);
             setError(null);
             if (identity?.publicKey) markConversationRead(eventId, identity.publicKey).catch(() => { });
+            // Talk → Groups lists this chat too: its count goes now, not at the next refresh.
+            yourGroupsStore.markRead(eventId);
         } catch (e: any) {
             setError(e?.message || 'Could not open this event chat.');
         }
@@ -103,26 +108,19 @@ export function EventChatView({ eventId }: Props) {
         ]);
     };
 
+    // The one chat header (groups decision 9): "📅 Working bee · event"; tapping it opens the event, which is the
+    // way back to it after it has left the feed (events round 2, A4).
     const header = (
-        <View style={styles.header}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={goBack} style={styles.backButton}>
-                <Text style={styles.backText}>←</Text>
-            </Pressable>
-            <View style={styles.headerTitleWrap}>
-                <Text style={styles.headerTitle} numberOfLines={1}>{view?.title || 'Event chat'}</Text>
-                <Text style={styles.headerSub} numberOfLines={1}>Event chat</Text>
-            </View>
-            {/* The way back to the event itself. After it ends or is cancelled it has left the feed, and this
-                chat is often the only way in (events round 2, A4). */}
-            <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="View event"
-                onPress={() => router.push(`/post/${eventId}`)}
-                style={styles.viewEventBtn}
-            >
-                <Text style={styles.viewEventText} numberOfLines={1}>View event</Text>
-            </Pressable>
-        </View>
+        <>
+        <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+        <ChatOwnerHeader
+            kind="event"
+            name={view?.title || 'Event chat'}
+            detail={view?.readOnly ? 'ended' : null}
+            onBack={goBack}
+            onOpenOwner={() => router.push(`/post/${eventId}`)}
+        />
+        </>
     );
 
     if (error && !view) {
@@ -240,20 +238,6 @@ export function EventChatView({ eventId }: Props) {
 const makeStyles = ({ colors, theme }: ThemeContextType) =>
     StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.app },
-        header: {
-            flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6,
-            borderBottomWidth: 1, borderBottomColor: colors.surface.subtle,
-        },
-        backButton: { width: 44, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
-        backText: { color: colors.text.body, fontSize: 22 },
-        headerTitleWrap: { flex: 1, minWidth: 0 },
-        headerTitle: { fontSize: 16, fontWeight: '800', color: colors.text.heading },
-        headerSub: { fontSize: 11, fontWeight: '700', color: EVENT_ACCENT },
-        viewEventBtn: {
-            minHeight: 48, justifyContent: 'center', paddingHorizontal: 10, marginLeft: 6, flexShrink: 0,
-            borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT,
-        },
-        viewEventText: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT },
         noteBox: {
             marginHorizontal: 12, marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1,
             backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.15)' : '#f5f3ff',

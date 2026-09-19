@@ -1,0 +1,60 @@
+appId: org.beanpool.pillar
+---
+# Basic release smoke test. Relies on an already-joined identity already seeded on the
+# device/emulator (see e2e/README.md) — clearState: false so Maestro doesn't wipe it.
+- launchApp:
+    clearState: false
+
+# Cold start (JS bundle + identity load) can take a few seconds longer than Maestro's
+# default element timeout — wait for the bar rather than racing it.
+- extendedWaitUntil:
+    visible:
+      id: "tab-market"
+    timeout: 90000
+
+- tapOn:
+    id: "tab-market"
+- assertVisible:
+    id: "page-title-market"
+    text: "Market"
+
+- tapOn:
+    id: "tab-map"
+- assertVisible:
+    text: "Recenter map"
+
+- tapOn:
+    id: "tab-talk"
+- assertVisible:
+    id: "page-title-talk"
+    text: "Talk"
+
+- tapOn:
+    id: "tab-pulse"
+- assertVisible:
+    id: "page-title-pulse"
+    text: "Pulse"
+
+- tapOn:
+    id: "tab-commons"
+- assertVisible:
+    id: "page-title-commons"
+    text: "Commons"
+
+- tapOn:
+    id: "tab-ledger"
+- assertVisible:
+    id: "page-title-ledger"
+    text: "Ledger"
+
+# Bean sheet: the balance info sheet off the Ledger tab's Wallet view.
+- tapOn:
+    id: "ledger-wallet-tab"
+- tapOn:
+    id: "bean-sheet-open"
+- assertVisible:
+    id: "bean-sheet"
+- tapOn:
+    id: "bean-sheet-close"
+- assertNotVisible:
+    id: "bean-sheet"

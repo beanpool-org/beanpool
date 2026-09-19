@@ -6,6 +6,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { Avatar } from '../common/Avatar';
 import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, type NodeTreasury } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface MemberItem {
     publicKey?: string;
@@ -1034,7 +1035,7 @@ export function MembersModule({
 
             {/* Member Standing & Tier Upgrade Modal */}
             {tierEditMember && (
-                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                <ModalBackdrop onClose={() => setTierEditMember(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
                     <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 text-left shadow-2xl">
                         <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
                             <div className="min-w-0 flex-1">
@@ -1044,8 +1045,9 @@ export function MembersModule({
                                 </p>
                             </div>
                             <button
+                                aria-label="Close"
                                 onClick={() => setTierEditMember(null)}
-                                className="text-nature-500 hover:text-white text-lg"
+                                className="shrink-0 text-nature-500 hover:text-white text-lg"
                             >
                                 ✕
                             </button>
@@ -1104,16 +1106,16 @@ export function MembersModule({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Create Treasury Modal */}
             {showCreateTreasuryModal && (
-                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                <ModalBackdrop onClose={() => setShowCreateTreasuryModal(false)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
                     <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
                         <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
                             <h3 className="text-base font-bold text-white m-0 min-w-0 flex-1">🏛️ Create Community Treasury</h3>
-                            <button onClick={() => setShowCreateTreasuryModal(false)} className="text-nature-500 hover:text-white text-lg">✕</button>
+                            <button aria-label="Close" onClick={() => setShowCreateTreasuryModal(false)} className="shrink-0 text-nature-500 hover:text-white text-lg">✕</button>
                         </div>
 
                         <div className="space-y-3 text-xs">
@@ -1160,16 +1162,16 @@ export function MembersModule({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Seed Offer Modal */}
             {offerTreasury && (
-                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                <ModalBackdrop onClose={() => setOfferTreasury(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
                     <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
                         <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
                             <h3 className="text-base font-bold text-white m-0 min-w-0 flex-1">🥚 Seed Offer for {offerTreasury.name}</h3>
-                            <button onClick={() => setOfferTreasury(null)} className="text-nature-500 hover:text-white text-lg">✕</button>
+                            <button aria-label="Close" onClick={() => setOfferTreasury(null)} className="shrink-0 text-nature-500 hover:text-white text-lg">✕</button>
                         </div>
 
                         <div className="space-y-3 text-xs">
@@ -1231,7 +1233,7 @@ export function MembersModule({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

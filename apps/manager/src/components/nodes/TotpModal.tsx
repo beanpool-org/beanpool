@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface TotpModalProps {
     nodeName: string;
@@ -55,10 +56,9 @@ export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps
 
     return (
         // Outer overlay: Escape closes, click-outside closes
-        <div
+        <ModalBackdrop
+            onClose={onClose}
             className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[60] animate-fade-in font-sans"
-            onKeyDown={(e) => e.key === 'Escape' && onClose()}
-            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
             <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="totp-title" aria-describedby="totp-desc"
                  className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
@@ -73,7 +73,7 @@ export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps
                         type="button"
                         onClick={onClose}
                         aria-label="Close"
-                        className="text-nature-500 hover:text-white transition-colors text-lg"
+                        className="shrink-0 text-nature-500 hover:text-white transition-colors text-lg"
                     >
                         ✕
                     </button>
@@ -131,6 +131,6 @@ export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps
                     </div>
                 </form>
             </div>
-        </div>
+        </ModalBackdrop>
     );
 }

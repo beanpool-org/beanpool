@@ -3,6 +3,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { generateNodeInvite, getTfaSessionToken } from '../../lib/node-client';
 import { generateOfflineQrUrl } from '../../lib/qr';
 import { useTimeout } from '../../lib/use-timeout';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface InvitesModuleProps {
     activeNode: NodeProfile;
@@ -443,7 +444,8 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
             {/* Printable QR Sheet Modal */}
             {showPrintSheet && generatedTokens.length > 0 && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setShowPrintSheet(false)}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="printable-sheet-title"
@@ -534,20 +536,21 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             ))}
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* QR Code Preview Modal */}
             {previewQrItem && (
-                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+                <ModalBackdrop onClose={() => setPreviewQrItem(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
                     <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-sm w-full space-y-4 text-center shadow-2xl">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                             <span className="text-xs font-bold text-terra-400 uppercase tracking-wider">
                                 SINGLE-USE ONBOARDING PASS
                             </span>
                             <button
+                                aria-label="Close"
                                 onClick={() => setPreviewQrItem(null)}
-                                className="text-nature-500 hover:text-white text-lg"
+                                className="shrink-0 text-nature-500 hover:text-white text-lg"
                             >
                                 ✕
                             </button>
@@ -585,7 +588,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

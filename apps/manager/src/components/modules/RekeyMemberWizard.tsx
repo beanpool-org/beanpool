@@ -6,6 +6,7 @@ import {
     type RekeyStatusResponse,
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface RekeyMemberWizardProps {
     member: {
@@ -125,7 +126,7 @@ export function RekeyMemberWizard({
     };
 
     return (
-        <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
+        <ModalBackdrop onClose={onClose} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
             <div className="m-auto bg-nature-950 border border-nature-800 rounded-3xl p-6 max-w-lg w-full space-y-6 shadow-2xl overflow-hidden relative">
                 
                 {/* Header */}
@@ -144,9 +145,10 @@ export function RekeyMemberWizard({
                         </div>
                     </div>
                     <button
+                        aria-label="Close"
                         type="button"
                         onClick={onClose}
-                        className="text-nature-400 hover:text-white p-1 rounded-lg transition-colors text-sm"
+                        className="shrink-0 text-nature-400 hover:text-white p-1 rounded-lg transition-colors text-sm"
                     >
                         ✕
                     </button>
@@ -384,6 +386,6 @@ export function RekeyMemberWizard({
                 )}
 
             </div>
-        </div>
+        </ModalBackdrop>
     );
 }

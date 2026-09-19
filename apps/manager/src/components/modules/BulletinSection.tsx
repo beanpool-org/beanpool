@@ -4,6 +4,7 @@ import { SubTabStrip } from '../layout/SubTabStrip';
 import { useSectionSubTab } from '../../lib/sections';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface BulletinSectionProps {
     activeNode: NodeProfile;
@@ -364,7 +365,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
 
             {/* Add Channel Modal */}
             {showAddChannelModal && (
-                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <ModalBackdrop onClose={() => setShowAddChannelModal(false)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
                         <h3 className="text-base font-bold text-white m-0">📚 Add Curated Pulse Feed</h3>
                         <form onSubmit={handleAddChannel} className="space-y-3">
@@ -426,7 +427,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

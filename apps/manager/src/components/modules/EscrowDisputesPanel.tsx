@@ -6,6 +6,7 @@ import {
     type EscrowDisputeItem,
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface EscrowDisputesPanelProps {
     activeNode: NodeProfile;
@@ -529,7 +530,7 @@ export function EscrowDisputesPanel({
 
             {/* Resolve Confirmation Modal */}
             {selectedDispute && selectedAction && (
-                <div className="fixed inset-0 overflow-y-auto z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                <ModalBackdrop onClose={handleCloseResolveModal} dismissable={!resolving} className="fixed inset-0 overflow-y-auto z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
                     <div
                         role="dialog"
                         aria-modal="true"
@@ -547,9 +548,10 @@ export function EscrowDisputesPanel({
                                 </p>
                             </div>
                             <button
+                                aria-label="Close"
                                 onClick={handleCloseResolveModal}
                                 disabled={resolving}
-                                className="text-nature-400 hover:text-white text-lg font-bold p-1 rounded-lg"
+                                className="shrink-0 text-nature-400 hover:text-white text-lg font-bold p-1 rounded-lg"
                             >
                                 ✕
                             </button>
@@ -656,7 +658,7 @@ export function EscrowDisputesPanel({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

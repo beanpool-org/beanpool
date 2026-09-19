@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -429,7 +430,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             type="button"
                             onClick={() => setActionMessage(null)}
                             aria-label="Dismiss message"
-                            className="text-nature-400 hover:text-white font-bold px-1"
+                            className="shrink-0 text-nature-400 hover:text-white font-bold px-1"
                         >
                             ✕
                         </button>
@@ -753,15 +754,11 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
             {/* Confirmation Modal for Destructive Actions */}
             {confirmModal.isOpen && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="confirm-modal-title"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) {
-                            setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-                        }
-                    }}
                     className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
                     <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-700 rounded-2xl p-6 shadow-2xl space-y-4">
@@ -799,7 +796,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

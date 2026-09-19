@@ -596,7 +596,7 @@ export function NodeIdentityPanel({
                             href="https://beanpool.org"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center min-h-[48px] lg:min-h-0 align-middle text-sky-400 font-semibold hover:underline"
+                            className="max-lg:inline-flex max-lg:items-center max-lg:min-h-[48px] max-lg:align-middle text-sky-400 font-semibold hover:underline"
                         >
                             beanpool.org ↗
                         </a>{' '}

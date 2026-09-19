@@ -27,6 +27,7 @@ import { ReplicationAccessPanel } from './ReplicationAccessPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface ApplianceSectionProps {
     activeNode: NodeProfile;
@@ -1487,7 +1488,9 @@ export function ApplianceSection({
 
             {/* One-Click Clean Storage & Compress Logs Modal */}
             {showCleanModal && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setShowCleanModal(false)}
+                    dismissable={!cleaningStorage}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="clean-storage-title"
@@ -1504,7 +1507,7 @@ export function ApplianceSection({
                                 onClick={() => setShowCleanModal(false)}
                                 disabled={cleaningStorage}
                                 aria-label="Close storage cleanup modal"
-                                className="w-11 h-11 flex items-center justify-center rounded-lg text-nature-400 hover:text-white text-lg font-bold disabled:opacity-40 disabled:pointer-events-none transition-colors"
+                                className="shrink-0 w-11 h-11 flex items-center justify-center rounded-lg text-nature-400 hover:text-white text-lg font-bold disabled:opacity-40 disabled:pointer-events-none transition-colors"
                             >
                                 ✕
                             </button>
@@ -1619,7 +1622,7 @@ export function ApplianceSection({
                             )}
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

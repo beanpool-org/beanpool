@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { fetchAdminDecisions, haltDecision, type AdminDecisionItem } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface DecisionsAdminPanelProps {
     activeNode: NodeProfile;
@@ -130,7 +131,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
             </div>
 
             {haltTarget && (
-                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Halt Decision">
+                <ModalBackdrop onClose={closeModal} dismissable={!halting} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Halt Decision">
                     <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-3">
                         <h3 className="text-base font-bold text-white m-0">Halt “{haltTarget.title}”?</h3>
                         <p className="text-xs text-nature-400 m-0">
@@ -168,7 +169,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

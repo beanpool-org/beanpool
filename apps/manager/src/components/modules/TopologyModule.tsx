@@ -20,6 +20,7 @@ import {
     type SnapshotItem,
     type RegistrarAllocation,
 } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface TopologyModuleProps {
     activeNode: NodeProfile;
@@ -1270,15 +1271,16 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
             {/* HISTORY MODAL */}
             {selectedHistoryNode && (
-                <div className="fixed inset-0 overflow-y-auto z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <ModalBackdrop onClose={() => setSelectedHistoryNode(null)} className="fixed inset-0 overflow-y-auto z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl animate-scale-in">
                         <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
                             <h4 className="text-sm font-bold text-white m-0 min-w-0 flex-1">
                                 📅 30-Day Historical Archives ({selectedHistoryNode.name})
                             </h4>
                             <button
+                                aria-label="Close"
                                 onClick={() => setSelectedHistoryNode(null)}
-                                className="text-nature-400 hover:text-white font-bold text-lg leading-none"
+                                className="shrink-0 text-nature-400 hover:text-white font-bold text-lg leading-none"
                             >
                                 ✕
                             </button>
@@ -1331,7 +1333,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

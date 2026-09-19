@@ -5,6 +5,7 @@ import { PruneBranchModal } from './PruneBranchModal';
 import { Avatar } from '../common/Avatar';
 import { RekeyMemberWizard } from './RekeyMemberWizard';
 import { OffboardMemberWizard } from './OffboardMemberWizard';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 import { useTimeout } from '../../lib/use-timeout';
 import { emergencySuspendMember, liftMemberSuspension } from '../../lib/node-client';
 
@@ -225,12 +226,12 @@ export function MemberDetailModal({
     const trustScore = isFrozen ? 12 : activeMemberFlags.length > 0 ? 38 : member?.canVouch ? 96 : 78;
 
     return (
-        <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
+        <ModalBackdrop onClose={onClose} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
             <div className="m-auto bg-nature-950 border border-nature-800 rounded-3xl p-6 max-w-lg w-full space-y-6 shadow-2xl overflow-hidden relative">
                 
                 {/* Modal Header */}
-                <div className="flex items-start justify-between border-b border-nature-800 pb-4">
-                    <div className="flex items-center gap-3.5">
+                <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-4">
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
                         <Avatar
                             src={getMemberRawAvatar(member, profiles as any)}
                             alt={displayName}
@@ -241,9 +242,9 @@ export function MemberDetailModal({
                             }`}
                             fallbackGlyph={initial}
                         />
-                        <div>
-                            <h3 className="text-lg font-black text-white m-0 tracking-tight flex items-center gap-2">
-                                <span>{displayName}</span>
+                        <div className="min-w-0 flex-1">
+                            <h3 className="text-lg font-black text-white m-0 tracking-tight flex flex-wrap items-center gap-2">
+                                <span className="min-w-0 break-words">{displayName}</span>
                                 <HelpLink screen="member-detail" />
                                 {member?.platform && member.platform !== 'unknown' && (
                                     <span
@@ -283,16 +284,17 @@ export function MemberDetailModal({
                             </h3>
                             <button
                                 onClick={handleCopyPubkey}
-                                className="text-[11px] font-mono text-nature-400 hover:text-white flex items-center gap-1 mt-0.5 transition-colors"
+                                className="text-[11px] font-mono text-nature-400 hover:text-white flex items-center gap-1 mt-0.5 transition-colors max-w-full"
                             >
-                                <span>{pubkey ? `${pubkey.slice(0, 24)}...` : 'N/A'}</span>
+                                <span className="truncate">{pubkey ? `${pubkey.slice(0, 24)}...` : 'N/A'}</span>
                                 <span className="text-[10px] text-terra-400 font-sans">{copiedPubkey ? '✓ Copied' : '📋'}</span>
                             </button>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-nature-400 hover:text-white p-1.5 rounded-lg hover:bg-nature-900 transition-colors text-lg"
+                        aria-label="Close"
+                        className="shrink-0 text-nature-400 hover:text-white p-1.5 rounded-lg hover:bg-nature-900 transition-colors text-lg"
                     >
                         ✕
                     </button>
@@ -336,7 +338,7 @@ export function MemberDetailModal({
                         Network Vouch Lineage
                     </span>
                     <div className="space-y-2">
-                        <div className="flex items-center justify-between text-nature-300">
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 text-nature-300">
                             <span className="text-nature-400">Vouched By:</span>
                             <span className="font-mono font-semibold text-white">
                                 {member?.vouched_by_pubkey
@@ -344,19 +346,19 @@ export function MemberDetailModal({
                                     : 'System Genesis (Root Node)'}
                             </span>
                         </div>
-                        <div className="flex items-center justify-between text-nature-300">
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 text-nature-300">
                             <span className="text-nature-400">Direct Vouched Downstream:</span>
                             <span className="font-mono font-bold text-emerald-400">
                                 {isVoucher ? '3 Members' : '0 Members'}
                             </span>
                         </div>
-                        <div className="flex items-center justify-between text-nature-300">
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 text-nature-300">
                             <span className="text-nature-400">Joined Date:</span>
                             <span className="font-mono text-nature-200">
                                 {fmtDate(member?.joinedAt || member?.joined_at)}
                             </span>
                         </div>
-                        <div className="flex items-center justify-between text-nature-300">
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 text-nature-300">
                             <span className="text-nature-400">Last Seen / Active:</span>
                             <span className="font-mono font-semibold text-terra-300">
                                 {fmtLastActive(member?.lastActiveAt || member?.last_active_at || member?.last_seen)}
@@ -497,7 +499,7 @@ export function MemberDetailModal({
                             {suspendDone && <p className="m-0 text-emerald-300 font-semibold">{suspendDone}</p>}
                             {suspendError && <p className="m-0 text-red-300 font-semibold">{suspendError}</p>}
                             {isSuspended ? (
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span className="text-amber-300 font-semibold">⏸️ Suspended</span>
                                     <button
                                         onClick={handleLift}
@@ -526,7 +528,7 @@ export function MemberDetailModal({
                                     <p className={`m-0 text-[11px] ${suspendReasonTrimmed.length >= MIN_SUSPEND_REASON ? 'text-nature-500' : 'text-amber-400'}`}>
                                         At least {MIN_SUSPEND_REASON} characters ({suspendReasonTrimmed.length} so far)
                                     </p>
-                                    <div className="flex justify-end gap-2">
+                                    <div className="flex flex-wrap justify-end gap-2">
                                         <button
                                             onClick={() => { setShowSuspend(false); setSuspendReason(''); setSuspendError(null); }}
                                             disabled={suspendBusy}
@@ -544,7 +546,7 @@ export function MemberDetailModal({
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span className="text-nature-400">Emergency: suspend now, the community decides whether it stays.</span>
                                     <button
                                         onClick={() => { setShowSuspend(true); setSuspendDone(null); }}
@@ -562,7 +564,7 @@ export function MemberDetailModal({
                             <p className="text-[11px] text-red-300 m-0">
                                 This will remove <code className="font-bold">{displayName}</code> from the node roster and settle remaining debt/credit to Commons. This action cannot be undone.
                             </p>
-                            <div className="flex items-center justify-end gap-2 pt-1">
+                            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
                                 <button
                                     onClick={() => setShowPruneConfirm(false)}
                                     className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-semibold text-[11px]"
@@ -581,7 +583,7 @@ export function MemberDetailModal({
                             </div>
                         </div>
                     ) : (
-                        <div className="flex items-center justify-between gap-2 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                             <button
                                 disabled={isFrozen}
                                 onClick={() => onToggleVouch?.(pubkey, !!isVoucher)}
@@ -721,7 +723,7 @@ export function MemberDetailModal({
                     onClose={() => setShowOffboardWizard(false)}
                 />
             )}
-        </div>
+        </ModalBackdrop>
     );
 }
 

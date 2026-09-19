@@ -23,6 +23,7 @@ import {
 import { EscrowDisputesPanel } from './EscrowDisputesPanel';
 import { DecisionsAdminPanel } from './DecisionsAdminPanel';
 import { EnterpriseLocationPicker } from './EnterpriseLocationPicker';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
@@ -763,7 +764,7 @@ export function EconomySection({
 
             {/* Create Enterprise Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <ModalBackdrop onClose={() => setShowCreateModal(false)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="m-auto w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in max-h-[90vh] overflow-y-auto">
                         <div className="border-b border-nature-800 pb-3">
                             <h3 className="text-base font-bold text-white m-0">🌾 Create Community Enterprise</h3>
@@ -903,12 +904,12 @@ export function EconomySection({
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Manage Keepers Modal */}
             {manageKeepersTreasury && (
-                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <ModalBackdrop onClose={() => setManageKeepersTreasury(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="m-auto w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
                             <div className="min-w-0 flex-1">
@@ -922,8 +923,9 @@ export function EconomySection({
                                 </p>
                             </div>
                             <button
+                                aria-label="Close"
                                 onClick={() => setManageKeepersTreasury(null)}
-                                className="w-8 h-8 rounded-full bg-nature-800 hover:bg-nature-700 text-nature-300 flex items-center justify-center text-sm font-bold"
+                                className="shrink-0 w-8 h-8 rounded-full bg-nature-800 hover:bg-nature-700 text-nature-300 flex items-center justify-center text-sm font-bold"
                             >
                                 ✕
                             </button>
@@ -1086,12 +1088,12 @@ export function EconomySection({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Seed Offer Modal */}
             {seedOfferTreasury && (
-                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <ModalBackdrop onClose={() => setSeedOfferTreasury(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
                         <h3 className="text-base font-bold text-white m-0">
                             Post Initial Offer for {seedOfferTreasury.name}
@@ -1155,7 +1157,7 @@ export function EconomySection({
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Subtab: Escrow Disputes */}

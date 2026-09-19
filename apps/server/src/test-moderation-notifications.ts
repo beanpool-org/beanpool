@@ -19,6 +19,10 @@
  *      notifications off means no push, and the live notice still arrives
  *   5. GET /api/local/admin/reports filters open / dismissed / actioned, counts open reports only, and keeps
  *      every field old callers read
+ *   6. a report dismissed after the author took the post down does not tell the reporter it was "kept"
+ *   7. Prune Stale Posts sends each author ONE notice with the count, worded as tidying, never as a takedown
+ *   8. the member-visible enterprise ledger names an arbitrated deal's signer in words, never as a key or
+ *      "owner:password"; the transactions column keeps the signer
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-moderation-notifications.ts
  */
@@ -344,6 +348,79 @@ async function main() {
         const ent = allList.body.reports.find((x: any) => x.id === entReport.id);
         assert(ent?.targetPostId === C.pubKeyHex && ent?.postId === null && ent?.postRemoved === null,
             'an enterprise report keeps its old targetPostId but reads as no post');
+
+        // ── 6. A report dismissed after the author took the post down ────────────────────────────
+        console.log('\n— 6. a dismissed report on a post its author already took down —');
+        const G = se.createPost('offer', 'goods', 'Gone garlic', 'bulbs', 4, 'fixed', Ann.pubKeyHex)!;
+        const rep6 = se.submitReport(R1.pubKeyHex, Ann.pubKeyHex, 'Other', G.id)!;
+        assert(se.removePost(G.id, Ann.pubKeyHex) === true, 'the author deletes their own post');
+        await flush(); sent.length = 0; clear(...all);
+        await admin('POST', `/api/local/admin/reports/${rep6.id}/dismiss`);
+        await flush();
+        assert(pushesTo(R1).length === 1 && pushesTo(R1)[0].body === mod.reportedPostGoneBody(),
+            `the reporter hears the post is no longer up (${pushesTo(R1)[0]?.body})`);
+        assert(!sent.some(m => m.body === mod.reportedPostKeptBody()), 'and is never told it was "reviewed and kept"');
+        assert(notices(socks.R1).length === 1 && notices(socks.R1)[0].outcome === 'gone' && !('screen' in notices(socks.R1)[0]),
+            'the live notice says gone, and opens no listing');
+        assert(pushesTo(Ann).length === 0, 'the author hears nothing');
+
+        // ── 7. Prune Stale Posts ─────────────────────────────────────────────────────────────────
+        console.log('\n— 7. Prune Stale Posts —');
+        const oldAt = new Date(Date.now() - 100 * 86_400_000 - 3_600_000).toISOString();
+        const annOld = Array.from({ length: 15 }, (_, i) => se.createPost('offer', 'goods', `Old jar ${i}`, 'old', 2, 'fixed', Ann.pubKeyHex)!.id);
+        const samOld = Array.from({ length: 2 }, (_, i) => se.createPost('offer', 'goods', `Old crate ${i}`, 'old', 2, 'fixed', Seller.pubKeyHex)!.id);
+        const setAge = db.prepare('UPDATE posts SET created_at = ? WHERE id = ?');
+        for (const id of [...annOld, ...samOld]) setAge.run(oldAt, id);
+        const rep7 = se.submitReport(R2.pubKeyHex, Ann.pubKeyHex, 'Spam or scam', annOld[0])!;
+        const rep7b = se.submitReport(R2.pubKeyHex, Seller.pubKeyHex, 'Spam or scam', samOld[0])!;
+        await flush(); sent.length = 0; clear(...all);
+        const prune = await admin('POST', '/api/local/admin/posts/bulk-delete', { postIds: [...annOld, ...samOld] });
+        assert(prune.status === 200 && prune.body?.deleted === 17, `the prune removes all 17 posts (${prune.body?.deleted})`);
+        await flush();
+        const annPrune = pushesTo(Ann);
+        assert(annPrune.length === 1, `a member with 15 old posts gets exactly one push (${annPrune.length})`);
+        assert(annPrune[0]?.title === mod.POSTS_CLEARED_TITLE && annPrune[0]?.body === mod.postsClearedBody(15, 100),
+            `with the count, the age, and "not a report" (${annPrune[0]?.body})`);
+        assert(/15 of your listings older than 100 days/.test(annPrune[0]?.body) && /routine tidying, not a report/.test(annPrune[0]?.body), 'worded as tidying');
+        assert(!sent.some(m => m.title === mod.POST_REMOVED_TITLE || /removed by the community's admins/.test(m.body)), 'nobody gets the takedown wording');
+        assert(notices(socks.Ann).length === 1 && notices(socks.Ann)[0].kind === 'posts_cleared' && notices(socks.Ann)[0].count === 15,
+            'and exactly one live notice, so no alerts stack');
+        assert(pushesTo(Seller).length === 1 && pushesTo(Seller)[0].body === mod.postsClearedBody(2, 100), `the other author gets one notice for 2 (${pushesTo(Seller)[0]?.body})`);
+        assert(notices(socks.Seller).length === 1, 'and one live notice');
+        assert(pushesTo(R2).length === 1 && pushesTo(R2)[0].body === mod.reportedPostsRemovedBody(2), `the reporter of 2 pruned posts hears once (${pushesTo(R2)[0]?.body})`);
+        assert(notices(socks.R2).length === 1, 'with one live notice');
+        for (const id of [R1, C, Buyer, Warden]) assert(pushesTo(id).length === 0, `${id.callsign} gets no push`);
+        assert(notices(socks.stranger).length === 0, 'a stranger gets no live notice');
+        const pruned = db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE id IN (${annOld.map(() => '?').join(',')}) AND active = 0 AND status = 'cancelled'`).get(...annOld) as any;
+        assert(pruned.c === 15, 'the posts are gone');
+        const rs7 = db.prepare('SELECT status FROM abuse_reports WHERE id IN (?, ?)').all(rep7.id, rep7b.id) as any[];
+        assert(rs7.length === 2 && rs7.every(r => r.status === 'actioned'), 'the reports on pruned posts are closed');
+        sent.length = 0;
+        await admin('POST', '/api/local/admin/posts/bulk-delete', { postIds: annOld });
+        await flush();
+        assert(sent.length === 0, 'pruning the same posts again sends nothing');
+
+        // ── 8. The enterprise ledger after an arbitrated deal ────────────────────────────────────
+        console.log('\n— 8. the enterprise ledger names an arbitrated deal\'s signer in words —');
+        const { publicKey: farm } = se.createTreasury('FarmCoop', '/uploads/avatar.jpg', 200);
+        const farmDeal = () => {
+            const post = se.createPost('offer', 'goods', `Farm eggs ${crypto.randomBytes(3).toString('hex')}`, 'dozen', 20, 'fixed', farm)!;
+            return se.acceptPost(post.id, Buyer.pubKeyHex)!;
+        };
+        const fd1 = farmDeal(), fd2 = farmDeal();
+        se.resolveEscrowDispute(fd1.id, 'release_to_seller', 'owner:password');
+        se.resolveEscrowDispute(fd2.id, 'split', Warden.pubKeyHex);
+        await flush();
+        const raw = db.prepare(`SELECT auth_signer FROM transactions WHERE (from_pubkey = ? OR to_pubkey = ?) AND auth_signer IS NOT NULL`).all(farm, farm) as any[];
+        assert(raw.some(r => r.auth_signer === 'owner:password') && raw.some(r => r.auth_signer === Warden.pubKeyHex),
+            'the transactions column still records both raw signers');
+        const ledger = se.getEnterpriseLedger(farm);
+        const ledgerJson = JSON.stringify(ledger);
+        assert(!ledgerJson.includes('owner:password'), 'the member-visible ledger never carries "owner:password"');
+        assert(!ledgerJson.includes(Warden.pubKeyHex), "nor the ruling admin's key");
+        const signers = ledger.entries.map(e => e.authSigner).filter(Boolean);
+        assert(signers.every(v => !HEX_KEY.test(String(v))), `no signer in it is a 64-hex key (${JSON.stringify(signers)})`);
+        assert(signers.includes('a community admin') && signers.includes('WardenAdmin'), 'it names them "a community admin" and by callsign');
     } finally {
         (globalThis as any).fetch = realFetch;
         for (const s of all) s.ws.close();

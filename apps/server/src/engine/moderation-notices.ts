@@ -55,6 +55,24 @@ export function reportedPostKeptBody(): string {
     return 'The post you reported was reviewed and kept.';
 }
 
+/** The report was dismissed after its author had already taken the post down: "kept" would be untrue. */
+export function reportedPostGoneBody(): string {
+    return 'The post you reported is no longer up. Thank you for letting the admins know.';
+}
+
+export const POSTS_CLEARED_TITLE = '🧹 Old listings cleared';
+
+/** Prune Stale Posts: routine tidying, worded so it never reads like a takedown. */
+export function postsClearedBody(count: number, olderThanDays?: number | null): string {
+    const what = count === 1 ? 'one of your listings' : `${count} of your listings`;
+    const age = olderThanDays && olderThanDays >= 1 ? ` older than ${olderThanDays} ${olderThanDays === 1 ? 'day' : 'days'}` : '';
+    return `The community cleared ${what}${age}. This is routine tidying, not a report.`;
+}
+
+export function reportedPostsRemovedBody(count: number): string {
+    return count > 1 ? `${count} posts you reported were removed. Thank you for letting the admins know.` : reportedPostRemovedBody();
+}
+
 function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string, body: string, data: Record<string, any>): void {
     const to = Array.from(new Set(recipients.filter(pk => typeof pk === 'string' && pk && pk !== 'SYSTEM')));
     if (to.length === 0) return;
@@ -108,7 +126,52 @@ export function notifyPostTakedown(
     tell(cb, others, REPORT_OUTCOME_TITLE, reportedPostRemovedBody(), { kind: 'report_outcome', outcome: 'removed', postId: post.id });
 }
 
-/** An admin dismissed a report on a post: its reporter hears the post was reviewed and kept. */
-export function notifyReportDismissed(cb: ModerationNoticeCallbacks, reporterPubkey: string, postId: string): void {
-    tell(cb, [reporterPubkey], REPORT_OUTCOME_TITLE, reportedPostKeptBody(), { kind: 'report_outcome', outcome: 'kept', screen: 'post', postId });
+/**
+ * An admin dismissed a report on a post: its reporter hears the post was reviewed and kept — or, when its
+ * author had already taken it down, only that it is no longer up.
+ */
+export function notifyReportDismissed(cb: ModerationNoticeCallbacks, reporterPubkey: string, postId: string, postIsLive = true): void {
+    if (postIsLive) {
+        tell(cb, [reporterPubkey], REPORT_OUTCOME_TITLE, reportedPostKeptBody(), { kind: 'report_outcome', outcome: 'kept', screen: 'post', postId });
+    } else {
+        tell(cb, [reporterPubkey], REPORT_OUTCOME_TITLE, reportedPostGoneBody(), { kind: 'report_outcome', outcome: 'gone', postId });
+    }
+}
+
+/**
+ * Prune Stale Posts removed a batch. Each author hears once, with the count, in words that say this was
+ * tidying and not a takedown; each reporter whose reports it closed hears once, however many posts that was.
+ * One notice per person, so nobody's app stacks an alert per post.
+ */
+export function notifyPostsCleared(
+    cb: ModerationNoticeCallbacks,
+    removed: { id: string; authorPubkey: string | null; wasLive: boolean; createdAt: string | null }[],
+    reportersByPost: Map<string, string[]>,
+    now = Date.now(),
+): void {
+    const byAuthor = new Map<string, { count: number; youngestMs: number | null }>();
+    for (const p of removed) {
+        if (!p.wasLive || !p.authorPubkey) continue;
+        const a = byAuthor.get(p.authorPubkey) ?? { count: 0, youngestMs: null };
+        a.count++;
+        const t = p.createdAt ? new Date(p.createdAt).getTime() : NaN;
+        if (Number.isFinite(t)) a.youngestMs = a.youngestMs === null ? t : Math.max(a.youngestMs, t);
+        byAuthor.set(p.authorPubkey, a);
+    }
+    for (const [author, a] of byAuthor) {
+        // "Older than N days" holds for every post in the batch: N is the youngest one's whole days.
+        const days = a.youngestMs === null ? null : Math.floor((now - a.youngestMs) / 86_400_000);
+        tell(cb, [author], POSTS_CLEARED_TITLE, postsClearedBody(a.count, days), { kind: 'posts_cleared', count: a.count });
+    }
+    const authorOf = new Map(removed.map(p => [p.id, p.authorPubkey]));
+    const byReporter = new Map<string, number>();
+    for (const [postId, reporters] of reportersByPost) {
+        for (const r of new Set(reporters)) {
+            if (r === authorOf.get(postId)) continue;
+            byReporter.set(r, (byReporter.get(r) ?? 0) + 1);
+        }
+    }
+    for (const [reporter, n] of byReporter) {
+        tell(cb, [reporter], REPORT_OUTCOME_TITLE, reportedPostsRemovedBody(n), { kind: 'report_outcome', outcome: 'removed' });
+    }
 }

@@ -20,7 +20,8 @@ import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
-import { closeOpenReportsOnPost, notifyPostTakedown, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
+import { adminActorName } from './engine/admin-actor-name.js';
+import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
@@ -4361,6 +4362,7 @@ export interface EnterpriseLedgerEntry {
     counterpartyName: string;
     memo: string;
     runningBalance: number;
+    /** Who signed, in words: a callsign or "a community admin"; never a key or 'owner:password'. */
     authSigner: string | null;
 }
 
@@ -4476,7 +4478,9 @@ export function getEnterpriseLedger(
                 counterpartyName: resolveName(counterparty),
                 memo: tx.memo || '',
                 runningBalance: running,
-                authSigner: tx.auth_signer ?? null,
+                // Who signed, in words. For an arbitrated deal the raw signer is the ruling admin's key or
+                // 'owner:password'; anyone who can read this book reads the name only. The column keeps the signer.
+                authSigner: tx.auth_signer ? adminActorName(tx.auth_signer) : null,
             });
         }
     }
@@ -5200,10 +5204,11 @@ export function dismissReport(reportId: string): boolean {
     // updated_at moves with status: the sync export selects on it, and without the bump replicas keep
     // showing the report as pending.
     const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
-    // Its reporter hears the post was reviewed and kept — once, when an open report is dismissed.
-    const isPost = Boolean(report?.target_post_id && db.prepare('SELECT 1 FROM posts WHERE id = ?').get(report.target_post_id));
-    if (res.changes > 0 && isPost && (report.status === 'pending' || report.status == null)) {
-        notifyReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_post_id);
+    // Its reporter hears the post was reviewed and kept — once, when an open report is dismissed. If the
+    // author had already taken it down, "kept" would be untrue: they hear it is no longer up.
+    const post = report?.target_post_id ? db.prepare('SELECT active, status FROM posts WHERE id = ?').get(report.target_post_id) as any : null;
+    if (res.changes > 0 && post && (report.status === 'pending' || report.status == null)) {
+        notifyReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_post_id, post.active === 1 && post.status !== 'cancelled');
     }
     return res.changes > 0;
 }
@@ -5249,11 +5254,21 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
     return ok;
 }
 
-/** Each removal tells its author and closes its open reports, as a single removal does. */
+/**
+ * Prune Stale Posts. Each removal closes its open reports, as a single removal does, but nobody is told per
+ * post: each author hears once, with the count, that this was routine tidying, not a takedown.
+ */
 export function adminBulkDeletePosts(postIds: string[]): number {
-    let deleted = 0;
-    for (const postId of postIds) if (adminDeletePost(postId)) deleted++;
-    return deleted;
+    const removed: NonNullable<ReturnType<typeof removePostByAdmin>>[] = [];
+    const reportersByPost = new Map<string, string[]>();
+    for (const postId of postIds) {
+        const r = removePostByAdmin(postId);
+        if (!r) continue;
+        removed.push(r);
+        reportersByPost.set(postId, closeOpenReportsOnPost(postId));
+    }
+    notifyPostsCleared(moderationNoticeCb, removed, reportersByPost);
+    return removed.length;
 }
 
 export function getPostCount(filter?: {
@@ -5868,14 +5883,15 @@ export function createTreasury(
 }
 
 /** The post as it stood before an admin removal: who wrote it and whether it was still live. */
-function postBeforeTakedown(postId: string): { id: string; title: string | null; authorPubkey: string | null; wasLive: boolean } | null {
-    const row = db.prepare('SELECT id, title, author_pubkey, active, status FROM posts WHERE id = ?').get(postId) as any;
+type PostBeforeTakedown = { id: string; title: string | null; authorPubkey: string | null; wasLive: boolean; createdAt: string | null };
+function postBeforeTakedown(postId: string): PostBeforeTakedown | null {
+    const row = db.prepare('SELECT id, title, author_pubkey, active, status, created_at FROM posts WHERE id = ?').get(postId) as any;
     if (!row) return null;
-    return { id: row.id, title: row.title ?? null, authorPubkey: row.author_pubkey ?? null, wasLive: row.active === 1 && row.status !== 'cancelled' };
+    return { id: row.id, title: row.title ?? null, authorPubkey: row.author_pubkey ?? null, wasLive: row.active === 1 && row.status !== 'cancelled', createdAt: row.created_at ?? null };
 }
 
 /** Remove the post, without telling anyone yet. Returns what the notices need, or null when nothing was removed. */
-function removePostByAdmin(postId: string): { id: string; title: string | null; authorPubkey: string | null; wasLive: boolean } | null {
+function removePostByAdmin(postId: string): PostBeforeTakedown | null {
     const before = postBeforeTakedown(postId);
     // The push dispatcher is passed so an admin removing a reported EVENT tells everyone marked Going
     // that it is off (docs/events-on-the-map.md §2.5); it is a no-op for every other post type.

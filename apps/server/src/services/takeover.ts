@@ -313,7 +313,7 @@ export function pickEnvelope(codeId: number | undefined): CodeCandidate & { newe
     const verified: CodeCandidate[] = [];
     for (const c of verifiedHeld()) {
         const stanza = c.header.recipients.find((r): r is CodeStanza => r.type === 'code');
-        // Locked to owners only: an owner's phone opens it (pickEnvelopeForOwners); the code can't.
+        // Locked to owners only: an owner's phone opens it (pickEnvelopeForOwners, newest only); the code can't.
         if (stanza) verified.push({ ...c, stanza });
     }
     if (!verified.length) {
@@ -329,21 +329,18 @@ export function pickEnvelope(codeId: number | undefined): CodeCandidate & { newe
 }
 
 /**
- * The envelope an owner's phone is asked to open (§5.2): the newest verified one locked to at least one owner. Its
- * header's owners are who can open it; the phone shows the owner whether they are one.
+ * The envelope an owner's phone is asked to open (§5.2): the newest verified one, and only that one. Its header's
+ * owners are who can open it; the phone shows the owner whether they are one. When the newest has no owner stanza
+ * the answer is the recovery code, never an older envelope: an owner removed since that older one was sealed could
+ * still open it.
  */
 export function pickEnvelopeForOwners(): Candidate & { newerSkipped: number; owners: string[] } {
-    const verified = verifiedHeld();
-    const withOwners = verified.filter((c) => c.header.recipients.some((r) => r.type === 'owner'));
-    if (!withOwners.length) {
-        throw new TakeoverError(409, "The take-over keys this standby holds are locked to the recovery code only: the main server had no owner when it locked them. Take over with the recovery code.", { noOwnerStanza: true });
+    const newest = verifiedHeld()[0];
+    const owners = newest.header.recipients.filter((r): r is OwnerStanza => r.type === 'owner').map((r) => '@' + r.callsign);
+    if (!owners.length) {
+        throw new TakeoverError(409, "The newest take-over keys this standby holds are locked to the recovery code only: the main server had no owner when it locked them. Take over with the printed recovery code.", { noOwnerStanza: true });
     }
-    const newest = withOwners[0];
-    return {
-        ...newest,
-        newerSkipped: verified.indexOf(newest),
-        owners: newest.header.recipients.filter((r): r is OwnerStanza => r.type === 'owner').map((r) => '@' + r.callsign),
-    };
+    return { ...newest, newerSkipped: 0, owners };
 }
 
 /** Is it a recovery code at all? A typo costs nothing and is answered before the brake. */

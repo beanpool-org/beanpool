@@ -4,6 +4,7 @@
 
 import { db } from '../db/db.js';
 import crypto from 'node:crypto';
+import { getLocalConfig } from '../config/local-config.js';
 import {
     exportSyncState as exportSyncStateEngine,
     type SyncPayload,
@@ -11,10 +12,23 @@ import {
 } from '@beanpool/engine';
 
 export type NodeRole = 'primary' | 'backup';
-let nodeRole: NodeRole = process.env.NODE_ROLE === 'backup' ? 'backup' : 'primary';
+let nodeRole: NodeRole | null = null;
+
+/**
+ * local-config.json's `nodeRole` wins over NODE_ROLE in the environment (sealed-keys.md §5.4 step 4). Only a
+ * take-over writes it, so a promoted standby needs no .env edit, and a later redeploy with the standby's old .env
+ * (NODE_ROLE=backup) cannot demote it. Read once, on first use; setNodeRole replaces it for this process.
+ */
+function resolveNodeRole(): NodeRole {
+    try {
+        const configured = getLocalConfig().nodeRole;
+        if (configured === 'primary' || configured === 'backup') return configured;
+    } catch { /* no readable config: the environment decides */ }
+    return process.env.NODE_ROLE === 'backup' ? 'backup' : 'primary';
+}
 
 export function getNodeRole(): NodeRole {
-    return nodeRole;
+    return (nodeRole ??= resolveNodeRole());
 }
 
 export function setNodeRole(role: NodeRole): void {

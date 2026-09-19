@@ -450,35 +450,44 @@ export function readBundleFrom(extractDir: string, header: SealedEnvelopeHeader 
     } catch {
         throw new Error(`Invalid backup archive: ${BUNDLE_MEMBER} is not readable`);
     }
+    return checkBundle(bundle, header, 'Invalid backup archive: ');
+}
+
+/**
+ * Check an opened take-over bundle before any of it is written: version 1, base64 files, a readable genesis and an
+ * Ed25519 node key, and (given the header it came in) the same community and the same key that locked it. Shared
+ * by restore and take-over (services/takeover.ts). `prefix` begins each error message.
+ */
+export function checkBundle(bundle: TakeoverBundle, header: SealedEnvelopeHeader | null, prefix = ''): TakeoverBundle {
     if (bundle?.v !== 1 || !bundle.files || typeof bundle.files !== 'object' || !bundle.localConfig) {
-        throw new Error(`Invalid backup archive: ${BUNDLE_MEMBER} is not a version 1 bundle`);
+        throw new Error(`${prefix}the take-over bundle is not a version 1 bundle`);
     }
     for (const f of BUNDLED_FILES) {
         const v = (bundle.files as any)[f];
         if (v !== null && v !== undefined && (typeof v !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(v))) {
-            throw new Error(`Invalid backup archive: the bundle's ${f} is not base64`);
+            throw new Error(`${prefix}the bundle's ${f} is not base64`);
         }
     }
     const genesisB64 = bundle.files['genesis.json'];
-    if (!genesisB64) throw new Error('Invalid backup archive: the bundle has no genesis.json');
+    if (!genesisB64) throw new Error(`${prefix}the bundle has no genesis.json`);
     let genesis: any;
     try { genesis = JSON.parse(Buffer.from(genesisB64, 'base64').toString('utf-8')); } catch { genesis = null; }
-    if (!genesis?.communityId) throw new Error('Invalid backup archive: the bundle\'s genesis.json is unreadable');
+    if (!genesis?.communityId) throw new Error(`${prefix}the bundle's genesis.json is unreadable`);
     const keyB64 = bundle.files.libp2p_key;
-    if (!keyB64) throw new Error('Invalid backup archive: the bundle has no node key');
+    if (!keyB64) throw new Error(`${prefix}the bundle has no node key`);
     let bundlePeerId: string;
     try {
         bundlePeerId = peerIdOfKeyFile(Buffer.from(keyB64, 'base64'));
     } catch {
-        throw new Error('Invalid backup archive: the bundle\'s node key is not an Ed25519 key');
+        throw new Error(`${prefix}the bundle's node key is not an Ed25519 key`);
     }
     if (header) {
         // The bundle belongs to the server that sealed the file, and to the community the header names.
         if (genesis.communityId !== header.communityId) {
-            throw new Error('Invalid backup archive: the bundle is from a different community than the file says');
+            throw new Error(`${prefix}the bundle is from a different community than the file says`);
         }
         if (bundlePeerId !== header.nodePeerId) {
-            throw new Error('Invalid backup archive: the bundle\'s node key is not the key that locked the file');
+            throw new Error(`${prefix}the bundle's node key is not the key that locked the file`);
         }
     }
     return bundle;

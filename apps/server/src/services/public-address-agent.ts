@@ -13,7 +13,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { getNodeRole, updateNodeConfig } from '../state-engine.js';
+import { getNodeRole, updateNodeConfig, getNodeConfig } from '../state-engine.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
 
@@ -129,7 +129,20 @@ export async function removeToken(): Promise<void> {
     }
 }
 
-const persist = (pa: any) => updateNodeConfig({ publicAddress: pa } as any);
+/**
+ * Save the registrar's answer. The registrar leaves `tunnelToken` out of its status when its own call to Cloudflare
+ * fails (apps/registrar/src/index.js), so saving the answer as it came would drop a token that still works, and
+ * the take-over keys would be re-locked without it until the next good answer (967 follow-up #2). So a missing
+ * token keeps the one already saved for the same name.
+ */
+export function withKeptTunnelToken(next: any, prev: any): any {
+    if (!next || typeof next !== 'object' || (typeof next.tunnelToken === 'string' && next.tunnelToken)) return next;
+    const kept = prev && typeof prev === 'object' && typeof prev.tunnelToken === 'string' && prev.tunnelToken ? prev.tunnelToken : null;
+    const sameName = !next.name || !prev?.name || next.name === prev.name;
+    return kept && sameName ? { ...next, tunnelToken: kept } : next;
+}
+
+const persist = (pa: any) => updateNodeConfig({ publicAddress: withKeptTunnelToken(pa, (getNodeConfig() as any).publicAddress) } as any);
 
 async function reconcile(): Promise<void> {
     const name = desiredName();

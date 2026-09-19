@@ -15,6 +15,8 @@
  *  5. The signature, where this server holds a pin (966 follow-up #2): a file of this community signed by another
  *     key is refused 409 and names the signer; confirming that signer by name lets it through to the next check;
  *     a header whose signature does not match the server it names is refused 400.
+ *  6. A file let through by naming its signer (X-Accept-Signer) restores its database only: a take-over bundle inside
+ *     it — which anyone who has seen a header can forge — is never applied (seal review round 1).
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sealed-backups.ts
@@ -370,6 +372,47 @@ async function main(): Promise<void> {
     const lie = await restore(lying, { 'X-Recovery-Code': code.code });
     assert(lie.status === 400 && lie.body.badSignature === true, `5. a signature that does not match the server it names: 400 (got ${lie.status})`);
     assert(liveMembers() === membersBefore && noLeftovers().length === 0, '5. nothing was restored and nothing left behind');
+
+    // ── 6. Accepted by its signer's name: the database only, never the bundle (seal review round 1, #2) ──
+    // Anyone who has seen a header can lock a tar to the same recovery code and sign it with their own key, with a
+    // bundle whose node key is that same key and whose genesis names this community: every bundle check passes.
+    // Naming the signer must still not install that key, nor the admin password inside. Last: it swaps the database.
+    console.log('\n— 6. X-Accept-Signer restores the database only —');
+    const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
+    const snapDb = path.join(work, 'forged-state.db');
+    writeDbSnapshot(snapDb);
+    const forgedBundle = {
+        v: 1,
+        files: {
+            libp2p_key: Buffer.from(privateKeyToProtobuf(forgerKey)).toString('base64'),
+            'community.key': Buffer.from('forged-community-key').toString('base64'),
+            'genesis.json': Buffer.from(JSON.stringify({ communityId: main.communityId, forged: true })).toString('base64'),
+            'connectors.json': null,
+        },
+        localConfig: { adminHash: 'forged-hash', salt: 'forged-salt', totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: null },
+        nodeRoles: [], publicAddress: null, recoveryCode: null,
+    };
+    const forgedTar = makeTarGz([
+        { name: './state.db', content: fs.readFileSync(snapDb) },
+        { name: './node_config.json', content: Buffer.from('{}') },
+        { name: './takeover-bundle.json', content: Buffer.from(JSON.stringify(forgedBundle)) },
+    ]);
+    const forgedFull = await sealAsNode(forgedTar, { signingKey: new Uint8Array(forgerKey.raw.subarray(0, 32)), nodePeerId: forgerPeer });
+    const keyBefore = sha(fs.readFileSync(path.join(dataDir!, 'libp2p_key')));
+    const communityKeyBefore = sha(fs.readFileSync(path.join(dataDir!, 'community.key')));
+    const genesisBefore = sha(fs.readFileSync(path.join(dataDir!, 'genesis.json')));
+    const configBefore = JSON.parse(fs.readFileSync(path.join(dataDir!, 'local-config.json'), 'utf-8'));
+    const byName = await restore(forgedFull, { 'X-Recovery-Code': code.code, 'X-Accept-Signer': forgerPeer });
+    assert(byName.status === 200 && byName.body.success === true && byName.body.restoredKeys === false && byName.body.keysIgnored === true,
+        `6. accepted by name: the database comes back, the keys inside are ignored (got ${byName.status}: ${JSON.stringify(byName.body).slice(0, 200)})`);
+    assert(sha(fs.readFileSync(path.join(dataDir!, 'libp2p_key'))) === keyBefore
+        && sha(fs.readFileSync(path.join(dataDir!, 'community.key'))) === communityKeyBefore
+        && sha(fs.readFileSync(path.join(dataDir!, 'genesis.json'))) === genesisBefore,
+        "6. …this server's node key, community key and genesis are untouched");
+    const configAfter = JSON.parse(fs.readFileSync(path.join(dataDir!, 'local-config.json'), 'utf-8'));
+    assert(configAfter.adminHash === configBefore.adminHash && configAfter.salt === configBefore.salt && configAfter.adminHash !== 'forged-hash',
+        '6. …and so is its admin password');
+    assert(sha(fs.readFileSync(path.join(dataDir!, 'state.db'))) === sha(fs.readFileSync(snapDb)), '6. …while the database itself was restored');
 
     server.close();
     fs.rmSync(work, { recursive: true, force: true });

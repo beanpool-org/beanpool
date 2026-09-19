@@ -107,8 +107,8 @@ async function main(): Promise<void> {
     });
     assert(downloadIdentityTraversal.status === 400, `download-identity rejects path-traversal nodeId (got ${downloadIdentityTraversal.status})`);
 
-    // 6. Sealed backups (sealed-keys slice 3): the harvester holds only .bpsealed files, and these routes serve them
-    //    as they are. The plain identity bundle is gone (410), and nothing here is gzip.
+    // 6. Sealed backups (sealed-keys slice 3): a locked node's .bpsealed files are served as they are. The plain
+    //    identity bundle is gone (410), and nothing here is gzip.
     const sealedDir = path.join(process.env.BEANPOOL_DATA_DIR!, 'backups', 'mullum', 'sealed');
     fs.mkdirSync(sealedDir, { recursive: true });
     const fakeSealed = Buffer.concat([Buffer.from([0, 0, 0, 2]), Buffer.from('{}'), Buffer.from('ciphertext')]);
@@ -125,12 +125,44 @@ async function main(): Promise<void> {
     const oneRes = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-2026-09-19T01-02-03.bpsealed`, { headers: { 'X-Admin-Password': ADMIN_PW } });
     const oneBody = Buffer.from(await oneRes.arrayBuffer());
     assert(oneRes.status === 200 && oneBody.equals(fakeSealed), `download-history serves a sealed file (got ${oneRes.status})`);
-    const oldName = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-2026-09-10.db`, { headers: { 'X-Admin-Password': ADMIN_PW } });
-    assert(oldName.status === 400, `download-history refuses an old plaintext .db name (got ${oldName.status})`);
+    const missing = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-2026-09-10.db`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    assert(missing.status === 404, `download-history: a daily .db copy that is not held is 404 (got ${missing.status})`);
+    const badName = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-2026-09-10.tar.gz`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    assert(badName.status === 400, `download-history refuses any other kind of name (got ${badName.status})`);
     const idRes = await fetch(`${BASE}/api/manager/backups/download-identity?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
     const idBody = Buffer.from(await idRes.arrayBuffer());
-    assert(idRes.status === 410 && !isGz(idBody) && /inside the sealed backup/.test(idBody.toString()), `download-identity is gone: 410 with the reason (got ${idRes.status})`);
-    assert(![dbBody, oneBody, idBody].some(isGz), 'no manager download starts with gzip magic');
+    assert(idRes.status === 410 && !isGz(idBody) && /locked backup/.test(idBody.toString()), `download-identity is gone: 410 with the reason (got ${idRes.status})`);
+
+    // 7. A node whose backups are not locked yet (seal review round 1): the harvester keeps the readable state.db and
+    //    daily copies as before, and these routes serve them as before, marked not locked. The locked legacy key
+    //    file is listed (identity: true) and downloadable.
+    const nodeDir = path.join(process.env.BEANPOOL_DATA_DIR!, 'backups', 'mullum');
+    fs.mkdirSync(path.join(nodeDir, 'history'), { recursive: true });
+    const sqlite = Buffer.concat([Buffer.from('SQLite format 3\0'), Buffer.alloc(100)]);
+    fs.writeFileSync(path.join(nodeDir, 'state.db'), sqlite);
+    fs.writeFileSync(path.join(nodeDir, 'history', 'beanpool-2026-09-18.db'), sqlite);
+    const past = new Date(Date.now() - 3 * 86_400_000);
+    fs.utimesSync(path.join(sealedDir, 'beanpool-2026-09-19T01-02-03.bpsealed'), past, past);
+    fs.writeFileSync(path.join(sealedDir, 'beanpool-identity-2026-09-01-legacy.bpsealed'), fakeSealed);
+    fs.utimesSync(path.join(sealedDir, 'beanpool-identity-2026-09-01-legacy.bpsealed'), past, past);
+    const plainRes = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    const plainBody = Buffer.from(await plainRes.arrayBuffer());
+    assert(plainRes.status === 200 && plainBody.equals(sqlite) && plainRes.headers.get('x-backup-locked') === 'no'
+        && /beanpool-backup-mullum\.db"/.test(plainRes.headers.get('content-disposition') || ''),
+        `download-db serves the readable state.db when it is newer than any locked file, marked not locked (got ${plainRes.status})`);
+    const hist2 = (await (await fetch(`${BASE}/api/manager/backups/history?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } })).json() as any).history;
+    const names = hist2.map((h: any) => `${h.filename}:${h.sealed}:${h.identity}`).sort();
+    assert(JSON.stringify(names) === JSON.stringify([
+        'beanpool-2026-09-18.db:false:false',
+        'beanpool-2026-09-19T01-02-03.bpsealed:true:false',
+        'beanpool-identity-2026-09-01-legacy.bpsealed:true:true',
+    ]), `history lists readable daily copies, locked backups and the locked key file (${names.join(', ')})`);
+    const dayRes = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-2026-09-18.db`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    assert(dayRes.status === 200 && Buffer.from(await dayRes.arrayBuffer()).equals(sqlite) && dayRes.headers.get('x-backup-locked') === 'no',
+        `download-history serves a readable daily copy, marked not locked (got ${dayRes.status})`);
+    const keyRes = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-identity-2026-09-01-legacy.bpsealed`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    assert(keyRes.status === 200 && Buffer.from(await keyRes.arrayBuffer()).equals(fakeSealed), `the locked legacy key file downloads (got ${keyRes.status})`);
+    assert(![dbBody, oneBody, idBody, plainBody].some(isGz), 'no manager download starts with gzip magic');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

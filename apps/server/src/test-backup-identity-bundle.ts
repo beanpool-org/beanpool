@@ -1,5 +1,5 @@
 /**
- * Test Suite: the identity bundle is gone, and no backup leaves unsealed — under ANY credential.
+ * Test Suite: the identity bundle is gone, and with a recovery code no backup leaves unlocked — under ANY credential.
  *
  * Sealed keys slice 3 (sealed-keys.md §6.1). Until slice 0 this suite asserted the replication token got the plain
  * identity bundle (that encoded the leak); slice 0 made it owner/admin only; slice 3 deletes the route: the node
@@ -8,11 +8,15 @@
  * an admin's key session:
  *
  *  1. POST /api/local/admin/identity-bundle is 404, and never a gzip body.
- *  2. POST /api/local/admin/backup and GET /api/local/admin/snapshots/download are either refused or a
- *     `bpsealed/v1` backup envelope; no response body starts with gzip magic (1f 8b).
+ *  2. With a recovery code, POST /api/local/admin/backup and GET /api/local/admin/snapshots/download are either
+ *     refused or a `bpsealed/v1` backup envelope marked X-Backup-Locked: yes; no body starts with gzip magic.
  *  3. The take-over envelope and backup-enroll never start with gzip magic either; backup-enroll carries no
  *     communityKey (it is public material only).
- *  4. With nobody to lock to (no owner, no code) the backup is refused with 409 and the fix, not sent plain.
+ *  4. Without a recovery code (no owner; then an owner but still no code — the live nodes' likely state) a backup
+ *     cannot be locked to anything that ships an opener, so /backup and the snapshot download send the readable
+ *     format they always did — the tar.gz of state.db + node_config.json (no keys, no bundle), the raw snapshot —
+ *     flagged X-Backup-Locked: no with "Backups are not locked yet: make a recovery code to lock them", and
+ *     /backup-status says the same in backupLock (seal review round 1). With a code, 2. holds: every one locked.
  *  5. The token still gets sync-snapshot and sync-delta (unchanged).
  *
  * Run:
@@ -23,6 +27,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import { execFileSync } from 'node:child_process';
 import type { AddressInfo } from 'node:net';
 import Koa from 'koa';
 import { generateKeyPair, privateKeyToProtobuf } from '@libp2p/crypto/keys';
@@ -97,7 +102,7 @@ async function runSuite() {
         resetAdminAuthTarpit();
         const res = await fetch(base + route, { method, headers });
         const body = Buffer.from(await res.arrayBuffer());
-        return { status: res.status, body, type: res.headers.get('content-type') || '' };
+        return { status: res.status, body, type: res.headers.get('content-type') || '', headers: res.headers };
     }
 
     // Owners and admins for the key sessions (2FA on for key sign-in, as the product requires for admins).
@@ -108,20 +113,47 @@ async function runSuite() {
     const owner = makeKeypair();
     const admin = makeKeypair();
 
-    // ── 4. Nobody to lock to ──
-    for (const [who, headers] of [['token', { 'x-replication-token': repToken }], ['admin password', { 'x-admin-password': testPass }]] as const) {
-        const r = await hit('POST', '/api/local/admin/backup', headers);
-        const body = JSON.parse(r.body.toString() || '{}');
-        assert(r.status === 409 && body.needsRecipient === true && /recovery code/.test(body.error), `4. no owner, no code: /backup under the ${who} is 409 with the fix (got ${r.status})`);
-        assert(!isGzip(r.body), `4. …and no plain archive is sent instead (${who})`);
-    }
+    // ── 4. No recovery code: readable, as before, and flagged not locked ──
+    const NOT_LOCKED = 'Backups are not locked yet: make a recovery code to lock them.';
+    const tarMembers = (buf: Buffer): string[] => {
+        const f = path.join(dataDir!, `.t-${crypto.randomBytes(4).toString('hex')}.tar.gz`);
+        fs.writeFileSync(f, buf);
+        try { return execFileSync('tar', ['-tzf', f], { encoding: 'utf-8' }).split('\n').map(x => x.trim().replace(/^\.\//, '')).filter(x => x && x !== '.'); }
+        finally { fs.rmSync(f, { force: true }); }
+    };
+    const readableNoCode = async (stage: string) => {
+        for (const [who, headers] of [['token', { 'x-replication-token': repToken }], ['admin password', { 'x-admin-password': testPass }]] as const) {
+            const r = await hit('POST', '/api/local/admin/backup', headers);
+            assert(r.status === 200 && isGzip(r.body) && r.type === 'application/gzip',
+                `4. ${stage}: /backup under the ${who} is the readable tar.gz, as before (got ${r.status}, ${r.type})`);
+            assert(r.headers.get('x-backup-locked') === 'no' && r.headers.get('x-backup-not-locked') === NOT_LOCKED,
+                `4. ${stage}: …flagged X-Backup-Locked: no, "${r.headers.get('x-backup-not-locked')}" (${who})`);
+            const members = tarMembers(r.body).sort();
+            assert(JSON.stringify(members) === JSON.stringify(['node_config.json', 'state.db']),
+                `4. ${stage}: …holding state.db and node_config.json only — no keys, no bundle (${members.join(', ')})`);
+        }
+        const sd = await hit('GET', `/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}`, { 'x-admin-password': testPass });
+        assert(sd.status === 200 && sd.body.subarray(0, 15).toString() === 'SQLite format 3' && sd.headers.get('x-backup-locked') === 'no',
+            `4. ${stage}: the snapshot download is the snapshot file itself, flagged not locked (got ${sd.status})`);
+        const st = await fetch(base + '/api/local/admin/backup-status', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': testPass }, body: '{}' });
+        const sj: any = await st.json();
+        assert(sj.backupLock?.locked === false && sj.backupLock?.message === NOT_LOCKED && sj.backupLock?.reason === 'no-recovery-code',
+            `4. ${stage}: backup-status says backups are not locked, and why (${JSON.stringify(sj.backupLock)})`);
+    };
+    resetAdminAuthTarpit();
+    await readableNoCode('no owner, no code');
 
     seedGenesisMember(owner.pubKeyHex, 'Olive'); // the genesis member is the owner
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(admin.pubKeyHex, 'Adam', new Date().toISOString(), owner.pubKeyHex, 'TEST');
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin.pubKeyHex);
     grantNodeRole(admin.pubKeyHex, 'admin', 'owner:password');
+    // An owner and still no code: nothing that ships could open a file locked to the owner alone, so still readable.
+    await readableNoCode('an owner, no code');
     await makeRecoveryCode();
+    const locked = await hit('POST', '/api/local/admin/backup', { 'x-admin-password': testPass });
+    assert(locked.status === 200 && locked.headers.get('x-backup-locked') === 'yes' && !locked.headers.get('x-backup-not-locked'),
+        '4. with a recovery code: /backup is flagged X-Backup-Locked: yes');
 
     const totpSecret = generateTotpSecret();
     const keySession = (kp: ReturnType<typeof makeKeypair>): string => {

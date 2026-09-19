@@ -89,7 +89,169 @@ function Rich({ text }: { text: string }) {
     );
 }
 
-function Block({ block }: { block: GuideBlock }) {
+export function resolveImageSrc(src: string): string {
+    const base = (typeof import.meta !== 'undefined' && (import.meta as any)?.env?.BASE_URL) || '/settings/';
+    const cleanBase = base.endsWith('/') ? base : `${base}/`;
+    const cleanSrc = src.startsWith('/') ? src.slice(1) : src;
+    return `${cleanBase}${cleanSrc}`;
+}
+
+function StandaloneImage({
+    img,
+    onEnlarge,
+    inGrid = false,
+}: {
+    img: Extract<GuideBlock, { type: 'img' }>;
+    onEnlarge: (img: { src: string; alt: string }) => void;
+    inGrid?: boolean;
+}) {
+    if (inGrid) {
+        return (
+            <figure className="rounded-xl border border-nature-800 bg-nature-900/50 overflow-hidden flex flex-col">
+                <button
+                    type="button"
+                    onClick={() => onEnlarge({ src: img.src, alt: img.alt })}
+                    className="w-full aspect-[16/10] bg-nature-950 block text-left group relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-terra-400"
+                    aria-label={`Enlarge: ${img.alt}`}
+                >
+                    <img
+                        src={resolveImageSrc(img.src)}
+                        alt={img.alt}
+                        loading="lazy"
+                        className="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+                        <span className="px-2 py-1 rounded-full bg-nature-950/85 border border-nature-700 text-[10px] font-bold text-white shadow flex items-center gap-1">
+                            <span>🔍</span> Enlarge
+                        </span>
+                    </div>
+                </button>
+                <figcaption className="p-2 text-xs text-nature-400 border-t border-nature-800 bg-nature-900/80 line-clamp-2 leading-snug flex-1">
+                    {img.alt}
+                </figcaption>
+            </figure>
+        );
+    }
+    return (
+        <figure className="my-4 rounded-xl border border-nature-800 bg-nature-900/50 overflow-hidden max-w-full">
+            <button
+                type="button"
+                onClick={() => onEnlarge({ src: img.src, alt: img.alt })}
+                className="w-full block text-left group relative focus:outline-none focus:ring-2 focus:ring-terra-400"
+                aria-label={`Enlarge: ${img.alt}`}
+            >
+                <img
+                    src={resolveImageSrc(img.src)}
+                    alt={img.alt}
+                    loading="lazy"
+                    className="w-full h-auto block rounded-t-xl"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+                    <span className="px-3 py-1.5 rounded-full bg-nature-950/85 border border-nature-700 text-xs font-bold text-white shadow-lg flex items-center gap-1.5">
+                        <span>🔍</span> Tap to enlarge
+                    </span>
+                </div>
+            </button>
+            <figcaption className="px-3 py-2 text-xs text-nature-400 border-t border-nature-800 bg-nature-900/80 flex items-center justify-between gap-2">
+                <span className="leading-snug">{img.alt}</span>
+                <button
+                    type="button"
+                    onClick={() => onEnlarge({ src: img.src, alt: img.alt })}
+                    className="text-[11px] font-bold text-terra-400 hover:text-terra-300 ml-2 shrink-0 min-h-[28px] px-2 py-1 rounded bg-nature-800/60 border border-nature-700"
+                >
+                    Enlarge 🔍
+                </button>
+            </figcaption>
+        </figure>
+    );
+}
+
+function LinkedImageCard({
+    img,
+    onOpen,
+}: {
+    img: Extract<GuideBlock, { type: 'img' }>;
+    onOpen: (slug: string) => void;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={() => onOpen(img.href!)}
+            aria-label={`Open ${img.alt}`}
+            className="group w-full text-left rounded-xl border border-nature-800 bg-nature-900/60 overflow-hidden hover:border-terra-500/60 transition-all focus:outline-none focus:ring-2 focus:ring-terra-400 flex flex-col"
+        >
+            <div className="aspect-[16/10] bg-nature-950 overflow-hidden w-full relative">
+                <img
+                    src={resolveImageSrc(img.src)}
+                    alt={img.alt}
+                    loading="lazy"
+                    className="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-200"
+                />
+            </div>
+            <div className="p-2.5 flex items-center justify-between gap-2 border-t border-nature-800/80 bg-nature-900/40 w-full flex-1">
+                <span className="text-xs font-bold text-nature-200 group-hover:text-terra-300 line-clamp-2 leading-snug">
+                    {img.alt}
+                </span>
+                <span className="text-xs font-bold text-nature-500 group-hover:text-terra-400 shrink-0">
+                    →
+                </span>
+            </div>
+        </button>
+    );
+}
+
+function ImageGroup({
+    items,
+    onOpen,
+    onEnlarge,
+}: {
+    items: Extract<GuideBlock, { type: 'img' }>[];
+    onOpen: (slug: string) => void;
+    onEnlarge: (img: { src: string; alt: string }) => void;
+}) {
+    if (items.length === 1 && !items[0].href) {
+        return <StandaloneImage img={items[0]} onEnlarge={onEnlarge} inGrid={false} />;
+    }
+
+    return (
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-3 gap-3 my-4">
+            {items.map((img, i) =>
+                img.href ? (
+                    <LinkedImageCard key={i} img={img} onOpen={onOpen} />
+                ) : (
+                    <StandaloneImage key={i} img={img} onEnlarge={onEnlarge} inGrid={true} />
+                ),
+            )}
+        </div>
+    );
+}
+
+type GroupedBlock =
+    | { kind: 'block'; block: Exclude<GuideBlock, { type: 'img' }> }
+    | { kind: 'images'; items: Extract<GuideBlock, { type: 'img' }>[] };
+
+function groupBlocks(blocks: GuideBlock[]): GroupedBlock[] {
+    const result: GroupedBlock[] = [];
+    let currentImgs: Extract<GuideBlock, { type: 'img' }>[] = [];
+
+    for (const b of blocks) {
+        if (b.type === 'img') {
+            currentImgs.push(b);
+        } else {
+            if (currentImgs.length > 0) {
+                result.push({ kind: 'images', items: currentImgs });
+                currentImgs = [];
+            }
+            result.push({ kind: 'block', block: b });
+        }
+    }
+    if (currentImgs.length > 0) {
+        result.push({ kind: 'images', items: currentImgs });
+    }
+    return result;
+}
+
+function Block({ block }: { block: Exclude<GuideBlock, { type: 'img' }> }) {
     if (block.type === 'ul') {
         return (
             <ul className="list-disc pl-5 my-3 space-y-1.5 text-[0.95rem] leading-relaxed text-nature-200">
@@ -119,21 +281,32 @@ function PageButton({ page, onOpen, snippet }: { page: GuidePage; onOpen: (slug:
 
 export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null; onNavigate: (slug: string | null) => void; onClose: () => void }) {
     const [query, setQuery] = useState('');
+    const [enlarged, setEnlarged] = useState<{ src: string; alt: string } | null>(null);
     const closeRef = useRef<HTMLButtonElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const page = slug ? manualPage(slug) : null;
     const results = useMemo(() => (query.trim() ? searchGuide(OPERATOR_MANUAL, query) : []), [query]);
+    const groupedBlocks = useMemo(() => (page ? groupBlocks(page.blocks) : []), [page]);
 
     useEffect(() => { closeRef.current?.focus(); }, []);
     useEffect(() => { scrollRef.current?.scrollTo?.({ top: 0 }); }, [slug]);
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (enlarged) {
+                    setEnlarged(null);
+                } else {
+                    onClose();
+                }
+            }
+        };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [onClose]);
+    }, [enlarged, onClose]);
 
     const open = (next: string | null) => {
         setQuery('');
+        setEnlarged(null);
         onNavigate(next);
     };
     const section = page ? OPERATOR_MANUAL.sections.find(s => s.id === page.section) : null;
@@ -195,7 +368,19 @@ export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null
                             {section && <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">{section.title}</p>}
                             <h1 className="text-2xl font-black text-white mt-1 mb-2">{page.title}</h1>
                             <p className="text-base text-nature-300 mb-4">{page.summary}</p>
-                            {page.blocks.map((b, i) => <Block key={i} block={b} />)}
+                            {groupedBlocks.map((group, i) => {
+                                if (group.kind === 'block') {
+                                    return <Block key={i} block={group.block} />;
+                                }
+                                return (
+                                    <ImageGroup
+                                        key={i}
+                                        items={group.items}
+                                        onOpen={open}
+                                        onEnlarge={(img) => setEnlarged(img)}
+                                    />
+                                );
+                            })}
                             {related.length > 0 && (
                                 <>
                                     <h2 className="text-lg font-black text-white mt-8 mb-3">Related</h2>
@@ -230,6 +415,42 @@ export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null
                     </p>
                 </div>
             </div>
+
+            {enlarged && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={enlarged.alt || 'Enlarged image'}
+                    className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in"
+                    onClick={() => setEnlarged(null)}
+                >
+                    <div
+                        className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="w-full flex items-center justify-between pb-2">
+                            <span className="text-xs font-bold text-nature-300 truncate max-w-[80%]">
+                                {enlarged.alt}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setEnlarged(null)}
+                                aria-label="Close enlarged image"
+                                className="min-h-[44px] min-w-[44px] px-3 py-1.5 rounded-lg bg-nature-900 border border-nature-700 text-white font-bold text-sm hover:bg-nature-800 flex items-center gap-1 shrink-0"
+                            >
+                                ✕ Close
+                            </button>
+                        </div>
+                        <div className="overflow-auto max-h-[75vh] w-full rounded-xl border border-nature-800 bg-nature-950 p-2 shadow-2xl flex items-center justify-center">
+                            <img
+                                src={resolveImageSrc(enlarged.src)}
+                                alt={enlarged.alt}
+                                className="max-w-full max-h-[70vh] w-auto h-auto object-contain rounded-lg"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

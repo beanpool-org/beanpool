@@ -55,4 +55,53 @@ describe('Manual in Settings', () => {
         const { container } = render(<HelpLink screen="home" />);
         expect(container).toBeEmptyDOMElement();
     });
+
+    it('renders inline images with resolved paths and opens lightbox on tap', async () => {
+        const user = userEvent.setup();
+        render(<ManualProvider><HelpLink screen="appliance/access" /></ManualProvider>);
+        await user.click(screen.getByRole('button', { name: /^Help: / }));
+
+        const manualDialog = screen.getByRole('dialog', { name: 'Operator manual' });
+        const img = within(manualDialog).getByRole('img', { name: 'The Access and Security screen in Settings' });
+        expect(img).toBeInTheDocument();
+        expect(img.getAttribute('src')).toMatch(/\/images\/appliance-access\.webp$/);
+
+        // Tap to enlarge
+        await user.click(within(manualDialog).getByRole('button', { name: /Enlarge: The Access and Security screen in Settings/ }));
+        const lightbox = screen.getByRole('dialog', { name: 'The Access and Security screen in Settings' });
+        expect(lightbox).toBeInTheDocument();
+        expect(within(lightbox).getByRole('button', { name: 'Close enlarged image' })).toBeInTheDocument();
+
+        // Escape closes the lightbox first, leaving manual open
+        await user.keyboard('{Escape}');
+        expect(screen.queryByRole('dialog', { name: 'The Access and Security screen in Settings' })).not.toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Operator manual' })).toBeInTheDocument();
+
+        // Open lightbox again and close with Close button
+        await user.click(within(manualDialog).getByRole('button', { name: 'Enlarge 🔍' }));
+        const lightbox2 = screen.getByRole('dialog', { name: 'The Access and Security screen in Settings' });
+        await user.click(within(lightbox2).getByRole('button', { name: 'Close enlarged image' }));
+        expect(screen.queryByRole('dialog', { name: 'The Access and Security screen in Settings' })).not.toBeInTheDocument();
+    });
+
+    it('settings map renders linked cards and clicking navigates to target page', async () => {
+        const user = userEvent.setup();
+        function OpenSettingsMap() {
+            const manual = useManual();
+            return <button onClick={() => manual?.openManual('settings-map')}>Open settings map</button>;
+        }
+        render(<ManualProvider><OpenSettingsMap /></ManualProvider>);
+        await user.click(screen.getByRole('button', { name: 'Open settings map' }));
+
+        const dialog = screen.getByRole('dialog', { name: 'Operator manual' });
+        expect(within(dialog).getByRole('heading', { level: 1, name: 'Settings map' })).toBeInTheDocument();
+
+        // Linked card for Home screen
+        const homeCard = within(dialog).getByRole('button', { name: /^Open The Home screen/ });
+        expect(homeCard).toBeInTheDocument();
+        await user.click(homeCard);
+
+        // Navigated to Finding your way around Settings
+        expect(within(dialog).getByRole('heading', { level: 1, name: 'Finding your way around Settings' })).toBeInTheDocument();
+    });
 });

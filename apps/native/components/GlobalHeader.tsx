@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Image, Alert, Linking, Modal, Pressable, Platform, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image, Linking, Pressable, Platform, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, usePathname } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { withJitter } from '../utils/jitter';
-import { getSavedNodes, SavedNode, removeSavedNode } from '../utils/nodes';
 import { getMemberProfile } from '../utils/db';
 import { MemberAvatar } from './MemberAvatar';
 import { getLastSyncTime } from '../services/pillar-sync';
@@ -40,17 +39,6 @@ const fetchWithTimeout = async (resource: RequestInfo, options: RequestInit & { 
 export const HEADER_ROW_HEIGHT = 48;
 const BEAN_SIZE = 38;
 const AVATAR_SIZE = 32;
-
-// The community's name, which heads the bean's sheet: the name the node gives itself, else the saved
-// alias, else the node's host, so something readable shows before the first health ping lands.
-// 'Local Discovery' is the node's placeholder when it has no directory entry, not a name.
-const NODE_NAME_PLACEHOLDER = 'Local Discovery';
-function communityLabel(url: string | null, name?: string | null): string {
-    const n = name?.trim();
-    if (n && n !== NODE_NAME_PLACEHOLDER) return n;
-    if (!url) return 'BeanPool';
-    try { return new URL(url).host || 'BeanPool'; } catch { return 'BeanPool'; }
-}
 
 /**
  * `onMeasure` reports the header's real rendered height — including the update banner,
@@ -90,18 +78,11 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
         statusBadge: { position: 'absolute', right: 5, bottom: 6, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#ffffff' },
         headerRightIcons: { flexDirection: 'row', alignItems: 'center' },
         iconBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-        modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center' },
-        modalContent: { backgroundColor: colors.surface.card, width: '85%', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
-        modalVersion: { fontSize: 14, fontWeight: '900', color: colors.text.muted, letterSpacing: 1, textAlign: 'right', marginBottom: 4 },
-        sheetCommunity: { paddingHorizontal: 12, paddingBottom: 12, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border.default },
-        sheetCommunityName: { fontSize: 22, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
-        sheetCommunitySub: { fontSize: 13, color: colors.text.secondary, marginTop: 2 },
-        modalHeader: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
-        nodeBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 8, marginBottom: 4 },
-        activeNodeBtn: { backgroundColor: colors.accent.tint },
-        nodeTitle: { fontSize: 16, color: colors.text.heading, fontWeight: '800' },
-        nodeSubText: { fontSize: 13, color: colors.text.muted, marginTop: 2 },
-        activeNodeText: { color: colors.accent.primary },
+        // Guests and phones with no community have nothing that "needs you" yet; the slot says what to do instead.
+        statePillWrap: { flex: 1, minWidth: 0, height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+        statePill: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 48, justifyContent: 'center' },
+        statePillInner: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingHorizontal: 14, borderRadius: 17, borderWidth: 1 },
+        statePillText: { fontSize: 14, fontWeight: '800' },
         softUpdateBanner: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -141,20 +122,13 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
 
     const { identity } = useIdentity();
     const [myAvatar, setMyAvatar] = useState<string | null>(null);
-    const [dropdownVisible, setDropdownVisible] = useState(false);
-    const [savedNodes, setSavedNodes] = useState<(SavedNode & { status: 'pinging' | 'online' | 'guest' | 'offline' })[]>([]);
     const [softUpdateVersion, setSoftUpdateVersion] = useState<string | null>(null);
     // The installed build is below the node's declared floor — a banner you cannot dismiss,
     // because the app genuinely will not behave against this node until it is updated.
     const [updateRequired, setUpdateRequired] = useState(false);
-    const [switching, setSwitching] = useState(false);
-    const [activeNode, setActiveNode] = useState<string | null>(null);
-    const [activeSyncTime, setActiveSyncTime] = useState<number | null>(null);
-    const membershipCache = useRef<Record<string, boolean>>({});
     const [isGuestOnActive, setIsGuestOnActive] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
     const [hasAnchorUrl, setHasAnchorUrl] = useState(true);
-    const [communityName, setCommunityName] = useState<string>('BeanPool');
     // In-memory mirror of the version facts already on disk. Storage is read once and written
     // only when something actually changes. The node refreshes its store lookup every 6 hours
     // and the app's own version cannot change while it is running, so the 30-second ping was
@@ -169,7 +143,6 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
     }>({ latestLoaded: false, latest: null, minKey: null, minimum: null, dismissed: new Map(), attemptAt: 0 });
     // Consecutive failed health pings — see the ping effect below (debounce + recent-sync grace).
     const healthFailuresRef = useRef(0);
-    const nodeNameRef = useRef<{ url: string; name: string } | null>(null);
 
     useEffect(() => {
         let isMounted = true;
@@ -305,25 +278,12 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 return;
             }
             if (isMounted) setHasAnchorUrl(true);
-            // Until this node has told us its own name, show the saved alias (or its host). Once it has, the
-            // alias never replaces it again, so an open sheet doesn't flick between the two on every ping.
-            if (nodeNameRef.current?.url !== active) {
-                try {
-                    const saved = (await getSavedNodes()).find(n => n.url === active);
-                    if (isMounted) setCommunityName(communityLabel(active, saved?.alias));
-                } catch { /* storage unavailable — keep the last name shown */ }
-            }
             try {
                 const r = await fetchWithTimeout(`${active}/api/community/health`, { timeout: 8000 });
                 if (r.ok) {
                     healthFailuresRef.current = 0;
                     if (isMounted) setIsOffline(false);
                     const data = await r.json();
-                    const remoteName = typeof data?.nodeName === 'string' ? data.nodeName.trim() : '';
-                    if (remoteName && remoteName !== NODE_NAME_PLACEHOLDER) {
-                        nodeNameRef.current = { url: active, name: remoteName };
-                        if (isMounted) setCommunityName(remoteName);
-                    }
                     await updateVersionBanner(active, data);
                 } else {
                     await markHealthFailure(active);
@@ -395,110 +355,11 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 const text = await r.text();
                 
                 const data = JSON.parse(text);
-                membershipCache.current[active] = !!data.isMember;
                 setIsGuestOnActive(!data.isMember);
             } catch (err: any) {
             }
         })();
     }, [identity?.publicKey, pathname]);
-
-    const openDropdown = async () => {
-        const nodes = await getSavedNodes();
-        const active = await AsyncStorage.getItem('beanpool_anchor_url');
-        setActiveNode(active);
-        const st = await getLastSyncTime();
-        setActiveSyncTime(st);
-        
-        const enriched = nodes.map(n => ({ ...n, status: 'pinging' as const }));
-        setSavedNodes(enriched);
-        setDropdownVisible(true);
-
-        enriched.forEach((node, idx) => {
-            const controller = new AbortController();
-            const t = setTimeout(() => controller.abort(), 3000);
-            fetch(`${node.url}/api/community/health`, { signal: controller.signal })
-                .then(r => r.ok ? r.json() : null)
-                .catch(() => null)
-                .then(async (data) => {
-                    clearTimeout(t);
-                    if (!data) {
-                        setSavedNodes(prev => {
-                            const copy = [...prev];
-                            copy[idx] = { ...copy[idx], status: 'offline' };
-                            return copy;
-                        });
-                        return;
-                    }
-
-                    const remoteName = data.nodeName || data.name;
-                    const cType = data.currency?.type || 'image';
-                    const cVal = data.currency?.value || 'bean';
-
-                    let isMember = false;
-                    if (identity?.publicKey) {
-                        try {
-                            const mr = await fetchWithTimeout(`${node.url}/api/community/membership/${identity.publicKey}`, { timeout: 8000 });
-                            const md = await mr.json();
-                            isMember = !!md.isMember;
-                            membershipCache.current[node.url] = isMember;
-                        } catch (e: any) {
-                            isMember = membershipCache.current[node.url] ?? false;
-                        }
-                    }
-
-                    if (node.url === active) {
-                        setIsGuestOnActive(!isMember);
-                    }
-
-                    const resolvedStatus = isMember ? 'online' as const : 'guest' as const;
-
-                    setSavedNodes(prev => {
-                        const copy = [...prev];
-                        const changed = copy[idx].alias !== remoteName || copy[idx].currencyType !== cType || copy[idx].currencyValue !== cVal;
-                        if (remoteName && changed) {
-                            copy[idx] = { ...copy[idx], status: resolvedStatus, alias: remoteName, currencyType: cType, currencyValue: cVal };
-                            import('../utils/nodes').then(m => m.addSavedNode(node.url, remoteName, cType, cVal));
-                        } else {
-                            copy[idx] = { ...copy[idx], status: resolvedStatus };
-                        }
-                        return copy;
-                    });
-                });
-        });
-    };
-
-    const handleQuickSwitch = async (targetUrl: string) => {
-        if (targetUrl === activeNode) {
-            setDropdownVisible(false);
-            return;
-        }
-        setSwitching(true);
-        try {
-            const { closeDB, initDB } = await import('../utils/db');
-            await closeDB(); 
-            await AsyncStorage.setItem('beanpool_anchor_url', targetUrl);
-            await initDB();
-
-            const cached = membershipCache.current[targetUrl];
-            setIsGuestOnActive(cached === undefined ? true : !cached);
-            if (identity?.publicKey) {
-                fetchWithTimeout(`${targetUrl}/api/community/membership/${identity.publicKey}`, { timeout: 3000 })
-                    .then(r => r.json())
-                    .then(d => {
-                        membershipCache.current[targetUrl] = !!d.isMember;
-                        setIsGuestOnActive(!d.isMember);
-                    })
-                    .catch(() => {});
-            }
-
-            setDropdownVisible(false);
-            setSwitching(false);
-            router.replace('/welcome');
-        } catch (e: any) {
-            setSwitching(false);
-            Alert.alert("Pivot Failed", e.message);
-        }
-    };
 
     // The header ROW's height. Deliberately not applied to the wrapper below: the wrapper
     // is `overflow: hidden`, so pinning it to this height clipped the update banner out of
@@ -506,6 +367,15 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
     // wrapper now sizes to its children (header row + banner, when there is one).
     const headerHeight = insets.top + HEADER_ROW_HEIGHT;
     const isMapScreen = pathname === '/map';
+    const needsJoinOrConnect = !hasAnchorUrl || isGuestOnActive;
+    const joinOrConnect = () => {
+        if (!hasAnchorUrl) {
+            router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } });
+        } else {
+            DeviceEventEmitter.emit('set_people_view', { view: 'invites' });
+            router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
+        }
+    };
 
     return (
         <View
@@ -523,15 +393,16 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
             </View>
 
-            {/* One 48dp row: the bean (opens the community sheet; wears the connection dot, whose white
-                ring keeps it visible against the bean's dark rim) | what needs you | invite, Settings, avatar. */}
+            {/* One 48dp row: the bean (opens the BeanPool sheet; wears the connection dot, whose white ring keeps
+                it visible against the bean's dark rim) | what needs you, or the Join / Connect pill | invite,
+                Settings, avatar. */}
             <View style={[styles.headerContainer, { paddingTop: insets.top, height: headerHeight }]} pointerEvents="box-none">
                 <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel={`Switch community, ${isOffline ? 'offline' : isGuestOnActive ? 'guest' : 'connected'}`}
+                    accessibilityLabel={`BeanPool: your community and help, ${!hasAnchorUrl ? 'not connected' : isOffline ? 'offline' : isGuestOnActive ? 'guest' : 'connected'}`}
                     style={styles.beanBtn}
                     activeOpacity={0.7}
-                    onPress={openDropdown}
+                    onPress={() => router.push('/beanpool')}
                 >
                     <Image
                         source={require('../assets/images/header-electric-bean.png')}
@@ -541,29 +412,47 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     <View style={[styles.statusBadge, { backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid }]} />
                 </TouchableOpacity>
 
-                {/* Small icons for what needs you, only while something does, stacked from the right. */}
-                <NeedsYouIcons guest={isGuestOnActive} sheetTop={headerHeight + 4} />
+                {needsJoinOrConnect ? (
+                    // A guest or a phone with no community has nothing that "needs you" yet. The slot names the
+                    // next step in words, where main's Join / Connect pill was, so onboarding stays obvious.
+                    <View style={styles.statePillWrap}>
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={!hasAnchorUrl ? 'Connect to a community' : 'Join this community'}
+                            style={styles.statePill}
+                            onPress={joinOrConnect}
+                        >
+                            <View style={[styles.statePillInner, !hasAnchorUrl
+                                ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border }
+                                : { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }]}>
+                                <MaterialCommunityIcons name={!hasAnchorUrl ? 'link-off' : 'account-alert-outline'} size={18}
+                                    color={!hasAnchorUrl ? colors.feedback.danger.fg : colors.feedback.warning.fg} />
+                                <Text numberOfLines={1} style={[styles.statePillText, { color: !hasAnchorUrl ? colors.feedback.danger.fg : colors.feedback.warning.fg }]}>
+                                    {!hasAnchorUrl ? 'Connect' : 'Join'}
+                                </Text>
+                            </View>
+                        </Pressable>
+                    </View>
+                ) : (
+                    // Small icons for what needs you, only while something does, stacked from the right.
+                    <NeedsYouIcons sheetTop={headerHeight + 4} />
+                )}
 
                 <View style={styles.headerRightIcons}>
-                    <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityLabel={!hasAnchorUrl ? 'Connect to community' : isGuestOnActive ? 'Join community' : 'Invite friends'}
-                        style={styles.iconBtn}
-                        onPress={() => {
-                            if (!hasAnchorUrl) {
-                                router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } });
-                            } else {
+                    {/* The pill already says Join / Connect, so the invite icon only shows for members. */}
+                    {!needsJoinOrConnect && (
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Invite friends"
+                            style={styles.iconBtn}
+                            onPress={() => {
                                 DeviceEventEmitter.emit('set_people_view', { view: 'invites' });
                                 router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
-                            }
-                        }}
-                    >
-                        <MaterialCommunityIcons
-                            name={!hasAnchorUrl ? 'link-off' : isGuestOnActive ? 'account-alert-outline' : 'account-plus-outline'}
-                            size={24}
-                            color={!hasAnchorUrl ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : '#ffffff'}
-                        />
-                    </TouchableOpacity>
+                            }}
+                        >
+                            <MaterialCommunityIcons name="account-plus-outline" size={24} color="#ffffff" />
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity
                         accessibilityRole="button"
                         accessibilityLabel="Settings"
@@ -652,104 +541,6 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 </View>
             )}
 
-            <Modal visible={dropdownVisible} transparent animationType="fade" onRequestClose={() => setDropdownVisible(false)}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.modalBg} onPress={() => setDropdownVisible(false)}>
-                    <View style={[styles.modalContent, { marginTop: headerHeight + 4 }]}>
-                        <Text style={styles.modalVersion}>v{appConfig.expo.version} ({Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : appConfig.expo.android.versionCode})</Text>
-                        {/* The community's name is not in the header row; it heads this sheet. */}
-                        {hasAnchorUrl && (
-                            <View style={styles.sheetCommunity}>
-                                <Text style={styles.sheetCommunityName} numberOfLines={2} accessibilityRole="header">{communityName}</Text>
-                                <Text style={styles.sheetCommunitySub}>
-                                    {isOffline ? 'Offline' : isGuestOnActive ? 'Visiting as a guest' : 'You are a member here'}
-                                </Text>
-                            </View>
-                        )}
-                        <Text style={styles.modalHeader}>Your communities</Text>
-                        {savedNodes.length === 0 && (
-                            <View style={{ padding: 14 }}>
-                                <Text style={{ fontSize: 14, color: colors.text.body, lineHeight: 20 }}>
-                                    {!hasAnchorUrl
-                                        ? '🔴 No community connected.\n\nAsk a friend for an invite link, or tap the Connect button to add a node manually.'
-                                        : 'No saved communities.'}
-                                </Text>
-                            </View>
-                        )}
-                        {savedNodes.map((n, i) => {
-                            const isCurrent = activeNode === n.url;
-                            const isGuest = n.status === 'guest';
-                            
-                            let activeStatusText = 'Syncing...';
-                            if (isCurrent && activeSyncTime && !isGuest) {
-                                const seconds = Math.floor((Date.now() - activeSyncTime) / 1000);
-                                if (seconds < 60) activeStatusText = `${seconds}s ago`;
-                                else if (seconds < 3600) activeStatusText = `${Math.floor(seconds / 60)}m ago`;
-                                else activeStatusText = `${Math.floor(seconds / 3600)}h ago`;
-                            }
-
-                            const dotColor = n.status === 'pinging' ? colors.text.muted 
-                                : n.status === 'online' ? colors.feedback.success.solid 
-                                : n.status === 'guest' ? colors.feedback.warning.solid 
-                                : colors.feedback.danger.solid;
-
-                            return (
-                                <TouchableOpacity
-                                    accessibilityRole="button"
-                                    key={i}
-                                    style={[styles.nodeBtn, isCurrent && styles.activeNodeBtn]}
-                                    onPress={() => handleQuickSwitch(n.url)}
-                                    onLongPress={() => {
-                                        Alert.alert(
-                                            "Remove Community?",
-                                            "Do you want to remove this community from your saved list?",
-                                            [
-                                                { text: "Cancel", style: "cancel" },
-                                                { text: "Remove", style: "destructive", onPress: async () => {
-                                                    await removeSavedNode(n.url);
-                                                    setSavedNodes(prev => prev.filter(node => node.url !== n.url));
-                                                }}
-                                            ]
-                                        );
-                                    }}
-                                    delayLongPress={500}
-                                    disabled={switching}
-                                >
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.nodeTitle, isCurrent && styles.activeNodeText]} numberOfLines={1}>
-                                            {n.alias || "Local Discovery"}
-                                        </Text>
-                                        <Text style={[styles.nodeSubText, isCurrent && styles.activeNodeText]} numberOfLines={1}>
-                                            {n.url}
-                                        </Text>
-                                    </View>
-                                    <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
-                                        {isCurrent ? (
-                                            <View style={{ alignItems: 'flex-end' }}>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                    <Text style={{ fontSize: 13, color: isGuest ? colors.feedback.warning.fg : colors.feedback.success.fg, fontWeight: 'bold' }}>
-                                                        {isGuest ? 'Guest Mode' : activeStatusText}
-                                                    </Text>
-                                                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: dotColor }} />
-                                                </View>
-                                                {isGuest && (
-                                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.fg, marginTop: 2 }}>Tap Join to register</Text>
-                                                )}
-                                            </View>
-                                        ) : (
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                {isGuest && <Text style={{ fontSize: 11, color: colors.feedback.warning.fg, fontWeight: '600' }}>Guest</Text>}
-                                                <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: dotColor }} />
-                                            </View>
-                                        )}
-                                    </View>
-                                </TouchableOpacity>
-                            );
-                        })}
-                        {/* Seam for the members' guide (feat/member-hub, not on main yet): its sections join
-                            this sheet here, below the communities, so the bean opens ONE sheet. */}
-                    </View>
-                </Pressable>
-            </Modal>
         </View>
     );
 }

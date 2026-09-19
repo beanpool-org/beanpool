@@ -49,7 +49,10 @@ export interface NeedsYouTransaction {
 
 export interface NeedsYouConversation {
     id: string;
-    /** 'dm' for a direct chat; group and event chats are '*_thread' and counted from Your groups instead. */
+    /**
+     * Only 'dm' is a message from a person. Group and event chats ('*_thread') are counted from Your groups
+     * instead, and a legacy 'group' conversation is left out rather than passed off as a person.
+     */
     type: string;
     unread: number;
     peer: string;
@@ -131,7 +134,7 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
         }
     }
 
-    const dms = (i.conversations || []).filter(c => c.unread > 0 && !c.type.endsWith('_thread'));
+    const dms = (i.conversations || []).filter(c => c.unread > 0 && c.type === 'dm');
     if (dms.length) {
         out.push({
             kind: 'message', count: dms.length, accent: false,

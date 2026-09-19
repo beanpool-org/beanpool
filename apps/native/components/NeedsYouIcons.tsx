@@ -5,10 +5,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
-import { getConversations, getDecisions, getMarketplaceTransactions, signedGet } from '../utils/db';
+import { getUnreadByConversation, getDecisions, getMarketplaceTransactions, signedGet } from '../utils/db';
+import { createRefreshGate } from '../utils/refresh-gate';
 import {
     buildNeedsYou, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_SLOT,
-    type NeedsYouEntry, type NeedsYouKind, type NeedsYouTarget,
+    type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
 
 // The slot between the bean and the invite icon holds one small icon per kind of thing that needs the
@@ -25,7 +26,11 @@ const ICON: Record<NeedsYouKind, React.ComponentProps<typeof MaterialCommunityIc
 // Warm and readable on the vine header, which is dark in both themes. Calm: no red.
 const ACCENT = palette.amber300;
 const NEUTRAL = '#ffffff';
-const POLL_MS = 30_000;
+// What asks the node (Decisions, Your groups) runs at most once per 15 s, whatever triggered it. The local
+// reads (deals and unread counts, both SQLite) run on every trigger; they cost no request.
+const NODE_MIN_GAP_MS = 15_000;
+// A backstop for anything no event announces (a vote opening, say). Only while the app is in front.
+const SAFETY_POLL_MS = 120_000;
 // A ws nudge usually means a message is on its way into the local database; the tab layout's sync
 // writes it there, so read a moment later rather than immediately.
 const WS_SETTLE_MS = 3_000;
@@ -44,23 +49,29 @@ function go(target: NeedsYouTarget) {
     }
 }
 
-async function load(me: string, guest: boolean): Promise<NeedsYouEntry[]> {
-    const settle = <T,>(p: Promise<T>) => p.catch(() => null);
-    const [transactions, decisions, conversations, yourGroups] = await Promise.all([
+type LocalParts = Pick<NeedsYouInputs, 'transactions' | 'conversations'>;
+type NodeParts = Pick<NeedsYouInputs, 'decisions' | 'groupChats'>;
+const settle = <T,>(p: Promise<T>) => p.catch(() => null);
+
+/** From the phone's own database: no request, nothing decrypted. */
+async function loadLocal(me: string): Promise<LocalParts> {
+    const [transactions, conversations] = await Promise.all([
         settle(getMarketplaceTransactions(me)),
-        // A guest has no vote here, so their list is never asked for.
-        guest ? null : settle(getDecisions('open')),
-        settle(getConversations(me)),
+        settle(getUnreadByConversation(me)),
+    ]);
+    return { transactions, conversations };
+}
+
+/** Two signed requests to the node. */
+async function loadNode(): Promise<NodeParts> {
+    const [decisions, yourGroups] = await Promise.all([
+        settle(getDecisions('open')),
         settle(signedGet('/api/your-groups').then(r => (r.ok ? r.json() : null))),
     ]);
-    return buildNeedsYou({
-        me,
-        now: Date.now(),
-        transactions,
+    return {
         decisions: decisions && { ...decisions, signed: decisions.canPropose !== null },
-        conversations,
         groupChats: Array.isArray(yourGroups?.items) ? yourGroups.items : null,
-    });
+    };
 }
 
 function NeedIcon({ e }: { e: NeedsYouEntry }) {
@@ -78,43 +89,80 @@ function NeedIcon({ e }: { e: NeedsYouEntry }) {
     );
 }
 
-export function NeedsYouIcons({ guest, sheetTop }: { guest: boolean; sheetTop: number }) {
+// Shown to members only: a guest or a phone with no community sees the header's Join / Connect pill here instead.
+export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     const { identity } = useIdentity();
     const { colors } = useTheme();
     const pathname = usePathname();
     const [entries, setEntries] = useState<NeedsYouEntry[]>([]);
     const [sheet, setSheet] = useState(false);
     const [width, setWidth] = useState(0);
-    const busy = useRef(false);
-    const again = useRef(false);
     const me = identity?.publicKey;
 
-    const refresh = useCallback(async () => {
+    const local = useRef<LocalParts>({ transactions: null, conversations: null });
+    const node = useRef<NodeParts>({ decisions: null, groupChats: null });
+    const localBusy = useRef(false);
+    const localAgain = useRef(false);
+    const nodeBusy = useRef(false);
+    const gate = useRef<ReturnType<typeof createRefreshGate> | null>(null);
+
+    const rebuild = useCallback(() => {
         if (!me) { setEntries([]); return; }
-        if (busy.current) { again.current = true; return; }
-        busy.current = true;
+        setEntries(buildNeedsYou({ me, now: Date.now(), ...local.current, ...node.current }));
+    }, [me]);
+
+    const refreshLocal = useCallback(async () => {
+        if (!me) return;
+        if (localBusy.current) { localAgain.current = true; return; }
+        localBusy.current = true;
         try {
             do {
-                again.current = false;
-                const next = await load(me, guest);
-                setEntries(next);
-            } while (again.current);
-        } catch { /* keep what we had */ } finally { busy.current = false; }
-    }, [me, guest]);
+                localAgain.current = false;
+                local.current = await loadLocal(me);
+                rebuild();
+            } while (localAgain.current);
+        } catch { /* keep what we had */ } finally { localBusy.current = false; }
+    }, [me, rebuild]);
 
-    // On each page change (which is also every return to the tabs), every 30s while the app is active,
-    // and shortly after a ws nudge.
-    useEffect(() => { refresh(); }, [refresh, pathname]);
+    // A new identity starts from nothing, and gets its own gate.
     useEffect(() => {
-        let settle: ReturnType<typeof setTimeout> | null = null;
-        const iv = setInterval(() => { if (AppState.currentState === 'active') refresh(); }, POLL_MS);
-        const app = AppState.addEventListener('change', st => { if (st === 'active') refresh(); });
-        const ws = DeviceEventEmitter.addListener('ws_activity', () => {
-            if (settle) clearTimeout(settle);
-            settle = setTimeout(refresh, WS_SETTLE_MS);
+        local.current = { transactions: null, conversations: null };
+        node.current = { decisions: null, groupChats: null };
+        setEntries([]);
+        if (!me) return;
+        const g = createRefreshGate(NODE_MIN_GAP_MS, async () => {
+            if (nodeBusy.current) return;
+            nodeBusy.current = true;
+            try { node.current = await loadNode(); rebuild(); } catch { /* keep what we had */ } finally { nodeBusy.current = false; }
         });
-        return () => { clearInterval(iv); app.remove(); ws.remove(); if (settle) clearTimeout(settle); };
-    }, [refresh]);
+        gate.current = g;
+        return () => { g.cancel(); if (gate.current === g) gate.current = null; };
+    }, [me, rebuild]);
+
+    const poke = useCallback(() => {
+        refreshLocal();
+        gate.current?.request();
+    }, [refreshLocal]);
+
+    // Each page change is a focus: returning from a chat you just read, or switching tab.
+    useEffect(() => { poke(); }, [poke, pathname]);
+
+    // Coming back to the app, a debounced ws nudge, and the slow safety poll while the app is in front.
+    useEffect(() => {
+        let settleTimer: ReturnType<typeof setTimeout> | null = null;
+        let poll: ReturnType<typeof setInterval> | null = null;
+        const startPoll = () => { if (!poll) poll = setInterval(poke, SAFETY_POLL_MS); };
+        const stopPoll = () => { if (poll) clearInterval(poll); poll = null; };
+        if (AppState.currentState === 'active') startPoll();
+        const app = AppState.addEventListener('change', st => {
+            if (st === 'active') { poke(); startPoll(); } else stopPoll();
+        });
+        const ws = DeviceEventEmitter.addListener('ws_activity', () => {
+            if (settleTimer) clearTimeout(settleTimer);
+            settleTimer = setTimeout(poke, WS_SETTLE_MS);
+        });
+        return () => { stopPoll(); app.remove(); ws.remove(); if (settleTimer) clearTimeout(settleTimer); };
+    }, [poke]);
 
     const fit = fitNeedsYou(entries, width);
     const byKind = new Map(fit.shown.map(e => [e.kind, e]));

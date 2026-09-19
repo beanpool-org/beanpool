@@ -71,6 +71,12 @@ describe('What needs you: which kinds show', () => {
         expect(e.map(x => [x.kind, x.count])).toEqual([['message', 1]]);
     });
 
+    it('a legacy non-thread group conversation is not counted as a message from a person', () => {
+        expect(buildNeedsYou(quiet({ conversations: [dm('old', 3, 'Old group', 'group')] }))).toEqual([]);
+        expect(buildNeedsYou(quiet({ conversations: [dm('old', 3, 'Old group', 'group'), dm('c1', 1)] }))[0])
+            .toMatchObject({ kind: 'message', count: 1, target: { to: 'chat', conversationId: 'c1' } });
+    });
+
     it('groups skip muted chats, read chats, and enterprise chats (no screen for them in the app yet)', () => {
         const e = buildNeedsYou(quiet({ groupChats: [
             group('g1', 3), group('g2', 0), group('g3', 5, { mute: { always: true } }), group('ent', 2, { kind: 'enterprise' }),

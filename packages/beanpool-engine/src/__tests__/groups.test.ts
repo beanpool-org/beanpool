@@ -160,7 +160,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         });
 
         assert.strictEqual(group.name, 'Mullum Permaculture');
-        assert.strictEqual(group.slug, 'mullum-permaculture');
+        assert.match(group.slug, /^mullum-permaculture-[a-z2-7]{6}$/);
         assert.strictEqual(group.joinPolicy, 'open');
         assert.strictEqual(group.memberCount, 1);
         assert.strictEqual(group.convenorPubkey, 'alice_pub');

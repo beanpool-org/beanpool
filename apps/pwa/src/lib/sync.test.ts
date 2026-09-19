@@ -181,6 +181,25 @@ describe('PWA WebSocket Pong Watchdog', () => {
         expect(activityListener).toHaveBeenCalledTimes(1);
     });
 
+    // A member who is not a party to a trade gets its board-changing steps as a bare { type } (the server
+    // scopes the payload to the two parties). The views re-fetch on the doorbell exactly as on the full event.
+    it.each(['post_accepted', 'transaction_completed', 'transaction_cancelled', 'dispute_resolved'])(
+        'a bare %s doorbell (no payload) still refreshes the views', async (type) => {
+            const activityListener = vi.fn();
+            onSyncActivity(activityListener);
+
+            connectToAnchor('ws://localhost:9000/ws');
+            const socket = await waitForWs();
+            socket.readyState = 1;
+            socket.onopen();
+            await vi.advanceTimersByTimeAsync(150);
+            activityListener.mockClear();
+
+            socket.onmessage({ data: JSON.stringify({ type }) });
+            await vi.advanceTimersByTimeAsync(200);
+            expect(activityListener).toHaveBeenCalledTimes(1);
+        });
+
     it('a hidden tab does not false-positive on return', async () => {
         connectToAnchor('ws://localhost:9000/ws');
         const socket = await waitForWs();

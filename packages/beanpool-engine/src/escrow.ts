@@ -24,7 +24,8 @@ export interface MarketplaceTransaction {
     coverImage?: string | null;
     disputeResolution?: 'release_to_seller' | 'refund_to_buyer' | 'split' | string;
     disputeResolvedAt?: string;
-    disputeResolvedBy?: string;
+    // No disputeResolvedBy: this is the parties' view of their trade, and the admin who ruled is named in
+    // words on the ruling itself. The signer stays on the row for the admin dispute views.
 }
 
 function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placeholders: string) => string, chunkSize = 500): T[] {
@@ -74,8 +75,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
         ratedBySeller: !!r.ratedBySeller,
         coverImage,
         disputeResolution: r.dispute_resolution || undefined,
-        disputeResolvedAt: r.dispute_resolved_at || undefined,
-        disputeResolvedBy: r.dispute_resolved_by || undefined
+        disputeResolvedAt: r.dispute_resolved_at || undefined
     };
 }
 
@@ -130,8 +130,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
             ratedBySeller: !!r.ratedBySeller,
             coverImage,
             disputeResolution: r.dispute_resolution || undefined,
-            disputeResolvedAt: r.dispute_resolved_at || undefined,
-            disputeResolvedBy: r.dispute_resolved_by || undefined
+            disputeResolvedAt: r.dispute_resolved_at || undefined
         };
     });
 }

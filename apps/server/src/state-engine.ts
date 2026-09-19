@@ -20,6 +20,8 @@ import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
+import { adminActorName } from './engine/admin-actor-name.js';
+import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
@@ -247,8 +249,7 @@ import {
     closePoll as closePollEngine,
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
-    adminDeletePost as adminDeletePostEngine,
-    adminBulkDeletePosts as adminBulkDeletePostsEngine
+    adminDeletePost as adminDeletePostEngine
 } from './engine/posts.js';
 import {
     requestPost as requestPostEngine,
@@ -411,6 +412,12 @@ export interface AbuseReport {
     reporterCallsign?: string;
     targetCallsign?: string;
     postTitle?: string | null;
+    /** The same status in the moderation list's words: 'open' (pending), 'dismissed' (reviewed), 'actioned'. */
+    outcome?: 'open' | 'dismissed' | 'actioned';
+    /** The reported post's id, its author's callsign, and whether it is gone (null when no post is reported). */
+    postId?: string | null;
+    postAuthorCallsign?: string | null;
+    postRemoved?: boolean | null;
     /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
 }
@@ -950,7 +957,13 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 // pass no recipients and reach every member socket; sockets with no verified member
 // get only PUBLIC_WS_EVENTS, as a bare doorbell, unless the operator chose the open
 // feed (ENFORCE_WS_AUTH=false), where they get every event without recipients.
-export function broadcast(event: any, recipients?: string[]): void {
+//
+// `othersGetDoorbell`: a private event whose side effect everyone may see (a listing going pending, a
+// completed trade on the activity feed). The recipients get the full event; every other member socket
+// (and an open-feed socket) gets only `{ type }`, so its client re-fetches what it may see. Clients use
+// nothing but the type of these events, so the doorbell refreshes them exactly as the payload did.
+export interface BroadcastOptions { othersGetDoorbell?: boolean }
+export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): void {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
             case 'new_post':
@@ -1006,9 +1019,12 @@ export function broadcast(event: any, recipients?: string[]): void {
             ws._memberPubkey = event.member.publicKey;
             ws._pendingMemberPubkey = null;
         }
-        if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) continue;
         let out = msg;
-        if (!ws._memberPubkey && !ws._openFeed) {
+        if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
+            if (!opts?.othersGetDoorbell) continue;
+            if (!ws._memberPubkey && !ws._openFeed && !PUBLIC_WS_EVENTS.has(event?.type)) continue;
+            out = doorbell ??= JSON.stringify({ type: event.type });
+        } else if (!ws._memberPubkey && !ws._openFeed) {
             if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
         }
@@ -2157,6 +2173,19 @@ export function canAdministerTreasury(publicKey: string, treasuryPubkey: string)
 }
 
 /**
+ * Who hears of an application to keep an enterprise: the applicant, and the people GET .../keepers/requests
+ * lets read it (the lead or sole keeper, and node admins). It names the applicant and what they pledge.
+ */
+function keeperRequestRecipients(enterprisePubkey: string, applicantPubkey: string): string[] {
+    const candidates = new Set<string>([
+        ...(db.prepare('SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?').all(enterprisePubkey) as any[]).map(r => r.member_pubkey),
+        ...listNodeRoles().map(r => r.member_pubkey),
+        ...(getAdminPubkey() ? [getAdminPubkey()] : []),
+    ]);
+    return [applicantPubkey, ...[...candidates].filter(pk => pk !== applicantPubkey && isLeadOrSoleKeeperOrAdmin(enterprisePubkey, pk))];
+}
+
+/**
  * Authority predicate for enterprise lead-level governance (docs/the-commons.md §2.2, §2.3).
  * Matches the authority predicate initiateWindUp and finaliseWindUp use:
  * the lead keeper, the sole keeper, or a node admin.
@@ -2721,7 +2750,7 @@ export function requestToJoinEnterprise(
         VALUES (?, ?, ?, ?, 'pending', ?)
     `).run(id, enterprisePubkey, memberPubkey, parsedAmount, now);
 
-    broadcast({ type: 'enterprise_keeper_request_created', enterprisePubkey, memberPubkey, requestId: id, pledgedBacking: parsedAmount });
+    broadcast({ type: 'enterprise_keeper_request_created', enterprisePubkey, memberPubkey, requestId: id, pledgedBacking: parsedAmount }, keeperRequestRecipients(enterprisePubkey, memberPubkey));
 
     return {
         id,
@@ -2964,7 +2993,7 @@ export function declineKeeperRequest(requestId: string, actorPubkey: string): { 
         WHERE id = ?
     `).run(now, actorPubkey, requestId);
 
-    broadcast({ type: 'enterprise_keeper_declined', enterprisePubkey: req.enterprise_pubkey, memberPubkey: req.member_pubkey });
+    broadcast({ type: 'enterprise_keeper_declined', enterprisePubkey: req.enterprise_pubkey, memberPubkey: req.member_pubkey }, keeperRequestRecipients(req.enterprise_pubkey, req.member_pubkey));
     return { ok: true };
 }
 
@@ -4333,6 +4362,7 @@ export interface EnterpriseLedgerEntry {
     counterpartyName: string;
     memo: string;
     runningBalance: number;
+    /** Who signed, in words: a callsign or "a community admin"; never a key or 'owner:password'. */
     authSigner: string | null;
 }
 
@@ -4448,7 +4478,9 @@ export function getEnterpriseLedger(
                 counterpartyName: resolveName(counterparty),
                 memo: tx.memo || '',
                 runningBalance: running,
-                authSigner: tx.auth_signer ?? null,
+                // Who signed, in words. For an arbitrated deal the raw signer is the ruling admin's key or
+                // 'owner:password'; anyone who can read this book reads the name only. The column keeps the signer.
+                authSigner: tx.auth_signer ? adminActorName(tx.auth_signer) : null,
             });
         }
     }
@@ -5058,12 +5090,15 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                mr.callsign as reporter_callsign, 
                mt.callsign as target_callsign,
                p.title as post_title,
+               p.id as post_row_id, p.active as post_active, p.status as post_status,
+               mp.callsign as post_author_callsign,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
         LEFT JOIN posts p ON ar.target_post_id = p.id
+        LEFT JOIN members mp ON p.author_pubkey = mp.public_key
         LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
         ${whereClause}
         ORDER BY ar.created_at DESC
@@ -5084,9 +5119,16 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         id: r.id, reporterPubkey: r.reporter_pubkey, targetPubkey: r.target_pubkey, 
         targetPostId: r.target_post_id, reason: r.reason, createdAt: r.created_at,
         status: r.status || 'pending',
+        outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
         targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
         postTitle: r.post_title || null,
+        // The reported post, for a moderation list (fields added; the ones above are unchanged for old callers).
+        // Only a real post: the phone app files an enterprise report with the enterprise's key in targetPostId.
+        postId: r.post_row_id || null,
+        postAuthorCallsign: r.post_row_id ? (r.post_author_callsign || null) : null,
+        // A post the admins or its author already took down.
+        postRemoved: r.post_row_id ? (r.post_active !== 1 || r.post_status === 'cancelled') : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,
         pulseItem: r.target_pulse_item_id
             ? {
@@ -5158,21 +5200,36 @@ export function getMemberStats(): Record<string, { posts: number; messages: numb
 }
 
 export function dismissReport(reportId: string): boolean {
+    const report = db.prepare("SELECT reporter_pubkey, target_post_id, status FROM abuse_reports WHERE id = ?").get(reportId) as any;
     // updated_at moves with status: the sync export selects on it, and without the bump replicas keep
     // showing the report as pending.
     const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
+    // Its reporter hears the post was reviewed and kept — once, when an open report is dismissed. If the
+    // author had already taken it down, "kept" would be untrue: they hear it is no longer up.
+    const post = report?.target_post_id ? db.prepare('SELECT active, status FROM posts WHERE id = ?').get(report.target_post_id) as any : null;
+    if (res.changes > 0 && post && (report.status === 'pending' || report.status == null)) {
+        notifyReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_post_id, post.active === 1 && post.status !== 'cancelled');
+    }
     return res.changes > 0;
 }
 
-export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false, removePulseItem: boolean = false): boolean {
-    return db.transaction(() => {
+export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false, removePulseItem: boolean = false, opts?: { reasonCategory?: string | null }): boolean {
+    // Notices go out after the commit, never from inside it: a rollback must not leave a member told of a removal.
+    let takedown: { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null = null;
+    const ok = db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
+        const wasOpen = report.status === 'pending' || report.status == null;
         
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
         
         if (deletePost && report.target_post_id) {
-            adminDeletePost(report.target_post_id);
+            const removed = removePostByAdmin(report.target_post_id);
+            if (removed) {
+                const reporters = closeOpenReportsOnPost(report.target_post_id);
+                if (wasOpen) reporters.push(report.reporter_pubkey);
+                takedown = { post: removed, reporters };
+            }
         }
 
         // Tombstoned exactly as the owner's own delete does. The member is not penalised unless
@@ -5192,10 +5249,26 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
         }
         return true;
     })();
+    const done = takedown as { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null;
+    if (ok && done) notifyPostTakedown(moderationNoticeCb, done.post, done.reporters, normaliseRemovalReason(opts?.reasonCategory));
+    return ok;
 }
 
+/**
+ * Prune Stale Posts. Each removal closes its open reports, as a single removal does, but nobody is told per
+ * post: each author hears once, with the count, that this was routine tidying, not a takedown.
+ */
 export function adminBulkDeletePosts(postIds: string[]): number {
-    return adminBulkDeletePostsEngine(broadcast, postIds, transfer, undefined, dispatchPushNotification);
+    const removed: NonNullable<ReturnType<typeof removePostByAdmin>>[] = [];
+    const reportersByPost = new Map<string, string[]>();
+    for (const postId of postIds) {
+        const r = removePostByAdmin(postId);
+        if (!r) continue;
+        removed.push(r);
+        reportersByPost.set(postId, closeOpenReportsOnPost(postId));
+    }
+    notifyPostsCleared(moderationNoticeCb, removed, reportersByPost);
+    return removed.length;
 }
 
 export function getPostCount(filter?: {
@@ -5809,11 +5882,40 @@ export function createTreasury(
     return { publicKey: pubKeyHex };
 }
 
-export function adminDeletePost(postId: string) {
+/** The post as it stood before an admin removal: who wrote it and whether it was still live. */
+type PostBeforeTakedown = { id: string; title: string | null; authorPubkey: string | null; wasLive: boolean; createdAt: string | null };
+function postBeforeTakedown(postId: string): PostBeforeTakedown | null {
+    const row = db.prepare('SELECT id, title, author_pubkey, active, status, created_at FROM posts WHERE id = ?').get(postId) as any;
+    if (!row) return null;
+    return { id: row.id, title: row.title ?? null, authorPubkey: row.author_pubkey ?? null, wasLive: row.active === 1 && row.status !== 'cancelled', createdAt: row.created_at ?? null };
+}
+
+/** Remove the post, without telling anyone yet. Returns what the notices need, or null when nothing was removed. */
+function removePostByAdmin(postId: string): PostBeforeTakedown | null {
+    const before = postBeforeTakedown(postId);
     // The push dispatcher is passed so an admin removing a reported EVENT tells everyone marked Going
     // that it is off (docs/events-on-the-map.md §2.5); it is a no-op for every other post type.
-    return adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction, dispatchPushNotification);
+    const ok = adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction, dispatchPushNotification);
+    return ok && before ? before : null;
 }
+
+/**
+ * An admin removes a post. Its author is told, in words and without naming the admin; every still-open
+ * report on it is closed and its reporter told the post was removed. `reasonCategory` is one of
+ * REMOVAL_REASON_LABELS' keys, or ignored.
+ */
+export function adminDeletePost(postId: string, opts?: { reasonCategory?: string | null }): boolean {
+    const removed = removePostByAdmin(postId);
+    if (!removed) return false;
+    const reporters = closeOpenReportsOnPost(postId);
+    notifyPostTakedown(moderationNoticeCb, removed, reporters, normaliseRemovalReason(opts?.reasonCategory));
+    return true;
+}
+
+const moderationNoticeCb = {
+    broadcast: (event: any, recipients?: string[], opts?: BroadcastOptions) => broadcast(event, recipients, opts),
+    dispatchPushNotification: (...args: Parameters<typeof dispatchPushNotification>) => dispatchPushNotification(...args),
+};
 
 export function isSoleOwner(publicKey: string): boolean {
     if (!isNodeOwner(publicKey)) return false;
@@ -6813,7 +6915,7 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
     const post = db.prepare("SELECT title FROM posts WHERE id = ?").get(postId) as any;
     const postTitle = post?.title || 'a post';
     const actorMember = meta.actorPubkey ? (getMember(meta.actorPubkey) as any) : null;
-    const actorName = actorMember?.callsign || meta.actorPubkey?.slice(0, 8) || 'Someone';
+    const actorName = actorMember?.callsign || 'Someone';
 
     const notificationMap: Partial<Record<SystemMessageType, { title: string; body: string; data: any }>> = {
         [SystemMessageType.ESCROW_CREATED]: {
@@ -6843,7 +6945,7 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
         },
         [SystemMessageType.ESCROW_DISPUTE_RESOLVED]: {
             title: '⚖️ Dispute Resolved',
-            body: `Dispute arbitrated by admin for "${postTitle}": ${meta.resolution || 'Resolved'}`,
+            body: `Dispute arbitrated by ${meta.resolvedByName || 'a community admin'} for "${postTitle}": ${meta.resolution || 'Resolved'}`,
             data: { screen: 'post', postId }
         },
         [SystemMessageType.REVIEW_LEFT]: {

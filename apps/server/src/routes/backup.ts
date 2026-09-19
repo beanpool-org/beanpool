@@ -14,10 +14,10 @@ import {
     getLocalConfig, saveLocalConfig,
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
     clearReplicationToken, hasReplicationToken,
-    updateBackupCadence,
+    updateBackupCadence, redactLocalConfig,
 } from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
-import { getBackupStatus, requestResync } from '../services/backup-puller.js';
+import { getBackupStatus, requestResync, getStandbyCredentialState } from '../services/backup-puller.js';
 import {
     writeDbSnapshot, createSnapshot, listSnapshots, resolveSnapshotPath,
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
@@ -76,8 +76,8 @@ router.post('/api/local/admin/backup', async (ctx) => {
         if (fs.existsSync(configPath)) {
             fs.copyFileSync(configPath, path.join(tmpDir, 'node_config.json'));
         } else {
-            // Export config from DB
-            const config = getLocalConfig();
+            // Export config from DB, without a standby's legacy plain-text admin password
+            const config = redactLocalConfig(getLocalConfig());
             fs.writeFileSync(path.join(tmpDir, 'node_config.json'), JSON.stringify(config, null, 2));
         }
 
@@ -112,10 +112,17 @@ router.post('/api/local/admin/backup', async (ctx) => {
 // Returns a tar.gz of all critical identity files needed for a full
 // node restore. These files are generated once on first boot and
 // cannot be regenerated without losing the node's identity.
+// Owner/admin sign-in ONLY. The replication token copies the database; it never
+// reaches the node's keys (libp2p_key is the node identity: whoever holds it can
+// answer as this node to the registrar, peers and standbys).
 router.post('/api/local/admin/identity-bundle', async (ctx) => {
-    const token = ctx.request.header['x-replication-token'];
-    const isTokenValid = token && (await verifyReplicationToken(String(token)));
-    if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
+    if (!(await checkAdminAuth(ctx as any))) {
+        if (ctx.request.header['x-replication-token'] && ctx.status === 401 && ctx.body && typeof ctx.body === 'object') {
+            ctx.body = { ...(ctx.body as object), tokenRefused: true,
+                hint: 'A replication token copies the database only; it cannot fetch the node keys. Sign in as an owner or admin.' };
+        }
+        return;
+    }
 
     const { execFileSync } = await import('node:child_process');
     const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -140,7 +147,12 @@ router.post('/api/local/admin/identity-bundle', async (ctx) => {
         for (const file of identityFiles) {
             const srcPath = path.join(DATA_DIR, file.src);
             if (fs.existsSync(srcPath)) {
-                fs.copyFileSync(srcPath, path.join(tmpDir, file.src));
+                if (file.src === 'local-config.json') {
+                    // Never ship a standby's legacy plain-text admin password in a bundle.
+                    fs.writeFileSync(path.join(tmpDir, file.src), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
+                } else {
+                    fs.copyFileSync(srcPath, path.join(tmpDir, file.src));
+                }
                 collected.push(file.src);
             } else if (file.required) {
                 ctx.status = 503;
@@ -152,7 +164,7 @@ router.post('/api/local/admin/identity-bundle', async (ctx) => {
 
         // Also export local-config from memory if file doesn't exist on disk
         if (!collected.includes('local-config.json')) {
-            const config = getLocalConfig();
+            const config = redactLocalConfig(getLocalConfig());
             fs.writeFileSync(path.join(tmpDir, 'local-config.json'), JSON.stringify(config, null, 2));
             collected.push('local-config.json');
         }
@@ -241,23 +253,38 @@ router.post('/api/local/admin/backup-status', async (ctx) => {
         primaryUrl: config.backupPrimaryUrl || process.env.BACKUP_PRIMARY_URL || null,
         intervalMs: Number(process.env.BACKUP_PULL_INTERVAL_MS) || 60000,
         ...getBackupStatus(),
+        credential: getNodeRole() === 'backup' ? getStandbyCredentialState() : null,
     };
 });
 
+// Booleans and an operator-facing warning only. Never a secret.
 router.post('/api/local/admin/replication-config/get', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const config = getLocalConfig();
+    const credential = getStandbyCredentialState();
     ctx.body = {
         primaryUrl: config.backupPrimaryUrl || process.env.BACKUP_PRIMARY_URL || '',
-        hasPassword: !!(config.backupAdminPassword || process.env.BACKUP_ADMIN_PASSWORD),
+        hasPassword: credential.passwordStored || credential.passwordInEnv,
         hasToken: !!(config.backupReplicationToken || process.env.BACKUP_REPLICATION_TOKEN),
+        credential,
     };
 });
 
+// A standby copies with a replication token only. The main server's admin password is
+// refused: a standby that kept it held it in plain text, so anyone with the standby's disk,
+// or a backup of it, had the main server's admin password.
 router.post('/api/local/admin/replication-config/save', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { primaryUrl, primaryPassword, primaryToken } = (ctx as any).requestBody || {};
-    if (primaryUrl === undefined) {
+    if (primaryPassword) {
+        ctx.status = 400;
+        ctx.body = {
+            error: "A standby copies with a replication token, not the main server's admin password. " +
+                'On the main server open Replication Access, make a token, and paste it here.',
+        };
+        return;
+    }
+    if (typeof primaryUrl !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'primaryUrl is required' };
         return;
@@ -265,16 +292,15 @@ router.post('/api/local/admin/replication-config/save', async (ctx) => {
 
     const config = getLocalConfig();
     config.backupPrimaryUrl = primaryUrl.trim() || null;
-    if (primaryPassword) {
-        config.backupAdminPassword = primaryPassword;
-    }
-    // Replication token this backup presents to its primary. Empty string clears it
-    // (revert to admin-password auth); undefined leaves it unchanged.
+    // Replication token this standby presents to its main server. Empty string clears it
+    // (copying stops until a new one is saved); undefined leaves it unchanged.
     if (primaryToken !== undefined) {
         config.backupReplicationToken = (typeof primaryToken === 'string' && primaryToken.trim()) ? primaryToken.trim() : null;
     }
+    // A saved token supersedes a legacy stored admin password: wipe it.
+    if (config.backupReplicationToken) config.backupAdminPassword = null;
     saveLocalConfig(config);
-    ctx.body = { success: true };
+    ctx.body = { success: true, credential: getStandbyCredentialState() };
 });
 
 // ---------- Replication token (primary side) ----------

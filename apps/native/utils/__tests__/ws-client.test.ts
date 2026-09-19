@@ -191,6 +191,20 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         expect(requestSync).toHaveBeenCalled();
     });
 
+    // A member who is not a party to a trade gets its board-changing steps as a bare { type } (the server
+    // scopes the payload to the two parties). Every ws_activity listener acts on the type alone, so the
+    // doorbell refreshes exactly as the full event did.
+    it.each(['post_accepted', 'transaction_completed', 'transaction_cancelled', 'dispute_resolved'])(
+        'a bare %s doorbell (no payload) still syncs and nudges the open screens', async (type) => {
+            const socket = await startAndConnect();
+            vi.mocked(requestSync).mockClear();
+            vi.mocked(DeviceEventEmitter.emit).mockClear();
+
+            socket.onmessage({ data: JSON.stringify({ type }) });
+            expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('ws_activity', { type });
+            expect(requestSync).toHaveBeenCalled();
+        });
+
     it('backgrounding the app disconnects and clears watchdog', async () => {
         const socket = await startAndConnect();
         socket.onmessage({ data: JSON.stringify({ type: 'pong' }) });

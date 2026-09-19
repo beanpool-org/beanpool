@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 7,
-  "hash": "4db19362f2c2e0a64d5980a7c8af7b3144b131144ae5a81e378659f78a7f0f96",
+  "version": 13,
+  "hash": "cbece2649b26cfee8e8d1f4c17a67ecfe17d26a29d49cb967b2d7ae554c40820",
   "sections": [
     {
       "id": "setup",
@@ -135,15 +135,22 @@
         },
         {
           "type": "p",
-          "text": "What it really does:"
+          "text": "What it does:"
         },
         {
           "type": "ul",
           "items": [
-            "**Step 1** saves your community's name. It does not save the region or the address you type.",
-            "**Step 3** can create your first enterprise and post its first offer.",
-            "**Step 5** makes three founding invites, with QR codes you can print."
+            "**Step 1** saves your community's name and checks that your server answers at its address. If either fails, it says which, and what to check, with **Retry** and **Continue anyway**. If you continue, the step is marked ⚠ instead of ✓. If two-factor sign-in is already on and you have not typed a code this session, it asks for one with **Enter 2FA code**, then saves.",
+            "**Step 2** turns on two-factor sign-in, if you want it now. Tap **Set up 2FA**, scan the code with an authenticator app, and type the 6-digit code it shows. Two-factor is on only once the server accepts that code; then the wizard shows your backup codes and a recovery kit to download. Save them before you leave the step: the server keeps only a scrambled copy, so they cannot be shown again. If two-factor was already on, the wizard says so and has no codes to show. While it is asking the server, it says **Checking whether 2FA is on**; if it could not find out, it says so, with **Retry**. The kit holds your server's address and those backup codes, nothing else. It never holds the admin password. Only an owner can set up 2FA; if the server refuses, the wizard shows why, and you can finish it later in Access & Security.",
+            "**Step 2** also explains how your phone becomes an owner. See The first owner below.",
+            "**Step 3** can create your first enterprise and post its first offer. If a member is already an owner, it makes them the enterprise's first keeper. On a new server nobody is, so it says no keeper will be set; add one later under Shared Projects & Economy. If any part fails, it shows the server's reason, with **Retry** (which repeats only the parts that failed) and **Continue anyway**.",
+            "**Step 4** explains how the commons fills. A new community's commons starts at 0 beans. Nothing, not even this wizard, can put beans into it by hand.",
+            "**Step 5** makes three founding invites, with QR codes you can print. If the server refuses or cannot be reached, it stops and shows the reason, with no code. Try again, or make invites later under People & Safety."
           ]
+        },
+        {
+          "type": "p",
+          "text": "A step shows ✓ only when it really happened. You can move on from any step without finishing it."
         },
         {
           "type": "p",
@@ -152,9 +159,7 @@
         {
           "type": "ul",
           "items": [
-            "**Step 2** shows an owner-pairing QR, an authenticator secret and an \"emergency seed\". The authenticator secret comes from the server, but the wizard never asks for a code, so two-factor sign-in is not switched on until you finish it in Access & Security. The emergency seed is made up on this screen and is not a working recovery code, and scanning the QR does nothing.",
-            "**Step 4** says it seeds the commons, but it does not move any beans.",
-            "If the server refuses or cannot be reached, step 5 stops and shows the reason, with no code. Try again, or make invites later under People & Safety."
+            "It does not save a region or a map location. Set those later under Node Identity."
           ]
         },
         {
@@ -341,7 +346,7 @@
         },
         {
           "type": "p",
-          "text": "Type the current password and a new one. The new one needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. Only someone who knows the current password can change it, even an owner signed in from the app."
+          "text": "Type the current password and a new one. The new one needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. Only an owner can change it, and only by typing the current password, even when signed in from the app."
         },
         {
           "type": "p",
@@ -361,7 +366,8 @@
             "Press **Setup 2FA Authenticator** and scan the QR code with an authenticator app, or type the secret it shows.",
             "Type the 6-digit code the app shows, and press **Verify & Enable**. Until you do, nothing changes.",
             "There is one code for the whole server, not one per person. Everyone who signs in needs it: with the password, and from the app's Manage button.",
-            "Once you have typed a code, the browser does not ask again for **4 hours** of use."
+            "Once you have typed a code, the browser does not ask again for **4 hours** of use.",
+            "Only an owner can switch it on or off."
           ]
         },
         {
@@ -371,8 +377,11 @@
         {
           "type": "ul",
           "items": [
-            "Some actions check only the password, never the code: changing the password, the factory reset, the community's name and address, invites made by the setup wizard, peer links and the money thresholds. Someone with the password alone can still do those. Guard the password as if two-factor sign-in were off.",
-            "Any admin can switch two-factor sign-in off, not only owners.",
+            "It covers every action in Settings: changing the password, the factory reset, the community's name and address, invites, peer links and the money thresholds all ask for the code as well as the password.",
+            "Switching it off needs an owner and a code the authenticator shows **right now** (or a backup code). Being signed in already is not enough, whether from the app or with the password and a code typed earlier.",
+            "Moving to a new authenticator needs a current code from the old one, or a backup code, too. In Settings: switch two-factor sign-in off with a current code, then set it up again on the new phone.",
+            "Wrong codes there count like wrong passwords, and back off the same way: see Rate limits.",
+            "There is one code for everyone. Anyone who has the password and the authenticator (or its secret) can do everything an owner can, so guard both.",
             "The server makes eight single-use backup codes when you set it up, but Settings does not show them. Store the authenticator secret somewhere safe instead; it is how you get back in if you lose the phone.",
             "If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first."
           ]
@@ -387,7 +396,7 @@
         },
         {
           "type": "p",
-          "text": "If you do hold one, keep it offline, like a spare key. Anyone who has it can do what the password can, apart from the password-only actions listed above."
+          "text": "If you do hold one, keep it offline, like a spare key. Anyone who has it can do what the password can. If two-factor sign-in is on, it still asks for the code."
         },
         {
           "type": "h2",
@@ -395,7 +404,7 @@
         },
         {
           "type": "p",
-          "text": "**Wipe & Reset Node** needs the admin password. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and prints it in the log."
+          "text": "Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and prints it in the log."
         },
         {
           "type": "p",
@@ -706,7 +715,7 @@
         {
           "type": "ul",
           "items": [
-            "**Dismiss Flag**: marks the report reviewed. Nothing happens to the person.",
+            "**Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was \"reviewed and kept\". If its author had already taken it down, they are told instead that it \"is no longer up\".",
             "**Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.",
             "**Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.",
             "To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on keeping it."
@@ -725,12 +734,15 @@
           "items": [
             "If someone had paid for it and the beans were still held, they get them back. Open requests are cancelled. An event is cancelled, and people going to it get a cancellation notice.",
             "Settings calls this permanent, but the record stays in the database, hidden. It cannot be brought back from Settings.",
-            "**The author is not told**, and nor is the person who reported it. Send them a message yourself."
+            "**The author is told**: \"Your post \"…\" was removed by the community's admins\". It never says which admin, or who reported it.",
+            "**Everyone who reported it is told** \"The post you reported was removed\". Each hears only about their own report, never about the others. Every open report on that post is closed as handled.",
+            "These come as an alert in the app and, if the member allows Marketplace notifications, on their phone.",
+            "Settings does not offer a reason yet. When it does, the reason you pick (spam or a scam, offensive, misleading, unsafe or illegal, against the community's rules) is added to the author's alert. To explain more, message them yourself."
           ]
         },
         {
           "type": "p",
-          "text": "**Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care."
+          "text": "**Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care. Each author whose posts it clears gets one alert with the count, however many posts that was: \"The community cleared 15 of your listings older than 92 days. This is routine tidying, not a report.\" The age is that of the newest post it cleared for them. It never uses the takedown wording. Open reports on the cleared posts are closed, and each of their reporters is told once that the posts were removed."
         },
         {
           "type": "h2",
@@ -903,11 +915,22 @@
         },
         {
           "type": "h2",
-          "text": "Know this"
+          "text": "What the two people see"
         },
         {
           "type": "p",
-          "text": "The notification the two people receive shows who ruled as a long key, or as \"owner:password\" if you used the password. They can see it was an admin, not which one by name."
+          "text": "The notification, the chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Signed in with your own key:** your callsign.",
+            "**Signed in with the admin password:** \"a community admin\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "They never show a key or \"owner:password\". Settings still records exactly who ruled, for the other admins."
         }
       ]
     },
@@ -1077,7 +1100,7 @@
         },
         {
           "type": "p",
-          "text": "Settings has no button to pay beans out of the commons by hand, and the setup wizard's \"seed the commons\" step moves no beans."
+          "text": "Settings has no button to put beans into the commons, or pay them out, by hand. The setup wizard's commons step only explains this; it moves no beans."
         }
       ]
     },
@@ -1105,9 +1128,10 @@
           "type": "ul",
           "items": [
             "**state.db** (with state.db-wal and state.db-shm beside it while the server runs): members, posts, deals, beans, votes, messages;",
-            "**genesis.json** and **community.key**: the community's own key. Lose these and the community cannot be rebuilt as itself;",
+            "**libp2p_key**: the server's own identity. It signs what your server sends to standbys, to other communities and to the service that gives it its web address. Lose it and the server comes back as a stranger: its address has to be claimed again with help, every link with another community made again by hand on both sides, and every standby set up again. Members, beans and posts are in state.db and survive;",
+            "**connectors.json**: your links with other communities;",
+            "**genesis.json** and **community.key**: the community's founding record and a key kept for later. community.key signs nothing today. Keep both anyway;",
             "**local-config.json**: the admin password, two-factor sign-in, the replication token (a standby's token, or a primary's scrambled copy of it) and other settings;",
-            "**libp2p_key** and **connectors.json**: the server's network identity and peer links;",
             "**snapshots**, **logs** and **cache**: the automatic snapshots, old logs, and pictures fetched for the Pulse, which can be fetched again."
           ]
         },
@@ -1126,7 +1150,7 @@
         {
           "type": "ul",
           "items": [
-            "**Download Sovereign Database**: a .tar.gz with a clean copy of the database, taken while the server runs. It usually carries a copy of your settings too, including the scrambled admin password and the two-factor secret. It does not include the community key.",
+            "**Download Sovereign Database**: a .tar.gz with a clean copy of the database, taken while the server runs. It usually carries a copy of your settings too, including the scrambled admin password and the two-factor secret. It does not include the server's keys (libp2p_key, community.key).",
             "**Point-in-Time Snapshots**: on by default, one every **24 hours**, keeping the last **7**, in data/snapshots. You can take one now, download one or delete one. Snapshots sit on the same disk as the server, so they do not survive a lost disk. Copy one off the server now and then.",
             "**Database Integrity Verification**: checks the live database or a snapshot for damage."
           ]
@@ -1161,10 +1185,15 @@
         {
           "type": "ul",
           "items": [
-            "On your server, **Replication Access** (under Backups & Restore) makes a replication token. It is shown once. Token-only mode then refuses the admin password for copying, which is safer.",
-            "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server**. If you give it the admin password instead, it is stored in plain text on the standby.",
+            "On your server, **Replication Access** (under Backups & Restore) makes a replication token. It is shown once. There is one token per server: making a new one stops every standby using the old one until you paste the new one in.",
+            "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server** (or as BACKUP_REPLICATION_TOKEN in its .env). A standby only takes a token. It never takes your admin password, so its disk and its backups never hold it.",
+            "The token copies the whole database and can also download a database backup, so guard it like a backup. It cannot fetch the server's keys: only an owner or admin, signed in, can.",
+            "**Token-only** refuses the admin password for copying. A new server starts with it on. A server set up before this change has it off, so an older standby keeps working; Replication Access says so, and tells you when a standby last copied with the admin password. Tick **Require token** once every standby has the token.",
+            "An older standby that still holds your admin password swaps it for a token by itself when it starts, if your server has no token yet: it uses the password once, keeps the token and deletes the password. If it cannot, it keeps the password, warns in its log at every start, and shows a red notice under **Live Backup Server** saying why and whether it is still copying.",
+            "That standby is **not copying** if your server has two-factor sign-in on, has token-only on, or no longer takes that password. It still copies with the password only if your server already has a token and token-only is off.",
+            "To fix it either way: if you saved your server's token, paste it under **Live Backup Server** on the standby and save. If not, make a new one under **Replication Access** and paste it into every standby. The standby then deletes the password. If the password came from BACKUP_ADMIN_PASSWORD in the standby's .env, delete that line too.",
             "Copying goes one way only. Your main server never takes data from the standby.",
-            "**A standby is not a complete copy.** It does not copy Decisions and their votes, or who holds which role. Keep file backups as well.",
+            "**A standby is not a complete copy.** It does not copy Decisions and their votes, who holds which role, enterprise pledges and keeper changes, invites, or members' notification settings. Keep file backups as well.",
             "Making a standby the main server uses scripts in the BeanPool source code, not in the server image, and the first start after needs PROMOTED_FROM_BACKUP=true."
           ]
         }
@@ -1384,8 +1413,8 @@
           "type": "ul",
           "items": [
             "It counts wrong passwords per internet address. The first 5 from an address cost nothing. After that, that address has to wait before its next try: 2 seconds, then 4, 8 and so on, up to an hour. Only that address waits; nobody else is slowed down by it.",
-            "A wrong two-factor code after the right password counts as a wrong password too.",
-            "A right password from the address (with its two-factor code, if that is on) clears its count. So does a day with no wrong password from it.",
+            "A wrong two-factor code counts as a wrong password too: after the right password, and when switching two-factor sign-in off or moving it to a new authenticator, however you are signed in.",
+            "A right password from the address (with its two-factor code, if that is on) clears its count, and so does a right code in either of those places. So does a day with no wrong password from it. Being signed in already does not clear it, but while you are signed in with the right password your requests don't use the shared limit below: one mistyped code never slows down your own dashboard.",
             "An address with no wrong password in the last day is always checked straight away, whatever anyone else is doing. So if you are kept waiting, try from another network (mobile data, another wifi) and the right password works at once.",
             "Addresses that have got it wrong recently share a limit for the whole server of 12 checks a minute. If you mistyped once or twice, and your neighbourhood of addresses (the same /24, or the same IPv6 /48) has had at most 3 wrong passwords today, a check is kept for you while the server is busy with someone else's guesses. You usually get in on your next try, within a minute.",
             "Someone guessing from many networks can stretch that wait. Each network they use can take the kept check away 2 times on their first day, and up to 4 times a day if they primed it the day before. So against N networks you wait about 1 + 2N to 1 + 4N minutes.",
@@ -1395,7 +1424,7 @@
         },
         {
           "type": "p",
-          "text": "Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code."
+          "text": "Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app."
         },
         {
           "type": "p",
@@ -1502,8 +1531,10 @@
           "items": [
             "Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.",
             "Some things are public on purpose: the market's list of posts, the Pulse, the community's health summary, profile pictures and post photos.",
-            "The live-updates channel tells the apps about changes as they happen. Only members get the full stream: every version of the BeanPool app signs its connection. Anyone else who connects is told only that something public changed, such as a post on the market or a pin on the map. They are never told what changed or who changed it. This is on by default.",
-            "The setting is ENFORCE_WS_AUTH. The value true goes further and turns away anyone who is not a signed-in member. The value false opens the full stream to anyone who can reach your server, as it was before. Do not use false."
+            "The live-updates channel tells the apps about changes as they happen. Every version of the BeanPool app signs its connection, so the server knows which member is listening.",
+            "A member hears about changes to the whole community, such as new posts, new members and announcements. They also hear about the private things they are part of: their own messages, their own trades, and the groups and event chats they are in. They never hear another member's messages or trades. When someone else's trade changes the market, for example a listing is taken, other members are told only that something changed, so their app can check again.",
+            "Anyone who is not a member is told only that something public changed, such as a post on the market or a pin on the map. They are never told what changed or who changed it. This is on by default.",
+            "The setting is ENFORCE_WS_AUTH. The value true goes further and turns away anyone who is not a signed-in member. The value false sends the community-wide changes to anyone who can reach your server, as it was before, but never anyone's messages or trades. Do not use false."
           ]
         },
         {

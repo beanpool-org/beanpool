@@ -26,7 +26,7 @@ HTTPS snapshot pull rather than serve-only P2P — is in `SECURITY-AUDIT.md`, Ph
 |---|---|---|
 | `NODE_ROLE` | `primary` (or unset) | `backup` |
 | `BACKUP_PRIMARY_URL` | — | `https://test.beanpool.org` |
-| `BACKUP_ADMIN_PASSWORD` | — | the primary's `ADMIN_PASSWORD` (shared operator secret) |
+| `BACKUP_REPLICATION_TOKEN` | — | the primary's replication token (Settings → Replication Access), or paste it under Live Backup Server. Never set `BACKUP_ADMIN_PASSWORD`: a standby no longer takes the admin password |
 | `BACKUP_PULL_INTERVAL_MS` | — | optional, default `60000` |
 
 **Connector config (`data/connectors.json`):**
@@ -64,11 +64,12 @@ admin password.
 
 > ⚠️ **Admin-password lock gotcha.** `initAdminPassword` **skips entirely once the node is locked**
 > (`isLocked:true` in `data/local-config.json`, set on first boot). After that, `ADMIN_PASSWORD`
-> (env or `.env`) is **ignored** — redeploying with a new value does nothing. The backup's snapshot
-> pull authenticates with the *primary's actual* admin password, so they must match. To set a known
+> (env or `.env`) is **ignored** — redeploying with a new value does nothing. To set a known
 > password on an already-locked node: stop it, null `isLocked`/`adminHash`/`salt` in
-> `local-config.json` (preserve `thresholds`/branding/contact), then restart with `ADMIN_PASSWORD`
-> set — it re-locks to that value. Set `BACKUP_ADMIN_PASSWORD` on the backup to the same value.
+> `local-config.json` (preserve `thresholds`/branding/contact, and set `replicationTokenOnly` to
+> `false` if it is missing, or the unlocked boot turns token-only on), then restart with
+> `ADMIN_PASSWORD` set — it re-locks to that value. The backup is unaffected: it copies with the
+> primary's replication token, not the admin password.
 
 ## Enforcement flags (read auth default ON; WS feed members-only by default; ledger default OFF)
 | Flag | Closes | Requires (clients) |

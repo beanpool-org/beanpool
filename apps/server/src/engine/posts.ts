@@ -1057,6 +1057,8 @@ type ConservingTxnFn = <T>(fn: () => T) => T;
 export function adminDeletePost(broadcast: BroadcastFn, postId: string, transferFn?: TransferFn, conservingTxn?: ConservingTxnFn, push?: PushFn): boolean {
     let deleted = false;
     const eventRow = db.prepare("SELECT title FROM posts WHERE id = ? AND type = 'event'").get(postId) as { title: string } | undefined;
+    // Same audience as removePost: a group or direct post's removal goes to the people who could see it.
+    const audienceRow = db.prepare('SELECT audience_scope, target_group_id, author_pubkey, target_pubkey, assigned_to FROM posts WHERE id = ?').get(postId) as any;
     const runTx = conservingTxn ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
     runTx(() => {
         if (transferFn) {
@@ -1075,7 +1077,9 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
         }
     });
     if (!deleted) return false;
-    broadcast({ type: 'post_removed', id: postId });
+    broadcast({ type: 'post_removed', id: postId }, audienceRow?.audience_scope === 'direct'
+        ? Array.from(new Set([audienceRow.author_pubkey, audienceRow.target_pubkey, audienceRow.assigned_to].filter(Boolean) as string[]))
+        : audienceRecipients(audienceRow ?? {}));
     if (eventRow) notifyEventChange(push, 'cancelled', postId, eventRow.title, 'SYSTEM');
     return true;
 }

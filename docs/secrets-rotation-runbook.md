@@ -30,12 +30,12 @@ This inventory enumerates every secret the BeanPool system uses across all layer
 | **`TIKTOK_CLIENT_SECRET`** | Node `.env`<br>`docker-compose.yml`<br>`apps/server/src/routes/channels.ts` | TikTok Open API client secret for The Pulse OAuth token relay. | In test VM `.env` |
 | **`TIKTOK_CLIENT_KEY`** (or `TIKTOK_CLIENT_ID`) | Node `.env`<br>`docker-compose.yml`<br>`apps/server/src/routes/channels.ts` | TikTok Open API client key. | In test VM `.env` |
 | **`ADMIN_PASSWORD`** | Node `/root/BeanPool-<Name>/.env`<br>Repo root `.env`<br>`deploy.sh`<br>`data/local-config.json` (scrypt hash) | Per-node root administrative password for `/api/local/admin/*`, backup pulls, and React manager login. | Echoed in 2026-09-15 transcript |
-| **`BACKUP_ADMIN_PASSWORD`** | Backup node `.env` (`test-mirror` / replicas) | Secondary node password to fetch snapshots from primary's `/api/local/admin/sync-snapshot`. | Echoed in 2026-09-15 transcript |
+| **`BACKUP_ADMIN_PASSWORD`** (legacy — delete it) | Backup node `.env` (`test-mirror` / replicas), if still there | No longer used. A standby copies with a replication token (`BACKUP_REPLICATION_TOKEN`, or pasted under Live Backup Server); a leftover copy of the primary's admin password is swapped for a token on start and warned about. Delete the line. | Echoed in 2026-09-15 transcript |
 | **`CF_API_TOKEN` (Node / Repo)** | Repo root `.env`<br>Node `.env`<br>`deploy.sh` | Cloudflare API token with Zone DNS edit permissions used for dynamic record updates. | Echoed in 2026-09-15 transcript |
 | **`CF_API_TOKEN` (Registrar)** | Cloudflare Worker secret (`wrangler secret put`) | Scoped Cloudflare API token with `Account·Cloudflare Tunnel·Edit` and `Zone·DNS·Edit` permissions. | Cloudflare Worker runtime |
 | **`CF_TUNNEL_TOKEN`** | Repo root `.env`<br>`deploy.sh`<br>Node `<node>/data/tunnel-token` | Cloudflare Zero Trust tunnel connector token for `cloudflared` sidecar container. | Echoed in 2026-09-15 transcript |
 | **`ADMIN_SECRET` (Registrar)** | Cloudflare Worker secret<br>`apps/registrar/src/admin-html.js` | Shared secret for registrar Worker administrative endpoints (`/api/local/admin/registrar/*`). | Cloudflare Worker runtime |
-| **`CLOUDFLARE_API_TOKEN`** | GitHub Actions Secret | Used in `.github/workflows/deploy-website.yml` to deploy `apps/website` to Cloudflare Pages. | GitHub Repo Secrets |
+| **`CLOUDFLARE_API_TOKEN`** | GitHub Actions Secret | **No longer used by CI.** `.github/workflows/deploy-website.yml` was removed on 2026-09-19 (#962); beanpool.org deploys through Cloudflare Pages' own Git connection. The secret was already empty. Delete it rather than rotate it. | GitHub Repo Secrets |
 | **`CLOUDFLARE_API_KEY`** | GitHub Actions Secret<br>Repo root `.env` | Global Cloudflare API Key (fallback credentials for legacy wrangler operations). | GitHub Repo Secrets |
 | **`CLOUDFLARE_EMAIL`** | GitHub Actions Secret<br>Repo root `.env` | Cloudflare account email associated with `CLOUDFLARE_API_KEY`. | GitHub Repo Secrets |
 | **`CLOUDFLARE_ACCOUNT_ID`** | GitHub Actions Secret<br>`apps/registrar/wrangler.toml` | Cloudflare Account ID (`151a28c4fd1e6ee09768f4226be76b4d`). | Public / semi-private identifier |
@@ -174,16 +174,14 @@ flowchart TD
 *   **Where to update:**
     1. In GitHub repository: **Settings** $\to$ **Secrets and variables** $\to$ **Actions**.
     2. Update Repository Secrets:
-       - `CLOUDFLARE_API_TOKEN`: Paste Token C from Step 2.1.
+       - `CLOUDFLARE_API_TOKEN`: delete it (unused since #962).
        - `CLOUDFLARE_API_KEY`: Update Global API Key if rotated.
        - `CLOUDFLARE_EMAIL`: Maintainer account email.
        - `CLOUDFLARE_ACCOUNT_ID`: `151a28c4fd1e6ee09768f4226be76b4d`.
 *   **How to verify:**
-    Trigger workflow dispatch on `.github/workflows/deploy-website.yml`:
-    ```bash
-    gh workflow run deploy-website.yml
-    gh run watch
-    ```
+    No GitHub workflow uses these Cloudflare secrets since `deploy-website.yml` was removed (2026-09-19, #962).
+    The website deploys through Cloudflare Pages' Git connection: merge any website change and check the
+    "Cloudflare Pages" check on the PR, then load beanpool.org.
 
 ---
 
@@ -212,7 +210,7 @@ flowchart TD
 When `ADMIN_PASSWORD` is initialized on first boot, the server creates an scrypt hash in `/root/BeanPool-<Name>/data/local-config.json` and sets `"isLocked": true`.  
 **Subsequent changes to `ADMIN_PASSWORD` in `.env` are IGNORED by the server while `isLocked` is true.**
 
-`scripts/rotate-node-env.sh` automatically detects when `ADMIN_PASSWORD` is being updated and atomically resets `isLocked` in `data/local-config.json` before recreating the container, allowing `initAdminPassword()` to hash and lock the new password in a single pass.
+`scripts/rotate-node-env.sh` automatically detects when `ADMIN_PASSWORD` is being updated and atomically resets `isLocked` in `data/local-config.json` before recreating the container, allowing `initAdminPassword()` to hash and lock the new password in a single pass. It keeps the node's replication token-only setting: an unlocked first boot would otherwise turn token-only ON (the new-install default), which refuses any standby still copying with the admin password. An unset setting is written as off, which is what it already meant.
 
 To rotate `ADMIN_PASSWORD` on an existing node:
 1. Generate new strong password matching `validatePasswordStrength()` requirements:
@@ -232,6 +230,7 @@ To rotate `ADMIN_PASSWORD` on an existing node:
      if (fs.existsSync(p)) {
        const cfg = JSON.parse(fs.readFileSync(p, \"utf8\"));
        cfg.isLocked = false;
+       if (!(\"replicationTokenOnly\" in cfg)) cfg.replicationTokenOnly = false; // keep token-only as it was
        delete cfg.adminHash;
        delete cfg.salt;
        fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), { mode: 0o600 });
@@ -241,7 +240,7 @@ To rotate `ADMIN_PASSWORD` on an existing node:
    '"
    ssh root@ssh-qld.beanpool.org "cd /root/BeanPool-Test && docker compose -p beanpool-test up -d --no-deps --force-recreate beanpool-node"
    ```
-4. On any backup node replicate: update `BACKUP_ADMIN_PASSWORD` to match the primary's new `ADMIN_PASSWORD`.
+4. Backup nodes need nothing: they copy with the primary's replication token, which does not change with the admin password. If a backup's `.env` still has `BACKUP_ADMIN_PASSWORD`, delete that line; do not set it to the new password. A backup that still copied with the old password stops copying and says so under Live Backup Server: if you saved the primary's replication token, paste it there; if not, make a new one under Replication Access on the primary and paste it into every backup.
 
 ---
 

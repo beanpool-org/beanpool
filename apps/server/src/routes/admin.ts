@@ -845,7 +845,9 @@ router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const ok = adminDeletePost(ctx.params.id);
+        // Optional: why, as one of the removal reason categories; the author reads it. Anything else is ignored.
+        const { reasonCategory } = (ctx as any).requestBody || {};
+        const ok = adminDeletePost(ctx.params.id, { reasonCategory });
         if (!ok) {
             ctx.status = 404;
             ctx.body = { success: false, error: 'Post not found' };
@@ -1030,16 +1032,20 @@ router.post('/api/local/admin/announcements', async (ctx) => {
 /**
  * GET /api/local/admin/reports — List abuse reports with optional status filtering and pagination (#172).
  * Query params:
- *   - status: 'pending' | 'reviewed' | 'actioned' | 'all' (default: 'all')
+ *   - status: 'open' | 'dismissed' | 'actioned' | 'all' (default: 'all'). The older names still work:
+ *     'pending' is 'open', 'reviewed' is 'dismissed'.
  *   - limit: max items (clamped [1, 500], default 50)
  *   - offset: item offset for pagination (default 0)
+ * pendingCount is always the number of open reports, whatever the filter.
  */
-const ALLOWED_STATUSES = new Set(['pending', 'reviewed', 'actioned', 'all']);
+const REPORT_STATUS_FILTERS: Record<string, string> = {
+    all: 'all', open: 'pending', pending: 'pending', dismissed: 'reviewed', reviewed: 'reviewed', actioned: 'actioned',
+};
 router.get('/api/local/admin/reports', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const rawStatus = String(ctx.query.status || 'all').toLowerCase();
-        const statusFilter = ALLOWED_STATUSES.has(rawStatus) ? rawStatus : 'all';
+        const statusFilter = REPORT_STATUS_FILTERS[rawStatus] ?? 'all';
         const parsedLimit = parseInt(String(ctx.query.limit), 10);
         const limit = Math.max(1, Math.min(isNaN(parsedLimit) ? 50 : parsedLimit, 500));
         const parsedOffset = parseInt(String(ctx.query.offset), 10);
@@ -1079,8 +1085,8 @@ router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
 router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const { deletePost, suspendUser, removePulseItem } = (ctx as any).requestBody || {};
-        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem);
+        const { deletePost, suspendUser, removePulseItem, reasonCategory } = (ctx as any).requestBody || {};
+        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, { reasonCategory });
         if (!ok) {
             ctx.status = 404;
             ctx.body = { success: false, error: 'Abuse report not found' };

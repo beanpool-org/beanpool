@@ -6,6 +6,7 @@ import { isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { isNodeOwner } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
+import { adminActorName } from './admin-actor-name.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
 import crypto from 'node:crypto';
 import {
@@ -17,7 +18,7 @@ import {
     type MarketplaceTransaction
 } from '@beanpool/engine';
 
-type BroadcastFn = (event: any, recipients?: string[]) => void;
+type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
 type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean, auth?: { signer: string; signature?: string; payload?: string }) => any;
 type EnsureConvFn = (postId: string, buyerPubkey: string, sellerPubkey: string) => string;
 type SystemMsgFn = (postId: string, type: any, payload: any, senderPubkey: string, recipientPubkey: string) => any;
@@ -69,6 +70,20 @@ export function recordDeferredWageClaim(
 function signerKeepsEnterprise(cb: EscrowCallbacks, signer: string, enterprisePubkey: string): boolean {
     if (typeof cb.canOperateTreasury !== 'function') return false;
     return cb.canOperateTreasury(signer, enterprisePubkey);
+}
+
+/**
+ * Who a trade's live events go to: the buyer and the seller, and for an enterprise side the keepers who may
+ * act for it (canOperateTreasury — the same test that lets them approve and complete its deals). A trade names
+ * both parties, the amount and the listing, so it never goes to the whole feed.
+ */
+function tradeRecipients(cb: EscrowCallbacks, tx: { buyerPublicKey: string; sellerPublicKey: string }): string[] {
+    const out = new Set<string>([tx.buyerPublicKey, tx.sellerPublicKey]);
+    for (const side of [tx.buyerPublicKey, tx.sellerPublicKey]) {
+        const keepers = db.prepare('SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?').all(side) as { member_pubkey: string }[];
+        for (const k of keepers) if (signerKeepsEnterprise(cb, k.member_pubkey, side)) out.add(k.member_pubkey);
+    }
+    return [...out];
 }
 
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
@@ -211,7 +226,7 @@ export function requestPost(
 
     db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'requested', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
 
-    cb.broadcast({ type: 'transaction_requested', transaction: tx });
+    cb.broadcast({ type: 'transaction_requested', transaction: tx }, tradeRecipients(cb, tx));
 
     cb.dispatchPushNotification(
         [post.author_pubkey],
@@ -377,7 +392,8 @@ export function approvePostRequest(
     });
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
-    cb.broadcast({ type: 'post_accepted', postId: post.id, transaction: tx });
+    // The listing is now pending on everyone's board: the others get a bare doorbell to re-fetch it.
+    cb.broadcast({ type: 'post_accepted', postId: post.id, transaction: tx }, tradeRecipients(cb, tx), { othersGetDoorbell: true });
 
     try {
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
@@ -424,7 +440,7 @@ export function rejectPostRequest(
     db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'").run(transactionId);
     
     const tx = getMarketplaceTransaction(db, transactionId)!;
-    cb.broadcast({ type: 'transaction_rejected', transaction: tx });
+    cb.broadcast({ type: 'transaction_rejected', transaction: tx }, tradeRecipients(cb, tx));
 
     const requesterPubkey = isOffer ? row.buyer_pubkey : row.seller_pubkey;
     cb.dispatchPushNotification(
@@ -458,7 +474,7 @@ export function cancelPostRequest(
     db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'").run(transactionId);
     
     const tx = getMarketplaceTransaction(db, transactionId)!;
-    cb.broadcast({ type: 'transaction_cancelled', transaction: tx });
+    cb.broadcast({ type: 'transaction_cancelled', transaction: tx }, tradeRecipients(cb, tx));
     return tx;
 }
 
@@ -634,7 +650,8 @@ export function acceptPost(
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
     });
 
-    cb.broadcast({ type: 'post_accepted', postId: post.id, transaction: tx });
+    // The listing is now pending on everyone's board: the others get a bare doorbell to re-fetch it.
+    cb.broadcast({ type: 'post_accepted', postId: post.id, transaction: tx }, tradeRecipients(cb, tx), { othersGetDoorbell: true });
 
     try {
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
@@ -820,7 +837,8 @@ export function completePostTransaction(
     }
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
-    cb.broadcast({ type: 'transaction_completed', transaction: tx });
+    // The listing's status and the members' activity feed change for everyone: a bare doorbell for the others.
+    cb.broadcast({ type: 'transaction_completed', transaction: tx }, tradeRecipients(cb, tx), { othersGetDoorbell: true });
     try {
         recordActivity('trade_completed', row.seller_pubkey, row.buyer_pubkey, {
             postId: row.post_id,
@@ -900,7 +918,8 @@ export function cancelPostTransaction(
     });
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
-    cb.broadcast({ type: 'transaction_cancelled', transaction: tx });
+    // The listing is back to active on everyone's board: a bare doorbell for the others.
+    cb.broadcast({ type: 'transaction_cancelled', transaction: tx }, tradeRecipients(cb, tx), { othersGetDoorbell: true });
 
     try {
         cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_CANCELLED, {
@@ -979,6 +998,9 @@ export function resolveEscrowDispute(
     const authSigner = adminSigner.trim();
     const completedAt = new Date().toISOString();
     const reasonText = opts?.reason ? ` (Reason: ${opts.reason})` : '';
+    // Members read who ruled in words; the signer itself stays on the audit columns (dispute_resolved_by,
+    // the ledger rows' auth_signer) and never reaches a memo, a chat line or a push.
+    const resolverName = adminActorName(authSigner);
 
     const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
     const sellerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.seller_pubkey) as any;
@@ -1013,7 +1035,7 @@ export function resolveEscrowDispute(
                 `escrow_${row.id}`,
                 row.seller_pubkey,
                 sellerShare,
-                `Dispute arbitrated by admin (${authSigner}): released to seller for ${row.post_id}${reasonText}`,
+                `Dispute arbitrated by ${resolverName}: released to seller for ${row.post_id}${reasonText}`,
                 'escrow',
                 false,
                 { signer: authSigner }
@@ -1041,7 +1063,7 @@ export function resolveEscrowDispute(
                 `escrow_${row.id}`,
                 row.buyer_pubkey,
                 buyerShare,
-                `Dispute arbitrated by admin (${authSigner}): refunded to buyer for ${row.post_id}${reasonText}`,
+                `Dispute arbitrated by ${resolverName}: refunded to buyer for ${row.post_id}${reasonText}`,
                 'escrow',
                 true,
                 { signer: authSigner }
@@ -1071,7 +1093,7 @@ export function resolveEscrowDispute(
                     `escrow_${row.id}`,
                     row.buyer_pubkey,
                     buyerShare,
-                    `Dispute arbitrated by admin (${authSigner}): 50% split refund to buyer for ${row.post_id}${reasonText}`,
+                    `Dispute arbitrated by ${resolverName}: 50% split refund to buyer for ${row.post_id}${reasonText}`,
                     'escrow',
                     true,
                     { signer: authSigner }
@@ -1085,7 +1107,7 @@ export function resolveEscrowDispute(
                     `escrow_${row.id}`,
                     row.seller_pubkey,
                     sellerShare,
-                    `Dispute arbitrated by admin (${authSigner}): 50% split payout to seller for ${row.post_id}${reasonText}`,
+                    `Dispute arbitrated by ${resolverName}: 50% split payout to seller for ${row.post_id}${reasonText}`,
                     'escrow',
                     false,
                     { signer: authSigner }
@@ -1132,7 +1154,12 @@ export function resolveEscrowDispute(
     }
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
-    cb.broadcast({ type: 'dispute_resolved', transactionId, action, authSigner, transaction: tx });
+    // The parties and the admin who ruled get the ruling; the listing and the activity feed change for everyone
+    // else, who get a bare doorbell (other admins' dispute lists re-fetch on it too).
+    const disputeRecipients = tradeRecipients(cb, tx);
+    if (authSigner && !disputeRecipients.includes(authSigner)) disputeRecipients.push(authSigner);
+    // The ruling names who ruled in words: the parties' sockets never carry the admin's key or 'owner:password'.
+    cb.broadcast({ type: 'dispute_resolved', transactionId, action, resolvedBy: resolverName, transaction: tx }, disputeRecipients, { othersGetDoorbell: true });
 
     // Public record on both parties' activity views
     try {
@@ -1171,8 +1198,7 @@ export function resolveEscrowDispute(
             transactionId: row.id,
             resolution: action,
             amount: row.credits,
-            actorPubkey: authSigner,
-            authSigner,
+            resolvedByName: resolverName,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey,
             reason: opts?.reason
@@ -1192,7 +1218,7 @@ export function resolveEscrowDispute(
         [row.buyer_pubkey, row.seller_pubkey],
         authSigner,
         '⚖️ Escrow Dispute Resolved',
-        `Dispute arbitrated by admin (${authSigner}): ${actionLabel} for "${post?.title || 'deal'}"`,
+        `Dispute arbitrated by ${resolverName}: ${actionLabel} for "${post?.title || 'deal'}"`,
         { screen: 'post', postId: row.post_id },
         'escrow'
     );

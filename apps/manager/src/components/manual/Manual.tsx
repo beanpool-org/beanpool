@@ -10,6 +10,8 @@ import { OPERATOR_MANUAL, SCREEN_HELP, helpPageFor, manualPage, type HelpScreen 
 interface ManualApi {
     /** Open the manual at a page, or at its contents when no slug is given. */
     openManual: (slug?: string) => void;
+    /** The pages this manual is limited to, if it is (ManualProvider's `pages`). */
+    pages?: readonly string[];
 }
 
 const ManualContext = createContext<ManualApi | null>(null);
@@ -18,7 +20,11 @@ export function useManual(): ManualApi | null {
     return useContext(ManualContext);
 }
 
-export function ManualProvider({ children }: { children: React.ReactNode }) {
+/**
+ * `pages`: when given, the only pages this manual shows (contents, search, Related, links); any other slug opens the
+ * contents instead. A moderator's Settings passes MODERATOR_MANUAL_PAGES.
+ */
+export function ManualProvider({ children, pages }: { children: React.ReactNode; pages?: readonly string[] }) {
     const [state, setState] = useState<{ open: boolean; slug: string | null }>({ open: false, slug: null });
     const openRef = useRef(false);
     openRef.current = state.open;
@@ -28,8 +34,8 @@ export function ManualProvider({ children }: { children: React.ReactNode }) {
         if (!openRef.current && typeof window !== 'undefined' && !(window.history.state as { bpManual?: boolean } | null)?.bpManual) {
             window.history.pushState({ ...(window.history.state ?? {}), bpManual: true }, '');
         }
-        setState({ open: true, slug: slug && manualPage(slug) ? slug : null });
-    }, []);
+        setState({ open: true, slug: slug && manualPage(slug) && (!pages || pages.includes(slug)) ? slug : null });
+    }, [pages]);
     const closeManual = useCallback(() => {
         setState({ open: false, slug: null });
         // Drop its history entry too, or the next Back would land on the closed manual and seem to do nothing.
@@ -44,13 +50,14 @@ export function ManualProvider({ children }: { children: React.ReactNode }) {
         window.addEventListener('popstate', onPop);
         return () => window.removeEventListener('popstate', onPop);
     }, []);
-    const api = useMemo(() => ({ openManual }), [openManual]);
+    const api = useMemo(() => ({ openManual, pages }), [openManual, pages]);
     return (
         <ManualContext.Provider value={api}>
             {children}
             {state.open && (
                 <ManualPanel
                     slug={state.slug}
+                    pages={pages}
                     onNavigate={(slug) => setState({ open: true, slug })}
                     onClose={closeManual}
                 />
@@ -63,7 +70,7 @@ export function ManualProvider({ children }: { children: React.ReactNode }) {
 export function HelpLink({ screen, className = '' }: { screen: HelpScreen; className?: string }) {
     const manual = useManual();
     const page = helpPageFor(screen);
-    if (!manual || !page) return null;
+    if (!manual || !page || (manual.pages && !manual.pages.includes(page.slug))) return null;
     return (
         <button
             type="button"
@@ -117,12 +124,19 @@ function PageButton({ page, onOpen, snippet }: { page: GuidePage; onOpen: (slug:
     );
 }
 
-export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null; onNavigate: (slug: string | null) => void; onClose: () => void }) {
+export function ManualPanel({ slug, onNavigate, onClose, pages }: { slug: string | null; onNavigate: (slug: string | null) => void; onClose: () => void; pages?: readonly string[] }) {
     const [query, setQuery] = useState('');
     const closeRef = useRef<HTMLButtonElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const page = slug ? manualPage(slug) : null;
-    const results = useMemo(() => (query.trim() ? searchGuide(OPERATOR_MANUAL, query) : []), [query]);
+    const shown = useCallback((p: GuidePage | null): p is GuidePage => p !== null && (!pages || pages.includes(p.slug)), [pages]);
+    const page = slug && shown(manualPage(slug)) ? manualPage(slug) : null;
+    const results = useMemo(
+        () => (query.trim() ? searchGuide(OPERATOR_MANUAL, query).filter(r => shown(r.page)) : []),
+        [query, shown],
+    );
+    const sections = OPERATOR_MANUAL.sections
+        .map(s => ({ ...s, pages: s.slugs.map(manualPage).filter(shown) }))
+        .filter(s => s.pages.length > 0);
 
     useEffect(() => { closeRef.current?.focus(); }, []);
     useEffect(() => { scrollRef.current?.scrollTo?.({ top: 0 }); }, [slug]);
@@ -137,7 +151,7 @@ export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null
         onNavigate(next);
     };
     const section = page ? OPERATOR_MANUAL.sections.find(s => s.id === page.section) : null;
-    const related = page ? page.related.map(manualPage).filter((p): p is GuidePage => p !== null) : [];
+    const related = page ? page.related.map(manualPage).filter(shown) : [];
 
     return (
         <div
@@ -209,15 +223,16 @@ export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null
                         <div className="mt-5">
                             <h1 className="text-2xl font-black text-white m-0">How to run your community</h1>
                             <p className="text-nature-300 mt-2">
-                                For owners and admins. Every screen in Settings has a <strong className="text-white">?</strong> beside its title that opens its page here.
+                                {pages
+                                    ? <>For moderators: the pages about reports, and how you sign in. The <strong className="text-white">?</strong> beside Reports opens its page here.</>
+                                    : <>For owners and admins. Every screen in Settings has a <strong className="text-white">?</strong> beside its title that opens its page here.</>}
                             </p>
-                            {OPERATOR_MANUAL.sections.map(s => (
+                            {sections.map(s => (
                                 <section key={s.id} className="mt-6" aria-labelledby={`manual-${s.id}`}>
                                     <h2 id={`manual-${s.id}`} className="text-lg font-black text-white m-0">{s.title}</h2>
                                     <p className="text-sm text-nature-400 mt-1 mb-3">{s.summary}</p>
                                     <ul className="space-y-2.5">
-                                        {s.slugs.map(sl => manualPage(sl)).filter((p): p is GuidePage => p !== null)
-                                            .map(p => <PageButton key={p.slug} page={p} onOpen={open} />)}
+                                        {s.pages.map(p => <PageButton key={p.slug} page={p} onOpen={open} />)}
                                     </ul>
                                 </section>
                             ))}

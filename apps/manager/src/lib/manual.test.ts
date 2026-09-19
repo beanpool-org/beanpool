@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { FEEDBACK_LIVE, validateGuide } from '@beanpool/core';
-import { OPERATOR_MANUAL, SCREEN_HELP, helpPageFor, manualPage, type HelpScreen } from './manual';
+import { OPERATOR_MANUAL, SCREEN_HELP, MODERATOR_MANUAL_PAGES, helpPageFor, manualPage, type HelpScreen } from './manual';
 
 const repo = path.resolve(__dirname, '../../../..');
 const read = (rel: string) => fs.readFileSync(path.join(repo, rel), 'utf8');
@@ -31,6 +31,11 @@ describe('operator manual in Settings', () => {
     it('passes the same validation the apps apply to the members\' guide', () => {
         expect(validateGuide(OPERATOR_MANUAL)).not.toBeNull();
         expect(OPERATOR_MANUAL.guides.length).toBeGreaterThanOrEqual(15);
+    });
+
+    it("a moderator's manual pages all exist, and include the page Reports' \"?\" opens", () => {
+        for (const slug of MODERATOR_MANUAL_PAGES) expect(manualPage(slug), slug).not.toBeNull();
+        expect(MODERATOR_MANUAL_PAGES).toContain(SCREEN_HELP['people/moderation']);
     });
 
     it('every "?" opens a page that exists', () => {

@@ -190,7 +190,12 @@ describe('phone-signin helpers', () => {
     });
 
     it('refuses a signed-in answer without a role it knows', async () => {
-        vi.stubGlobal('fetch', vi.fn(async () => json(200, { status: 'signed-in', role: 'moderator', memberPubkey: 'x', csrfToken: 'y' })));
+        vi.stubGlobal('fetch', vi.fn(async () => json(200, { status: 'signed-in', role: 'superuser', memberPubkey: 'x', csrfToken: 'y' })));
         expect(await waitForPhone(ID1)).toEqual({ kind: 'ended', message: PHONE_SIGNIN_MESSAGES.failed });
+    });
+
+    it('accepts a moderator (their Settings is Reports only)', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => json(200, { status: 'signed-in', role: 'moderator', memberPubkey: 'x', csrfToken: 'y' })));
+        expect(await waitForPhone(ID1)).toEqual({ kind: 'signed-in', session: { memberPubkey: 'x', role: 'moderator' }, csrfToken: 'y' });
     });
 });

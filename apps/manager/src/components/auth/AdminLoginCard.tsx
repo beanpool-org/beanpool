@@ -192,7 +192,7 @@ export function AdminLoginCard({ nodeUrl, onAuthenticated, onKeySession }: Admin
                             <span>Sign in with your phone</span>
                         </button>
                         <p className="text-xs text-nature-400 mt-2 mb-0 text-center leading-relaxed">
-                            Owners and admins: scan a code with the BeanPool app. No password needed.
+                            Owners, admins and moderators: scan a code with the BeanPool app. No password needed.
                         </p>
                     </div>
                 )}

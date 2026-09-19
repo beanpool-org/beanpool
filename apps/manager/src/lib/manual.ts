@@ -47,6 +47,12 @@ export const SCREEN_HELP = {
 
 export type HelpScreen = keyof typeof SCREEN_HELP;
 
+/**
+ * The manual a moderator sees: the pages about their one screen, how they sign in, and what the role is. The rest
+ * (money, backups, the server) is for owners and admins, whose screens a moderator never gets.
+ */
+export const MODERATOR_MANUAL_PAGES: readonly string[] = ['reports-and-takedowns', 'signing-in', 'roles'];
+
 export function manualPage(slug: string): GuidePage | null {
     return OPERATOR_MANUAL?.guides.find(g => g.slug === slug) ?? null;
 }

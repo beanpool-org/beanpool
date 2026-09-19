@@ -113,7 +113,7 @@ export const TAKEOVER_STEPS = [
     ['pull-config', 'Stopped copying from the old main server'],
     ['restart', 'Restarted as the main server'],
     ['audit', 'Checked that the ledger adds up'],
-    ['announcement', 'Told the community'],
+    ['announcement', 'Posted a notice for members'],
     ['reseal', 'Locked the keys again, on this server'],
     ['tunnel', 'Brought the tunnel for the web address back up'],
     ['done', 'Finished'],

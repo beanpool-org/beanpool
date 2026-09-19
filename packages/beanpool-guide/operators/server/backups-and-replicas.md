@@ -1,7 +1,7 @@
 ---
 slug: backups-and-replicas
 title: Backups and replicas
-summary: What to back up, the backups Settings makes (locked once you make a recovery code), restoring, running a second server as a standby, and taking over on it.
+summary: What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words, restoring, running a second server as a standby, and taking over on it.
 related: updates-and-health, troubleshooting, what-the-server-sees, first-time-setup
 ---
 
@@ -86,6 +86,16 @@ A locked backup is still private: whoever opens it can read everything in it, in
 
 If the recovery code is lost, no locked backup can be opened today. While the server is running that costs little: press **Replace it** in the Who can unlock this community card, then download a new backup. Keep the paper somewhere away from the server.
 
+## Owners' 12 words
+
+A locked backup and the locked take-over keys are locked to each owner's key, and will open for any one owner once opening with a phone arrives. Today only the recovery code opens them, so keep the printed code. An owner who loses their phone gets that key back from their 12 words. So each owner's 12 words matter most on the day the server itself is lost.
+
+- **Backups & Restore** in Settings lists each owner with **12 words checked:** and a date, or **not yet**, and a line such as "1 of 3 owners have checked their 12 words in the last year".
+- An owner checks their words in the BeanPool app (phone or web), under **Settings**, **Community keys**. The app asks them once when they become an owner and again a year after their last check. They can always say Later.
+- The words are checked on the owner's own device and never reach the server. The server keeps only the owner's signed statement that they checked, and when. It cannot check the words itself, so the date is what the owner reported, nothing more.
+- Nothing waits on it: an owner who never checks can still do everything an owner does.
+- Removing an owner takes them off the list. Their date stays with their account, and shows again if they are made an owner again.
+
 ## Backups that are not locked
 
 Backups downloaded before this update, and every backup from a server with no recovery code, are **.tar.gz** files (or, for a snapshot, a .db file) and are not locked. They hold the settings, including the scrambled admin password and the two-factor secret. Make a recovery code first. Then find the unlocked ones and delete them: Downloads, other computers, Time Machine, cloud drives, email. Deleting a file does not always wipe it from an SSD. Treat anything that was in one as possibly seen by someone else: change the admin password and set up two-factor sign-in again when you can.
@@ -165,7 +175,7 @@ What the standby does, in order. Each step is written to data/takeover-journal.j
 - becomes the main server in its own settings (local-config.json), so NODE_ROLE=backup left in its .env does not matter and a later update cannot turn it back into a standby;
 - stops copying from the old main server, and restarts;
 - checks once that the ledger adds up, before members trade on it;
-- tells the community: "This community moved to a new server", with the date and the code's number;
+- posts a notice, "This community moved to a new server", with the date and the code's number. Only people connected at that moment see it live; there are no push notifications, because a standby has no copy of phones' notification tokens;
 - locks the keys again, on this server, to the owners and the same recovery code, and deletes the copies it held from the old main server;
 - starts the tunnel for the web address.
 

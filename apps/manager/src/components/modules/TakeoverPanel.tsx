@@ -346,7 +346,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                 <ul className="m-0 pl-5 space-y-1">
                                     <li>it opens the main server&apos;s locked keys with your printed recovery code;</li>
                                     <li>it takes the main server&apos;s identity, owners and admins, links with other communities, admin password and web address;</li>
-                                    <li>it stops copying, restarts, checks the ledger adds up, and tells the community;</li>
+                                    <li>it stops copying, restarts, checks the ledger adds up, and posts a notice for members;</li>
                                     <li>after it, sign in with the community&apos;s admin password or an owner&apos;s key: this standby&apos;s own password stops working.</li>
                                 </ul>
                                 <p className="m-0 font-bold text-white">What it will not have (a standby does not copy these):</p>

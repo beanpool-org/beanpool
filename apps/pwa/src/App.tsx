@@ -31,6 +31,7 @@ import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
 import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
+import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { takeProfileFragment } from './lib/profile-link';
 
 function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
@@ -111,6 +112,9 @@ export function App() {
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile'>('menu');
+    // "Check now" on the owners' 12-words prompt opens Settings with that card open; closing Settings resets it.
+    const [ownerWordsOpen, setOwnerWordsOpen] = useState(false);
+    useEffect(() => { if (!showSettings) setOwnerWordsOpen(false); }, [showSettings]);
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     const [openNewPost, setOpenNewPost] = useState(false);
@@ -707,6 +711,7 @@ export function App() {
                                 themePreference={themePreference}
                                 onThemePreferenceChange={setThemePreference}
                                 initialMode={settingsInitialMode}
+                                openOwnerWordsCheck={ownerWordsOpen}
                                 onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}
                                 nodeVersion={communityHealth?.version?.trim() || undefined}
                             />
@@ -730,6 +735,10 @@ export function App() {
                             {activeTab !== 'map' && (
                                 <div className="max-w-xl mx-auto px-4 pt-2">
                                     <RecoveryAlertBanner identity={identity} />
+                                    <OwnerWordsPrompt
+                                        publicKey={identity?.publicKey}
+                                        onCheckNow={() => { setSettingsInitialMode('menu'); setOwnerWordsOpen(true); setShowSettings(true); }}
+                                    />
                                 </div>
                             )}
                             {activeTab === 'map' && (

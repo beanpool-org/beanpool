@@ -824,6 +824,18 @@ CREATE TABLE IF NOT EXISTS node_roles (
 );
 CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
 
+-- 22c. "Check your 12 words" (sealed-keys.md §7): an owner's own signed statement that they typed their 12 words on
+-- their device and the words matched their account. Only the fact and the date: nothing derived from the words ever
+-- reaches the server. One row per member, the latest check. The request signature is kept so the record can be
+-- re-verified against the member's key; the server cannot verify the check itself and nothing claims it did.
+-- Gates nothing: it is read only by the Settings list of who can unlock the community, and by the owner's own app.
+CREATE TABLE IF NOT EXISTS owner_words_checks (
+    member_pubkey  TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
+    checked_at     INTEGER NOT NULL,
+    signature      TEXT NOT NULL,
+    signed_payload TEXT NOT NULL
+);
+
 -- 22b. A node role held aside during an admin's emergency suspension (answer L).
 -- Suspending removes the member's node role; if the "Keep this suspension?" vote does not keep it
 -- (fails, misses quorum, is halted, or an admin lifts the suspension) the exact row comes back.

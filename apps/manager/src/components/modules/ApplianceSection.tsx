@@ -27,6 +27,7 @@ import { ReplicationAccessPanel } from './ReplicationAccessPanel';
 import { TakeoverPanel } from './TakeoverPanel';
 import { TakeoverLockPanel } from './TakeoverLockPanel';
 import type { RolesViewer } from './NodeRolesPanel';
+import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -953,6 +954,10 @@ export function ApplianceSection({
                         <TakeoverLockPanel activeNode={activeNode} viewer={rolesViewer} communityName={diag?.communityName} />
                     </SectionErrorBoundary>
 
+                    {/* Owners' "12 words checked" (sealed-keys.md §7). Shown under "Who can unlock this community" (#979). */}
+                    <SectionErrorBoundary sectionName="Owners' 12 words" resetKey={activeNode.id}>
+                        <OwnerWordsChecksPanel activeNode={activeNode} />
+                    </SectionErrorBoundary>
                     {/* Database Download and Restore Wizard */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Download Database Backup */}

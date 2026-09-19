@@ -336,8 +336,9 @@ function verifyTransactionAuthorship(tx: Transaction): boolean {
 }
 
 export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload): Promise<ImportResult> {
-    if (nodeRole !== 'backup') {
-        throw new Error(`[Sync] This node runs as '${nodeRole}', which imports no remote state (one-directional backup topology). Inbound state rejected.`);
+    const role = getNodeRole();
+    if (role !== 'backup') {
+        throw new Error(`[Sync] This node runs as '${role}', which imports no remote state (one-directional backup topology). Inbound state rejected.`);
     }
 
     if (!remote.signature || !remote.publicKey) {
@@ -649,7 +650,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     }
                 }
 
-                if ((ENFORCE_LEDGER_AUTH || nodeRole === 'backup') && accountCountBefore > 1
+                if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && accountCountBefore > 1
                     && Math.abs(importedBalanceDelta) > LEDGER_CONSERVATION_TOLERANCE) {
                     throw new Error(`[Sync] Conservation violation: import shifted total balance by ${importedBalanceDelta.toFixed(4)} (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
                 }

@@ -35,6 +35,7 @@ import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, type QuizResult
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
+import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -1423,6 +1424,8 @@ export default function SettingsScreen() {
                 <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
                 {/* Owners and admins only — the node answers the role; see components/NodeAdminEntry.tsx. */}
                 <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} />
+                {/* Owners only: "Check your 12 words" (sealed-keys.md §7); see components/OwnerWordsCard.tsx. */}
+                <OwnerWordsCard styles={styles} />
                 <Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/profile-setup')} accessibilityRole="button">

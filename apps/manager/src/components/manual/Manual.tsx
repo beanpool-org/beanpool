@@ -24,7 +24,8 @@ export function ManualProvider({ children }: { children: React.ReactNode }) {
     openRef.current = state.open;
     // The open manual is a history entry, so a phone's Back button closes it instead of leaving Settings.
     const openManual = useCallback((slug?: string) => {
-        if (!openRef.current && typeof window !== 'undefined') {
+        // Unless the entry is already the manual's: the phone menu hands its own entry over when it opens the manual.
+        if (!openRef.current && typeof window !== 'undefined' && !(window.history.state as { bpManual?: boolean } | null)?.bpManual) {
             window.history.pushState({ ...(window.history.state ?? {}), bpManual: true }, '');
         }
         setState({ open: true, slug: slug && manualPage(slug) ? slug : null });

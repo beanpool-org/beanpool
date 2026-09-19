@@ -305,8 +305,8 @@ export function PeopleSafetySection({
                                         key={report.id || idx}
                                         className="p-4 rounded-xl bg-nature-950 border border-nature-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:border-nature-700 transition-colors"
                                     >
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
+                                        <div className="space-y-1 min-w-0 break-words">
+                                            <div className="flex flex-wrap items-center gap-2">
                                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                                                     {report.severity || 'Report'}
                                                 </span>

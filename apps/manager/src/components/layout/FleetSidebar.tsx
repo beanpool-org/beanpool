@@ -200,7 +200,7 @@ export function FleetSidebar({
         <aside
             id={inDrawer ? 'settings-menu' : undefined}
             className={inDrawer
-                ? 'w-full h-full bg-nature-900 flex flex-col font-sans select-none'
+                ? 'w-full min-h-full bg-nature-900 flex flex-col font-sans select-none'
                 : `w-72 bg-nature-900 border-r border-nature-800 ${isFleetMode ? 'flex' : 'hidden lg:flex'} flex-col shrink-0 h-screen sticky top-0 font-sans z-30 select-none`}
         >
             {/* Header Brand */}

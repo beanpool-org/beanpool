@@ -653,14 +653,14 @@ export function EconomySection({
                                             )}
                                         </div>
 
-                                        <div className="border-t border-nature-800/80 pt-3 flex items-center justify-between">
+                                        <div className="border-t border-nature-800/80 pt-3 flex flex-wrap items-center justify-between gap-2">
                                             <div>
                                                 <div className="text-[10px] text-nature-400 uppercase font-bold">Balance</div>
                                                 <div className="text-sm font-bold text-white font-mono">
                                                     {t.balance ?? '0.00'} beans
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex flex-wrap items-center gap-2">
                                                 <button
                                                     onClick={() => setEditingLocationPubkey(editingLocationPubkey === pubkeyStr ? null : pubkeyStr)}
                                                     className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"

@@ -228,7 +228,7 @@ export function EscrowDisputesPanel({
                 </div>
 
                 {/* Subtabs for Pending vs Resolved */}
-                <div className="flex items-center gap-2 mt-5 pt-4 border-t border-nature-800/80">
+                <div className="flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-nature-800/80">
                     <button
                         onClick={() => setFilterStatus('pending')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
@@ -264,8 +264,8 @@ export function EscrowDisputesPanel({
 
             {/* Error banner */}
             {error && (
-                <div className="bg-rose-950/80 border border-rose-800 rounded-2xl p-4 text-rose-300 text-xs flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                <div className="bg-rose-950/80 border border-rose-800 rounded-2xl p-4 text-rose-300 text-xs flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 break-words">
                         <span>⚠️</span>
                         <span>{error}</span>
                     </div>

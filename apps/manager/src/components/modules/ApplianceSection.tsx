@@ -1145,10 +1145,10 @@ export function ApplianceSection({
                                 {(Array.isArray(snapshots) ? snapshots : []).map((s) => (
                                     <div
                                         key={s.name}
-                                        className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between gap-3 text-xs"
+                                        className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 flex flex-wrap items-center justify-between gap-3 text-xs"
                                     >
-                                        <div>
-                                            <div className="font-bold text-white font-mono">{s.name}</div>
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-white font-mono break-all">{s.name}</div>
                                             <div className="text-[10px] text-nature-400 mt-0.5">
                                                 {s.createdAt ? new Date(s.createdAt).toLocaleString() : 'Recent snapshot'} · {Math.round((s.sizeBytes || 0) / 1024)} KB
                                             </div>

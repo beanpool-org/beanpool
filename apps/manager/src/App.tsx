@@ -945,10 +945,25 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         },
     });
     const closeMenu = useCallback(() => closeMenuEntry(() => setMenuOpen(false)), []);
-    /** Leave the menu for a screen: its history entry becomes that screen, so Back does not reopen the menu. */
+    /**
+     * Leave the menu for a screen: the menu's history entry becomes that screen, so Back does not reopen the menu.
+     * Choosing the screen already showing just closes the menu.
+     */
     const leaveMenu = (tab: TabId, sub?: string) => {
+        const target = sub ?? defaultSubTab(tab);
+        if (tab === activeTab && target === currentSubTab) {
+            closeMenu();
+            return;
+        }
         if (readSettingsEntry(window.history.state)?.menu) {
-            window.history.replaceState({ bpSettings: { tab, sub: sub ?? defaultSubTab(tab) } }, '');
+            window.history.replaceState({ bpSettings: { tab, sub: target } }, '');
+        }
+        setMenuOpen(false);
+    };
+    /** The manual takes over the menu's history entry (it would otherwise add its own on top). */
+    const leaveMenuForManual = () => {
+        if (readSettingsEntry(window.history.state)?.menu) {
+            window.history.replaceState({ bpSettings: { tab: activeTab, sub: currentSubTab }, bpManual: true }, '');
         }
         setMenuOpen(false);
     };
@@ -1032,7 +1047,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                             setActiveTab(tab);
                         }}
                         onClose={closeMenu}
-                        onBeforeManual={() => leaveMenu(activeTab, currentSubTab)}
+                        onBeforeManual={leaveMenuForManual}
                         nodeHealthMap={nodeHealthMap}
                         tabAlertCounts={tabAlertCounts}
                         isFleetMode={false}

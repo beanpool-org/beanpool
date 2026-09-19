@@ -9,13 +9,16 @@ import React, { useLayoutEffect, useRef } from 'react';
  */
 export function SubTabStrip({ wrap, children }: { wrap: boolean; children: React.ReactNode }) {
     const ref = useRef<HTMLDivElement>(null);
-    const lastActive = useRef<Element | null>(null);
+    const last = useRef<{ active: Element | null; width: number }>({ active: null, width: 0 });
 
     useLayoutEffect(() => {
         const strip = ref.current;
         const active = strip?.querySelector('[aria-current="page"]') ?? null;
-        if (!strip || !active || active === lastActive.current) return;
-        lastActive.current = active;
+        if (!strip || !active) return;
+        // Only when the current tab changes, or the labels change width (a count arriving): not on every render,
+        // which would snap the strip back while the owner is scrolling it.
+        if (active === last.current.active && strip.scrollWidth === last.current.width) return;
+        last.current = { active, width: strip.scrollWidth };
         if (strip.scrollWidth <= strip.clientWidth) return;
         // Move the strip only: scrollIntoView would scroll the page too.
         const s = strip.getBoundingClientRect();

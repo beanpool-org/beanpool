@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 8,
-  "hash": "d58d53fae443af0d237ef4d6266617382168185a3c76b6c93184d40366334070",
+  "version": 9,
+  "hash": "6822fe8fb4e040dfd64264ab9744c090994e1060dd309abb8306512f48958ebc",
   "sections": [
     {
       "id": "setup",
@@ -692,7 +692,7 @@
         {
           "type": "ul",
           "items": [
-            "**Dismiss Flag**: marks the report reviewed. Nothing happens to the person.",
+            "**Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was \"reviewed and kept\".",
             "**Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.",
             "**Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.",
             "To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on keeping it."
@@ -711,7 +711,10 @@
           "items": [
             "If someone had paid for it and the beans were still held, they get them back. Open requests are cancelled. An event is cancelled, and people going to it get a cancellation notice.",
             "Settings calls this permanent, but the record stays in the database, hidden. It cannot be brought back from Settings.",
-            "**The author is not told**, and nor is the person who reported it. Send them a message yourself."
+            "**The author is told**: \"Your post \"…\" was removed by the community's admins\". It never says which admin, or who reported it.",
+            "**Everyone who reported it is told** \"The post you reported was removed\". Each hears only about their own report, never about the others. Every open report on that post is closed as handled.",
+            "These come as an alert in the app and, if the member allows Marketplace notifications, on their phone.",
+            "Settings does not offer a reason yet. When it does, the reason you pick (spam or a scam, offensive, misleading, unsafe or illegal, against the community's rules) is added to the author's alert. To explain more, message them yourself."
           ]
         },
         {
@@ -889,11 +892,22 @@
         },
         {
           "type": "h2",
-          "text": "Know this"
+          "text": "What the two people see"
         },
         {
           "type": "p",
-          "text": "The notification the two people receive shows who ruled as a long key, or as \"owner:password\" if you used the password. They can see it was an admin, not which one by name."
+          "text": "The notification, the chat line and the ledger memo name who ruled in words:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Signed in with your own key:** your callsign.",
+            "**Signed in with the admin password:** \"a community admin\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "They never show a key or \"owner:password\". Settings still records exactly who ruled, for the other admins."
         }
       ]
     },

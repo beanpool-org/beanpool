@@ -26,6 +26,8 @@ There is no "dispute" button in the app. Ask the admins of your community for he
 
 An admin cannot settle a deal they are part of, or one involving an enterprise they keep.
 
+You both get an alert and a line in your chat saying how it was settled. It names the admin by their callsign, or says "a community admin".
+
 ## If someone is not honest
 
 - Leave a fair review. Low stars reduce the trust they earn.

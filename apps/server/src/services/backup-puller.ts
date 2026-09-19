@@ -29,8 +29,9 @@
  *   BACKUP_REPLICATION_TOKEN      the primary's replication token (or set it under Live
  *                                 Backup Server, which stores it in local-config.json);
  *                                 sent in X-Replication-Token
- *   BACKUP_ADMIN_PASSWORD         LEGACY — the primary's admin password. Still honoured so an
- *                                 old standby keeps copying, but on start the standby swaps it
+ *   BACKUP_ADMIN_PASSWORD         LEGACY — the primary's admin password. Still sent while no
+ *                                 token is set (a primary with two-factor or token-only on
+ *                                 refuses it), but on start the standby swaps it
  *                                 for a token when it safely can (migrateStandbyPassword) and
  *                                 warns every start while it can't.
  *   BACKUP_PULL_INTERVAL_MS       optional — default 60000 (60s)
@@ -348,14 +349,17 @@ function nextMode(): PullMode {
 //   1. It already has a token too → the token is what it copies with; the password is wiped.
 //   2. The main server has NO replication token yet → the standby uses the password once to
 //      mint one, checks the new token works, stores only the token and wipes the password.
-//   3. Otherwise it keeps copying with the password (never silently break copying) and warns
-//      loudly every start; Settings shows a banner saying what to do.
+//   3. Otherwise it keeps the password (never wipes it on a guess) and warns loudly every
+//      start; Settings shows a banner that says whether this standby is still copying.
 //
 // Case 3 covers a main server that already has a token (minting another would REPLACE it and
 // cut off whichever standby is using it — the server keeps a single token), a main server
-// with two-factor sign-in on (the password alone can't reach the token routes), an older
-// server without them, and a main server that can't be reached right now (retried on a later
-// pull, at most hourly).
+// with two-factor sign-in on or a changed password (it refuses the password, so the standby is
+// NOT copying), an older server without token routes (still takes the password), and a main
+// server that can't be reached right now (retried on a later pull, at most hourly). Token-only
+// on the main server also means NOT copying. Two old standbys swapping at the same moment could
+// both mint; the token is checked again after a pause so the one whose token was replaced keeps
+// its password.
 //
 // A password that came from BACKUP_ADMIN_PASSWORD in .env can't be wiped by the node (the file
 // is outside the container); once a token is stored it is never used, and the warning asks the
@@ -412,9 +416,14 @@ export function getStandbyCredentialState(): StandbyCredentialState {
     return refreshCredentialState(warning, credentialState.lastSwap);
 }
 
-/** A failure reason that never echoes a secret. */
+/**
+ * A failure reason that never echoes a secret. `copying` is what that failure means for the
+ * password pulls this standby falls back to: true = the main server still takes the password,
+ * false = it refuses it (two-factor on, password changed, token-only on), null = not known
+ * right now (main server unreachable or erroring).
+ */
 class SwapError extends Error {
-    constructor(message: string, readonly retryable: boolean) { super(message); }
+    constructor(message: string, readonly retryable: boolean, readonly copying: boolean | null) { super(message); }
 }
 
 async function primaryPost(primaryUrl: string, apiPath: string, headers: Record<string, string>, body: Record<string, unknown>): Promise<Response> {
@@ -428,10 +437,22 @@ async function primaryPost(primaryUrl: string, apiPath: string, headers: Record<
             signal: controller.signal,
         });
     } catch (e: any) {
-        throw new SwapError(e?.name === 'AbortError' ? 'the main server did not answer in time' : 'the main server could not be reached', true);
+        throw new SwapError(e?.name === 'AbortError' ? 'the main server did not answer in time' : 'the main server could not be reached', true, null);
     } finally {
         clearTimeout(timer);
     }
+}
+
+/** True when the main server accepts this token for replication. */
+async function tokenWorks(primaryUrl: string, token: string): Promise<boolean> {
+    const res = await primaryPost(primaryUrl, '/api/local/admin/replication-access', { 'X-Replication-Token': token }, {});
+    return res.ok;
+}
+
+/** How long a freshly made token must keep working before the password is wiped (see race note). */
+function swapRecheckMs(): number {
+    const v = Number(process.env.BACKUP_SWAP_RECHECK_MS);
+    return Number.isFinite(v) && v >= 0 ? v : 3_000;
 }
 
 async function mintTokenWithPassword(primaryUrl: string, password: string): Promise<string> {
@@ -439,28 +460,58 @@ async function mintTokenWithPassword(primaryUrl: string, password: string): Prom
     const statusRes = await primaryPost(primaryUrl, '/api/local/admin/replication-token/status', pwHeaders, { password });
     if (!statusRes.ok) {
         const body = await statusRes.json().catch(() => ({} as any));
-        if (body?.totpRequired) throw new SwapError('the main server has two-factor sign-in on, so the password alone cannot make a token', false);
-        if (statusRes.status === 401 || statusRes.status === 403) throw new SwapError(`the main server refused the stored password (HTTP ${statusRes.status})`, false);
-        if (statusRes.status === 404) throw new SwapError('the main server is too old to make replication tokens', false);
-        throw new SwapError(`the main server answered HTTP ${statusRes.status}`, statusRes.status >= 500);
+        if (body?.totpRequired) throw new SwapError('the main server has two-factor sign-in on, so it refuses the password alone', false, false);
+        if (statusRes.status === 401 || statusRes.status === 403) throw new SwapError(`the main server refused the stored password (HTTP ${statusRes.status}); it may have been changed`, false, false);
+        if (statusRes.status === 404) throw new SwapError('the main server is too old to make replication tokens', false, true);
+        throw new SwapError(`the main server answered HTTP ${statusRes.status}`, statusRes.status >= 500, null);
     }
     const status = await statusRes.json().catch(() => ({} as any));
+    // Token-only on the main server refuses password pulls: this standby is not copying.
+    const passwordStillCopies = !status?.tokenOnly;
     if (status?.hasToken) {
-        throw new SwapError('the main server already has a replication token, and making a new one would cut off any standby using it', false);
+        throw new SwapError('the main server already has a replication token, and making a new one would cut off any standby using it', false, passwordStillCopies);
     }
     const genRes = await primaryPost(primaryUrl, '/api/local/admin/replication-token/generate', pwHeaders, { password });
     const gen = await genRes.json().catch(() => ({} as any));
     if (!genRes.ok || typeof gen?.token !== 'string' || !gen.token) {
-        throw new SwapError(`the main server did not make a token (HTTP ${genRes.status})`, genRes.status >= 500);
+        throw new SwapError(`the main server did not make a token (HTTP ${genRes.status})`, genRes.status >= 500, genRes.status >= 500 ? null : passwordStillCopies);
     }
     // Prove the new token opens the replication door before trusting copying to it.
-    const checkRes = await primaryPost(primaryUrl, '/api/local/admin/replication-access', { 'X-Replication-Token': gen.token }, {});
-    if (!checkRes.ok) throw new SwapError(`the new token did not work (HTTP ${checkRes.status})`, false);
+    if (!(await tokenWorks(primaryUrl, gen.token))) throw new SwapError('the new token did not work', false, passwordStillCopies);
+    // Race: two old standbys of one tokenless main server can both see "no token" and both
+    // make one; the second replaces the first. Check again after a pause, so the standby whose
+    // token was replaced keeps its password instead of wiping it and being cut off.
+    const pause = swapRecheckMs();
+    if (pause > 0) await new Promise(r => setTimeout(r, pause));
+    if (!(await tokenWorks(primaryUrl, gen.token))) {
+        throw new SwapError('another standby made a replication token on the main server at the same moment, which replaced this one', false, passwordStillCopies);
+    }
     return gen.token;
 }
 
+// The fix for every swap failure. The main server keeps only a hash of its token and shows it
+// once, so "copy it from the main server" is not possible: reuse a saved one or make a new one.
+const TOKEN_FIX_STEPS = 'To fix: if you saved the main server\'s replication token when it was made, paste it here under Live Backup Server and save. ' +
+    'If not, on the main server open Replication Access, make a new token, and paste it into every standby of that main server ' +
+    '(making one replaces the old one, which stops any standby still using it).';
+
 const PASSWORD_PENDING_NOTE = "This server holds the main server's admin password to copy with. It swaps it for a replication token when it starts as a standby; if it can't, this says why.";
 const ENV_PASSWORD_NOTE ="BACKUP_ADMIN_PASSWORD is still set in this server's .env. It holds the main server's admin password in plain text and is no longer used: delete that line and restart.";
+
+/** The operator-facing warning for a swap that did not happen. Never contains a secret. */
+function swapFailureWarning(why: string, copying: boolean | null, storedPw: boolean): string {
+    const where = storedPw ? 'in plain text in local-config.json' : 'in plain text in BACKUP_ADMIN_PASSWORD in .env';
+    const lead = copying === false
+        ? `This standby is NOT copying: the main server refuses its stored admin password. It could not swap the password for a replication token: ${why}.`
+        : copying === true
+            ? `This standby still copies with the main server's admin password, which is kept ${where}. It could not swap it for a replication token: ${why}.`
+            : `This standby could not swap the main server's admin password for a replication token: ${why}. It tries again every hour. Until then it copies with the password if the main server still takes it.`;
+    const tail = copying === false
+        ? ` The password is still kept ${where}.`
+        : '';
+    return `${lead}${tail} ${TOKEN_FIX_STEPS} The stored password is then wiped` +
+        (storedPw ? '.' : '; also delete BACKUP_ADMIN_PASSWORD from .env and restart.');
+}
 
 /**
  * Swap a legacy stored/env admin password for a replication token (see the block comment
@@ -475,6 +526,11 @@ export async function migrateStandbyPassword(): Promise<StandbyCredentialState> 
     if (token) {
         if (storedPw) {
             updateLocalConfig({ backupAdminPassword: null });
+            if (getLocalConfig().backupAdminPassword) {
+                const warning = "This standby copies with its replication token, but could not delete the main server's admin password from local-config.json (the file could not be written). Check the data directory is writable and has free space, then restart.";
+                logger.security('P2P', `[Backup] ⚠️ ${warning}`);
+                return refreshCredentialState(warning, 'failed');
+            }
             logger.info('P2P', "[Backup] 🔐 Removed the main server's admin password from this standby. It copies with its replication token.");
         }
         if (envPw) logger.security('P2P', `[Backup] ⚠️ ${ENV_PASSWORD_NOTE}`);
@@ -486,22 +542,25 @@ export async function migrateStandbyPassword(): Promise<StandbyCredentialState> 
 
     // 2. Password only: use it once to mint a token.
     try {
-        if (!primaryUrl || !isAllowedPrimaryUrl(primaryUrl)) throw new SwapError('the main server address is missing or not https', false);
+        // The pull refuses a missing or non-https address too, so nothing is copying.
+        if (!primaryUrl || !isAllowedPrimaryUrl(primaryUrl)) throw new SwapError('the main server address is missing or not https', false, false);
         const minted = await mintTokenWithPassword(primaryUrl, password);
         updateLocalConfig({ backupReplicationToken: minted, backupAdminPassword: null });
+        // saveLocalConfig logs and swallows a failed write: read it back before claiming success.
+        const saved = getLocalConfig();
+        if (saved.backupReplicationToken !== minted || saved.backupAdminPassword) {
+            throw new SwapError('the new token could not be saved to local-config.json (check the data directory is writable and has free space)', true, null);
+        }
         logger.info('P2P', "[Backup] 🔐 Swapped the main server's admin password for a replication token. The password is no longer stored on this standby.");
         if (envPw) logger.security('P2P', `[Backup] ⚠️ ${ENV_PASSWORD_NOTE}`);
         return refreshCredentialState(envPw ? ENV_PASSWORD_NOTE : null, 'minted-token');
     } catch (e: any) {
-        // 3. Could not swap safely: keep copying with the password, and say so loudly.
+        // 3. Could not swap safely: keep the password (never wipe it on a guess) and say
+        // plainly whether this standby is still copying with it.
         migrateRetryable = e instanceof SwapError ? e.retryable : true;
         const why = e instanceof SwapError ? e.message : 'an unexpected error';
-        const where = storedPw ? 'in plain text in local-config.json' : 'in plain text in BACKUP_ADMIN_PASSWORD in .env';
-        const warning = `This standby still copies with the main server's admin password, which is kept ${where}. ` +
-            `It could not swap it for a replication token automatically: ${why}. ` +
-            'To fix: on the main server open Replication Access and copy its replication token (make one if there is none), ' +
-            'then paste it here under Live Backup Server and save. The stored password is then wiped' +
-            (storedPw ? '.' : '; also delete BACKUP_ADMIN_PASSWORD from .env and restart.');
+        const copying = e instanceof SwapError ? e.copying : null;
+        const warning = swapFailureWarning(why, copying, !!storedPw);
         logger.security('P2P', `[Backup] ⚠️ ${warning}`);
         return refreshCredentialState(warning, 'failed');
     }

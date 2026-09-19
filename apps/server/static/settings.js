@@ -3188,8 +3188,12 @@
                 if (stateEl) {
                     stateEl.textContent = d.hasToken
                         ? (d.tokenOnly ? 'set · token-only enforced' : 'set · admin-password fallback active')
-                        : 'not set (admin password in use)';
-                    stateEl.style.color = d.hasToken ? '#10b981' : '#f59e0b';
+                        : (d.tokenOnly
+                            // Token-only with no token (a new install, or a cleared token): the
+                            // admin password is refused too, so no standby can copy.
+                            ? 'not set · nothing can copy until you make a token'
+                            : 'not set · standbys copy with the admin password');
+                    stateEl.style.color = d.hasToken ? '#10b981' : d.tokenOnly ? '#ef4444' : '#f59e0b';
                 }
                 const cb = document.getElementById('rep-token-only');
                 if (cb) cb.checked = !!d.tokenOnly;

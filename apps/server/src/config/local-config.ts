@@ -44,8 +44,9 @@ export interface LocalConfig {
     backupPrimaryUrl?: string | null;
     // LEGACY, never written any more. Older standbys stored the main server's admin password
     // here in plain text. On start a standby swaps it for a replication token and wipes it
-    // (services/backup-puller.ts migrateStandbyPassword); where it can't, it keeps copying with
-    // it and warns. It is stripped from every backup file this node writes (redactLocalConfig).
+    // (services/backup-puller.ts migrateStandbyPassword); where it can't, it keeps it and warns,
+    // saying whether the main server still takes it. It is stripped from every backup file
+    // this node writes (redactLocalConfig).
     backupAdminPassword?: string | null;
     // --- Replication credential (live backup) ---
     // Primary side: scrypt hash of a dedicated replication token. The snapshot-pull

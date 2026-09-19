@@ -9,12 +9,19 @@
  *   2. Live Backup Server (replication-config/save) refuses the admin password, accepts a token.
  *   3. Warning path: a legacy standby whose main server already has a token keeps copying with
  *      the password (no other standby is cut off), warns, and Settings carries the warning.
- *   4. Warning path: two-factor sign-in on the main server — no token made, warning says why.
+ *      With token-only on as well, the banner says it is NOT copying, and the pull does fail.
+ *   4. Warning path: two-factor sign-in on the main server, or a stored password it refuses —
+ *      no token made, and the banner says the standby is NOT copying (the pull really fails).
  *   5. Backup files and /api responses never carry the stored password.
  *   6. Auto-swap: a legacy standby whose main server has no token mints one with the password,
  *      stores only the token, and the password is nowhere in the data dir (grep, incl. state.db).
  *   7. Copying works end to end with the token, also with token-only switched on.
  *   8. A token already present: a stored password is wiped; an env password is warned about.
+ *   9. Race: a token replaced by another standby's swap during the re-check keeps the password;
+ *      two swaps at once leave exactly one working token.
+ *  10. A swap whose config write fails is not reported as done, and nothing is wiped.
+ *  11. Node Settings' Replication Access status line (static/settings.js, run against the real
+ *      route) says nothing can copy when token-only is on with no token.
  *
  * Main server and standby share one process and one data dir, as in test-backup-topology: the
  * node signs its own snapshot and trusts itself as the `mirror`. The puller talks to the main
@@ -28,6 +35,7 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import { execFileSync } from 'node:child_process';
+import vm from 'node:vm';
 import type { AddressInfo } from 'node:net';
 import Koa from 'koa';
 
@@ -36,6 +44,8 @@ process.env.ADMIN_PASSWORD = ADMIN_PW;
 delete process.env.BACKUP_ADMIN_PASSWORD;
 delete process.env.BACKUP_REPLICATION_TOKEN;
 delete process.env.BACKUP_PRIMARY_URL;
+// The swap re-checks a new token after a pause (race guard); keep it short here.
+process.env.BACKUP_SWAP_RECHECK_MS = '150';
 
 // Everything the node prints, so the logs can be checked for the password.
 const printed: string[] = [];
@@ -171,19 +181,51 @@ async function main() {
         const stillCopies = await requestResync();
         assert(stillCopies.ok, `3. copying still works with the password (${stillCopies.error || 'ok'})`);
         assert(getReplicationAccessLog().lastPullAuth === 'admin-pw', '3. that pull used the admin password');
+        assert(/^This standby still copies with the main server's admin password/.test(warned.warning || '') && !/NOT copying/.test(warned.warning || ''),
+            '3. token-only off: the warning says it still copies (true: the pull below works)');
+        assert(!/copy its replication token/i.test(warned.warning || '') && /make a new token, and paste it into every standby/.test(warned.warning || ''),
+            '3. the fix steps say to reuse a saved token or make a new one for every standby (the main server shows a token only once)');
         const status = await post('/api/local/admin/backup-status', { password: ADMIN_PW });
         assert(/admin password/.test(status.json?.credential?.warning || ''), '3. Settings (backup-status) carries the warning for the banner');
         const cfgGet = await post('/api/local/admin/replication-config/get', { password: ADMIN_PW });
         assert(cfgGet.json?.credential?.passwordStored === true && typeof cfgGet.json?.credential?.warning === 'string', '3. replication-config/get carries the warning too');
+
+        // Token-only on as well: the main server refuses the password, so nothing is copying.
+        updateLocalConfig({ replicationTokenOnly: true });
+        const tokOnly = await migrateStandbyPassword();
+        assert(tokOnly.lastSwap === 'failed' && /^This standby is NOT copying/.test(tokOnly.warning || '') && !/still copies/.test(tokOnly.warning || ''),
+            '3. token already there and token-only on: the warning says NOT copying');
+        resetBrakes();
+        const tokOnlyPull = await requestResync();
+        assert(!tokOnlyPull.ok && /401/.test(tokOnlyPull.error || ''), `3. …and that is true: the password pull is refused (${tokOnlyPull.error || 'ok'})`);
+        updateLocalConfig({ replicationTokenOnly: false });
 
         // ---------- 4. Warning path: two-factor sign-in on the main server ----------
         clearReplicationToken();
         updateLocalConfig({ totpEnabled: true, totpSecret: 'JBSWY3DPEHPK3PXP' });
         const tfa = await migrateStandbyPassword();
         assert(tfa.lastSwap === 'failed' && /two-factor/.test(tfa.warning || ''), '4. two-factor on: no swap, and the warning says so');
+        assert(/^This standby is NOT copying: the main server refuses its stored admin password/.test(tfa.warning || ''), '4. two-factor on: the warning says this standby is NOT copying');
+        assert(!/still copies/.test(tfa.warning || ''), '4. two-factor on: the warning never says it still copies');
+        assert(/Live Backup Server/.test(tfa.warning || '') && /Replication Access, make a new token/.test(tfa.warning || ''), '4. two-factor on: the warning gives the fix steps');
         assert(!getLocalConfig().replicationTokenHash, '4. no token was made on the main server');
-        assert(getLocalConfig().backupAdminPassword === ADMIN_PW, '4. the password is kept so nothing breaks silently');
-        updateLocalConfig({ totpEnabled: false, totpSecret: null });
+        assert(getLocalConfig().backupAdminPassword === ADMIN_PW, '4. the password is kept (not wiped on a guess), though it no longer copies');
+        resetBrakes();
+        const tfaPull = await requestResync();
+        assert(!tfaPull.ok && /401/.test(tfaPull.error || ''), `4. …and NOT copying is true: the password pull gets 401 with two-factor on (${tfaPull.error || 'ok'})`);
+        updateLocalConfig({ totpEnabled: false, totpSecret: null }); // so this test can sign in to read Settings
+        const tfaStatus = await post('/api/local/admin/backup-status', { password: ADMIN_PW });
+        assert(/NOT copying/.test(tfaStatus.json?.credential?.warning || ''), '4. Settings (backup-status) carries the NOT copying banner');
+
+        // A stored password the main server refuses (e.g. it was changed since).
+        updateLocalConfig({ backupAdminPassword: 'an-old-admin-password-9!' });
+        resetBrakes();
+        const refusedPw = await migrateStandbyPassword();
+        assert(refusedPw.lastSwap === 'failed' && /refused the stored password/.test(refusedPw.warning || '') && /^This standby is NOT copying/.test(refusedPw.warning || ''),
+            '4. a refused password: the warning says NOT copying, and why');
+        assert(!/still copies/.test(refusedPw.warning || ''), '4. a refused password: the warning never says it still copies');
+        updateLocalConfig({ backupAdminPassword: ADMIN_PW });
+        resetBrakes();
 
         // ---------- 5. Backup files and API responses ----------
         fs.writeFileSync(path.join(DATA_DIR!, 'genesis.json'), JSON.stringify({ communityId: 'standby-test' }));
@@ -240,6 +282,85 @@ async function main() {
         const envWarn = await migrateStandbyPassword();
         assert(envWarn.using === 'token' && /BACKUP_ADMIN_PASSWORD/.test(envWarn.warning || ''), '8. a password left in .env is warned about, and not used');
         delete process.env.BACKUP_ADMIN_PASSWORD;
+
+        // ---------- 9. Race: two old standbys swapping on one tokenless main server ----------
+        const legacyStandby = () => {
+            clearReplicationToken();
+            updateLocalConfig({ replicationTokenOnly: false, backupAdminPassword: ADMIN_PW, backupReplicationToken: null });
+        };
+        // (a) Deterministic: another standby makes a token while this one is re-checking its own.
+        legacyStandby();
+        process.env.BACKUP_SWAP_RECHECK_MS = '1500';
+        const racing = migrateStandbyPassword();
+        for (let i = 0; i < 100 && !getLocalConfig().replicationTokenHash; i++) await new Promise(r => setTimeout(r, 10));
+        assert(!!getLocalConfig().replicationTokenHash, '9. precondition: this standby made a token and is re-checking it');
+        const other = await post('/api/local/admin/replication-token/generate', { password: ADMIN_PW }, { 'X-Admin-Password': ADMIN_PW });
+        assert(other.status === 200 && typeof other.json?.token === 'string', '9. another standby makes a token meanwhile (replacing it)');
+        const lost = await racing;
+        assert(lost.lastSwap === 'failed' && /another standby made a replication token/.test(lost.warning || ''), '9. the re-check notices its token was replaced, and says so');
+        assert(getLocalConfig().backupAdminPassword === ADMIN_PW && !getLocalConfig().backupReplicationToken, '9. it keeps its password and stores no dead token');
+        assert(await verifyReplicationToken(other.json.token), '9. the other standby\'s token still works');
+
+        // (b) Two swaps at the same moment: exactly one ends with a working token.
+        legacyStandby();
+        process.env.BACKUP_SWAP_RECHECK_MS = '300';
+        const pair = await Promise.all([migrateStandbyPassword(), migrateStandbyPassword()]);
+        const winners = pair.filter(r => r.lastSwap === 'minted-token').length;
+        const losers = pair.filter(r => r.lastSwap === 'failed').length;
+        assert(winners === 1 && losers === 1, `9. two swaps at once: one mints, one backs off (got ${pair.map(r => r.lastSwap).join(', ')})`);
+        const kept = getLocalConfig().backupReplicationToken;
+        assert(typeof kept === 'string' && await verifyReplicationToken(kept), '9. the token stored at the end is the one the main server accepts');
+        process.env.BACKUP_SWAP_RECHECK_MS = '150';
+
+        // ---------- 10. A config write that fails is not reported as a swap ----------
+        legacyStandby();
+        const cfgPath = path.join(DATA_DIR!, 'local-config.json');
+        // Main server and standby share this file here, so make it read-only only once the main
+        // server has stored its new token (during the re-check pause); the standby's write then fails.
+        process.env.BACKUP_SWAP_RECHECK_MS = '800';
+        let unsaved;
+        const printedBefore = printed.length;
+        try {
+            const pending = migrateStandbyPassword();
+            for (let i = 0; i < 100 && !getLocalConfig().replicationTokenHash; i++) await new Promise(r => setTimeout(r, 10));
+            fs.chmodSync(cfgPath, 0o444);
+            unsaved = await pending;
+        } finally { fs.chmodSync(cfgPath, 0o644); process.env.BACKUP_SWAP_RECHECK_MS = '150'; }
+        const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+        if (isRoot) {
+            console.log('  (10 skipped: running as root, a read-only file is still writable)');
+        } else {
+            assert(unsaved.lastSwap === 'failed' && /could not be saved/.test(unsaved.warning || ''), `10. a write that fails is reported as a failure, not "Swapped" (${unsaved.lastSwap}: ${unsaved.warning})`);
+            assert(!printed.slice(printedBefore).some(l => l.includes('Swapped the main server')), '10. no "Swapped…" log line for it');
+            assert(getLocalConfig().backupAdminPassword === ADMIN_PW, '10. the password on disk is untouched');
+        }
+
+        // ---------- 11. Node Settings: Replication Access status line ----------
+        const settingsSrc = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'static', 'settings.js'), 'utf-8');
+        const start = settingsSrc.indexOf('async function loadReplicationAccess()');
+        let depth = 0, end = settingsSrc.indexOf('{', start);
+        for (let i = end; i < settingsSrc.length; i++) {
+            if (settingsSrc[i] === '{') depth++;
+            else if (settingsSrc[i] === '}' && --depth === 0) { end = i + 1; break; }
+        }
+        const els: Record<string, any> = {};
+        for (const id of ['rep-token-state', 'rep-token-only', 'rep-token-only-notice']) els[id] = { textContent: '', style: {}, checked: false };
+        const settingsCtx = vm.createContext({
+            API: `${base}/api/local`, authToken: ADMIN_PW, relativeTime: () => 'now', JSON,
+            fetch: (u: string, init: any) => { resetBrakes(); return fetch(u, init); },
+            document: { getElementById: (id: string) => els[id] || null },
+        });
+        vm.runInContext(settingsSrc.slice(start, end) + '\nthis.loadReplicationAccess = loadReplicationAccess;', settingsCtx);
+        clearReplicationToken();
+        updateLocalConfig({ replicationTokenOnly: true }); // a fresh install, or a token cleared on a token-only server
+        await settingsCtx.loadReplicationAccess();
+        assert(els['rep-token-state'].textContent === 'not set · nothing can copy until you make a token',
+            `11. Settings, token-only with no token: "nothing can copy" (got "${els['rep-token-state'].textContent}")`);
+        assert(!/admin password in use/.test(els['rep-token-state'].textContent), '11. …and never "admin password in use"');
+        updateLocalConfig({ replicationTokenOnly: false });
+        await settingsCtx.loadReplicationAccess();
+        assert(els['rep-token-state'].textContent === 'not set · standbys copy with the admin password', '11. Settings, token-only off with no token: standbys copy with the admin password');
+        assert(els['rep-token-only-notice'].style.display === 'block', '11. …with the token-only-off notice shown');
 
         // ---------- Logs ----------
         const leaked = printed.filter(l => l.includes(ADMIN_PW));

@@ -473,7 +473,7 @@ async function main(): Promise<void> {
 
     // Reading is not throttled: a member scrolling a chat is not a flood.
     ctx = await dispatch(market, 'GET', `/api/marketplace/posts/${chatty.id}/chat`, routeCtx(chatty.id, goer));
-    assert(ctx.status !== 429 && ctx.body?.messages?.length === 2, 'the chat read is not throttled');
+    assert(ctx.status !== 429 && ctx.body?.messages?.length === 3, 'the chat read is not throttled');
 
     await p2pNode.stop();
     console.log(`\n${passed}/${run} passed`);

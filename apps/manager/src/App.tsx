@@ -1032,6 +1032,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                     setActiveTab('home');
                                                 }}
                                                 onCancel={() => setShowColdStart(false)}
+                                                onOpenAccessSecurity={() => {
+                                                    setShowColdStart(false);
+                                                    setNavSubTab('access');
+                                                    setActiveTab('appliance');
+                                                }}
                                             />
                                         </SectionErrorBoundary>
                                     );

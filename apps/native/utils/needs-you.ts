@@ -5,6 +5,7 @@
  */
 
 import type { DecisionWithTally, MyPoolVoting } from './db';
+import { isMuted, type YourChatMute } from './your-groups';
 import { poolVoteBlocker } from './decision-card';
 import { canManageNode, type AdminQueueItem, type SettingsSection } from './node-role';
 
@@ -23,8 +24,10 @@ export type NeedsYouTarget =
     | { to: 'deal'; postId: string; txId: string }
     | { to: 'my-deals' }
     | { to: 'decide' }
-    | { to: 'chat'; conversationId: string; event?: boolean }
-    | { to: 'unread-messages' };
+    | { to: 'chat'; conversationId: string; event?: boolean; thread?: 'group' | 'enterprise' }
+    | { to: 'unread-messages' }
+    /** Talk → Groups (groups slice 2): group, enterprise and event chats are listed there, not under Messages. */
+    | { to: 'your-groups' };
 
 export interface NeedsYouEntry {
     kind: NeedsYouKind;
@@ -186,17 +189,19 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
         });
     }
 
-    // Muted chats stay quiet here too. Enterprise chats are left out: the app has no screen for them yet,
-    // so an icon would have nowhere to land.
-    const groups = (i.groupChats || []).filter(g => g.unreadCount > 0 && !g.mute && g.kind !== 'enterprise');
+    // Muted chats stay quiet here too (a lapsed mute is not a mute). Enterprise keeper chats count like any
+    // other: since groups slice 2 they have a screen, and Talk's Groups total counts them.
+    const groups = (i.groupChats || []).filter(g => g.unreadCount > 0 && !isMuted(g.mute as YourChatMute | null, new Date(i.now)));
     if (groups.length) {
         const [g] = groups;
         out.push({
             kind: 'group', count: groups.length, accent: false,
             label: groups.length === 1 ? `${plural(g.unreadCount, 'new line', 'new lines')} in ${g.name}` : `New lines in ${groups.length} of your groups`,
             target: groups.length === 1
-                ? { to: 'chat', conversationId: g.conversationId, event: g.kind === 'event' || undefined }
-                : { to: 'unread-messages' },
+                ? (g.kind === 'event'
+                    ? { to: 'chat', conversationId: g.conversationId, event: true }
+                    : { to: 'chat', conversationId: g.conversationId, thread: g.kind })
+                : { to: 'your-groups' },
         });
     }
 

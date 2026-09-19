@@ -1116,7 +1116,8 @@ export async function createNodeTreasury(
         body: JSON.stringify({ ...data, password: adminPassword }),
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }
@@ -1174,7 +1175,8 @@ export async function seedTreasuryOffer(
         body: JSON.stringify({ ...offer, password: adminPassword }),
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }

@@ -447,6 +447,17 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         });
     });
 
+    it("createNodeTreasury and seedTreasuryOffer pass the node's refusal through", async () => {
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 400, statusText: 'Bad Request', json: async () => ({ error: 'name and avatar are required' }) });
+        await expect(createNodeTreasury('https://node.example.com', { name: '', avatar: '' }, 'pw')).rejects.toThrow('name and avatar are required');
+
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'Not a treasury' }) });
+        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', credits: 1 }, 'pw')).rejects.toThrow('Not a treasury');
+
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 502, statusText: 'Bad Gateway', json: async () => { throw new Error('not json'); } });
+        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', credits: 1 }, 'pw')).rejects.toThrow('HTTP 502: Bad Gateway');
+    });
+
     it('seedTreasuryOffer sends POST to seed an offer with 2FA session token', async () => {
         fetchMock.mockResolvedValueOnce({
             ok: true,

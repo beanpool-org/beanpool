@@ -252,6 +252,10 @@ export function ApplianceSection({
                     ...data,
                     enabled: Boolean(data.totpEnabled ?? data.enabled),
                 });
+            } else if (res.status === 401) {
+                // The status is held to 2FA like every admin route: a 401 asking for a code means 2FA is on.
+                const err = await res.json().catch(() => ({}));
+                if (err?.totpRequired) setTfaStatus({ enabled: true });
             }
         } catch {}
     };

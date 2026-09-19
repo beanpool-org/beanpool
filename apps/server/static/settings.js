@@ -568,12 +568,17 @@
                 const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 if (!password) { setFallbackUI(); return; }
                 const res = await fetch(`${API}/admin/2fa/status`, { headers: adminHeaders() });
+                let data;
                 if (!res.ok) {
-                    if (res.status === 401) { setFallbackUI(); }
-                    else { setErrorUI(); }
-                    return;
+                    // The status is held to 2FA like every admin route. A 401 asking for a code says 2FA is on;
+                    // showing "Disabled" then would be the old chicken-and-egg bug (docs/2FA.md, 5).
+                    const err = res.status === 401 ? await res.json().catch(() => ({})) : {};
+                    if (err.totpRequired) { data = { totpEnabled: true, backupCodesRemaining: null }; }
+                    else if (res.status === 401) { setFallbackUI(); return; }
+                    else { setErrorUI(); return; }
+                } else {
+                    data = await res.json();
                 }
-                const data = await res.json();
                 
                 if (badge) {
                     if (data.totpEnabled) {
@@ -587,7 +592,9 @@
                         boxEnabled?.classList.remove('hidden');
                         
                         const countEl = document.getElementById('totp-backup-count-text');
-                        if (countEl) countEl.textContent = `${data.backupCodesRemaining ?? 0} emergency backup code(s) remaining`;
+                        if (countEl) countEl.textContent = data.backupCodesRemaining === null
+                            ? 'Sign in again with your 2FA code to see how many backup codes remain'
+                            : `${data.backupCodesRemaining ?? 0} emergency backup code(s) remaining`;
                     } else {
                         badge.textContent = 'Disabled';
                         badge.style.background = 'rgba(148, 163, 184, 0.1)';
@@ -663,6 +670,11 @@
                     showStatus('totp-setup-status', data.error || 'Verification failed — check code', 'error');
                     return;
                 }
+                // Keep the 2FA session the node hands back: every admin call asks for it from now on.
+                if (data.tfaSessionToken) {
+                    tfaSessionToken = data.tfaSessionToken;
+                    sessionStorage.setItem('bp-2fa-session', tfaSessionToken);
+                }
                 document.getElementById('totp-box-setup')?.classList.add('hidden');
                 
                 // Render backup codes safely via textContent nodes
@@ -717,6 +729,8 @@
                     showStatus('totp-disable-status', data.error || 'Failed to disable 2FA', 'error');
                     return;
                 }
+                tfaSessionToken = null;
+                sessionStorage.removeItem('bp-2fa-session');
                 showStatus('totp-disable-status', '2FA disabled', 'success');
                 setTimeout(() => load2faStatus(), 1000);
             } catch (e) {

@@ -102,8 +102,11 @@ These properties are persisted in the node's `data/local-config.json`:
 
 ### `GET /api/local/admin/2fa/status`
 
-**Auth:** Password-only (no TOTP required). This is deliberate — the UI needs to know
-whether 2FA is enabled *before* the user can provide a TOTP code. See [Bugs fixed](#bugs-encountered-and-fixed).
+**Auth:** `checkAdminAuth()` (password + 2FA session or code, or a key session), owner or admin. Until
+2026-09-19 this took the password alone so the UI could learn whether 2FA was on before it had a code
+(bug 5 below). It no longer needs to: with 2FA on, the password alone gets `401 { totpRequired: true }`, and
+both settings UIs read that as "2FA is on". The password-only version also let a caller clear the password
+brake between wrong codes.
 
 **Response:**
 ```json
@@ -120,7 +123,7 @@ whether 2FA is enabled *before* the user can provide a TOTP code. See [Bugs fixe
 
 ### `POST /api/local/admin/2fa/setup`
 
-**Auth:** Full `checkAdminAuth()` (password + TOTP if already enabled).
+**Auth:** Full `checkAdminAuth()` (password + TOTP if already enabled, or a key session). Owner only.
 
 Generates a new pending secret, QR code, and 8 backup codes. Does NOT
 overwrite an active `totpSecret`.
@@ -142,7 +145,7 @@ overwrite an active `totpSecret`.
 
 ### `POST /api/local/admin/2fa/verify`
 
-**Auth:** Full `checkAdminAuth()` (password only at this point — 2FA not yet active).
+**Auth:** Full `checkAdminAuth()` (password only at this point — 2FA not yet active — or a key session). Owner only.
 
 **Request body:** `{ "code": "123456" }`
 
@@ -171,7 +174,11 @@ Verifies the 6-digit code against `totpPendingSecret`. On success:
 
 ### `POST /api/local/admin/2fa/disable`
 
-**Auth:** Full `checkAdminAuth()` (password + TOTP required since 2FA is currently active).
+**Auth:** Full `checkAdminAuth()` (password + 2FA session or code, or a key session), **owner only**, and a code
+that is right *now*: a 6-digit code from the authenticator or one unused backup code, in `code`, `totpCode` or
+`X-Admin-TOTP`. A 2FA session from an earlier sign-in, or a key session, is not enough on its own: turning 2FA off
+is what someone holding a stolen session would want. A backup code counts so an owner who lost the phone can
+still turn it off. A wrong code counts against the password brake (password callers) and the tarpit.
 
 **Request body:** `{ "code": "123456" }`
 
@@ -388,6 +395,10 @@ UI fell back to showing "Disabled".
 
 **Fix:** Status endpoint now uses password-only inline verification (no TOTP enforcement).
 The response only contains non-sensitive metadata.
+
+**Superseded 2026-09-19:** the password-only status route let a caller clear the password brake between wrong
+2FA codes, and was one of the routes that skipped 2FA. It is back on `checkAdminAuth()`; the UIs now read a
+`401 { totpRequired: true }` from it as "2FA is on" instead of falling back to "Disabled".
 
 ### 6. Frontend property name mismatch
 

@@ -251,7 +251,10 @@ ${body}
 const linkItem = g => `            <li><a href="${g.slug}.html"><strong>${inline(g.title)}</strong><span>${inline(g.summary)}</span></a></li>`;
 
 /** Every file under apps/website/guide/, keyed by file name. */
-export function renderWebsite(guide) {
+export function renderWebsite(guide, { operatorManualOnWeb = false } = {}) {
+    const operators = operatorManualOnWeb
+        ? `Read the <a href="operators/index.html">operator manual</a>.`
+        : `Its manual is in your server's Settings: sign in and press Manual in the side bar.`;
     const foot = `        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version ${guide.version}.</p>`;
     const bySlug = new Map(guide.guides.map(g => [g.slug, g]));
     const about = guide.sections.find(s => s.id === ABOUT_SECTION);
@@ -263,7 +266,7 @@ export function renderWebsite(guide) {
         body: [
             `        <p class="kicker">For members</p>`,
             `        <h1>Members' guide</h1>`,
-            `        <p class="lede">For people who already belong to a BeanPool community. New here? Start on the <a href="../index.html">home page</a>. Running a community's server? Read the <a href="operators/index.html">operator manual</a>.</p>`,
+            `        <p class="lede">For people who already belong to a BeanPool community. New here? Start on the <a href="../index.html">home page</a>. Running a community's server? ${operators}</p>`,
             `        <nav class="guide-toc" aria-label="Contents">`,
             `            <h2>Contents</h2>`,
             `            <ul>`,
@@ -311,11 +314,12 @@ export function renderWebsite(guide) {
 
 // ─── The operator manual ───────────────────────────────────────────────────────
 // For the owners and admins who run a community's server. The same block model and the same checks as the members'
-// guide, in a separate collection (operators/) with its own version: the node's Settings bundles operators.json, and
-// the website publishes the same bytes under /guide/operators/. It is not in the members' guide.json, so the member
-// apps neither carry it nor find it in their search.
+// guide, in a separate collection (operators/) with its own version: the node's Settings bundles operators.json. The
+// website copy under /guide/operators/ is rendered here but not written: scripts/build.mjs has it switched off
+// (PUBLISH_OPERATORS_WEBSITE, Marty's decision 2026-09-19). It is not in the members' guide.json, so the member apps
+// neither carry it nor find it in their search.
 
-/** Every file under apps/website/guide/operators/, keyed by file name. */
+/** Every file of the website's copy (apps/website/guide/operators/, when published), keyed by file name. */
 export function renderOperatorsWebsite(manual) {
     const root = '../../';
     const nav = `<a href="index.html">Operator manual</a>

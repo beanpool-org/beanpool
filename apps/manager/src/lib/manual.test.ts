@@ -1,6 +1,6 @@
 /**
  * Divergence checks between the operator manual and Settings:
- *   - Settings bundles exactly the bytes the guide build writes, which are the website's bytes too;
+ *   - Settings bundles exactly the bytes the guide build writes, and there is no website copy (Marty, 2026-09-19);
  *   - every "?" points at a page that exists;
  *   - every screen and sub-tab in Settings has a "?" entry, so a new screen cannot ship without help.
  */
@@ -14,11 +14,18 @@ const repo = path.resolve(__dirname, '../../../..');
 const read = (rel: string) => fs.readFileSync(path.join(repo, rel), 'utf8');
 
 describe('operator manual in Settings', () => {
-    it('is the generated operators.json, byte for byte the same as the website copy', () => {
+    it('is the generated operators.json', () => {
         const generated = read('packages/beanpool-guide/generated/operators.json');
-        const website = read('apps/website/guide/operators/operators.json');
-        expect(website).toBe(generated);
         expect(OPERATOR_MANUAL).toEqual(JSON.parse(generated));
+    });
+
+    it('is not published on the website', () => {
+        // The guard for Marty's decision of 2026-09-19: the manual ships in node Settings only, and the website copy
+        // waits until the security weak spots it describes are fixed (PUBLISH_OPERATORS_WEBSITE in
+        // packages/beanpool-guide/scripts/build.mjs). Remove this only together with that switch.
+        expect(fs.existsSync(path.join(repo, 'apps/website/guide/operators')),
+            'apps/website/guide/operators/ must not exist: the operator manual is not published on beanpool.org until its security weak spots are fixed (Marty, 2026-09-19)')
+            .toBe(false);
     });
 
     it('passes the same validation the apps apply to the members\' guide', () => {

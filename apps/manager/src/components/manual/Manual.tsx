@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { searchGuide, splitBold, type GuideBlock, type GuidePage } from '@beanpool/core';
-import { OPERATOR_MANUAL, OPERATOR_MANUAL_WEB_URL, SCREEN_HELP, helpPageFor, manualPage, type HelpScreen } from '../../lib/manual';
+import { OPERATOR_MANUAL, SCREEN_HELP, helpPageFor, manualPage, type HelpScreen } from '../../lib/manual';
 
 /**
  * The operator manual inside Settings: a full-screen reader opened from the sidebar's Manual button, from the
@@ -204,8 +204,8 @@ export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null
                     )}
 
                     <p className="mt-10 pt-4 border-t border-nature-800 text-sm text-nature-500">
-                        Manual version {OPERATOR_MANUAL.version}, matching the version this server runs. Also at{' '}
-                        <a href={OPERATOR_MANUAL_WEB_URL} target="_blank" rel="noreferrer" className="text-terra-300 underline">beanpool.org/guide/operators</a>.
+                        Manual version {OPERATOR_MANUAL.version}, matching the version this server runs. This manual is part of
+                        your server's Settings and works without an internet connection.
                     </p>
                 </div>
             </div>

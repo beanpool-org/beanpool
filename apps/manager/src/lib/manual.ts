@@ -1,9 +1,11 @@
 /**
  * The operator manual ("how to run your community"), shown inside Settings.
  *
- * One source: packages/beanpool-guide/operators/*.md. Its build writes generated/operators.json, bundled here, and
- * the same bytes to beanpool.org/guide/operators/operators.json. Settings shows only the bundled copy and never
- * fetches a newer one: the manual on a server describes the version that server runs.
+ * One source: packages/beanpool-guide/operators/*.md. Its build writes generated/operators.json, bundled here.
+ * Settings shows only the bundled copy and never fetches a newer one: the manual on a server describes the version
+ * that server runs. There is no website copy and nothing here links to one: the guide build has it switched off
+ * until the security weak spots it describes are fixed (packages/beanpool-guide/scripts/build.mjs,
+ * PUBLISH_OPERATORS_WEBSITE; Marty's decision, 2026-09-19).
  *
  * It is the same block model as the members' guide, so the checks, search and bold-splitting in @beanpool/core's
  * member-guide.ts apply unchanged.
@@ -15,9 +17,6 @@ import bundledManual from '../../../../packages/beanpool-guide/generated/operato
 
 /** The bundled manual. Built from checked source, so it always validates; a broken build fails the tests. */
 export const OPERATOR_MANUAL: Guide = validateGuide(bundledManual) as Guide;
-
-/** Where the website keeps the same manual, for the "Also at" line. */
-export const OPERATOR_MANUAL_WEB_URL = 'https://beanpool.org/guide/operators/';
 
 /**
  * Every Settings screen and the manual page its "?" opens. A screen is a section tab, or a section tab and one of

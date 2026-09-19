@@ -12,9 +12,9 @@ Every event has its own chat. The host and everyone who has tapped **Going** can
 ## Opening it
 
 - Open the event and tap **Open event chat**.
-- Or find it in **Talk**, under **Messages**, with your other chats.
+- Or find it in **Talk**, under **Groups**, marked 📅 **Event**.
 
-At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap **View event** to go back to the event.
+At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap the event's name at the very top to go back to the event.
 
 ## Writing
 

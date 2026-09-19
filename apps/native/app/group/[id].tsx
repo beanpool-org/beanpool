@@ -33,7 +33,7 @@ import { hapticSuccess } from '../../utils/haptics';
 export default function GroupInviteLanding() {
     const params = useLocalSearchParams<Record<string, string>>();
     const id = String(params.id || '');
-    const preview = React.useMemo(() => inviteLandingPreviewFromParams(params), [params.name, params.category, params.joinPolicy, params.memberCount, params.invited]); // eslint-disable-line react-hooks/exhaustive-deps
+    const preview = React.useMemo(() => inviteLandingPreviewFromParams(params), [params.name, params.category, params.joinPolicy, params.memberCount, params.invited]);
     const insets = useSafeAreaInsets();
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);

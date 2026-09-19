@@ -839,11 +839,12 @@ router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    // A moderator takes down reported posts only (admin-auth.ts, MODERATOR_ROUTES): someone must have reported it.
+    // A moderator takes down reported posts only (admin-auth.ts, MODERATOR_ROUTES): the post needs an open
+    // report. A dismissed ('reviewed') or actioned one no longer counts.
     if ((ctx.state as any)?.adminRole === 'moderator'
-        && !db.prepare('SELECT 1 FROM abuse_reports WHERE target_post_id = ? LIMIT 1').get(ctx.params.id)) {
+        && !db.prepare("SELECT 1 FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL) LIMIT 1").get(ctx.params.id)) {
         ctx.status = 403;
-        ctx.body = { success: false, error: 'Moderators can remove a post only when someone has reported it' };
+        ctx.body = { success: false, error: 'Moderators can remove a post only while a report on it is open' };
         return;
     }
     try {

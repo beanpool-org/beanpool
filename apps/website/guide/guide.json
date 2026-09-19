@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 14,
-  "hash": "8009046effdb277db2df7fc0dfd143151e846d3cb32b8c88f00705ac099fe700",
+  "version": 15,
+  "hash": "937a783b10c664d3f86c4779b01112d34e1037e051ce7a2aab6abc536ad211ae",
   "sections": [
     {
       "id": "about",
@@ -3925,7 +3925,7 @@
             "Their posts in the Market are hidden from you.",
             "They disappear from your People list and your chats, and you cannot message each other.",
             "Their pins on the Map, their Pulse posts, and their messages in event chats still show.",
-            "A report goes to your community's admins, who can look into it."
+            "A report goes to your community's moderators, who can look into it."
           ]
         },
         {
@@ -3956,7 +3956,7 @@
     {
       "slug": "reporting",
       "title": "Reporting a problem",
-      "summary": "Tell your community's admins about a post, an event, a Pulse post or an enterprise.",
+      "summary": "Tell your community's moderators about a post, an event, a Pulse post or an enterprise.",
       "section": "settings",
       "related": [
         "blocking",
@@ -3997,7 +3997,7 @@
         },
         {
           "type": "p",
-          "text": "There is no separate button to report a person or a single message in the phone app yet. Block them instead: blocking also sends a report to your admins. See \"Blocking someone\"."
+          "text": "There is no separate button to report a person or a single message in the phone app yet. Block them instead: blocking also sends a report to your community's moderators. See \"Blocking someone\"."
         },
         {
           "type": "p",
@@ -4009,7 +4009,7 @@
         },
         {
           "type": "p",
-          "text": "Your report goes to the people who run your community's server. They decide what to do. They can remove a post, or suspend a member while the community votes on it."
+          "text": "Your report goes to your community's moderators: the owners and admins who run its server, and any members they have made moderators. They decide what to do. A moderator can remove a post or a Pulse post. Only the owners and admins can suspend a member, while the community votes on it."
         },
         {
           "type": "ul",
@@ -4025,7 +4025,7 @@
         },
         {
           "type": "p",
-          "text": "If one of your own posts is removed by the admins, you get an alert saying so, and why if they gave a reason. It does not say who reported it."
+          "text": "If one of your own posts is removed by the moderators, you get an alert saying so, and why if they gave a reason. It does not say who reported it."
         },
         {
           "type": "p",

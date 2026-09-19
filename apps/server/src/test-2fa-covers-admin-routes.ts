@@ -7,9 +7,9 @@
  *   1. the password alone is refused (401, totpRequired);
  *   2. the password with a 2FA session gets through;
  *   3. a key session of the right role gets through;
- *   4. a key session of too low a role is refused 403 (owner-only routes, tried with an admin's session). For the
- *      owner-or-admin routes the only role below admin is moderator, which cannot get a key session at all (checked
- *      once), and an admin demoted mid-session loses the session at once (checked for every route: 401);
+ *   4. a key session of too low a role is refused 403 (owner-only routes, tried with an admin's session). A
+ *      moderator's key session is refused 403 on every one of them (moderators reach reports only:
+ *      test-moderator-routes.ts), and an admin demoted mid-session loses the session at once (every route: 401);
  *   5. in break-glass mode the password with a 2FA session is refused (403) and a key session still works.
  * Then:
  *   6. turning 2FA off: owner only, and only with a code that is right now (a 2FA session or key session alone is
@@ -163,8 +163,8 @@ async function main() {
         const deeSid = keySession(dee).sessionId;
         assert(!!ownerSid && !!adminSid, 'owner and admin sign in with their keys');
         assert(!deeSid, 'Dee holds no role yet: no key session');
-        const moTry = keySession(mo);
-        assert(!moTry.sessionId && /node role/.test(moTry.error || ''), `a moderator cannot get an admin key session (${moTry.error})`);
+        const moSid = keySession(mo).sessionId!;
+        assert(!!moSid, 'a moderator signs in with their key too (their session reaches reports only)');
 
         set2fa(true);
         resetAdminAuthTarpit();
@@ -176,6 +176,7 @@ async function main() {
         const pwWith2fa = { 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfa };
         const asOwner = { 'x-admin-session': ownerSid };
         const asAdmin = { 'x-admin-session': adminSid };
+        const asModerator = { 'x-admin-session': moSid };
 
         type Route = { method: string; path: string; body?: any; ok: number; owner: boolean; after?: () => void };
         // `ok` is what the route answers once past auth. Bodies are chosen to have no lasting effect where possible:
@@ -219,6 +220,9 @@ async function main() {
             } else {
                 assert(d.status === r.ok, `${name}: admin key session → ${r.ok} (got ${d.status})`);
             }
+
+            const m = await call(r.method, r.path, asModerator, r.body);
+            assert(m.status === 403 && m.body.moderator === true, `${name}: moderator key session → 403 (got ${m.status})`);
 
             // An admin demoted mid-session: the session dies on its next request.
             grantNodeRole(dee.pubKeyHex, 'admin', 'owner:password');

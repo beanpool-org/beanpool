@@ -12,7 +12,13 @@
  * fresh CSRF token is fetched. Nothing here stores a password, and the password login stays exactly as it was.
  */
 
-export type KeySession = { memberPubkey: string; role: 'owner' | 'admin' };
+export type KeySessionRole = 'owner' | 'admin' | 'moderator';
+export type KeySession = { memberPubkey: string; role: KeySessionRole };
+
+/** A moderator's Settings is Reports and nothing else (components/modules/ModeratorView.tsx). */
+export function isModeratorSession(session: KeySession | null | undefined): boolean {
+    return session?.role === 'moderator';
+}
 
 /** /settings sections the node's admin queue links to — mirrors ADMIN_SETTINGS_SECTIONS on the server. */
 export const HANDOFF_SECTIONS = ['home', 'moderation', 'disputes', 'decisions'] as const;
@@ -25,6 +31,15 @@ export function sectionTarget(section: HandoffSection): { tab: 'home' | 'people'
         case 'decisions': return { tab: 'economy', subTab: 'decisions' };
         default: return { tab: 'home' };
     }
+}
+
+/**
+ * Where a link lands for this role. A moderator has one screen, Reports, so every link lands there: a section they
+ * cannot open (disputes, decisions, home) never shows an empty or refused screen.
+ */
+export function sectionTargetFor(role: KeySessionRole | null | undefined, section: HandoffSection | null): { tab: 'home' | 'people' | 'economy'; subTab?: string } | null {
+    if (role === 'moderator') return sectionTarget('moderation');
+    return section ? sectionTarget(section) : null;
 }
 
 export function parseHandoffFragment(hash: string): { token: string | null; section: HandoffSection | null } {
@@ -42,8 +57,8 @@ export type KeySessionStart =
     | { kind: 'none'; section: HandoffSection | null }
     | { kind: 'failed'; message: string; section: HandoffSection | null };
 
-function asRole(r: unknown): 'owner' | 'admin' | null {
-    return r === 'owner' || r === 'admin' ? r : null;
+function asRole(r: unknown): KeySessionRole | null {
+    return r === 'owner' || r === 'admin' || r === 'moderator' ? r : null;
 }
 
 /**

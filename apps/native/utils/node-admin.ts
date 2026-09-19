@@ -1,5 +1,6 @@
 /**
- * "🛡️ Manage <community>" — an owner or admin opens their node's /settings from the app, already signed in
+ * "🛡️ Manage <community>" — an owner or admin (or a moderator: "Moderate <community>", Reports only) opens their
+ * node's /settings from the app, already signed in
  * with their member key, without the node password.
  *
  *   1. Role: asked of the node every time (GET /api/node-admin/me, signed). Nothing cached, nothing the
@@ -19,9 +20,9 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { buildSignedHeaders, signData, encodeUtf8, hexToBytes, encodeBase64 } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 
-import { canManageNode, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem } from './node-role';
+import { canManageNode, manageLabel, manageSubtitle, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem } from './node-role';
 
-export { canManageNode, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem };
+export { canManageNode, manageLabel, manageSubtitle, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem };
 
 function base(nodeUrl: string): string {
     return nodeUrl.replace(/\/+$/, '');
@@ -138,7 +139,7 @@ export async function requireDeviceUnlock(communityName: string): Promise<Unlock
 }
 
 export const NO_DEVICE_LOCK_MESSAGE =
-    "Managing a community opens its admin settings signed in as you, so BeanPool asks for your phone's own " +
+    "Managing or moderating a community opens its settings signed in as you, so BeanPool asks for your phone's own " +
     'unlock first — fingerprint, face or PIN. This phone has no screen lock set, so anyone holding it could ' +
     'do the same. Set a screen lock in your phone’s settings, then try again.';
 
@@ -176,7 +177,7 @@ export async function requestSettingsLink(nodeUrl: string, identity: BeanPoolIde
             return { kind: 'ok', token: body.handshakeToken };
         }
         if (body.totpRequired) return { kind: 'totp-required', wrongCode: !!totpCode };
-        if (res.status === 403) return { kind: 'refused', message: body.error || 'You do not hold an owner or admin role on this node.' };
+        if (res.status === 403) return { kind: 'refused', message: body.error || 'You do not hold an owner, admin or moderator role on this node.' };
         return { kind: 'error', message: body.error || `The node did not answer (${res.status}).` };
     } catch (e: any) {
         return { kind: 'error', message: e?.message || 'Could not reach the node.' };

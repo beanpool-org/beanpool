@@ -242,13 +242,14 @@ describe('What needs you: 🛡️ admin work (owners and admins only)', () => {
         admin: { role, queue: queue(item('reports', 2, 'moderation')) },
     }));
 
-    it('shows for an owner and for an admin while the queue holds something', () => {
+    it('shows for an owner, an admin and a moderator while the queue holds something', () => {
         expect(admin('owner', queue(item('reports', 2, 'moderation')))).toHaveLength(1);
         expect(admin('admin', queue(item('reports', 2, 'moderation')))[0]).toMatchObject({ kind: 'admin', count: 2 });
+        expect(admin('moderator', queue(item('reports', 2, 'moderation')))[0]).toMatchObject({ kind: 'admin', count: 2, target: { to: 'admin', section: 'moderation' } });
     });
 
     it('never for anyone else, whatever the queue says', () => {
-        for (const role of [null, undefined, 'member', 'moderator', 'Owner', true]) {
+        for (const role of [null, undefined, 'member', 'Moderator', 'Owner', true]) {
             expect(admin(role, queue(item('reports', 2, 'moderation')))).toEqual([]);
         }
         expect(buildNeedsYou(quiet({ admin: null }))).toEqual([]);

@@ -43,6 +43,14 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             ctx.state.adminRole = sessionRes.session.role;
             ctx.state.isKeySession = true;
 
+            // A moderator's session reaches the moderator routes and nothing else (MODERATOR_ROUTES, below).
+            // Checked here, before any route runs, so an admin route that never names a role is still closed to them.
+            if (sessionRes.session.role === 'moderator' && !isModeratorRoute(ctx)) {
+                ctx.status = 403;
+                ctx.body = { error: MODERATOR_REFUSAL, moderator: true };
+                return false;
+            }
+
             // #133: CSRF validation for mutating requests with cookie session (or if header provided)
             const reqPath = ctx.path || ctx.request?.path || '';
             const isMutatingMethod = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(ctx.method?.toUpperCase());
@@ -278,13 +286,46 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     return true;
 }
 
-export type AdminRole = 'owner' | 'admin';
+export type AdminRole = 'owner' | 'admin' | 'moderator';
 
 /**
- * The role gate that follows checkAdminAuth on every admin route. checkAdminAuth has already set
+ * Everything a moderator may call: reading and triaging reports, and taking down a reported post or Pulse item
+ * (Marty's decision, 2026-09-19: "real, narrow: reports and removing posts only"). Plus the plumbing of their own
+ * session: a fresh CSRF token after a reload, and signing themselves out everywhere. Every other route that calls
+ * checkAdminAuth answers a moderator 403 there, before the route runs: default deny, in this one list.
+ *
+ * Two of these routes narrow further for a moderator: reports/:id/action refuses `suspendUser`, and
+ * posts/:id/delete takes only a post someone has reported (routes/admin.ts). The password path never yields a
+ * moderator (it is owner level), so none of this touches it.
+ */
+export const MODERATOR_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: string }> = [
+    { method: 'GET', path: '/api/local/admin/reports' },
+    { method: 'POST', path: '/api/local/admin/reports/:id/dismiss' },
+    { method: 'POST', path: '/api/local/admin/reports/:id/action' },
+    { method: 'POST', path: '/api/local/admin/posts/:id/delete' },
+    { method: 'POST', path: '/api/local/admin/csrf-token' },
+    { method: 'POST', path: '/api/local/admin/auth/revoke-all' },
+];
+
+export const MODERATOR_REFUSAL = 'Moderators can review reports and remove reported posts only';
+
+const MODERATOR_ROUTE_PATTERNS = MODERATOR_ROUTES.map(r => ({
+    method: r.method,
+    re: new RegExp('^' + r.path.replace(/:[A-Za-z]+/g, '[^/]+') + '/?$'),
+}));
+
+/** Whether this request is one a moderator's session may make. */
+export function isModeratorRoute(ctx: any): boolean {
+    const method = String(ctx.method || '').toUpperCase();
+    const reqPath = String(ctx.path || ctx.request?.path || '');
+    return MODERATOR_ROUTE_PATTERNS.some(r => r.method === method && r.re.test(reqPath));
+}
+
+/**
+ * The role gate that follows checkAdminAuth on an admin route. checkAdminAuth has already set
  * ctx.state.adminRole: the member's live node_roles role under a key session, 'owner' under the node password
- * (only owners hold it) or a break-glass code. A key session never carries 'moderator': admin-key-auth.ts refuses
- * one. Answers 403 with `error` and returns false when the role is not in `allowed`.
+ * (only owners hold it) or a break-glass code. A moderator only gets this far on MODERATOR_ROUTES.
+ * Answers 403 with `error` and returns false when the role is not in `allowed`.
  */
 export function requireAdminRole(ctx: any, allowed: readonly AdminRole[], error: string): boolean {
     const role = ctx.state?.adminRole;

@@ -8,7 +8,7 @@
  * lib/key-session.ts ends up with after the app's one-time link: an admin_session cookie and a CSRF token.
  */
 
-import type { KeySession } from './key-session';
+import type { KeySession, KeySessionRole } from './key-session';
 
 export interface PhonePairing {
     pairingId: string;
@@ -58,12 +58,12 @@ export const PHONE_SIGNIN_MESSAGES = {
     refused: 'Too many refused attempts on that code. Get a new code to try again.',
     used: 'That code was already used. Get a new code.',
     wrongBrowser: 'That code belongs to another browser or tab. Get a new code here.',
-    notAdmin: "The phone that scanned isn't an owner or admin of this community. Scan with an owner's or admin's phone.",
+    notAdmin: "The phone that scanned isn't an owner, admin or moderator of this community. Scan with the phone of someone who is.",
     failed: 'The sign-in was not accepted. Get a new code to try again.',
 } as const;
 
-function asRole(r: unknown): 'owner' | 'admin' | null {
-    return r === 'owner' || r === 'admin' ? r : null;
+function asRole(r: unknown): KeySessionRole | null {
+    return r === 'owner' || r === 'admin' || r === 'moderator' ? r : null;
 }
 
 /** One long-poll (the node holds it up to 25 s). `retry` means the network hiccuped: poll again shortly. */

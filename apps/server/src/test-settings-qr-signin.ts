@@ -7,8 +7,9 @@
  *      and does not use up the approval for the real browser.
  *   3. Single use: a second approval, a replayed approval (same body again, or on another pairing), and a
  *      second redemption are all refused.
- *   4. Signers: wrong key (signature by someone else), a member without a role, a moderator, an unknown key.
- *      A member without a role shows "not an owner or admin" on the waiting page; five refusals burn the code.
+ *   4. Signers: wrong key (signature by someone else), a member without a role (twice), an unknown key.
+ *      A member without a role shows "not-admin" on the waiting page; five refusals burn the code.
+ *      A moderator is let in (happy path), with a session that reaches reports and is refused everything else.
  *   5. Expiry: an expired pairing can be neither approved nor redeemed. A role revoked between approval and
  *      redemption gives no session.
  *   6. The node's 2FA code is still asked for, on the phone.
@@ -188,6 +189,19 @@ async function main() {
         assert((await approve(b2.pairingId, b2.shortCode, admin)).status === 200, 'an admin can approve too');
         const got2 = await poll(b2);
         assert(got2.body.status === 'signed-in' && got2.body.role === 'admin', 'and the browser gets an admin session');
+
+        // A moderator too: the browser gets a moderator session, which reaches reports and nothing else.
+        const b3 = await newPairing();
+        const modOk = await approve(b3.pairingId, b3.shortCode, moderator);
+        assert(modOk.status === 200 && modOk.body.role === 'moderator', `a moderator can approve (got ${modOk.status})`);
+        const got3 = await poll(b3);
+        assert(got3.body.status === 'signed-in' && got3.body.role === 'moderator' && !!got3.sessionId, 'and the browser gets a moderator session');
+        const s3 = await sessionInfo(got3.sessionId!);
+        assert(s3.authenticated === true && s3.role === 'moderator', 'the session says moderator');
+        const reports = await call('GET', '/api/local/admin/reports?status=open', { headers: { Cookie: `admin_session=${got3.sessionId}` } });
+        assert(reports.status === 200 && Array.isArray(reports.body.reports), `the moderator session lists reports (got ${reports.status})`);
+        const data = await call('POST', '/api/local/admin/data', { body: {}, headers: { Cookie: `admin_session=${got3.sessionId}`, 'X-CSRF-Token': got3.body.csrfToken } });
+        assert(data.status === 403, `and is refused the members' data (got ${data.status})`);
     }
 
     // ── 2. Bound to the browser that asked ──
@@ -253,10 +267,10 @@ async function main() {
         const plain = await approve(b.pairingId, b.shortCode, member);
         assert(plain.status === 403 && plain.body.reason === 'not-admin', 'a member without a role is refused');
         const seen = await poll(b);
-        assert(seen.body.status === 'waiting' && seen.body.notice === 'not-admin', 'the waiting page says the phone is not an owner or admin, and keeps waiting');
+        assert(seen.body.status === 'waiting' && seen.body.notice === 'not-admin', 'the waiting page says the phone holds no role here, and keeps waiting');
 
-        const mod = await approve(b.pairingId, b.shortCode, moderator);
-        assert(mod.status === 403 && mod.body.reason === 'not-admin', 'a moderator is refused (admin-key-auth lets in owners and admins only)');
+        const plainAgain = await approve(b.pairingId, b.shortCode, member);
+        assert(plainAgain.status === 403 && plainAgain.body.reason === 'not-admin', 'and again (a moderator is let in: see the happy path)');
 
         const stranger = await approve(b.pairingId, b.shortCode, outsider);
         assert(stranger.status === 403 && stranger.body.reason === 'inactive', 'an unknown key is refused');

@@ -1720,7 +1720,7 @@ export default function PostDetailModal() {
                                             setShowReportForm(false);
                                             setReportDetails('');
                                             setReportReason('');
-                                            Alert.alert('Reported', 'Post was flagged for review.');
+                                            Alert.alert('Reported', "Thanks. Your community's moderators will review it.");
                                         } catch (e: any) {
                                             Alert.alert('Error', e.message);
                                         } finally {

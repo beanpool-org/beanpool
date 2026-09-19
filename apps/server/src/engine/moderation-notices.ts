@@ -1,11 +1,11 @@
-// What the people involved hear when the admins act on a post: its author, and the members who reported it.
+// What the people involved hear when the admins or moderators act on a post: its author, and the members who reported it.
 //
 // Two channels, both ones every app in the stores already handles:
 //   - a push on the `marketplace` category, so the member's Marketplace notification preference applies;
 //   - a live `system_announcement` event, which the phone app and the PWA already show as an alert. It goes
 //     to the recipient's own sockets only (broadcast with recipients, no doorbell for anyone else).
-// Neither names the admin who acted, and neither names anyone who reported: the author hears "the community's
-// admins", and each reporter hears only about their own report.
+// Neither names the admin or moderator who acted, and neither names anyone who reported: the author hears "the
+// community's moderators", and each reporter hears only about their own report.
 
 import { db } from '../db/db.js';
 
@@ -44,11 +44,11 @@ function quoted(title: string | null | undefined): string {
 export function postRemovedBody(title: string | null | undefined, reasonCategory?: string | null): string {
     const label = reasonCategory ? REMOVAL_REASON_LABELS[reasonCategory] : undefined;
     const what = title && title.trim() ? `Your post ${quoted(title)}` : 'Your post';
-    return `${what} was removed by the community's admins.${label ? ` Reason: ${label}.` : ''}`;
+    return `${what} was removed by the community's moderators.${label ? ` Reason: ${label}.` : ''}`;
 }
 
 export function reportedPostRemovedBody(): string {
-    return 'The post you reported was removed. Thank you for letting the admins know.';
+    return 'The post you reported was removed. Thank you for letting the moderators know.';
 }
 
 export function reportedPostKeptBody(): string {
@@ -57,7 +57,7 @@ export function reportedPostKeptBody(): string {
 
 /** The report was dismissed after its author had already taken the post down: "kept" would be untrue. */
 export function reportedPostGoneBody(): string {
-    return 'The post you reported is no longer up. Thank you for letting the admins know.';
+    return 'The post you reported is no longer up. Thank you for letting the moderators know.';
 }
 
 export const POSTS_CLEARED_TITLE = '🧹 Old listings cleared';
@@ -70,7 +70,7 @@ export function postsClearedBody(count: number, olderThanDays?: number | null): 
 }
 
 export function reportedPostsRemovedBody(count: number): string {
-    return count > 1 ? `${count} posts you reported were removed. Thank you for letting the admins know.` : reportedPostRemovedBody();
+    return count > 1 ? `${count} posts you reported were removed. Thank you for letting the moderators know.` : reportedPostRemovedBody();
 }
 
 function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string, body: string, data: Record<string, any>): void {

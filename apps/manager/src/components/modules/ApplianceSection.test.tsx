@@ -406,6 +406,114 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByRole('button', { name: /disable 2fa/i })).toBeInTheDocument();
     });
 
+    // The node turns 2FA off only with a code that is right now (an earlier sign-in is not enough), so the card asks
+    // for one and sends it, with the 2FA session and the password as every admin call does.
+    async function renderAccessWith2faOn(disableResponse: { ok: boolean; status?: number; body: unknown }) {
+        const fetchMock = vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/admin/2fa/status')) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, totpEnabled: true }) });
+            }
+            if (url.includes('/api/local/admin/2fa/disable')) {
+                return Promise.resolve({
+                    ok: disableResponse.ok,
+                    status: disableResponse.status ?? (disableResponse.ok ? 200 : 401),
+                    json: () => Promise.resolve(disableResponse.body),
+                });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        nodeClient.setTfaSessionToken(mockProfile.id, 'tfa-session-abc');
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="access"
+                />
+            );
+        });
+        const disableCalls = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/local/admin/2fa/disable'));
+        return { disableCalls };
+    }
+
+    it('shows 2FA as on when the status call answers 401 asking for a code (no 2FA session yet)', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/admin/2fa/status')) {
+                return Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({ error: '2FA code required', totpRequired: true }) });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) });
+        }));
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="access"
+                />
+            );
+        });
+        expect(screen.getByText('Enabled')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /setup 2fa authenticator/i })).not.toBeInTheDocument();
+    });
+
+    it('Disable 2FA asks for a current code and sends nothing without one', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const { disableCalls } = await renderAccessWith2faOn({ ok: true, body: { success: true } });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
+        });
+
+        expect(disableCalls()).toHaveLength(0);
+        expect(screen.getByText(/Enter a current code from your authenticator app/i)).toBeInTheDocument();
+    });
+
+    it('Disable 2FA sends the code with the 2FA session, and shows the node\'s refusal', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const { disableCalls } = await renderAccessWith2faOn({ ok: false, status: 401, body: { error: 'Invalid 2FA code', totpRequired: true } });
+
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText('Current 2FA or backup code'), { target: { value: ' 123456 ' } });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
+        });
+
+        expect(disableCalls()).toHaveLength(1);
+        const [, init] = disableCalls()[0];
+        expect(JSON.parse(init.body)).toEqual({ code: '123456' });
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-session-abc');
+        expect(init.headers['X-Admin-Password']).toBe(mockProfile.adminPassword);
+        expect(screen.getByText('2FA was not turned off: Invalid 2FA code')).toBeInTheDocument();
+        // Still on: the badge did not change.
+        expect(screen.getByText('Enabled')).toBeInTheDocument();
+    });
+
     it('surfaces error cleanly when update check returns HTTP error', async () => {
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/admin/check-update')) {

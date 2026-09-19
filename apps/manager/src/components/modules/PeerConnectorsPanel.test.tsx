@@ -166,6 +166,41 @@ describe('PeerConnectorsPanel Component', () => {
         expect(screen.getByTestId('connectors-list')).toBeInTheDocument();
     });
 
+    // Peer-link changes are held to 2FA on the node now, like every admin route: they must carry the 2FA session.
+    it('sends the 2FA session when connecting a peer', async () => {
+        sessionStorage.setItem(`bp_tfa_session_${mockActiveNode.id}`, 'tfa-peer-token');
+        const connectHeaders: Record<string, string>[] = [];
+        vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/connectors/connect') && opts?.method === 'POST') {
+                connectHeaders.push(opts.headers as Record<string, string>);
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) } as Response);
+            }
+            if (strUrl.includes('/api/local/connectors')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve([{ address: 'wss://brisbane.beanpool.org:8443', callsign: 'Brisbane', connected: false, enabled: true }]),
+                } as Response);
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response);
+        });
+        try {
+            render(<PeerConnectorsPanel activeNode={mockActiveNode} />);
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument();
+            });
+            fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+            await waitFor(() => {
+                expect(connectHeaders).toHaveLength(1);
+            });
+            expect(connectHeaders[0]['X-Admin-2FA-Session']).toBe('tfa-peer-token');
+            expect(connectHeaders[0]['X-Admin-Password']).toBe(mockActiveNode.adminPassword);
+        } finally {
+            sessionStorage.removeItem(`bp_tfa_session_${mockActiveNode.id}`);
+        }
+    });
+
     it('connects and disconnects a peer connector', async () => {
         const testConnectors = [
             {

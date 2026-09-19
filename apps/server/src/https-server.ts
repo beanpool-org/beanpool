@@ -29,7 +29,7 @@ import {
     updateBackupCadence,
     validatePasswordStrength,
     generateReplicationToken, setReplicationToken, clearReplicationToken, hasReplicationToken, verifyReplicationToken,
-    getGatewayConfig,
+    getGatewayConfig, isBreakGlassMode,
 } from './config/local-config.js';
 import {
     getConnectors, addConnector, removeConnector,
@@ -126,7 +126,7 @@ import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
-import { acquirePasswordAttempt, settlePasswordAttempt } from './password-brake.js';
+import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
 import { gatewayAdmit, gatewayAdmitMember, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
 
 
@@ -572,8 +572,10 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
 
             if (ticket && isValidWsTicket(ticket)) {
                 authorized = true;
-            } else if (auth && config.adminHash && config.salt) {
-                // The admin password, so under the same per-source brake as every other password check.
+            } else if (auth && config.adminHash && config.salt && !twoFactorOn() && !isBreakGlassMode()) {
+                // The admin password, so under the same per-source brake as every other password check. Never under
+                // 2FA or in break-glass mode: this path takes the password alone, and every client asks for a ticket
+                // (checkAdminAuth) now.
                 const brakeKey = limiterKeyForIp(resolveClientIp(req.socket.remoteAddress, req.headers));
                 const admission = await acquirePasswordAttempt(brakeKey);
                 if (!admission.admitted) {
@@ -585,7 +587,8 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 try {
                     pwOk = await verifyPasswordAsync(auth, config.adminHash, config.salt);
                 } finally {
-                    settlePasswordAttempt(brakeKey, pwOk);
+                    // Under 2FA a right password alone clears nothing (password-brake.ts, checkAdminPassword).
+                    settlePasswordAttempt(brakeKey, pwOk, !twoFactorOn());
                 }
                 if (pwOk) {
                     logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');

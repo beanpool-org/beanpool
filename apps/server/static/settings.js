@@ -568,12 +568,17 @@
                 const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 if (!password) { setFallbackUI(); return; }
                 const res = await fetch(`${API}/admin/2fa/status`, { headers: adminHeaders() });
+                let data;
                 if (!res.ok) {
-                    if (res.status === 401) { setFallbackUI(); }
-                    else { setErrorUI(); }
-                    return;
+                    // The status is held to 2FA like every admin route. A 401 asking for a code says 2FA is on;
+                    // showing "Disabled" then would be the old chicken-and-egg bug (docs/2FA.md, 5).
+                    const err = res.status === 401 ? await res.json().catch(() => ({})) : {};
+                    if (err.totpRequired) { data = { totpEnabled: true, backupCodesRemaining: null }; }
+                    else if (res.status === 401) { setFallbackUI(); return; }
+                    else { setErrorUI(); return; }
+                } else {
+                    data = await res.json();
                 }
-                const data = await res.json();
                 
                 if (badge) {
                     if (data.totpEnabled) {
@@ -587,7 +592,9 @@
                         boxEnabled?.classList.remove('hidden');
                         
                         const countEl = document.getElementById('totp-backup-count-text');
-                        if (countEl) countEl.textContent = `${data.backupCodesRemaining ?? 0} emergency backup code(s) remaining`;
+                        if (countEl) countEl.textContent = data.backupCodesRemaining === null
+                            ? 'Sign in again with your 2FA code to see how many backup codes remain'
+                            : `${data.backupCodesRemaining ?? 0} emergency backup code(s) remaining`;
                     } else {
                         badge.textContent = 'Disabled';
                         badge.style.background = 'rgba(148, 163, 184, 0.1)';
@@ -607,10 +614,9 @@
 
         document.getElementById('btn-totp-start-setup')?.addEventListener('click', async () => {
             try {
-                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 const res = await fetch(`${API}/admin/2fa/setup`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password }
+                    headers: adminHeaders({ 'Content-Type': 'application/json' })
                 });
                 if (!res.ok) {
                     const err = await res.json();
@@ -654,16 +660,20 @@
             const code = document.getElementById('totp-setup-code')?.value?.trim();
             if (!code) { showStatus('totp-setup-status', 'Enter 6-digit code from your app', 'error'); return; }
             try {
-                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 const res = await fetch(`${API}/admin/2fa/verify`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ code })
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {
                     showStatus('totp-setup-status', data.error || 'Verification failed — check code', 'error');
                     return;
+                }
+                // Keep the 2FA session the node hands back: every admin call asks for it from now on.
+                if (data.tfaSessionToken) {
+                    tfaSessionToken = data.tfaSessionToken;
+                    sessionStorage.setItem('bp-2fa-session', tfaSessionToken);
                 }
                 document.getElementById('totp-box-setup')?.classList.add('hidden');
                 
@@ -709,10 +719,9 @@
             if (!code) { showStatus('totp-disable-status', 'Enter current 2FA or backup code to confirm', 'error'); return; }
             if (!confirm('Are you sure you want to disable 2FA for this node?')) return;
             try {
-                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 const res = await fetch(`${API}/admin/2fa/disable`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password, 'X-Admin-TOTP': code },
+                    headers: adminHeaders({ 'Content-Type': 'application/json', 'X-Admin-TOTP': code }),
                     body: JSON.stringify({ code })
                 });
                 const data = await res.json();
@@ -720,6 +729,8 @@
                     showStatus('totp-disable-status', data.error || 'Failed to disable 2FA', 'error');
                     return;
                 }
+                tfaSessionToken = null;
+                sessionStorage.removeItem('bp-2fa-session');
                 showStatus('totp-disable-status', '2FA disabled', 'success');
                 setTimeout(() => load2faStatus(), 1000);
             } catch (e) {
@@ -857,7 +868,7 @@
             try {
                 await fetch(`${API}/connectors/connect`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken, address })
                 });
                 await refreshConnectors();
@@ -868,7 +879,7 @@
             try {
                 await fetch(`${API}/connectors/disconnect`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken, address })
                 });
                 await refreshConnectors();
@@ -880,7 +891,7 @@
             try {
                 await fetch(`${API}/connectors/remove`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken, address })
                 });
                 await refreshConnectors();
@@ -891,7 +902,7 @@
             try {
                 await fetch(`${API}/connectors`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         password: authToken,
                         address,
@@ -914,7 +925,7 @@
             try {
                 const res = await fetch(`${API}/connectors`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         password: authToken,
                         address,
@@ -940,7 +951,7 @@
             try {
                 const res = await fetch(`${API}/update-identity`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         password: authToken,
                         callsign: document.getElementById('cfg-callsign').value,
@@ -999,7 +1010,7 @@
                 showStatus('seed-invite-status', 'Generating...', 'info');
                 const res = await fetch('/api/admin/seed-invite', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken, type: selectedType })
                 });
                 const data = await res.json();
@@ -1080,7 +1091,7 @@
             try {
                 const res = await fetch(`${API}/change-password`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ currentPassword: authToken, newPassword: np })
                 });
                 if (res.ok) {
@@ -1127,7 +1138,7 @@
             try {
                 const res = await fetch(`${API}/reset`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken })
                 });
                 const d = await res.json();
@@ -1286,7 +1297,7 @@
             try {
                 const res = await fetch('/api/admin/thresholds', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(updates)
                 });
                 if (res.ok) {
@@ -1330,7 +1341,7 @@
             try {
                 const res = await fetch('/api/admin/check-update', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken })
                 });
                 const data = await res.json();

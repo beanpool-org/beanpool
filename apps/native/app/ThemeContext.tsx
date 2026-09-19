@@ -1,8 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { Platform, useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SystemUI from 'expo-system-ui';
+import * as NavigationBar from 'expo-navigation-bar';
 import { lightColors, darkColors, earthColors, slateColors } from '../constants/colors';
+import {
+    type ResolvedTheme,
+    type ThemePreference,
+    THEME_PREFERENCE_KEY,
+    loadThemePreference,
+    resolveTheme,
+} from '../utils/theme-preference';
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = ResolvedTheme;
+export type { ThemePreference };
 export type LightPaletteMode = 'classic' | 'earth' | 'slate';
 
 export const lightPaletteColors: Record<LightPaletteMode, typeof lightColors> = {
@@ -12,37 +23,39 @@ export const lightPaletteColors: Record<LightPaletteMode, typeof lightColors> = 
 };
 
 export interface ThemeContextType {
+    /** The theme being drawn — the preference resolved against the phone's setting. */
     theme: ThemeMode;
+    /** What the member chose in Settings: follow the phone, or always light/dark. */
+    themePreference: ThemePreference;
     lightPalette: LightPaletteMode;
     colors: typeof lightColors;
-    toggleTheme: () => void;
+    setThemePreference: (preference: ThemePreference) => void;
     setLightPalette: (palette: LightPaletteMode) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-    const [theme, setTheme] = useState<ThemeMode>('light');
+    // Live: re-renders when the phone switches light/dark while the app is open.
+    const systemScheme = useColorScheme();
+    const [themePreference, setThemePreferenceState] = useState<ThemePreference>('system');
     const [lightPalette, setLightPaletteState] = useState<LightPaletteMode>('classic');
+    const theme = resolveTheme(themePreference, systemScheme);
 
     useEffect(() => {
-        Promise.all([
-            AsyncStorage.getItem('beanpool_theme_pref'),
-            AsyncStorage.getItem('beanpool_light_palette'),
-        ]).then(([themePref, palettePref]) => {
-            if (themePref === 'light' || themePref === 'dark') {
-                setTheme(themePref);
-            }
+        loadThemePreference(AsyncStorage)
+            .then(setThemePreferenceState)
+            .catch(() => { /* keep 'system' */ });
+        AsyncStorage.getItem('beanpool_light_palette').then((palettePref) => {
             if (palettePref === 'classic' || palettePref === 'earth' || palettePref === 'slate') {
                 setLightPaletteState(palettePref);
             }
         });
     }, []);
 
-    const toggleTheme = async () => {
-        const nextTheme = theme === 'light' ? 'dark' : 'light';
-        setTheme(nextTheme);
-        await AsyncStorage.setItem('beanpool_theme_pref', nextTheme);
+    const setThemePreference = async (preference: ThemePreference) => {
+        setThemePreferenceState(preference);
+        await AsyncStorage.setItem(THEME_PREFERENCE_KEY, preference);
     };
 
     const setLightPalette = async (palette: LightPaletteMode) => {
@@ -57,13 +70,25 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         return lightPaletteColors[lightPalette];
     }, [theme, lightPalette]);
 
+    // System bars and the root window follow the drawn theme, not the phone's: with an override
+    // the two can differ. The status bar icons are set per screen with <StatusBar>; here the
+    // window behind everything (seen during transitions and keyboard moves) and, on Android, the
+    // navigation bar's button colour (needs enforceContrast: false in the expo-navigation-bar plugin).
+    useEffect(() => {
+        SystemUI.setBackgroundColorAsync(resolvedColors.surface.app).catch(() => {});
+        if (Platform.OS === 'android') {
+            try { NavigationBar.setStyle(theme === 'dark' ? 'dark' : 'light'); } catch { /* older module */ }
+        }
+    }, [theme, resolvedColors]);
+
     const value = useMemo(() => ({
         theme,
+        themePreference,
         lightPalette,
         colors: resolvedColors,
-        toggleTheme,
+        setThemePreference,
         setLightPalette,
-    }), [theme, lightPalette, resolvedColors]);
+    }), [theme, themePreference, lightPalette, resolvedColors]);
 
     return (
         <ThemeContext.Provider value={value}>

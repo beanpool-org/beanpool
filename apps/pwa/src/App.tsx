@@ -151,7 +151,7 @@ export function App() {
             }
         };
     }, [isBottomNavVisible]);
-    const [theme, toggleTheme] = useTheme();
+    const [theme, themePreference, setThemePreference] = useTheme();
     const [sysAnnouncement, setSysAnnouncement] = useState<{ title: string, body: string, severity: string } | null>(null);
     const [totalUnread, setTotalUnread] = useState(0);
     const [pendingDealsCount, setPendingDealsCount] = useState(0);
@@ -694,8 +694,8 @@ export function App() {
                                 identity={identity}
                                 onIdentityUpdated={(updated) => { setIdentity(updated); setShowSettings(false); }}
                                 onBack={() => setShowSettings(false)}
-                                theme={theme}
-                                onToggleTheme={toggleTheme}
+                                themePreference={themePreference}
+                                onThemePreferenceChange={setThemePreference}
                                 initialMode={settingsInitialMode}
                                 onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}
                                 nodeVersion={communityHealth?.version?.trim() || undefined}

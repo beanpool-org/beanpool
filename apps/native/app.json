@@ -6,7 +6,7 @@
     "orientation": "default",
     "icon": "./assets/images/app-icon.png",
     "scheme": "beanpool",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "backgroundColor": "#ffffff",
       "image": "./assets/images/logo.png",
@@ -155,6 +155,13 @@
         }
       ],
       "expo-sqlite",
+      "expo-system-ui",
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
+        }
+      ],
       [
         "expo-location",
         {

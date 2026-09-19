@@ -2,7 +2,7 @@
 slug: getting-help
 title: Getting help
 summary: Where to look when you are stuck, and who to ask.
-related: the-bean, reporting, faq, blocking
+related: the-bean, reporting, faq, blocking, the-top-bar
 ---
 
 ## Look it up

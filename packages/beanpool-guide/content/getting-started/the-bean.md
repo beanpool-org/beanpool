@@ -2,10 +2,12 @@
 slug: the-bean
 title: This guide
 summary: Where to find this guide, how to search it, and how it stays up to date.
-related: getting-help, how-it-works, faq, whats-new
+related: getting-help, how-it-works, faq, whats-new, the-top-bar
 ---
 
 ## Opening it
+
+Tap the bean at the top left of the screen. Or:
 
 - Open **Settings** with the sliders button at the top of the screen.
 - Under **BeanPool**, tap **Help & how it works**.

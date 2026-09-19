@@ -2,7 +2,7 @@
 slug: decisions
 title: Voting on a Decision
 summary: Find open Decisions, vote, change your vote, and see results.
-related: proposing-a-decision, rules, polls, commons-fund
+related: proposing-a-decision, rules, polls, commons-fund, the-top-bar
 ---
 
 ## Where

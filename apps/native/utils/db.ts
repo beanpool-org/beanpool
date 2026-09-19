@@ -5164,3 +5164,43 @@ export async function deleteGroupPostApi(groupId: string, postId: string): Promi
     return Boolean(res?.success);
 }
 
+// ===================== YOUR GROUPS & GROUP CHAT (groups slice 2) =====================
+// Every call is signed and served only to the member; nothing here is cached on the phone.
+
+/** GET /api/your-groups: every group, enterprise and event chat the member is in, newest first. */
+export async function fetchYourGroups(): Promise<import('./your-groups').YourChatsResponse> {
+    const res = await signedGet('/api/your-groups');
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || 'Could not load your groups.');
+    return { items: Array.isArray(body?.items) ? body.items : [], totalUnread: Number(body?.totalUnread || 0) };
+}
+
+/** A group's chat as the member sees it. Throws the node's own message. */
+export async function getGroupChat(groupId: string, limit = 50, offset = 0): Promise<any> {
+    const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}&offset=${offset}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || 'Could not open this group chat.');
+    return body;
+}
+
+export async function postGroupChatMessage(groupId: string, text: string, clientId?: string): Promise<any> {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId });
+}
+
+/** An enterprise's keeper chat. */
+export async function getEnterpriseChat(treasury: string, limit = 50): Promise<any> {
+    const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/thread?limit=${limit}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || 'Could not open this enterprise chat.');
+    return body;
+}
+
+export async function postEnterpriseChatMessage(treasury: string, text: string, clientId?: string): Promise<any> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
+}
+
+/** Mute one chat for 8 hours, a week or always, or unmute it (groups decision 12). */
+export async function muteChatApi(conversationId: string, duration: '8h' | '1w' | 'always' | 'off'): Promise<any> {
+    return _signedRequest('/api/messages/mute', { conversationId, duration });
+}
+

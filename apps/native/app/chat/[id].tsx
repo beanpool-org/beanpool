@@ -14,6 +14,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, getConversationKind } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
+import { GroupChatView } from '../../components/GroupChatView';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
@@ -109,19 +110,30 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
  * never waits on a database read to decide. The lookup is the fallback for an older link or a push.
  */
 export default function ChatRoute() {
-    const { id, event } = useLocalSearchParams<{ id?: string; event?: string }>();
+    const { id, event, group, enterprise, created, name } = useLocalSearchParams<{
+        id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string;
+    }>();
     const [isEventChat, setIsEventChat] = useState(event === '1');
+    // A group's chat and an enterprise's keeper chat are node-readable threads like the event chat, on their own
+    // screen with the one owner header (groups decision 9). "Your groups" says which on the way in.
+    const [threadKind, setThreadKind] = useState<'group' | 'enterprise' | null>(
+        group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null,
+    );
 
     useEffect(() => {
-        if (isEventChat || !id) return;
+        if (isEventChat || threadKind || !id) return;
         let alive = true;
         getConversationKind(String(id)).then(kind => {
-            if (alive && kind === 'event_thread') setIsEventChat(true);
+            if (!alive) return;
+            if (kind === 'event_thread') setIsEventChat(true);
+            else if (kind === 'group_thread') setThreadKind('group');
+            else if (kind === 'enterprise_thread') setThreadKind('enterprise');
         });
         return () => { alive = false; };
-    }, [id, isEventChat]);
+    }, [id, isEventChat, threadKind]);
 
     if (isEventChat && id) return <EventChatView eventId={String(id)} />;
+    if (threadKind && id) return <GroupChatView kind={threadKind} id={String(id)} justCreated={created === '1'} initialName={name} />;
     return <ChatScreen />;
 }
 

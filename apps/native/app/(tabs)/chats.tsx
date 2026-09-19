@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image,
 import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
-import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal } from '../../utils/db';
+import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, fetchYourGroups } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
@@ -14,11 +14,13 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
+import { type YourChat, unreadLabel } from '../../utils/your-groups';
+import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
     const { identity } = useIdentity();
-    // Talk = Messages + People. People is rendered inline rather than as its own route so the
+    // Talk = Messages | Groups | People (groups decision 6). People is rendered inline rather than as its own route so the
     // Talk tab stays highlighted; /people survives for the deep links that pass a `view` param,
     // and PeopleScreen reads that param off whichever route it is mounted on.
     const talkParams = useLocalSearchParams<{ view?: string; filter?: string }>();
@@ -27,12 +29,19 @@ export default function ChatsScreen() {
     React.useEffect(() => {
         if (talkParams.view === 'people') {
             setTalkView('people');
+        } else if (talkParams.view === 'groups') {
+            setTalkView('groups');
         } else if (talkParams.view === 'messages') {
             setTalkView('messages');
         }
     }, [talkParams.view]);
 
     const [conversations, setConversations] = useState<any[]>([]);
+    // "Your groups" (slice 1 API): groups, enterprises kept, events going to. Loaded with the conversations so the
+    // switch can show the Groups unread total while Messages is open.
+    const [yourGroups, setYourGroups] = useState<YourChat[] | null>(null);
+    const [yourGroupsError, setYourGroupsError] = useState<string | null>(null);
+    const groupsUnread = React.useMemo(() => (yourGroups || []).reduce((n, g) => n + (g.unreadCount || 0), 0), [yourGroups]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
@@ -56,6 +65,7 @@ export default function ChatsScreen() {
     const qr = useQuickReturn({ pinned: showOptions || searchFocused, resetKey: talkView });
     const listRef = useRef<FlatList>(null);
     useTabRetapScrollTop(listRef, qr.show);
+    const createGroup = useCreateGroupFlow();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
@@ -72,7 +82,9 @@ export default function ChatsScreen() {
             flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
-            paddingVertical: 9,
+            minHeight: 44,
+            paddingVertical: 6,
+            paddingHorizontal: 4,
             borderRadius: 9,
         },
         talkTabActive: {
@@ -83,12 +95,19 @@ export default function ChatsScreen() {
             shadowOffset: { width: 0, height: 1 },
             elevation: 2,
         },
-        talkTabText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
+        talkTabInner: { flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: '100%' },
+        talkTabText: { flexShrink: 1, fontSize: 13, fontWeight: '600', color: colors.text.secondary },
+        talkTabBadge: {
+            minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, flexShrink: 0,
+            backgroundColor: colors.accent.primary, alignItems: 'center', justifyContent: 'center',
+        },
+        talkTabBadgeText: { color: colors.text.inverse, fontSize: 10, fontWeight: '800' },
         talkTabTextActive: { color: colors.text.heading, fontWeight: '800' },
         header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
         title: { fontSize: 32, fontWeight: '800', color: colors.text.body, letterSpacing: -0.5 },
         newChatBtn: { padding: 8, backgroundColor: colors.accent.tint, borderRadius: 12 },
         list: { paddingTop: 4, paddingBottom: 100 },
+        groupsActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
         chatRow: {
             flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12,
             marginHorizontal: 16, marginVertical: 4, borderRadius: 14,
@@ -288,6 +307,8 @@ export default function ChatsScreen() {
                     getConversations(identity.publicKey)
                         .then(res => {
                             const filtered = (res || []).filter((c: any) => {
+                                // Group, enterprise and event chats live under Groups now (decision 6).
+                                if (c.type === 'group_thread' || c.type === 'event_thread' || c.type === 'enterprise_thread') return false;
                                 const pk = getPeerKey(c);
                                 return !pk || !blocked.includes(pk);
                             });
@@ -303,6 +324,13 @@ export default function ChatsScreen() {
                             if (active) setDeals(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);
+                    fetchYourGroups()
+                        .then(res => {
+                            if (!active) return;
+                            setYourGroups(prev => keepIfSame(prev, res.items));
+                            setYourGroupsError(null);
+                        })
+                        .catch((e: any) => { if (active) setYourGroupsError(e?.message || 'Could not load your groups.'); });
                     getFriendsLocal(identity.publicKey)
                         .then(res => {
                             if (active) setFriendPubkeys(prev => {
@@ -533,8 +561,9 @@ export default function ChatsScreen() {
     const talkSwitch = (
         <View style={styles.talkBar}>
             {([
-                { id: 'messages' as const, label: 'Messages', icon: '\u{1F4AC}' },
-                { id: 'people' as const, label: 'People', icon: '\u{1F465}' },
+                { id: 'messages' as const, label: 'Messages', count: 0 },
+                { id: 'groups' as const, label: 'Groups', count: groupsUnread },
+                { id: 'people' as const, label: 'People', count: 0 },
             ]).map(t => {
                 const active = talkView === t.id;
                 return (
@@ -544,11 +573,18 @@ export default function ChatsScreen() {
                         style={[styles.talkTab, active && styles.talkTabActive]}
                         accessibilityRole="radio"
                         accessibilityState={{ selected: active }}
-                        accessibilityLabel={t.label}
+                        accessibilityLabel={t.count ? `${t.label}, ${t.count} unread` : t.label}
                     >
-                        <Text style={[styles.talkTabText, active && styles.talkTabTextActive]}>
-                            {t.icon}  {t.label}
-                        </Text>
+                        <View style={styles.talkTabInner}>
+                            <Text style={[styles.talkTabText, active && styles.talkTabTextActive]} numberOfLines={1}>
+                                {t.label}
+                            </Text>
+                            {t.count > 0 && (
+                                <View style={styles.talkTabBadge}>
+                                    <Text style={styles.talkTabBadgeText} maxFontSizeMultiplier={1.1}>{unreadLabel(t.count)}</Text>
+                                </View>
+                            )}
+                        </View>
                     </Pressable>
                 );
             })}
@@ -670,6 +706,29 @@ export default function ChatsScreen() {
             </Pressable>
         </View>
     ) : null;
+
+    if (talkView === 'groups') {
+        const hasAny = (yourGroups?.length ?? 0) > 0;
+        return (
+            <View style={styles.safeArea}>
+                <Animated.ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+                    <PageTitle title="Talk" />
+                    {talkSwitch}
+                    {hasAny && (
+                        <View style={styles.groupsActions}>
+                            <NewGroupButton onPress={createGroup.open} compact />
+                        </View>
+                    )}
+                    {yourGroups === null
+                        ? (yourGroupsError ? <YourGroupsError message={yourGroupsError} /> : <YourGroupsLoading />)
+                        : hasAny
+                            ? <YourGroupsRows items={yourGroups} myPubkey={identity?.publicKey} showUnread />
+                            : <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push({ pathname: '/(tabs)/projects', params: { section: 'groups' } })} />}
+                </Animated.ScrollView>
+                {createGroup.modal}
+            </View>
+        );
+    }
 
     if (talkView === 'people') {
         return (

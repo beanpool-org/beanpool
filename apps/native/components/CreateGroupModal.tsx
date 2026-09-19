@@ -20,6 +20,8 @@ import { useTheme, useStyles } from '../app/ThemeContext';
 import { createGroupApi, type GroupCategory, type JoinPolicy, type GroupItem } from '../utils/db';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 import { submitCreateGroup } from '../utils/create-group-submit';
+import { GROUP_CATEGORY_EMOJI } from '../utils/your-groups';
+import { router } from 'expo-router';
 
 interface CreateGroupModalProps {
     isOpen: boolean;
@@ -27,12 +29,14 @@ interface CreateGroupModalProps {
     onCreated: (group: GroupItem) => void;
 }
 
-const CATEGORIES: Array<{ key: GroupCategory; label: string; icon: string; desc: string }> = [
-    { key: 'working_group', label: 'Working Group', icon: 'account-group', desc: 'Practical focus group coordinating tasks' },
-    { key: 'project', label: 'Project Team', icon: 'hammer-wrench', desc: 'Collaborating on an initiative or venture' },
-    { key: 'guild', label: 'Guild', icon: 'shield-account', desc: 'Skill sharing and craft practitioners' },
-    { key: 'social', label: 'Social Circle', icon: 'coffee', desc: 'Community chats and shared interests' },
-    { key: 'general', label: 'General', icon: 'forum', desc: 'Open discussion space' },
+// Groups decision 11: Social Circle (default, pre-selected) → General → Working Group → Project Team → Guild.
+// The same form, the same defaults, from Commons and from Talk (decision 4). Emoji match the group's chat header.
+const CATEGORIES: Array<{ key: GroupCategory; label: string; emoji: string; desc: string }> = [
+    { key: 'social', label: 'Social Circle', emoji: GROUP_CATEGORY_EMOJI.social, desc: 'Friends, neighbours, shared interests' },
+    { key: 'general', label: 'General', emoji: GROUP_CATEGORY_EMOJI.general, desc: 'Open discussion space' },
+    { key: 'working_group', label: 'Working Group', emoji: GROUP_CATEGORY_EMOJI.working_group, desc: 'Getting a practical job done together' },
+    { key: 'project', label: 'Project Team', emoji: GROUP_CATEGORY_EMOJI.project, desc: 'Collaborating on an initiative' },
+    { key: 'guild', label: 'Guild', emoji: GROUP_CATEGORY_EMOJI.guild, desc: 'People who share a skill or craft' },
 ];
 
 const JOIN_POLICIES: Array<{ key: JoinPolicy; label: string; icon: string; desc: string }> = [
@@ -45,7 +49,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
     const { colors } = useTheme();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [category, setCategory] = useState<GroupCategory>('working_group');
+    const [category, setCategory] = useState<GroupCategory>('social');
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>('open');
     const [submitting, setSubmitting] = useState(false);
     const insets = useSafeAreaInsets();
@@ -70,7 +74,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             alignItems: 'center',
             justifyContent: 'space-between',
             paddingHorizontal: 20,
-            paddingVertical: 16,
+            paddingVertical: 4,
             borderBottomWidth: 1,
             borderBottomColor: colors.border.default,
         },
@@ -80,7 +84,11 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             color: colors.text.heading,
         },
         closeBtn: {
-            padding: 4,
+            width: 48,
+            height: 48,
+            marginRight: -12,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         // Padding on contentContainerStyle, not the ScrollView's style: on Android, padding on the
         // ScrollView itself is not part of the scroll range, so the last 20dp could never be reached.
@@ -167,6 +175,12 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             color: colors.text.secondary,
             marginTop: 2,
         },
+        bridge: {
+            minHeight: 48, justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12,
+            borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border.strong, marginBottom: 4,
+        },
+        bridgeText: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
+        bridgeLink: { fontWeight: '800', color: colors.brand.primary },
         createBtn: {
             backgroundColor: colors.brand.primary,
             borderRadius: 14,
@@ -214,6 +228,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                 onCreated(group);
                 setName('');
                 setDescription('');
+                setCategory('social');
+                setJoinPolicy('open');
                 onClose();
             },
             onInvalidName: () => Alert.alert('Invalid Name', 'Group name must be at least 2 characters long.'),
@@ -292,11 +308,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                                         }}
                                     >
                                         <View style={styles.optionIconWrap}>
-                                            <MaterialCommunityIcons
-                                                name={cat.icon as any}
-                                                size={20}
-                                                color={selected ? colors.brand.primary : colors.text.secondary}
-                                            />
+                                            <Text style={{ fontSize: 20 }} allowFontScaling={false}>{cat.emoji}</Text>
                                         </View>
                                         <View style={styles.optionTextWrap}>
                                             <Text style={styles.optionLabel}>{cat.label}</Text>
@@ -309,6 +321,20 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                                 );
                             })}
                         </View>
+
+                        {/* Decision 14: the bridge to an enterprise, for people who are really running something. */}
+                        <Pressable
+                            style={styles.bridge}
+                            accessibilityRole="link"
+                            accessibilityLabel="Running something together? Start an enterprise"
+                            onPress={async () => {
+                                await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+                                onClose();
+                                router.push('/propose-project');
+                            }}
+                        >
+                            <Text style={styles.bridgeText}>🥖 Running something together? <Text style={styles.bridgeLink}>Start an enterprise →</Text></Text>
+                        </Pressable>
 
                         <Text style={styles.fieldLabel}>Join Policy</Text>
                         <View style={styles.optionRow}>

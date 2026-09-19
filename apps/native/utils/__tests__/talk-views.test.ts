@@ -24,4 +24,9 @@ describe('Talk and People start on a view they have a page for', () => {
         expect(initialTalkView('')).toBe('messages');
         expect(initialTalkView(undefined)).toBe('messages');
     });
+
+    it('Talk has three views: Messages | Groups | People (groups decision 6)', () => {
+        expect(initialTalkView('groups')).toBe('groups');
+        expect(initialPeopleView('groups')).toBe('community');
+    });
 });

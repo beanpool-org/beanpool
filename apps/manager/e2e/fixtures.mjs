@@ -713,6 +713,37 @@ const BACKUP_STATUS = {
     isSynced: true,
 };
 
+const TAKEOVER_MISSING = [
+    'Decisions and their votes',
+    'enterprise pledges and keeper changes',
+    'invites',
+    "members' notification settings",
+    'settings the main server keeps in its database other than its web address (for example what it lists in the directory)',
+    'anything that changed on the main server after this standby last copied it',
+];
+
+const TAKEOVER_PROGRESS = {
+    role: 'backup', state: 'none', startedAt: null, completedAt: null, authorisedBy: null, peerId: null, sealedAt: null,
+    steps: [], error: null, result: null, missing: TAKEOVER_MISSING, afterwards: [], codeUsed: null,
+};
+
+// Long unbroken strings on purpose: a PeerId and a hostname must wrap inside the card at 320px.
+const TAKEOVER_PREVIEW = {
+    sessionId: 'f'.repeat(64),
+    expiresAt: Date.parse('2026-09-19T00:10:00.000Z'),
+    envelope: { envelopeId: 'e'.repeat(32), sealedAt: '2026-09-18T22:14:00.000Z', codeId: 2, newerCopiesSkipped: 0 },
+    communityId: 'a1b2c3d4e5f60718',
+    peerId: '12D3KooWRiverbendMainServerIdentityKeptAcrossTheTakeOver',
+    owners: ['@RiverbendCommunityGardenCoordinator', '@Anna'],
+    admins: 2,
+    connectors: 3,
+    publicAddress: 'riverbend-community-garden-and-tool-library.beanpool.org',
+    tunnel: { source: 'older-envelope', sealedAt: '2026-09-18T21:00:00.000Z', message: 'The newest keys had no tunnel token, so it came from the copy locked 2026-09-18T21:00:00.000Z.' },
+    mainServer: { url: 'https://primary-riverbend.example.org', answers: true, lastCopyAt: Date.parse('2026-09-19T00:00:00.000Z'), warning: 'The main server still answers. Take over only if it is really gone: two servers with one identity will compete, and the old one must never be started again.' },
+    missing: TAKEOVER_MISSING,
+    afterwards: [],
+};
+
 const REPLICATION_CONFIG = { primaryUrl: 'https://primary-riverbend.example.org', hasPassword: true, hasToken: true };
 
 // ---------------------------------------------------------------------------
@@ -886,6 +917,11 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/replication-config/save') return ok({ success: true });
     if (pathname === '/api/local/admin/replication-resync') return ok({ success: true });
     if (pathname === '/api/local/admin/backup-status') return ok(BACKUP_STATUS);
+
+    // ---- take-over on a standby (sealed keys slice 5) ----
+    if (pathname === '/api/local/admin/takeover/progress') return ok(TAKEOVER_PROGRESS);
+    if (pathname === '/api/local/admin/takeover/open') return ok({ success: true, preview: TAKEOVER_PREVIEW });
+    if (pathname === '/api/local/admin/takeover/cancel') return ok({ success: true });
     if (pathname === '/api/local/admin/backup-config') return ok({ success: true });
     if (pathname === '/api/local/admin/backup/verify') return ok({ success: true, ok: true, verifiedAt: '2026-09-19T00:00:00.000Z', result: [] });
     if (pathname === '/api/local/admin/backup') return ok({});

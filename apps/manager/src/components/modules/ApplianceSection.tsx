@@ -24,6 +24,7 @@ import { PublicAddressPanel } from './PublicAddressPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
 import { StandbyReplicationPanel } from './StandbyReplicationPanel';
 import { ReplicationAccessPanel } from './ReplicationAccessPanel';
+import { TakeoverPanel } from './TakeoverPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -1209,6 +1210,11 @@ export function ApplianceSection({
                             />
                         </SectionErrorBoundary>
                     )}
+
+                    {/* Take over as the main server (a standby), or how a take-over went (the server it made main). */}
+                    <SectionErrorBoundary sectionName="Take over" resetKey={activeNode.id}>
+                        <TakeoverPanel activeNode={activeNode} isStandby={isStandby} />
+                    </SectionErrorBoundary>
                 </div>
             )}
 

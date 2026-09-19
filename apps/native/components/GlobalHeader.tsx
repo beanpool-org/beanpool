@@ -517,8 +517,9 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
             </View>
 
             {/* MOCK (mock/header-slim): one 48dp row. The bean opens the community sheet the
-                old centre chevron opened, and wears the connection dot as a badge. The page name
-                sits beside it; invite, settings and avatar are plain icons on the right. */}
+                old centre chevron opened, and wears the connection dot as a badge, whose white ring keeps
+                it visible against the electric bean's dark rim. The page name sits beside it; invite, settings and avatar are plain icons on the
+                right. */}
             <View style={[styles.headerContainer, { paddingTop: insets.top, height: headerHeight }]} pointerEvents="box-none">
                 <TouchableOpacity
                     accessibilityRole="button"
@@ -528,7 +529,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     onPress={openDropdown}
                 >
                     <Image
-                        source={require('../assets/images/header-bean.png')}
+                        source={require('../assets/images/header-electric-bean.png')}
                         style={{ width: BEAN_SIZE, height: BEAN_SIZE }}
                         resizeMode="contain"
                     />

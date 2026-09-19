@@ -139,7 +139,7 @@ export function PeopleSafetySection({
                         onClick={() => setSubTab('directory')}
                         data-subtab="directory"
                         aria-current={subTab === 'directory' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'directory'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -151,7 +151,7 @@ export function PeopleSafetySection({
                         onClick={() => setSubTab('invites')}
                         data-subtab="invites"
                         aria-current={subTab === 'invites' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'invites'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -163,7 +163,7 @@ export function PeopleSafetySection({
                         onClick={() => setSubTab('moderation')}
                         data-subtab="moderation"
                         aria-current={subTab === 'moderation' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'moderation'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -180,7 +180,7 @@ export function PeopleSafetySection({
                         onClick={() => setSubTab('roles')}
                         data-subtab="roles"
                         aria-current={subTab === 'roles' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'roles'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -306,7 +306,7 @@ export function PeopleSafetySection({
                                         className="p-4 rounded-xl bg-nature-950 border border-nature-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:border-nature-700 transition-colors"
                                     >
                                         <div className="space-y-1 min-w-0 break-words">
-                                            <div className="flex flex-wrap items-center gap-2">
+                                            <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
                                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                                                     {report.severity || 'Report'}
                                                 </span>

@@ -228,7 +228,7 @@ export function EscrowDisputesPanel({
                 </div>
 
                 {/* Subtabs for Pending vs Resolved */}
-                <div className="flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-nature-800/80">
+                <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 mt-5 pt-4 border-t border-nature-800/80">
                     <button
                         onClick={() => setFilterStatus('pending')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${

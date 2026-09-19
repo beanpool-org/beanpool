@@ -87,6 +87,22 @@ try {
             await page.locator('main').getByRole('button', { name: modal.open }).first().click();
             await settle(page);
             record(`modal ${modal.name} ${at}`, await horizontalOverflow(page));
+            // A phone-height screen: the modal's last button (usually Save or Close) can be scrolled to and seen.
+            checks++;
+            await page.setViewportSize({ width: WIDTH, height: 640 });
+            const lastButton = page.locator('.fixed.inset-0 button').last();
+            await lastButton.scrollIntoViewIfNeeded().catch(() => {});
+            const reachable = await lastButton.evaluate((el) => {
+                const r = el.getBoundingClientRect();
+                const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                return r.top >= 0 && r.bottom <= window.innerHeight && (hit === el || el.contains(hit));
+            });
+            if (!reachable) {
+                failures.push(`modal ${modal.name} ${at}: its last button cannot be reached on a 320×640 screen`);
+                console.log(`  ✗ modal ${modal.name} last button ${at}`);
+            } else {
+                console.log(`  ✓ modal ${modal.name} last button ${at}`);
+            }
             checks++;
             await page.setViewportSize({ width: WIDTH, height: 360 });
             const field = page.locator('.fixed.inset-0 input:not([type=checkbox]):not([type=radio]):not([type=range]), .fixed.inset-0 textarea, .fixed.inset-0 select').last();

@@ -38,6 +38,14 @@ export const SCREENS = [
     { tab: 'appliance', sub: 'access' },
 ];
 
+const LEGACY_SUB_TAB_LABELS = {
+    directory: /^Members \(/, invites: /^Invites & QR$/, moderation: /^Triage & Moderation/, roles: /^Owners & admins$/,
+    enterprises: /^Enterprises \(/, decisions: /^Proposals$/, pool: /^Commons Pool$/, disputes: /Escrow Disputes/,
+    announcements: /^Announcements$/, pulse: /^Pulse Channels/,
+    diagnostics: /^Diagnostics & Logs$/, backups: /^Backups & Restore$/, gateway: /^Gateway & Peers$/,
+    network: /^Public Address$/, identity: /^Node Identity$/, access: /^Access & Security$/,
+};
+
 export function screenName(s) {
     return s.sub ? `${s.tab}-${s.sub}` : s.tab;
 }
@@ -60,7 +68,7 @@ export async function startServer() {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-settings-'));
     const config = { root: MANAGER_DIR, configFile: path.join(MANAGER_DIR, 'vite.config.ts'), logLevel: 'error' };
     await build({ ...config, build: { outDir, emptyOutDir: true } });
-    const server = await preview({ ...config, build: { outDir }, preview: { port: 0, host: '127.0.0.1', strictPort: false, proxy: {} } });
+    const server = await preview({ ...config, build: { outDir }, preview: { port: Number(process.env.SETTINGS_HARNESS_PORT || 0), host: '127.0.0.1', strictPort: false, proxy: {} } });
     const addr = server.httpServer.address();
     return {
         server: { close: async () => { await server.close(); fs.rmSync(outDir, { recursive: true, force: true }); } },
@@ -129,7 +137,11 @@ export async function openSettings(browser, origin, { width, height = 800, textS
 
 /** Sub-tab buttons carry data-subtab; on a phone they are in a strip that scrolls inside itself. */
 export async function selectSubTab(page, sub) {
-    const btn = page.locator(`main [data-subtab="${sub}"]`).first();
+    let btn = page.locator(`main [data-subtab="${sub}"]`).first();
+    if (!(await btn.count())) {
+        // A build from before sub-tabs were tagged (to compare against main): find the button by its label.
+        btn = page.locator('main button').filter({ hasText: LEGACY_SUB_TAB_LABELS[sub] }).first();
+    }
     await btn.scrollIntoViewIfNeeded();
     await btn.click();
 }

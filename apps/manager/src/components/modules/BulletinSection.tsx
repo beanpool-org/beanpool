@@ -172,7 +172,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                         onClick={() => setSubTab('announcements')}
                         data-subtab="announcements"
                         aria-current={subTab === 'announcements' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'announcements'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -184,7 +184,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                         onClick={() => setSubTab('pulse')}
                         data-subtab="pulse"
                         aria-current={subTab === 'pulse' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'pulse'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'

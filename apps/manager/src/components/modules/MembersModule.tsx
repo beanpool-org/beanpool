@@ -527,7 +527,7 @@ export function MembersModule({
 
     return (
         <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-6 shadow-xl font-sans animate-fade-in">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
                 <div className="min-w-0">
                     <h3 className="text-lg font-bold text-white m-0 flex items-center gap-2">
                         <span>👥 Sovereign Trust Engine Inspector & Moderation Radar</span>
@@ -548,9 +548,9 @@ export function MembersModule({
 
             {/* 🏛️ Community Treasuries & Enterprise Management Card */}
             <div className="bg-nature-950/80 border border-nature-800 p-5 rounded-2xl space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
                     <div className="min-w-0">
-                        <h4 className="text-sm font-bold text-white m-0 flex flex-wrap items-center gap-2">
+                        <h4 className="text-sm font-bold text-white m-0 flex flex-wrap lg:flex-nowrap items-center gap-2">
                             <span>🏛️ Community Treasuries & Enterprises</span>
                             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                                 {treasuries.length} Active
@@ -611,7 +611,7 @@ export function MembersModule({
             {/* 🚨 Active Security & Abuse Detection Radar */}
             {(flags.length > 0 || reports.length > 0) && (
                 <div className="bg-red-950/30 border border-red-800/80 p-5 rounded-2xl space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
                             <span>🚨 Active Security Alerts & Abuse Radar ({flags.length + reports.length})</span>
                         </div>
@@ -646,7 +646,7 @@ export function MembersModule({
                         {reports.map((report: UserReportItem, idx: number) => (
                             <div key={idx} className="p-3 bg-nature-950/80 border border-amber-900/60 rounded-xl flex items-start justify-between gap-3">
                                 <div className="space-y-1 min-w-0 break-words">
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
                                         <span className="px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold uppercase font-mono">
                                             USER REPORT
                                         </span>
@@ -722,7 +722,7 @@ export function MembersModule({
 
                     {/* Member Roster Table */}
                     <div className="space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-x-4 gap-y-2">
                             <h4 className="text-xs font-extrabold text-nature-300 uppercase tracking-wider">
                                 Node Member Roster & Trust Inspector ({filteredMembers.length})
                             </h4>

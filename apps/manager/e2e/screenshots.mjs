@@ -21,7 +21,7 @@ async function shot(page, name) {
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
     const width = page.viewportSize().width;
     const file = path.join(out, `${name}.png`);
-    await page.screenshot({ path: file, fullPage: true, clip: { x: 0, y: 0, width, height: Math.min(height, MAX_H) } });
+    await page.screenshot({ path: file, fullPage: true, animations: 'disabled', clip: { x: 0, y: 0, width, height: Math.min(height, MAX_H) } });
     console.log(file);
 }
 

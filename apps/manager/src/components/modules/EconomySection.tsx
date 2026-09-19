@@ -443,7 +443,7 @@ export function EconomySection({
                         onClick={() => setSubTab('enterprises')}
                         data-subtab="enterprises"
                         aria-current={subTab === 'enterprises' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'enterprises'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -455,7 +455,7 @@ export function EconomySection({
                         onClick={() => setSubTab('decisions')}
                         data-subtab="decisions"
                         aria-current={subTab === 'decisions' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'decisions'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -467,7 +467,7 @@ export function EconomySection({
                         onClick={() => setSubTab('pool')}
                         data-subtab="pool"
                         aria-current={subTab === 'pool' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'pool'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -479,7 +479,7 @@ export function EconomySection({
                         onClick={() => setSubTab('disputes')}
                         data-subtab="disputes"
                         aria-current={subTab === 'disputes' ? 'page' : undefined}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'disputes'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -653,14 +653,14 @@ export function EconomySection({
                                             )}
                                         </div>
 
-                                        <div className="border-t border-nature-800/80 pt-3 flex flex-wrap items-center justify-between gap-2">
+                                        <div className="border-t border-nature-800/80 pt-3 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2">
                                             <div>
                                                 <div className="text-[10px] text-nature-400 uppercase font-bold">Balance</div>
                                                 <div className="text-sm font-bold text-white font-mono">
                                                     {t.balance ?? '0.00'} beans
                                                 </div>
                                             </div>
-                                            <div className="flex flex-wrap items-center gap-2">
+                                            <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
                                                 <button
                                                     onClick={() => setEditingLocationPubkey(editingLocationPubkey === pubkeyStr ? null : pubkeyStr)}
                                                     className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"

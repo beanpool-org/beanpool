@@ -558,7 +558,7 @@ export function ApplianceSection({
                         onClick={() => setSubTab('diagnostics')}
                         data-subtab="diagnostics"
                         aria-current={subTab === 'diagnostics' ? 'page' : undefined}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'diagnostics'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -570,7 +570,7 @@ export function ApplianceSection({
                         onClick={() => setSubTab('backups')}
                         data-subtab="backups"
                         aria-current={subTab === 'backups' ? 'page' : undefined}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'backups'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -582,7 +582,7 @@ export function ApplianceSection({
                         onClick={() => setSubTab('gateway')}
                         data-subtab="gateway"
                         aria-current={subTab === 'gateway' ? 'page' : undefined}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'gateway'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -594,7 +594,7 @@ export function ApplianceSection({
                         onClick={() => setSubTab('network')}
                         data-subtab="network"
                         aria-current={subTab === 'network' ? 'page' : undefined}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'network'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -606,7 +606,7 @@ export function ApplianceSection({
                         onClick={() => setSubTab('identity')}
                         data-subtab="identity"
                         aria-current={subTab === 'identity' ? 'page' : undefined}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'identity'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -618,7 +618,7 @@ export function ApplianceSection({
                         onClick={() => setSubTab('access')}
                         data-subtab="access"
                         aria-current={subTab === 'access' ? 'page' : undefined}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'access'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -1146,10 +1146,10 @@ export function ApplianceSection({
                                 {(Array.isArray(snapshots) ? snapshots : []).map((s) => (
                                     <div
                                         key={s.name}
-                                        className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 flex flex-wrap items-center justify-between gap-3 text-xs"
+                                        className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 text-xs"
                                     >
                                         <div className="min-w-0">
-                                            <div className="font-bold text-white font-mono break-all">{s.name}</div>
+                                            <div className="font-bold text-white font-mono break-words">{s.name}</div>
                                             <div className="text-[10px] text-nature-400 mt-0.5">
                                                 {s.createdAt ? new Date(s.createdAt).toLocaleString() : 'Recent snapshot'} · {Math.round((s.sizeBytes || 0) / 1024)} KB
                                             </div>

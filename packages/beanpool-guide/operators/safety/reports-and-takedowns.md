@@ -22,6 +22,8 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 - The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.
 - It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter.
 
+![The Triage and Moderation screen in Settings](images/people-moderation.webp)
+
 ## What each action does
 
 - **Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was "reviewed and kept". If its author had already taken it down, they are told instead that it "is no longer up".

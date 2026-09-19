@@ -7,6 +7,8 @@ related: what-the-server-sees, the-settings-screens, troubleshooting
 
 BeanPool is made by a small project, not by you. "Suggest a change" is how members, and you, tell the project about an idea or a problem.
 
+![The Settings Home screen where operator shortcuts and feedback live](images/home.webp)
+
 ## Where it goes
 
 A suggestion goes straight from the member's app or browser to the BeanPool project at beanpool.org. It does not pass through your server, and you and your members do not see it.

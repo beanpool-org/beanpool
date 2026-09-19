@@ -32,6 +32,8 @@ The BeanPool source code has a small watchdog for Linux machines (ops/watchdog).
 - On the machine, check Docker's own logs and old images: docker system df shows them; docker image prune removes old images.
 - When there is room again, check the database: Backups & Restore, then Database Integrity Verification.
 
+![Diagnostics and system resources in Settings](images/appliance-diagnostics.webp)
+
 ## You cannot sign in
 
 - "Too many wrong admin passwords": wait, try from another network, or sign in from the app. See Rate limits.

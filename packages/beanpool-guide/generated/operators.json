@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 19,
-  "hash": "0f38ecd5476d39c834e347cf4f1fbc8a0266c2799364fce2b7e7b101fabf41f3",
+  "version": 21,
+  "hash": "08f56347209717a5fafecd063a9e43c509ca21b5a358652cacb197abd93d138c",
   "sections": [
     {
       "id": "setup",
@@ -11,6 +11,7 @@
         "first-time-setup",
         "signing-in",
         "the-settings-screens",
+        "settings-map",
         "access-and-security"
       ]
     },
@@ -134,6 +135,11 @@
           "text": "While your community has no members, Settings opens with a setup wizard. You can skip it, and open it again later from Home. It records that you finished it in this browser only."
         },
         {
+          "type": "img",
+          "src": "images/cold-start.webp",
+          "alt": "The first-time setup wizard in Settings"
+        },
+        {
           "type": "p",
           "text": "What it does:"
         },
@@ -222,6 +228,11 @@
           ]
         },
         {
+          "type": "img",
+          "src": "images/sign-in.webp",
+          "alt": "The sign-in screen in node Settings"
+        },
+        {
           "type": "h2",
           "text": "From the app's Manage button"
         },
@@ -307,6 +318,7 @@
       "summary": "The five screens in Settings, what each is for, how to get around on a phone or a laptop, how to get back to BeanPool, and how to get help on any of them.",
       "section": "setup",
       "related": [
+        "settings-map",
         "first-time-setup",
         "signing-in",
         "roles",
@@ -330,6 +342,11 @@
             "**Bulletin & News**: Announcements to every member, and Pulse Channels.",
             "**Appliance & Data**: Diagnostics & Logs, Backups & Restore, Gateway & Peers, Public Address, Node Identity, and Access & Security."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/home.webp",
+          "alt": "The Settings Home screen showing community health and shortcuts"
         },
         {
           "type": "h2",
@@ -401,6 +418,164 @@
       ]
     },
     {
+      "slug": "settings-map",
+      "title": "Settings map",
+      "summary": "A visual map of every screen in node Settings, grouped by section, with direct links to each screen's instructions.",
+      "section": "setup",
+      "related": [
+        "the-settings-screens",
+        "signing-in",
+        "first-time-setup",
+        "access-and-security"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "A visual map of every screen in node Settings. Tap any picture to open that screen's instructions in this manual."
+        },
+        {
+          "type": "h2",
+          "text": "Setting up"
+        },
+        {
+          "type": "img",
+          "src": "images/home.webp",
+          "alt": "The Home screen in Settings",
+          "href": "the-settings-screens"
+        },
+        {
+          "type": "img",
+          "src": "images/cold-start.webp",
+          "alt": "The first-time setup wizard",
+          "href": "first-time-setup"
+        },
+        {
+          "type": "img",
+          "src": "images/sign-in.webp",
+          "alt": "Signing in to Settings",
+          "href": "signing-in"
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-access.webp",
+          "alt": "Access and security settings",
+          "href": "access-and-security"
+        },
+        {
+          "type": "h2",
+          "text": "People and roles"
+        },
+        {
+          "type": "img",
+          "src": "images/people-directory.webp",
+          "alt": "Members directory",
+          "href": "members-and-invites"
+        },
+        {
+          "type": "img",
+          "src": "images/modal-member-detail.webp",
+          "alt": "Member details card",
+          "href": "members-and-invites"
+        },
+        {
+          "type": "img",
+          "src": "images/people-invites.webp",
+          "alt": "Invites and QR cards",
+          "href": "members-and-invites"
+        },
+        {
+          "type": "img",
+          "src": "images/people-moderation.webp",
+          "alt": "Triage and moderation",
+          "href": "reports-and-takedowns"
+        },
+        {
+          "type": "img",
+          "src": "images/people-roles.webp",
+          "alt": "Owners and admins",
+          "href": "roles"
+        },
+        {
+          "type": "h2",
+          "text": "Money and decisions"
+        },
+        {
+          "type": "img",
+          "src": "images/economy-enterprises.webp",
+          "alt": "Enterprises",
+          "href": "enterprises-and-keepers"
+        },
+        {
+          "type": "img",
+          "src": "images/economy-pool.webp",
+          "alt": "Commons Pool",
+          "href": "enterprises-and-keepers"
+        },
+        {
+          "type": "img",
+          "src": "images/economy-decisions.webp",
+          "alt": "Proposals and Decisions",
+          "href": "decisions-and-emergencies"
+        },
+        {
+          "type": "img",
+          "src": "images/economy-disputes.webp",
+          "alt": "Escrow Disputes",
+          "href": "disputes"
+        },
+        {
+          "type": "h2",
+          "text": "Bulletin and news"
+        },
+        {
+          "type": "img",
+          "src": "images/bulletin-announcements.webp",
+          "alt": "Announcements",
+          "href": "pulse-and-announcements"
+        },
+        {
+          "type": "img",
+          "src": "images/bulletin-pulse.webp",
+          "alt": "Pulse Channels",
+          "href": "pulse-and-announcements"
+        },
+        {
+          "type": "h2",
+          "text": "Running the server"
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-diagnostics.webp",
+          "alt": "Diagnostics and Logs",
+          "href": "updates-and-health"
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-backups.webp",
+          "alt": "Backups and Restore",
+          "href": "backups-and-replicas"
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-gateway.webp",
+          "alt": "Gateway and Peers",
+          "href": "address-and-peers"
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-network.webp",
+          "alt": "Public Address",
+          "href": "address-and-peers"
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-identity.webp",
+          "alt": "Node Identity",
+          "href": "address-and-peers"
+        }
+      ]
+    },
+    {
       "slug": "access-and-security",
       "title": "Access and security",
       "summary": "Changing the admin password, two-factor sign-in, break-glass codes, and the factory reset. Under Appliance & Data, then Access & Security.",
@@ -419,6 +594,11 @@
         {
           "type": "p",
           "text": "Type the current password and a new one. The new one needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. Only an owner can change it, and only by typing the current password, even when signed in from the app."
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-access.webp",
+          "alt": "The Access and Security screen in Settings"
         },
         {
           "type": "p",
@@ -574,6 +754,11 @@
           ]
         },
         {
+          "type": "img",
+          "src": "images/people-roles.webp",
+          "alt": "The Owners and Admins screen in Settings"
+        },
+        {
           "type": "p",
           "text": "Owners and admins open Settings from the BeanPool app with their own key: **Settings**, then **🛡️ Manage** and the community's name. Moderators see **🛡️ Moderate** and the community's name instead. The app shows the button only to people the server says hold one of these roles."
         },
@@ -711,12 +896,31 @@
           ]
         },
         {
+          "type": "img",
+          "src": "images/people-invites.webp",
+          "alt": "The Invites and QR screen in Settings"
+        },
+        {
           "type": "h2",
           "text": "A member's page"
         },
         {
           "type": "p",
-          "text": "Open **People & Safety**, then **Members**, and open a person. Owners and admins can:"
+          "text": "Open **People & Safety**, then **Members**, and open a person."
+        },
+        {
+          "type": "img",
+          "src": "images/people-directory.webp",
+          "alt": "The Members directory in Settings"
+        },
+        {
+          "type": "img",
+          "src": "images/modal-member-detail.webp",
+          "alt": "A member detail card in Settings"
+        },
+        {
+          "type": "p",
+          "text": "Owners and admins can:"
         },
         {
           "type": "ul",
@@ -796,6 +1000,11 @@
             "The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.",
             "It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/people-moderation.webp",
+          "alt": "The Triage and Moderation screen in Settings"
         },
         {
           "type": "h2",
@@ -895,6 +1104,11 @@
           "text": "An announcement goes to every member at once: to anyone with the app open, and as a notification to every phone. It is not kept anywhere, so someone who has notifications off will not see it later. Keep it short and use it rarely."
         },
         {
+          "type": "img",
+          "src": "images/bulletin-announcements.webp",
+          "alt": "The Announcements screen in Settings"
+        },
+        {
           "type": "h2",
           "text": "The Pulse"
         },
@@ -910,6 +1124,11 @@
             "Pictures are fetched by your server, so members' phones do not contact other sites to show them.",
             "An item stops showing when its owner is suspended or removed."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/bulletin-pulse.webp",
+          "alt": "The Pulse Channels screen in Settings"
         },
         {
           "type": "p",
@@ -973,6 +1192,11 @@
         {
           "type": "p",
           "text": "**Shared Projects & Economy**, then **Escrow Disputes**. Choose how old a deal must be to show: 3, 7, 14 or 30 days (7 is usual)."
+        },
+        {
+          "type": "img",
+          "src": "images/economy-disputes.webp",
+          "alt": "The Escrow Disputes screen in Settings"
         },
         {
           "type": "p",
@@ -1089,6 +1313,11 @@
           "text": "**Shared Projects & Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far."
         },
         {
+          "type": "img",
+          "src": "images/economy-decisions.webp",
+          "alt": "The Proposals and Decisions screen in Settings"
+        },
+        {
           "type": "h2",
           "text": "Emergency suspension"
         },
@@ -1169,7 +1398,16 @@
         },
         {
           "type": "p",
-          "text": "**Shared Projects & Economy**, then **Enterprises**. Owners and admins can:"
+          "text": "**Shared Projects & Economy**, then **Enterprises**."
+        },
+        {
+          "type": "img",
+          "src": "images/economy-enterprises.webp",
+          "alt": "The Enterprises screen in Settings"
+        },
+        {
+          "type": "p",
+          "text": "Owners and admins can:"
         },
         {
           "type": "ul",
@@ -1209,6 +1447,11 @@
         {
           "type": "p",
           "text": "The commons pool is the community's shared beans. The **Commons Pool** tab does not show it yet: its figures (\"240.0 beans\", \"✓ Solvent & Fully Backed\", \"0.0 drift\", \"0 queued\") are placeholders that never change, so do not rely on them. The beans come from the 1.5% market fee on every completed trade, the circulation fee on large balances, and members who leave with beans to spare. They pay out through Decisions: grants to enterprises, hardship grants, and writing off debts. Removing a member also settles their balance through the commons."
+        },
+        {
+          "type": "img",
+          "src": "images/economy-pool.webp",
+          "alt": "The Commons Pool screen in Settings"
         },
         {
           "type": "p",
@@ -1292,6 +1535,11 @@
         {
           "type": "p",
           "text": "**Appliance & Data**, then **Backups & Restore**."
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-backups.webp",
+          "alt": "Backups and restore options in Settings"
         },
         {
           "type": "p",
@@ -1487,6 +1735,11 @@
           "text": "**Diagnostics & Logs** shows the processor, memory, database size, live connections, peers and the disk. Home shows the same at a glance, and a card after an unclean shutdown (power cut, crash). After an unclean shutdown the server checks its database as it starts; read the card, then acknowledge it."
         },
         {
+          "type": "img",
+          "src": "images/appliance-diagnostics.webp",
+          "alt": "Diagnostics and system health cards in Settings"
+        },
+        {
           "type": "p",
           "text": "The server keeps its most recent log lines, which Settings shows under Logs. Some messages only appear in Docker's own log: docker compose logs --tail 200 beanpool-node"
         },
@@ -1537,6 +1790,11 @@
           ]
         },
         {
+          "type": "img",
+          "src": "images/appliance-network.webp",
+          "alt": "Public Address configuration in Settings"
+        },
+        {
           "type": "p",
           "text": "You can also use your own domain name and certificate. BeanPool does not need to be involved."
         },
@@ -1547,6 +1805,11 @@
         {
           "type": "p",
           "text": "**Node Identity** holds the community's name, contact email and phone, and the area it serves."
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-identity.webp",
+          "alt": "Node Identity and directory settings in Settings"
         },
         {
           "type": "p",
@@ -1567,6 +1830,11 @@
             "the rate limit (see Rate limits);",
             "which other websites may call your server."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-gateway.webp",
+          "alt": "Gateway and Peers settings in Settings"
         },
         {
           "type": "p",
@@ -1613,6 +1881,11 @@
             "**Checking an invite code** before joining: 30 a minute per internet address.",
             "**Reports**: 10 an hour per member."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-gateway.webp",
+          "alt": "Gateway switches and rate limits under Gateway & Peers"
         },
         {
           "type": "h2",
@@ -1763,6 +2036,11 @@
           ]
         },
         {
+          "type": "img",
+          "src": "images/appliance-diagnostics.webp",
+          "alt": "Diagnostics and system activity visible to admins in Settings"
+        },
+        {
           "type": "h2",
           "text": "What your server sends elsewhere"
         },
@@ -1792,6 +2070,11 @@
         {
           "type": "p",
           "text": "BeanPool is made by a small project, not by you. \"Suggest a change\" is how members, and you, tell the project about an idea or a problem."
+        },
+        {
+          "type": "img",
+          "src": "images/home.webp",
+          "alt": "The Settings Home screen where operator shortcuts and feedback live"
         },
         {
           "type": "h2",
@@ -1897,6 +2180,11 @@
             "On the machine, check Docker's own logs and old images: docker system df shows them; docker image prune removes old images.",
             "When there is room again, check the database: Backups & Restore, then Database Integrity Verification."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-diagnostics.webp",
+          "alt": "Diagnostics and system resources in Settings"
         },
         {
           "type": "h2",

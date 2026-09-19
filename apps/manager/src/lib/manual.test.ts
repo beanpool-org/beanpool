@@ -29,7 +29,8 @@ describe('operator manual in Settings', () => {
     });
 
     it('passes the same validation the apps apply to the members\' guide', () => {
-        expect(validateGuide(OPERATOR_MANUAL)).not.toBeNull();
+        expect(validateGuide(OPERATOR_MANUAL, { allowImages: true })).not.toBeNull();
+        expect(validateGuide(OPERATOR_MANUAL)).toBeNull();
         expect(OPERATOR_MANUAL.guides.length).toBeGreaterThanOrEqual(15);
     });
 

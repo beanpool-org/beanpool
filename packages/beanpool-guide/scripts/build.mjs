@@ -34,6 +34,8 @@ export const BUNDLED_JSON = path.join(pkgDir, 'generated', 'guide.json');
 export const WEBSITE_DIR = path.join(repoRoot, 'apps', 'website', 'guide');
 export const OPERATORS_DIR = path.join(pkgDir, 'operators');
 export const OPERATORS_JSON = path.join(pkgDir, 'generated', 'operators.json');
+export const OPERATORS_IMAGES_DIR = path.join(OPERATORS_DIR, 'images');
+export const MANAGER_PUBLIC_IMAGES_DIR = path.join(repoRoot, 'apps', 'manager', 'public', 'images');
 export const OPERATORS_WEBSITE_DIR = path.join(WEBSITE_DIR, 'operators');
 /** Whether the build writes the operator manual to the website. Off: see the header (Marty's decision, 2026-09-19). */
 export const PUBLISH_OPERATORS_WEBSITE = false;
@@ -47,7 +49,7 @@ const COLLECTIONS = [
 /** Every generated file (absolute path → exact contents) for the current source. */
 export function expectedOutputs() {
     const guide = loadGuide(CONTENT_DIR);
-    const manual = loadGuide(OPERATORS_DIR, { aboutSection: null });
+    const manual = loadGuide(OPERATORS_DIR, { aboutSection: null, allowImages: true });
     const out = { [BUNDLED_JSON]: serializeGuide(guide), [OPERATORS_JSON]: serializeGuide(manual) };
     const websiteOpts = { operatorManualOnWeb: PUBLISH_OPERATORS_WEBSITE };
     for (const [name, text] of Object.entries(renderWebsite(guide, websiteOpts))) out[path.join(WEBSITE_DIR, name)] = text;
@@ -95,6 +97,22 @@ export function check() {
     for (const file of filesUnder(WEBSITE_DIR)) {
         if (!(file in out)) problems.push(`${path.relative(repoRoot, file)} is not generated from the source; remove it`);
     }
+    if (fs.existsSync(OPERATORS_IMAGES_DIR)) {
+        for (const img of fs.readdirSync(OPERATORS_IMAGES_DIR)) {
+            if (img.startsWith('.')) continue;
+            const src = path.join(OPERATORS_IMAGES_DIR, img);
+            const dst = path.join(MANAGER_PUBLIC_IMAGES_DIR, img);
+            if (!fs.existsSync(dst)) {
+                problems.push(`apps/manager/public/images/${img} is missing; run generate to copy it`);
+            } else {
+                const srcBuf = fs.readFileSync(src);
+                const dstBuf = fs.readFileSync(dst);
+                if (!srcBuf.equals(dstBuf)) {
+                    problems.push(`apps/manager/public/images/${img} is out of date; run generate to update it`);
+                }
+            }
+        }
+    }
     return problems;
 }
 
@@ -111,6 +129,13 @@ function write() {
     for (const [file, text] of Object.entries(out)) {
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, text);
+    }
+    if (fs.existsSync(OPERATORS_IMAGES_DIR)) {
+        fs.mkdirSync(MANAGER_PUBLIC_IMAGES_DIR, { recursive: true });
+        for (const img of fs.readdirSync(OPERATORS_IMAGES_DIR)) {
+            if (img.startsWith('.')) continue;
+            fs.copyFileSync(path.join(OPERATORS_IMAGES_DIR, img), path.join(MANAGER_PUBLIC_IMAGES_DIR, img));
+        }
     }
     console.log(`Members' guide v${guide.version}, operator manual v${manual.version}: wrote ${Object.keys(out).length} files.`);
 }

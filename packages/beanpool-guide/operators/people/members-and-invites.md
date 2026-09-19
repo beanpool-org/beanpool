@@ -19,9 +19,17 @@ Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and 
 - If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server.
 - In the community's invite tree, every invite made in Settings comes from the first member, Admin. The server also records which owner or admin made it (or "the admin password"), in its security log.
 
+![The Invites and QR screen in Settings](images/people-invites.webp)
+
 ## A member's page
 
-Open **People & Safety**, then **Members**, and open a person. Owners and admins can:
+Open **People & Safety**, then **Members**, and open a person.
+
+![The Members directory in Settings](images/people-directory.webp)
+
+![A member detail card in Settings](images/modal-member-detail.webp)
+
+Owners and admins can:
 
 - **Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Members then vote for 7 days on keeping the suspension. If the vote does not pass, it lifts by itself. See Decisions and emergencies.
 - **Lift suspension**: ends a suspension early and closes its vote.

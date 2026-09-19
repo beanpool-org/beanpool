@@ -46,6 +46,8 @@ A moderator whose role is taken away, or changed, is signed out straight away.
 - Admins, signed in with their key, see the list but cannot change it.
 - Moderators never see this list: their Settings is Reports only. Ordinary members cannot open Settings at all.
 
+![The Owners and Admins screen in Settings](images/people-roles.webp)
+
 Owners and admins open Settings from the BeanPool app with their own key: **Settings**, then **🛡️ Manage** and the community's name. Moderators see **🛡️ Moderate** and the community's name instead. The app shows the button only to people the server says hold one of these roles.
 
 ## Adding someone

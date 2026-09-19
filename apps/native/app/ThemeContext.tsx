@@ -39,7 +39,7 @@ export interface ThemeContextType {
 const PATTERN_KEY = 'beanpool_background_pattern';
 
 /** The flat colour the doodle tiles are drawn on — sampled from the art itself. */
-const PATTERN_GROUND = { light: '#f1f1e4', dark: '#101717' } as const;
+const PATTERN_GROUND = { light: '#f1f1e4', dark: '#141a1a' } as const;
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 

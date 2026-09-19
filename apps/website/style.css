@@ -1,7 +1,7 @@
 /* ======================== DESIGN SYSTEM TOKENS ======================== */
 :root {
     --bg-primary: #030712;
-    --pattern-bg: #101717;   /* the doodle tile's own ground */
+    --pattern-bg: #141a1a;   /* the doodle tile's own ground */
     --bg-surface: #0b0f19;
     --bg-card: rgba(17, 24, 39, 0.45);
     --bg-card-hover: rgba(22, 32, 54, 0.6);

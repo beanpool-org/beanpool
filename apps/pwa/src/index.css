@@ -80,7 +80,7 @@
   --header-bg: #1d231d;
   --header-overlay: rgba(29, 35, 29, 0.85);
   --pattern-image: -webkit-image-set(url('/pattern-dark.webp') 1x, url('/pattern-dark-2x.webp') 2x);
-  --pattern-bg: #101717;
+  --pattern-bg: #141a1a;
   --nav-bg: #2a322a;
   --shadow-card: 0 4px 12px rgba(0,0,0,0.3);
 }

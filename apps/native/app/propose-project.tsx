@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+
+export { ErrorBoundary };
 import { StatusBar } from 'expo-status-bar';
 import { createEnterpriseApi } from '../utils/db';
 import * as ImagePicker from 'expo-image-picker';

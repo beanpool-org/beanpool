@@ -34,8 +34,8 @@
  *
  *   4. Being clean must not be free to mint. One IPv6 customer can hold a /48: 65,536 /64s, each a fresh clean
  *      source. So failures are also counted per wider prefix (IPv6 /48, IPv4 /24); once a prefix has had
- *      PREFIX_CLEAN_FAILURES failures in a day, its sources no longer count as clean, only as "few failures"
- *      (the top tier of the shared allowance). An owner's own clean source outside that prefix is unaffected.
+ *      PREFIX_CLEAN_FAILURES failures in a day, its sources no longer count as clean (nor as 'typo'), only as
+ *      'few'. An owner's own clean source outside that prefix is unaffected.
  *
  *   5. One source for everyone is an operator's mistake, not an attack. A reverse proxy on another host that is not
  *      in TRUSTED_PROXIES makes every member arrive from the proxy's address (client-ip.ts notices: the proxy sends

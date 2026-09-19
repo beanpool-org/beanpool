@@ -36,6 +36,8 @@ If neither answers, the server is down or unreachable. See Troubleshooting.
 
 **Diagnostics & Logs** shows the processor, memory, database size, live connections, peers and the disk. Home shows the same at a glance, and a card after an unclean shutdown (power cut, crash). After an unclean shutdown the server checks its database as it starts; read the card, then acknowledge it.
 
+![Diagnostics and system health cards in Settings](images/appliance-diagnostics.webp)
+
 The server keeps its most recent log lines, which Settings shows under Logs. Some messages only appear in Docker's own log: docker compose logs --tail 200 beanpool-node
 
 ## Disk space

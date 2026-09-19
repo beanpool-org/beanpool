@@ -37,6 +37,8 @@ You can give someone the moderator role, and it shows on their profile in Settin
 - Admins, signed in with their key, see the list but cannot change it.
 - Moderators and ordinary members cannot open Settings at all.
 
+![The Owners and Admins screen in Settings](images/people-roles.webp)
+
 Owners and admins open Settings from the BeanPool app with their own key: **Settings**, then **🛡️ Manage** and the community's name. The app shows that button only to people the server says hold one of those roles.
 
 ## Adding someone

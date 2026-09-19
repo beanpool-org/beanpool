@@ -67,6 +67,8 @@ curl -k -X POST -H "X-Admin-Password: PASSWORD" -H "Content-Type: application/js
 
 **Appliance & Data**, then **Backups & Restore**.
 
+![Backups and restore options in Settings](images/appliance-backups.webp)
+
 **Download Sovereign Database**:
 
 - **With a recovery code**: a **.bpsealed** file, a locked backup. It holds a clean copy of the database taken while the server runs, the settings, and the server's keys and sign-in settings (libp2p_key, community.key, genesis.json, connectors.json, the scrambled admin password, two-factor sign-in). One file brings back the whole community. It is locked to the recovery code and to the community's owners. Nobody else can open it, including an admin who downloads it or anyone who finds the file. Every download is locked, whoever asks.

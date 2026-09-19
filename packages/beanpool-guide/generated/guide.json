@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 5,
-  "hash": "9509ecaaa61e64d8de17a5708bcbd91a239e1136b163e16acb23ad89eb08c589",
+  "version": 6,
+  "hash": "963c51604b433ded535f360c2535b2add9a00cbbc7f6933bdffcceaa69d0f55f",
   "sections": [
     {
       "id": "about",
@@ -1531,12 +1531,16 @@
           "text": "Pull the list down to refresh it."
         },
         {
+          "type": "p",
+          "text": "The search and filters slide away as you scroll down, so you see more posts. Scroll up a little and they come back. To jump back to the top, tap **Market** again."
+        },
+        {
           "type": "h2",
           "text": "Search"
         },
         {
           "type": "p",
-          "text": "Type in **Search marketplace...** at the top. The search also finds related words: \"fruit\" finds \"lemon\". Without a connection, it searches what is already on your phone."
+          "text": "Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: \"fruit\" finds \"lemon\". Without a connection, it searches what is already on your phone."
         },
         {
           "type": "h2",
@@ -1574,6 +1578,10 @@
         {
           "type": "p",
           "text": "If nothing matches, tap **Clear All Filters**."
+        },
+        {
+          "type": "p",
+          "text": "When you have scrolled down and a search or filter is on, a small chip at the top shows what it is. Tap the chip to change it. Tap **✕** on it to clear the search and every filter."
         },
         {
           "type": "p",
@@ -2167,7 +2175,8 @@
           "type": "ul",
           "items": [
             "Search with **Search chats, posts, partners...**.",
-            "The filter button sorts by **Recent**, **Unread** or credits, and can show **Unread Only** or **Friends Only**."
+            "The filter button sorts by **Recent**, **Unread** or credits, and can show **Unread Only** or **Friends Only**.",
+            "The search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top."
           ]
         },
         {
@@ -2564,6 +2573,10 @@
         {
           "type": "p",
           "text": "Pull down to refresh."
+        },
+        {
+          "type": "p",
+          "text": "The buttons along the top slide away as you scroll down. Scroll up a little and they come back. Tap **Pulse** again to jump to the top."
         },
         {
           "type": "h2",

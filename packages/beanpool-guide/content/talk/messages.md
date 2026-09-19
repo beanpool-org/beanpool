@@ -11,6 +11,7 @@ Tap **Talk** in the row of tabs, then **Messages**. Your chats are listed under 
 
 - Search with **Search chats, posts, partners...**.
 - The filter button sorts by **Recent**, **Unread** or credits, and can show **Unread Only** or **Friends Only**.
+- The search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top.
 
 ## Starting a chat
 

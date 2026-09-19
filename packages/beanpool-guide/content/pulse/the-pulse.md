@@ -14,6 +14,8 @@ Tap **Pulse** in the row of tabs. The Pulse gathers what members of your communi
 
 Pull down to refresh.
 
+The buttons along the top slide away as you scroll down. Scroll up a little and they come back. Tap **Pulse** again to jump to the top.
+
 ## Opening a post
 
 Tap the picture or the title. It opens in your browser or in that site's own app, such as YouTube. Nothing plays inside BeanPool.

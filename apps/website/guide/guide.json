@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "version": 1,
-  "hash": "c2bcd12a0cfd04f54675a521a8836abeb5ee1e97897bb40f00752db10d8f97e7",
+  "hash": "a0ea0fbbbc0e36d38be06f02c80585223f58551cb4e19d99543ff7585c500f1d",
   "guides": [
     {
       "slug": "how-it-works",
@@ -69,7 +69,7 @@
           "type": "ul",
           "items": [
             "A gift can only come from beans you have. It can never take you below zero.",
-            "You can send gifts after your first completed trade.",
+            "You can send gifts once you have completed a trade in the market. A trade of only 1 or 2 beans is too small to count.",
             "Gifts have no fee."
           ]
         },
@@ -83,7 +83,7 @@
         },
         {
           "type": "p",
-          "text": "Your credit line starts at zero. It opens when you complete your first trade. Someone your community has chosen to welcome newcomers can also give you a small start by vouching for you: 25, 50 or 100 beans."
+          "text": "Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). Someone your community has chosen to welcome newcomers can also give you a small start by vouching for you: 25, 50 or 100 beans."
         },
         {
           "type": "p",
@@ -257,7 +257,7 @@
         },
         {
           "type": "p",
-          "text": "Nobody can see how you voted. Everyone sees the totals, and you see your own vote. This is true for admins too."
+          "text": "The app never shows anyone how you voted, admins included. Everyone sees the totals, and you see your own vote. Your vote is stored on your community's server with your account, so that it can be counted and checked. Someone who can open the server's files directly could look it up."
         },
         {
           "type": "p",
@@ -462,7 +462,7 @@
         },
         {
           "type": "p",
-          "text": "A gift needs two things. You must have completed at least one trade, and you can only give beans you have. A gift can never take you below zero."
+          "text": "A gift needs two things. You must have completed a trade in the market (1 or 2 beans is too small to count), and you can only give beans you have. A gift can never take you below zero."
         },
         {
           "type": "h2",
@@ -494,7 +494,7 @@
         },
         {
           "type": "p",
-          "text": "On a Decision: no. Only the totals are shown, and your own vote to you. On a Poll: yes. Polls are an open show of hands."
+          "text": "On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server, so someone who can open the server's files directly could look it up. On a Poll: yes, everyone can see. Polls are an open show of hands."
         },
         {
           "type": "h2",
@@ -569,7 +569,7 @@
         {
           "type": "ul",
           "items": [
-            "**Secret ballots.** Nobody can see how you voted on a Decision, not even admins. You can see your own vote.",
+            "**Secret ballots.** The app no longer shows anyone how you voted on a Decision, admins included. You can see your own vote.",
             "**Who may vote.** Only members who joined before a Decision opened can vote on it.",
             "**Turnout.** Turnout now counts members who did something in the app in the last 30 days.",
             "**Emergency suspension.** When an admin suspends someone, a 7-day vote opens at once: \"Keep this suspension?\". If it does not pass, the suspension lifts by itself.",

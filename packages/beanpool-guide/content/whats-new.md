@@ -15,7 +15,7 @@ Some of these changes live on your community's server. You get them when your co
 
 ### Voting
 
-- **Secret ballots.** Nobody can see how you voted on a Decision, not even admins. You can see your own vote.
+- **Secret ballots.** The app no longer shows anyone how you voted on a Decision, admins included. You can see your own vote.
 - **Who may vote.** Only members who joined before a Decision opened can vote on it.
 - **Turnout.** Turnout now counts members who did something in the app in the last 30 days.
 - **Emergency suspension.** When an admin suspends someone, a 7-day vote opens at once: "Keep this suspension?". If it does not pass, the suspension lifts by itself.

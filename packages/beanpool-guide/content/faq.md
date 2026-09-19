@@ -18,7 +18,7 @@ The app has no way to buy or sell beans for money. Beans are earned by helping p
 
 ## Why can't I send a gift?
 
-A gift needs two things. You must have completed at least one trade, and you can only give beans you have. A gift can never take you below zero.
+A gift needs two things. You must have completed a trade in the market (1 or 2 beans is too small to count), and you can only give beans you have. A gift can never take you below zero.
 
 ## Why can't I spend below zero?
 
@@ -34,7 +34,7 @@ On a Decision or a Poll, yes, until the vote closes. On a keeper or convenor vot
 
 ## Can anyone see how I voted?
 
-On a Decision: no. Only the totals are shown, and your own vote to you. On a Poll: yes. Polls are an open show of hands.
+On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server, so someone who can open the server's files directly could look it up. On a Poll: yes, everyone can see. Polls are an open show of hands.
 
 ## I lost my phone. Is my account gone?
 

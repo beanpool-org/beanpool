@@ -34,14 +34,14 @@ If a trade gets stuck, an admin of your community can step in. They can pay the 
 You can also send beans to someone as a gift, with no trade.
 
 - A gift can only come from beans you have. It can never take you below zero.
-- You can send gifts after your first completed trade.
+- You can send gifts once you have completed a trade in the market. A trade of only 1 or 2 beans is too small to count.
 - Gifts have no fee.
 
 ## Going below zero: your credit line
 
 You can spend a little more than you have, and go below zero. This is your **credit line**. It is a promise to help others later.
 
-Your credit line starts at zero. It opens when you complete your first trade. Someone your community has chosen to welcome newcomers can also give you a small start by vouching for you: 25, 50 or 100 beans.
+Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). Someone your community has chosen to welcome newcomers can also give you a small start by vouching for you: 25, 50 or 100 beans.
 
 Your credit line grows with your **trust**:
 

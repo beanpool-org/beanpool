@@ -42,7 +42,7 @@ Any active member whose credit is not frozen, and who joined **before** the Deci
 
 ## Secret ballots
 
-Nobody can see how you voted. Everyone sees the totals, and you see your own vote. This is true for admins too.
+The app never shows anyone how you voted, admins included. Everyone sees the totals, and you see your own vote. Your vote is stored on your community's server with your account, so that it can be counted and checked. Someone who can open the server's files directly could look it up.
 
 Polls are different: a Poll is an open show of hands, and everyone can see who picked what.
 

@@ -414,7 +414,7 @@ export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null
                     role="dialog"
                     aria-modal="true"
                     aria-label={enlarged.alt || 'Enlarged image'}
-                    className="fixed inset-0 z-[120] bg-black/95 flex flex-col animate-in fade-in"
+                    className="fixed inset-0 z-[120] bg-nature-950 flex flex-col animate-in fade-in"
                     onClick={() => setEnlarged(null)}
                 >
                     <div

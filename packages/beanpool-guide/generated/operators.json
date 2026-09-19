@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 18,
-  "hash": "70663914040a3e8a18523b64ecd4d8c72677a6a3a5682c90a3d9a6e748437c54",
+  "version": 19,
+  "hash": "572e741a3c01acdfb0b2e2435dc2440367b6f997ed127d6f1ef8b16cb0f8875d",
   "sections": [
     {
       "id": "setup",
@@ -219,11 +219,6 @@
           "text": "Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app."
         },
         {
-          "type": "img",
-          "src": "images/sign-in.webp",
-          "alt": "The sign-in screen in node Settings"
-        },
-        {
           "type": "ul",
           "items": [
             "The password counts as an **owner**. Whoever has it can do everything an owner can.",
@@ -231,6 +226,11 @@
             "Your browser keeps the password for this tab only. Close the tab and you sign in again.",
             "Some things can only be done with the password, even by an owner signed in from the app: changing the password, resetting the server, making invites from the setup wizard, the community's name and address, peer links and the money thresholds."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/sign-in.webp",
+          "alt": "The sign-in screen in node Settings"
         },
         {
           "type": "h2",
@@ -694,17 +694,17 @@
           "text": "**People & Safety**, then **Owners & admins**, lists everyone who holds a role, what it is and who gave it."
         },
         {
-          "type": "img",
-          "src": "images/people-roles.webp",
-          "alt": "The Owners and Admins screen in Settings"
-        },
-        {
           "type": "ul",
           "items": [
             "Owners, signed in with their key or with the admin password, see the list and can add and remove people.",
             "Admins, signed in with their key, see the list but cannot change it.",
             "Moderators and ordinary members cannot open Settings at all."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/people-roles.webp",
+          "alt": "The Owners and Admins screen in Settings"
         },
         {
           "type": "p",
@@ -836,11 +836,6 @@
           "text": "Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing."
         },
         {
-          "type": "img",
-          "src": "images/people-invites.webp",
-          "alt": "The Invites and QR screen in Settings"
-        },
-        {
           "type": "ul",
           "items": [
             "Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button. A moderator cannot.",
@@ -849,12 +844,17 @@
           ]
         },
         {
+          "type": "img",
+          "src": "images/people-invites.webp",
+          "alt": "The Invites and QR screen in Settings"
+        },
+        {
           "type": "h2",
           "text": "A member's page"
         },
         {
           "type": "p",
-          "text": "Open **People & Safety**, then **Members**, and open a person. Owners and admins can:"
+          "text": "Open **People & Safety**, then **Members**, and open a person."
         },
         {
           "type": "img",
@@ -865,6 +865,10 @@
           "type": "img",
           "src": "images/modal-member-detail.webp",
           "alt": "A member detail card in Settings"
+        },
+        {
+          "type": "p",
+          "text": "Owners and admins can:"
         },
         {
           "type": "ul",
@@ -939,16 +943,16 @@
           "text": "**People & Safety**, then **Triage & Moderation**. Any owner or admin can act on them."
         },
         {
-          "type": "img",
-          "src": "images/people-moderation.webp",
-          "alt": "The Triage and Moderation screen in Settings"
-        },
-        {
           "type": "ul",
           "items": [
             "The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.",
             "It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/people-moderation.webp",
+          "alt": "The Triage and Moderation screen in Settings"
         },
         {
           "type": "h2",
@@ -1038,11 +1042,6 @@
           "text": "The Pulse shows what members share from their own channels (videos, feeds and so on), plus the Learn videos. Anyone can see the Pulse feed, even without joining, so it is part of your community's public face."
         },
         {
-          "type": "img",
-          "src": "images/bulletin-pulse.webp",
-          "alt": "The Pulse Channels screen in Settings"
-        },
-        {
           "type": "ul",
           "items": [
             "Members add their own channels, and can hide or delete their own items.",
@@ -1050,6 +1049,11 @@
             "Pictures are fetched by your server, so members' phones do not contact other sites to show them.",
             "An item stops showing when its owner is suspended or removed."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/bulletin-pulse.webp",
+          "alt": "The Pulse Channels screen in Settings"
         },
         {
           "type": "p",
@@ -1319,12 +1323,16 @@
         },
         {
           "type": "p",
-          "text": "**Shared Projects & Economy**, then **Enterprises**. Owners and admins can:"
+          "text": "**Shared Projects & Economy**, then **Enterprises**."
         },
         {
           "type": "img",
           "src": "images/economy-enterprises.webp",
           "alt": "The Enterprises screen in Settings"
+        },
+        {
+          "type": "p",
+          "text": "Owners and admins can:"
         },
         {
           "type": "ul",
@@ -1699,17 +1707,17 @@
           "text": "**Appliance & Data**, then **Public Address**. Members' apps need an address to reach your server."
         },
         {
-          "type": "img",
-          "src": "images/appliance-network.webp",
-          "alt": "Public Address configuration in Settings"
-        },
-        {
           "type": "ul",
           "items": [
             "You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.",
             "The usual way in is a tunnel: a small helper container dials out to Cloudflare, so your server needs no open ports and its own address stays hidden. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
             "The BeanPool project then checks from time to time that the name still answers with your server's key. If another server answers, the name is taken away."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-network.webp",
+          "alt": "Public Address configuration in Settings"
         },
         {
           "type": "p",
@@ -1741,17 +1749,17 @@
           "text": "**Gateway & Peers** has the gateway switches:"
         },
         {
-          "type": "img",
-          "src": "images/appliance-gateway.webp",
-          "alt": "Gateway and Peers settings in Settings"
-        },
-        {
           "type": "ul",
           "items": [
             "turn the market, messages, links with other communities, invites or the web app off for everyone;",
             "the rate limit (see Rate limits);",
             "which other websites may call your server."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-gateway.webp",
+          "alt": "Gateway and Peers settings in Settings"
         },
         {
           "type": "p",
@@ -1788,11 +1796,6 @@
           "text": "The limits"
         },
         {
-          "type": "img",
-          "src": "images/appliance-gateway.webp",
-          "alt": "Gateway switches and rate limits under Gateway & Peers"
-        },
-        {
           "type": "ul",
           "items": [
             "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. Community and federation traffic, and Settings itself, are not counted.",
@@ -1802,6 +1805,11 @@
             "**Checking an invite code** before joining: 30 a minute per internet address.",
             "**Reports**: 10 an hour per member."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-gateway.webp",
+          "alt": "Gateway switches and rate limits under Gateway & Peers"
         },
         {
           "type": "h2",
@@ -1944,17 +1952,17 @@
           "text": "What admins see in Settings"
         },
         {
-          "type": "img",
-          "src": "images/appliance-diagnostics.webp",
-          "alt": "Diagnostics and system activity visible to admins in Settings"
-        },
-        {
           "type": "ul",
           "items": [
             "The logs, with passwords, keys and 12-word phrases removed before they are written.",
             "The list of devices connected right now, with their internet address, device type and member name.",
             "Reports, and the people they are about."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-diagnostics.webp",
+          "alt": "Diagnostics and system activity visible to admins in Settings"
         },
         {
           "type": "h2",
@@ -2089,11 +2097,6 @@
           "text": "The disk is full"
         },
         {
-          "type": "img",
-          "src": "images/appliance-diagnostics.webp",
-          "alt": "Diagnostics and system resources in Settings"
-        },
-        {
           "type": "ul",
           "items": [
             "Appliance & Data, then Diagnostics & Logs, shows how full it is and what is using it.",
@@ -2101,6 +2104,11 @@
             "On the machine, check Docker's own logs and old images: docker system df shows them; docker image prune removes old images.",
             "When there is room again, check the database: Backups & Restore, then Database Integrity Verification."
           ]
+        },
+        {
+          "type": "img",
+          "src": "images/appliance-diagnostics.webp",
+          "alt": "Diagnostics and system resources in Settings"
         },
         {
           "type": "h2",

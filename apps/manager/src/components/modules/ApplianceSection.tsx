@@ -24,6 +24,8 @@ import { PublicAddressPanel } from './PublicAddressPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
 import { StandbyReplicationPanel } from './StandbyReplicationPanel';
 import { ReplicationAccessPanel } from './ReplicationAccessPanel';
+import { TakeoverLockPanel } from './TakeoverLockPanel';
+import type { RolesViewer } from './NodeRolesPanel';
 import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
@@ -49,6 +51,8 @@ interface ApplianceSectionProps {
     /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
     onSubTabChange?: (sub: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access') => void;
     isStandby?: boolean;
+    /** Who is signed in: decides whether the recovery-code buttons show (owners only; the password is owner level). */
+    rolesViewer?: RolesViewer;
 }
 
 export function ApplianceSection({
@@ -69,6 +73,7 @@ export function ApplianceSection({
     initialSubTab = 'diagnostics',
     onSubTabChange,
     isStandby: propIsStandby,
+    rolesViewer = { kind: 'password' },
 }: ApplianceSectionProps) {
     const [subTab, setSubTab] = useSectionSubTab<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab, onSubTabChange);
     const [backupRole, setBackupRole] = useState<'primary' | 'backup' | null>(null);
@@ -944,8 +949,11 @@ export function ApplianceSection({
             {/* Subtab: Backups & Restore */}
             {subTab === 'backups' && (
                 <div className="space-y-6">
-                    {/* Owners' "12 words checked" (sealed-keys.md §7). Sits where "Who can unlock this community"
-                        (#979) goes; fold into that card's owner rows once both are in. */}
+                    <SectionErrorBoundary sectionName="Who can unlock this community" resetKey={activeNode.id}>
+                        <TakeoverLockPanel activeNode={activeNode} viewer={rolesViewer} communityName={diag?.communityName} />
+                    </SectionErrorBoundary>
+
+                    {/* Owners' "12 words checked" (sealed-keys.md §7). Shown under "Who can unlock this community" (#979). */}
                     <SectionErrorBoundary sectionName="Owners' 12 words" resetKey={activeNode.id}>
                         <OwnerWordsChecksPanel activeNode={activeNode} />
                     </SectionErrorBoundary>

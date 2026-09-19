@@ -325,6 +325,9 @@ function sealedStatus(s: StoredEnvelope, skipped: SkippedOwner[]): TakeoverStatu
 
 // ── Re-seal ────────────────────────────────────────────────────────────────────────────────
 
+// Read once, at boot (index.ts, from getNodeRole()). Nothing changes a node's role while it runs today; if a standby is
+// ever promoted without a restart, this must be updated too, or the promoted node goes on refusing to make a code
+// (RecoveryCodeOnStandbyError, 409) and sealing nothing.
 let standby = false;
 let queue: Promise<unknown> = Promise.resolve();
 const pendingReasons = new Set<string>();
@@ -512,11 +515,80 @@ export async function getSealedTakeoverEnvelope(): Promise<{ envelopeId: string;
     return { envelopeId: stored.envelopeId, bytes, header: readSealedHeader(new Uint8Array(bytes)) };
 }
 
+// ── Which standby holds which envelope (§4: "standby @ 203.0.113.9 holds the keys sealed today 14:02") ──
+
+/** One standby's last fetch of the envelope, keyed by the address it came from. */
+export interface EnvelopeHolderRecord {
+    ip: string;
+    envelopeId: string;
+    /** When that envelope was sealed (its header's createdAt). */
+    sealedAt: string;
+    lastFetchAt: number;
+    /** 'sent': the bytes went out. 'confirmed': the standby named this envelope in If-None-Match (a 304). */
+    how: 'sent' | 'confirmed';
+}
+
+export interface EnvelopeHolder extends EnvelopeHolderRecord {
+    /** It is the envelope this server hands out now. */
+    current: boolean;
+    message: string;
+}
+
+const HOLDERS_KEY = 'takeover_envelope_holders';
+const HOLDERS_KEEP = 10;
+
+function readHolderRecords(): EnvelopeHolderRecord[] {
+    try {
+        const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(HOLDERS_KEY) as { value?: string } | undefined;
+        const list = row?.value ? JSON.parse(row.value) : [];
+        return Array.isArray(list) ? list.filter((h) => h && typeof h.ip === 'string' && typeof h.envelopeId === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
+/** The envelope route saw a standby (replication token) fetch or confirm an envelope. Never throws. */
+export function noteEnvelopeFetch(ip: string, envelopeId: string, sealedAt: string, how: EnvelopeHolderRecord['how']): void {
+    try {
+        const others = readHolderRecords().filter((h) => h.ip !== ip);
+        const list = [{ ip, envelopeId, sealedAt, lastFetchAt: Date.now(), how }, ...others]
+            .sort((a, b) => b.lastFetchAt - a.lastFetchAt)
+            .slice(0, HOLDERS_KEEP);
+        db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(HOLDERS_KEY, JSON.stringify(list));
+    } catch (e: any) {
+        logger.warn('SYS', `[Takeover] Could not record which standby fetched the envelope: ${e?.message || e}`);
+    }
+}
+
+/**
+ * Who holds what, newest fetch first. Reads the envelope on disk as it is (no re-seal), so it is cheap. A standby
+ * that last fetched an older envelope is named as holding keys from before the latest change, with its reason.
+ */
+export function getEnvelopeHolders(): EnvelopeHolder[] {
+    const stored = readStored();
+    return readHolderRecords().map((h) => {
+        const current = !!stored && stored.envelopeId === h.envelopeId;
+        const verb = h.how === 'confirmed' ? 'holds' : 'was sent';
+        const message = current
+            ? `The standby at ${h.ip} ${verb} the take-over keys sealed ${h.sealedAt}, the current lock.`
+            : `The standby at ${h.ip} ${verb} take-over keys sealed ${h.sealedAt}, from before the latest change`
+                + (stored ? ` (${stored.reason}, ${stored.sealedAt}).` : '.');
+        return { ...h, current, message };
+    });
+}
+
 // ── The recovery code (§2.6) ───────────────────────────────────────────────────────────────
 
 export class RecoveryCodeExistsError extends Error {
     constructor(public readonly codeId: number) {
         super(`Recovery code #${codeId} already exists. Making a new one replaces it: the old paper stops opening anything locked from now on.`);
+    }
+}
+
+/** A standby seals nothing of its own (§3), so a code made there would open nothing. */
+export class RecoveryCodeOnStandbyError extends Error {
+    constructor() {
+        super('This server is a standby: it seals nothing, so a recovery code made here would open nothing. Make the code in the main server\'s Settings.');
     }
 }
 
@@ -528,6 +600,7 @@ export function makeRecoveryCode(opts: { replace?: boolean } = {}): Promise<{
     code: string; codeId: number; createdAt: string; replacedCodeId: number | null; status: TakeoverStatus;
 }> {
     return serial(async () => {
+        if (standby) throw new RecoveryCodeOnStandbyError();
         const config = getLocalConfig() as any;
         const current: RecoveryCodeRecord | null = config.recoveryCode ?? null;
         if (current && !opts.replace) throw new RecoveryCodeExistsError(current.codeId);

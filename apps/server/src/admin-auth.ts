@@ -294,8 +294,9 @@ export type AdminRole = 'owner' | 'admin' | 'moderator';
  * session: a fresh CSRF token after a reload, and signing themselves out everywhere. Every other route that calls
  * checkAdminAuth answers a moderator 403 there, before the route runs: default deny, in this one list.
  *
- * Two of these routes narrow further for a moderator: reports/:id/action refuses `suspendUser`, and
- * posts/:id/delete takes only a post someone has reported (routes/admin.ts). The password path never yields a
+ * Two of these routes narrow further for a moderator (routes/admin.ts): reports/:id/action refuses `suspendUser`
+ * and removes a post or Pulse item only through a report that is still open, and posts/:id/delete takes only a
+ * post with an open report. The password path never yields a
  * moderator (it is owner level), so none of this touches it.
  */
 export const MODERATOR_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: string }> = [

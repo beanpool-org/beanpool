@@ -30,13 +30,15 @@ Admins sign in from the app's Manage button and can do the day-to-day work: memb
 Moderators look after reports, and nothing else. They sign in from the app's **Moderate** button (or on a computer, by scanning the code with the app) and see one screen, **Reports**, where they can:
 
 - read every report, filtered by open, handled or dismissed, with what the post says and who reported it;
-- take down the reported post, with a reason the author reads;
-- take a reported Pulse item off the Pulse;
+- take down the reported post while its report is still open, with a reason the author reads;
+- take a reported Pulse item off the Pulse, again while its report is still open;
 - dismiss a report, or mark it handled.
 
 That is all. A moderator cannot suspend or freeze anyone, see members' details or the member list, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work.
 
 A moderator whose role is taken away, or changed, is signed out straight away.
+
+If the server's two-factor sign-in is on (see Access and security), a moderator's key sign-in also asks for the server's 6-digit code, exactly as an admin's does, so they need it from whoever keeps the authenticator. The server has one set of backup codes, not one per person: a backup code a moderator uses is spent, and nobody can use it again. The code on its own opens nothing; it only works alongside a key that holds a role.
 
 ## Owners & admins
 

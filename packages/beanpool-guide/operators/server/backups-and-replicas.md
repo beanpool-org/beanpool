@@ -23,24 +23,51 @@ The simplest complete backup: stop the server, copy the whole data folder somewh
 
 A backup from Settings is **locked** only when the server has a printed recovery code. Today the recovery code is the only way to open a locked backup; opening one with an owner's phone comes in a later update. So until you make a recovery code, the server keeps making the backups it always made: **not locked**, readable by anyone who has the file.
 
-A server with no recovery code says so every time. The download carries the words "Backups are not locked yet: make a recovery code to lock them." and the server's log repeats them. The fleet manager shows that server as "Partial: database, no keys", with "Make a recovery code on the node to lock its backups." The Settings screen does not show the words yet: it still says "✅ Backup downloaded", which is true, because the file opens.
+A server with no recovery code says so every time. The download carries the words "Backups are not locked yet: make a recovery code to lock them." and the server's log repeats them. The fleet manager shows that server as "Partial: database, no keys", with "Make a recovery code on the node to lock its backups." In Settings, the **Who can unlock this community** card shows the same words (see below). The download button itself still says "✅ Backup downloaded", which is true, because the file opens.
+
+## Who can unlock this community
+
+**Appliance & Data**, then **Backups & Restore**. The first card shows:
+
+![The Who can unlock this community card in Settings](images/appliance-backups.webp)
+
+- **Locked** (green), and who can open the server's take-over keys: each owner by name, and the recovery code by its number. Any one of them alone is enough. Under it, when the keys were last locked again and why (an owner added or removed, a new code, a changed setting).
+- **Not locked yet** (amber), and why: no owner and no recovery code, or the server has not made its keys yet. Make someone an owner, or make a recovery code.
+- **Error** (red), with the reason. The locked copy from before the change is kept but not handed out.
+- A standby says it holds no take-over keys of its own. Make the recovery code on the main server.
+- If an owner is left out of the lock, a line names them and says why.
+- Whether backups are locked, and if not, why.
+- The recovery code's number and the day it was made, or "No printed recovery code".
+
+Admins see all of this. Only an owner, or someone signed in with the admin password (which counts as an owner), sees the buttons below.
 
 ## Make a recovery code
 
-Until the Settings card for it arrives, an owner makes the code with one command on the server's own machine:
+In the **Who can unlock this community** card, press **Make a recovery code**.
+
+- The code appears once, in large letters: BPRC- and a number, then groups of letters and digits. It is kept nowhere on the server, and Settings does not keep it either. Close the card and it is gone.
+- Press **Print** for a plain page with the code, the community's name, the date, and what the code is for, then **Print this page**. Or copy it onto paper by hand.
+- Tick **I've printed it or written it down**, then press **Done**. Tapping beside the card, Escape and the phone's Back button do not close it, so a stray tap cannot lose the code. The ✕ does close it: if you had not written it down by then, make a new code.
+- Keep the paper away from the server. Anyone holding it can open your locked backups.
+- From then on every backup is locked, and takeover-envelope.json is locked to the code as well.
+
+**Check a code** proves a paper is right: type the code from it and press **Check**. The answer is yes or no. A mistyped letter is caught at once. A wrong code counts like a wrong password (see Rate limits). Capitals or small letters both work, and the dashes are optional.
+
+**Replace it** makes a new code in place of the old one. Settings warns first: from then on the take-over keys and new backups are locked to the owners and the new code, and the old code stops opening them. **Backups made before stay locked to the old code as well as the owners**, so keep the old paper until those backups are destroyed. Then the new code is shown once, as above.
+
+On a standby the buttons are not shown, and the server refuses to make a code there: a standby locks nothing of its own, so the code would open nothing.
+
+Instead of Settings, an owner can make the code with one command on the server's own machine:
 
 curl -k -X POST -H "X-Admin-Password: PASSWORD" -H "Content-Type: application/json" -d '{}' https://localhost:8443/api/local/admin/takeover/recovery-code
 
 - Put the server's admin password for PASSWORD. The admin password counts as an owner. With two-factor sign-in on, add -H "X-Admin-TOTP: 123456" with the code the authenticator shows.
-- The answer holds "code": BPRC- followed by a number and groups of letters. That is the recovery code. It is shown **once** and kept nowhere on the server. Write it on paper, check it, and keep the paper away from the server.
-- If the server already has a code, the answer says so and changes nothing. To replace it, send -d '{"replace":true}' instead. The old paper still opens backups made before, so keep it until those backups are gone.
-- From then on every backup is locked, and takeover-envelope.json is locked to the code as well.
+- The answer holds "code": that is the recovery code, shown **once**.
+- If the server already has a code, the answer says so and changes nothing. To replace it, send -d '{"replace":true}' instead.
 
 ## Backups from Settings
 
 **Appliance & Data**, then **Backups & Restore**.
-
-![Backups and restore options in Settings](images/appliance-backups.webp)
 
 **Download Sovereign Database**:
 
@@ -57,11 +84,11 @@ curl -k -X POST -H "X-Admin-Password: PASSWORD" -H "Content-Type: application/js
 
 A locked backup is still private: whoever opens it can read everything in it, including how each member voted (see Privacy and what your server can see). It is locked to each owner of the day it was made: once opening with a phone arrives, an owner removed later can still open backups made while they were one.
 
-If the recovery code is lost, no locked backup can be opened today. While the server is running that costs little: make a new code (with "replace"), then download a new backup. Keep the paper somewhere away from the server.
+If the recovery code is lost, no locked backup can be opened today. While the server is running that costs little: press **Replace it** in the Who can unlock this community card, then download a new backup. Keep the paper somewhere away from the server.
 
 ## Owners' 12 words
 
-A locked backup and the locked take-over keys open for any one owner, with the key their account already has. An owner who loses their phone gets that key back from their 12 words. So each owner's 12 words matter most on the day the server itself is lost.
+A locked backup and the locked take-over keys are locked to each owner's key, and will open for any one owner once opening with a phone arrives. Today only the recovery code opens them, so keep the printed code. An owner who loses their phone gets that key back from their 12 words. So each owner's 12 words matter most on the day the server itself is lost.
 
 - **Backups & Restore** in Settings lists each owner with **12 words checked:** and a date, or **not yet**, and a line such as "1 of 3 owners have checked their 12 words in the last year".
 - An owner checks their words in the BeanPool app (phone or web), under **Settings**, **Community keys**. The app asks them once when they become an owner and again a year after their last check. They can always say Later.
@@ -111,5 +138,12 @@ A second server can follow yours as a read-only standby, copying changes about e
 - That standby is **not copying** if your server has two-factor sign-in on, has token-only on, or no longer takes that password. It still copies with the password only if your server already has a token and token-only is off.
 - To fix it either way: if you saved your server's token, paste it under **Live Backup Server** on the standby and save. If not, make a new one under **Replication Access** and paste it into every standby. The standby then deletes the password. If the password came from BACKUP_ADMIN_PASSWORD in the standby's .env, delete that line too.
 - Copying goes one way only. Your main server never takes data from the standby.
+- **The standby keeps the locked take-over keys.** Each time it copies, it also asks your server for takeover-envelope.json, with the token only. If nothing changed, your server answers "no change" and nothing is sent. The standby keeps the last 5 in the folder data/held-takeover-envelopes on its own disk. A sixth deletes only the oldest, so a bad copy from your server can't wipe out a good one.
+- The standby **can't open them**. It has no owner's key and no recovery code. Only an owner or the recovery code opens them, as with a locked backup. It keeps the files exactly as they came, and nothing from inside them is ever on the standby's disk.
+- The standby only keeps a copy signed by the server it copies from (the one it was set up to trust). It refuses any other copy, keeps what it had, and writes a line to its log starting "Refused a take-over envelope".
+- On the standby, **Live Backup Server** says what it holds: when the newest copy was locked and who can open it. If the owners or the recovery code changed since the copy before, it says who was added or removed.
+- On your server, **Replication Access** says which standby holds which copy. When an owner is added or removed, a standby shows as holding keys "from before the latest change" until it next copies, about a minute later.
+- A main server running a BeanPool from before this has nothing to send. The standby says "the main server is too old to send a take-over envelope" and keeps copying the database as before. A server with no owner and no recovery code has nothing to send either, and the standby says that instead.
+- Taking over with these keys comes in a later update. Until then, making a standby the main server works as below.
 - **A standby is not a complete copy.** It does not copy Decisions and their votes, who holds which role, enterprise pledges and keeper changes, invites, or members' notification settings. Keep file backups as well.
 - Making a standby the main server uses scripts in the BeanPool source code, not in the server image, and the first start after needs PROMOTED_FROM_BACKUP=true.

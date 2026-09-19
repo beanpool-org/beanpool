@@ -10,7 +10,8 @@
  *      Every MODERATOR_ROUTES entry must be a route the node really mounts.
  *   3. The allowlist works: list reports (open filter, open count), dismiss one, mark one actioned, take down the
  *      reported post (both ways), a fresh CSRF token. Refused even there: suspending the member from a report, and
- *      removing a post nobody reported.
+ *      removing a post nobody reported, or one whose reports are all dismissed or actioned, by either route
+ *      (owners and admins still can).
  *   4. The password path never yields a moderator: it is owner level, whatever else is sent.
  *   5. A moderator whose role is taken away, or changed, loses the session at once. Signing yourself out everywhere
  *      works; signing someone else out does not.
@@ -288,10 +289,46 @@ async function main() {
         const unreported = await call('POST', `/api/local/admin/posts/${postE.id}/delete`, asMod, {});
         assert(unreported.status === 403, `…but not a post nobody reported (got ${unreported.status})`);
         assert((db.prepare('SELECT active FROM posts WHERE id = ?').get(postE.id) as any)?.active === 1, 'which stays up');
+        // Only an OPEN report counts: once a report is dismissed or actioned it no longer lets a moderator remove the post.
+        const dismissedOnly = await call('POST', `/api/local/admin/posts/${postC.id}/delete`, asMod, {});
+        assert(dismissedOnly.status === 403, `…nor a post whose only report was dismissed (got ${dismissedOnly.status})`);
+        const actionedOnly = await call('POST', `/api/local/admin/posts/${postB.id}/delete`, asMod, {});
+        assert(actionedOnly.status === 403, `…nor one whose only report was already actioned (got ${actionedOnly.status})`);
+        const upNow = (id: string) => (db.prepare('SELECT active FROM posts WHERE id = ?').get(id) as any)?.active === 1;
+        assert(upNow(postC.id) && upNow(postB.id), 'both stay up');
+        // The same rule on the other takedown route: acting on a closed report removes nothing for a moderator.
+        const reportStatus = (id: string) => (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(id) as any)?.status;
+        const viaDismissed = await call('POST', `/api/local/admin/reports/${repC.id}/action`, asMod, { deletePost: true });
+        assert(viaDismissed.status === 403, `…nor from the dismissed report itself (got ${viaDismissed.status})`);
+        const viaActioned = await call('POST', `/api/local/admin/reports/${repB.id}/action`, asMod, { deletePost: true });
+        assert(viaActioned.status === 403, `…nor from the actioned one (got ${viaActioned.status})`);
+        const pulseViaDismissed = await call('POST', `/api/local/admin/reports/${repC.id}/action`, asMod, { removePulseItem: true });
+        assert(pulseViaDismissed.status === 403, `…and no Pulse removal through a closed report either (got ${pulseViaDismissed.status})`);
+        assert(upNow(postC.id) && upNow(postB.id), 'both posts are still up');
+        assert(reportStatus(repC.id) === 'reviewed' && reportStatus(repB.id) === 'actioned', 'and neither report changed');
+        const ada = makeKeypair();
+        addMember(ada, 'Ada', olive.pubKeyHex);
+        grantNodeRole(ada.pubKeyHex, 'admin', olive.pubKeyHex);
+        const asAdmin = { 'x-admin-session': keySession(ada).sessionId! };
+        // Owners and admins act on any report, whatever its state.
+        const postF = createPost('offer', 'other', 'Later offer', 'Reported, dismissed, then removed', 10, 'fixed', oscar.pubKeyHex)!;
+        const repF = submitReport(rita.pubKeyHex, oscar.pubKeyHex, 'Hmm', postF.id)!;
+        assert((await call('POST', `/api/local/admin/reports/${repF.id}/dismiss`, asMod)).status === 200, 'a moderator dismisses one more report');
+        const modF = await call('POST', `/api/local/admin/reports/${repF.id}/action`, asMod, { deletePost: true });
+        assert(modF.status === 403 && upNow(postF.id), `which the moderator then cannot remove through it (got ${modF.status})`);
+        const adminF = await call('POST', `/api/local/admin/reports/${repF.id}/action`, asAdmin, { deletePost: true });
+        assert(adminF.status === 200 && !upNow(postF.id), `an admin removes it through the dismissed report (got ${adminF.status})`);
+        const adminDismissed = await call('POST', `/api/local/admin/posts/${postC.id}/delete`, asAdmin, {});
+        assert(adminDismissed.status === 200 && !upNow(postC.id), `an admin still removes the post whose report was dismissed (got ${adminDismissed.status})`);
+        const asOwner = { 'x-admin-session': keySession(olive).sessionId! };
+        const ownerActioned = await call('POST', `/api/local/admin/posts/${postB.id}/delete`, asOwner, {});
+        assert(ownerActioned.status === 200 && !upNow(postB.id), `and the owner the one whose report was actioned (got ${ownerActioned.status})`);
+        const ownerUnreported = await call('POST', `/api/local/admin/posts/${postE.id}/delete`, asOwner, {});
+        assert(ownerUnreported.status === 200 && !upNow(postE.id), `owners and admins need no report at all (got ${ownerUnreported.status})`);
         const after = await call('GET', '/api/local/admin/reports?status=open', asMod);
         assert(after.status === 200 && after.body.pendingCount === 0, `no report is left open (got ${after.body.pendingCount})`);
         const actioned = await call('GET', '/api/local/admin/reports?status=actioned', asMod);
-        assert(actioned.status === 200 && actioned.body.reports.length === 3, `the actioned filter shows the three acted on (got ${actioned.body.reports?.length})`);
+        assert(actioned.status === 200 && actioned.body.reports.length === 4, `the actioned filter shows the four acted on (A, B, D, and F by the admin; got ${actioned.body.reports?.length})`);
 
         // ── 4. The password path ──
         console.log('\n4. The password never yields a moderator');

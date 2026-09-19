@@ -18,6 +18,8 @@ import {
 } from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
 import { getBackupStatus, requestResync, getStandbyCredentialState } from '../services/backup-puller.js';
+import { getHeldEnvelopesStatus } from '../services/standby-envelopes.js';
+import { getEnvelopeHolders } from '../services/takeover-envelope.js';
 import {
     createSnapshot, listSnapshots, resolveSnapshotPath,
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
@@ -179,6 +181,8 @@ router.post('/api/local/admin/backup-status', async (ctx) => {
         intervalMs: Number(process.env.BACKUP_PULL_INTERVAL_MS) || 60000,
         ...getBackupStatus(),
         credential: getNodeRole() === 'backup' ? getStandbyCredentialState() : null,
+        // A standby: the main server's locked take-over keys it holds (never opened here), and whether they changed.
+        takeoverEnvelopes: getNodeRole() === 'backup' ? getHeldEnvelopesStatus() : null,
         // Whether the next backup leaves locked, and if not why, in words the manager can show as they are.
         backupLock: backupLockState(),
     };
@@ -281,6 +285,8 @@ router.post('/api/local/admin/replication-access', async (ctx) => {
         ...getReplicationAccessLog(),
         tokenOnly: !!getLocalConfig().replicationTokenOnly,
         hasToken: hasReplicationToken(),
+        // Which standby last fetched which take-over envelope.
+        envelopeHolders: getEnvelopeHolders(),
     };
 });
 

@@ -32,7 +32,7 @@ When you are done, **← App** at the top right (in full, **← Back to the Bean
 
 To use Settings on a computer's bigger screen without the password:
 
-- First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://mullum.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.
+- First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://yourtown.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.
 - Then, in the phone app, open **Settings** and tap **Sign in on a computer** (next to Manage or Moderate; owners, admins and moderators only). Point the camera at the QR code.
 - The phone shows the 6-character code, your community and which browser asked (for example "Firefox on Windows"). Check the code matches the one on the computer. If it doesn't, or it isn't your computer, tap **No, that's not my computer**.
 - Tap **Sign in**. The phone asks for its own unlock, and the 6-digit code if your server has two-factor sign-in on. The computer opens Settings, signed in as you.

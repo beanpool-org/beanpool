@@ -750,6 +750,27 @@ async function main() {
         const unauthPreview = await fetch(`${baseUrl}/api/local/admin/members/${graceOldKey}/offboard/preview`);
         assert(unauthPreview.status === 401, 'GET offboard preview unauthenticated returns 401');
 
+        // 1b. Non-existent member or unrecognised code returns 404
+        const nonExistentKey = generateValidPubkey();
+        const nonExistentIssueRes = await fetch(`${baseUrl}/api/local/admin/members/${nonExistentKey}/rekey/issue-code`, {
+            method: 'POST',
+            headers: { 'x-admin-session': 'valid-operator-session' },
+        });
+        assert(nonExistentIssueRes.status === 404, 'POST issue-code for non-existent member returns 404');
+
+        const nonExistentCompleteRes = await fetch(`${baseUrl}/api/local/admin/members/${graceOldKey}/rekey/complete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-session': 'valid-operator-session',
+            },
+            body: JSON.stringify({
+                code: 'RK-9999-9999',
+                newPubkey: generateValidPubkey(),
+            }),
+        });
+        assert(nonExistentCompleteRes.status === 404, 'POST complete rekey with unrecognised code returns 404');
+
         // 2. Authenticated issue rekey code via admin endpoint
         const authIssueRes = await fetch(`${baseUrl}/api/local/admin/members/${graceOldKey}/rekey/issue-code`, {
             method: 'POST',

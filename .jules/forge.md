@@ -100,3 +100,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `DELETE /api/pricing-guide/admin/item/:id`, `POST /api/pricing-guide/admin/pin`, and `POST /api/pricing-guide/reports/:id/status` in `apps/server/src/routes/pricing-guide.ts` returned `200 OK` with `{ success: false }` when the requested resource did not exist in the database.
 **Learning:** Returning HTTP `200 OK` on missing resource mutations misleads callers and API clients into treating missing items as successful operations.
 **Pattern:** Look for route handlers where DB mutations return boolean success flags (`!ok`) that pass through to `res.body = { success: ok }` without setting `ctx.status = 404` when `!ok`.
+
+## 2026-09-19 - [Missing 404 status code on non-existent member re-key requests]
+**Issue:** `POST /api/local/admin/members/:pubkey/rekey/issue-code` and `POST /api/local/admin/members/:pubkey/rekey/complete` in `apps/server/src/routes/admin.ts` defaulted to HTTP 400 when a member or re-key code was not found.
+**Learning:** Catching errors in route handlers without inspecting error messages (or `e.status`) to differentiate non-existent resource errors from bad client inputs returns 400 Bad Request instead of 404 Not Found.
+**Pattern:** Inspect error messages in route catch blocks (e.g. `e?.message?.includes('not found')`) to return `404` for missing resources rather than falling back to `400`.

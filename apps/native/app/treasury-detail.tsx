@@ -207,7 +207,7 @@ export default function TreasuryDetailScreen() {
         balancePos: { color: colors.brand.primary },
         balanceNeg: { color: colors.feedback.warning.solid },
         balanceMetaRow: { flexDirection: 'row', marginTop: 14, gap: 12 },
-        metaBox: { flex: 1, backgroundColor: colors.surface.page, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border.default },
+        metaBox: { flex: 1, backgroundColor: colors.surface.app, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border.default },
         metaLabel: { fontSize: 10, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
         metaValue: { fontSize: 16, fontWeight: '800', color: colors.text.heading, marginTop: 3 },
 
@@ -263,7 +263,7 @@ export default function TreasuryDetailScreen() {
         threadMsgText: { fontSize: 13, color: colors.text.body, lineHeight: 18 },
         threadMsgRemoved: { fontSize: 13, fontStyle: 'italic', color: colors.text.muted },
         threadInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
-        threadInput: { flex: 1, backgroundColor: colors.surface.page, height: 48, borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, color: colors.text.body, fontSize: 13 },
+        threadInput: { flex: 1, backgroundColor: colors.surface.app, height: 48, borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, color: colors.text.body, fontSize: 13 },
         threadSendBtn: { height: 48, flexShrink: 0, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
         threadSendBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
         // A real 48x48dp target (was ~22x23). hitSlop cannot stand in: Android drops touches outside the parent row.

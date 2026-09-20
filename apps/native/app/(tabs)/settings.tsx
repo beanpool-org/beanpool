@@ -65,8 +65,8 @@ export default function SettingsScreen() {
     const { theme, colors, themePreference, setThemePreference, lightPalette, setLightPalette, patternEnabled, setPatternEnabled } = useTheme();
     const { identity, setIdentity } = useIdentity();
 
-    const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: theme === 'dark' ? colors.surface.app : palette.grayAlt100 },
+    const styles = useStyles(({ theme, colors, patternEnabled }) => StyleSheet.create({
+        container: { flex: 1, backgroundColor: patternEnabled ? colors.surface.page : (theme === 'dark' ? colors.surface.app : palette.grayAlt100) },
         content: { padding: 20, paddingTop: 16, paddingBottom: 48 },
 
         // ─── Identity Dashboard ───

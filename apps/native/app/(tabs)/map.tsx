@@ -441,7 +441,7 @@ export default function MapScreen() {
         // Legacy (unused but kept for safety)
         priceRowCompact: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingVertical: 2 },
         priceRow: { flexDirection: 'row', gap: 8, marginBottom: 4, alignItems: 'center' },
-        creditsInputWide: { flex: 1, backgroundColor: colors.surface.page, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 14, paddingVertical: 12, color: colors.text.heading, fontSize: 16, fontWeight: '800' },
+        creditsInputWide: { flex: 1, backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 14, paddingVertical: 12, color: colors.text.heading, fontSize: 16, fontWeight: '800' },
 
         priceTypeBtn: { width: 72, backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center', alignItems: 'center' },
         priceTypeBtnText: { color: colors.text.secondary, fontSize: 13, fontWeight: '700' },

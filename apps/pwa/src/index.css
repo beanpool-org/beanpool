@@ -31,6 +31,7 @@
   --scrollbar-thumb: #c0ccc0; /* nature-300 */
   --header-bg: #fbfaf8;       /* oat-50 */
   --pattern-image: -webkit-image-set(url('/pattern-light.webp') 1x, url('/pattern-light-2x.webp') 2x);
+  --pattern-image: image-set(url('/pattern-light.webp') 1x, url('/pattern-light-2x.webp') 2x);
   --pattern-bg: #f1f1e4;      /* the tile's own ground — what shows between the doodles */
   --header-overlay: rgba(251, 250, 248, 0.85);
   --nav-bg: #ffffff;
@@ -80,6 +81,7 @@
   --header-bg: #1d231d;
   --header-overlay: rgba(29, 35, 29, 0.85);
   --pattern-image: -webkit-image-set(url('/pattern-dark.webp') 1x, url('/pattern-dark-2x.webp') 2x);
+  --pattern-image: image-set(url('/pattern-dark.webp') 1x, url('/pattern-dark-2x.webp') 2x);
   --pattern-bg: #141a1a;
   --nav-bg: #2a322a;
   --shadow-card: 0 4px 12px rgba(0,0,0,0.3);

@@ -70,6 +70,10 @@ body {
         radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
         radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.03) 0%, transparent 50%),
         -webkit-image-set(url('assets/pattern-dark.webp') 1x, url('assets/pattern-dark-2x.webp') 2x);
+    background-image:
+        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.03) 0%, transparent 50%),
+        image-set(url('assets/pattern-dark.webp') 1x, url('assets/pattern-dark-2x.webp') 2x);
     background-repeat: no-repeat, no-repeat, repeat;
     background-size: auto, auto, 890px 890px;
     background-attachment: fixed;

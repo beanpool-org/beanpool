@@ -93,7 +93,7 @@ Object.defineProperty(RN, 'TextInput', {
 function RootLayoutNav() {
     const { identity, isLoading } = useIdentity();
     const { recognition, recheck } = useNodeStatus();
-    const { theme } = useTheme();
+    const { theme, colors } = useTheme();
     const segments = useSegments();
     const router = useRouter();
     const [deepLinkUrl, setDeepLinkUrl] = useState<string | null>(null);
@@ -585,6 +585,7 @@ function RootLayoutNav() {
     if (isLoading || !appLockChecked) return null; // Or a splash screen
 
     const isDark = theme === 'dark';
+    const sheetOptions = { presentation: 'modal' as const, contentStyle: { backgroundColor: colors.surface.chrome } };
     const navTheme = isDark
         ? { ...NavDarkTheme, colors: { ...NavDarkTheme.colors, background: 'transparent' } }
         : { ...NavDefaultTheme, colors: { ...NavDefaultTheme.colors, background: 'transparent' } };
@@ -602,18 +603,18 @@ function RootLayoutNav() {
                 <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
                 <Stack.Screen name="welcome" />
                 <Stack.Screen name="node-mismatch" options={{ gestureEnabled: false }} />
-                <Stack.Screen name="post/[id]" options={{ presentation: 'modal' }} />
-                <Stack.Screen name="propose-project" options={{ presentation: 'modal' }} />
-                <Stack.Screen name="treasury-post" options={{ presentation: 'modal' }} />
-                <Stack.Screen name="suggest-change" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="post/[id]" options={sheetOptions} />
+                <Stack.Screen name="propose-project" options={sheetOptions} />
+                <Stack.Screen name="treasury-post" options={sheetOptions} />
+                <Stack.Screen name="suggest-change" options={sheetOptions} />
                 <Stack.Screen name="owner-words-check" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/[slug]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/section/[id]" options={{ animation: 'slide_from_right' }} />
-                <Stack.Screen name="public-profile" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="public-profile" options={sheetOptions} />
                 <Stack.Screen name="new-message" options={{ headerShown: false, animation: 'slide_from_right' }} />
                 <Stack.Screen name="chat/[id]" />
-                <Stack.Screen name="pulse-intake" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="pulse-intake" options={sheetOptions} />
                 <Stack.Screen name="apple-probe" />
                 <Stack.Screen name="google-probe" />
                 <Stack.Screen name="channels" />

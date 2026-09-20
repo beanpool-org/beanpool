@@ -266,8 +266,9 @@ function ChatScreen() {
         KeyboardController.dismiss().then(() => setViewerUri(uri));
     }, []);
 
-    const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.card },
+    const styles = useStyles(({ theme, colors, patternEnabled }) => StyleSheet.create({
+        // The wallpaper shows behind the thread; with it off, the chat keeps its plain card white.
+        container: { flex: 1, backgroundColor: patternEnabled ? colors.surface.page : colors.surface.card },
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
         backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
         headerProfileContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 8, gap: 10 },

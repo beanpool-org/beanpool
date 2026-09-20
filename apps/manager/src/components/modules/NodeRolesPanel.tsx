@@ -114,6 +114,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
     const [query, setQuery] = useState('');
     const [target, setTarget] = useState<Target | null>(null);
     const [newRole, setNewRole] = useState<MemberNodeRole>('admin');
+    // An admin only ever grants moderator, so don't leave the form defaulted to a role they cannot use.
     const [confirmingAdd, setConfirmingAdd] = useState(false);
     const [removing, setRemoving] = useState<NodeRoleRecord | null>(null);
     const searchRef = useRef<HTMLInputElement>(null);
@@ -121,7 +122,14 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
 
     const tfa = getTfaSessionToken(activeNode.id);
     const myKey = viewer.kind === 'key' ? viewer.memberPubkey : null;
+    // Owner-level: may grant and revoke every role. The node enforces this; the UI only mirrors it.
     const canManage = viewer.kind === 'password' || viewer.role === 'owner';
+    // An admin may appoint and remove MODERATORS, and nothing else (Marty, 2026-09-20). They may not
+    // touch anyone who already holds a role, because granting replaces it -- see grantNodeRole.
+    const isAdminViewer = viewer.kind === 'key' && viewer.role === 'admin';
+    const canManageModerators = canManage || isAdminViewer;
+    const grantableRoles: MemberNodeRole[] = canManage ? ['owner', 'admin', 'moderator'] : ['moderator'];
+    const canRemoveRow = (role: MemberNodeRole) => canManage || (isAdminViewer && role === 'moderator');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -166,7 +174,11 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
 
     const noOwner = roles !== null && !roles.some((r) => r.role === 'owner');
     // With no owner yet the node lets any signed-in admin make the first one, so the form is offered to everyone.
-    const showAdd = roles !== null && (canManage || noOwner);
+    const showAdd = roles !== null && (canManageModerators || noOwner);
+
+    useEffect(() => {
+        if (!canManage && !noOwner && newRole !== 'moderator') setNewRole('moderator');
+    }, [canManage, noOwner, newRole]);
 
     // Every match, never capped: the list scrolls inside itself, and the count says how many there are.
     const suggestions = useMemo(() => matchMembers(members, query), [members, query]);
@@ -183,7 +195,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
         setTarget(null);
         setConfirmingAdd(false);
         setQuery('');
-        setNewRole('admin');
+        setNewRole(canManage || noOwner ? 'admin' : 'moderator');
     };
 
     const addYourself = () => {
@@ -246,12 +258,19 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                     other owners and admins. <strong className="text-white">Admins</strong> run the community day to day. Each person holds one role at most.
                 </p>
                 <p className="text-xs text-nature-400 m-0">
-                    The node checks every change: only an owner can add or remove owners and admins, the last owner can't be removed,
+                    The node checks every change: only an owner can add or remove owners and admins, an admin can add and remove
+                    moderators but cannot change anyone who already holds a role, the last owner can't be removed,
                     and anyone suspended or removed from the community loses their role.
                 </p>
-                {!canManage && (
+                {!canManage && isAdminViewer && (
+                    <p className="text-xs text-amber-300 m-0" data-testid="roles-admin-moderators-only">
+                        You're signed in as an admin. You can add and remove <strong className="text-white">moderators</strong> here.
+                        Owners and admins are added and removed by an owner.
+                    </p>
+                )}
+                {!canManage && !isAdminViewer && (
                     <p className="text-xs text-amber-300 m-0" data-testid="roles-read-only">
-                        You're signed in as an admin, so this list is read-only. Ask an owner to make changes.
+                        This list is read-only for you. Ask an owner to make changes.
                     </p>
                 )}
             </div>
@@ -326,7 +345,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                             {' · '}added by {grantedByText(r.granted_by)} on {formatWhen(r.granted_at)}
                                         </div>
                                     </div>
-                                    {canManage && !isRemoving && (
+                                    {canRemoveRow(r.role) && !isRemoving && (
                                         <button
                                             type="button"
                                             onClick={() => { setRemoving(r); setNotice(null); }}
@@ -449,7 +468,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                             <fieldset className="border-0 p-0 m-0 space-y-2">
                                 <legend className="text-sm text-nature-300 mb-1">Role</legend>
                                 <div className="flex flex-wrap gap-2">
-                                    {(['owner', 'admin', 'moderator'] as MemberNodeRole[]).map((role) => (
+                                    {(noOwner ? (['owner', 'admin', 'moderator'] as MemberNodeRole[]) : grantableRoles).map((role) => (
                                         <label
                                             key={role}
                                             className={`${btn} cursor-pointer flex items-center gap-2 ${

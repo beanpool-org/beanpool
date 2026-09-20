@@ -35,6 +35,8 @@ const members = [
 
 const aliceOwner = { member_pubkey: ALICE, role: 'owner' as const, granted_at: '2026-09-15T10:00:00.000Z', granted_by: 'owner:password', callsign: 'alice' };
 const bobAdmin = { member_pubkey: BOB, role: 'admin' as const, granted_at: '2026-09-16T10:00:00.000Z', granted_by: ALICE, callsign: 'bob' };
+// Appointed by the OWNER on purpose: an admin may still remove this one (Marty, 2026-09-20).
+const carolModerator = { member_pubkey: CAROL, role: 'moderator' as const, granted_at: '2026-09-17T10:00:00.000Z', granted_by: ALICE, callsign: 'carol' };
 
 async function renderPanel(viewer: RolesViewer = { kind: 'password' }, onChanged = vi.fn()) {
     await act(async () => {
@@ -178,12 +180,54 @@ describe('NodeRolesPanel', () => {
         expect(screen.getByTestId('remove-confirm').textContent).toContain('This is you — you will be signed out of these Settings.');
     });
 
-    it('an admin signed in by key sees the list read-only, with no add or remove controls', async () => {
+    // Changed 2026-09-20 on the owner's instruction: an admin used to see this list read-only.
+    // "they are admins - admins should be able to appoint a much lower ranked account. you
+    // shouldn't need the owner to do this." Scope is moderator ONLY, both ways.
+    it('an admin signed in by key can manage moderators, and is told so', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, bobAdmin, carolModerator]);
         await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
         expect(screen.getByTestId(`role-row-${ALICE}`)).toBeInTheDocument();
-        expect(screen.getByTestId('roles-read-only')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /^Remove / })).not.toBeInTheDocument();
-        expect(screen.queryByTestId('add-role')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('roles-read-only')).not.toBeInTheDocument();
+        const notice = screen.getByTestId('roles-admin-moderators-only');
+        expect(notice.textContent).toContain('You can add and remove');
+        expect(notice.textContent).toContain('moderators');
+        expect(screen.getByTestId('add-role')).toBeInTheDocument();
+    });
+
+    it('an admin is offered Moderator only, never Owner or Admin', async () => {
+        await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
+        expect(screen.getByTestId('add-role')).toBeInTheDocument();
+        // The role choices only appear once someone is picked.
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'carol' } });
+        await click(suggestion('carol'));
+        expect(screen.getByLabelText(/Moderator/)).toBeInTheDocument();
+        expect(screen.queryByLabelText(/Owner/)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/Admin/)).not.toBeInTheDocument();
+    });
+
+    it('an admin may remove a moderator the OWNER appointed, but not an owner or a fellow admin', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, bobAdmin, carolModerator]);
+        await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
+
+        // The only Remove button on the page belongs to the moderator row.
+        const removeButtons = screen.queryAllByRole('button', { name: /^Remove / });
+        expect(removeButtons).toHaveLength(1);
+        expect(within(screen.getByTestId(`role-row-${CAROL}`)).getByRole('button', { name: /^Remove / })).toBeInTheDocument();
+        expect(within(screen.getByTestId(`role-row-${ALICE}`)).queryByRole('button', { name: /^Remove / })).not.toBeInTheDocument();
+        expect(within(screen.getByTestId(`role-row-${BOB}`)).queryByRole('button', { name: /^Remove / })).not.toBeInTheDocument();
+
+        await click(removeButtons[0]);
+        await click(screen.getByRole('button', { name: /^Yes, remove/ }));
+        expect(revoke).toHaveBeenCalledWith('https://node.test', CAROL, 'moderator', 'pw', undefined);
+    });
+
+    it('an admin appointing a moderator sends role=moderator', async () => {
+        await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'carol' } });
+        await click(suggestion('carol'));
+        await click(screen.getByRole('button', { name: 'Continue' }));
+        await click(screen.getByRole('button', { name: /^Yes, make carol/ }));
+        expect(grant).toHaveBeenCalledWith('https://node.test', CAROL, 'moderator', 'pw', undefined);
     });
 
     it('with no owner, a key session can make itself the owner in one step', async () => {
@@ -358,6 +402,7 @@ describe('PeopleSafetySection → Owners & admins tab', () => {
         expect(screen.queryByTestId('node-roles-panel')).not.toBeInTheDocument();
         await click(screen.getByRole('button', { name: 'Owners & admins' }));
         expect(screen.getByTestId('node-roles-panel')).toBeInTheDocument();
-        expect(screen.getByTestId('roles-read-only')).toBeInTheDocument();
+        // The admin viewer reaches the panel with its moderator powers, not a read-only list.
+        expect(screen.getByTestId('roles-admin-moderators-only')).toBeInTheDocument();
     });
 });

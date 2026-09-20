@@ -250,6 +250,89 @@ async function main() {
     assert(isNodeOwner('dave') === false, 'Revoking admin from owner role on single-owner node does not raise false last-owner error');
     assert(isNodeOwner('gen_alice') === true, 'Alice is STILL an owner after non-owner revoke attempts');
 
+    // ── 6b. Admins appoint moderators (Marty, 2026-09-20) ──
+    // An admin may appoint and remove moderators without an owner. The rule must key off the
+    // TARGET'S CURRENT ROLE, because grantNodeRole DELETEs the existing row before inserting --
+    // so "grant moderator" is also a demotion primitive. Gating on the requested role alone would
+    // let an admin strip any owner (while 2+ owners exist, so the last-owner guard never fires)
+    // or any fellow admin.
+    seedMember('mod_admin', 'ModAdmin');
+    seedMember('mod_peer_admin', 'ModPeerAdmin');
+    seedMember('mod_target', 'ModTarget');
+    seedMember('mod_owner2', 'ModOwnerTwo');
+    seedMember('mod_plain', 'ModPlain');
+
+    grantNodeRole('mod_admin', 'admin', 'gen_alice');
+    grantNodeRole('mod_peer_admin', 'admin', 'gen_alice');
+    assert(isNodeAdmin('mod_admin', false) === true, 'ModAdmin is an admin');
+
+    // The thing Marty asked for: an admin appoints a moderator, no owner needed.
+    grantNodeRole('mod_target', 'moderator', 'mod_admin');
+    assert(nodeRoleOf('mod_target') === 'moderator', 'Admin can appoint a moderator');
+
+    // Appointing again is idempotent, not an escalation.
+    grantNodeRole('mod_target', 'moderator', 'mod_admin');
+    assert(nodeRoleOf('mod_target') === 'moderator', 'Admin re-appointing an existing moderator is allowed');
+
+    // THE ESCALATION THIS GUARD EXISTS FOR. Two owners, so 'Cannot remove the last owner'
+    // cannot be what saves us -- only the current-role check can.
+    grantNodeRole('mod_owner2', 'owner', 'gen_alice');
+    assert(isNodeOwner('mod_owner2') === true, 'Second owner exists, so the last-owner guard is not in play');
+    throws(() => grantNodeRole('mod_owner2', 'moderator', 'mod_admin'),
+        'Only an owner may change the role of an existing owner',
+        'Admin CANNOT demote an owner by granting them moderator');
+    assert(isNodeOwner('mod_owner2') === true, 'The owner still holds owner after the blocked attempt');
+
+    throws(() => grantNodeRole('mod_peer_admin', 'moderator', 'mod_admin'),
+        'Only an owner may change the role of an existing admin',
+        'Admin CANNOT demote a fellow admin by granting them moderator');
+    assert(nodeRoleOf('mod_peer_admin') === 'admin', 'The fellow admin still holds admin after the blocked attempt');
+
+    // An admin may not promote anyone, only appoint moderators.
+    throws(() => grantNodeRole('mod_plain', 'admin', 'mod_admin'), 'Only an owner may grant the admin role', 'Admin cannot grant admin');
+    throws(() => grantNodeRole('mod_plain', 'owner', 'mod_admin'), 'Only an owner may grant the owner role', 'Admin cannot grant owner');
+
+    // A member with no role may not appoint a moderator.
+    throws(() => grantNodeRole('mod_plain', 'moderator', 'plain_user'),
+        'Only an owner or an admin may grant the moderator role', 'Plain member cannot appoint a moderator');
+    throws(() => grantNodeRole('mod_plain', 'moderator'),
+        'Only an owner or an admin may grant the moderator role', 'Missing actorPubkey cannot appoint a moderator');
+    throws(() => grantNodeRole('mod_plain', 'moderator', ''),
+        'Only an owner or an admin may grant the moderator role', 'Empty actorPubkey cannot appoint a moderator');
+    // A moderator is not an admin, so one moderator cannot appoint another.
+    throws(() => grantNodeRole('mod_plain', 'moderator', 'mod_target'),
+        'Only an owner or an admin may grant the moderator role', 'A moderator cannot appoint a moderator');
+
+    // Removal: an admin may remove ANY moderator, including one an OWNER appointed
+    // (Marty's answer, 2026-09-20 -- one uniform rule).
+    grantNodeRole('mod_plain', 'moderator', 'gen_alice');
+    assert(nodeRoleOf('mod_plain') === 'moderator', 'Owner appointed a moderator');
+    revokeNodeRole('mod_plain', 'moderator', 'mod_admin');
+    assert(nodeRoleOf('mod_plain') === null, 'Admin can remove a moderator an OWNER appointed');
+
+    revokeNodeRole('mod_target', 'moderator', 'mod_admin');
+    assert(nodeRoleOf('mod_target') === null, 'Admin can remove a moderator they appointed');
+
+    // But an admin still cannot revoke admin or owner.
+    throws(() => revokeNodeRole('mod_peer_admin', 'admin', 'mod_admin'), 'Only an owner may revoke the admin role', 'Admin cannot revoke a fellow admin');
+    throws(() => revokeNodeRole('mod_owner2', 'owner', 'mod_admin'), 'Only an owner may revoke the owner role', 'Admin cannot revoke an owner');
+    // And a member with no role cannot revoke a moderator.
+    grantNodeRole('mod_target', 'moderator', 'gen_alice');
+    throws(() => revokeNodeRole('mod_target', 'moderator', 'plain_user'),
+        'Only an owner or an admin may revoke the moderator role', 'Plain member cannot remove a moderator');
+    assert(nodeRoleOf('mod_target') === 'moderator', 'The moderator survives the blocked removal');
+
+    // Owners keep every power they had.
+    revokeNodeRole('mod_target', 'moderator', 'gen_alice');
+    assert(nodeRoleOf('mod_target') === null, 'Owner can still remove a moderator');
+
+    // Restore the single-owner state the later sections expect.
+    revokeNodeRole('mod_owner2', 'owner', 'gen_alice');
+    revokeNodeRole('mod_peer_admin', 'admin', 'gen_alice');
+    revokeNodeRole('mod_admin', 'admin', 'gen_alice');
+    assert(isNodeOwner('mod_owner2') === false, 'Second owner removed, single-owner state restored');
+    assert(isNodeOwner('gen_alice') === true, 'Alice is still the owner going into section 7');
+
     // ── 7. Overrides: Former getAdminPubkey() call sites ──
     // Owner (Alice): has overrides
     assert(hasListedOffer('gen_alice') === true, 'Owner hasListedOffer override');

@@ -1,5 +1,5 @@
 import 'fast-text-encoding';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, type ReactElement, type ReactNode } from 'react';
 import { Stack, useRouter, useSegments, useGlobalSearchParams, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -90,10 +90,32 @@ Object.defineProperty(RN, 'TextInput', {
     }
 });
 
+// The wallpaper is drawn INSIDE every pushed screen, not only behind the navigator.
+//
+// It started out behind the navigator alone, with each screen left transparent so it could
+// show through. That made screens see-through during a push as well: the chat list stayed
+// visible underneath the chat opening over it (reported as "an overlap of the screens"),
+// and drawing both at once made the push feel slow. Giving each screen its own copy of the
+// wallpaper makes it opaque again -- the incoming screen hides the outgoing one -- while
+// keeping the doodles on every page.
+//
+// Page sheets opt out: they are MEANT to reveal the screen below as they slide up, and they
+// already fill themselves with the tile's ground colour (sheetOptions). Reading that off the
+// resolved options rather than a list of route names keeps this in step on its own.
+function patternScreenLayout({ options, children }: { options: { presentation?: string }; children: ReactNode }): ReactElement {
+    if (options.presentation && options.presentation !== 'card') return children as ReactElement;
+    return (
+        <View style={{ flex: 1 }}>
+            <PatternBackground />
+            {children}
+        </View>
+    );
+}
+
 function RootLayoutNav() {
     const { identity, isLoading } = useIdentity();
     const { recognition, recheck } = useNodeStatus();
-    const { theme, colors } = useTheme();
+    const { theme, colors, patternEnabled } = useTheme();
     const segments = useSegments();
     const router = useRouter();
     const [deepLinkUrl, setDeepLinkUrl] = useState<string | null>(null);
@@ -592,14 +614,22 @@ function RootLayoutNav() {
 
     return (
         <View style={{ flex: 1 }}>
-            {/* The wallpaper sits behind every route; screens are transparent over it. */}
+            {/* A backdrop for the edges a screen doesn't cover -- during a back-swipe, or behind a
+                page sheet. Each screen paints its own copy on top (patternScreenLayout). */}
             <PatternBackground />
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-            {/* React Navigation paints its own theme background over each screen, which would
-                hide the wallpaper no matter how transparent the screens themselves are. Handing
-                it a transparent background is what lets the pattern show through. */}
+            {/* React Navigation paints its own theme background behind the screens, which would
+                hide the backdrop above. Handing it a transparent background is what lets that
+                backdrop show through at the edges a screen doesn't cover. */}
             <NavThemeProvider value={navTheme}>
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
+            <Stack
+                // Opaque, so a screen can no longer be seen through during a push. The colour
+                // only shows in the instant before the screen's own wallpaper paints, so it is
+                // the tile's ground colour while the pattern is on (surface.chrome IS that
+                // ground then) and the plain app colour while it is off.
+                screenOptions={{ headerShown: false, contentStyle: { backgroundColor: patternEnabled ? colors.surface.chrome : colors.surface.app } }}
+                screenLayout={patternScreenLayout}
+            >
                 <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
                 <Stack.Screen name="welcome" />
                 <Stack.Screen name="node-mismatch" options={{ gestureEnabled: false }} />

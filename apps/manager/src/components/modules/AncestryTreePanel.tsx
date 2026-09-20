@@ -1,12 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { TIER_LEVELS, tierForCredit, tierIndexForName } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
-import { pruneInviteBranch, getTfaSessionToken } from '../../lib/node-client';
+import { pruneInviteBranch, getTfaSessionToken, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
 import { PruneBranchModal } from './PruneBranchModal';
-import type { MemberItem } from './MembersModule';
 
 export interface AncestryTreePanelProps {
-    nodeData: any;
+    nodeData: Record<string, unknown> | null;
     nodeDataLoading?: boolean;
     activeNode: NodeProfile;
     onRefresh?: () => void;
@@ -38,23 +37,24 @@ export function AncestryTreePanel({
     const [pruneTarget, setPruneTarget] = useState<{ pubkey: string; callsign?: string } | null>(null);
 
     const members: MemberItem[] = useMemo(() => {
-        return Array.isArray(nodeData?.members) ? nodeData.members : [];
+        return Array.isArray(nodeData?.members) ? (nodeData!.members as MemberItem[]) : [];
     }, [nodeData?.members]);
 
     const accounts = useMemo(() => {
-        return Array.isArray(nodeData?.accounts) ? nodeData.accounts : [];
+        return Array.isArray(nodeData?.accounts) ? (nodeData!.accounts as Record<string, unknown>[]) : [];
     }, [nodeData?.accounts]);
 
     const profiles = useMemo(() => {
-        return Array.isArray(nodeData?.profiles) ? nodeData.profiles : [];
+        return Array.isArray(nodeData?.profiles) ? (nodeData!.profiles as Array<{ publicKey?: string; pubkey?: string; status?: string; [key: string]: unknown }>) : [];
     }, [nodeData?.profiles]);
 
     const healthFlags = useMemo(() => {
-        return Array.isArray(nodeData?.health?.flags) ? nodeData.health.flags : [];
-    }, [nodeData?.health?.flags]);
+        const health = nodeData?.health as { flags?: NodeHealthFlag[] } | undefined;
+        return Array.isArray(health?.flags) ? health.flags : [];
+    }, [nodeData?.health]);
 
     const reports = useMemo(() => {
-        return Array.isArray(nodeData?.reports) ? nodeData.reports : [];
+        return Array.isArray(nodeData?.reports) ? (nodeData!.reports as Record<string, unknown>[]) : [];
     }, [nodeData?.reports]);
 
     const memberStats = useMemo(() => {
@@ -74,9 +74,9 @@ export function AncestryTreePanel({
     }, [members]);
 
     const profilesMap = useMemo(() => {
-        const map = new Map<string, any>();
+        const map = new Map<string, { publicKey?: string; pubkey?: string; status?: string; [key: string]: unknown }>();
         for (const p of profiles) {
-            const pk = typeof p?.publicKey === 'string' ? p.publicKey : (typeof (p as any)?.pubkey === 'string' ? (p as any).pubkey : '');
+            const pk = typeof p?.publicKey === 'string' ? p.publicKey : (typeof p?.pubkey === 'string' ? p.pubkey : '');
             if (pk) map.set(pk, p);
         }
         return map;
@@ -97,7 +97,7 @@ export function AncestryTreePanel({
 
     // Direct flags per member
     const nodeFlags = useMemo(() => {
-        const flagsMap: Record<string, any[]> = {};
+        const flagsMap: Record<string, NodeHealthFlag[]> = {};
         for (const f of healthFlags) {
             const flagMembers = Array.isArray(f?.members) ? f.members : [];
             for (const m of flagMembers) {
@@ -157,8 +157,8 @@ export function AncestryTreePanel({
 
     // Branch flags computation
     const branchFlagsMap = useMemo(() => {
-        const cache: Record<string, any[]> = {};
-        function compute(pubkey: string, visiting = new Set<string>()): any[] {
+        const cache: Record<string, NodeHealthFlag[]> = {};
+        function compute(pubkey: string, visiting = new Set<string>()): NodeHealthFlag[] {
             if (cache[pubkey]) return cache[pubkey];
             if (visiting.has(pubkey)) return [];
             visiting.add(pubkey);
@@ -170,7 +170,7 @@ export function AncestryTreePanel({
                 const childPk = typeof child?.publicKey === 'string' ? child.publicKey : (typeof (child as any)?.pubkey === 'string' ? (child as any).pubkey : '');
                 if (childPk) all.push(...compute(childPk, new Set(visiting)));
             }
-            const unique: any[] = [];
+            const unique: NodeHealthFlag[] = [];
             const seen = new Set<string>();
             for (const f of all) {
                 const desc = f?.description || f?.type || '';
@@ -206,7 +206,7 @@ export function AncestryTreePanel({
             }
             visiting.add(pubkey);
 
-            const rawPersonal = memberStats[pubkey] || {};
+            const rawPersonal = (memberStats as Record<string, Record<string, number>>)[pubkey] || {};
             const personal = {
                 posts: typeof rawPersonal.posts === 'number' ? rawPersonal.posts : 0,
                 messages: typeof rawPersonal.messages === 'number' ? rawPersonal.messages : 0,
@@ -367,7 +367,7 @@ export function AncestryTreePanel({
         const isAlert = bFlags.some((f) => f?.severity === 'alert' || f?.severity === 'critical');
 
         // Personal stats
-        const rawPersonal = memberStats[pk] || {};
+        const rawPersonal = (memberStats as Record<string, Record<string, number>>)[pk] || {};
         const personal = {
             posts: typeof rawPersonal.posts === 'number' ? rawPersonal.posts : 0,
             messages: typeof rawPersonal.messages === 'number' ? rawPersonal.messages : 0,

@@ -849,10 +849,12 @@ export function App() {
 
                 {/* Bottom nav — mobile only */}
                 <nav 
-                    className={`relative md:hidden bottom-nav-bar ${!isBottomNavVisible ? 'hidden' : ''}`}
+                    // Visibility lives in the classes, never in `style`: an inline `display`
+                    // beats `md:hidden`, which kept the bottom bar on screen next to the
+                    // desktop sidebar at every width instead of swapping at 768px.
+                    className={`relative bottom-nav-bar ${isBottomNavVisible ? 'flex' : 'hidden'} md:hidden`}
                     data-testid="mobile-bottom-nav"
                     style={{
-                        display: isBottomNavVisible ? 'flex' : 'none',
                     position: 'fixed',
                     bottom: 0,
                     left: 0,

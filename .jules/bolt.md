@@ -195,3 +195,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-03 - O(1) Member Lookups in Native ProposeDecisionModal
 **Learning:** In `apps/native/components/ProposeDecisionModal.tsx`, looking up target member details during decision proposal ran `members.find(...)` scans across `members` on every character input in the subject field ($O(M)$ linear array scan).
 **Action:** Pre-computed `membersMap` using `useMemo` indexed by both `publicKey` and lowercased `callsign` to turn selected member detail lookups into constant-time $O(1)$ Map retrievals.
+
+## 2026-10-04 - O(1) Enterprise Treasury Lookups in Native NewEventModal
+**Learning:** In `apps/native/components/NewEventModal.tsx`, mapping over `keeperOf` keys to populate host options ran `treasuries.find(t => t.publicKey === pk)` on every element ($O(N \times M)$ nested scan).
+**Action:** Pre-computed `treasuriesMap` indexed by `publicKey` before mapping `keeperOf`, converting enterprise name lookups into constant-time $O(1)$ retrievals ($O(N + M)$ overall).

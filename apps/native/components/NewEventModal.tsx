@@ -127,11 +127,13 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             .then(([bal, treasuries]) => {
                 if (cancelled) return;
                 const keeperOf: string[] = Array.isArray((bal as any)?.keeperOf) ? (bal as any).keeperOf : [];
-                setEnterprises(keeperOf.map(pk => ({
-                    publicKey: pk,
-                    name: treasuries.find(t => t.publicKey === pk)?.name || 'Enterprise',
-                })));
-            })
+                    // Pre-compute map of treasuries by publicKey to avoid O(N*M) nested scans inside map
+                    const treasuriesMap = new Map(treasuries.map(t => [t.publicKey, t]));
+                    setEnterprises(keeperOf.map(pk => ({
+                        publicKey: pk,
+                        name: treasuriesMap.get(pk)?.name || 'Enterprise',
+                    })));
+                })
             .catch(() => {});
         // Centre the pin map on the member only if they have already allowed location; never prompt here.
         // A carried-in pin wins: it is a place the member has just chosen, and recentring on their own

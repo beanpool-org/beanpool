@@ -108,6 +108,10 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         document.documentElement.style.removeProperty('--bottom-nav-offset');
     });
 
+    // Visibility is asserted through classes, not computed `display`. jsdom loads no stylesheet
+    // here, so getComputedStyle only ever saw the element's INLINE style — which is exactly the
+    // inline `display` that was overriding `md:hidden` and putting the bottom bar on desktop
+    // beside the sidebar. Asserting on it would re-require the bug these tests now guard against.
     it('renders bottom nav as visible on default tabs and hides it when opening a profile', async () => {
         render(<App />);
 
@@ -118,7 +122,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
 
         const bottomNav = screen.getByTestId('mobile-bottom-nav');
         expect(bottomNav).toBeInTheDocument();
-        expect(bottomNav).toHaveStyle({ display: 'flex' });
+        expect(bottomNav.classList.contains('flex')).toBe(true);
         expect(bottomNav.classList.contains('hidden')).toBe(false);
 
         // Document root should not have data-bottom-nav=hidden
@@ -131,7 +135,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
 
         // Once profile is open, bottom nav must be hidden
         await waitFor(() => {
-            expect(bottomNav).toHaveStyle({ display: 'none' });
+            expect(bottomNav.classList.contains('hidden')).toBe(true);
         });
         expect(bottomNav.classList.contains('hidden')).toBe(true);
 
@@ -146,7 +150,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         fireEvent.click(backButton);
 
         await waitFor(() => {
-            expect(bottomNav).toHaveStyle({ display: 'flex' });
+            expect(bottomNav.classList.contains('flex')).toBe(true);
         });
         expect(document.documentElement.getAttribute('data-bottom-nav')).toBeNull();
         expect(document.documentElement.classList.contains('bottom-nav-hidden')).toBe(false);
@@ -162,7 +166,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         });
 
         const bottomNav = screen.getByTestId('mobile-bottom-nav');
-        expect(bottomNav).toHaveStyle({ display: 'flex' });
+        expect(bottomNav.classList.contains('flex')).toBe(true);
 
         // Switch to Commons (projects) tab via mobile bottom nav
         const commonsTab = within(bottomNav).getByText(/Commons/i);
@@ -177,7 +181,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         fireEvent.click(openTreasuryBtn);
 
         await waitFor(() => {
-            expect(bottomNav).toHaveStyle({ display: 'none' });
+            expect(bottomNav.classList.contains('hidden')).toBe(true);
         });
         expect(bottomNav.classList.contains('hidden')).toBe(true);
         expect(document.documentElement.getAttribute('data-bottom-nav')).toBe('hidden');
@@ -190,7 +194,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         fireEvent.click(backButton);
 
         await waitFor(() => {
-            expect(bottomNav).toHaveStyle({ display: 'flex' });
+            expect(bottomNav.classList.contains('flex')).toBe(true);
         });
         expect(document.documentElement.getAttribute('data-bottom-nav')).toBeNull();
         expect(document.documentElement.classList.contains('bottom-nav-hidden')).toBe(false);

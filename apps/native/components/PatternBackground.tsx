@@ -1,10 +1,15 @@
 /**
  * PatternBackground — the doodle wallpaper that stands in for the flat app background.
  *
- * Rendered once, behind the whole navigator (app/_layout.tsx). Screens don't draw it
- * themselves; they leave their page container on `colors.surface.page`, which the theme
- * re-points to 'transparent' while the pattern is on. Elements that genuinely need a solid
- * fill (inputs, chips, sunken rows) keep using `colors.surface.app` and stay opaque.
+ * Drawn once per stack screen, by the navigator's screenLayout (app/_layout.tsx). It used to
+ * be rendered once behind the whole navigator instead, with screens left transparent over it
+ * -- but a transparent screen is also see-through DURING a push, so the outgoing screen showed
+ * through the incoming one. Each screen carrying its own copy is what keeps it opaque.
+ *
+ * Screens still don't reference the wallpaper themselves: they leave their page container on
+ * `colors.surface.page`, which the theme re-points to 'transparent' while the pattern is on.
+ * Elements that genuinely need a solid fill (inputs, chips, sunken rows) keep using
+ * `colors.surface.app` and stay opaque.
  *
  * Tile sizing: the asset is a 2x2 block of a seamless tile, so one repeat covers four
  * tiles. `resizeMode="repeat"` lays it down at the asset's dp size — 890dp here, giving a
@@ -26,11 +31,13 @@ const TILES = {
 export default function PatternBackground() {
     const { theme, colors, patternEnabled } = useTheme();
 
-    // The solid colour stays underneath: it is what shows with the pattern switched off,
-    // and what fills the frame for the moment before the tile decodes.
+    // The solid colour stays underneath: it is what shows with the pattern switched off, and
+    // what fills the frame for the moment before the tile decodes. While the pattern is on it
+    // is the tile's OWN ground colour (surface.chrome is that ground then), so that first
+    // moment matches the wallpaper instead of flashing a slightly different off-white.
     return (
         <View
-            style={[StyleSheet.absoluteFill, { backgroundColor: colors.surface.app }]}
+            style={[StyleSheet.absoluteFill, { backgroundColor: patternEnabled ? colors.surface.chrome : colors.surface.app }]}
             pointerEvents="none"
         >
             {patternEnabled && (

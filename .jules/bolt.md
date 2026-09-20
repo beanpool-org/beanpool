@@ -191,3 +191,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-02 - O(1) Pending Transaction Lookups in PWA MyDealsModal
 **Learning:** In `apps/pwa/src/components/MyDealsModal.tsx`, filtering `myPosts` and `pendingDeals` executed `transactions.some(...)` scans across `transactions` for every post item in `posts`, creating an $O(P \times T)$ nested array scan on every modal render.
 **Action:** Pre-computed `pendingTxPostIds` and `myPendingTxPostIds` Sets via `useMemo` placed unconditionally before early returns, reducing pending transaction post resolution to constant-time $O(1)$ Set lookups ($O(P + T)$ overall).
+
+## 2026-10-03 - O(1) Member Lookups in Native ProposeDecisionModal
+**Learning:** In `apps/native/components/ProposeDecisionModal.tsx`, looking up target member details during decision proposal ran `members.find(...)` scans across `members` on every character input in the subject field ($O(M)$ linear array scan).
+**Action:** Pre-computed `membersMap` using `useMemo` indexed by both `publicKey` and lowercased `callsign` to turn selected member detail lookups into constant-time $O(1)$ Map retrievals.

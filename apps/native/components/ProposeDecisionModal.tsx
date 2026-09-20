@@ -85,11 +85,21 @@ export function ProposeDecisionModal({
 
     const [fetchedBalance, setFetchedBalance] = useState<number | null>(null);
 
-    // Lookup selected member details for removal preview
+    // ⚡ Bolt: Pre-compute member map indexed by publicKey and callsign for O(1) lookups
+    const membersMap = useMemo(() => {
+        const map = new Map<string, typeof members[number]>();
+        for (const m of members) {
+            if (m.publicKey) map.set(m.publicKey, m);
+            if (m.callsign) map.set(m.callsign.toLowerCase(), m);
+        }
+        return map;
+    }, [members]);
+
+    // Lookup selected member details for removal preview via O(1) Map lookup
     const selectedMember = useMemo(() => {
         if (!subject) return null;
-        return members.find(m => m.publicKey === subject || m.callsign?.toLowerCase() === subject.toLowerCase());
-    }, [members, subject]);
+        return membersMap.get(subject) || membersMap.get(subject.toLowerCase()) || null;
+    }, [membersMap, subject]);
 
     useEffect(() => {
         if (effect !== 'remove_member' || !subject) {

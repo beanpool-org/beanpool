@@ -64,7 +64,15 @@ type PreferenceStorage = {
 export async function loadThemePreference(storage: PreferenceStorage): Promise<ThemePreference> {
     const migrated = (await storage.getItem(DEFAULT_LIGHT_MIGRATION_KEY)) !== null;
     const stored = parseThemePreference(await storage.getItem(THEME_PREFERENCE_KEY));
-    if (!migrated) await storage.setItem(DEFAULT_LIGHT_MIGRATION_KEY, 'done');
+    // The marker is written before the branches below, so every path records that the move has run
+    // and a 'Same as phone' chosen later is never clobbered. A failed write must NOT reject the
+    // whole read: a member who stored Dark would open light for that launch. Swallow it and let the
+    // move be retried on the next launch instead.
+    if (!migrated) {
+        try {
+            await storage.setItem(DEFAULT_LIGHT_MIGRATION_KEY, 'done');
+        } catch { /* retried next launch */ }
+    }
 
     if (stored) {
         if (!migrated && stored === 'system') {

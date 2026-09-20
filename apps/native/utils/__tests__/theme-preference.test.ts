@@ -67,6 +67,8 @@ describe('loadThemePreference', () => {
         const s = memoryStorage({ [LEGACY_THEME_KEY]: 'light' });
         expect(await loadThemePreference(s)).toBe('light');
         expect(s.data.has(LEGACY_THEME_KEY)).toBe(false);
+        // The marker must be written on this path too, or a later 'Same as phone' is clobbered.
+        expect(s.data.get(DEFAULT_LIGHT_MIGRATION_KEY)).toBe('done');
     });
 
     it('keeps a stored preference and ignores any leftover old key', async () => {
@@ -77,6 +79,13 @@ describe('loadThemePreference', () => {
     it('re-seeds when the stored value is garbage', async () => {
         const s = memoryStorage({ [THEME_PREFERENCE_KEY]: 'sepia' });
         expect(await loadThemePreference(s)).toBe('light');
+        expect(s.data.get(DEFAULT_LIGHT_MIGRATION_KEY)).toBe('done');
+    });
+
+    it('still returns a stored Dark when the marker write fails', async () => {
+        const s = memoryStorage({ [THEME_PREFERENCE_KEY]: 'dark' });
+        s.setItem = async () => { throw new Error('disk full'); };
+        expect(await loadThemePreference(s)).toBe('dark');
     });
 });
 

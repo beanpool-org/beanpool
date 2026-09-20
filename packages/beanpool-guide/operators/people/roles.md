@@ -11,7 +11,7 @@ A role is about running the server. It has nothing to do with trust badges, whic
 
 Owners can do everything in Settings. Only owners can:
 
-- give or take away any role, including admin and moderator (an admin can do this for moderators only);
+- give or take away the owner and admin roles (admins can give and take away the moderator role too);
 - remove or offboard an owner or an admin;
 - suspend an owner;
 - lift a suspension, or give back a role that a suspension took away;

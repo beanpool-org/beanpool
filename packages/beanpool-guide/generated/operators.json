@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 31,
-  "hash": "5a21784e49cf46ac332ef532a324c5b664dbf332470420c750c603771fe9360d",
+  "version": 32,
+  "hash": "76cd1644ff4ae8d32b9cfb108974e3e143d48b4aa04992f68ad5f36c35613cb5",
   "sections": [
     {
       "id": "setup",
@@ -405,7 +405,7 @@
         },
         {
           "type": "p",
-          "text": "Owners and admins see the same screens. Some buttons only work for owners, and Settings says so when it refuses. Under Owners & admins, admins see the list but cannot change it. A moderator sees none of these screens: their Settings is one screen, Reports, with **Moderator** at the top. See Owners, admins and moderators."
+          "text": "Owners and admins see the same screens. Some buttons only work for owners, and Settings says so when it refuses. Under Owners & admins, admins can add and remove moderators; owners and admins are added and removed by an owner. A moderator sees none of these screens: their Settings is one screen, Reports, with **Moderator** at the top. See Owners, admins and moderators."
         },
         {
           "type": "h2",
@@ -691,7 +691,7 @@
         {
           "type": "ul",
           "items": [
-            "give or take away any role, including admin and moderator (an admin can do this for moderators only);",
+            "give or take away the owner and admin roles (admins can give and take away the moderator role too);",
             "remove or offboard an owner or an admin;",
             "suspend an owner;",
             "lift a suspension, or give back a role that a suspension took away;",

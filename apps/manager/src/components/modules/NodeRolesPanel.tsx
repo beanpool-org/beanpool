@@ -50,7 +50,7 @@ export function grantConsequence(name: string, role: MemberNodeRole, self = fals
         case 'owner':
             return `${name} will be able to open these Settings with ${their} own key and do everything here — including adding and removing owners, admins and moderators.`;
         case 'admin':
-            return `${name} will be able to open these Settings with ${their} own key and run the community day to day — members, moderation, invites and backups — but not add or remove owners, admins or moderators.`;
+            return `${name} will be able to open these Settings with ${their} own key and run the community day to day — members, moderation, invites and backups — and add or remove moderators, but not owners or admins.`;
         case 'moderator':
             return `${name} will be able to open these Settings with ${their} own key, but see only Reports: dismiss a report, or take down the post or Pulse item it is about. Nothing else — not members' details, money, invites, backups or roles.`;
     }
@@ -427,12 +427,18 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                             const k = (m.publicKey || m.pubkey) as string;
                                             const held = roleByKey.get(k);
                                             const status = typeof m.status === 'string' && m.status !== 'active' ? m.status : null;
+                                            // An admin may not change anyone who already holds owner or admin: granting
+                                            // replaces the role they have, so the node refuses it. Don't offer a choice
+                                            // that ends in a 403 -- say why here instead.
+                                            const blockedForAdmin = !canManage && !!held && held !== 'moderator';
                                             return (
                                                 <li key={k}>
                                                     <button
                                                         type="button"
                                                         onClick={() => pick(k)}
-                                                        className={`${btn} w-full text-left flex flex-col items-start gap-0.5 bg-nature-950 text-nature-100 border-nature-800 hover:border-terra-500/50`}
+                                                        disabled={blockedForAdmin}
+                                                        title={blockedForAdmin ? `Only an owner can change ${ROLE_ARTICLE[held!]}'s role.` : undefined}
+                                                        className={`${btn} w-full text-left flex flex-col items-start gap-0.5 bg-nature-950 text-nature-100 border-nature-800 ${blockedForAdmin ? 'opacity-50 cursor-not-allowed' : 'hover:border-terra-500/50'}`}
                                                     >
                                                         <span className="break-words min-w-0 max-w-full">
                                                             {m.callsign || shortKey(k)}
@@ -442,6 +448,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                                         <span className="text-xs text-nature-400 font-normal flex flex-wrap gap-x-2">
                                                             <span className="font-mono">{shortKey(k)}</span>
                                                             {held && <span>{ROLE_ICON[held]} {ROLE_LABEL[held]}</span>}
+                                                            {blockedForAdmin && <span className="text-amber-300">Only an owner can change this</span>}
                                                         </span>
                                                     </button>
                                                 </li>

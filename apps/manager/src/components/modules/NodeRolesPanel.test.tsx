@@ -221,6 +221,19 @@ describe('NodeRolesPanel', () => {
         expect(revoke).toHaveBeenCalledWith('https://node.test', CAROL, 'moderator', 'pw', undefined);
     });
 
+    it('an admin cannot pick someone who already holds owner or admin', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, bobAdmin, carolModerator]);
+        await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'a' } });
+        const list = screen.getByRole('list', { name: 'Matching members' });
+        // alice holds owner and bob holds admin: offered, but not choosable, and told why.
+        expect(within(list).getByRole('button', { name: /alice/ })).toBeDisabled();
+        expect(within(list).getByText(/Only an owner can change this/)).toBeInTheDocument();
+        // carol is already a moderator, so an admin may still act on her.
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'carol' } });
+        expect(suggestion('carol')).not.toBeDisabled();
+    });
+
     it('an admin appointing a moderator sends role=moderator', async () => {
         await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'carol' } });

@@ -97,7 +97,7 @@ export function listNodeRoles(): NodeRoleRecord[] {
 }
 
 /**
- * Grants a node role ('owner' or 'admin') to a member.
+ * Grants a node role ('owner', 'admin' or 'moderator') to a member.
  * Each member holds at most ONE node role.
  *
  * Enforces:
@@ -106,7 +106,17 @@ export function listNodeRoles(): NodeRoleRecord[] {
  * - A treasury (is_treasury=1) can NEVER hold a node role
  * - Only an owner may grant 'owner' (unless bootstrapping on a node with 0 owners)
  * - Only an owner may grant 'admin'
+ * - An ADMIN may grant 'moderator', but only to someone who holds no role or is already a
+ *   moderator (see below). Owners may grant it to anyone the other rules allow.
  * - Demoting the last owner to admin is blocked
+ *
+ * WHY THE ADMIN RULE KEYS OFF THE TARGET'S CURRENT ROLE, NOT THE REQUESTED ONE:
+ * member_pubkey is the PRIMARY KEY and this function DELETEs the existing row before inserting,
+ * so "grant moderator" is also a DEMOTION primitive. A rule of merely "an admin may grant
+ * moderator" would let an admin strip any owner (whenever 2+ owners exist, so the last-owner
+ * guard never fires) or any fellow admin, by "promoting" them to moderator. The guard below
+ * therefore reads the target's CURRENT role from the same transaction and refuses unless it is
+ * null or 'moderator'.
  */
 export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
     if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
@@ -151,20 +161,35 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
             actorPubkey === 'SYSTEM' ||
             (!!actorPubkey && isNodeOwner(actorPubkey));
 
+        // Read inside the transaction, BEFORE the guard: the admin rule below depends on it.
+        const existing = db.prepare("SELECT role, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as { role: string; session_epoch: number; break_glass_hash: string | null } | undefined;
+        const currentRole = existing?.role ?? null;
+
         if (role === 'owner') {
             if (ownerCount > 0 && !isOwner) {
                 throw new Error('Only an owner may grant the owner role');
             }
-        } else if (role === 'admin' || role === 'moderator') {
+        } else if (role === 'admin') {
             if (!isOwner) {
-                throw new Error(`Only an owner may grant the ${role} role`);
+                throw new Error('Only an owner may grant the admin role');
+            }
+            if (isNodeOwner(targetPubkey) && ownerCount <= 1) {
+                throw new Error('Cannot remove the last owner');
+            }
+        } else if (role === 'moderator') {
+            // An admin may appoint a moderator without troubling an owner. They may NOT use this
+            // to demote anyone: the target must currently hold no role, or already be a moderator.
+            const actorIsAdmin = !!actorPubkey && isNodeAdmin(actorPubkey, false);
+            if (!isOwner && !actorIsAdmin) {
+                throw new Error('Only an owner or an admin may grant the moderator role');
+            }
+            if (!isOwner && currentRole !== null && currentRole !== 'moderator') {
+                throw new Error(`Only an owner may change the role of an existing ${currentRole}`);
             }
             if (isNodeOwner(targetPubkey) && ownerCount <= 1) {
                 throw new Error('Cannot remove the last owner');
             }
         }
-
-        const existing = db.prepare("SELECT role, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as { role: string; session_epoch: number; break_glass_hash: string | null } | undefined;
         const epoch = existing ? (existing.role !== role ? existing.session_epoch + 1 : existing.session_epoch) : 0;
         const breakGlass = role === 'owner' ? (existing?.break_glass_hash || null) : null;
 
@@ -183,7 +208,11 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
  * Enforces:
  * - Only an owner may revoke 'owner'
  * - Never allow the last owner to be removed
- * - Only an owner may revoke 'admin' or 'moderator'
+ * - Only an owner may revoke 'admin'
+ * - An owner OR an admin may revoke 'moderator' -- including a moderator an OWNER appointed
+ *   (Marty, 2026-09-20: one uniform rule, "if you can appoint you can un-appoint"; the
+ *   granted_by-based variant was rejected because a list where some moderators are removable
+ *   and some are not needs explaining). An owner can always re-appoint, and can revoke the admin.
  */
 export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
     if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
@@ -209,9 +238,14 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
             if (ownerCount <= 1) {
                 throw new Error('Cannot remove the last owner');
             }
-        } else if (role === 'admin' || role === 'moderator') {
+        } else if (role === 'admin') {
             if (!isOwner) {
-                throw new Error(`Only an owner may revoke the ${role} role`);
+                throw new Error('Only an owner may revoke the admin role');
+            }
+        } else if (role === 'moderator') {
+            const actorIsAdmin = !!actorPubkey && isNodeAdmin(actorPubkey, false);
+            if (!isOwner && !actorIsAdmin) {
+                throw new Error('Only an owner or an admin may revoke the moderator role');
             }
         }
 

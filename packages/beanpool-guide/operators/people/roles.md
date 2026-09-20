@@ -11,7 +11,7 @@ A role is about running the server. It has nothing to do with trust badges, whic
 
 Owners can do everything in Settings. Only owners can:
 
-- give or take away any role, including admin and moderator;
+- give or take away the owner and admin roles (admins can give and take away the moderator role too);
 - remove or offboard an owner or an admin;
 - suspend an owner;
 - lift a suspension, or give back a role that a suspension took away;
@@ -23,7 +23,7 @@ The **admin password** counts as an owner. Anyone who knows it can do all of the
 
 ## Admin
 
-Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse, backups and diagnostics. They cannot give or take away roles, and they cannot act against an owner.
+Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse, backups and diagnostics. They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner.
 
 ## Moderator
 
@@ -45,7 +45,7 @@ If the server's two-factor sign-in is on (see Access and security), a moderator'
 **People & Safety**, then **Owners & admins**, lists everyone who holds a role, what it is and who gave it.
 
 - Owners, signed in with their key or with the admin password, see the list and can add and remove people.
-- Admins, signed in with their key, see the list but cannot change it.
+- Admins, signed in with their key, see the list and can add and remove **moderators**. Owners and admins are added and removed by an owner.
 - Moderators never see this list: their Settings is Reports only. Ordinary members cannot open Settings at all.
 
 ![The Owners and Admins screen in Settings](images/people-roles.webp)
@@ -56,7 +56,7 @@ Owners and admins open Settings from the BeanPool app with their own key: **Sett
 
 - Under **Add someone**, type part of their callsign, or paste their full public key. Typing the first six or more characters of a key also finds them.
 - Every member who matches is listed, with a count above the list. A long list scrolls inside its own box. Callsigns that start with what you typed come first, then ones that contain it; among those, the most recently active come first. Each row shows the short form of the member's key, so two people with the same name can be told apart. If nobody matches, it says "No one matches".
-- Pick them, then choose **Owner**, **Admin** or **Moderator**.
+- Pick them, then choose **Owner**, **Admin** or **Moderator**. Signed in as an admin, **Moderator** is the only choice offered.
 - **Continue** shows what they will be able to do, in plain words. Nothing changes until you press the **Yes, make …** button.
 
 Giving a new role replaces the old one.
@@ -71,7 +71,8 @@ You can also do both from a member's own page: **People & Safety**, then **Membe
 
 The server checks every change. If it refuses, the screen shows its reason word for word after "Not done. The node said:". The usual ones:
 
-- "Only an owner may grant the admin role" (or "revoke"): you are signed in as an admin. Ask an owner.
+- "Only an owner may grant the admin role" (or "revoke"): you are signed in as an admin. Admins can add and remove moderators, but only an owner can make another admin or owner.
+- "Only an owner may change the role of an existing admin" (or "owner"): you are an admin, and that person already holds a role. Giving someone a role replaces the one they have, so an admin may only appoint someone who holds no role, or who is already a moderator. Ask an owner.
 - "Only an owner may grant the owner role": once a community has an owner, only an owner can add another.
 - "Cannot remove the last owner": add another owner first, then remove this one.
 - "Only active accounts can hold a node role": the member is suspended. Suspending or removing someone takes their role away. If the community's vote overturns a suspension the role comes back by itself; otherwise add them again once they are active.

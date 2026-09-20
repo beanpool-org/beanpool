@@ -46,7 +46,7 @@ Settings opened from the app's Manage button is laid out for the phone. So is an
 
 ## Who sees what
 
-Owners and admins see the same screens. Some buttons only work for owners, and Settings says so when it refuses. Under Owners & admins, admins see the list but cannot change it. A moderator sees none of these screens: their Settings is one screen, Reports, with **Moderator** at the top. See Owners, admins and moderators.
+Owners and admins see the same screens. Some buttons only work for owners, and Settings says so when it refuses. Under Owners & admins, admins can add and remove moderators; owners and admins are added and removed by an owner. A moderator sees none of these screens: their Settings is one screen, Reports, with **Moderator** at the top. See Owners, admins and moderators.
 
 ## Some figures are placeholders
 

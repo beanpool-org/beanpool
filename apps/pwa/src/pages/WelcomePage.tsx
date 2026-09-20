@@ -598,7 +598,7 @@ export function WelcomePage({ onComplete }: Props) {
     };
 
     return (
-        <div className="bg-oat-50 dark:bg-nature-950 min-h-screen text-nature-950 dark:text-oat-50" style={{
+        <div className="page-surface min-h-screen text-nature-950 dark:text-oat-50" style={{
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',

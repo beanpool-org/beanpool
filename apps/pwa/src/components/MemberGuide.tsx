@@ -195,7 +195,7 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE }:
     }
 
     return (
-        <div ref={topRef} className="flex justify-center p-4 min-h-screen bg-oat-50 dark:bg-nature-950 transition-colors" data-testid="member-guide">
+        <div ref={topRef} className="flex justify-center p-4 min-h-screen page-surface transition-colors" data-testid="member-guide">
             <div className="max-w-3xl w-full mt-2 pb-32">
                 {header}
                 {body}

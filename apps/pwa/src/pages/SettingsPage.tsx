@@ -427,7 +427,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     }
 
     return (
-        <div className="flex justify-center p-4 min-h-screen bg-oat-50 dark:bg-nature-950 transition-colors">
+        <div className="flex justify-center p-4 min-h-screen page-surface transition-colors">
             <div className="max-w-3xl w-full mt-2 pb-32">
                 {/* Header */}
                 <div className="flex items-center mb-6">

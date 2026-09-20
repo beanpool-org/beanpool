@@ -166,7 +166,8 @@ export function EconomySection({
     const loadTreasuries = async () => {
         setLoadingTreasuries(true);
         try {
-            const list = await fetchNodeTreasuries(activeNode.url);
+            const effectiveTfa = tfaToken ?? getTfaSessionToken(activeNode.id);
+            const list = await fetchNodeTreasuries(activeNode.url, activeNode.adminPassword, effectiveTfa);
             setTreasuries(list || []);
 
             // Populate keepers from list or fetch individually if not returned

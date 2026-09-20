@@ -1226,9 +1226,15 @@ export interface NodeTreasury {
     locationUpdatedAt?: string | null;
 }
 
-export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury[]> {
+export async function fetchNodeTreasuries(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<NodeTreasury[]> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/treasuries');
-    const res = await fetch(endpoint);
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
     if (!res.ok) return [];
     const data = await res.json().catch(() => ({}));
     const rawList = Array.isArray(data.treasuries) ? data.treasuries : (Array.isArray(data) ? data : []);

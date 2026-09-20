@@ -49,10 +49,10 @@ describe('parseThemePreference', () => {
 });
 
 describe('loadThemePreference', () => {
-    it('defaults a fresh install to Same as phone', async () => {
+    it('defaults a fresh install to Light', async () => {
         const s = memoryStorage();
-        expect(await loadThemePreference(s)).toBe('system');
-        expect(s.data.get(THEME_PREFERENCE_KEY)).toBe('system');
+        expect(await loadThemePreference(s)).toBe('light');
+        expect(s.data.get(THEME_PREFERENCE_KEY)).toBe('light');
     });
 
     it('carries an old Dark Mode switch that was on across once, then drops the old key', async () => {
@@ -62,9 +62,9 @@ describe('loadThemePreference', () => {
         expect(s.data.has(LEGACY_THEME_KEY)).toBe(false);
     });
 
-    it('treats an old switch left off as no choice: Same as phone', async () => {
+    it('treats an old switch left off as no choice: the Light default', async () => {
         const s = memoryStorage({ [LEGACY_THEME_KEY]: 'light' });
-        expect(await loadThemePreference(s)).toBe('system');
+        expect(await loadThemePreference(s)).toBe('light');
         expect(s.data.has(LEGACY_THEME_KEY)).toBe(false);
     });
 
@@ -75,7 +75,7 @@ describe('loadThemePreference', () => {
 
     it('re-seeds when the stored value is garbage', async () => {
         const s = memoryStorage({ [THEME_PREFERENCE_KEY]: 'sepia' });
-        expect(await loadThemePreference(s)).toBe('system');
+        expect(await loadThemePreference(s)).toBe('light');
     });
 });
 

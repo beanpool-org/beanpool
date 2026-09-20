@@ -46,7 +46,11 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Live: re-renders when the phone switches light/dark while the app is open.
     const systemScheme = useColorScheme();
-    const [themePreference, setThemePreferenceState] = useState<ThemePreference>('system');
+    // Light until the stored preference loads. This is the value the first render draws with, and on
+    // Android the map bakes its base light/dark in when it is created (userInterfaceStyle is an
+    // initialProp there), so a 'system' default made a dark-phone user's map dark even after the
+    // stored 'light' arrived. See utils/theme-preference.ts.
+    const [themePreference, setThemePreferenceState] = useState<ThemePreference>('light');
     const [lightPalette, setLightPaletteState] = useState<LightPaletteMode>('classic');
     // On by default; 'plain' is the opt-out, stored per device like the palette choice.
     const [patternEnabled, setPatternEnabledState] = useState(true);
@@ -55,7 +59,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         loadThemePreference(AsyncStorage)
             .then(setThemePreferenceState)
-            .catch(() => { /* keep 'system' */ });
+            .catch(() => { /* keep 'light' */ });
         AsyncStorage.getItem('beanpool_light_palette').then((palettePref) => {
             if (palettePref === 'classic' || palettePref === 'earth' || palettePref === 'slate') {
                 setLightPaletteState(palettePref);

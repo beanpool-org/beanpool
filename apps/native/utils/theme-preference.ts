@@ -1,10 +1,16 @@
 /**
- * Light/dark choice: follow the phone by default, with an in-app override.
+ * Light/dark choice: LIGHT by default, with 'Same as phone' and Dark offered in Settings.
+ *
+ * The default was 'system' until 2026-09-20. It was changed because following the phone surprised
+ * people whose phone is in night mode -- they opened a light-looking app and got a dark one -- and
+ * because the map's base colours can't follow a late theme change on Android (see (tabs)/map.tsx),
+ * so starting light keeps the map and the chrome agreeing. Anyone who wants the old behaviour picks
+ * 'Same as phone'.
  *
  * One stored preference — 'system' | 'light' | 'dark'. The old Settings → Dark Mode switch stored
  * 'light' | 'dark' under LEGACY_THEME_KEY; it is read once to seed the new key and then removed.
  * Only a stored 'dark' carries over: 'light' was the switch's default state, so it says nothing
- * about a choice, and those users start on 'system' like everyone else.
+ * about a choice, and those users start on the default like everyone else.
  */
 
 export type ThemePreference = 'system' | 'light' | 'dark';
@@ -25,7 +31,7 @@ export function parseThemePreference(raw: string | null | undefined): ThemePrefe
 
 /** The seed for a device that has no stored preference yet. */
 export function preferenceFromLegacy(legacy: string | null | undefined): ThemePreference {
-    return legacy === 'dark' ? 'dark' : 'system';
+    return legacy === 'dark' ? 'dark' : 'light';
 }
 
 /**

@@ -226,12 +226,26 @@ describe('NodeRolesPanel', () => {
         await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'a' } });
         const list = screen.getByRole('list', { name: 'Matching members' });
-        // alice holds owner and bob holds admin: offered, but not choosable, and told why.
+        // alice holds owner: offered, but not choosable, and told why.
         expect(within(list).getByRole('button', { name: /alice/ })).toBeDisabled();
         expect(within(list).getByText(/Only an owner can change this/)).toBeInTheDocument();
+        // bob holds admin. Searched separately: 'a' does not match "bob", so asserting it in the
+        // list above only looked like coverage -- the admin branch of the guard was untested.
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'bob' } });
+        expect(suggestion('bob')).toBeDisabled();
         // carol is already a moderator, so an admin may still act on her.
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'carol' } });
         expect(suggestion('carol')).not.toBeDisabled();
+    });
+
+    it('with no owner, the guard steps aside so an admin can make a fellow admin the first owner', async () => {
+        // The node deliberately lets any signed-in admin create the FIRST owner. The suggestion-list
+        // guard must not hide that, or bootstrap is only possible on yourself.
+        fetchRoles.mockResolvedValue([bobAdmin, { ...bobAdmin, member_pubkey: ALICE, callsign: 'alice' }]);
+        await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'alice' } });
+        expect(suggestion('alice')).not.toBeDisabled();
+        expect(screen.queryByText(/Only an owner can change this/)).not.toBeInTheDocument();
     });
 
     it('an admin appointing a moderator sends role=moderator', async () => {

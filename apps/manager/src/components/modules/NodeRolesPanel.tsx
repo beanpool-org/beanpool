@@ -430,7 +430,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                             // An admin may not change anyone who already holds owner or admin: granting
                                             // replaces the role they have, so the node refuses it. Don't offer a choice
                                             // that ends in a 403 -- say why here instead.
-                                            const blockedForAdmin = !canManage && !!held && held !== 'moderator';
+                                            // Not in the no-owner bootstrap state: there the node lets a signed-in
+                                            // admin make the FIRST owner, including a fellow admin, so don't hide it.
+                                            const blockedForAdmin = !canManage && !noOwner && !!held && held !== 'moderator';
                                             return (
                                                 <li key={k}>
                                                     <button

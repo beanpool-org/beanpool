@@ -88,10 +88,10 @@ coverage that does not exist.
   on its own line beside a related suite, not at the end (see the #740 entry below).
 - **vitest packages**: the package must have a `"test"` script for `turbo run test` to see
   it. `apps/native`, `apps/pwa` and `apps/manager` all have one. **`apps/manager` was
-  unblocked by PR #419 (`464c600`)** and now holds ~65 test files that do run — the earlier
-  wording here ("apps/manager does not ... do not add manager tests") was left stale after
-  that landed and is withdrawn. Manager tests are welcome; the register entry for
-  `TelemetryModule` below has said so since 2026-08.
+  unblocked by PR #419 (`464c600`, 2026-08-25)** and now holds dozens of test files that do
+  run, and that fail the build when they break. **Manager tests are welcome.** An earlier
+  version of this bullet said the opposite; it is withdrawn — see the `TelemetryModule` entry
+  in the register below.
 - Verify before pushing: `pnpm turbo run test --filter=<pkg>` and confirm your file appears
   in the output.
 

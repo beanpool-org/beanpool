@@ -12,7 +12,7 @@ Some of these changes live on your community's server. You get them when your co
 ### New
 
 - **This BeanPool sheet.** Guides to how BeanPool works, the rules, common questions and what's new. They work without a connection. Open it from Settings → BeanPool.
-- **Light or dark.** The app now follows your phone's light or dark setting. To choose for yourself, go to Settings → Appearance: Same as phone, Light or Dark.
+- **Light or dark.** The app starts light. To make it dark, or to have it follow your phone, go to Settings → Appearance: Same as phone, Light or Dark.
 - **Badges.** Every screen now uses the same trust levels as your community's server: Resident from 200 trust, Steward from 600, Elder from 1,400. Some screens used to show the wrong badge. The Newcomer badge is easier to read.
 
 ### Voting

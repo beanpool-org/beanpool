@@ -128,7 +128,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                 <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
                     <div>
                         <h2 id="pricing-guide-title" className="text-lg sm:text-xl font-extrabold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-                            <span>💡</span> Community Pricing Guide
+                            <span aria-hidden="true">💡</span> Community Pricing Guide
                         </h2>
                         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                             {items.length} items & services benchmarked
@@ -175,13 +175,13 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                         type="button"
                         aria-pressed={selectedCategory === 'all'}
                         onClick={() => setSelectedCategory('all')}
-                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors ${
+                        className={`flex-shrink-0 px-3 py-1.5 min-h-[44px] rounded-full text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors ${
                             selectedCategory === 'all'
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                         }`}
                     >
-                        🌟 All Items
+                        <span aria-hidden="true">🌟</span> All Items
                     </button>
                     {PRICING_CATEGORIES.map((cat) => {
                         const active = selectedCategory === cat.id;
@@ -191,7 +191,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                 type="button"
                                 aria-pressed={active}
                                 onClick={() => setSelectedCategory(cat.id)}
-                                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors ${
+                                className={`flex-shrink-0 px-3 py-1.5 min-h-[44px] rounded-full text-xs font-semibold flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors ${
                                     active
                                         ? 'bg-emerald-600 text-white'
                                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
@@ -273,7 +273,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{item.description}</p>
                                         {config.showSeasonality && item.seasonalityHint && (
                                             <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
-                                                ☀️ {item.seasonalityHint}
+                                                <span aria-hidden="true">☀️</span> {item.seasonalityHint}
                                             </p>
                                         )}
                                     </div>
@@ -281,10 +281,10 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                     {/* Price & Actions */}
                                     <div className="flex flex-col items-end flex-shrink-0">
                                         <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
-                                            <span>🫘 {effectivePrice}</span>
+                                            <span><span aria-hidden="true">🫘</span> {effectivePrice}</span>
                                             {item.unit && <span className="text-[10px] text-emerald-600/80 font-normal">/{item.unit}</span>}
-                                            {item.trend === 'up' && <span className="text-emerald-500 text-[10px] ml-0.5">▲</span>}
-                                            {item.trend === 'down' && <span className="text-rose-500 text-[10px] ml-0.5">▼</span>}
+                                            {item.trend === 'up' && <span className="text-emerald-500 text-[10px] ml-0.5" aria-hidden="true">▲</span>}
+                                            {item.trend === 'down' && <span className="text-rose-500 text-[10px] ml-0.5" aria-hidden="true">▼</span>}
                                         </div>
 
                                         <div className="flex items-center gap-1 mt-1.5">
@@ -301,11 +301,11 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                     e.stopPropagation();
                                                     setReportingItem(item);
                                                 }}
-                                                className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs transition-colors"
+                                                className="min-w-[44px] min-h-[44px] flex items-center justify-center p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 title="Report price feedback"
                                                 aria-label={`Report price for ${item.name}`}
                                             >
-                                                🚩
+                                                <span aria-hidden="true">🚩</span>
                                             </button>
                                         </div>
                                     </div>
@@ -335,9 +335,11 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                 </div>
                             ) : (
                                 <form onSubmit={handleSubmitReport}>
-                                    <h3 id="report-modal-title" className="text-base font-bold text-zinc-900 dark:text-zinc-100">🚩 Report Price</h3>
+                                    <h3 id="report-modal-title" className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                                        <span aria-hidden="true">🚩</span> Report Price
+                                    </h3>
                                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 mb-4">
-                                        {reportingItem.name} • Current: 🫘 {reportingItem.priceBeans}
+                                        {reportingItem.name} • Current: <span aria-hidden="true">🫘</span> {reportingItem.priceBeans}
                                     </p>
 
                                     <div className="grid grid-cols-3 gap-2 mb-3" role="radiogroup" aria-label="Feedback reason">
@@ -346,39 +348,39 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                             role="radio"
                                             aria-checked={reportType === 'too_high'}
                                             onClick={() => setReportType('too_high')}
-                                            className={`py-2 px-1 text-xs font-semibold rounded-xl border text-center transition-colors ${
+                                            className={`py-2 px-1 min-h-[44px] text-xs font-semibold rounded-xl border text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                                 reportType === 'too_high'
                                                     ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-700 dark:text-emerald-300'
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300'
                                             }`}
                                         >
-                                            📈 Too High
+                                            <span aria-hidden="true">📈</span> Too High
                                         </button>
                                         <button
                                             type="button"
                                             role="radio"
                                             aria-checked={reportType === 'too_low'}
                                             onClick={() => setReportType('too_low')}
-                                            className={`py-2 px-1 text-xs font-semibold rounded-xl border text-center transition-colors ${
+                                            className={`py-2 px-1 min-h-[44px] text-xs font-semibold rounded-xl border text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                                 reportType === 'too_low'
                                                     ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-700 dark:text-emerald-300'
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300'
                                             }`}
                                         >
-                                            📉 Too Low
+                                            <span aria-hidden="true">📉</span> Too Low
                                         </button>
                                         <button
                                             type="button"
                                             role="radio"
                                             aria-checked={reportType === 'other'}
                                             onClick={() => setReportType('other')}
-                                            className={`py-2 px-1 text-xs font-semibold rounded-xl border text-center transition-colors ${
+                                            className={`py-2 px-1 min-h-[44px] text-xs font-semibold rounded-xl border text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                                 reportType === 'other'
                                                     ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-700 dark:text-emerald-300'
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300'
                                             }`}
                                         >
-                                            💬 Other
+                                            <span aria-hidden="true">💬</span> Other
                                         </button>
                                     </div>
 
@@ -388,21 +390,21 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         placeholder="Optional: Why is this estimate wrong?"
                                         value={reportComment}
                                         onChange={(e) => setReportComment(e.target.value)}
-                                        className="w-full text-xs p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:ring-2 focus:ring-emerald-500 mb-4"
+                                        className="w-full text-xs p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-4"
                                     />
 
                                     <div className="flex gap-2">
                                         <button
                                             type="button"
                                             onClick={() => setReportingItem(null)}
-                                            className="flex-1 py-2 rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors"
+                                            className="flex-1 py-2 min-h-[44px] rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             type="submit"
                                             disabled={reportSubmitting}
-                                            className="flex-1 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50"
+                                            className="flex-1 py-2 min-h-[44px] rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50"
                                         >
                                             {reportSubmitting ? 'Submitting...' : 'Submit'}
                                         </button>

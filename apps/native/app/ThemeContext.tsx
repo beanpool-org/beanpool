@@ -85,9 +85,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const base = theme === 'dark'
             ? (darkColors as unknown as typeof lightColors)
             : lightPaletteColors[lightPalette];
-        // The pattern is drawn once, behind the navigator. Page containers therefore go
-        // transparent so it shows through; surface.app stays solid for the inputs, chips and
-        // sunken rows that share the token and must not become see-through.
+        // The pattern is drawn once per screen, underneath that screen's content. Page
+        // containers therefore go transparent so it shows through; surface.app stays solid for
+        // the inputs, chips and sunken rows that share the token and must not become see-through.
         if (!patternEnabled) return base;
         // Chrome that must stay opaque (the tab strip, the controls block that the feed slides
         // under) takes the tile's own ground colour, so it reads as the same surface as the

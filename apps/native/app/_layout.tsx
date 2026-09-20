@@ -1,5 +1,5 @@
 import 'fast-text-encoding';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, type ReactElement, type ReactNode } from 'react';
 import { Stack, useRouter, useSegments, useGlobalSearchParams, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -89,6 +89,32 @@ Object.defineProperty(RN, 'TextInput', {
         return PatchedTextInput;
     }
 });
+
+// The wallpaper is drawn INSIDE every pushed screen, not only behind the navigator.
+//
+// It started out behind the navigator alone, with each screen left transparent so it could
+// show through. That made screens see-through during a push as well: the chat list stayed
+// visible underneath the chat opening over it (reported as "an overlap of the screens"),
+// and drawing both at once made the push feel slow. Giving each screen its own copy of the
+// wallpaper makes it opaque again -- the incoming screen hides the outgoing one -- while
+// keeping the doodles on every page.
+//
+// Page sheets opt out: they are MEANT to reveal the screen below as they slide up, and they
+// already fill themselves with the tile's ground colour (sheetOptions). Reading that off the
+// resolved options rather than a list of route names keeps this in step on its own.
+//
+// Keep the branch keyed on something FIXED per route. The two arms return different trees, so a
+// route that changed its presentation while mounted (a setOptions call on a later render) would
+// remount and lose its state. Nothing does that today.
+function patternScreenLayout({ options, children }: { options: { presentation?: string }; children: ReactNode }): ReactElement {
+    if (options.presentation && options.presentation !== 'card') return children as ReactElement;
+    return (
+        <View style={{ flex: 1 }}>
+            <PatternBackground />
+            {children}
+        </View>
+    );
+}
 
 function RootLayoutNav() {
     const { identity, isLoading } = useIdentity();
@@ -592,14 +618,26 @@ function RootLayoutNav() {
 
     return (
         <View style={{ flex: 1 }}>
-            {/* The wallpaper sits behind every route; screens are transparent over it. */}
-            <PatternBackground />
+            {/* A plain floor under the navigator, in case a transition ever leaves a strip no
+                screen covers. It is deliberately NOT the tiled wallpaper: every screen now
+                paints its own (patternScreenLayout), so a second tile here would be drawn on
+                every frame and never seen -- the overdraw this change set out to remove. */}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.surface.chrome }]} pointerEvents="none" />
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-            {/* React Navigation paints its own theme background over each screen, which would
-                hide the wallpaper no matter how transparent the screens themselves are. Handing
-                it a transparent background is what lets the pattern show through. */}
+            {/* native-stack merges the theme's background into each screen's contentStyle,
+                UNDERNEATH the contentStyle below -- so with that opaque this value no longer
+                decides anything. Left transparent so nothing here can reintroduce a colour of
+                its own behind a screen. */}
             <NavThemeProvider value={navTheme}>
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
+            <Stack
+                // Opaque, so a screen can no longer be seen through during a push. In practice
+                // the screen's own wallpaper paints over this in the same commit, so the colour
+                // is a floor rather than something the eye catches -- but it must not be
+                // 'transparent', which is what let screens show through each other. Same token
+                // as the sheets below: the tile's ground colour while the pattern is on.
+                screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface.chrome } }}
+                screenLayout={patternScreenLayout}
+            >
                 <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
                 <Stack.Screen name="welcome" />
                 <Stack.Screen name="node-mismatch" options={{ gestureEnabled: false }} />

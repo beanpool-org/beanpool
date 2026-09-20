@@ -71,7 +71,7 @@ export default function ProjectsScreen() {
     const [sortBy, setSortBy] = useState<'trending' | 'balance' | 'newest'>('trending');
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.surface.app },
+        safeArea: { flex: 1, backgroundColor: colors.surface.page },
         headerContainer: { marginBottom: 16 },
         headerInfo: { marginBottom: 16 },
         headerDesc: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },

@@ -232,7 +232,7 @@ export default function GroupInviteLanding() {
 }
 
 const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface.app },
+    container: { flex: 1, backgroundColor: colors.surface.page },
     topBar: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 4 },
     closeBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
     content: { paddingHorizontal: 20, alignItems: 'stretch' },

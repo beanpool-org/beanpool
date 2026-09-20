@@ -70,7 +70,7 @@ export default function ChatsScreen() {
     const createGroup = useCreateGroupFlow();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.surface.app },
+        safeArea: { flex: 1, backgroundColor: colors.surface.page },
         talkBar: {
             flexDirection: 'row',
             marginHorizontal: 16,

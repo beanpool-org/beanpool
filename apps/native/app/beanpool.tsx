@@ -65,7 +65,7 @@ export default function BeanPoolSheet() {
     const searching = query.trim().length >= 2;
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
         headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },

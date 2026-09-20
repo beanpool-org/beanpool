@@ -61,8 +61,8 @@ function formatJoinDate(dateStr: string | null) {
 export default function NewMessageScreen() {
     const { identity } = useIdentity();
     const { theme, colors } = useTheme();
-    const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.surface.card },
+    const styles = useStyles(({ theme, colors, patternEnabled }) => StyleSheet.create({
+        safeArea: { flex: 1, backgroundColor: patternEnabled ? colors.surface.page : colors.surface.card },
         container: { flex: 1 },
 
         // Header

@@ -66,7 +66,7 @@ export default function RecoverIdentityScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface.app },
+    container: { flex: 1, backgroundColor: colors.surface.page },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     card: {
         width: '100%',

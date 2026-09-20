@@ -1,7 +1,11 @@
 import { StrictMode, Component, type ReactNode, type ErrorInfo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { applyPatternPreference } from './lib/usePatternBackground';
 import './index.css';
+
+// Before the first paint, so "plain background" never flashes the pattern in.
+applyPatternPreference();
 
 // Error boundary to catch and display React rendering errors
 class ErrorBoundary extends Component<

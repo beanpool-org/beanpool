@@ -30,6 +30,10 @@
   --success: #647664;         /* nature-600 */
   --scrollbar-thumb: #c0ccc0; /* nature-300 */
   --header-bg: #fbfaf8;       /* oat-50 */
+  --pattern-image: url('/pattern-light.webp');
+  --pattern-image-hidpi: image-set(url('/pattern-light.webp') 1x, url('/pattern-light-2x.webp') 2x);
+  --pattern-image-hidpi-webkit: -webkit-image-set(url('/pattern-light.webp') 1x, url('/pattern-light-2x.webp') 2x);
+  --pattern-bg: #f1f1e4;      /* the tile's own ground — what shows between the doodles */
   --header-overlay: rgba(251, 250, 248, 0.85);
   --nav-bg: #ffffff;
   --shadow-card: 0 4px 6px -1px rgba(100, 118, 100, 0.1), 0 2px 4px -2px rgba(100, 118, 100, 0.05);
@@ -77,6 +81,10 @@
   --scrollbar-thumb: #526052;
   --header-bg: #1d231d;
   --header-overlay: rgba(29, 35, 29, 0.85);
+  --pattern-image: url('/pattern-dark.webp');
+  --pattern-image-hidpi: image-set(url('/pattern-dark.webp') 1x, url('/pattern-dark-2x.webp') 2x);
+  --pattern-image-hidpi-webkit: -webkit-image-set(url('/pattern-dark.webp') 1x, url('/pattern-dark-2x.webp') 2x);
+  --pattern-bg: #141a1a;
   --nav-bg: #2a322a;
   --shadow-card: 0 4px 12px rgba(0,0,0,0.3);
 }
@@ -84,10 +92,60 @@
 html, body, #root {
   height: 100%;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: var(--bg-primary);
+  background-color: var(--pattern-bg, var(--bg-primary));
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ——— Doodle wallpaper ———
+   Stands in for the flat page colour. Drawn once here, on the app root: screens sit on it
+   transparently, while inputs, cards and sunken rows keep their own solid fills.
+
+   The asset is a 2x2 block of a seamless tile, so `background-size` is the whole 890px
+   block. Halving it to 445px (one tile) would render the art at half scale and still tile
+   seamlessly — an easy mistake to ship unnoticed. Whole numbers only: a fractional tile
+   size lands on part-pixels and that is what makes a repeat show seams.
+
+   "Plain background" in Settings adds .plain-background to <html>. */
+#root {
+  background-image: var(--pattern-image);
+  background-repeat: repeat;
+  background-size: 890px 890px;
+}
+
+/* The high-resolution tile, offered only where the browser says it understands image-set.
+   This has to be @supports and not a second declaration: --pattern-image is a CUSTOM property,
+   whose value is stored unvalidated, so a later declaration always wins for everyone and a
+   var() that substitutes to something the engine cannot parse makes background-image resolve
+   to none — it does NOT fall back to the previous declaration. @supports tests a literal, so
+   an engine that only knows the -webkit- form keeps the plain 1x url above instead of losing
+   the wallpaper entirely. Old Chrome and Android WebView are the ones that need this. */
+@supports (background-image: -webkit-image-set(url('/pattern-light.webp') 1x)) {
+  #root { background-image: var(--pattern-image-hidpi-webkit); }
+}
+@supports (background-image: image-set(url('/pattern-light.webp') 1x)) {
+  #root { background-image: var(--pattern-image-hidpi); }
+}
+
+/* Page surfaces: transparent so the wallpaper shows, but their original solid colour again
+   when the pattern is off, so "plain background" looks exactly as these pages did before.
+   Modal and sheet panels deliberately do NOT use this — they stay opaque. */
+.page-surface { background-color: var(--page-surface); }
+
+:root { --page-surface: transparent; }
+:root.plain-background { --page-surface: #fbfaf8; }            /* oat-50, as the pages had */
+:root.dark-theme.plain-background { --page-surface: #1d231d; } /* nature-950, as the pages had */
+
+:root.plain-background {
+  --pattern-image: none;
+  --pattern-image-hidpi: none;
+  --pattern-image-hidpi-webkit: none;
+  --pattern-bg: var(--bg-primary);
+}
+
+@media print {
+  #root { background-image: none; }
 }
 
 /* Pulse animation for sync indicator */

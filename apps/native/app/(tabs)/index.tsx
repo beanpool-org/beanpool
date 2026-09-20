@@ -137,7 +137,7 @@ export default function MarketScreen() {
     const [filter, setFilter] = useState<MarketTypeFilter>('all');
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.surface.app },
+        safeArea: { flex: 1, backgroundColor: colors.surface.page },
         listContent: { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 100 },
 
         // Search row

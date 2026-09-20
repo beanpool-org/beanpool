@@ -758,7 +758,7 @@ export default function ChannelsScreen() {
 }
 
 const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
-    screen: { flex: 1, backgroundColor: colors.surface.app },
+    screen: { flex: 1, backgroundColor: colors.surface.page },
     header: {
         paddingHorizontal: 16, paddingVertical: 12,
         borderBottomWidth: 1, borderBottomColor: colors.border.default,

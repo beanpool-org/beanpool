@@ -25,7 +25,7 @@ export default function SuggestChangeScreen() {
     const { theme, colors } = useTheme();
     const insets = useSafeAreaInsets();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'flex-start' },
         headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },

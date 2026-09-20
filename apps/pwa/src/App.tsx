@@ -466,7 +466,7 @@ export function App() {
 
     return (
         <div 
-            className={`flex h-screen overflow-hidden bg-bg-primary text-text-primary ${!isBottomNavVisible ? 'bottom-nav-hidden' : ''}`}
+            className={`flex h-screen overflow-hidden text-text-primary ${!isBottomNavVisible ? 'bottom-nav-hidden' : ''}`}
             data-bottom-nav={isBottomNavVisible ? 'visible' : 'hidden'}
             style={{
                 ...(!isBottomNavVisible ? {

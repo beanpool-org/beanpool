@@ -50,7 +50,7 @@ export default function PublicProfileScreen() {
     }), [colors]);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
 
         header: {
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

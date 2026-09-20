@@ -109,7 +109,7 @@ export default function TreasuryDetailScreen() {
     const ledgerRequest = useRef(0);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: colors.surface.app },
         backButton: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
         headerTitle: { flex: 1, fontSize: 18, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },

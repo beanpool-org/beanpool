@@ -57,7 +57,7 @@ export default function PostDetailModal() {
     const insets = useSafeAreaInsets();
     const { theme, colors } = useTheme();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: colors.surface.app },
         errorText: { color: colors.text.secondary, fontSize: 16, textAlign: 'center', marginBottom: 24, lineHeight: 24 },
         closeBtn: { backgroundColor: palette.orangeAlt500, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },

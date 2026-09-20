@@ -14,6 +14,7 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
 import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme';
+import { loadPatternPreference, setPatternPreference } from '../lib/usePatternBackground';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { NodeAdminLink } from '../components/NodeAdminLink';
 import { OwnerWordsCheck } from '../components/OwnerWordsCheck';
@@ -90,6 +91,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     }, [initialMode]);
 
     // App Preferences & Toggles
+    const [patternEnabled, setPatternEnabled] = useState(loadPatternPreference);
     const [useModernMarkers, setUseModernMarkers] = useState(() => {
         return localStorage.getItem('beanpool_modern_markers') !== 'false';
     });
@@ -425,7 +427,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     }
 
     return (
-        <div className="flex justify-center p-4 min-h-screen bg-oat-50 dark:bg-nature-950 transition-colors">
+        <div className="flex justify-center p-4 min-h-screen page-surface transition-colors">
             <div className="max-w-3xl w-full mt-2 pb-32">
                 {/* Header */}
                 <div className="flex items-center mb-6">
@@ -703,6 +705,26 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             );
                                         })}
                                     </div>
+                                </div>
+
+                                {/* Background pattern: the doodle wallpaper, or a plain colour. Per device. */}
+                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <span className="text-xl">🎨</span>
+                                        <div className="flex-1">
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Background pattern</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">Doodles behind the app, or a plain background</div>
+                                        </div>
+                                        <input
+                                            type="checkbox"
+                                            className="w-12 h-7 cursor-pointer accent-nature-600"
+                                            checked={patternEnabled}
+                                            onChange={(e) => {
+                                                setPatternEnabled(e.target.checked);
+                                                setPatternPreference(e.target.checked);
+                                            }}
+                                        />
+                                    </label>
                                 </div>
 
                                 {/* Notification Preferences */}

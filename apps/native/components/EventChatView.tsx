@@ -237,7 +237,7 @@ export function EventChatView({ eventId }: Props) {
 
 const makeStyles = ({ colors, theme }: ThemeContextType) =>
     StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         noteBox: {
             marginHorizontal: 12, marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1,
             backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.15)' : '#f5f3ff',

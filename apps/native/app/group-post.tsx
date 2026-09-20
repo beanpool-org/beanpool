@@ -37,7 +37,7 @@ export default function GroupPostScreen() {
     const [toast, setToast] = useState('');
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         header: {
             flexDirection: 'row',
             alignItems: 'center',

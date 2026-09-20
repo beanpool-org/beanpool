@@ -280,7 +280,7 @@ export default function MapScreen() {
     }, [theme]);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         map: { width: '100%', height: '100%' },
 
         // Floating Filter Bar

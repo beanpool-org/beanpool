@@ -2058,7 +2058,7 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface.app },
+    container: { flex: 1, backgroundColor: colors.surface.page },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
     headerSubtitle: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', marginBottom: 32, lineHeight: 24 },

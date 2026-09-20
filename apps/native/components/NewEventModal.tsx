@@ -657,7 +657,7 @@ function nextWholeHour(): Date {
 
 const makeStyles = ({ colors, theme }: ThemeContextType) =>
     StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         header: {
             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
             paddingHorizontal: 12, paddingTop: HEADER_PAD_TOP, paddingBottom: 10, borderBottomWidth: 1,

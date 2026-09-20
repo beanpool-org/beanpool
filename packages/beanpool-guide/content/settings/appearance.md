@@ -1,7 +1,7 @@
 ---
 slug: appearance
 title: Light and dark
-summary: Make the app light or dark, or follow your phone.
+summary: The app starts light. Make it dark, or follow your phone.
 related: privacy, notifications, the-bean, web-app
 ---
 
@@ -9,8 +9,8 @@ related: privacy, notifications, the-bean, web-app
 
 - Open **Settings**. Under **App Settings**, find **Appearance**.
 - Choose one:
-- **Same as phone:** the app is dark when your phone is set to dark, and light when it is light. This is how it starts.
-- **Light:** always light.
+- **Same as phone:** the app is dark when your phone is set to dark, and light when it is light.
+- **Light:** always light. This is how the app starts.
 - **Dark:** always dark.
 
 When the app is light, **Light Color Scheme** lets you choose **Classic**, **Earth** or **Slate**.

@@ -1,5 +1,5 @@
 /**
- * useTheme — light/dark: follow the device by default, with an in-app override.
+ * useTheme — light/dark: LIGHT by default, with 'Same as device' and Dark offered in Settings.
  *
  * One stored preference, 'system' | 'light' | 'dark' (Settings → Appearance). With 'system' the
  * page follows prefers-color-scheme live, including a change made while it is open. Applies
@@ -8,6 +8,11 @@
  *
  * The old toggle stored 'light' | 'dark' under LEGACY_KEY — and wrote 'light' on every load, so
  * only 'dark' says anything about a choice. It is read once to seed the new key, then removed.
+ *
+ * The default was 'system' from #930 (2026-09-19) until 2026-09-20, matching the phone app. Both are
+ * back to light: following the device surprised people whose device is in night mode. #930 also WROTE
+ * 'system' to storage on first load, so DEFAULT_LIGHT_MIGRATION_KEY moves that stored default to light
+ * exactly once per browser; 'Same as device' chosen after that is kept.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -17,6 +22,7 @@ export type ThemePreference = 'system' | 'light' | 'dark';
 
 const STORAGE_KEY = 'beanpool-theme-mode';
 const LEGACY_KEY = 'beanpool-theme';
+const DEFAULT_LIGHT_MIGRATION_KEY = 'beanpool-theme-default-light-v1';
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
 // --header-bg in index.css, so the browser chrome runs on from the header.
@@ -45,10 +51,20 @@ function writeStorage(key: string, value: string | null) {
 }
 
 export function loadThemePreference(): ThemePreference {
+    const migrated = readStorage(DEFAULT_LIGHT_MIGRATION_KEY) !== null;
     const stored = readStorage(STORAGE_KEY);
-    if (stored === 'system' || stored === 'light' || stored === 'dark') return stored;
+    if (!migrated) writeStorage(DEFAULT_LIGHT_MIGRATION_KEY, 'done');
+
+    if (stored === 'system' || stored === 'light' || stored === 'dark') {
+        if (!migrated && stored === 'system') {
+            writeStorage(STORAGE_KEY, 'light');
+            return 'light';
+        }
+        return stored;
+    }
+
     const legacy = readStorage(LEGACY_KEY);
-    const seeded: ThemePreference = legacy === 'dark' ? 'dark' : 'system';
+    const seeded: ThemePreference = legacy === 'dark' ? 'dark' : 'light';
     writeStorage(STORAGE_KEY, seeded);
     if (legacy !== null) writeStorage(LEGACY_KEY, null);
     return seeded;

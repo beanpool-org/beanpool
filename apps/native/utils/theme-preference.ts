@@ -18,6 +18,8 @@ export type ResolvedTheme = 'light' | 'dark';
 
 export const THEME_PREFERENCE_KEY = 'beanpool_theme_mode';
 export const LEGACY_THEME_KEY = 'beanpool_theme_pref';
+/** Set once the 'system' default written by #930 has been moved to light. See loadThemePreference. */
+export const DEFAULT_LIGHT_MIGRATION_KEY = 'beanpool_theme_default_light_v1';
 
 export const THEME_PREFERENCE_OPTIONS: { value: ThemePreference; label: string }[] = [
     { value: 'system', label: 'Same as phone' },
@@ -49,10 +51,29 @@ type PreferenceStorage = {
     removeItem(key: string): Promise<void>;
 };
 
-/** Read the stored preference, seeding it from the old switch the first time and dropping that key. */
+/**
+ * Read the stored preference, seeding it from the old switch the first time and dropping that key.
+ *
+ * Also runs the one-time move off the old 'system' default. #930 did not only change the default --
+ * it WROTE 'system' to storage on first run, so every device that opened v1.2.39-v1.2.45 has a
+ * stored 'system' that it never chose. Changing the seed alone would leave all of them following the
+ * phone for ever. A stored 'system' is indistinguishable from a deliberate one, so the move is gated
+ * on DEFAULT_LIGHT_MIGRATION_KEY and happens exactly once per device: 'Same as phone' picked after
+ * that is kept. The marker is written on every path, so choosing 'Same as phone' later never trips it.
+ */
 export async function loadThemePreference(storage: PreferenceStorage): Promise<ThemePreference> {
+    const migrated = (await storage.getItem(DEFAULT_LIGHT_MIGRATION_KEY)) !== null;
     const stored = parseThemePreference(await storage.getItem(THEME_PREFERENCE_KEY));
-    if (stored) return stored;
+    if (!migrated) await storage.setItem(DEFAULT_LIGHT_MIGRATION_KEY, 'done');
+
+    if (stored) {
+        if (!migrated && stored === 'system') {
+            await storage.setItem(THEME_PREFERENCE_KEY, 'light');
+            return 'light';
+        }
+        return stored;
+    }
+
     const legacy = await storage.getItem(LEGACY_THEME_KEY);
     const seeded = preferenceFromLegacy(legacy);
     await storage.setItem(THEME_PREFERENCE_KEY, seeded);

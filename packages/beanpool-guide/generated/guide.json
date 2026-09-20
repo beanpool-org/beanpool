@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 17,
-  "hash": "65b4bcc21ff0aa6abdc7092b4897c5394f164ed94710adda472c52976eb0a108",
+  "version": 18,
+  "hash": "6c998e49b9efddc523654a7b6c1130029eb69513c3e94044839ff099fb71846d",
   "sections": [
     {
       "id": "about",
@@ -711,7 +711,7 @@
           "type": "ul",
           "items": [
             "**This BeanPool sheet.** Guides to how BeanPool works, the rules, common questions and what's new. They work without a connection. Open it from Settings → BeanPool.",
-            "**Light or dark.** The app now follows your phone's light or dark setting. To choose for yourself, go to Settings → Appearance: Same as phone, Light or Dark.",
+            "**Light or dark.** The app starts light. To make it dark, or to have it follow your phone, go to Settings → Appearance: Same as phone, Light or Dark.",
             "**Badges.** Every screen now uses the same trust levels as your community's server: Resident from 200 trust, Steward from 600, Elder from 1,400. Some screens used to show the wrong badge. The Newcomer badge is easier to read."
           ]
         },
@@ -4094,7 +4094,7 @@
     {
       "slug": "appearance",
       "title": "Light and dark",
-      "summary": "Make the app light or dark, or follow your phone.",
+      "summary": "The app starts light. Make it dark, or follow your phone.",
       "section": "settings",
       "related": [
         "privacy",
@@ -4112,8 +4112,8 @@
           "items": [
             "Open **Settings**. Under **App Settings**, find **Appearance**.",
             "Choose one:",
-            "**Same as phone:** the app is dark when your phone is set to dark, and light when it is light. This is how it starts.",
-            "**Light:** always light.",
+            "**Same as phone:** the app is dark when your phone is set to dark, and light when it is light.",
+            "**Light:** always light. This is how the app starts.",
             "**Dark:** always dark."
           ]
         },

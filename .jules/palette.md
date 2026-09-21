@@ -165,3 +165,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-19 - ProposeDecisionModal Touch Target Sizing, Focus Rings, and Emoji Hiding
 **Learning:** `ProposeDecisionModal.tsx` close button lacked explicit `type="button"`, minimum touch target sizing (< 44px), and visible focus ring indicators; touch option selector buttons lacked state communication via `aria-pressed` and minimum touch target height (`min-h-[44px]`); and decorative emojis (`🌱`, `👤`, `🏛️`, `🛡️`) were read by screen readers.
 **Action:** Added `type="button"`, `min-w-[44px] min-h-[44px]`, `focus-visible:ring-2` to close button, `aria-pressed` and `min-h-[44px]` to touch option triggers, wrapped decorative emojis with `<span aria-hidden="true">`, and added unit tests in `ProposeDecisionModal.test.tsx`.
+
+## 2026-09-20 - SuggestChangeForm Decorative Emoji Hiding & Focus Ring Styling
+**Learning:** `SuggestChangeForm.tsx` rendered a decorative heading emoji (`💬`) without hiding it from assistive technology (`aria-hidden="true"`), and its interactive elements (radio kind selector buttons, textarea, community input, submit button, and back button) lacked explicit focus-visible ring indicators (`focus-visible:ring-2 focus-visible:ring-emerald-500`) for keyboard navigation.
+**Action:** Wrapped decorative heading emoji with `<span aria-hidden="true">💬 </span>`, added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` styling across all form controls in `SuggestChangeForm.tsx`, and added unit tests in `SuggestChangeForm.test.tsx`.

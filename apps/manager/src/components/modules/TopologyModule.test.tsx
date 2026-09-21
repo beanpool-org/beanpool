@@ -10,6 +10,7 @@ const mockApproveRegistrarClaim = vi.fn();
 const mockRevokeRegistrarClaim = vi.fn();
 const mockFetchNodeSnapshots = vi.fn();
 const mockCreateNodeSnapshot = vi.fn();
+const mockDownloadAdminFile = vi.fn();
 
 vi.mock('../../lib/node-client', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../lib/node-client')>();
@@ -21,6 +22,7 @@ vi.mock('../../lib/node-client', async (importOriginal) => {
         revokeRegistrarClaim: (...args: any[]) => mockRevokeRegistrarClaim(...args),
         fetchNodeSnapshots: (...args: any[]) => mockFetchNodeSnapshots(...args),
         createNodeSnapshot: (...args: any[]) => mockCreateNodeSnapshot(...args),
+        downloadAdminFile: (...args: any[]) => mockDownloadAdminFile(...args),
     };
 });
 
@@ -207,6 +209,56 @@ describe('TopologyModule Component', () => {
             expect(mockCreateNodeSnapshot).toHaveBeenCalledWith(
                 mockNode.url,
                 mockNode.adminPassword,
+                undefined
+            );
+        });
+    });
+
+    it('downloads snapshot using resolveNodeApiUrl endpoint', async () => {
+        const remoteNode: NodeProfile = {
+            id: 'node-remote',
+            name: 'Remote Sovereign Node',
+            url: 'https://test.beanpool.org',
+            adminPassword: 'secretpassword',
+        };
+        mockFetchNodeSnapshots.mockResolvedValueOnce([
+            {
+                name: 'snapshot-20260915.sqlite',
+                sizeBytes: 1048576,
+                createdAt: '2026-09-15 10:00:00',
+            },
+        ]);
+        mockDownloadAdminFile.mockResolvedValueOnce(undefined);
+
+        await act(async () => {
+            render(
+                <TopologyModule
+                    activeNode={remoteNode}
+                    profiles={[remoteNode]}
+                    diag={null}
+                    onRefresh={() => {}}
+                />
+            );
+        });
+
+        // Switch to On-Node Snapshots
+        await act(async () => {
+            fireEvent.click(screen.getByText('On-Node Snapshots'));
+        });
+
+        expect(await screen.findByText('snapshot-20260915.sqlite')).toBeInTheDocument();
+
+        // Click Download
+        await act(async () => {
+            fireEvent.click(screen.getByText('⬇ Download'));
+        });
+
+        await waitFor(() => {
+            expect(mockDownloadAdminFile).toHaveBeenCalledWith(
+                '/proxy/https/test.beanpool.org/api/local/admin/snapshots/download',
+                { name: 'snapshot-20260915.sqlite' },
+                'secretpassword',
+                'snapshot-20260915.sqlite',
                 undefined
             );
         });

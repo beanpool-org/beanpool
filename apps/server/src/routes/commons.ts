@@ -209,11 +209,7 @@ router.post('/api/commons/decisions/:id/vote', async (ctx) => {
 });
 
 router.post('/api/commons/decisions/tick', async (ctx) => {
-    if (!(await deps.checkAdminAuth(ctx as any))) {
-        ctx.status = 401;
-        ctx.body = { error: 'Admin authorization required' };
-        return;
-    }
+    if (!(await deps.checkAdminAuth(ctx as any))) return;
 
     const result = tickDecisions();
     ctx.body = { success: true, ...result };

@@ -57,7 +57,7 @@ function assert(cond: any, msg: string): void {
 }
 
 const deps: RouteDeps = {
-    checkAdminAuth: async () => false,
+    checkAdminAuth: async (ctx: any) => ctx.headers?.authorization === 'Bearer admin-secret',
     rateLimit: () => true,
     clampLimit: (_v: unknown, def = 20) => def,
     clampOffset: () => 0,
@@ -78,6 +78,7 @@ async function callRouter(
         rawBody?: string;
         params?: Record<string, string>;
         query?: Record<string, string>;
+        headers?: Record<string, string>;
     } = {}
 ): Promise<{ status: number; body: any }> {
     const layer = (router as any).stack.find((l: any) =>
@@ -103,6 +104,8 @@ async function callRouter(
         rawBody: opts.rawBody,
         params,
         query: opts.query || {},
+        headers: opts.headers || {},
+        get: (h: string) => (opts.headers || {})[h.toLowerCase()],
         status: 200,
         body: undefined,
         throw: (status: number, message: string) => {
@@ -506,9 +509,15 @@ async function runSuite() {
     setCommonsBalance(500);
     db.prepare(`UPDATE accounts SET balance = 500 WHERE public_key = 'COMMONS_POOL'`).run();
 
-    // Fire tick
-    const tickRes = await callRouter(commonsRouter, 'POST', '/api/commons/decisions/tick');
-    assert(tickRes.status === 200, 'Tick executed successfully');
+    // Fire tick without admin auth -> fails 401
+    const unauthTickRes = await callRouter(commonsRouter, 'POST', '/api/commons/decisions/tick');
+    assert(unauthTickRes.status === 401, 'Tick without admin auth fails with 401');
+
+    // Fire tick with admin auth -> succeeds 200
+    const tickRes = await callRouter(commonsRouter, 'POST', '/api/commons/decisions/tick', {
+        headers: { authorization: 'Bearer admin-secret' },
+    });
+    assert(tickRes.status === 200, 'Tick executed successfully with admin auth');
 
     // Verify decision executed
     const executedDecision = db.prepare(`SELECT * FROM decisions WHERE id = ?`).get(decisionPool.id) as any;

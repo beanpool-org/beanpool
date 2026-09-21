@@ -558,7 +558,7 @@ export function initStateEngine(): void {
     // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes)
     setInterval(() => {
         try { persistDecayEvents(); } catch (e) { console.warn('[Ledger] Failed to persist decay events:', e); }
-        persistCommonsBalance();
+        try { persistCommonsBalance(); } catch (e) { console.warn('[Ledger] Failed to persist commons balance:', e); }
     }, 5 * 60 * 1000);
 
     // #129: Run the ledger conservation audit IMMEDIATELY at startup so drift

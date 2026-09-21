@@ -57,7 +57,7 @@ function assert(cond: any, msg: string): void {
 }
 
 const deps: RouteDeps = {
-    checkAdminAuth: async (ctx: any) => ctx.headers?.authorization === 'Bearer admin-secret',
+    checkAdminAuth: async (ctx: any) => { if (ctx.headers?.authorization === 'Bearer admin-secret') return true; ctx.status = 401; ctx.body = { error: 'Authentication required' }; return false; },
     rateLimit: () => true,
     clampLimit: (_v: unknown, def = 20) => def,
     clampOffset: () => 0,

@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 /**
  * Mid-wizard onboarding state.
@@ -44,7 +44,7 @@ const listeners = new Set<() => void>();
 
 export async function getPendingOnboarding(): Promise<PendingOnboarding | null> {
     try {
-        const raw = await AsyncStorage.getItem(KEY);
+        const raw = await SecureStore.getItemAsync(KEY);
         if (!raw) return null;
         return JSON.parse(raw);
     } catch {
@@ -54,7 +54,7 @@ export async function getPendingOnboarding(): Promise<PendingOnboarding | null> 
 
 export async function setPendingOnboarding(state: PendingOnboarding): Promise<void> {
     try {
-        await AsyncStorage.setItem(KEY, JSON.stringify(state));
+        await SecureStore.setItemAsync(KEY, JSON.stringify(state));
     } catch (e) {
         console.warn('[Onboarding] Failed to persist wizard state', e);
     }
@@ -70,7 +70,7 @@ export async function updatePendingOnboarding(patch: Partial<PendingOnboarding>)
 
 export async function clearPendingOnboarding(): Promise<void> {
     try {
-        await AsyncStorage.removeItem(KEY);
+        await SecureStore.deleteItemAsync(KEY);
     } catch {}
     notify();
 }

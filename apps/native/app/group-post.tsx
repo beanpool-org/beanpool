@@ -2,7 +2,9 @@ import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import * as Crypto from 'expo-crypto';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { createPost } from '../utils/db';

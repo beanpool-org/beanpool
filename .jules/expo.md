@@ -81,3 +81,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `treasury-detail.tsx` was missing an exported `ErrorBoundary` component for Expo Router error handling, and parameter typing did not account for potential array query parameter values.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` and safely extracted scalar string values for search parameters.
 **Pattern:** Ensure Expo Router screen components export `ErrorBoundary` and handle both string and string[] parameter types gracefully.
+
+## 2026-09-18 - [Export ErrorBoundary in group-post]
+**Issue:** `group-post.tsx` was missing an exported `ErrorBoundary` component for Expo Router error handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router`.
+**Pattern:** Ensure Expo Router screen components in `apps/native/app/` re-export `ErrorBoundary`.

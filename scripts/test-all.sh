@@ -243,6 +243,7 @@ run_federation_suites() {
       test-federation-purchase-route
       test-federation-commission
       test-federation-settlement
+      test-admin-actor-name
       test-admin-auth
       test-admin-key-auth
       test-app-admin-handoff

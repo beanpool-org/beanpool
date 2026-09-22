@@ -314,7 +314,7 @@ export function initConnectorManager(node: Libp2p): void {
 
     // Start periodic handshake for trust verification (federation peers use the
     // handshake for mutual-trust establishment and RTT measurement).
-    handshakeTimer = setInterval(handshakeConnectedPeers, HANDSHAKE_INTERVAL_MS);
+    handshakeTimer = setInterval(() => { void handshakeConnectedPeers(); }, HANDSHAKE_INTERVAL_MS);
 
     // Daily-ish tombstone GC: drop tombstones older than retention, but never
     // delete a tombstone that any peer's cursor hasn't yet advanced past.
@@ -339,60 +339,64 @@ export function initConnectorManager(node: Libp2p): void {
 async function handshakeConnectedPeers(): Promise<void> {
     if (!p2pNode) return;
 
-    for (const connector of connectors) {
-        if (!connector.enabled) continue;
+    try {
+        for (const connector of connectors) {
+            if (!connector.enabled) continue;
 
-        const status = statuses.get(connector.address);
-        if (!status?.connected || !status.peerId) continue;
+            const status = statuses.get(connector.address);
+            if (!status?.connected || !status.peerId) continue;
 
-        try {
-            const { peerIdFromString } = await import('@libp2p/peer-id');
-            const peerId = peerIdFromString(status.peerId);
+            try {
+                const { peerIdFromString } = await import('@libp2p/peer-id');
+                const peerId = peerIdFromString(status.peerId);
 
-            const result = await sendHandshake(p2pNode, peerId);
+                const result = await sendHandshake(p2pNode, peerId);
 
-            status.mutualTrust = result.mutualTrust;
-            status.remoteTrustLevel = result.remoteTrustLevel;
-            status.remoteActive = result.remoteActive;
-            status.latencyMs = result.latencyMs;
-            status.lastVerified = Date.now();
-            status.error = null;
-        } catch (e: any) {
-            status.connected = false;
-            status.mutualTrust = false;
-            status.remoteTrustLevel = null;
-            status.latencyMs = null;
-            status.error = `Handshake failed: ${e.message}`;
+                status.mutualTrust = result.mutualTrust;
+                status.remoteTrustLevel = result.remoteTrustLevel;
+                status.remoteActive = result.remoteActive;
+                status.latencyMs = result.latencyMs;
+                status.lastVerified = Date.now();
+                status.error = null;
+            } catch (e: any) {
+                status.connected = false;
+                status.mutualTrust = false;
+                status.remoteTrustLevel = null;
+                status.latencyMs = null;
+                status.error = `Handshake failed: ${e.message}`;
 
-            const msg = (e.message || '').toLowerCase();
-            const isTransient = msg.includes('closed') || msg.includes('reset') || msg.includes('timeout');
+                const msg = (e.message || '').toLowerCase();
+                const isTransient = msg.includes('closed') || msg.includes('reset') || msg.includes('timeout');
 
-            if (isTransient) {
-                logger.info('P2P', `[Connectors] Handshake failed with ${connector.callsign || connector.address}: ${e.message} (normal connection lifecycle refresh)`);
-            } else {
-                logger.warn('P2P', `[Connectors] Handshake failed with ${connector.callsign || connector.address}: ${e.message}`);
-            }
+                if (isTransient) {
+                    logger.info('P2P', `[Connectors] Handshake failed with ${connector.callsign || connector.address}: ${e.message} (normal connection lifecycle refresh)`);
+                } else {
+                    logger.warn('P2P', `[Connectors] Handshake failed with ${connector.callsign || connector.address}: ${e.message}`);
+                }
 
-            if (status.peerId) {
-                try {
-                    const { peerIdFromString } = await import('@libp2p/peer-id');
-                    await p2pNode.hangUp(peerIdFromString(status.peerId));
-                } catch {}
-            }
+                if (status.peerId) {
+                    try {
+                        const { peerIdFromString } = await import('@libp2p/peer-id');
+                        await p2pNode.hangUp(peerIdFromString(status.peerId));
+                    } catch {}
+                }
 
-            if (isTransient) {
-                // Schedule instant reconnection to minimize sync downtime
-                setTimeout(() => {
-                    if (connector.enabled) {
-                        const currentStatus = statuses.get(connector.address);
-                        if (!currentStatus?.connected) {
-                            logger.info('P2P', `[Connectors] 🔄 Attempting immediate reconnection to ${connector.callsign || connector.address} after stream close...`);
-                            connectToAddress(connector.address).catch(() => {});
+                if (isTransient) {
+                    // Schedule instant reconnection to minimize sync downtime
+                    setTimeout(() => {
+                        if (connector.enabled) {
+                            const currentStatus = statuses.get(connector.address);
+                            if (!currentStatus?.connected) {
+                                logger.info('P2P', `[Connectors] 🔄 Attempting immediate reconnection to ${connector.callsign || connector.address} after stream close...`);
+                                connectToAddress(connector.address).catch(() => {});
+                            }
                         }
-                    }
-                }, 1000);
+                    }, 1000);
+                }
             }
         }
+    } catch (e: any) {
+        logger.error('P2P', `[Connectors] Error in handshake loop: ${e?.message || e}`);
     }
 }
 

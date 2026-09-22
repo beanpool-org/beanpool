@@ -75,8 +75,12 @@ export function loadThemePreference(): ThemePreference {
 
     const legacy = readStorage(LEGACY_KEY);
     const seeded: ThemePreference = legacy === 'dark' ? 'dark' : 'light';
-    writeStorage(STORAGE_KEY, seeded);
-    if (legacy !== null) writeStorage(LEGACY_KEY, null);
+    // Drop the old key only once the new one has actually landed. Deleting it after a write that
+    // failed loses a carried-over Dark for good: the next load finds neither key and reseeds to
+    // light. Same fault as the marker ordering -- a destructive step running after a write that
+    // did not land. The native copy is immune by accident: its unguarded await rejects before it
+    // reaches removeItem.
+    if (writeStorage(STORAGE_KEY, seeded) && legacy !== null) writeStorage(LEGACY_KEY, null);
     markDone();
     return seeded;
 }

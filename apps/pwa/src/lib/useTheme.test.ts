@@ -66,6 +66,25 @@ describe('loadThemePreference: the one-time move off the #930 system default', (
 
     // The reviewer's catch: ordering alone was a no-op here, because writeStorage swallows its
     // throw, so the marker landed even when the value write failed. Gated on the write landing now.
+    it('keeps the old dark toggle when the seed write fails, so it can carry over next load', () => {
+        localStorage.setItem('beanpool-theme', 'dark');
+        const realSet = localStorage.setItem.bind(localStorage);
+        const stub = vi.spyOn(localStorage, 'setItem').mockImplementation((k: string, v: string) => {
+            if (k === 'beanpool-theme-mode') throw new Error('quota exceeded');
+            realSet(k, v);
+        });
+        try {
+            expect(loadThemePreference()).toBe('dark');
+        } finally {
+            stub.mockRestore();
+        }
+        // The old key must survive: it is the only record of the choice until the new one lands.
+        expect(localStorage.getItem('beanpool-theme')).toBe('dark');
+        expect(loadThemePreference()).toBe('dark');
+        expect(localStorage.getItem('beanpool-theme-mode')).toBe('dark');
+        expect(localStorage.getItem('beanpool-theme')).toBeNull();
+    });
+
     it('does NOT record the move when the value write fails, so it retries next load', () => {
         localStorage.setItem('beanpool-theme-mode', 'system');
         const realSet = localStorage.setItem.bind(localStorage);

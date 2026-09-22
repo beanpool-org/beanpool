@@ -155,6 +155,27 @@ describe('loadThemePreference: the one-time move off the #930 system default', (
         expect(s.data.get(DEFAULT_LIGHT_MIGRATION_KEY)).toBe('done');
     });
 
+    // Native is immune to the PWA's legacy-key loss (fixed in #1031) only BY ACCIDENT: its seed
+    // setItem is unguarded, so a rejection propagates before removeItem runs. Wrapping that write
+    // in a try/catch would look like a tidy-up and would silently reintroduce the bug. This pins it.
+    it('keeps the old Dark Mode key when the seed write fails, so it can carry over next launch', async () => {
+        const s = memoryStorage({ [LEGACY_THEME_KEY]: 'dark' });
+        const realSet = s.setItem;
+        let fail = true;
+        s.setItem = async (k: string, v: string) => {
+            if (fail && k === THEME_PREFERENCE_KEY) throw new Error('write failed');
+            return realSet(k, v);
+        };
+        await expect(loadThemePreference(s)).rejects.toThrow('write failed');
+        expect(s.data.get(LEGACY_THEME_KEY)).toBe('dark');
+        expect(s.data.has(DEFAULT_LIGHT_MIGRATION_KEY)).toBe(false);
+
+        fail = false;
+        expect(await loadThemePreference(s)).toBe('dark');
+        expect(s.data.get(THEME_PREFERENCE_KEY)).toBe('dark');
+        expect(s.data.has(LEGACY_THEME_KEY)).toBe(false);
+    });
+
     it('marks a fresh install done, so a later Same as phone is never clobbered', async () => {
         const s = memoryStorage();
         expect(await loadThemePreference(s)).toBe('light');

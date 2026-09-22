@@ -658,15 +658,36 @@ const REGISTRAR_ALLOCATIONS = [
     },
 ];
 
+/**
+ * The onboarding funnel, as the node's engine/funnel.ts actually writes it: (day, event, variant, count), with the
+ * event names OnboardingModule's STEPS look for. The previous rows here used invented names (signup_started,
+ * first_trade), which no step matched, so every screen built on this fixture drew an empty funnel and the phone
+ * check measured nothing. These exercise the widest content the screen has: the rejection list with three
+ * reasons, a re-entry deduction, the "across the full N days" note on a derived step, and the historical keeper
+ * breakdown.
+ */
 const FUNNEL_ROWS = (() => {
-    const events = ['signup_started', 'seed_backed_up', 'avatar_published', 'first_trade'];
     const rows = [];
+    const day = (d) => `2026-09-${String(12 + d).padStart(2, '0')}`;
     for (let d = 0; d < 7; d++) {
-        const day = `2026-09-${String(12 + d).padStart(2, '0')}`;
-        events.forEach((event, i) => {
-            rows.push({ day, event, variant: 'control', count: 12 - d - i * 2 > 0 ? 12 - d - i * 2 : 1 });
-        });
+        rows.push({ day: day(d), event: 'invite_attempt', variant: null, count: 9 - d });
+        rows.push({ day: day(d), event: 'member_created', variant: null, count: 7 - d });
+        rows.push({ day: day(d), event: 'avatar_published', variant: null, count: 5 - d > 0 ? 5 - d : 1 });
+        rows.push({ day: day(d), event: 'guide_complete', variant: null, count: 4 - d > 0 ? 4 - d : 1 });
+        rows.push({ day: day(d), event: 'activated', variant: null, count: 3 - d > 0 ? 3 - d : 1 });
     }
+    // A derived step that reaches back before counting began, so its "across the full N days" note renders.
+    rows.push({ day: '2026-08-30', event: 'member_created', variant: null, count: 4 });
+    rows.push({ day: '2026-08-30', event: 'activated', variant: null, count: 2 });
+    // Rejections, one row per reason, plus the already-a-member re-entries taken off the top of the funnel.
+    rows.push({ day: day(1), event: 'invite_failed', variant: 'expired', count: 3 });
+    rows.push({ day: day(2), event: 'invite_failed', variant: 'invalid', count: 2 });
+    rows.push({ day: day(4), event: 'invite_failed', variant: 'already_used', count: 1 });
+    rows.push({ day: day(3), event: 'invite_reentry', variant: null, count: 2 });
+    // Keeper enrolment is closed, but historical rows still exist on a node that ran those builds.
+    rows.push({ day: day(0), event: 'protection_shown', variant: 'A', count: 2 });
+    rows.push({ day: day(0), event: 'protection_shown', variant: 'C', count: 3 });
+    rows.push({ day: day(0), event: 'protection_choice', variant: 'C', count: 3 });
     return rows;
 })();
 

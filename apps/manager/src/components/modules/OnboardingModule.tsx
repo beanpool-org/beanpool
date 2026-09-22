@@ -3,9 +3,15 @@ import type { NodeProfile } from '../../lib/profiles';
 import { fetchOnboardingFunnel, getTfaSessionToken, type FunnelRow } from '../../lib/node-client';
 
 export interface OnboardingModuleProps {
-    profiles: NodeProfile[];
-    activeProfileId: string;
-    onSelectNode: (id: string) => void;
+    /**
+     * Single-node Settings (People & Safety -> Onboarding Funnel) passes the one node App.tsx already resolved,
+     * which carries whichever sign-in that page holds. No node switcher there: there is nothing to switch to.
+     */
+    activeNode?: NodeProfile;
+    /** Fleet mode passes its whole list, and only it gets the switcher across them. */
+    profiles?: NodeProfile[];
+    activeProfileId?: string;
+    onSelectNode?: (id: string) => void;
 }
 
 const WINDOWS = [7, 30, 90] as const;
@@ -37,8 +43,12 @@ function sum(rows: FunnelRow[]): number {
     return rows.reduce((n, r) => n + r.count, 0);
 }
 
-export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: OnboardingModuleProps) {
-    const active = profiles.find(p => p.id === activeProfileId) || profiles[0];
+export function OnboardingModule({ activeNode, profiles, activeProfileId, onSelectNode }: OnboardingModuleProps) {
+    // One code path for both callers: single-node Settings is a list of one, so the switcher below and the
+    // "no profiles" card are decided by what is in `nodes`, not by a mode flag.
+    const singleNode = Boolean(activeNode);
+    const nodes = activeNode ? [activeNode] : profiles ?? [];
+    const active = activeNode ?? nodes.find(p => p.id === activeProfileId) ?? nodes[0];
     const [days, setDays] = useState<number>(30);
     const [rows, setRows] = useState<FunnelRow[] | null>(null);
     const [loading, setLoading] = useState(false);
@@ -98,7 +108,8 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
 
             let note: string | null = null;
             if (isTopRow && comparableReentry > 0) {
-                note = `${submitted} submitted, ${comparableReentry} already a member${comparableReentry === 1 ? '' : 's'} excluded`;
+                // 'already a members' is what the old plural produced, and this screen now goes to every node owner.
+                note = `${submitted} submitted, ${comparableReentry} ${comparableReentry === 1 ? 'already a member' : 'already members'} excluded`;
             } else if (countingSince && total > comparableTotal) {
                 note = `${total} across the full ${days} days`;
             }
@@ -139,7 +150,7 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
         return { steps, failures, reentry, comparableReentry, protectionStates, countingSince, top };
     }, [rows, days]);
 
-    if (!active || profiles.length === 0) {
+    if (!active) {
         return (
             <div className="bg-nature-950/50 border-2 border-dashed border-nature-800/80 rounded-2xl p-12 flex flex-col items-center justify-center text-center space-y-3 animate-fade-in font-sans">
                 <span className="text-4xl opacity-50 grayscale" aria-hidden="true">🚪</span>
@@ -155,23 +166,35 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
         <div className="space-y-6 animate-fade-in font-sans">
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-xl font-bold text-white tracking-tight m-0 flex items-center gap-2.5">
-                        <span aria-hidden="true">🚪</span> Onboarding
-                    </h2>
+                    {/*
+                      In single-node Settings this panel sits under People & Safety's own h2, so its title is an
+                      h3 there; in fleet mode it IS the page and stays an h2. And the community is not named:
+                      the page the owner is on is already their own node, so "join Local Sovereign Node" would
+                      be both redundant and, when no profile names it, plain wrong.
+                    */}
+                    {singleNode ? (
+                        <h3 className="text-base font-bold text-white tracking-tight m-0 flex items-center gap-2.5">
+                            <span aria-hidden="true">🚪</span> Onboarding Funnel
+                        </h3>
+                    ) : (
+                        <h2 className="text-xl font-bold text-white tracking-tight m-0 flex items-center gap-2.5">
+                            <span aria-hidden="true">🚪</span> Onboarding
+                        </h2>
+                    )}
                     <p className="text-xs text-nature-400 m-0 mt-1">
-                        How many people tried to join {active?.name || 'this node'}, and where they stopped.
-                        Counts only — no member is identifiable here.
+                        How many people tried to join{singleNode ? '' : ` ${active?.name || 'this node'}`}, and where
+                        they stopped. Counts only — no member is identifiable here.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    {profiles.length > 1 && (
+                    {nodes.length > 1 && onSelectNode && (
                         <select
                             value={activeProfileId}
                             onChange={e => onSelectNode(e.target.value)}
                             aria-label="Choose which node's funnel to show"
                             className="px-3 py-2 rounded-xl bg-nature-800 text-xs font-bold text-white border border-nature-700"
                         >
-                            {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            {nodes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                     )}
                     <div role="group" aria-label="How far back to look" className="flex rounded-xl overflow-hidden border border-nature-700">
@@ -180,7 +203,7 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                                 key={w}
                                 onClick={() => setDays(w)}
                                 aria-pressed={days === w}
-                                className={`px-3 py-2 text-xs font-bold transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                                className={`px-3 py-2 text-xs font-bold transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[48px] lg:min-h-0 ${
                                     days === w ? 'bg-emerald-600 text-white' : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
                                 }`}
                             >

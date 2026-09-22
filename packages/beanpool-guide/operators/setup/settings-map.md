@@ -25,6 +25,8 @@ A visual map of every screen in node Settings. Tap any picture to open that scre
 
 [![Invites and QR cards](images/people-invites.webp)](members-and-invites)
 
+[![The Onboarding Funnel](images/people-funnel.webp)](members-and-invites)
+
 [![Triage and moderation](images/people-moderation.webp)](reports-and-takedowns)
 
 [![Owners and admins](images/people-roles.webp)](roles)

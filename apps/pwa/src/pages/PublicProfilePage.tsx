@@ -207,9 +207,12 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const avatarResolved = resolveAvatarUrl(profile?.avatar);
 
     return (
-        <div className="fixed inset-0 bg-nature-100 dark:bg-black z-[110] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300" data-testid="page-overlay">
+        <div className="page-overlay z-[110] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300" data-testid="page-overlay">
             {/* z-[110]: above the mobile app header (App.tsx, zIndex 100). This page carries its own Back bar,
-                and at z-50 that bar sat under the header where Back could not be tapped. */}
+                and at z-50 that bar sat under the header where Back could not be tapped.
+                .page-overlay (index.css) is the fixed layer itself: full bleed on a phone, starting past the
+                w-64 sidebar on md+ so the sidebar stays clickable, and painting the wallpaper over its own
+                opaque ground so the tab content behind it does not show through. */}
             {/* Header */}
             {/* One row at 320px with 1.3x text: Back and the action buttons keep their size (48px targets), the
                 title takes what is left and truncates. Below sm the title is the short "Profile" and Report /

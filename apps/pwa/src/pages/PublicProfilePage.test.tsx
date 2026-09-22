@@ -119,7 +119,7 @@ describe('PublicProfilePage & TreasuryDetailPage bottom padding regression (#791
 
         // The profile banner/content container must derive padding from --bottom-nav-offset
         const bannerHeading = screen.getByText('Trust Profile');
-        const rootContainer = bannerHeading.closest('.fixed.inset-0');
+        const rootContainer = bannerHeading.closest('[data-testid="page-overlay"]');
         expect(rootContainer).not.toBeNull();
 
         const profileContent = rootContainer?.querySelector('.max-w-2xl.mx-auto.pb-20');
@@ -144,7 +144,7 @@ describe('PublicProfilePage & TreasuryDetailPage bottom padding regression (#791
         });
 
         const headerTitle = screen.getAllByText('Community Bakery')[0];
-        const rootContainer = headerTitle.closest('.fixed.inset-0');
+        const rootContainer = headerTitle.closest('[data-testid="page-overlay"]');
         expect(rootContainer).not.toBeNull();
 
         const detailContent = rootContainer?.querySelector('.max-w-2xl.mx-auto');
@@ -152,6 +152,61 @@ describe('PublicProfilePage & TreasuryDetailPage bottom padding regression (#791
         expect(detailContent).toHaveStyle({
             paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)',
         });
+    });
+});
+
+// Both pages were `fixed inset-0 bg-nature-100 dark:bg-black`: a full-viewport layer that covered the
+// desktop sidebar, and an opaque flat fill that replaced the doodle wallpaper with plain black in dark
+// mode. They now carry .page-overlay, which stops at the sidebar on md+ and repaints the wallpaper over
+// its own ground (index.css). jsdom lays nothing out, so the class — and the absence of the two it
+// replaced — is what the assertion can hold on to; the CSS contract itself is asserted in
+// AppBottomNav.test.tsx.
+describe('Full-page views are .page-overlay, not a viewport-wide opaque sheet', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('PublicProfilePage stops at the sidebar and drops the flat bg-nature-100 / dark:bg-black fill', async () => {
+        render(
+            <PublicProfilePage
+                identity={mockIdentity}
+                pubkey="peer-pubkey-123"
+                onBack={vi.fn()}
+                onMessage={vi.fn()}
+                onNavigatePost={vi.fn()}
+            />
+        );
+        await waitFor(() => expect(screen.getByText('Trust Profile')).toBeInTheDocument());
+
+        const root = screen.getByTestId('page-overlay');
+        const classes = root.className.split(/\s+/);
+        expect(classes).toContain('page-overlay');
+        expect(classes).toContain('z-[110]');   // still above the mobile header
+        expect(classes).not.toContain('inset-0');
+        expect(classes).not.toContain('fixed'); // position now comes from .page-overlay
+        expect(classes).not.toContain('bg-nature-100');
+        expect(classes).not.toContain('dark:bg-black');
+    });
+
+    it('TreasuryDetailPage stops at the sidebar and drops the flat bg-nature-100 / dark:bg-black fill', async () => {
+        render(
+            <TreasuryDetailPage
+                identity={mockIdentity}
+                pubkey="treasury-pubkey-123"
+                onBack={vi.fn()}
+                onNavigatePost={vi.fn()}
+            />
+        );
+        await waitFor(() => expect(screen.getAllByText('Community Bakery').length).toBeGreaterThan(0));
+
+        const root = screen.getByTestId('page-overlay');
+        const classes = root.className.split(/\s+/);
+        expect(classes).toContain('page-overlay');
+        expect(classes).toContain('z-[110]');
+        expect(classes).not.toContain('inset-0');
+        expect(classes).not.toContain('fixed');
+        expect(classes).not.toContain('bg-nature-100');
+        expect(classes).not.toContain('dark:bg-black');
     });
 });
 

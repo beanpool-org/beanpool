@@ -99,8 +99,9 @@ html, body, #root {
 }
 
 /* ——— Doodle wallpaper ———
-   Stands in for the flat page colour. Drawn once here, on the app root: screens sit on it
-   transparently, while inputs, cards and sunken rows keep their own solid fills.
+   Stands in for the flat page colour. Drawn here, on the app root and on the full-page
+   overlays below: screens sit on it transparently, while inputs, cards and sunken rows keep
+   their own solid fills.
 
    The asset is a 2x2 block of a seamless tile, so `background-size` is the whole 890px
    block. Halving it to 445px (one tile) would render the art at half scale and still tile
@@ -108,7 +109,13 @@ html, body, #root {
    size lands on part-pixels and that is what makes a repeat show seams.
 
    "Plain background" in Settings adds .plain-background to <html>. */
-#root {
+
+/* Both wallpapered selectors paint from here, ABOVE the @supports blocks below, and neither
+   may restate background-image later in the file. The override and this rule have equal
+   specificity (.page-overlay is 0,1,0 either way), so whichever is declared last wins: a
+   base declaration further down silently reasserts the 1x tile and undoes the hidpi upgrade
+   for that selector alone. */
+#root, .page-overlay {
   background-image: var(--pattern-image);
   background-repeat: repeat;
   background-size: 890px 890px;
@@ -122,10 +129,10 @@ html, body, #root {
    an engine that only knows the -webkit- form keeps the plain 1x url above instead of losing
    the wallpaper entirely. Old Chrome and Android WebView are the ones that need this. */
 @supports (background-image: -webkit-image-set(url('/pattern-light.webp') 1x)) {
-  #root { background-image: var(--pattern-image-hidpi-webkit); }
+  #root, .page-overlay { background-image: var(--pattern-image-hidpi-webkit); }
 }
 @supports (background-image: image-set(url('/pattern-light.webp') 1x)) {
-  #root { background-image: var(--pattern-image-hidpi); }
+  #root, .page-overlay { background-image: var(--pattern-image-hidpi); }
 }
 
 /* Page surfaces: transparent so the wallpaper shows, but their original solid colour again
@@ -144,8 +151,47 @@ html, body, #root {
   --pattern-bg: var(--bg-primary);
 }
 
+/* ——— Full-page views that float over the app shell ———
+   Settings, a member's profile and an enterprise page are not routes inside the content
+   column: each is mounted as a fixed layer over it. Two things follow from that.
+
+   They stop at the desktop sidebar. `inset: 0` covered the whole viewport, sidebar included,
+   and a layer you cannot see still swallows every click — the sidebar sat there visible and
+   dead. 16rem is the sidebar's own w-64, in rem so the two stay in step when the member
+   scales their font.
+
+   They cannot use .page-surface. Live tab content is still mounted behind a profile or an
+   enterprise page, so a transparent layer just moves the same bug one level down and shows
+   the feed through. They repaint the wallpaper over their own opaque ground instead, which
+   reads as a page surface without being a hole; under "Plain background" the pattern is
+   none and the ground is the flat colour these pages had, exactly as .page-surface gives.
+   The md background-position cancels the 16rem offset, so the doodles land on the same
+   grid as #root's and opening one of these views does not jog the wallpaper sideways.
+
+   The wallpaper itself is painted with #root's rule above, before the @supports overrides,
+   so the hidpi tile still wins here; only the ground and the geometry belong in this rule. */
+.page-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-color: var(--page-ground);
+}
+
+@media (min-width: 768px) {
+  .page-overlay {
+    left: 16rem;
+    background-position: -16rem 0;
+  }
+}
+
+:root { --page-ground: var(--pattern-bg); }              /* the tile's own ground, so the doodles sit right */
+:root.plain-background { --page-ground: #fbfaf8; }            /* oat-50, as .page-surface gives */
+:root.dark-theme.plain-background { --page-ground: #1d231d; } /* nature-950, as .page-surface gives */
+
 @media print {
-  #root { background-image: none; }
+  #root, .page-overlay { background-image: none; }
 }
 
 /* Pulse animation for sync indicator */

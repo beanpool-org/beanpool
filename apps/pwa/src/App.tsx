@@ -703,7 +703,10 @@ export function App() {
                         // zIndex 100 ties the mobile header and bottom nav, so DOM order decides: Settings
                         // (in <main>) draws over the header before it, keeping its own Back tappable, and
                         // under the bottom nav after it, which stays usable. At 60 Back sat under the header.
-                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, overflowY: 'auto' }}>
+                        // .page-overlay (index.css) places the layer: full bleed on a phone, but starting past
+                        // the w-64 sidebar on md+, where covering it left it visible and swallowing clicks.
+                        // zIndex stays inline — the stacking above is what this mount is about.
+                        <div data-testid="settings-overlay" className="page-overlay" style={{ zIndex: 100, overflowY: 'auto' }}>
                             <SettingsPage
                                 identity={identity}
                                 onIdentityUpdated={(updated) => { setIdentity(updated); setShowSettings(false); }}

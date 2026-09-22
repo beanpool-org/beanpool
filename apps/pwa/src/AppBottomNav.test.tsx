@@ -1,5 +1,11 @@
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// The stylesheet as text: jsdom applies no CSS, so the rules .page-overlay must carry are asserted
+// against the source. It is read off disk rather than imported, because vitest stubs a CSS import to
+// the empty string, `?raw` and all; and by import.meta.dirname rather than new URL(..., import.meta.url),
+// which Vite rewrites at transform time into a served http asset URL.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import React from 'react';
 import { App, navTabWeight, NAV_LABEL_FONT_SIZE } from './App';
 import type { BeanPoolIdentity } from './lib/identity';
@@ -247,16 +253,21 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
         });
         expect(mobileHeader().style.zIndex).toBe('100');
 
+        // `fixed inset-0` became `.page-overlay`: the same fixed layer, full bleed on a phone, but
+        // stopping at the desktop sidebar instead of covering it (index.css). The stacking this
+        // describe block is about — z-[110], over the zIndex-100 header — is unchanged.
         fireEvent.click(screen.getByText('Open Peer Profile'));
         const profile = await screen.findByTestId('page-overlay');
-        expect(profile).toHaveClass('fixed', 'inset-0', 'z-[110]');
+        expect(profile).toHaveClass('page-overlay', 'z-[110]');
+        expect(profile).not.toHaveClass('inset-0');
         fireEvent.click(screen.getByRole('button', { name: /back/i }));
         await waitFor(() => expect(screen.queryByTestId('page-overlay')).not.toBeInTheDocument());
 
         fireEvent.click(within(screen.getByTestId('mobile-bottom-nav')).getByText(/Commons/i));
         fireEvent.click(await screen.findByText('Open Treasury'));
         const enterprise = await screen.findByTestId('page-overlay');
-        expect(enterprise).toHaveClass('fixed', 'inset-0', 'z-[110]');
+        expect(enterprise).toHaveClass('page-overlay', 'z-[110]');
+        expect(enterprise).not.toHaveClass('inset-0');
     });
 
     it('draws Settings over the header but under the bottom nav, which stays usable', async () => {
@@ -270,7 +281,9 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
         const back = await screen.findByRole('button', { name: '← Back' });
         const wrapper = back.closest('main > div') as HTMLElement;
         const nav = screen.getByTestId('mobile-bottom-nav');
-        expect(wrapper.style.position).toBe('fixed');
+        // The inline `position: fixed` moved into .page-overlay, which also insets the layer past the
+        // desktop sidebar; the class is now what carries it. zIndex stayed inline on purpose.
+        expect(wrapper).toHaveClass('page-overlay');
         // Equal zIndex: document order decides, so the header must come before Settings and the nav after.
         expect(wrapper.style.zIndex).toBe(header.style.zIndex);
         expect(wrapper.style.zIndex).toBe(nav.style.zIndex);
@@ -291,5 +304,89 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
         const nav = screen.getByTestId('mobile-bottom-nav');
         expect(Number(setup.style.zIndex)).toBeGreaterThan(Number(header.style.zIndex));
         expect(Number(setup.style.zIndex)).toBeGreaterThan(Number(nav.style.zIndex));
+    });
+});
+
+// ——— Full-page views and the desktop sidebar ———
+// Settings, a member's profile and an enterprise page are mounted as fixed layers over the content
+// column. At `inset: 0` they covered the whole viewport, the w-64 sidebar included. Since the doodle
+// wallpaper landed, Settings' .page-surface is transparent, so on md+ the sidebar was plainly visible
+// through a layer that swallowed every click on it. They now carry .page-overlay.
+//
+// jsdom applies no stylesheet, so the class is the assertion in the DOM tests and the stylesheet
+// itself is read as text for the rules that class has to carry.
+describe('Full-page views clear the desktop sidebar', () => {
+    const sidebar = () => document.querySelector('aside.md\\:flex') as HTMLElement;
+
+    it('mounts Settings as .page-overlay, outside the sidebar, whose tabs still close it', async () => {
+        render(<App />);
+        await waitFor(() => {
+            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
+        });
+
+        fireEvent.click(within(sidebar()).getByRole('button', { name: 'Settings' }));
+        const overlay = await screen.findByTestId('settings-overlay');
+        expect(overlay).toHaveClass('page-overlay');
+        // Whatever else changes, the layer must not be a viewport-wide sheet again.
+        expect(overlay.className).not.toContain('inset-0');
+        expect(overlay.style.position).toBe('');
+
+        // The sidebar is a sibling of the content column, never inside the layer that covers it.
+        expect(overlay.contains(sidebar())).toBe(false);
+
+        // And a sidebar tab leaves Settings — the handler was always there, the layer just ate the click.
+        fireEvent.click(within(sidebar()).getByRole('button', { name: /Ledger/ }));
+        await waitFor(() => expect(screen.queryByTestId('settings-overlay')).not.toBeInTheDocument());
+    });
+
+    it('mounts a profile as .page-overlay, outside the sidebar', async () => {
+        render(<App />);
+        await waitFor(() => {
+            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Open Peer Profile'));
+        const profile = await screen.findByTestId('page-overlay');
+        expect(profile).toHaveClass('page-overlay');
+        expect(profile.contains(sidebar())).toBe(false);
+    });
+
+    it('index.css insets .page-overlay past the sidebar on md+ and gives it the wallpaper over its own ground', () => {
+        const css = readFileSync(join(import.meta.dirname, 'index.css'), 'utf8');
+
+        const base = css.match(/\n\.page-overlay\s*\{([^}]*)\}/);
+        expect(base).not.toBeNull();
+        const baseBody = base![1];
+        expect(baseBody).toMatch(/position:\s*fixed/);
+        expect(baseBody).toMatch(/left:\s*0/);                                   // full bleed on a phone
+        expect(baseBody).toMatch(/background-color:\s*var\(--page-ground\)/);    // opaque: no tab content through it
+
+        // The wallpaper on top of that ground is painted by the rule .page-overlay shares with #root,
+        // and that rule has to sit ABOVE the @supports hidpi overrides. Both are specificity 0,1,0 for
+        // .page-overlay, so whichever is declared last wins: while the base rule below carried its own
+        // background-image, it reasserted the 1x tile and these views rendered blurry on hidpi screens
+        // next to a crisp #root. Hence the declaration is asserted where it must live, not in the base
+        // rule, and the base rule is held to carrying no background-image at all.
+        const shared = css.match(/\n#root,\s*\.page-overlay\s*\{([^}]*)\}/);
+        expect(shared).not.toBeNull();
+        expect(shared![1]).toMatch(/background-image:\s*var\(--pattern-image\)/);
+        expect(shared![1]).toMatch(/background-repeat:\s*repeat/);
+        expect(shared![1]).toMatch(/background-size:\s*890px\s+890px/);
+        expect(baseBody).not.toMatch(/background-image/);
+
+        const hidpiAt = css.search(/@supports[^{]*-webkit-image-set/);
+        expect(hidpiAt).toBeGreaterThan(-1);
+        expect(css.indexOf(shared![0])).toBeLessThan(hidpiAt);
+
+        // md+ starts the layer at the sidebar's own w-64, so the sidebar is neither covered nor click-blocked.
+        const md = css.match(/@media\s*\(min-width:\s*768px\)\s*\{\s*\.page-overlay\s*\{([^}]*)\}/);
+        expect(md).not.toBeNull();
+        expect(md![1]).toMatch(/left:\s*16rem/);
+
+        // "Plain background" turns the pattern off, so the ground has to be the flat page colour these
+        // pages had — the same pair .page-surface uses, light and dark.
+        expect(css).toMatch(/:root\s*\{\s*--page-ground:\s*var\(--pattern-bg\)/);
+        expect(css).toMatch(/:root\.plain-background\s*\{\s*--page-ground:\s*#fbfaf8/);
+        expect(css).toMatch(/:root\.dark-theme\.plain-background\s*\{\s*--page-ground:\s*#1d231d/);
     });
 });

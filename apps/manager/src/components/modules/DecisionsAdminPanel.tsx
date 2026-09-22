@@ -96,7 +96,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
 
             {loading && decisions.length === 0 && (
                 <div className="py-6 text-center text-xs text-nature-400 flex items-center justify-center gap-2">
-                    <span className="animate-spin text-terra-400">⏳</span>
+                    <span className="animate-spin text-terra-400" aria-hidden="true">⏳</span>
                     <span>Loading Community Decisions...</span>
                 </div>
             )}

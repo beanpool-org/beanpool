@@ -199,3 +199,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-04 - Remove Unused myMarketPosts Calculation in PWA MarketplacePage
 **Learning:** In `apps/pwa/src/pages/MarketplacePage.tsx`, `myMarketPosts` executed an $O(P \times T + P \log P)$ array filter, nested `myTransactions.some(...)` scan, and date sort on every render cycle, despite `myMarketPosts` being completely unused in the component.
 **Action:** Removed the unused `myMarketPosts` computation block to eliminate redundant array allocations and unnecessary sorting on render cycles.
+
+## 2026-10-05 - O(1) Group Lookups in PWA MapPage Composer Audience Notices
+**Learning:** In `apps/pwa/src/pages/MapPage.tsx`, rendering audience scope notices for group posts repeatedly ran `userGroups.find(g => g.id === targetGroupId)` array scans on render cycles.
+**Action:** Pre-computed `userGroupsMap` using `useMemo` indexed by group `id` to convert group name resolution into $O(1)$ constant-time Map retrievals.

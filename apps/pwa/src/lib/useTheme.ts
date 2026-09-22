@@ -53,13 +53,19 @@ function writeStorage(key: string, value: string | null) {
 export function loadThemePreference(): ThemePreference {
     const migrated = readStorage(DEFAULT_LIGHT_MIGRATION_KEY) !== null;
     const stored = readStorage(STORAGE_KEY);
-    if (!migrated) writeStorage(DEFAULT_LIGHT_MIGRATION_KEY, 'done');
+    const markDone = () => { if (!migrated) writeStorage(DEFAULT_LIGHT_MIGRATION_KEY, 'done'); };
 
     if (stored === 'system' || stored === 'light' || stored === 'dark') {
         if (!migrated && stored === 'system') {
+            // Value first, marker second — see the note in the native copy. The marker must never
+            // outlive the write it vouches for, or the browser reads as migrated while still
+            // holding 'system' and nothing revisits it. Lower risk here than on native because
+            // both writes are synchronous, but the two must not diverge in shape.
             writeStorage(STORAGE_KEY, 'light');
+            markDone();
             return 'light';
         }
+        markDone();
         return stored;
     }
 
@@ -67,6 +73,7 @@ export function loadThemePreference(): ThemePreference {
     const seeded: ThemePreference = legacy === 'dark' ? 'dark' : 'light';
     writeStorage(STORAGE_KEY, seeded);
     if (legacy !== null) writeStorage(LEGACY_KEY, null);
+    markDone();
     return seeded;
 }
 

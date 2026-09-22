@@ -64,21 +64,23 @@ type PreferenceStorage = {
 export async function loadThemePreference(storage: PreferenceStorage): Promise<ThemePreference> {
     const migrated = (await storage.getItem(DEFAULT_LIGHT_MIGRATION_KEY)) !== null;
     const stored = parseThemePreference(await storage.getItem(THEME_PREFERENCE_KEY));
-    // The marker is written before the branches below, so every path records that the move has run
-    // and a 'Same as phone' chosen later is never clobbered. A failed write must NOT reject the
-    // whole read: a member who stored Dark would open light for that launch. Swallow it and let the
-    // move be retried on the next launch instead.
-    if (!migrated) {
-        try {
-            await storage.setItem(DEFAULT_LIGHT_MIGRATION_KEY, 'done');
-        } catch { /* retried next launch */ }
-    }
-
     if (stored) {
         if (!migrated && stored === 'system') {
+            // ORDER MATTERS. The value is written BEFORE the marker, and both are awaited.
+            // The marker is the record that this device has been dealt with, so it must never
+            // outlive the write it vouches for: if the app is killed, or the write throws, after
+            // the marker lands but before the value does, the device keeps 'system' while reading
+            // as already-migrated, and nothing ever revisits it -- stranded on 'follow the phone'
+            // for good, which is the exact fault this whole function exists to repair, and
+            // indistinguishable afterwards from a deliberate choice. Written this way round, the
+            // same interruption leaves the marker unset and the move simply retries next launch.
+            // Residual cost, accepted: someone who opens Settings and picks 'Same as phone' inside
+            // that one-launch window is moved to Light once more on the retry.
             await storage.setItem(THEME_PREFERENCE_KEY, 'light');
+            await markMoveDone(storage);
             return 'light';
         }
+        await markMoveDone(storage, migrated);
         return stored;
     }
 
@@ -86,5 +88,19 @@ export async function loadThemePreference(storage: PreferenceStorage): Promise<T
     const seeded = preferenceFromLegacy(legacy);
     await storage.setItem(THEME_PREFERENCE_KEY, seeded);
     if (legacy !== null) await storage.removeItem(LEGACY_THEME_KEY);
+    await markMoveDone(storage, migrated);
     return seeded;
+}
+
+/**
+ * Record that the one-time move has run, AFTER whatever value write it vouches for.
+ * A failed marker write must not reject the read -- a member with a stored Dark would open Light
+ * for that launch -- so it is swallowed and the move retries next launch, which is harmless
+ * because the value it would rewrite is already correct.
+ */
+async function markMoveDone(storage: PreferenceStorage, migrated = false): Promise<void> {
+    if (migrated) return;
+    try {
+        await storage.setItem(DEFAULT_LIGHT_MIGRATION_KEY, 'done');
+    } catch { /* retried next launch; the stored value is already right */ }
 }

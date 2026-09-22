@@ -437,6 +437,8 @@ intentional; do not open PRs or issues attempting to alter them:
   its handler never calls `checkAdminAuth`, so the headers are never read and the list is identical. Sending them only
   puts the admin password and 2FA session on a public request. Before adding admin headers to a fetch, show the
   route reads them.
+- **Re-filed as #1041** (2026-09-22, 19:10 UTC), before #1042 wrote this entry into `.jules/vault.md`; closed again
+  2026-09-23.
 
 ### 2026-09-22 — Shield: SecureStore for native onboarding state (#1019) — CLOSED, WOULD STRAND NEW MEMBERS
 - **Category:** DELIBERATE DECISION
@@ -460,3 +462,19 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Verified:** it already needed a valid signature (any keypair, not a member). It calls `tickDecisions()` with no
   arguments, the same call the primary's 60-second timer makes, so the exposure was low. Landed as hardening. The
   route has no client; removing it outright is a possible follow-up, not a defect to re-file.
+
+### 2026-09-23 — Bolt: Map lookup for group names in the MapPage composer (#1034) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE
+- **Claim:** three `userGroups.find()` calls in the New Post panel are repeated O(G) scans worth a memoised `Map`.
+- **Why not to re-file:** they are one-shot lookups in one panel's render, over the member's own groups (a handful),
+  not inside a loop or recursion. That is the third filing of this shape (#745, #1018, #1034). Bolt: before a lookup
+  rewrite, name the loop or recursion the lookup runs in and how large the list can grow.
+
+### 2026-09-23 — Pixel: accessibilityLabel on the group invite landing buttons (#1036) — CLOSED, NO-OP
+- **Category:** CLAIM FALSE
+- **Claim:** the Try again / Close / Not now buttons in `apps/native/app/group/[id].tsx` lack accessibility labels.
+- **Why not to re-file:** each Pressable's only child is a `Text` with those exact words, and React Native names an
+  accessible element from its child text on iOS and Android, so screen readers already read them. The one button whose
+  content can be a spinner (the primary action) already has an explicit label and a busy state. Pixel: add
+  `accessibilityLabel` only where the visible content is not text (icon, image, spinner, emoji only), or where the
+  spoken name must differ from the text.

@@ -45,9 +45,21 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 <TouchableOpacity onPress={handleSend}>
   <SendIcon />
 </TouchableOpacity>
+
+// ✅ FINE AS IT IS: the only child is text, so React Native already names it "Close".
+// accessibilityLabel="Close" here would change nothing a screen reader says (closed #1036).
+<Pressable onPress={close} accessibilityRole="button">
+  <Text>Close</Text>
+</Pressable>
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-23 — Labels that repeat a button's only text. Closed #1036.
+`<Pressable accessibilityRole="button"><Text>Close</Text></Pressable>` is already announced as "Close, button": React
+Native names an accessible element from its child text on iOS and Android. Adding `accessibilityLabel="Close"` changes
+nothing. Label only what has no text (icon, image, spinner, emoji only) or must be spoken differently — see the
+primary button in `app/group/[id].tsx`, which labels its spinner state.
+
 ### 2026-09-12 — Do NOT file against keeper / guardian / social-recovery components. Closed #730.
 Keeper (social/guardian) recovery was scrapped. #713 DELETES these files on both clients:
 `IncomingRecoveryApprovalModal.tsx`, `KeeperProtectionPanel.tsx` (PWA), `RecoveryPinModal.tsx`,

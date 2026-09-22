@@ -19,6 +19,11 @@ lookups/counts → O(1)" fix). Before opening a PR:
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
 
+### 2026-09-23 — "O(1) group lookups in MapPage composer audience notices" (#1034) — CLOSED, NO BENEFIT.
+Three one-shot `userGroups.find()` calls in one panel's render, over the member's own groups (a handful). No loop, no
+recursion, nothing a member sees changes. This is the third time (#745, #1018, #1034): name the loop or recursion and
+the list size before filing a lookup rewrite.
+
 ### 2026-09-22 — "O(1) enterprise treasury lookups in NewEventModal" (#1018) — CLOSED, NO BENEFIT.
 `keeperOf` is the enterprises one member keeps, usually 0-3, and the code runs once per modal open (a `useEffect`
 keyed on visibility), not per render or per keystroke. Only file a lookup rewrite when the list grows with the

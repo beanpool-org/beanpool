@@ -49,4 +49,15 @@ describe('PricingGuideModal price accessible text', () => {
         expect(screen.getByText(', price falling')).toHaveClass('sr-only');
         expect(rising).toHaveClass('sr-only');
     });
+
+    it('puts the unit and trend in the row name when rows are selectable, because that name replaces the text inside', async () => {
+        const api = await import('../lib/api');
+        vi.mocked(api.getPricingGuideApi).mockResolvedValueOnce({
+            items: [{ id: 'eggs', category: 'food', emoji: '🥚', name: 'Eggs', description: 'A dozen', priceBeans: 12, unit: 'dozen', trend: 'up' }],
+            config: {},
+        } as any);
+        render(<PricingGuideModal isOpen={true} onClose={() => {}} onSelectOfferItem={() => {}} />);
+
+        expect(await screen.findByRole('button', { name: 'Select Eggs for offer at 12 Beans per dozen, price rising' })).toBeInTheDocument();
+    });
 });

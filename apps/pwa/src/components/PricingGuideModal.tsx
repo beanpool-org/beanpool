@@ -246,7 +246,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                     }`}
                                     role={onSelectOfferItem ? 'button' : undefined}
                                     tabIndex={onSelectOfferItem ? 0 : undefined}
-                                    aria-label={onSelectOfferItem ? `Select ${item.name} for offer at ${effectivePrice} Beans` : undefined}
+                                    aria-label={onSelectOfferItem ? `Select ${item.name} for offer at ${effectivePrice} Beans${item.unit ? ` per ${item.unit}` : ''}${item.trend === 'up' ? ', price rising' : item.trend === 'down' ? ', price falling' : ''}` : undefined}
                                     onKeyDown={(e) => {
                                         if (onSelectOfferItem && (e.key === 'Enter' || e.key === ' ')) {
                                             e.preventDefault();

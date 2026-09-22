@@ -28,7 +28,7 @@ export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeShee
             animationType="fade"
             onRequestClose={onClose}
         >
-            <Pressable style={styles.actionSheetBackdrop} onPress={onClose}>
+            <Pressable style={styles.actionSheetBackdrop} accessibilityRole="button" accessibilityLabel="Close create post sheet" onPress={onClose}>
                 <Pressable style={styles.actionSheetContainer} onPress={(e) => e.stopPropagation()}>
                     <Text style={styles.actionSheetTitle}>Create New Post</Text>
                     <Text style={styles.actionSheetSubtitle}>What would you like to share with the village?</Text>

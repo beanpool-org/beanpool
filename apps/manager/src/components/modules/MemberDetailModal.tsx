@@ -128,8 +128,8 @@ export function MemberDetailModal({
             setSuspendReason('');
             setSuspendDone(`Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
             onSuspensionChanged?.();
-        } catch (e: any) {
-            setSuspendError(e?.message || 'Failed to suspend');
+        } catch (e: unknown) {
+            setSuspendError(e instanceof Error ? e.message : 'Failed to suspend');
         } finally {
             setSuspendBusy(false);
         }
@@ -144,8 +144,8 @@ export function MemberDetailModal({
             setLocalStatus('active');
             setSuspendDone('Suspension lifted. Any open vote about it has closed.');
             onSuspensionChanged?.();
-        } catch (e: any) {
-            setSuspendError(e?.message || 'Failed to lift the suspension');
+        } catch (e: unknown) {
+            setSuspendError(e instanceof Error ? e.message : 'Failed to lift the suspension');
         } finally {
             setSuspendBusy(false);
         }

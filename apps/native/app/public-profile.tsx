@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, ScrollView, ActivityIndicator, Alert, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
@@ -40,7 +42,7 @@ const fmtLastActive = (iso?: string | null): string => {
 };
 
 export default function PublicProfileScreen() {
-    const { publicKey, callsign } = useLocalSearchParams<{ publicKey?: string; callsign?: string }>();
+    const { publicKey, callsign } = useLocalSearchParams<{ publicKey?: string | string[]; callsign?: string | string[] }>();
     const { identity } = useIdentity();
     const { theme, colors } = useTheme();
     const RISK_BAND = React.useMemo<Record<string, { bg: string; border: string; text: string; emoji: string }>>(() => ({
@@ -681,7 +683,7 @@ export default function PublicProfileScreen() {
                 {/* Banner */}
                 <View style={styles.banner}>
                     <View style={styles.avatarRing}>
-                        <MemberAvatar avatarUrl={profile?.avatar_url} pubkey={pubKeyStr} callsign={callsignStr || '?'} size={80} enlargeable />
+                        <MemberAvatar avatarUrl={profile?.avatar_url} pubkey={pubKeyStr || ''} callsign={callsignStr || '?'} size={80} enlargeable />
                     </View>
                     <View style={styles.nameRow}>
                         <Text style={styles.callsignText} numberOfLines={1}>{callsignStr}</Text>

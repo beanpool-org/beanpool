@@ -281,10 +281,10 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                     {/* Price & Actions */}
                                     <div className="flex flex-col items-end flex-shrink-0">
                                         <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
-                                            <span><span aria-hidden="true">🫘</span> {effectivePrice}</span>
+                                            <span><span aria-hidden="true">🫘</span> {effectivePrice}<span className="sr-only"> Beans</span></span>
                                             {item.unit && <span className="text-[10px] text-emerald-600/80 font-normal">/{item.unit}</span>}
-                                            {item.trend === 'up' && <span className="text-emerald-500 text-[10px] ml-0.5" aria-hidden="true">▲</span>}
-                                            {item.trend === 'down' && <span className="text-rose-500 text-[10px] ml-0.5" aria-hidden="true">▼</span>}
+                                            {item.trend === 'up' && <><span className="text-emerald-500 text-[10px] ml-0.5" aria-hidden="true">▲</span><span className="sr-only">, price rising</span></>}
+                                            {item.trend === 'down' && <><span className="text-rose-500 text-[10px] ml-0.5" aria-hidden="true">▼</span><span className="sr-only">, price falling</span></>}
                                         </div>
 
                                         <div className="flex items-center gap-1 mt-1.5">
@@ -339,7 +339,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         <span aria-hidden="true">🚩</span> Report Price
                                     </h3>
                                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 mb-4">
-                                        {reportingItem.name} • Current: <span aria-hidden="true">🫘</span> {reportingItem.priceBeans}
+                                        {reportingItem.name} • Current: <span aria-hidden="true">🫘</span> {reportingItem.priceBeans}<span className="sr-only"> Beans</span>
                                     </p>
 
                                     <div className="grid grid-cols-3 gap-2 mb-3" role="radiogroup" aria-label="Feedback reason">

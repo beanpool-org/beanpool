@@ -31,3 +31,22 @@ describe('PricingGuideModal Component', () => {
         expect(allItemsBtn.className).toContain('focus-visible:ring-2');
     });
 });
+
+describe('PricingGuideModal price accessible text', () => {
+    it('says Beans and the trend in words, since the bean and the arrow are hidden from screen readers', async () => {
+        const api = await import('../lib/api');
+        vi.mocked(api.getPricingGuideApi).mockResolvedValueOnce({
+            items: [
+                { id: 'eggs', category: 'food', emoji: '🥚', name: 'Eggs', description: 'A dozen', priceBeans: 12, unit: 'dozen', trend: 'up' },
+                { id: 'bread', category: 'food', emoji: '🍞', name: 'Bread', description: 'A loaf', priceBeans: 8, trend: 'down' },
+            ],
+            config: {},
+        } as any);
+        render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+
+        const rising = await screen.findByText(', price rising');
+        expect(rising.parentElement?.textContent).toContain('12 Beans');
+        expect(screen.getByText(', price falling')).toHaveClass('sr-only');
+        expect(rising).toHaveClass('sr-only');
+    });
+});

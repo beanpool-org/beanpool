@@ -64,6 +64,28 @@ describe('loadThemePreference: the one-time move off the #930 system default', (
         expect(loadThemePreference()).toBe('system');
     });
 
+    // The reviewer's catch: ordering alone was a no-op here, because writeStorage swallows its
+    // throw, so the marker landed even when the value write failed. Gated on the write landing now.
+    it('does NOT record the move when the value write fails, so it retries next load', () => {
+        localStorage.setItem('beanpool-theme-mode', 'system');
+        const realSet = localStorage.setItem.bind(localStorage);
+        const stub = vi.spyOn(localStorage, 'setItem').mockImplementation((k: string, v: string) => {
+            if (k === 'beanpool-theme-mode') throw new Error('quota exceeded');
+            realSet(k, v);
+        });
+        try {
+            expect(loadThemePreference()).toBe('light');
+        } finally {
+            stub.mockRestore();
+        }
+        expect(localStorage.getItem('beanpool-theme-default-light-v1')).toBeNull();
+        expect(localStorage.getItem('beanpool-theme-mode')).toBe('system');
+        // Next load, with storage working, completes the move rather than reading as already done.
+        expect(loadThemePreference()).toBe('light');
+        expect(localStorage.getItem('beanpool-theme-mode')).toBe('light');
+        expect(localStorage.getItem('beanpool-theme-default-light-v1')).toBe('done');
+    });
+
     it('marks a fresh browser done, so a later Same as device is never clobbered', () => {
         expect(loadThemePreference()).toBe('light');
         localStorage.setItem('beanpool-theme-mode', 'system');

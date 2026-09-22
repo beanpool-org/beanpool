@@ -94,6 +94,13 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
 
             {error && <div className="p-3 rounded-xl bg-red-950/60 border border-red-800 text-xs text-red-300">{error}</div>}
 
+            {loading && decisions.length === 0 && (
+                <div className="py-6 text-center text-xs text-nature-400 flex items-center justify-center gap-2">
+                    <span className="animate-spin text-terra-400">⏳</span>
+                    <span>Loading Community Decisions...</span>
+                </div>
+            )}
+
             {!error && decisions.length === 0 && !loading && (
                 <div className="py-6 text-center text-xs text-nature-400">No open Decisions.</div>
             )}

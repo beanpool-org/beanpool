@@ -25,6 +25,20 @@ const keepVote: nodeClient.AdminDecisionItem = {
 describe('DecisionsAdminPanel', () => {
     beforeEach(() => vi.restoreAllMocks());
 
+    it('shows loading indicator while fetching decisions', async () => {
+        let resolveFetch: (val: nodeClient.AdminDecisionItem[]) => void = () => {};
+        const fetchPromise = new Promise<nodeClient.AdminDecisionItem[]>((resolve) => {
+            resolveFetch = resolve;
+        });
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockReturnValue(fetchPromise);
+        render(<DecisionsAdminPanel activeNode={node} />);
+        expect(screen.getByText('Loading Community Decisions...')).toBeInTheDocument();
+
+        resolveFetch([keepVote]);
+        expect(await screen.findByText("Keep Troll's suspension?")).toBeInTheDocument();
+        expect(screen.queryByText('Loading Community Decisions...')).not.toBeInTheDocument();
+    });
+
     it('lists open Decisions with totals only', async () => {
         vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([keepVote]);
         render(<DecisionsAdminPanel activeNode={node} />);

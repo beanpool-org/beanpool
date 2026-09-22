@@ -110,3 +110,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `generateOfflineQrUrl` in `apps/manager/src/lib/qr.ts` was untested.
 **Learning:** `QRCode.create('')` throws when supplied an empty string, causing `generateOfflineQrUrl` to return `''` in its try/catch block. Mocking `QRCode.create` with `vi.spyOn` allowed testing both valid SVG data URL rendering and error recovery.
 **Action:** Identify remaining utility functions in `apps/manager/src/lib/` (e.g. `geo.ts`) or UI components for future unit test coverage.
+
+## 2026-09-12 - [manager tests] SubTabStrip component unit tests
+**Gap:** SubTabStrip component in `apps/manager/src/components/layout/SubTabStrip.tsx` was untested.
+**Learning:** Testing `SubTabStrip` required mocking container and active child `getBoundingClientRect`, `scrollWidth`, `clientWidth`, and `scrollLeft` properties on element instances to verify active tab auto-scrolling inside `useLayoutEffect`.
+**Action:** Continue identifying remaining untested layout or module components in `apps/manager/src/components/`.

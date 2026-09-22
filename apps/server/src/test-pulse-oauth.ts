@@ -23,7 +23,7 @@ import { initStateEngine } from './state-engine.js';
 import { addChannel, listPublicChannels } from './engine/creator-channels.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { createChannelRoutes } from './routes/channels.js';
-import { createPulseSubmitRoutes, rowToPulseFeedCard } from './routes/pulse-submit.js';
+import { createPulseSubmitRoutes, rowToPulseFeedCard, MAX_OAUTH_INGEST_ITEMS } from './routes/pulse-submit.js';
 import type { RouteDeps } from './routes/types.js';
 
 let run = 0, passed = 0;
@@ -357,6 +357,21 @@ async function main(): Promise<void> {
     });
     assert(longThumbIngest.status === 200, 'Long thumbnail ingest returned 200');
     assert(longThumbIngest.body.count === 1, 'Long thumbnail URL up to 4096 chars is accepted (Fix 3)');
+
+    // 3g: Batch size over MAX_OAUTH_INGEST_ITEMS (50) is rejected with 400
+    const overLimitItems = Array.from({ length: MAX_OAUTH_INGEST_ITEMS + 1 }, (_, i) => ({
+        url: `https://www.tiktok.com/@alice_pottery/video/710000000000000${1000 + i}`,
+        title: `Video ${i}`,
+    }));
+    const overLimitIngest = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
+        actor: alice,
+        body: {
+            channelId: aliceTikTok.id,
+            items: overLimitItems,
+        },
+    });
+    assert(overLimitIngest.status === 400, 'Over-limit batch size (> 50) is rejected with 400');
+    assert(overLimitIngest.body.error === 'too_many_items', 'Error code is too_many_items');
 
     console.log('\n--- 4. Resubmission & Tombstone Restoration via OAuth ---');
     const now = new Date().toISOString();

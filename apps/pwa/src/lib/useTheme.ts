@@ -7,7 +7,8 @@
  * theme-color. Independent of the map's dark mode toggle.
  *
  * The old toggle stored 'light' | 'dark' under LEGACY_KEY — and wrote 'light' on every load, so
- * only 'dark' says anything about a choice. It is read once to seed the new key, then removed.
+ * only 'dark' says anything about a choice. It is read once to seed the new key, then removed —
+ * but only once that write has landed, or the choice is lost with nothing left to recover it from.
  *
  * The default was 'system' from #930 (2026-09-19) until 2026-09-20, matching the phone app. Both are
  * back to light: following the device surprised people whose device is in night mode. #930 also WROTE
@@ -80,6 +81,10 @@ export function loadThemePreference(): ThemePreference {
     // light. Same fault as the marker ordering -- a destructive step running after a write that
     // did not land. The native copy is immune by accident: its unguarded await rejects before it
     // reaches removeItem.
+    // Accepted, and deliberate: if the seed write fails AND a later Light pick also fails to
+    // persist, storage healing afterwards resurrects the old 'dark'. That is the last durably
+    // stored signal, and neither behaviour honours a choice that was never written. The only way
+    // to avoid it is to delete the legacy key early, which is the bug above. Don't "fix" it.
     if (writeStorage(STORAGE_KEY, seeded) && legacy !== null) writeStorage(LEGACY_KEY, null);
     markDone();
     return seeded;
@@ -118,7 +123,9 @@ export function useTheme(): [Theme, ThemePreference, (preference: ThemePreferenc
 
     const setPreference = useCallback((next: ThemePreference) => {
         setPreferenceState(next);
-        writeStorage(STORAGE_KEY, next);
+        // Second and last chance to reap the legacy key: the seed path is never re-entered once a
+        // preference is stored, so a seed write that failed would otherwise leave it for ever.
+        if (writeStorage(STORAGE_KEY, next)) writeStorage(LEGACY_KEY, null);
     }, []);
 
     return [theme, preference, setPreference];

@@ -99,8 +99,9 @@ html, body, #root {
 }
 
 /* ——— Doodle wallpaper ———
-   Stands in for the flat page colour. Drawn once here, on the app root: screens sit on it
-   transparently, while inputs, cards and sunken rows keep their own solid fills.
+   Stands in for the flat page colour. Drawn here, on the app root and on the full-page
+   overlays below: screens sit on it transparently, while inputs, cards and sunken rows keep
+   their own solid fills.
 
    The asset is a 2x2 block of a seamless tile, so `background-size` is the whole 890px
    block. Halving it to 445px (one tile) would render the art at half scale and still tile
@@ -108,7 +109,13 @@ html, body, #root {
    size lands on part-pixels and that is what makes a repeat show seams.
 
    "Plain background" in Settings adds .plain-background to <html>. */
-#root {
+
+/* Both wallpapered selectors paint from here, ABOVE the @supports blocks below, and neither
+   may restate background-image later in the file. The override and this rule have equal
+   specificity (.page-overlay is 0,1,0 either way), so whichever is declared last wins: a
+   base declaration further down silently reasserts the 1x tile and undoes the hidpi upgrade
+   for that selector alone. */
+#root, .page-overlay {
   background-image: var(--pattern-image);
   background-repeat: repeat;
   background-size: 890px 890px;
@@ -159,7 +166,10 @@ html, body, #root {
    reads as a page surface without being a hole; under "Plain background" the pattern is
    none and the ground is the flat colour these pages had, exactly as .page-surface gives.
    The md background-position cancels the 16rem offset, so the doodles land on the same
-   grid as #root's and opening one of these views does not jog the wallpaper sideways. */
+   grid as #root's and opening one of these views does not jog the wallpaper sideways.
+
+   The wallpaper itself is painted with #root's rule above, before the @supports overrides,
+   so the hidpi tile still wins here; only the ground and the geometry belong in this rule. */
 .page-overlay {
   position: fixed;
   top: 0;
@@ -167,9 +177,6 @@ html, body, #root {
   bottom: 0;
   left: 0;
   background-color: var(--page-ground);
-  background-image: var(--pattern-image);
-  background-repeat: repeat;
-  background-size: 890px 890px;
 }
 
 @media (min-width: 768px) {

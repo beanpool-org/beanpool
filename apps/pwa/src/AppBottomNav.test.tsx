@@ -360,7 +360,23 @@ describe('Full-page views clear the desktop sidebar', () => {
         expect(baseBody).toMatch(/position:\s*fixed/);
         expect(baseBody).toMatch(/left:\s*0/);                                   // full bleed on a phone
         expect(baseBody).toMatch(/background-color:\s*var\(--page-ground\)/);    // opaque: no tab content through it
-        expect(baseBody).toMatch(/background-image:\s*var\(--pattern-image\)/);  // and the wallpaper on top of it
+
+        // The wallpaper on top of that ground is painted by the rule .page-overlay shares with #root,
+        // and that rule has to sit ABOVE the @supports hidpi overrides. Both are specificity 0,1,0 for
+        // .page-overlay, so whichever is declared last wins: while the base rule below carried its own
+        // background-image, it reasserted the 1x tile and these views rendered blurry on hidpi screens
+        // next to a crisp #root. Hence the declaration is asserted where it must live, not in the base
+        // rule, and the base rule is held to carrying no background-image at all.
+        const shared = css.match(/\n#root,\s*\.page-overlay\s*\{([^}]*)\}/);
+        expect(shared).not.toBeNull();
+        expect(shared![1]).toMatch(/background-image:\s*var\(--pattern-image\)/);
+        expect(shared![1]).toMatch(/background-repeat:\s*repeat/);
+        expect(shared![1]).toMatch(/background-size:\s*890px\s+890px/);
+        expect(baseBody).not.toMatch(/background-image/);
+
+        const hidpiAt = css.search(/@supports[^{]*-webkit-image-set/);
+        expect(hidpiAt).toBeGreaterThan(-1);
+        expect(css.indexOf(shared![0])).toBeLessThan(hidpiAt);
 
         // md+ starts the layer at the sidebar's own w-64, so the sidebar is neither covered nor click-blocked.
         const md = css.match(/@media\s*\(min-width:\s*768px\)\s*\{\s*\.page-overlay\s*\{([^}]*)\}/);

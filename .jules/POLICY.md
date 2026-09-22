@@ -422,3 +422,41 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** PHANTOM CLAIM, HARMLESS DEFENCE IN DEPTH (third after #800, #836)
 - **Verified:** `requireSignature` already refuses unsigned writes and any `*pubkey` body field that isn't the signer.
   The route-level check duplicates it. Show the request passing the middleware before calling anything spoofable.
+
+### 2026-09-22 — Forge: 429 on braked recovery-code takeover/open (#1017) — CLOSED, CLAIM WAS FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** the braked path on `/api/local/admin/takeover/open` doesn't answer 429.
+- **Why not to re-file:** `refuseBraked` sets `ctx.status = 429` and `Retry-After` itself
+  (apps/server/src/password-brake.ts:372-373), and Koa keeps an explicitly set status when `ctx.body` is assigned
+  later. test-takeover-by-code.ts already asserts 429 on this route and passes with or without the extra line.
+
+### 2026-09-22 — Vault: admin headers on fetchNodeTreasuries (#1014) — CLOSED, INERT AND LEAKS THE PASSWORD
+- **Category:** CLAIM FALSE
+- **Claim:** the manager's treasury list fetch needs admin auth headers.
+- **Why not to re-file:** `/api/treasuries` is a public read (PUBLIC_READ_EXACT in apps/server/src/https-server.ts), and
+  its handler never calls `checkAdminAuth`, so the headers are never read and the list is identical. Sending them only
+  puts the admin password and 2FA session on a public request. Before adding admin headers to a fetch, show the
+  route reads them.
+
+### 2026-09-22 — Shield: SecureStore for native onboarding state (#1019) — CLOSED, WOULD STRAND NEW MEMBERS
+- **Category:** DELIBERATE DECISION
+- **Claim:** the mid-wizard onboarding record should be in SecureStore, not AsyncStorage.
+- **Why not to re-file:** nothing in it is secret (the invite code is spent at Step 1; callsign, node URL and avatar are
+  public profile data; the keypair is already in SecureStore). The avatar is a base64 data URI of about 85-90 KB, which
+  some iOS keychains reject, and the write swallows errors, so the step silently fails to save. That strands a new
+  member on the node-mismatch screen, the exact harm the record exists to prevent
+  (apps/native/utils/onboarding-state.ts header).
+
+### 2026-09-22 — Bolt: Map lookup for enterprise names in NewEventModal (#1018) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE
+- **Claim:** `keeperOf.map(... treasuries.find ...)` is a costly O(N×M) scan.
+- **Why not to re-file:** `keeperOf` is the enterprises one member keeps (usually 0-3), and it runs once per modal
+  open. Bolt: only file a lookup rewrite for a list that can grow with the community AND runs per render or per
+  keystroke.
+
+### 2026-09-22 — Sentinel: admin auth on POST /api/commons/decisions/tick (#1021) — LANDED, CLAIM OVERSTATED
+- **Category:** FIX LANDED
+- **Claim:** the tick route is unauthenticated.
+- **Verified:** it already needed a valid signature (any keypair, not a member). It calls `tickDecisions()` with no
+  arguments, the same call the primary's 60-second timer makes, so the exposure was low. Landed as hardening. The
+  route has no client; removing it outright is a possible follow-up, not a defect to re-file.

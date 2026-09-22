@@ -37,8 +37,8 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
         setError(null);
         try {
             setDecisions(await fetchAdminDecisions(activeNode.url, activeNode.adminPassword, tfaToken));
-        } catch (err: any) {
-            setError(err?.message || 'Failed to load Decisions');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to load Decisions');
         } finally {
             setLoading(false);
         }
@@ -67,8 +67,8 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
             setHaltTarget(null);
             setReason('');
             await load();
-        } catch (err: any) {
-            setHaltError(err?.message || 'Failed to halt the Decision');
+        } catch (err: unknown) {
+            setHaltError(err instanceof Error ? err.message : 'Failed to halt the Decision');
         } finally {
             setHalting(false);
         }

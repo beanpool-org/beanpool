@@ -124,6 +124,58 @@ describe('loadThemePreference: the one-time move off the #930 system default', (
         expect(await loadThemePreference(light)).toBe('light');
     });
 
+    // The gap that survived three review rounds: the marker used to be written BEFORE the value it
+    // vouches for, so an interruption in between left the device reading as migrated while still
+    // holding 'system' -- stranded on 'follow the phone' for ever, which is the fault this function
+    // exists to repair. These fail against that ordering.
+    it('does NOT record the move when the value write fails, so it retries next launch', async () => {
+        const s = memoryStorage({ [THEME_PREFERENCE_KEY]: 'system' });
+        const realSet = s.setItem;
+        s.setItem = async (k: string, v: string) => {
+            if (k === THEME_PREFERENCE_KEY) throw new Error('write failed');
+            return realSet(k, v);
+        };
+        await expect(loadThemePreference(s)).rejects.toThrow('write failed');
+        expect(s.data.has(DEFAULT_LIGHT_MIGRATION_KEY)).toBe(false);
+        expect(s.data.get(THEME_PREFERENCE_KEY)).toBe('system');
+    });
+
+    it('completes the move on the next launch after an interrupted one', async () => {
+        const s = memoryStorage({ [THEME_PREFERENCE_KEY]: 'system' });
+        const realSet = s.setItem;
+        let fail = true;
+        s.setItem = async (k: string, v: string) => {
+            if (fail && k === THEME_PREFERENCE_KEY) throw new Error('killed mid-write');
+            return realSet(k, v);
+        };
+        await expect(loadThemePreference(s)).rejects.toThrow('killed mid-write');
+        fail = false;
+        expect(await loadThemePreference(s)).toBe('light');
+        expect(s.data.get(THEME_PREFERENCE_KEY)).toBe('light');
+        expect(s.data.get(DEFAULT_LIGHT_MIGRATION_KEY)).toBe('done');
+    });
+
+    // Native is immune to the PWA's legacy-key loss (fixed in #1031) only BY ACCIDENT: its seed
+    // setItem is unguarded, so a rejection propagates before removeItem runs. Wrapping that write
+    // in a try/catch would look like a tidy-up and would silently reintroduce the bug. This pins it.
+    it('keeps the old Dark Mode key when the seed write fails, so it can carry over next launch', async () => {
+        const s = memoryStorage({ [LEGACY_THEME_KEY]: 'dark' });
+        const realSet = s.setItem;
+        let fail = true;
+        s.setItem = async (k: string, v: string) => {
+            if (fail && k === THEME_PREFERENCE_KEY) throw new Error('write failed');
+            return realSet(k, v);
+        };
+        await expect(loadThemePreference(s)).rejects.toThrow('write failed');
+        expect(s.data.get(LEGACY_THEME_KEY)).toBe('dark');
+        expect(s.data.has(DEFAULT_LIGHT_MIGRATION_KEY)).toBe(false);
+
+        fail = false;
+        expect(await loadThemePreference(s)).toBe('dark');
+        expect(s.data.get(THEME_PREFERENCE_KEY)).toBe('dark');
+        expect(s.data.has(LEGACY_THEME_KEY)).toBe(false);
+    });
+
     it('marks a fresh install done, so a later Same as phone is never clobbered', async () => {
         const s = memoryStorage();
         expect(await loadThemePreference(s)).toBe('light');

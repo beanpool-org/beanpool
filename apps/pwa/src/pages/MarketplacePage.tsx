@@ -330,20 +330,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         });
     }, []);
 
-    const myMarketPosts = posts.filter(p => 
-        identity && 
-        (
-            p.authorPublicKey === identity.publicKey || 
-            (p as any).acceptedBy === identity.publicKey ||
-            myTransactions.some(t => t.postId === p.id && t.status === 'pending' && (t.buyerPublicKey === identity.publicKey || t.sellerPublicKey === identity.publicKey))
-        )
-    ).sort((a, b) => {
-        if (a.status === 'pending' && b.status !== 'pending') return -1;
-        if (b.status === 'pending' && a.status !== 'pending') return 1;
-        if (a.status === 'active' && b.status !== 'active') return -1;
-        if (b.status === 'active' && a.status !== 'active') return 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
+    // ⚡ Bolt: Removed unused myMarketPosts computation that ran O(P*T + P log P) filtering/sorting on every render
 
     const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>('active');
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');

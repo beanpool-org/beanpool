@@ -58,8 +58,8 @@ export function EscrowDisputesPanel({
             setDisputes(list);
             setTotalCount(typeof data.total === 'number' ? data.total : list.length);
             setTabCounts(data.counts ?? null);
-        } catch (err: any) {
-            setError(err.message || 'Failed to load escrow disputes');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to load escrow disputes');
         } finally {
             setLoading(false);
         }
@@ -69,7 +69,7 @@ export function EscrowDisputesPanel({
         loadDisputes();
     }, [activeNode?.id, activeNode?.url, minDays, filterStatus, page]);
 
-    const isResolved = (d: EscrowDisputeItem) => Boolean(d.resolution || (d as any).disputeResolution);
+    const isResolved = (d: EscrowDisputeItem) => Boolean(d.resolution || (d as { disputeResolution?: string }).disputeResolution);
     const isRealDispute = (d: EscrowDisputeItem) => d.status === 'pending' || isResolved(d);
 
     const realDisputes = disputes.filter(isRealDispute);
@@ -151,10 +151,10 @@ export function EscrowDisputesPanel({
             autoCloseTimer.schedule(() => {
                 handleCloseResolveModal();
             }, 1200);
-        } catch (err: any) {
+        } catch (err: unknown) {
             setActionFeedback({
                 type: 'error',
-                message: err.message || 'Failed to resolve escrow dispute',
+                message: err instanceof Error ? err.message : 'Failed to resolve escrow dispute',
             });
         } finally {
             setResolving(false);

@@ -195,3 +195,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-03 - O(1) Member Lookups in Native ProposeDecisionModal
 **Learning:** In `apps/native/components/ProposeDecisionModal.tsx`, looking up target member details during decision proposal ran `members.find(...)` scans across `members` on every character input in the subject field ($O(M)$ linear array scan).
 **Action:** Pre-computed `membersMap` using `useMemo` indexed by both `publicKey` and lowercased `callsign` to turn selected member detail lookups into constant-time $O(1)$ Map retrievals.
+
+## 2026-10-04 - Remove Unused myMarketPosts Calculation in PWA MarketplacePage
+**Learning:** In `apps/pwa/src/pages/MarketplacePage.tsx`, `myMarketPosts` executed an $O(P \times T + P \log P)$ array filter, nested `myTransactions.some(...)` scan, and date sort on every render cycle, despite `myMarketPosts` being completely unused in the component.
+**Action:** Removed the unused `myMarketPosts` computation block to eliminate redundant array allocations and unnecessary sorting on render cycles.

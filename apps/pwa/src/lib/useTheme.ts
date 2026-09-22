@@ -7,7 +7,8 @@
  * theme-color. Independent of the map's dark mode toggle.
  *
  * The old toggle stored 'light' | 'dark' under LEGACY_KEY — and wrote 'light' on every load, so
- * only 'dark' says anything about a choice. It is read once to seed the new key, then removed.
+ * only 'dark' says anything about a choice. It is read once to seed the new key, then removed —
+ * but only once that write has landed, or the choice is lost with nothing left to recover it from.
  *
  * The default was 'system' from #930 (2026-09-19) until 2026-09-20, matching the phone app. Both are
  * back to light: following the device surprised people whose device is in night mode. #930 also WROTE
@@ -43,30 +44,49 @@ function readStorage(key: string): string | null {
     try { return localStorage.getItem(key); } catch { return null; }
 }
 
-function writeStorage(key: string, value: string | null) {
+/** Returns whether the write actually landed. Private mode throws on every write: false, not a crash. */
+function writeStorage(key: string, value: string | null): boolean {
     try {
         if (value === null) localStorage.removeItem(key);
         else localStorage.setItem(key, value);
-    } catch { /* private mode: the choice lasts for this visit */ }
+        return true;
+    } catch { /* private mode: the choice lasts for this visit */ return false; }
 }
 
 export function loadThemePreference(): ThemePreference {
     const migrated = readStorage(DEFAULT_LIGHT_MIGRATION_KEY) !== null;
     const stored = readStorage(STORAGE_KEY);
-    if (!migrated) writeStorage(DEFAULT_LIGHT_MIGRATION_KEY, 'done');
+    const markDone = () => { if (!migrated) writeStorage(DEFAULT_LIGHT_MIGRATION_KEY, 'done'); };
 
     if (stored === 'system' || stored === 'light' || stored === 'dark') {
         if (!migrated && stored === 'system') {
-            writeStorage(STORAGE_KEY, 'light');
+            // Value first, marker second, AND the marker only if the value actually landed — see the
+            // note in the native copy. The marker must never outlive the write it vouches for, or the
+            // browser reads as migrated while still holding 'system' and nothing revisits it.
+            // Ordering alone is not enough here: writeStorage swallows its throw, so without the
+            // return-value check the marker would still land after a failed value write and the
+            // reorder would be a no-op for that case. In private mode BOTH writes fail, so nothing
+            // persists and every load returns 'light' — the pre-existing, documented limitation.
+            if (writeStorage(STORAGE_KEY, 'light')) markDone();
             return 'light';
         }
+        markDone();
         return stored;
     }
 
     const legacy = readStorage(LEGACY_KEY);
     const seeded: ThemePreference = legacy === 'dark' ? 'dark' : 'light';
-    writeStorage(STORAGE_KEY, seeded);
-    if (legacy !== null) writeStorage(LEGACY_KEY, null);
+    // Drop the old key only once the new one has actually landed. Deleting it after a write that
+    // failed loses a carried-over Dark for good: the next load finds neither key and reseeds to
+    // light. Same fault as the marker ordering -- a destructive step running after a write that
+    // did not land. The native copy is immune by accident: its unguarded await rejects before it
+    // reaches removeItem.
+    // Accepted, and deliberate: if the seed write fails AND a later Light pick also fails to
+    // persist, storage healing afterwards resurrects the old 'dark'. That is the last durably
+    // stored signal, and neither behaviour honours a choice that was never written. The only way
+    // to avoid it is to delete the legacy key early, which is the bug above. Don't "fix" it.
+    if (writeStorage(STORAGE_KEY, seeded) && legacy !== null) writeStorage(LEGACY_KEY, null);
+    markDone();
     return seeded;
 }
 
@@ -103,7 +123,9 @@ export function useTheme(): [Theme, ThemePreference, (preference: ThemePreferenc
 
     const setPreference = useCallback((next: ThemePreference) => {
         setPreferenceState(next);
-        writeStorage(STORAGE_KEY, next);
+        // Second and last chance to reap the legacy key: the seed path is never re-entered once a
+        // preference is stored, so a seed write that failed would otherwise leave it for ever.
+        if (writeStorage(STORAGE_KEY, next)) writeStorage(LEGACY_KEY, null);
     }, []);
 
     return [theme, preference, setPreference];

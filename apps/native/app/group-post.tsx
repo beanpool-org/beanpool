@@ -2,7 +2,9 @@ import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import * as Crypto from 'expo-crypto';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { createPost } from '../utils/db';
@@ -16,9 +18,10 @@ const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 const PRICE_TYPE_LABEL: Record<string, string> = { fixed: 'Total', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' };
 
 export default function GroupPostScreen() {
-    const params = useLocalSearchParams<{ groupId?: string; groupName?: string }>();
-    const groupId = params.groupId;
-    const groupName = params.groupName || 'Group';
+    const params = useLocalSearchParams<{ groupId?: string | string[]; groupName?: string | string[] }>();
+    const groupId = Array.isArray(params.groupId) ? params.groupId[0] : params.groupId;
+    const rawGroupName = Array.isArray(params.groupName) ? params.groupName[0] : params.groupName;
+    const groupName = rawGroupName || 'Group';
     const { identity } = useIdentity();
     const { theme, colors } = useTheme();
 

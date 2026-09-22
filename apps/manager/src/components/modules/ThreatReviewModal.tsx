@@ -143,8 +143,8 @@ export function ThreatReviewModal({
             setDismissError(null);
             try {
                 await onDismissReport(threat);
-            } catch (e: any) {
-                setDismissError(e?.message || 'Failed to dismiss the report');
+            } catch (e: unknown) {
+                setDismissError(e instanceof Error ? e.message : 'Failed to dismiss the report');
                 return;
             } finally {
                 setDismissing(false);
@@ -155,8 +155,8 @@ export function ThreatReviewModal({
             setDismissError(null);
             try {
                 await onFreezePubkeys(involvedPubkeys);
-            } catch (e: any) {
-                setDismissError(e?.message || 'Failed to freeze the account');
+            } catch (e: unknown) {
+                setDismissError(e instanceof Error ? e.message : 'Failed to freeze the account');
                 return;
             } finally {
                 setFreezing(false);

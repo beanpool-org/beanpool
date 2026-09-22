@@ -43,4 +43,25 @@ describe('SuggestChangeForm', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(/at least 10/);
         expect(submit).not.toHaveBeenCalled();
     });
+
+    it('hides decorative heading emoji and applies focus-visible ring classes', () => {
+        const { container } = render(<SuggestChangeForm appVersion="1.2.3" onDone={vi.fn()} submit={vi.fn()} />);
+        const hiddenEmoji = container.querySelector('h3 span[aria-hidden="true"]');
+        expect(hiddenEmoji).toHaveTextContent('💬');
+
+        const radioBtn = screen.getByRole('radio', { name: 'Idea' });
+        expect(radioBtn).toHaveClass('focus-visible:ring-2');
+
+        const textarea = screen.getByLabelText(/Your suggestion/i);
+        expect(textarea).toHaveClass('focus-visible:ring-2');
+
+        const input = screen.getByLabelText(/Your community/i);
+        expect(input).toHaveClass('focus-visible:ring-2');
+
+        const sendBtn = screen.getByRole('button', { name: 'Send' });
+        expect(sendBtn).toHaveClass('focus-visible:ring-2');
+
+        const backBtn = screen.getByRole('button', { name: '← Back to Settings' });
+        expect(backBtn).toHaveClass('focus-visible:ring-2');
+    });
 });

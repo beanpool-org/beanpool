@@ -56,7 +56,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 <button
                     type="button"
                     onClick={onDone}
-                    className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                    className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
                     ← Back to Settings
                 </button>
@@ -66,7 +66,10 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
 
     return (
         <form onSubmit={handleSend} className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
-            <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">💬 Suggest a change to BeanPool</h3>
+            <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">
+                <span aria-hidden="true">💬 </span>
+                Suggest a change to BeanPool
+            </h3>
             <p className="text-sm text-nature-700 dark:text-nature-300 mb-5 leading-relaxed bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
                 {FEEDBACK_NOTICE}
             </p>
@@ -82,7 +85,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                             role="radio"
                             aria-checked={on}
                             onClick={() => setKind(k.id)}
-                            className={`min-h-[48px] px-5 rounded-full text-sm font-semibold border cursor-pointer transition-colors ${on
+                            className={`min-h-[48px] px-5 rounded-full text-sm font-semibold border cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${on
                                 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-800 dark:text-emerald-300'
                                 : 'bg-white dark:bg-nature-800 border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300'}`}
                         >
@@ -99,7 +102,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 onChange={(e) => { setText(e.target.value); if (error) setError(null); }}
                 rows={6}
                 placeholder="What would make BeanPool better for your community? Any language is fine."
-                className="w-full p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-base resize-y"
+                className="w-full p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-base resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             />
             <div className={`text-xs text-right mt-1 mb-5 ${over ? 'text-red-600 font-bold' : 'text-nature-500 dark:text-nature-400'}`}>
                 {count} / {FEEDBACK_TEXT_MAX}
@@ -114,7 +117,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 maxLength={FEEDBACK_COMMUNITY_MAX}
                 autoComplete="off"
                 placeholder="Leave blank if you'd rather not say"
-                className="w-full min-h-[48px] p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-base"
+                className="w-full min-h-[48px] p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             />
             <p className="text-xs text-nature-500 dark:text-nature-400 mt-1 mb-5">Helps us see how many places ask for the same thing.</p>
 
@@ -127,14 +130,14 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
             <button
                 type="submit"
                 disabled={sending || over}
-                className="w-full min-h-[48px] py-3 rounded-xl font-bold bg-emerald-600 text-white border-none cursor-pointer hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm mb-3"
+                className="w-full min-h-[48px] py-3 rounded-xl font-bold bg-emerald-600 text-white border-none cursor-pointer hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
                 {sending ? 'Sending…' : 'Send'}
             </button>
             <button
                 type="button"
                 onClick={onDone}
-                className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
                 ← Back to Settings
             </button>

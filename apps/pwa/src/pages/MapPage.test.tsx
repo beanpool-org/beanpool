@@ -366,6 +366,29 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         expect(view!.getByTestId('map-preview-card')).toHaveTextContent('A dozen eggs');
         expect(view!.getByTestId('map-new-post-panel')).toBeVisible();
     });
+
+    // The panel is fixed to the VIEWPORT, so left-3/right-3 on its own stretched it across a desktop
+    // screen and over the w-64 sidebar. jsdom lays nothing out, so the breakpoint classes are the
+    // assertion: the phone gutters stay, and md+ gets a left edge past the sidebar and a capped width.
+    it('caps the New Post panel to a card column past the sidebar on md+, and leaves the phone sheet full bleed', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} openNewPost />);
+        });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        const classes = panel.className.split(/\s+/);
+
+        // Phone: unchanged, edge to edge inside a 0.75rem gutter.
+        expect(classes).toContain('left-3');
+        expect(classes).toContain('right-3');
+
+        // md+: starts at the 16rem sidebar plus the same gutter, and stops being a full-width bar.
+        expect(classes).toContain('md:left-[16.75rem]');
+        expect(classes).toContain('md:right-auto');
+        expect(classes).toContain('md:w-[30rem]');
+        expect(classes).toContain('md:max-w-[calc(100vw-17.5rem)]');
+    });
+
 });
 
 describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
@@ -717,6 +740,18 @@ describe('Edit event (events round 2, A1–A3, decision 29)', () => {
         expect(within(panel).queryByRole('button', { name: 'Offer' })).toBeNull();
         expect(within(panel).getByTestId('event-edit-fixed')).toBeTruthy();
         expect(within(panel).getByRole('button', { name: 'Save changes' })).toBeTruthy();
+    });
+
+    // Edit Event is the New Post panel under another title, so it must carry the same md+ width cap:
+    // without it this form spanned a desktop screen and lay over the sidebar too.
+    it('is the same panel, so it keeps the md+ width cap past the sidebar', async () => {
+        setup(hosted);
+        const view = await openEdit(hosted);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const classes = view.getByTestId('map-new-post-panel').className.split(/\s+/);
+        expect(classes).toContain('md:left-[16.75rem]');
+        expect(classes).toContain('md:right-auto');
+        expect(classes).toContain('md:w-[30rem]');
     });
 
     it('a title edit saves only the title, with the host\'s own key — silent, so no UPDATED warning', async () => {

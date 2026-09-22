@@ -1722,11 +1722,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             </div>
         )}
 
-        {/* Quick Post Panel — rendered OUTSIDE the map div so Leaflet touch handlers don't interfere */}
+        {/* Quick Post Panel — rendered OUTSIDE the map div so Leaflet touch handlers don't interfere.
+            It is fixed to the VIEWPORT, not to the map, so left-3/right-3 spanned a desktop screen end to end
+            and lay over the w-64 sidebar as well. On md+ it starts at the sidebar's edge plus the same 0.75rem
+            gutter and takes a card column's width (30rem), with the max-w so it still fits at exactly 768px.
+            Below md nothing changes: the phone sheet is full bleed as before. Edit Event and Copy Event are
+            this same panel under another title. */}
         {showNewPost && (
-            <div 
+            <div
                 data-testid="map-new-post-panel"
-                className="fixed bottom-[calc(var(--bottom-nav-offset)+0.5rem)] md:bottom-4 left-3 right-3 max-h-[60vh] overflow-y-auto bg-white/95 dark:bg-nature-900/95 backdrop-blur-xl rounded-3xl p-5 z-[1000] shadow-soft border border-nature-200 dark:border-nature-800 overscroll-contain"
+                className="fixed bottom-[calc(var(--bottom-nav-offset)+0.5rem)] md:bottom-4 left-3 right-3 md:left-[16.75rem] md:right-auto md:w-[30rem] md:max-w-[calc(100vw-17.5rem)] max-h-[60vh] overflow-y-auto bg-white/95 dark:bg-nature-900/95 backdrop-blur-xl rounded-3xl p-5 z-[1000] shadow-soft border border-nature-200 dark:border-nature-800 overscroll-contain"
                 style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}
             >
                 <div className="flex justify-between items-center mb-4">

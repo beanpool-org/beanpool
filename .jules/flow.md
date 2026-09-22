@@ -83,3 +83,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-09-10 - Replace any types with strict interfaces in App.tsx and node-client.ts
 **Learning:** `App.tsx` and `node-client.ts` relied on `any` types for `fleetNodeData`, `nodeData`, `nodeLogs`, and filter parameters, bypassing type checking for node health flags and user reports.
 **Action:** Defined `NodeHealthFlag`, `NodeReport`, `MemberItem`, and `NodeDataPayload` interfaces in `node-client.ts` and updated state and filter callbacks in `App.tsx` with strict types.
+
+## 2026-09-22 - Add loading state for DecisionsAdminPanel
+**Learning:** `DecisionsAdminPanel.tsx` did not show a visual loading state while fetching community decisions asynchronously, leaving the container blank before data arrived.
+**Action:** Render an explicit loading indicator and spinner when `loading && decisions.length === 0`.

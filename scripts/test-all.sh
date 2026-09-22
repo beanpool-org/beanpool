@@ -262,6 +262,7 @@ run_federation_suites() {
       test-takeover-crash-resume
       test-takeover-by-phone
       test-takeover-split-brain
+      test-unlock-cancel
       test-cash-also-needed
       test-posts-ignore-archetypes
       test-crowdfund-ledger-sync

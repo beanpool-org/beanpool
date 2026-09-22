@@ -259,5 +259,52 @@ describe('App Component', () => {
 
             expect(lastAdminHeaders['X-Admin-Password']).toBe('fresh-authenticated-password');
         });
+
+        /**
+         * The onboarding funnel is an owner/admin screen: the server keeps
+         * /api/local/admin/onboarding-funnel out of MODERATOR_ROUTES
+         * (apps/server/src/admin-auth.ts), so a moderator's session is answered 403 before the route runs. Settings
+         * must not offer them a tab that can only fail, and it hides it the way it hides every other owner screen:
+         * a moderator key session gets ModeratorView instead of the sections, never People & Safety.
+         */
+        it('hides the Onboarding Funnel from a moderator session, with the rest of People & Safety', async () => {
+            sessionStorage.clear();
+            localStorage.clear();
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (String(url).includes('/api/local/admin/auth/session')) {
+                    return Promise.resolve({
+                        ok: true,
+                        status: 200,
+                        json: () => Promise.resolve({
+                            authenticated: true,
+                            isKeySession: true,
+                            role: 'moderator',
+                            memberPubkey: 'ab'.repeat(32),
+                        }),
+                    });
+                }
+                if (String(url).includes('/api/local/admin/csrf-token')) {
+                    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ csrfToken: 'csrf-mod' }) });
+                }
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [], pendingCount: 0 }),
+                });
+            }));
+
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+
+            expect(screen.queryByRole('button', { name: /^Onboarding Funnel$/ })).not.toBeInTheDocument();
+            expect(document.querySelector('[data-subtab="funnel"]')).toBeNull();
+            // Not a special case for this one tab: the whole section is gone, and so is any way to reach it.
+            expect(screen.queryByRole('button', { name: /people & safety/i })).not.toBeInTheDocument();
+            expect(screen.queryByText(/member directory, trust tiers/i)).not.toBeInTheDocument();
+            // No funnel request was even attempted under that session.
+            const tried = (globalThis.fetch as any).mock.calls.filter(([u]: [string]) => String(u).includes('onboarding-funnel'));
+            expect(tried).toHaveLength(0);
+        });
     });
 });

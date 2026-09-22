@@ -14,6 +14,8 @@ export const SECTION_SUB_TABS: Record<SettingsSection, { id: string; label: stri
     people: [
         { id: 'directory', label: 'Members' },
         { id: 'invites', label: 'Invites & QR' },
+        // Right after Invites & QR: invites lead into the funnel, so the two read in the order they happen.
+        { id: 'funnel', label: 'Onboarding Funnel' },
         { id: 'moderation', label: 'Triage & Moderation' },
         { id: 'roles', label: 'Owners & admins' },
     ],

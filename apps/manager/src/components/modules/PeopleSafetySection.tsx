@@ -5,6 +5,7 @@ import { useSectionSubTab } from '../../lib/sections';
 import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersModule';
 import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
+import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
 import { AncestryTreePanel } from './AncestryTreePanel';
@@ -26,9 +27,9 @@ interface PeopleSafetySectionProps {
     onToggleOperator: (pubkey: string, canOperate: boolean) => Promise<void>;
     onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
-    initialSubTab?: 'directory' | 'invites' | 'moderation' | 'roles';
+    initialSubTab?: 'directory' | 'invites' | 'funnel' | 'moderation' | 'roles';
     /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
-    onSubTabChange?: (sub: 'directory' | 'invites' | 'moderation' | 'roles') => void;
+    onSubTabChange?: (sub: 'directory' | 'invites' | 'funnel' | 'moderation' | 'roles') => void;
     /** Who is signed in to /settings — decides whether Owners & admins offers its add/remove controls. */
     rolesViewer?: RolesViewer;
 }
@@ -50,7 +51,7 @@ export function PeopleSafetySection({
     onSubTabChange,
     rolesViewer = { kind: 'password' },
 }: PeopleSafetySectionProps) {
-    const [subTab, setSubTab] = useSectionSubTab<'directory' | 'invites' | 'moderation' | 'roles'>(initialSubTab, onSubTabChange);
+    const [subTab, setSubTab] = useSectionSubTab<'directory' | 'invites' | 'funnel' | 'moderation' | 'roles'>(initialSubTab, onSubTabChange);
     const [directoryView, setDirectoryView] = useState<'roster' | 'tree'>('roster');
     const [selectedThreat, setSelectedThreat] = useState<ThreatItem | null>(null);
     const [bulkDeleteDays, setBulkDeleteDays] = useState(30);
@@ -225,6 +226,18 @@ export function PeopleSafetySection({
                         Invites &amp; QR
                     </button>
                     <button
+                        onClick={() => setSubTab('funnel')}
+                        data-subtab="funnel"
+                        aria-current={subTab === 'funnel' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
+                            subTab === 'funnel'
+                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                : 'text-nature-400 hover:text-white border border-transparent'
+                        }`}
+                    >
+                        Onboarding Funnel
+                    </button>
+                    <button
                         onClick={() => setSubTab('moderation')}
                         data-subtab="moderation"
                         aria-current={subTab === 'moderation' ? 'page' : undefined}
@@ -323,6 +336,19 @@ export function PeopleSafetySection({
 
             {subTab === 'invites' && (
                 <InvitesModule activeNode={activeNode} />
+            )}
+
+            {subTab === 'funnel' && (
+                <SectionErrorBoundary sectionName="Onboarding Funnel" resetKey={activeNode.id}>
+                    {/*
+                      `activeNode` and nothing else: it is the node this page is served from, already carrying
+                      whichever sign-in Settings holds (App.tsx builds it), so the funnel request goes out the same
+                      way the Members directory's and Invites' do. A moderator never reaches here at all — App.tsx
+                      answers a moderator session with ModeratorView instead of this section — which matches the
+                      server, where /api/local/admin/onboarding-funnel is absent from MODERATOR_ROUTES and so 403s.
+                    */}
+                    <OnboardingModule activeNode={activeNode} />
+                </SectionErrorBoundary>
             )}
 
             {subTab === 'roles' && (

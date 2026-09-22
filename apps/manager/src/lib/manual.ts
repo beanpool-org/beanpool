@@ -28,6 +28,7 @@ export const SCREEN_HELP = {
     home: 'the-settings-screens',
     'people/directory': 'members-and-invites',
     'people/invites': 'members-and-invites',
+    'people/funnel': 'members-and-invites',
     'people/moderation': 'reports-and-takedowns',
     'people/roles': 'roles',
     'member-detail': 'roles',

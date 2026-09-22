@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PeopleSafetySection } from './PeopleSafetySection';
 import type { NodeProfile } from '../../lib/profiles';
+import { setKeySessionCsrfToken, setTfaSessionToken } from '../../lib/node-client';
 
 const mockProfile: NodeProfile = {
     id: 'test-node',
@@ -482,5 +483,117 @@ describe('PeopleSafetySection Component', () => {
                 vi.unstubAllGlobals();
             }
         });
+    });
+});
+
+/**
+ * The onboarding funnel, brought into single-node Settings (the fleet manager that used to host it is retired).
+ *
+ * What these check, beyond "it renders": the request leaves by the SAME path as the other People & Safety screens
+ * -- resolveNodeApiUrl + buildAdminHeaders, with the node App.tsx resolved -- under both single-node sign-ins.
+ * Nothing new was added to authenticate it, and nothing about the server changed.
+ */
+describe('People & Safety: Onboarding Funnel', () => {
+    // The node App.tsx builds in single-node mode: this page's own origin, so resolveNodeApiUrl leaves the path
+    // alone instead of routing it through /proxy/, and a key-session cookie rides along same-origin.
+    const singleNode: NodeProfile = {
+        id: 'local-node',
+        name: 'Local Sovereign Node',
+        url: window.location.origin,
+        adminPassword: 'break-glass-pass',
+        isPrimary: true,
+    };
+
+    const FUNNEL = {
+        days: 30,
+        rows: [
+            { day: '2026-09-01', event: 'invite_attempt', variant: null, count: 8 },
+            { day: '2026-09-01', event: 'member_created', variant: null, count: 6 },
+            { day: '2026-09-02', event: 'invite_failed', variant: 'expired', count: 2 },
+        ],
+    };
+
+    const renderPeople = (node: NodeProfile) => render(
+        <PeopleSafetySection
+            activeNode={node}
+            // `reports: []` so the moderation loader never fires: the funnel is then the only request made.
+            nodeData={{ reports: [], members: mockMembers }}
+            nodeDataLoading={false}
+            onRefresh={vi.fn()}
+            onFreezeUser={vi.fn()}
+            onPruneUser={vi.fn()}
+            onUpdateTier={vi.fn()}
+            onToggleVoucher={vi.fn()}
+            onToggleOperator={vi.fn()}
+        />
+    );
+
+    const funnelCalls = (fetchMock: any) =>
+        fetchMock.mock.calls.filter(([u]: [string]) => String(u).includes('onboarding-funnel'));
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        setKeySessionCsrfToken(null);
+        setTfaSessionToken('local-node', undefined);
+    });
+
+    it('offers the funnel as a sub-tab, right after Invites & QR', async () => {
+        await act(async () => { renderPeople(singleNode); });
+
+        const order = [...document.querySelectorAll('[data-subtab]')].map(b => b.getAttribute('data-subtab'));
+        expect(order).toEqual(['directory', 'invites', 'funnel', 'moderation', 'roles']);
+        expect(screen.getByRole('button', { name: /^Onboarding Funnel$/ })).toBeInTheDocument();
+    });
+
+    it('reads the funnel with the break-glass password sign-in, through the shared admin headers', async () => {
+        setTfaSessionToken('local-node', 'tfa-abc');
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => FUNNEL });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await act(async () => { renderPeople(singleNode); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Onboarding Funnel$/ })); });
+
+        await waitFor(() => expect(funnelCalls(fetchMock).length).toBe(1));
+        const [url, init] = funnelCalls(fetchMock)[0];
+        // Same origin as the page, so no /proxy/ hop -- exactly what the members directory and invites do.
+        expect(String(url)).toBe(`${window.location.origin}/api/local/admin/onboarding-funnel?days=30`);
+        expect(init.headers['X-Admin-Password']).toBe('break-glass-pass');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-abc');
+        expect(init.headers['X-CSRF-Token']).toBeUndefined();
+
+        await waitFor(() => expect(screen.getByText('Entered an invite code')).toBeInTheDocument());
+        expect(screen.getByRole('heading', { name: /Onboarding Funnel/ })).toBeInTheDocument();
+        expect(screen.getByText('Code had expired')).toBeInTheDocument();
+    });
+
+    it('reads the funnel under a key sign-in: no password, the session cookie and its CSRF token instead', async () => {
+        setKeySessionCsrfToken('csrf-from-key-session');
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => FUNNEL });
+        vi.stubGlobal('fetch', fetchMock);
+
+        // An owner or admin signed in from the app: App.tsx leaves adminPassword undefined, and the httpOnly
+        // admin_session cookie authenticates the request by itself.
+        await act(async () => { renderPeople({ ...singleNode, adminPassword: undefined }); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Onboarding Funnel$/ })); });
+
+        await waitFor(() => expect(funnelCalls(fetchMock).length).toBe(1));
+        const [url, init] = funnelCalls(fetchMock)[0];
+        expect(String(url)).toBe(`${window.location.origin}/api/local/admin/onboarding-funnel?days=30`);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-CSRF-Token']).toBe('csrf-from-key-session');
+
+        await waitFor(() => expect(screen.getByText('Entered an invite code')).toBeInTheDocument());
+        setKeySessionCsrfToken(null);
+    });
+
+    it('offers no node switcher: there is only ever this node', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => FUNNEL });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await act(async () => { renderPeople(singleNode); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Onboarding Funnel$/ })); });
+
+        await waitFor(() => expect(screen.getByText('Entered an invite code')).toBeInTheDocument());
+        expect(screen.queryByLabelText(/Choose which node/i)).not.toBeInTheDocument();
     });
 });

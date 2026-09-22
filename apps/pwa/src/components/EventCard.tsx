@@ -100,7 +100,7 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
                 aria-pressed={mine}
                 disabled={!canRsvp || busy !== null}
                 onClick={(e) => { e.stopPropagation(); tap(status); }}
-                className={`flex-1 min-w-0 min-h-[48px] px-1.5 py-1 rounded-xl border text-sm font-extrabold leading-tight break-words transition-colors disabled:opacity-60 ${
+                className={`flex-1 min-w-0 min-h-[48px] px-1.5 py-1 rounded-xl border text-sm font-extrabold leading-tight break-words transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${
                     mine
                         ? 'bg-violet-700 border-violet-700 text-white dark:bg-violet-500 dark:border-violet-500'
                         : 'bg-white border-violet-300 text-violet-800 hover:bg-violet-50 dark:bg-nature-900 dark:border-violet-800 dark:text-violet-200'
@@ -173,11 +173,11 @@ export function EventCard({ post, identity, distanceKm, onOpen, onRsvpChange }: 
                 </span>
                 {place && (
                     <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
-                        📍 {place}
+                        <span aria-hidden="true">📍 </span>{place}
                     </span>
                 )}
                 <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
-                    👥 {countsLine(p)}
+                    <span aria-hidden="true">👥 </span>{countsLine(p)}
                 </span>
             </button>
             <RsvpButtons rsvp={rsvp} />
@@ -259,13 +259,13 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 {(p.eventPlaceName || p.lat != null) && (
                     <div className="flex flex-col items-start gap-1 min-w-0">
                         <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
-                            📍 {[p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ') || 'On the map'}
+                            <span aria-hidden="true">📍 </span>{[p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ') || 'On the map'}
                         </span>
                         {onShowOnMap && p.lat != null && p.lng != null && (
                             <button
                                 type="button"
                                 onClick={() => onShowOnMap(p)}
-                                className="flex-shrink-0 min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent"
+                                className="flex-shrink-0 min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                             >
                                 Show on map
                             </button>
@@ -282,14 +282,16 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     <button
                         type="button"
                         onClick={() => onOpenProfile?.(p.authorPublicKey)}
-                        className="inline-flex items-center min-h-[48px] max-w-full bg-transparent border-0 p-0 font-bold text-left text-nature-900 dark:text-white underline decoration-dotted cursor-pointer break-words"
+                        className="inline-flex items-center min-h-[48px] max-w-full bg-transparent border-0 p-0 font-bold text-left text-nature-900 dark:text-white underline decoration-dotted cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 rounded-sm"
                     >
                         {hostName}
                     </button>
                     {p.audienceScope === 'group' && p.targetGroupName ? <> · for {p.targetGroupName} only</> : null}
                 </p>
 
-                <p className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300">👥 {countsLine(p)}</p>
+                <p className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300">
+                    <span aria-hidden="true">👥 </span>{countsLine(p)}
+                </p>
                 <RsvpButtons rsvp={rsvp} />
                 {rsvp.error && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>}
 
@@ -298,7 +300,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         type="button"
                         data-testid="event-open-chat"
                         onClick={() => onOpenChat(p)}
-                        className="min-h-[48px] w-full px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-violet-50 dark:bg-violet-950/40 text-left"
+                        className="min-h-[48px] w-full px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-violet-50 dark:bg-violet-950/40 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                     >
                         💬 {EVENT_CHAT_ENTRY_LABEL}
                     </button>
@@ -339,7 +341,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 type="button"
                                 data-testid="event-edit"
                                 onClick={() => onEdit(p)}
-                                className="min-h-[48px] px-3 rounded-xl border border-violet-700 dark:border-violet-400 text-sm font-bold text-white bg-violet-700 dark:bg-violet-600"
+                                className="min-h-[48px] px-3 rounded-xl border border-violet-700 dark:border-violet-400 text-sm font-bold text-white bg-violet-700 dark:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                             >
                                 Edit event
                             </button>
@@ -352,7 +354,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 type="button"
                                 data-testid="event-copy-to-new-date"
                                 onClick={() => onCopyToNewDate(p)}
-                                className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent"
+                                className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                             >
                                 Copy to a new date
                             </button>
@@ -362,7 +364,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 type="button"
                                 onClick={handleCancel}
                                 disabled={cancelling}
-                                className="min-h-[48px] px-3 rounded-xl border border-red-300 dark:border-red-900 text-sm font-bold text-red-700 dark:text-red-300 bg-transparent disabled:opacity-60"
+                                className="min-h-[48px] px-3 rounded-xl border border-red-300 dark:border-red-900 text-sm font-bold text-red-700 dark:text-red-300 bg-transparent disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
                             >
                                 {cancelling ? 'Cancelling…' : 'Cancel event'}
                             </button>

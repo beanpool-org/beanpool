@@ -36,6 +36,15 @@ Vault's domain is `apps/manager/` ONLY. Do NOT touch `apps/server` (Sentinel's d
 - Environment variables accessed via `import.meta.env.VITE_*` are PUBLIC (bundled into the client)
 
 ## ✅ Resolved — do NOT re-file
+
+### 2026-09-22 — "fetchNodeTreasuries is missing admin auth headers" (#1014, re-filed as #1041) — CLOSED, INERT.
+`/api/treasuries` is a PUBLIC read: it is in `PUBLIC_READ_EXACT` (apps/server/src/https-server.ts), and its GET
+handler (apps/server/src/routes/treasury.ts, `listTreasuriesHandler`) never calls `checkAdminAuth`. So
+`X-Admin-Password` and `X-Admin-2FA-Session` are never read there, the returned list is identical with or without
+them, and the node does not answer 401. The only effect is putting the admin password on a public request, on every
+Economy and Members tab load. Before filing "helper X omits admin headers", show the ROUTE reading them: find the
+`checkAdminAuth` call in its handler, and check the path is not in `PUBLIC_READ_EXACT`.
+
 ### 2026-09-19 — "Don't persist the AI API key in localStorage" (#908) — CLOSED, deliberate.
 `AiServicesModule.tsx` reloads its config with `loadAiConfig()`, so stripping `apiKey` in `saveAiConfig` makes the
 operator's key vanish on every reload; OpenRouter calls then fail with a 401 "verify your API key" message although

@@ -32,6 +32,14 @@ The batch size limit (e.g. 200 items maximum) is **STILL WANTED**. Sentinel may 
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #109)
 
+### 2026-09-22 — "require admin auth for the commons decision tick" (#1021) — LANDED, CLAIM OVERSTATED.
+The route was never unauthenticated: `requireSignature` already demanded a valid signature on every mutating /api/
+route (any keypair, not necessarily a member's). The handler calls `tickDecisions()` with no arguments — the same
+call the primary's own 60-second timer makes — so nothing attacker-controlled reached it and the exposure was low.
+Landed as hardening. Say what an attacker actually gains: "unauthenticated" means the request gets past
+`requireSignature`, not merely that the handler lacks its own check.
+
+
 ### 2026-09-19 — POST /api/ratings "raterPubkey spoofing" (#909) — LANDED as defence in depth; CLAIM WAS FALSE.
 Over HTTP the spoof was never reachable: `requireSignature` (https-server.ts) already demands a signature on every
 mutating /api/ route, and its generic spoof check refuses any `*pubkey` body field that is not the signer

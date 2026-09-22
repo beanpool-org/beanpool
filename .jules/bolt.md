@@ -18,6 +18,12 @@ lookups/counts → O(1)" fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
+
+### 2026-09-22 — "O(1) enterprise treasury lookups in NewEventModal" (#1018) — CLOSED, NO BENEFIT.
+`keeperOf` is the enterprises one member keeps, usually 0-3, and the code runs once per modal open (a `useEffect`
+keyed on visibility), not per render or per keystroke. Only file a lookup rewrite when the list grows with the
+community AND the code runs per render or per keystroke — and never leave the block mis-indented.
+
 ### 2026-08-25 — DM recipient lookup micro-optimisation rejected as churn (#363).
 Replacing `.find()` with a ternary on a two-element array changes nothing observable and trades a
 self-evident expression for an index assumption. See POLICY.md §11.

@@ -420,6 +420,16 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
         const empty = await fetchNodeTreasuries('https://node.example.com');
         expect(empty).toEqual([]);
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ treasuries: mockTreasuries }),
+        });
+        const treasuriesAuth = await fetchNodeTreasuries('https://node.example.com', 'adminpass', 'tfa123');
+        expect(treasuriesAuth).toEqual(mockTreasuries);
+        const lastIndex = fetchMock.mock.calls.length - 1;
+        expect(headersOf(fetchMock.mock.calls[lastIndex][1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(fetchMock.mock.calls[lastIndex][1])['X-Admin-2FA-Session']).toBe('tfa123');
     });
 
     it('createNodeTreasury sends POST to create a treasury', async () => {

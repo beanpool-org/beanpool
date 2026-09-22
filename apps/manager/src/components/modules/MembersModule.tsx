@@ -249,10 +249,10 @@ export function MembersModule({
     const reloadTreasuries = React.useCallback(async () => {
         if (!activeNodeUrl) return;
         try {
-            const list = await fetchNodeTreasuries(activeNodeUrl);
+            const list = await fetchNodeTreasuries(activeNodeUrl, adminPassword, tfaToken);
             setTreasuries(list);
         } catch {}
-    }, [activeNodeUrl]);
+    }, [activeNodeUrl, adminPassword, tfaToken]);
 
     React.useEffect(() => {
         reloadTreasuries();

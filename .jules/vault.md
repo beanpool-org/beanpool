@@ -94,3 +94,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** `OnboardingModule.tsx` invoked `fetchOnboardingFunnel()` without `tfaToken`, causing onboarding funnel requests to fail with 401 Unauthorized on 2FA-protected nodes.
 **Learning:** React component hooks calling admin API client helpers must pass `getTfaSessionToken(active.id)` to forward `X-Admin-2FA-Session`.
 **Prevention:** Ensure every call site invoking administrative fetch helpers passes `getTfaSessionToken(node.id)` when querying node endpoints.
+
+## 2026-09-20 - Missing Admin Auth and 2FA Headers in fetchNodeTreasuries
+**Vulnerability:** `fetchNodeTreasuries()` performed `fetch(endpoint)` without request headers, omitting `X-Admin-Password` and `X-Admin-2FA-Session`, causing enterprise/treasury listing requests to fail with 401 Unauthorized on protected or 2FA-enabled nodes.
+**Learning:** `fetchNodeTreasuries` was the sole admin API helper in `node-client.ts` that omitted `adminPassword` and `tfaToken` parameters and did not use `buildAdminHeaders()`.
+**Prevention:** Always accept optional `adminPassword?: string` and `tfaToken?: string` in node API client helpers and construct request headers via `buildAdminHeaders(adminPassword, tfaToken)`.

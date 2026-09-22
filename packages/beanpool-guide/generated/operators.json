@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 32,
-  "hash": "76cd1644ff4ae8d32b9cfb108974e3e143d48b4aa04992f68ad5f36c35613cb5",
+  "version": 33,
+  "hash": "faffdc54d60b155820ef3b0a2476c6b09c3896d3c8c04474376533e7c28aa07f",
   "sections": [
     {
       "id": "setup",
@@ -337,7 +337,7 @@
           "type": "ul",
           "items": [
             "**Home**: the community at a glance, with shortcuts to invite someone, make an enterprise, download a backup and check the books.",
-            "**People & Safety**: Members (each person's page and role), Invites & QR, Triage & Moderation (reports and taking posts down), and Owners & admins (who runs the server).",
+            "**People & Safety**: Members (each person's page and role), Invites & QR, Onboarding Funnel (where people stop when they try to join), Triage & Moderation (reports and taking posts down), and Owners & admins (who runs the server).",
             "**Shared Projects & Economy**: Enterprises, Proposals (the community's Decisions), Commons Pool, and Escrow Disputes (deals that are stuck).",
             "**Bulletin & News**: Announcements to every member, and Pulse Channels.",
             "**Appliance & Data**: Diagnostics & Logs, Backups & Restore, Gateway & Peers, Public Address, Node Identity, and Access & Security."
@@ -481,6 +481,12 @@
           "type": "img",
           "src": "images/people-invites.webp",
           "alt": "Invites and QR cards",
+          "href": "members-and-invites"
+        },
+        {
+          "type": "img",
+          "src": "images/people-funnel.webp",
+          "alt": "The Onboarding Funnel",
           "href": "members-and-invites"
         },
         {
@@ -862,7 +868,7 @@
     {
       "slug": "members-and-invites",
       "title": "Members and invites",
-      "summary": "How people join, the invites you can make, and what each button on a member does, from Freeze to Offboard.",
+      "summary": "How people join, the invites you can make, where people stop in the join flow, and what each button on a member does, from Freeze to Offboard.",
       "section": "people",
       "related": [
         "roles",
@@ -904,6 +910,38 @@
           "type": "img",
           "src": "images/people-invites.webp",
           "alt": "The Invites and QR screen in Settings"
+        },
+        {
+          "type": "h2",
+          "text": "Where people stop: the Onboarding Funnel"
+        },
+        {
+          "type": "p",
+          "text": "Open **People & Safety**, then **Onboarding Funnel**. It sits next to Invites & QR because it is what happens after an invite: how many people tried to join over the last 7, 30 or 90 days, and how far down the join flow each of them got, from entering a code to posting their first offer."
+        },
+        {
+          "type": "img",
+          "src": "images/people-funnel.webp",
+          "alt": "The Onboarding Funnel screen in Settings"
+        },
+        {
+          "type": "p",
+          "text": "Reading it:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Counts only.** Nobody is named and nobody can be picked out of it. Your server keeps no per-person record of any of this, so there is none to show.",
+            "Steps the server **tallies as they happen** only have figures from the day counting started on your server, which the screen names at the top. Two steps, **Joined** and **Actually got started**, are worked out from records your server already kept, so they reach further back; where one knows about more, it says so under the number.",
+            "**Already-a-member re-entries** come off the top of the funnel: that is somebody arriving twice, not somebody new. Left in, they would quietly halve every rate below.",
+            "A step marked **not measured yet** is one your members' app does not report yet. It is not a step where everyone gave up.",
+            "A rate **above 100%** means people arrived without an invite code being counted. That is worth knowing, not a fault.",
+            "**Why codes were rejected** lists expired, unrecognised and already-used codes. A run of expired ones usually means printed cards sat around too long: invites last 30 days."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Owners and admins can open it, signed in either way. A moderator cannot, and does not see the tab."
         },
         {
           "type": "h2",

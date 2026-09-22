@@ -108,7 +108,8 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
 
             let note: string | null = null;
             if (isTopRow && comparableReentry > 0) {
-                note = `${submitted} submitted, ${comparableReentry} already a member${comparableReentry === 1 ? '' : 's'} excluded`;
+                // 'already a members' is what the old plural produced, and this screen now goes to every node owner.
+                note = `${submitted} submitted, ${comparableReentry} ${comparableReentry === 1 ? 'already a member' : 'already members'} excluded`;
             } else if (countingSince && total > comparableTotal) {
                 note = `${total} across the full ${days} days`;
             }

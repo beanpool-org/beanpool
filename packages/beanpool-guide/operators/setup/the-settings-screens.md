@@ -10,7 +10,7 @@ Settings is where owners and admins run the community's server. Members never se
 ## The screens
 
 - **Home**: the community at a glance, with shortcuts to invite someone, make an enterprise, download a backup and check the books.
-- **People & Safety**: Members (each person's page and role), Invites & QR, Triage & Moderation (reports and taking posts down), and Owners & admins (who runs the server).
+- **People & Safety**: Members (each person's page and role), Invites & QR, Onboarding Funnel (where people stop when they try to join), Triage & Moderation (reports and taking posts down), and Owners & admins (who runs the server).
 - **Shared Projects & Economy**: Enterprises, Proposals (the community's Decisions), Commons Pool, and Escrow Disputes (deals that are stuck).
 - **Bulletin & News**: Announcements to every member, and Pulse Channels.
 - **Appliance & Data**: Diagnostics & Logs, Backups & Restore, Gateway & Peers, Public Address, Node Identity, and Access & Security.

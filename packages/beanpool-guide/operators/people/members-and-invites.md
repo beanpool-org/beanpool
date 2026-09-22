@@ -1,7 +1,7 @@
 ---
 slug: members-and-invites
 title: Members and invites
-summary: How people join, the invites you can make, and what each button on a member does, from Freeze to Offboard.
+summary: How people join, the invites you can make, where people stop in the join flow, and what each button on a member does, from Freeze to Offboard.
 related: roles, reports-and-takedowns, decisions-and-emergencies, disputes, first-time-setup
 ---
 
@@ -20,6 +20,23 @@ Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and 
 - In the community's invite tree, every invite made in Settings comes from the first member, Admin. The server also records which owner or admin made it (or "the admin password"), in its security log.
 
 ![The Invites and QR screen in Settings](images/people-invites.webp)
+
+## Where people stop: the Onboarding Funnel
+
+Open **People & Safety**, then **Onboarding Funnel**. It sits next to Invites & QR because it is what happens after an invite: how many people tried to join over the last 7, 30 or 90 days, and how far down the join flow each of them got, from entering a code to posting their first offer.
+
+![The Onboarding Funnel screen in Settings](images/people-funnel.webp)
+
+Reading it:
+
+- **Counts only.** Nobody is named and nobody can be picked out of it. Your server keeps no per-person record of any of this, so there is none to show.
+- Steps the server **tallies as they happen** only have figures from the day counting started on your server, which the screen names at the top. Two steps, **Joined** and **Actually got started**, are worked out from records your server already kept, so they reach further back; where one knows about more, it says so under the number.
+- **Already-a-member re-entries** come off the top of the funnel: that is somebody arriving twice, not somebody new. Left in, they would quietly halve every rate below.
+- A step marked **not measured yet** is one your members' app does not report yet. It is not a step where everyone gave up.
+- A rate **above 100%** means people arrived without an invite code being counted. That is worth knowing, not a fault.
+- **Why codes were rejected** lists expired, unrecognised and already-used codes. A run of expired ones usually means printed cards sat around too long: invites last 30 days.
+
+Owners and admins can open it, signed in either way. A moderator cannot, and does not see the tab.
 
 ## A member's page
 

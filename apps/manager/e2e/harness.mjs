@@ -37,6 +37,7 @@ export const SCREENS = [
     { tab: 'home' },
     { tab: 'people', sub: 'directory' },
     { tab: 'people', sub: 'invites' },
+    { tab: 'people', sub: 'funnel' },
     { tab: 'people', sub: 'moderation' },
     { tab: 'people', sub: 'roles' },
     { tab: 'economy', sub: 'enterprises' },
@@ -54,7 +55,7 @@ export const SCREENS = [
 ];
 
 const LEGACY_SUB_TAB_LABELS = {
-    directory: /^Members \(/, invites: /^Invites & QR$/, moderation: /^Triage & Moderation/, roles: /^Owners & admins$/,
+    directory: /^Members \(/, invites: /^Invites & QR$/, funnel: /^Onboarding Funnel$/, moderation: /^Triage & Moderation/, roles: /^Owners & admins$/,
     enterprises: /^Enterprises \(/, decisions: /^Proposals$/, pool: /^Commons Pool$/, disputes: /Escrow Disputes/,
     announcements: /^Announcements$/, pulse: /^Pulse Channels/,
     diagnostics: /^Diagnostics & Logs$/, backups: /^Backups & Restore$/, gateway: /^Gateway & Peers$/,

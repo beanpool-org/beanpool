@@ -43,11 +43,13 @@ function readStorage(key: string): string | null {
     try { return localStorage.getItem(key); } catch { return null; }
 }
 
-function writeStorage(key: string, value: string | null) {
+/** Returns whether the write actually landed. Private mode throws on every write: false, not a crash. */
+function writeStorage(key: string, value: string | null): boolean {
     try {
         if (value === null) localStorage.removeItem(key);
         else localStorage.setItem(key, value);
-    } catch { /* private mode: the choice lasts for this visit */ }
+        return true;
+    } catch { /* private mode: the choice lasts for this visit */ return false; }
 }
 
 export function loadThemePreference(): ThemePreference {
@@ -57,12 +59,14 @@ export function loadThemePreference(): ThemePreference {
 
     if (stored === 'system' || stored === 'light' || stored === 'dark') {
         if (!migrated && stored === 'system') {
-            // Value first, marker second — see the note in the native copy. The marker must never
-            // outlive the write it vouches for, or the browser reads as migrated while still
-            // holding 'system' and nothing revisits it. Lower risk here than on native because
-            // both writes are synchronous, but the two must not diverge in shape.
-            writeStorage(STORAGE_KEY, 'light');
-            markDone();
+            // Value first, marker second, AND the marker only if the value actually landed — see the
+            // note in the native copy. The marker must never outlive the write it vouches for, or the
+            // browser reads as migrated while still holding 'system' and nothing revisits it.
+            // Ordering alone is not enough here: writeStorage swallows its throw, so without the
+            // return-value check the marker would still land after a failed value write and the
+            // reorder would be a no-op for that case. In private mode BOTH writes fail, so nothing
+            // persists and every load returns 'light' — the pre-existing, documented limitation.
+            if (writeStorage(STORAGE_KEY, 'light')) markDone();
             return 'light';
         }
         markDone();

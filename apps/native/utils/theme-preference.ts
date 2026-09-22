@@ -77,7 +77,7 @@ export async function loadThemePreference(storage: PreferenceStorage): Promise<T
             // Residual cost, accepted: someone who opens Settings and picks 'Same as phone' inside
             // that one-launch window is moved to Light once more on the retry.
             await storage.setItem(THEME_PREFERENCE_KEY, 'light');
-            await markMoveDone(storage);
+            await markMoveDone(storage, migrated);
             return 'light';
         }
         await markMoveDone(storage, migrated);

@@ -114,11 +114,11 @@ export default function GroupInviteLanding() {
             <Text style={styles.title}>{title}</Text>
             <Text style={styles.body}>{body}</Text>
             {retry && (
-                <Pressable style={styles.primaryBtn} onPress={load} accessibilityRole="button">
+                <Pressable style={styles.primaryBtn} onPress={load} accessibilityRole="button" accessibilityLabel="Try again">
                     <Text style={styles.primaryText} numberOfLines={1}>Try again</Text>
                 </Pressable>
             )}
-            <Pressable style={styles.secondaryBtn} onPress={close} accessibilityRole="button">
+            <Pressable style={styles.secondaryBtn} onPress={close} accessibilityRole="button" accessibilityLabel="Close">
                 <Text style={styles.secondaryText}>Close</Text>
             </Pressable>
         </ScrollView>
@@ -215,7 +215,7 @@ export default function GroupInviteLanding() {
                         : <Text style={styles.primaryText} numberOfLines={1}>{action.label}</Text>}
                 </Pressable>
                 {!!action?.note && <Text style={styles.note}>{action.note}</Text>}
-                <Pressable style={styles.secondaryBtn} onPress={close} accessibilityRole="button">
+                <Pressable style={styles.secondaryBtn} onPress={close} accessibilityRole="button" accessibilityLabel="Not now">
                     <Text style={styles.secondaryText}>Not now</Text>
                 </Pressable>
             </ScrollView>

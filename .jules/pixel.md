@@ -113,3 +113,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-09-11 - Add accessibilityLabel, hint, and busy state to pledge button
 **Learning:** Action buttons with loading states replacing text with ActivityIndicator leave screen readers with empty or ambiguous labels during async operations.
 **Action:** Provide dynamic accessibilityLabel and accessibilityState={{ disabled, busy }} on buttons that conditionally render ActivityIndicator.
+
+## 2026-09-13 - Add accessibilityLabel to group invite landing buttons
+**Learning:** Action buttons with `accessibilityRole="button"` inside modal or landing screens without explicit `accessibilityLabel` rely on child text nodes, which can be inconsistent or skipped depending on screen reader focus.
+**Action:** Always provide explicit `accessibilityLabel` props on error, retry, close, and secondary dismiss `Pressable` buttons.

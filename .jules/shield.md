@@ -33,6 +33,15 @@ Shield's domain is `apps/native/` ONLY. Do NOT touch `apps/server` (that's Senti
 - Sensitive storage should use `expo-secure-store`, NOT `AsyncStorage`
 
 ## ✅ Resolved — do NOT re-file
+
+### 2026-09-22 — "use SecureStore for the mid-wizard onboarding state" (#1019) — CLOSED, WOULD STRAND NEW MEMBERS.
+Nothing in that record is secret: the invite code is spent at Step 1, callsign and node URL are public profile data,
+and the keypair is already in SecureStore. The avatar is a base64 data URI of roughly 90 KB (apps/native/utils/
+image-processing.ts), which a keychain can refuse where AsyncStorage would not, and `setPendingOnboarding` swallows
+write errors. A silently lost record strands a brand-new member on the node-mismatch screen — the exact harm the file
+exists to prevent (see its header comment). Before moving any storage to SecureStore, say which field is secret, how
+big the value gets, and what the member sees when the write fails.
+
 ### 2026-09-18 — `usesCleartextTraffic=false` in the Android manifest (#872). Closed.
 BeanPool nodes are self-hosted and are often reached on a LAN or by bare IP over http: `normalizeNodeUrl`
 (apps/native/utils/node-url.ts) deliberately returns `http://` for IPv4 and localhost, and the settings field's

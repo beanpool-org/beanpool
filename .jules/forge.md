@@ -46,6 +46,13 @@ const { id } = req.body; // could be undefined, crashes downstream
 ```
 
 ## ✅ Resolved — do NOT re-file
+
+### 2026-09-22 — "braked takeover/open does not return 429" (#1017) — CLOSED, CLAIM FALSE.
+`refuseBraked` (apps/server/src/password-brake.ts) sets `ctx.status = 429` and `Retry-After` itself, and Koa keeps an
+explicitly set status when `ctx.body` is assigned afterwards. `test-takeover-by-code.ts` already asserts 429 on
+`/api/local/admin/takeover/open`, and it passes with and without the extra line. Before filing "route X returns the
+wrong status", run the suite that covers it and paste the assertion.
+
 ### 2026-09-11 — "Missing x-public-key checks" on signature-gated routes is UNREACHABLE. Closed #717.
 `requireSignature` (`apps/server/src/https-server.ts:742`) treats every `POST|PUT|DELETE` on
 `/api/` as mutating and returns **401 before the handler runs** when `X-Public-Key` or

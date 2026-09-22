@@ -78,7 +78,7 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
         renderAt320(<EventCard post={baseEvent} identity={identity} onRsvpChange={onRsvpChange} />);
         fireEvent.click(screen.getByRole('button', { name: 'Interested' }));
         await waitFor(() => expect(api.rsvpEvent).toHaveBeenCalledWith('ev-1', 'interested'));
-        expect(await screen.findByText('👥 6 going · 4 interested')).toBeInTheDocument();
+        expect(await screen.findByText(/6 going · 4 interested/)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Interested ✓' })).toHaveAttribute('aria-pressed', 'true');
         expect(onRsvpChange).toHaveBeenCalled();
     });
@@ -106,6 +106,14 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
         renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null }} identity={null} />);
         expect(screen.getByRole('button', { name: 'Going' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Interested' })).toBeDisabled();
+    });
+
+    it('hides decorative emojis from screen readers with aria-hidden="true"', () => {
+        const { container } = renderAt320(<EventCard post={baseEvent} identity={identity} distanceKm={2.4} />);
+        const hiddenEmojis = container.querySelectorAll('[aria-hidden="true"]');
+        const hiddenTexts = Array.from(hiddenEmojis).map(e => e.textContent?.trim());
+        expect(hiddenTexts).toContain('📍');
+        expect(hiddenTexts).toContain('👥');
     });
 });
 

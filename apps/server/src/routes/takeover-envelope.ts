@@ -271,8 +271,6 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
             const admission = await acquirePasswordAttempt(key);
             if (!admission.admitted) {
                 refuseBraked(ctx, admission);
-                // Return 429 Too Many Requests when password brake rejects request
-                ctx.status = 429;
                 ctx.body = { ...(ctx.body as Record<string, unknown>), error: `Too many wrong recovery codes from your network. Try again in ${admission.retryAfter}s.` };
                 return;
             }

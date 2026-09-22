@@ -14,6 +14,7 @@ import {
     approveRegistrarClaim,
     revokeRegistrarClaim,
     downloadAdminFile,
+    resolveNodeApiUrl,
     getTfaSessionToken,
     type HarvesterNodeState,
     type HistoryFileItem,
@@ -266,7 +267,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!targetSnapshotNode) return;
         try {
             await downloadAdminFile(
-                `${targetSnapshotNode.url}/api/local/admin/snapshots/download`,
+                resolveNodeApiUrl(targetSnapshotNode.url, '/api/local/admin/snapshots/download'),
                 { name: snapName },
                 targetSnapshotNode.adminPassword,
                 snapName,

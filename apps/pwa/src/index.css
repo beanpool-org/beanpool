@@ -224,6 +224,44 @@ html, body, #root {
   display: none;
 }
 
+/* A Live Pulse chip reveals the rest of its line.
+   At rest the chip is exactly as wide as its short line, because a hidden sizer holds that line and
+   sets the width. The full line sits on top of the sizer and is clipped. `is-scrolling` — added by
+   the component only while a pointer is over the chip, or it holds keyboard focus, AND only when the
+   full line really is wider — slides it by the measured overflow. The transition lives in that state
+   alone, so dropping the class snaps the line back to the start instead of crawling back.
+   Nothing autoplays: an always-running marquee is a distraction and an accessibility problem.
+   The movement is gated on a pointer that can genuinely hover, so a tap on a phone only opens. */
+.pulse-chip-viewport {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+}
+.pulse-chip-sizer {
+  visibility: hidden;
+  white-space: nowrap;
+}
+.pulse-chip-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pulse-chip-viewport.is-scrolling .pulse-chip-track {
+    transform: translateX(calc(-1 * var(--pulse-overflow, 0px)));
+    transition: transform var(--pulse-duration, 3s) linear;
+  }
+}
+/* Belt and braces with the component's own check, for a browser that reports the preference to CSS
+   but not to matchMedia: under reduced motion the line never moves, and the chip carries a title. */
+@media (prefers-reduced-motion: reduce) {
+  .pulse-chip-viewport.is-scrolling .pulse-chip-track {
+    transform: none;
+    transition: none;
+  }
+}
+
 /* Selection color */
 ::selection {
   background: var(--accent);

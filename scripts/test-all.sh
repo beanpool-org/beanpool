@@ -180,8 +180,12 @@ run_check "deploy_health" bash scripts/test-deploy-health.sh
 # instant, and it is the only check here that tests this script rather than the product.
 run_check "fail_summary" bash scripts/test-failing-tests-summary.sh
 
-# Undeclared imports & dependency boundary guard. Ensures every bare module import in apps/manager
-# is explicitly declared in its package.json so workspace hoisting does not mask missing dependencies.
+# Undeclared imports & dependency boundary guard. Ensures every bare module import in each package the
+# Dockerfile builds — core, engine, PWA, manager and the server (its src/test-*.ts included, because the
+# server's tsc compiles them) — is declared in that package's own package.json. Our .npmrc sets
+# node-linker=hoisted, so an undeclared import still resolves here from the root node_modules and this
+# suite goes green; the Docker build copies no .npmrc and fails instead. That is #1075: a server test file
+# imported multiformats, nothing here noticed, and no image built for main across seven merges.
 run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
 
 # Node Settings on a phone. Owners open /settings from the app's Manage button, in the phone's own browser, so every

@@ -62,9 +62,16 @@ export function guardGated(
 /**
  * A focus ring for a gated control. It stays in the Tab order, so focus has to be visible on it —
  * and being dimmed, it needs the ring more than an ordinary control does, not less.
+ *
+ * The shade has to be one `tailwind.config.js` actually defines. `terra` is defined at 500 and 600
+ * only, and an undefined shade emits no CSS at all: the outline then falls back to `currentColor`,
+ * which on the Confirm & Prune button (`text-nature-500` on `bg-nature-800`) is a 2.4:1 grey — a
+ * ring you cannot see, on the one control that most needs one (found reviewing #1077). `terra-500`
+ * clears WCAG 1.4.11's 3:1 on every surface these controls sit on: 3.2:1 on `nature-800`, 5.6:1 on
+ * `nature-950`, 3.4:1 on white. The test below pins the shade to the palette so this cannot rot.
  */
 export const GATED_FOCUS =
-    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-terra-400';
+    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-terra-500';
 
 /**
  * The dimmed look for a gated control, focus ring included. The `disabled:opacity-50` in this app's

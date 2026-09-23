@@ -7,10 +7,15 @@
  * One picture of the grid per column count — 5 (1440px), 4 (1200px), 3 (800px), 2 (640px) and 1 (320px, at
  * normal and at 1.3x text) — in light and in dark. Nothing here talks to a node; the feed is e2e/fixtures.mjs.
  *
+ * Then one more picture per column count from `md` up, of the case the first set cannot show: the poll sitting in
+ * the LAST column of a row, where the two columns it asks for do not fit. A plain auto-placed grid pushes it to
+ * the next row and leaves that cell empty; the grid is `grid-flow-row-dense` so the tiles after it back-fill.
+ *
  * It also prints, for every width, what the pictures are meant to show, measured from the live layout rather
  * than eyeballed: the height of each listing tile, whether any VIEW button sits away from the bottom of its own
  * tile (the stretch this branch removes), whether the VIEW buttons in a row line up, how many columns the poll
- * spans, and whether any poll answer is truncated. A non-zero exit means one of those is wrong.
+ * spans, whether any poll answer is truncated, and whether any row of the grid has an empty cell in it. A
+ * non-zero exit means one of those is wrong.
  *
  * Needs Chromium for Playwright once:
  *   pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
@@ -19,6 +24,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { startServer, launch, openMarket, grid } from './harness.mjs';
+import { postsWithPollAt } from './fixtures.mjs';
 
 const out = process.argv[2];
 if (!out) {
@@ -49,7 +55,12 @@ const WIDTHS = [
 function measure() {
     const gridEl = document.querySelector('div.grid.grid-cols-1');
     const cells = [...gridEl.children];
-    const colCount = getComputedStyle(gridEl).gridTemplateColumns.split(' ').filter(Boolean).length;
+    const columns = getComputedStyle(gridEl).gridTemplateColumns.split(' ').filter(Boolean);
+    const colCount = columns.length;
+    // How many columns a cell covers, from its width: one column plus a gap for each extra column it takes.
+    const colWidth = parseFloat(columns[0]);
+    const gap = parseFloat(getComputedStyle(gridEl).columnGap) || 0;
+    const spanOf = (el) => Math.round((el.getBoundingClientRect().width + gap) / (colWidth + gap));
 
     const tiles = cells
         .map((cell) => ({ cell, view: cell.querySelector('div.rounded-full.mt-auto') }))
@@ -74,9 +85,28 @@ function measure() {
         });
 
     const pollCell = cells.find(c => c.textContent.includes('POLL'));
-    const pollSpan = pollCell
-        ? Math.round(pollCell.getBoundingClientRect().width / (gridEl.getBoundingClientRect().width / colCount))
-        : 0;
+    const pollSpan = pollCell ? spanOf(pollCell) : 0;
+
+    // Every row of the grid, by the columns its cells actually cover. Cells in one row share a top edge (the row
+    // stretches them), so that is what groups them. Any row but the last that does not add up to the full column
+    // count has a hole in it — the empty cell a two-column poll leaves behind when it will not fit.
+    const byTop = new Map();
+    for (const cell of cells) {
+        const top = Math.round(cell.getBoundingClientRect().top + window.scrollY);
+        byTop.set(top, (byTop.get(top) || 0) + spanOf(cell));
+    }
+    const rows = [...byTop.entries()].sort((a, b) => a[0] - b[0]);
+    const rowFill = rows.map(([, filled]) => filled);
+
+    // Where the poll ended up on screen — not where it is in the feed. `grid-flow-row-dense` can move the tiles
+    // after it, so the only honest answer comes from the geometry.
+    const gridLeft = gridEl.getBoundingClientRect().left;
+    const pollAt = pollCell
+        ? {
+            row: rows.findIndex(([top]) => top === Math.round(pollCell.getBoundingClientRect().top + window.scrollY)) + 1,
+            column: Math.round((pollCell.getBoundingClientRect().left - gridLeft) / (colWidth + gap)) + 1,
+        }
+        : null;
     const pollAnswers = pollCell
         ? [...pollCell.querySelectorAll('button span.font-bold')].map(s => ({
             text: s.textContent.trim().slice(0, 40),
@@ -89,8 +119,14 @@ function measure() {
         ? getComputedStyle(answerButton.parentElement).gridTemplateColumns.split(' ').filter(Boolean).length
         : 0;
 
-    return { colCount, tiles, pollSpan, pollAnswers, pollAnswerColumns };
+    return { colCount, tiles, pollSpan, pollAt, pollAnswers, pollAnswerColumns, rowFill };
 }
+
+/** The rows with an empty cell in them: every row but the last that does not fill its columns. */
+const holes = (m) => m.rowFill
+    .slice(0, -1)
+    .map((filled, i) => ({ row: i + 1, filled }))
+    .filter(r => r.filled < m.colCount);
 
 const problems = [];
 const note = (width, ok, message) => {
@@ -151,9 +187,46 @@ try {
                 const clipped = m.pollAnswers.filter(a => a.clipped);
                 note(label, clipped.length === 0,
                     `no poll answer truncated${clipped.length ? `: ${clipped.map(c => c.text).join(' | ')}` : ''}`);
+
+                const empty = holes(m);
+                note(label, empty.length === 0,
+                    `no row has an empty cell — rows are ${m.rowFill.join('/')} of ${m.colCount} columns`
+                    + `${empty.length ? ` (row ${empty.map(e => e.row).join(', ')} short)` : ''}`);
             }
             await context.close();
         }
+    }
+
+    // The poll in the LAST column of a row. The feed above happens to put it where its two columns fit at every
+    // width but 1200px, so on its own it would let a grid that cannot place a wide tile through. Here the poll is
+    // moved to the last column of the first row at each column count, which is the worst case there is.
+    console.log('\nPoll in the last column of a row:');
+    for (const spec of WIDTHS.filter(w => w.columns >= 3)) {
+        const posts = postsWithPollAt(spec.columns - 1);
+        const { context, page, unrouted } = await openMarket(browser, origin, {
+            width: spec.width, height: 1000, posts,
+        });
+        const file = path.join(out, `poll-last-column-${spec.name}-light.png`);
+        await grid(page).screenshot({ path: file, animations: 'disabled' });
+        console.log(file);
+
+        if (unrouted.length) problems.push(`poll-last-column-${spec.name}: unanswered API paths ${[...new Set(unrouted)].join(', ')}`);
+
+        const m = await page.evaluate(measure);
+        const label = `${spec.width}px, poll at ${spec.columns - 1}`;
+        note(label, m.colCount === spec.columns, `${m.colCount} columns (expected ${spec.columns})`);
+        note(label, m.pollSpan === 2, `poll still spans ${m.pollSpan} column(s) (expected 2)`);
+
+        // Without `grid-flow-row-dense` this is where the grid leaves a hole: the poll cannot start in the last
+        // column, moves to the next row, and the cell it passed over stays blank.
+        const empty = holes(m);
+        note(label, empty.length === 0,
+            `no row has an empty cell — rows are ${m.rowFill.join('/')} of ${m.colCount} columns`
+            + `${empty.length ? ` (row ${empty.map(e => e.row).join(', ')} short)` : ''}`);
+        console.log(`    · the poll asked for the last column of row 1 and is drawn at row ${m.pollAt.row}, `
+            + `column ${m.pollAt.column}`
+            + `${empty.length ? ', and row 1 is left with a blank cell' : '; a tile from after it fills row 1 instead'}`);
+        await context.close();
     }
 } finally {
     await browser.close();

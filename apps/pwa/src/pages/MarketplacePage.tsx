@@ -2649,7 +2649,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         ) : (() => {
                             if (viewMode === 'grid') {
                                 return (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                                    // `grid-flow-row-dense`: the poll below takes two columns from `md` up, and a
+                                    // plain auto-placed grid cannot put it in the last column of a row — it moves to
+                                    // the next row and leaves that cell empty, a hole that walks about as the feed
+                                    // and the window change. Dense lets the tiles after it back-fill the cell.
+                                    // It only ever moves a tile forward past the poll, and only into a cell that
+                                    // would otherwise be blank; with no item wider than one column there is nothing
+                                    // to back-fill, so below `md` this changes nothing.
+                                    <div className="grid grid-flow-row-dense grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                                         {filtered.map((post) => {
                                             if (post.type === 'event') {
                                                 return (

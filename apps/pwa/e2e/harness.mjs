@@ -69,9 +69,10 @@ export async function launch() {
 
 /**
  * One page showing the Market grid. `width` is the viewport, `dark` picks the theme (both the emulated colour
- * scheme and the stored Settings choice), `textScale` is the 1.3x font setting. Returns once the feed has drawn.
+ * scheme and the stored Settings choice), `textScale` is the 1.3x font setting, and `posts` is the feed to answer
+ * with (fixtures.POSTS unless a caller wants the poll somewhere else). Returns once the feed has drawn.
  */
-export async function openMarket(browser, origin, { width, height = 1200, dark = false, textScale = 1 } = {}) {
+export async function openMarket(browser, origin, { width, height = 1200, dark = false, textScale = 1, posts } = {}) {
     const context = await browser.newContext({
         viewport: { width, height },
         colorScheme: dark ? 'dark' : 'light',
@@ -91,7 +92,7 @@ export async function openMarket(browser, origin, { width, height = 1200, dark =
     const unrouted = [];
     await context.route('**/api/**', async (route) => {
         const url = new URL(route.request().url());
-        const body = mockResponse(url.pathname, url.search);
+        const body = mockResponse(url.pathname, url.search, posts);
         if (body === undefined) {
             unrouted.push(url.pathname);
             return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not Found' }) });

@@ -92,6 +92,20 @@ export const POSTS = [
     }),
 ];
 
+/**
+ * The same feed with the poll moved to `index`. The poll is the only thing in the grid wider than one column, so
+ * where it falls is what decides whether the row it lands in can hold it: with the poll at `columns - 1` it wants
+ * the last column of the first row, has only one column left, and a plain auto-placed grid would push it down and
+ * leave that cell empty. Used by market-grid-shots.mjs to photograph exactly that case at every column count.
+ */
+export function postsWithPollAt(index) {
+    const rest = POSTS.filter(p => p.type !== 'poll');
+    const poll = POSTS.find(p => p.type === 'poll');
+    if (!poll) throw new Error('fixtures: no poll in POSTS');
+    if (index > rest.length) throw new Error(`fixtures: cannot put the poll at ${index} of ${rest.length + 1} posts`);
+    return [...rest.slice(0, index), poll, ...rest.slice(index)];
+}
+
 export const IDENTITY = {
     publicKey: ME,
     privateKey: '',
@@ -100,17 +114,18 @@ export const IDENTITY = {
 };
 
 /**
- * Every /api path the page asks for, answered from the list above. Anything not named here is answered 404,
+ * Every /api path the page asks for, answered from `posts` — the list above unless a caller hands over another
+ * order of it (see postsWithPollAt). Anything not named here is answered 404,
  * which the page already treats as "this node is older than that route" and hides quietly.
  */
-export function mockResponse(pathname, search) {
+export function mockResponse(pathname, search, posts = POSTS) {
     if (pathname === '/api/marketplace/posts') {
         const params = new URLSearchParams(search);
         const id = params.get('id');
-        if (id) return POSTS.filter(p => p.id === id);
+        if (id) return posts.filter(p => p.id === id);
         const type = params.get('type');
         const types = (params.get('types') || 'offer,need').split(',');
-        return POSTS.filter(p => (type ? p.type === type : types.includes(p.type)));
+        return posts.filter(p => (type ? p.type === type : types.includes(p.type)));
     }
     if (pathname === '/api/activity/feed') return { feed: [] };
     if (pathname === '/api/community/members') return [];

@@ -314,6 +314,18 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         expect(pollOptions().className).toContain('md:grid-cols-2');
     });
 
+    // A two-column tile cannot start in the last column of a row: auto-placement moves it down and leaves that
+    // cell empty. Where the poll falls depends on the feed and the window, so the hole walks about. Dense flow
+    // lets the tiles after it take the cell instead (Marty on #1092).
+    it('lets the tiles after the poll fill a cell its two columns are too wide for', async () => {
+        await openGrid();
+        const gridEl = pollCard().parentElement!.parentElement as HTMLElement;
+        // Anchor: this really is the Card View grid, not a wrapper.
+        expect(gridEl.className).toContain('grid-cols-1');
+        expect(gridEl.className).toContain('xl:grid-cols-5');
+        expect(gridEl.className).toContain('grid-flow-row-dense');
+    });
+
     it('shows poll answers in full in the grid — a ballot option you cannot read is not a choice', async () => {
         await openGrid();
         const label = screen.getByText('It is Amazing and we should start on it this weekend');

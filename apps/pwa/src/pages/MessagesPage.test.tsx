@@ -575,9 +575,34 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
         };
     }
 
+    /**
+     * Opens a conversation and waits until it is *fully* open, which is not the same thing as
+     * the composer being on screen.
+     *
+     * The composer only renders once `activeConv` is set, so `findByPlaceholderText` resolves on
+     * that very commit — before its passive effects have run. One of them, "leaving a conversation
+     * drops anything it was holding" (MessagesPage.tsx), is keyed on `activeConv?.id` and so also
+     * fires on the commit where that id first becomes non-null, clearing the pending image, the
+     * notice and the drop highlight. A paste or a drop fired in that gap sets its state first and
+     * the queued effect resets it afterwards; nothing re-renders, so the wait that follows polls a
+     * DOM that will never change and burns the whole 15 s budget before failing.
+     *
+     * React schedules that flush as a macrotask, and RTL's async wrapper drains it with a
+     * `setTimeout(…, 0)` before `findBy*` returns. The margin is ~1 ms on an idle box — measured
+     * here as composer-in-DOM at +31 ms, effect at +41 ms, `findBy*` returning at +42 ms — and a
+     * loaded CI runner loses it (#1073, where two different tests in this block failed on two
+     * different runs). Draining the mount effects here closes the gap for every test in the block,
+     * which is why they all open their chat through this helper.
+     */
+    async function openChat(conversationId: string) {
+        render(<MessagesPage identity={mockIdentity} openConversationId={conversationId} />);
+        const composer = await screen.findByPlaceholderText('Message...');
+        await act(async () => {});   // let the mount effects land before anything is pasted or dropped
+        return composer;
+    }
+
     async function openDm() {
-        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
-        return await screen.findByPlaceholderText('Message...');
+        return await openChat('conv-1');
     }
 
     beforeEach(() => {
@@ -714,8 +739,7 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
     });
 
     it('in a group chat a pasted picture gets one line of explanation and nothing is sent', async () => {
-        render(<MessagesPage identity={mockIdentity} openConversationId={GROUP_ID} />);
-        const composer = await screen.findByPlaceholderText('Message...');
+        const composer = await openChat(GROUP_ID);
 
         fireEvent.paste(composer, { clipboardData: imageClipboard(pictureFile()) });
 
@@ -790,7 +814,7 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
             timestamp: '2026-09-14T00:00:00.000Z',
         } as ApiMessage];
 
-        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        await openChat('conv-1');
 
         expect(await screen.findByText('the back fence')).toBeInTheDocument();
     });

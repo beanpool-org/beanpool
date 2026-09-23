@@ -478,3 +478,13 @@ intentional; do not open PRs or issues attempting to alter them:
   content can be a spinner (the primary action) already has an explicit label and a busy state. Pixel: add
   `accessibilityLabel` only where the visible content is not text (icon, image, spinner, emoji only), or where the
   spoken name must differ from the text.
+
+### 2026-09-24 — Pixel: accessibilityLabel on the pending-deal card in MyDealsSheet (#1087) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** the Pressable that wraps a pending deal in `apps/native/components/MyDealsSheet.tsx` lacks an
+  `accessibilityLabel`, so screen readers can't tell what it opens.
+- **Why not to re-file:** with no label, React Native names the Pressable from all of its child text, so VoiceOver and
+  TalkBack already read the whole card: status, date, the Beans amount with its sign, the post title and "From/To
+  <member>". The proposed label ("View deal details for <title>") REPLACES all of that and drops the amount, the status
+  and the other member. Never put an `accessibilityLabel` on a Pressable that wraps a whole card of text. If it needs
+  anything, it's an `accessibilityHint` saying what a tap does.

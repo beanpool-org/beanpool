@@ -104,6 +104,27 @@ describe('the group roster and its lead convenor', () => {
         expect(buildRosterView(group(), roster, CONVENOR).handOverCandidates).toEqual([]);
     });
 
+    it('tells a lead whose only company is observers to make one a member first', () => {
+        const observersOnly = [member(LEAD, 'convenor'), member(OBSERVER, 'observer'), member('pk-obi2', 'observer')];
+        const view = buildRosterView(group(), observersOnly, LEAD);
+        // Leaving still needs a hand-over (observers are active people), but there is nobody to hand to: without
+        // this flag the screen sends the lead round a dead end.
+        expect(view.leaveNeedsHandOver).toBe(true);
+        expect(view.handOverCandidates).toEqual([]);
+        expect(view.handOverBlockedByObservers).toBe(true);
+
+        // Not a dead end once one of them is a member.
+        const promoted = [member(LEAD, 'convenor'), member(OBSERVER, 'member'), member('pk-obi2', 'observer')];
+        expect(buildRosterView(group(), promoted, LEAD).handOverBlockedByObservers).toBe(false);
+        // A lead alone in the group is not blocked — they may simply leave.
+        expect(buildRosterView(group(), [member(LEAD, 'convenor')], LEAD).handOverBlockedByObservers).toBe(false);
+        // Nor is anyone who does not hold the lead.
+        expect(buildRosterView(group(), observersOnly, OBSERVER).handOverBlockedByObservers).toBe(false);
+        // An observer who is not active is nobody to promote, so this is a lead alone, not a dead end.
+        const invitedObserver = [member(LEAD, 'convenor'), member(OBSERVER, 'observer', { status: 'invited' })];
+        expect(buildRosterView(group(), invitedObserver, LEAD).handOverBlockedByObservers).toBe(false);
+    });
+
     it('asks a leaving lead to hand over — unless they are alone in the group', () => {
         expect(buildRosterView(group(), roster, LEAD).leaveNeedsHandOver).toBe(true);
         expect(buildRosterView(group(), [member(LEAD, 'convenor')], LEAD).leaveNeedsHandOver).toBe(false);

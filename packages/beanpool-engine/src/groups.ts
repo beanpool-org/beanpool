@@ -14,7 +14,8 @@
 //  - NOBODY can remove or demote the lead — not another convenor, and not a node admin (admins hold no power
 //    over groups today, and this change gives them none).
 //  - The lead changes by hand-over, by stepping down or leaving (hand over first while anyone else is active),
-//    by the 30-day-silence vote (apps/server/src/engine/group-succession.ts), or by a community Decision.
+//    or by the 30-day-silence vote (apps/server/src/engine/group-succession.ts). No community Decision names a
+//    group's lead as its subject, so that is not a route today.
 // Every route goes through this file, so there is one place the rules live.
 
 import type Database from 'better-sqlite3';
@@ -442,6 +443,18 @@ export const HAND_OVER_FIRST =
     'You are this group\'s lead convenor. Hand the lead over to someone else first.';
 
 /**
+ * What a convenor refused by the lead rules can actually do. The hand-over is the only route they can take today,
+ * so it is the only one this names as available. The 30-day-silence vote exists on the server
+ * (apps/server/src/engine/group-succession.ts) but no client calls those routes yet — neither app has a group
+ * succession screen — so it is worded as coming, exactly as the manual's own rules page words it
+ * (packages/beanpool-guide/content/about/rules.md, "A quiet lead convenor"). A refusal that names a vote the
+ * member cannot find is the same dead end as naming a Decision that does not exist; see docs/the-commons.md,
+ * "A suspended lead is still the lead".
+ */
+export const LEAD_SILENCE_VOTE =
+    'A vote to replace a lead who has gone quiet is coming in a later update.';
+
+/**
  * The lead hands the lead on: to another active convenor, or to an active member, who becomes a convenor in the
  * same step. The outgoing lead stays a convenor — handing over is not leaving.
  */
@@ -544,7 +557,11 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
             throw new Error('A convenor removed you from this group. Only a convenor can add you back.');
         }
         if (existing.status === 'invited') {
-            // Accepting an invitation
+            // Accepting an invitation. The invitation may carry role = 'convenor', so THIS is the write that makes
+            // the row an active convenor and re-decides the fallback — pin the lead first, as setMemberRole does.
+            // Without it, a group whose lead_pubkey is NULL hands the lead to whoever the fallback prefers among
+            // the convenors it can now see: the group's creator accepting a re-invitation, or an older joined_at.
+            reconcileGroupLead(db, groupId);
             db.prepare(
                 "UPDATE group_members SET status = 'active', updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
             ).run(now, groupId, memberPubkey);
@@ -586,14 +603,15 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
         throw new Error('Target is not a member of this group');
     }
 
-    // The lead convenor. Nobody demotes them — a convenor who thinks they should go has the 30-day-silence vote
-    // and the community Decision, not this route. The lead themselves hands the lead over first.
+    // The lead convenor. Nobody demotes them — the lead themselves hands the lead over first, and that is the only
+    // route anyone can take today: the 30-day-silence vote has server routes but no screen in either client, and
+    // no Decision effect names a group's lead at all.
     const lead = getGroupLead(db, groupId);
     const isSelf = convenorPubkey === targetPubkey;
     if (lead && targetPubkey === lead && newRole !== 'convenor') {
         throw new Error(isSelf
             ? `UNAUTHORIZED: ${HAND_OVER_FIRST}`
-            : "UNAUTHORIZED: The group's lead convenor cannot be demoted. The lead can hand the lead over, or the community can decide.");
+            : `UNAUTHORIZED: The group's lead convenor cannot be demoted. The lead can hand the lead over. ${LEAD_SILENCE_VOTE}`);
     }
     // Only the lead may touch another convenor. A convenor may still step down from convenor themselves.
     if (target.role === 'convenor' && target.status === 'active' && newRole !== 'convenor'
@@ -611,14 +629,16 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
         }
     }
 
+    // Pin down whoever leads the group now — BEFORE the role is written. It changes nothing for a group whose
+    // lead is already stored; it settles the fallback for one whose lead_pubkey has never been written (a group
+    // imported from a node older than the lead convenor). Written afterwards it came too late: the fallback was
+    // evaluated with the promoted person already a convenor, so promoting someone who joined earlier, or the
+    // group's creator, moved the lead to them — the convenor doing the promoting lost the lead by promoting.
     const now = membershipWriteAt(db, groupId, targetPubkey);
+    reconcileGroupLead(db, groupId);
     db.prepare(
         "UPDATE group_members SET role = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
     ).run(newRole, now, groupId, targetPubkey);
-    // Pin down whoever leads the group now. It changes nothing for a group whose lead is already stored; it
-    // settles the fallback for one whose lead_pubkey has never been written, so a later promotion cannot quietly
-    // move the lead to whoever happens to have joined earliest.
-    reconcileGroupLead(db, groupId);
 
     return getGroupMember(db, groupId, targetPubkey)!;
 }
@@ -641,7 +661,7 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
         // The lead leaves by handing over first; until then there is no route out of the group for them, and no
         // route by which anyone else can push them out. That is the point of the lead.
         if (!isSelf) {
-            throw new Error("UNAUTHORIZED: The group's lead convenor cannot be removed. The lead can hand the lead over and leave, or the community can decide.");
+            throw new Error(`UNAUTHORIZED: The group's lead convenor cannot be removed. The lead can hand the lead over and leave. ${LEAD_SILENCE_VOTE}`);
         }
         if (otherActiveMemberCount(db, groupId, targetPubkey) > 0) {
             throw new Error(HAND_OVER_FIRST);
@@ -772,6 +792,12 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
     return updated;
 }
 
+/**
+ * A convenor approves a request to join. No reconcileGroupLead here, unlike joinGroup and inviteGroupMember: this
+ * one only ever writes `status`, never `role`, so the person it activates is whatever they already were — and the
+ * only route that can have made a not-yet-active row a convenor is setMemberRole, which already pinned the lead
+ * before writing that role. Add a role to this UPDATE and that stops being true: pin the lead first if you do.
+ */
 export function approveGroupMember(db: Db, groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
         throw new Error('UNAUTHORIZED: Only a group convenor can approve member join requests');
@@ -812,7 +838,10 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
             return existing;
         }
         if (existing.status === 'pending_approval') {
-            // Direct approve
+            // Direct approve: status and role move in one UPDATE, so with role = 'convenor' this single write
+            // makes an active convenor out of a pending request. Pin the lead before it, for the same reason
+            // setMemberRole does — otherwise the convenor approving an older request loses the lead to them.
+            reconcileGroupLead(db, groupId);
             db.prepare(
                 "UPDATE group_members SET status = 'active', role = ?, invited_by = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
             ).run(role, convenorPubkey, now, groupId, targetPubkey);

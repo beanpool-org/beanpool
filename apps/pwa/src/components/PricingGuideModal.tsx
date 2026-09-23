@@ -229,32 +229,40 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                             const effectivePrice = item.priceBeans;
                             const confidenceDot =
                                 (item.confidenceCount || 0) >= 3 ? 'bg-emerald-500' : (item.confidenceCount || 0) >= 1 ? 'bg-amber-500' : 'bg-rose-400';
+                            const showSeasonality = Boolean(config.showSeasonality && item.seasonalityHint);
+                            const descriptionId = `pricing-item-desc-${item.id}`;
+                            const seasonalityId = `pricing-item-season-${item.id}`;
 
                             return (
                                 <div
                                     key={item.id}
-                                    onClick={() => {
-                                        if (onSelectOfferItem) {
-                                            onSelectOfferItem(item, effectivePrice);
-                                            onClose();
-                                        }
-                                    }}
-                                    className={`flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 transition-all ${
+                                    className={`relative isolate flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 transition-all ${
                                         onSelectOfferItem
-                                            ? 'cursor-pointer hover:border-emerald-500/50 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500'
+                                            ? 'cursor-pointer hover:border-emerald-500/50 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 active:scale-[0.99]'
                                             : ''
                                     }`}
-                                    role={onSelectOfferItem ? 'button' : undefined}
-                                    tabIndex={onSelectOfferItem ? 0 : undefined}
-                                    aria-label={onSelectOfferItem ? `Select ${item.name} for offer at ${effectivePrice} Beans${item.unit ? ` per ${item.unit}` : ''}${item.trend === 'up' ? ', price rising' : item.trend === 'down' ? ', price falling' : ''}` : undefined}
-                                    onKeyDown={(e) => {
-                                        if (onSelectOfferItem && (e.key === 'Enter' || e.key === ' ')) {
-                                            e.preventDefault();
-                                            onSelectOfferItem(item, effectivePrice);
-                                            onClose();
-                                        }
-                                    }}
                                 >
+                                    {/*
+                                      The select action is a real button covering the row, and a SIBLING of the
+                                      Report button below — an interactive control nested inside another one is
+                                      flattened or skipped by screen readers. Its aria-label stays short (name,
+                                      price, unit, trend) and the row's own description and seasonality hint are
+                                      attached as the accessible DESCRIPTION, so they are announced too: a label
+                                      replaces the content, a description is read after it.
+                                    */}
+                                    {onSelectOfferItem && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                onSelectOfferItem(item, effectivePrice);
+                                                onClose();
+                                            }}
+                                            className="absolute -inset-px rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                            aria-label={`Select ${item.name} for offer at ${effectivePrice} Beans${item.unit ? ` per ${item.unit}` : ''}${item.trend === 'up' ? ', price rising' : item.trend === 'down' ? ', price falling' : ''}`}
+                                            aria-describedby={showSeasonality ? `${descriptionId} ${seasonalityId}` : descriptionId}
+                                        />
+                                    )}
+
                                     {/* Thumbnail / Emoji */}
                                     <div className="w-11 h-11 rounded-xl bg-zinc-200/60 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0 text-2xl overflow-hidden">
                                         {item.thumbnailUrl ? (
@@ -270,9 +278,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">{item.name}</h3>
                                             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${confidenceDot}`} title={`Confidence: ${item.confidenceCount || 0} listings`} />
                                         </div>
-                                        <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{item.description}</p>
-                                        {config.showSeasonality && item.seasonalityHint && (
-                                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                                        <p id={descriptionId} className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{item.description}</p>
+                                        {showSeasonality && (
+                                            <p id={seasonalityId} className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
                                                 <span aria-hidden="true">☀️</span> {item.seasonalityHint}
                                             </p>
                                         )}
@@ -295,13 +303,11 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                     Offer →
                                                 </span>
                                             )}
+                                            {/* relative z-10 keeps this above the select overlay spanning the row; the row's `isolate` keeps that z-10 local. */}
                                             <button
                                                 type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setReportingItem(item);
-                                                }}
-                                                className="min-w-[44px] min-h-[44px] flex items-center justify-center p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                onClick={() => setReportingItem(item)}
+                                                className="relative z-10 min-w-[44px] min-h-[44px] flex items-center justify-center p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 title="Report price feedback"
                                                 aria-label={`Report price for ${item.name}`}
                                             >

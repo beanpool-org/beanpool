@@ -95,7 +95,7 @@ export function EventChatView({ eventId }: Props) {
 
     const rawMessages: any[] = view?.messages || [];
     const messages: ChatMessage[] = useMemo(
-        () => rawMessages.map(m => normaliseThreadMessage(m, decodeEventChatText, me)),
+        () => rawMessages.map(m => normaliseThreadMessage(m, decodeEventChatText, me, 'event')),
         [rawMessages, me],
     );
     const listItems = useMemo(() => buildChatListItems(messages), [messages]);
@@ -204,6 +204,7 @@ export function EventChatView({ eventId }: Props) {
         return (
             <ChatMessageRow
                 item={item}
+                kind="event"
                 isMe={isMe}
                 styles={chat}
                 actions={actions}

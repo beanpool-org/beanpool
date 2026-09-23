@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import type { ChatMessage } from '../../utils/chat-actions';
+import type { ChatMessage, ChatKind } from '../../utils/chat-actions';
 import { isTombstone, tombstoneText, reactionSummary } from '../../utils/chat-actions';
 import { splitTextWithLinks } from '../../utils/chat-links';
 import type { ChatStyles } from './styles';
@@ -24,6 +24,8 @@ interface Props {
     item: ChatMessage;
     isMe: boolean;
     styles: ChatStyles;
+    /** Which chat this is. A tombstone's words depend on it — see tombstoneText. */
+    kind: ChatKind;
     /** Who said it, above the words. Only set where the chat shows names — see showsAuthorName. */
     authorLabel?: string | null;
     quote?: ChatQuote | null;
@@ -46,7 +48,7 @@ function renderTextWithLinks(text: string, linkStyle: any, onPressUrl: (url: str
     );
 }
 
-export function ChatBubble({ item, isMe, styles, authorLabel, quote, onPress, onPressUrl, attachment, status, footer }: Props) {
+export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPress, onPressUrl, attachment, status, footer }: Props) {
     const removed = isTombstone(item);
     const { emojis, total } = removed ? { emojis: [] as string[], total: 0 } : reactionSummary(item.metadata);
     const textStyle = isMe ? styles.messageTextMe : styles.messageTextOther;
@@ -84,7 +86,7 @@ export function ChatBubble({ item, isMe, styles, authorLabel, quote, onPress, on
 
             {removed ? (
                 <Text style={[styles.messageText, textStyle, styles.messageRemoved]}>
-                    {tombstoneText(item)}
+                    {tombstoneText(item, kind)}
                     {'  '}
                     <Text style={[styles.messageTime, timeStyle, { fontSize: 10 }]}>{item.timestamp}</Text>
                 </Text>

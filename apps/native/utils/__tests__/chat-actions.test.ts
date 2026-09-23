@@ -8,13 +8,15 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    MESSAGE_EDIT_WINDOW_MS, DELETED_BY_AUTHOR_TEXT, REMOVED_BY_CONVENOR_TEXT, NOT_AVAILABLE_YET,
+    MESSAGE_EDIT_WINDOW_MS, DELETED_BY_AUTHOR_TEXT, REMOVED_BY_CONVENOR_TEXT, REMOVED_BY_HOST_TEXT, NOT_AVAILABLE_YET,
     buildChatListItems, canDeleteMessage, canEditMessage, canReactToMessage, canRemoveMessage,
     canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator,
     isSystemLine, isTombstone, messageActions, normaliseThreadMessage, pendingAfterRead, reactionSummary,
     shouldFollowNewMessages, showsAuthorName, threadMessageDisplayText, tombstoneText,
     type ChatMessage, type ChatViewer,
 } from '../chat-actions';
+// The wording the event chat has always shown, so the two cannot drift apart unnoticed.
+import { EVENT_CHAT_REMOVED_TEXT } from '../events';
 
 const ME = 'me-pubkey';
 const THEM = 'them-pubkey';
@@ -169,10 +171,31 @@ describe('the whole action bar', () => {
 describe('what a deleted message says', () => {
     it('reads as the author\'s own delete when removedBy is the author', () => {
         expect(tombstoneText({ senderId: ME, metadata: { removed: true, removedBy: ME } })).toBe(DELETED_BY_AUTHOR_TEXT);
+        expect(tombstoneText({ senderId: ME, metadata: { removed: true, removedBy: ME } }, 'group')).toBe(DELETED_BY_AUTHOR_TEXT);
     });
 
     it('reads as a convenor\'s removal when anybody else did it', () => {
         expect(tombstoneText({ senderId: ME, metadata: { removed: true, removedBy: 'convenor-key' } })).toBe(REMOVED_BY_CONVENOR_TEXT);
+        expect(tombstoneText({ senderId: ME, metadata: { removed: true, removedBy: 'convenor-key' } }, 'group')).toBe(REMOVED_BY_CONVENOR_TEXT);
+    });
+
+    it('says the host removed it in an event chat, whoever pressed the button', () => {
+        // An event has no convenor, and the host may remove their own message — neither reading applies.
+        expect(tombstoneText({ senderId: THEM, metadata: { removed: true, removedBy: 'host-key' } }, 'event'))
+            .toBe(REMOVED_BY_HOST_TEXT);
+        expect(tombstoneText({ senderId: 'host-key', metadata: { removed: true, removedBy: 'host-key' } }, 'event'))
+            .toBe(REMOVED_BY_HOST_TEXT);
+        expect(tombstoneText({ senderId: ME, metadata: { removed: true } }, 'event')).toBe(REMOVED_BY_HOST_TEXT);
+    });
+
+    it('keeps the wording the event chat had before the shared components', () => {
+        expect(REMOVED_BY_HOST_TEXT).toBe('removed by the host');
+        expect(REMOVED_BY_HOST_TEXT).toBe(EVENT_CHAT_REMOVED_TEXT);
+    });
+
+    it('reads as the author\'s own delete in a DM, which has no moderator', () => {
+        expect(tombstoneText({ senderId: ME, metadata: { removed: true, removedBy: ME } }, 'dm')).toBe(DELETED_BY_AUTHOR_TEXT);
+        expect(tombstoneText({ senderId: THEM, metadata: { removed: true, removedBy: THEM } }, 'dm')).toBe(DELETED_BY_AUTHOR_TEXT);
     });
 
     it('is a tombstone by type or by metadata, whichever the node sent', () => {
@@ -381,6 +404,28 @@ describe('a node-readable chat\'s message, in the shape the components want', ()
             decode, ME,
         );
         expect(theirs.text).toBe(REMOVED_BY_CONVENOR_TEXT);
+    });
+
+    it('gives an event chat\'s tombstone the host\'s wording, both ways round', () => {
+        const hostRemovedMine = normaliseThreadMessage(
+            { id: 'e1', authorPubkey: ME, type: 'removed', ciphertext: b64('x'), metadata: { removed: true, removedBy: 'host' } },
+            decode, ME, 'event',
+        );
+        expect(hostRemovedMine.text).toBe(REMOVED_BY_HOST_TEXT);
+        // The host removing their OWN message: removedBy === senderId, which in a group would read as a delete.
+        const hostRemovedTheirOwn = normaliseThreadMessage(
+            { id: 'e2', authorPubkey: 'host', type: 'removed', ciphertext: b64('x'), metadata: { removed: true, removedBy: 'host' } },
+            decode, ME, 'event',
+        );
+        expect(hostRemovedTheirOwn.text).toBe(REMOVED_BY_HOST_TEXT);
+    });
+
+    it('gives a DM\'s tombstone the author\'s own delete', () => {
+        const m = normaliseThreadMessage(
+            { id: 'd1', authorPubkey: THEM, type: 'removed', ciphertext: b64('x'), metadata: { removed: true, removedBy: THEM } },
+            decode, ME, 'dm',
+        );
+        expect(m.text).toBe(DELETED_BY_AUTHOR_TEXT);
     });
 
     it('leaves a system line as it was written', () => {

@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { View } from 'react-native';
-import type { ChatMessage, MessageActions } from '../../utils/chat-actions';
+import type { ChatMessage, MessageActions, ChatKind } from '../../utils/chat-actions';
 import { ChatBubble, type ChatQuote } from './ChatBubble';
 import { ChatEmojiPicker, ChatMessageActions } from './ChatMessageActions';
 import type { ChatStyles } from './styles';
@@ -17,6 +17,8 @@ interface Props {
     item: ChatMessage;
     isMe: boolean;
     styles: ChatStyles;
+    /** Which chat this is, for the bubble's tombstone wording. */
+    kind: ChatKind;
     actions: MessageActions;
     showActions: boolean;
     showEmojiPicker: boolean;
@@ -37,7 +39,7 @@ interface Props {
 }
 
 export function ChatMessageRow({
-    item, isMe, styles, actions, showActions, showEmojiPicker, pickerPosition,
+    item, isMe, styles, kind, actions, showActions, showEmojiPicker, pickerPosition,
     onPressBubble, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove, onPickEmoji, onPressUrl,
     authorLabel, quote, attachment, status, footer,
 }: Props) {
@@ -66,6 +68,7 @@ export function ChatMessageRow({
                     item={item}
                     isMe={isMe}
                     styles={styles}
+                    kind={kind}
                     authorLabel={authorLabel}
                     quote={quote}
                     onPress={onPressBubble}

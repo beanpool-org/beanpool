@@ -216,7 +216,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
 
     /** The node's messages in the one shape every chat's components speak, plus what this phone still owes. */
     const messages: ChatMessage[] = useMemo(() => {
-        const fromNode = rawMessages.map(m => normaliseThreadMessage(m, decodeEventChatText, me));
+        const fromNode = rawMessages.map(m => normaliseThreadMessage(m, decodeEventChatText, me, kind));
         const mine: ChatMessage[] = pending.map(p => ({
             id: p.clientId,
             senderId: me || '',
@@ -229,7 +229,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             timestamp: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }));
         return [...fromNode, ...mine];
-    }, [rawMessages, pending, me]);
+    }, [rawMessages, pending, me, kind]);
 
     const spokenCount = useMemo(
         () => rawMessages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM').length,
@@ -505,7 +505,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             const parent = messagesById.get(item.metadata.replyToId);
             const parentText = !parent
                 ? 'Message not found'
-                : isTombstone(parent) ? tombstoneText(parent) : parent.text;
+                : isTombstone(parent) ? tombstoneText(parent, kind) : parent.text;
             const parentAuthor = !parent
                 ? 'Someone'
                 : (me && parent.senderId === me) ? 'You' : (parent.authorName || (parent.senderId || '').slice(0, 8) || 'Someone');
@@ -536,6 +536,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         return (
             <ChatMessageRow
                 item={item}
+                kind={kind}
                 isMe={isMe}
                 styles={chat}
                 actions={actions}

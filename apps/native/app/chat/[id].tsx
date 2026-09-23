@@ -1017,7 +1017,7 @@ function ChatScreen() {
             const parentText = !parentMsg
                 ? 'Message not found'
                 : isTombstone(parentMsg)
-                    ? tombstoneText(parentMsg)
+                    ? tombstoneText(parentMsg, 'dm')
                     : parentMsg.type === 'image' ? '🔒 Photo' : parentMsg.text;
             const parentAuthor = parentMsg ? (parentMsg.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')) : 'Someone';
             return {
@@ -1051,6 +1051,7 @@ function ChatScreen() {
         return (
             <ChatMessageRow
                 item={item}
+                kind="dm"
                 isMe={isMe}
                 styles={chat}
                 actions={actions}

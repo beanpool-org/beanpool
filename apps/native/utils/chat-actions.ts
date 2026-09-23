@@ -19,6 +19,12 @@ export const CHAT_REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '
 export const DELETED_BY_AUTHOR_TEXT = 'This message was deleted';
 export const REMOVED_BY_CONVENOR_TEXT = 'Removed by a convenor';
 
+/**
+ * An event chat's one removal, whoever did it. Kept identical to utils/events.EVENT_CHAT_REMOVED_TEXT —
+ * spelled again here because this file must stay free of everything but itself for vitest.
+ */
+export const REMOVED_BY_HOST_TEXT = 'removed by the host';
+
 /** An older node knows none of the new verbs. The app says this rather than showing its 403/404. */
 export const NOT_AVAILABLE_YET = 'Not available on this community yet';
 
@@ -99,10 +105,22 @@ export function isTombstone(m: { type?: string; metadata?: any } | null | undefi
 
 /**
  * The words a tombstone shows. The node stores one marker text per thread kind; the app ignores it and reads
- * `metadata.removedBy` instead, because that is the only field that tells an author's own delete from a
- * convenor's removal — and the two must not read the same.
+ * the chat's kind and `metadata.removedBy` instead, because those are what tell an author's own delete from
+ * a moderator's removal — and the two must not read the same.
+ *
+ * Which readings a chat HAS is a property of the chat, not of who pressed the button:
+ *  - an event chat has exactly one, the host's removal, and it says so even when the host removed their own
+ *    message (the power `canRemoveMessage` deliberately keeps). It has no author delete to be confused with,
+ *    and "Removed by a convenor" would name a role an event does not have;
+ *  - a group chat has both, told apart by `removedBy`;
+ *  - a DM has no moderator at all, so every tombstone in one is the author's own delete.
  */
-export function tombstoneText(m: { senderId?: string; metadata?: any } | null | undefined): string {
+export function tombstoneText(
+    m: { senderId?: string; metadata?: any } | null | undefined,
+    kind?: ChatKind,
+): string {
+    if (kind === 'event') return REMOVED_BY_HOST_TEXT;
+    if (kind === 'dm') return DELETED_BY_AUTHOR_TEXT;
     const by = m?.metadata?.removedBy;
     if (by && m?.senderId && by === m.senderId) return DELETED_BY_AUTHOR_TEXT;
     if (by) return REMOVED_BY_CONVENOR_TEXT;
@@ -367,9 +385,10 @@ export function chatActionErrorMessage(err: ChatActionError | null | undefined):
 export function threadMessageDisplayText(
     m: { type?: string; senderId?: string; authorPubkey?: string; ciphertext?: string; metadata?: any },
     decode: (ciphertext: string, type: string) => string,
+    kind?: ChatKind,
 ): string {
     const senderId = m.senderId ?? m.authorPubkey;
-    if (isTombstone({ type: m.type, metadata: m.metadata })) return tombstoneText({ senderId, metadata: m.metadata });
+    if (isTombstone({ type: m.type, metadata: m.metadata })) return tombstoneText({ senderId, metadata: m.metadata }, kind);
     if (isSystemLine({ type: m.type, senderId, systemType: null })) return String(m.ciphertext ?? '');
     return decode(String(m.ciphertext ?? ''), String(m.type ?? 'text'));
 }
@@ -382,6 +401,7 @@ export function normaliseThreadMessage(
     raw: any,
     decode: (ciphertext: string, type: string) => string,
     myPubkey?: string | null,
+    kind?: ChatKind,
 ): ChatMessage {
     let metadata: any = raw?.metadata;
     if (typeof metadata === 'string') {
@@ -393,7 +413,7 @@ export function normaliseThreadMessage(
     return {
         id: String(raw?.id ?? ''),
         senderId,
-        text: threadMessageDisplayText({ type, senderId, ciphertext: raw?.ciphertext, metadata }, decode),
+        text: threadMessageDisplayText({ type, senderId, ciphertext: raw?.ciphertext, metadata }, decode, kind),
         type,
         systemType: raw?.systemType ?? raw?.system_type ?? null,
         metadata,

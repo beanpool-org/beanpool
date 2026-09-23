@@ -1,7 +1,7 @@
 ---
 slug: groups
 title: Groups
-summary: Your groups and their chats, starting a group, inviting people, and joining by invitation.
+summary: Your groups and their chats, talking in them, starting a group, inviting people, and joining by invitation.
 related: messages, mute, mentions, enterprises, event-chat, posting
 ---
 
@@ -44,8 +44,27 @@ Later, a convenor can invite people from the chat's **⋮** menu, **Invite peopl
 - The **⋮** menu has **Invite people** (convenors), **Mute notifications** and **Group info**.
 - Joins, leaves and role changes show in the chat as small grey lines.
 - Write **@** and someone's name to alert them. See "Mentions".
+- The newest message sits just above the message box, and stays there when the keyboard opens. Scroll up to read back; a new message arriving then waits for you rather than dragging you down.
 
 A group's chat is not end-to-end encrypted. Its members and the people who run your community's server can read it. The chat says so above the message box. Private things belong in a chat between two people.
+
+## Talking in a group's chat
+
+A group's chat works exactly like a chat with one person. Tap a message and small round buttons appear beside it:
+
+- **Reply** quotes it above what you write next. Tap the quote to jump back to what it answers.
+- **React** opens seven emojis. One each; tap it again to take it back. The reactions show as a badge under the message.
+- **Edit**, on your own messages, for 15 minutes. The message then shows **edited**.
+- **Delete**, on your own messages, at any time. It asks **Delete for everyone?** once, and the message then reads **This message was deleted** to everyone in the group.
+- **Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**.
+
+Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader.
+
+Photos cannot be sent in a group's chat, and a deal cannot be started in one. Both belong in a chat between two people. See "Messages".
+
+An **observer** can read the chat but not write in it, react or reply.
+
+Your community's server needs to be up to date for reply, reactions, edit and delete. If yours is not, the app says **Not available on this community yet** — ask whoever looks after it.
 
 ## Joining a group
 

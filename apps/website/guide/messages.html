@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Messages — BeanPool members' guide</title>
-    <meta name="description" content="Start a chat, send photos, reply and react, and what is private.">
+    <meta name="description" content="Start a chat, send photos, reply, react, edit, delete, mute, and what is private.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -56,7 +56,7 @@
     <main class="legal-content glass-panel guide">
         <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#talk">Talk</a></p>
         <h1>Messages</h1>
-        <p class="lede">Start a chat, send photos, reply and react, and what is private.</p>
+        <p class="lede">Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</p>
         <h2>Your chats</h2>
         <p><strong>Talk</strong> has three buttons at the top: <strong>Messages</strong>, <strong>Groups</strong> and <strong>People</strong>.</p>
         <p>Tap <strong>Talk</strong> in the row of tabs, then <strong>Messages</strong>. Your chats with people are listed under <strong>Inbox</strong>. Deals that need you are at the top, under <strong>Action Required</strong>.</p>
@@ -84,13 +84,23 @@
             <li>a clock: still sending;</li>
             <li><strong>not delivered</strong>: it failed. Tap it to <strong>Resend</strong> or <strong>Discard</strong> it.</li>
         </ul>
-        <h2>Reply, react, edit</h2>
-        <p>Tap a message to <strong>Reply</strong>, <strong>React</strong> with an emoji, or <strong>Edit</strong>. You can edit your own messages for 15 minutes; they then show &quot;edited&quot;.</p>
-        <p>Sent messages cannot be deleted. Think before you send.</p>
+        <h2>Reply, react, edit, delete</h2>
+        <p>Tap a message. Small round buttons appear beside it:</p>
+        <ul>
+            <li><strong>Reply</strong> quotes it above what you write next. Tap the quote in a sent message to jump back to what it answers.</li>
+            <li><strong>React</strong> opens seven emojis. Tap one to add it, tap it again to take it back. One reaction each; tapping a different one swaps it. The reactions show as a small badge under the message.</li>
+            <li><strong>Edit</strong>, on your own messages, for 15 minutes after you sent it. The message then shows <strong>edited</strong>. Photos cannot be edited.</li>
+            <li><strong>Delete</strong>, on your own messages, at any time — there is no time limit. It asks <strong>Delete for everyone?</strong> once. The message then reads <strong>This message was deleted</strong> for both of you, and nobody can react to it or reply to it.</li>
+        </ul>
+        <p>The same buttons are in a group's chat. See &quot;Groups&quot;.</p>
+        <p>Deleting takes the words off your community's server too, so a new phone signing in later never sees them.</p>
+        <h2>Muting a chat</h2>
+        <p>Tap <strong>⋮</strong> at the top right, then <strong>Mute notifications</strong>: <strong>For 8 hours</strong>, <strong>For a week</strong> or <strong>Always</strong>. Tap <strong>⋮</strong> and <strong>Unmute</strong> to undo it. See &quot;Muting a chat&quot;.</p>
         <h2>What is private</h2>
         <ul>
             <li>A chat between two people is <strong>end-to-end encrypted</strong>: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. One exception: if the app cannot find the other person's key, or locking fails, it sends the message without the lock rather than not at all, and does not warn you. The chat shows <strong>End-to-end encrypted</strong> at the top. Photos in it are encrypted too.</li>
             <li>Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.</li>
+            <li>Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.</li>
             <li>A group's chat can also be read by the group's members.</li>
             <li>An event's chat can also be read by the host and everyone going.</li>
             <li>An enterprise's chat can be read by any member of your community. It is the enterprise's public discussion, the same one its page shows, and anyone in the community can write in it too. It is not a private chat for its keepers.</li>
@@ -102,10 +112,11 @@
             <li><a href="people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
             <li><a href="blocking.html"><strong>Blocking someone</strong><span>Hide someone's posts and messages from you, and undo it later.</span></a></li>
             <li><a href="event-chat.html"><strong>Event chat</strong><span>Talk with the host and everyone going to an event.</span></a></li>
-            <li><a href="groups.html"><strong>Groups</strong><span>Your groups and their chats, starting a group, inviting people, and joining by invitation.</span></a></li>
+            <li><a href="groups.html"><strong>Groups</strong><span>Your groups and their chats, talking in them, starting a group, inviting people, and joining by invitation.</span></a></li>
+            <li><a href="mute.html"><strong>Muting a chat</strong><span>Silence a chat — one person's, a group's or an enterprise's — for 8 hours, a week, or for good.</span></a></li>
             <li><a href="the-top-bar.html"><strong>The top bar</strong><span>The bean, the small icons that show when something needs you, and the buttons at the top right.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 18.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 19.</p>
     </main>
 </body>
 </html>

@@ -147,6 +147,17 @@ against Contract B. Build against a local fixture so your work does not block on
 - **Facade cards, not embeds.** Thumbnail, title, the member's callsign and avatar, platform and
   category. Tapping opens the post on its own platform, externally. Do **not** embed or proxy video
   playback: it breaches platform terms and the node has no rights to re-host the content.
+  > **Partly reversed, 2026-09-23.** Marty's call on the board, after Damo tested Pulse → Learn:
+  > "Embedded video playing still doesn't play natively in the app (still links out which looks
+  > shit)". **YouTube's own embedded player, loaded only after the member taps ▶, is now allowed in
+  > the native app.** A card still looks exactly as described above and still fetches nothing from
+  > Google until that tap, so the privacy reason behind the facade is intact. YouTube documents
+  > this use for mobile apps and the conditions on it — client identity, a 200×200 viewport, no
+  > overlay on a playing player — at
+  > <https://developers.google.com/youtube/terms/required-minimum-functionality>; they are met in
+  > `apps/native/utils/youtube-embed.ts`, with tests. **What is still rejected is the other thing:**
+  > proxying, re-hosting or re-streaming video through a node. That reason — no rights to the
+  > content — has not changed. Every platform other than YouTube still opens its own app.
 - Make it obvious whose post it is and which platform it came from. This feed's value is "my
   neighbour made this", so the person matters as much as the content.
 - A per-item mute via Contract B's mute endpoint. Only the item's **owner** can mute, so the control

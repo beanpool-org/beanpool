@@ -59,6 +59,7 @@ import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { requireAdminRole, type AdminRole } from '../admin-auth.js';
+import { avatarUrlFor } from '../engine/avatar-url.js';
 
 /**
  * Who may do what on the routes below. Every admin route takes checkAdminAuth (a key-signed session of an owner or
@@ -752,11 +753,7 @@ router.get('/api/community/members', async (ctx) => {
             ...m,
             lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
             nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-            avatarUrl: m.avatarUrl
-                ? (m.avatarUrl.startsWith('bundled://')
-                    ? m.avatarUrl
-                    : `/api/avatar/${m.publicKey}?size=thumb`)
-                : null,
+            avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
         }));
 
     const bodyStr = JSON.stringify(members);
@@ -1510,11 +1507,7 @@ router.get('/api/members', async (ctx) => {
         callsign: m.callsign,
         joinedAt: m.joinedAt,
         nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-        avatarUrl: m.avatarUrl
-            ? (m.avatarUrl.startsWith('bundled://')
-                ? m.avatarUrl
-                : `/api/avatar/${m.publicKey}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
         profileUpdatedAt: m.profileUpdatedAt,
         earnedCredit: m.earnedCredit ?? 0,
         elderVouchedBy: m.elderVouchedBy || null,

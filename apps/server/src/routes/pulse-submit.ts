@@ -65,6 +65,7 @@ import {
 import { logger } from '../logger.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
+import { avatarUrlFor } from '../engine/avatar-url.js';
 
 export interface PulseSubmitRouteDeps extends RouteDeps {
     thumbnailService?: PulseThumbnailService;
@@ -485,11 +486,7 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
         id: r.id,
         ownerPubkey: r.owner_pubkey,
         callsign: r.callsign || 'Neighbour',
-        avatarUrl: r.avatar_url
-            ? (r.avatar_url.startsWith('bundled://')
-                ? r.avatar_url
-                : `/api/avatar/${r.owner_pubkey}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(r.owner_pubkey, r.avatar_url),
         platform: r.platform,
         category: r.category,
         url: r.url || null,

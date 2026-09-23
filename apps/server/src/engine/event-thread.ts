@@ -23,6 +23,7 @@ import {
 } from '@beanpool/engine';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import type { MessagingCallbacks } from './messaging.js';
+import { avatarUrlFor } from './avatar-url.js';
 
 export const EVENT_THREAD_MESSAGE_MAX = 2000;
 export const EVENT_THREAD_REMOVED_TEXT = 'removed by the host';
@@ -228,11 +229,7 @@ export function toThreadMessage(r: any, conversationId: string, removedText = EV
         conversationId,
         authorPubkey: r.author_pubkey,
         authorCallsign: r.author_callsign || r.author_pubkey?.slice(0, 8),
-        authorAvatar: r.author_avatar
-            ? (r.author_avatar.startsWith('bundled://')
-                ? r.author_avatar
-                : `/api/avatar/${r.author_pubkey}?size=thumb`)
-            : null,
+        authorAvatar: avatarUrlFor(r.author_pubkey, r.author_avatar),
         ciphertext: displayCiphertext,
         nonce: r.nonce,
         type: r.type,

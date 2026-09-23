@@ -7,6 +7,7 @@ import { db, writeTombstone } from '../db/db.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
+import { isServableAvatarValue } from './avatar-url.js';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import {
     getMember,
@@ -38,7 +39,12 @@ function assertMemberActive(publicKey: string): void {
 function assertProfileComplete(publicKey: string): void {
     const member = db.prepare("SELECT avatar_url, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return;
-    if (!member.avatar_url) {
+    // `isServableAvatarValue`, not a truthiness test. A row whose avatar_url is this node's own
+    // /api/avatar/ URL (written before updateProfile refused to store one) holds no photo at
+    // all — GET /api/avatar/<pk> 404s for it. Counting it as "has a photo" meant the gate stayed
+    // open on a photo nobody could see, and the phone's self-heal never got the signal to
+    // republish the real one.
+    if (!isServableAvatarValue(member.avatar_url)) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {

@@ -8,6 +8,7 @@ import { db } from '../db/db.js';
 import { getMember, getConversation, type Conversation } from '@beanpool/engine';
 import { isSyntheticAccount } from '@beanpool/core';
 import type { MessagingCallbacks } from './messaging.js';
+import { avatarUrlFor } from './avatar-url.js';
 
 export interface EnterpriseThreadMessage {
     id: string;
@@ -120,11 +121,7 @@ export function getEnterpriseThreadMessages(
             conversationId: r.conversation_id,
             authorPubkey: r.author_pubkey,
             authorCallsign: r.author_callsign || r.author_pubkey?.slice(0, 8),
-            authorAvatar: r.author_avatar
-                ? (r.author_avatar.startsWith('bundled://')
-                    ? r.author_avatar
-                    : `/api/avatar/${r.author_pubkey}?size=thumb`)
-                : null,
+            authorAvatar: avatarUrlFor(r.author_pubkey, r.author_avatar),
             ciphertext: displayCiphertext,
             nonce: r.nonce,
             type: r.type,
@@ -202,11 +199,7 @@ export function postEnterpriseThreadMessage(
                     conversationId: existing.conversation_id,
                     authorPubkey: existing.author_pubkey,
                     authorCallsign: senderMember?.callsign || authorPubkey.slice(0, 8),
-                    authorAvatar: senderMember?.avatar_url
-                        ? (senderMember.avatar_url.startsWith('bundled://')
-                            ? senderMember.avatar_url
-                            : `/api/avatar/${authorPubkey}?size=thumb`)
-                        : null,
+                    authorAvatar: avatarUrlFor(authorPubkey, senderMember?.avatar_url),
                     ciphertext: existing.ciphertext,
                     nonce: existing.nonce,
                     type: existing.type,
@@ -235,11 +228,7 @@ export function postEnterpriseThreadMessage(
         conversationId: enterprisePubkey,
         authorPubkey,
         authorCallsign: senderMember?.callsign || authorPubkey.slice(0, 8),
-        authorAvatar: senderMember?.avatar_url
-            ? (senderMember.avatar_url.startsWith('bundled://')
-                ? senderMember.avatar_url
-                : `/api/avatar/${authorPubkey}?size=thumb`)
-            : null,
+        authorAvatar: avatarUrlFor(authorPubkey, senderMember?.avatar_url),
         ciphertext,
         nonce,
         type,
@@ -305,11 +294,7 @@ export function removeEnterpriseThreadMessage(
         conversationId: enterprisePubkey,
         authorPubkey: msgRow.author_pubkey,
         authorCallsign: authorMember?.callsign || msgRow.author_pubkey?.slice(0, 8),
-        authorAvatar: authorMember?.avatar_url
-            ? (authorMember.avatar_url.startsWith('bundled://')
-                ? authorMember.avatar_url
-                : `/api/avatar/${msgRow.author_pubkey}?size=thumb`)
-            : null,
+        authorAvatar: avatarUrlFor(msgRow.author_pubkey, authorMember?.avatar_url),
         ciphertext,
         nonce,
         type: 'removed',

@@ -19,6 +19,11 @@ export function createAvatarRoutes(deps?: AvatarRouteDeps) {
         }
 
         const size = ctx.query.size === 'thumb' ? 'thumb' : 'full';
+        // `v` (the content-derived version from engine/avatar-url.ts) is deliberately not read.
+        // It exists to make the URL change when the photo does, so client caches that key on the
+        // URL fetch again; what gets served is always whatever the row holds NOW. Ignoring it
+        // also means a stale or absent `v` — an older app build, a hand-typed URL — still gets
+        // the current photo rather than a 404.
         const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
 
         const result = await avatarService.getAvatar(pubkey, size, { ifNoneMatch });
@@ -48,10 +53,13 @@ export function createAvatarRoutes(deps?: AvatarRouteDeps) {
         if (result.etag) {
             ctx.set('ETag', result.etag);
         }
-        // NOT `immutable`. The emitted URL carries no version, so `immutable` would freeze a
-        // changed avatar in every client cache for a year — and the native `_v=` buster falls
-        // back to a static value because almost no caller passes `updatedAt`. Revalidating
-        // costs one conditional request that answers 304 with an empty body.
+        // Still NOT `immutable`, though the emitted URL now carries a content-derived `v` that
+        // would make it safe for the CURRENT emitters. The URL is public and long-lived: builds
+        // already on members' phones, and anything that saved an older unversioned link, would
+        // have that stale response frozen in cache for a year with no way to correct it.
+        // Revalidating costs one conditional request that answers 304 with an empty body, and
+        // the `v` parameter is what actually fixes staleness — it changes the URL, so a changed
+        // photo is a cache MISS rather than a revalidation.
         ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
         ctx.body = result.buffer;
     });

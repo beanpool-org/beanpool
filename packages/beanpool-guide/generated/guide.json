@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 22,
-  "hash": "6093ba054132edfdf6d20cb1c591e1e0f6cff20cdd53a50cf469b50d39e1c7e2",
+  "version": 23,
+  "hash": "c0661e701f1b72e6123911544a5a2e5300a9366d4c28f28b0942aa2be343214a",
   "sections": [
     {
       "id": "about",
@@ -2226,7 +2226,7 @@
           "type": "ul",
           "items": [
             "Type in **Message...** and tap the send button.",
-            "To send a photo, tap **+**, then **Camera** or **Gallery**. Photos can only be sent in chats between two people."
+            "To send a photo, tap **+**, then **Camera** or **Gallery**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. Photos can only be sent in chats between two people."
           ]
         },
         {

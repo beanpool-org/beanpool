@@ -26,7 +26,7 @@ Chats that belong to a group, an enterprise or an event are under **Groups**, no
 ## Sending
 
 - Type in **Message...** and tap the send button.
-- To send a photo, tap **+**, then **Camera** or **Gallery**. Photos can only be sent in chats between two people.
+- To send a photo, tap **+**, then **Camera** or **Gallery**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. Photos can only be sent in chats between two people.
 
 The ticks under your message:
 

@@ -44,7 +44,7 @@ function main() {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status) VALUES (?, 'Bob', 'active')`).run(memberBob);
 
     const convId = 'conv_tombstone_test';
-    db.prepare(`INSERT OR IGNORE INTO conversations (id, created_at) VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`).run(convId);
+    db.prepare(`INSERT OR IGNORE INTO conversations (id, type, created_at) VALUES (?, 'dm', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`).run(convId);
 
     // ── Test Case 1: Standard message tombstoning with attachments and metadata stripping ──
     const msg1Id = 'msg_001';

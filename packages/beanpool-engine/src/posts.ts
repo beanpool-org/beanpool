@@ -10,6 +10,7 @@ import {
     type AudienceScope
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -278,11 +279,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         reachPeers: parseReachPeers(row.reach_peers),
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
-        authorAvatarUrl: row.author_avatar
-            ? (row.author_avatar.startsWith('bundled://')
-                ? row.author_avatar
-                : `/api/avatar/${row.author_pubkey}?size=thumb`)
-            : null,
+        authorAvatarUrl: avatarUrlFor(row.author_pubkey, row.author_avatar),
         createdBy: row.created_by || undefined,
         pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
         pollClosesAt: row.poll_closes_at || undefined,

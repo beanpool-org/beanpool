@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
+import { isSelfAvatarUrl } from '@beanpool/core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1333,7 +1334,12 @@ export function createCrowdfundProject(
 ) {
     if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
-    const photoUrl = photos && photos.length > 0 ? photos[0] : '';
+    // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. An
+    // editor that read the enterprise back from the node holds THIS node's own avatar URL
+    // there, not the photo; storing it would point the avatar at itself. Same rule as
+    // updateProfile: read it as "no photo" rather than rejecting the whole save.
+    const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
+    const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
     const now = new Date().toISOString();
     const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
     const existingCallsign = db.prepare(
@@ -1387,7 +1393,11 @@ export function updateCrowdfundProject(
     }
 
     const now = new Date().toISOString();
-    const photoUrl = photos && photos.length > 0 ? photos[0] : '';
+    // As in createCrowdfundProject: this node's own avatar URL, sent back by an editor that
+    // loaded the enterprise from the node, means "unchanged" — the UPDATEs below COALESCE a
+    // null onto the existing avatar_url, so the stored photo survives the edit.
+    const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
+    const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
 
     db.transaction(() => {
         if (deadline_at !== undefined) {

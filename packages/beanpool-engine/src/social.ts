@@ -6,6 +6,7 @@
 // Pure reads (parameterized on better-sqlite3 Database handle).
 
 import type Database from 'better-sqlite3';
+import { avatarUrlFor } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -58,11 +59,7 @@ export function getRatings(db: Db, targetPubkey: string): any[] {
         transactionId: r.transaction_id,
         createdAt: r.created_at,
         rater_callsign: r.rater_callsign,
-        rater_avatar: r.rater_avatar
-            ? (r.rater_avatar.startsWith('bundled://')
-                ? r.rater_avatar
-                : `/api/avatar/${r.rater_pubkey}?size=thumb`)
-            : null
+        rater_avatar: avatarUrlFor(r.rater_pubkey, r.rater_avatar)
     }));
 }
 
@@ -86,11 +83,7 @@ export function getRatingsGiven(db: Db, raterPubkey: string): Rating[] {
         transactionId: r.transaction_id,
         createdAt: r.created_at,
         target_callsign: r.target_callsign,
-        target_avatar: r.target_avatar
-            ? (r.target_avatar.startsWith('bundled://')
-                ? r.target_avatar
-                : `/api/avatar/${r.target_pubkey}?size=thumb`)
-            : null
+        target_avatar: avatarUrlFor(r.target_pubkey, r.target_avatar)
     }));
 }
 
@@ -120,10 +113,6 @@ export function getFriends(db: Db, pubkey: string): FriendEntry[] {
         callsign: r.callsign,
         addedAt: r.added_at,
         isGuardian: false,
-        avatarUrl: r.avatar_url
-            ? (r.avatar_url.startsWith('bundled://')
-                ? r.avatar_url
-                : `/api/avatar/${r.friend_pubkey}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(r.friend_pubkey, r.avatar_url),
     }));
 }

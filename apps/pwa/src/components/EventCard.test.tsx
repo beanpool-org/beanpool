@@ -173,6 +173,19 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
         expect(list.className).toMatch(/flex-shrink-0/);
     });
 
+    // Decision 1 again, in the one view where matching the offer card means showing nothing: MarketplaceCard's
+    // compact branch is a condensed row with no photo at all, built to double the listings on screen. A thumbnail
+    // only the event had would make it the odd card out again, in the view with the least room for it.
+    it('shows no photo in the compact view, where the offer cards beside it have none either', () => {
+        renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="compact" />);
+        const card = screen.getByTestId('event-card');
+        expect(within(card).queryByRole('img')).toBeNull();
+        // And the lines stay the stack they have always been, not a column beside an empty gap.
+        const lines = within(card).getByRole('button', { name: /Open event/ }).querySelectorAll(':scope > span');
+        expect(lines[0].textContent).toBe('SAT 28 SEP ·9:00–12:00');
+        expect(lines[1].textContent).toBe(baseEvent.title);
+    });
+
     // Decision 4: at 320px with 1.3× text the photo gives way before the card does, and the RSVP row keeps the
     // card's full width under it rather than being squeezed into the column beside the thumbnail.
     it('holds at 320px: the photo cannot push the card wider, and the RSVP row keeps its own row', () => {

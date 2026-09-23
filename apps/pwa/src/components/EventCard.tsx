@@ -155,8 +155,9 @@ interface EventCardProps {
     distanceKm?: number | null;
     /**
      * Which shape the feed is in, so the event's photo takes the same size, crop and rounding the offer cards
-     * beside it are using (MarketplaceCard): a banner in the grid, a square thumbnail on the left in the other
-     * two. Defaults to the grid, which is how the Market opens.
+     * beside it are using (MarketplaceCard): a banner in the grid, a square thumbnail on the left in the list,
+     * and — because the compact offer card carries no photo at all — nothing in compact. Defaults to the grid,
+     * which is how the Market opens.
      */
     viewMode?: 'grid' | 'list' | 'compact';
     onOpen?: () => void;
@@ -169,10 +170,15 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     const place = [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ');
     // The host gave the event a photo; the card showed everything but. It is read straight off the post, the way
     // the offer cards and the event page read theirs — there is no second resolver on the web client.
-    const photo = p.photos && p.photos.length > 0 ? p.photos[0] : null;
+    const firstPhoto = p.photos && p.photos.length > 0 ? p.photos[0] : null;
+    // Compact is the one view where the offer card beside it has no photo: MarketplaceCard's compact branch is a
+    // single condensed row of emoji, title, price and badge, built to double the listings on screen. Matching the
+    // card beside it there means showing nothing — a thumbnail only this card had would make the event the odd
+    // one out again, in the view that can least afford the height.
+    const photo = viewMode === 'compact' ? null : firstPhoto;
     // Only a photo turns the card's text into a column beside a thumbnail. Without one the card is exactly what
     // it has always been, in every view.
-    const asRow = !!photo && viewMode !== 'grid';
+    const asRow = !!photo && viewMode === 'list';
 
     const lines = (
         <>

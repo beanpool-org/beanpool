@@ -128,6 +128,16 @@ describe('PricingGuideModal selectable row accessibility', () => {
         expect(onSelect).not.toHaveBeenCalled();
     });
 
+    it('keeps the confidence dot above the select overlay, so its tooltip still takes the hover', async () => {
+        await renderSelectable();
+
+        // The overlay is a positioned sibling inside the row's `isolate` context, so it paints over
+        // every in-flow child unless that child is lifted too. Without this the dot's title tooltip
+        // is unreachable by mouse. jsdom has no paint order, so pin the classes the stacking rests on.
+        const dot = screen.getByTitle('Confidence: 0 listings');
+        expect(dot).toHaveClass('relative', 'z-10');
+    });
+
     it('selects the item with Enter', async () => {
         const onSelect = vi.fn();
         const { row } = await renderSelectable(onSelect);

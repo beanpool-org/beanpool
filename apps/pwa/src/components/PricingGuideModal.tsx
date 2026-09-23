@@ -276,7 +276,13 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">{item.name}</h3>
-                                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${confidenceDot}`} title={`Confidence: ${item.confidenceCount || 0} listings`} />
+                                            {/* relative z-10 for the same reason as the Report button: the select overlay is a
+                                                positioned sibling, so it would otherwise paint over this dot and swallow the
+                                                hover its title tooltip needs. */}
+                                            <span
+                                                className={`relative z-10 w-2 h-2 rounded-full flex-shrink-0 ${confidenceDot}`}
+                                                title={`Confidence: ${item.confidenceCount || 0} listings`}
+                                            />
                                         </div>
                                         <p id={descriptionId} className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{item.description}</p>
                                         {showSeasonality && (

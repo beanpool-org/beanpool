@@ -461,7 +461,11 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
 
             if (isPending) {
                 return (
-                    <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: '/post/[id]', params: { id: item.postId, txId: item.id } }); }}>
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`View deal details for ${item.postTitle}`}
+                        onPress={() => { onClose(); router.push({ pathname: '/post/[id]', params: { id: item.postId, txId: item.id } }); }}
+                    >
                         {card}
                     </Pressable>
                 );

@@ -125,3 +125,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-09-11 - Add accessibilityLabel, hint, and busy state to pledge button
 **Learning:** Action buttons with loading states replacing text with ActivityIndicator leave screen readers with empty or ambiguous labels during async operations.
 **Action:** Provide dynamic accessibilityLabel and accessibilityState={{ disabled, busy }} on buttons that conditionally render ActivityIndicator.
+
+## 2026-09-24 - Add accessibilityLabel to pending deal item wrapper in MyDealsSheet
+**Learning:** Pressable card wrappers for pending deals in MyDealsSheet lacked an explicit accessibilityLabel, causing screen readers to fall back to unannounced or incomplete child tree text without specifying the action target.
+**Action:** Always provide explicit accessibilityLabel (e.g. `View deal details for ${item.postTitle}`) on Pressable wrappers for list cards.

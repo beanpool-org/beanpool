@@ -64,6 +64,8 @@ PIDS=()
 NAMES=()
 SKIPPED_NAMES=()
 
+RUN_START=$(date +%s)
+
 MAX_CONCURRENT_JOBS=4
 
 run_check() {
@@ -74,9 +76,29 @@ run_check() {
     sleep 0.2
   done
 
-  "$@" > "$LOGDIR/$name.log" 2>&1 &
+  # Each check times ITSELF, in a subshell, and writes "<start offset> <duration>" to $name.dur.
+  # The collection loop below reaps in launch order, so timing there would credit a check that
+  # finished early with all the time it then sat waiting to be reaped — which is precisely the
+  # number you must not get wrong when the question is what is overlapping with what.
+  (
+    CHECK_START=$(date +%s)
+    "$@" > "$LOGDIR/$name.log" 2>&1
+    CHECK_RC=$?
+    CHECK_END=$(date +%s)
+    echo "$((CHECK_START - RUN_START)) $((CHECK_END - CHECK_START))" > "$LOGDIR/$name.dur"
+    exit $CHECK_RC
+  ) &
   PIDS+=($!)
   NAMES+=("$name")
+}
+
+# "185" -> "3m05s"; "47" -> "47s". Durations only, so no hour case.
+fmt_secs() {
+  if [ "$1" -ge 60 ]; then
+    printf '%dm%02ds' $(($1 / 60)) $(($1 % 60))
+  else
+    printf '%ds' "$1"
+  fi
 }
 
 skip_check() {
@@ -584,7 +606,16 @@ for i in "${!NAMES[@]}"; do
       break
     fi
   done
-  printf "║  %-16s %s\n" "$NAME" "$STATUS"
+  # Wall clock, and the offset from the start of the run at which this check began. The pair is
+  # what makes the load legible: which checks were actually running at the same time, and which
+  # one is the long pole everything else is hiding behind. A check killed before it could write
+  # its own .dur simply prints no timing rather than a wrong one.
+  TIMING=""
+  if [ -f "$LOGDIR/$NAME.dur" ]; then
+    read -r CHECK_AT CHECK_FOR < "$LOGDIR/$NAME.dur"
+    TIMING="$(fmt_secs "$CHECK_FOR")  (started +$(fmt_secs "$CHECK_AT"))"
+  fi
+  printf "║  %-16s %s  %s\n" "$NAME" "$STATUS" "$TIMING"
 done
 
 for sn in "${SKIPPED_NAMES[@]}"; do
@@ -593,6 +624,7 @@ done
 
 echo "╠══════════════════════════════════════════╣"
 printf "║  Total: %d passed, %d failed, %d skipped\n" "$PASS" "$FAIL" "${#SKIPPED_NAMES[@]}"
+printf "║  Wall clock: %s (max %d parallel jobs)\n" "$(fmt_secs $(($(date +%s) - RUN_START)))" "$MAX_CONCURRENT_JOBS"
 echo "╚══════════════════════════════════════════╝"
 
 # Failure details. A plain tail of each log is not enough for the turbo checks: `turbo run test`

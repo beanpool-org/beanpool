@@ -1032,15 +1032,19 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             // tombstone or change compares against it. The DO UPDATE is guarded so an unchanged row is not
             // rewritten — the touch triggers would otherwise restamp it with the replica's clock.
             if (remote.groups) {
+                // lead_pubkey travels with the group (2026-09-23). A snapshot from a node older than the lead
+                // convenor sends null for it; COALESCE keeps whatever this node already knows rather than
+                // erasing it, so a replica that has run the backfill is not un-backfilled by an old primary.
                 const importGroup = db.prepare(`INSERT INTO groups
-                    (id, name, slug, description, avatar_url, category, created_by, join_policy, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, name, slug, description, avatar_url, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name = excluded.name,
                         slug = excluded.slug,
                         description = excluded.description,
                         avatar_url = excluded.avatar_url,
                         category = excluded.category,
+                        lead_pubkey = COALESCE(excluded.lead_pubkey, groups.lead_pubkey),
                         join_policy = excluded.join_policy,
                         updated_at = excluded.updated_at
                     WHERE excluded.updated_at IS NOT NULL
@@ -1049,7 +1053,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     if (!g?.id || !g.name || !g.slug || !g.createdBy) { conflictsSkipped++; continue; }
                     const res = importGroup.run(
                         g.id, g.name, g.slug, g.description ?? null, g.avatarUrl ?? null, g.category || 'general',
-                        g.createdBy, g.joinPolicy || 'open', g.createdAt, g.updatedAt || g.createdAt,
+                        g.createdBy, g.leadPubkey ?? null, g.joinPolicy || 'open', g.createdAt, g.updatedAt || g.createdAt,
                     );
                     if (res.changes > 0) groupChanges++;
                 }

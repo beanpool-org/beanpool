@@ -149,6 +149,7 @@ import {
     redeemInvite as redeemInviteEngine,
     redeemOfflineTicket as redeemOfflineTicketEngine
 } from './engine/invites.js';
+import { avatarUrlFor, isServableAvatarValue } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
@@ -216,6 +217,9 @@ import {
     getGroupMember as getGroupMemberEngine,
     isGroupConvenor as isGroupConvenorEngine,
     isGroupMember as isGroupMemberEngine,
+    getGroupLead as getGroupLeadEngine,
+    isGroupLead as isGroupLeadEngine,
+    handOverGroupLead as handOverGroupLeadEngine,
     getMemberGroupIds as getMemberGroupIdsEngine,
     joinGroup as joinGroupEngine,
     setMemberRole as setMemberRoleEngine,
@@ -267,6 +271,7 @@ import {
     sendMessage as sendMessageEngine,
     toggleMessageReaction as toggleMessageReactionEngine,
     editMessage as editMessageEngine,
+    deleteOwnMessage as deleteOwnMessageEngine,
     MESSAGE_EDIT_WINDOW_MS,
     injectSystemMessage as injectSystemMessageEngine,
     markConversationRead as markConversationReadEngine,
@@ -1066,7 +1071,8 @@ export function assertMemberActive(publicKey: string): void {
 export function assertProfileComplete(publicKey: string): void {
     const member = db.prepare("SELECT avatar_url, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return; // Let assertMemberActive handle missing members
-    if (!member.avatar_url) {
+    // See the identical gate in engine/posts.ts: a stored /api/avatar/ URL is not a photo.
+    if (!isServableAvatarValue(member.avatar_url)) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {
@@ -1348,11 +1354,7 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
         kind: 'member',
         publicKey: inviterKey,
         callsign: inviter.callsign,
-        avatarUrl: inviter.avatarUrl
-            ? (inviter.avatarUrl.startsWith('bundled://')
-                ? inviter.avatarUrl
-                : `/api/avatar/${inviter.publicKey}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(inviter.publicKey, inviter.avatarUrl),
         tier: getMemberTrustProfile(inviterKey).tier.name,
     };
 }
@@ -1393,11 +1395,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         `).all(viewerPubkey, targetPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
             publicKey: r.publicKey,
             callsign: r.callsign,
-            avatarUrl: r.avatarUrl
-                ? (r.avatarUrl.startsWith('bundled://')
-                    ? r.avatarUrl
-                    : `/api/avatar/${r.publicKey}?size=thumb`)
-                : null
+            avatarUrl: avatarUrlFor(r.publicKey, r.avatarUrl)
         }))
         : [];
     const mutualCount = mutualConnections.length;
@@ -1447,11 +1445,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
             elderVouch = {
                 publicKey: voucher.publicKey,
                 callsign: voucher.callsign,
-                avatarUrl: voucher.avatarUrl
-                    ? (voucher.avatarUrl.startsWith('bundled://')
-                        ? voucher.avatarUrl
-                        : `/api/avatar/${voucher.publicKey}?size=thumb`)
-                    : null,
+                avatarUrl: avatarUrlFor(voucher.publicKey, voucher.avatarUrl),
             };
         }
     }
@@ -2254,11 +2248,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
     `).all(treasuryPubkey) as any[]).map(r => ({
         publicKey: r.public_key,
         callsign: r.callsign,
-        avatarUrl: r.avatar_url
-            ? (r.avatar_url.startsWith('bundled://')
-                ? r.avatar_url
-                : `/api/avatar/${r.public_key}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(r.public_key, r.avatar_url),
         grantedAt: r.granted_at ?? null,
         role: r.role || 'keeper',
         backing: Number(r.backing || 0),
@@ -2470,9 +2460,7 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
         id: r.id,
         keeper: r.keeper,
         callsign: r.callsign,
-        avatarUrl: r.avatar_url
-            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.keeper}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(r.keeper, r.avatar_url),
         amount: Number(r.amount),
         pledgedAt: r.pledged_at,
     }));
@@ -2499,9 +2487,7 @@ export function getKeeperPledges(keeperPubkey: string): Array<{
         id: r.id,
         enterprise: r.enterprise,
         callsign: r.callsign,
-        avatarUrl: r.avatar_url
-            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.enterprise}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(r.enterprise, r.avatar_url),
         amount: Number(r.amount),
         pledgedAt: r.pledged_at,
     }));
@@ -2795,9 +2781,7 @@ export function getKeeperRequests(enterprisePubkey: string, filterStatus?: strin
             enterprisePubkey: r.enterprise_pubkey,
             memberPubkey: r.member_pubkey,
             callsign: r.callsign,
-            avatarUrl: r.avatar_url
-                ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.member_pubkey}?size=thumb`)
-                : null,
+            avatarUrl: avatarUrlFor(r.member_pubkey, r.avatar_url),
             pledgedBacking: Number(r.pledged_backing),
             status: r.status,
             createdAt: r.created_at,
@@ -4879,6 +4863,10 @@ export function toggleMessageReaction(messageId: string, authorPubkey: string, e
 
 export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string): Message {
     return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce);
+}
+
+export function deleteOwnMessage(messageId: string, authorPubkey: string): Message {
+    return deleteOwnMessageEngine(getMessagingCb(), messageId, authorPubkey);
 }
 
 export { MESSAGE_EDIT_WINDOW_MS };
@@ -7042,6 +7030,35 @@ export function isGroupMember(groupId: string, memberPubkey: string): boolean {
     return isGroupMemberEngine(db, groupId, memberPubkey);
 }
 
+export function getGroupLead(groupId: string): string | null {
+    return getGroupLeadEngine(db, groupId);
+}
+
+export function isGroupLead(groupId: string, memberPubkey: string): boolean {
+    return isGroupLeadEngine(db, groupId, memberPubkey);
+}
+
+/**
+ * The lead convenor hands the lead on (2026-09-23). An active member becomes a convenor in the same step; the
+ * outgoing lead stays a convenor. The group's chat says so — who leads a group is the group's business, not a
+ * quiet database change.
+ */
+export function handOverGroupLead(groupId: string, leadPubkey: string, targetPubkey: string): GroupMember {
+    const res = handOverGroupLeadEngine(db, groupId, leadPubkey, targetPubkey);
+    try {
+        syncGroupThreadMembership(groupId, targetPubkey);
+        postGroupSystemLine(getMessagingCb(), groupId, GroupSystemType.LEAD_HANDED_OVER,
+            `${callsignOf(leadPubkey)} made ${callsignOf(targetPubkey)} the group's lead convenor`,
+            { actorPubkey: leadPubkey, targetPubkey, role: res.role });
+    } catch (e) { console.warn('[Groups] Could not write the lead hand-over line:', e); }
+    bumpGroupsVersion();
+    const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
+    broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
+    const group = getGroupEngine(db, groupId);
+    if (group) broadcast({ type: 'group_updated', group }, recipients);
+    return res;
+}
+
 export function getMemberGroupIds(memberPubkey: string): string[] {
     return getMemberGroupIdsEngine(db, memberPubkey);
 }
@@ -7172,8 +7189,8 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
     return getGroupThreadEngine(groupId, viewerPubkey, limit, offset);
 }
 
-export function postGroupThreadMessage(groupId: string, authorPubkey: string, text: string, clientId?: string): EventThreadMessage {
-    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, text, clientId);
+export function postGroupThreadMessage(groupId: string, authorPubkey: string, text: string, clientId?: string, replyToId?: string): EventThreadMessage {
+    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, text, clientId, replyToId);
 }
 
 export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {

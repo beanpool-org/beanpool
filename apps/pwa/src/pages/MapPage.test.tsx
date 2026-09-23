@@ -542,6 +542,81 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         expect(onNavigate).toHaveBeenCalledWith('marketplace', 'ev-new');
     });
 
+    // "Post as -> an enterprise" used to fail with "Signature validation failed": the enterprise went in the
+    // body as authorPublicKey, and the node refuses any body field ending in publicKey that is not the
+    // signer. It now goes through the enterprise's own route, with the enterprise in the PATH.
+    describe('Post as', () => {
+        const ENT = 'ent-pubkey-aaaa';
+        const openAsKeeper = async () => {
+            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false, keeperOf: [ENT] } as any);
+            vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [{ publicKey: ENT, name: 'Bindarrabi Hall' }] } as any);
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+            const panel = await view!.findByTestId('map-new-post-panel');
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Event' })); });
+            return panel;
+        };
+        const fillAndCreate = async (panel: HTMLElement) => {
+            fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
+            fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
+            fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'The hall' } });
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+            const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+            const clickHandlers = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+            await act(async () => { clickHandlers.forEach((h: any) => h({ latlng: { lat: -28.55, lng: 153.5 } })); });
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
+        };
+
+        it("an enterprise host goes to the enterprise's own route, with the enterprise never in the body", async () => {
+            const entCreate = vi.spyOn(api, 'treasuryPostEvent').mockResolvedValue({ success: true, post: { id: 'ev-ent' } } as any);
+            const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+            const panel = await openAsKeeper();
+            await waitFor(() => expect(within(panel).getByRole('option', { name: 'Bindarrabi Hall' })).toBeInTheDocument());
+            fireEvent.change(within(panel).getByLabelText('Post as'), { target: { value: `ent:${ENT}` } });
+            await fillAndCreate(panel);
+
+            await waitFor(() => expect(entCreate).toHaveBeenCalledTimes(1));
+            expect(create).not.toHaveBeenCalled();
+            expect(entCreate.mock.calls[0][0]).toBe(ENT);
+            const body = entCreate.mock.calls[0][1];
+            expect(body).toMatchObject({
+                title: 'Working bee', lat: -28.55, lng: 153.5, eventPlaceName: 'The hall',
+                eventStartAt: new Date('2030-09-28T09:00').toISOString(), audienceScope: 'public',
+            });
+            // The node refuses any body field ending in publicKey that is not the signer.
+            expect(body).not.toHaveProperty('authorPublicKey');
+        });
+
+        it('a "Me" host still goes to the marketplace route, signing as the member', async () => {
+            const entCreate = vi.spyOn(api, 'treasuryPostEvent').mockResolvedValue({ success: true, post: { id: 'ev-ent' } } as any);
+            const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+            const panel = await openAsKeeper();
+            await fillAndCreate(panel);
+
+            await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+            expect(entCreate).not.toHaveBeenCalled();
+            expect(create.mock.calls[0][0]).toMatchObject({ type: 'event', authorPublicKey: mockIdentity.publicKey });
+        });
+
+        it('a group host still goes to the marketplace route, signing as the convenor', async () => {
+            vi.spyOn(api, 'getGroups').mockResolvedValue([
+                { id: 'grp-1', name: 'Garden Crew', viewerRole: 'convenor', viewerStatus: 'active' },
+            ] as any);
+            const entCreate = vi.spyOn(api, 'treasuryPostEvent').mockResolvedValue({ success: true, post: { id: 'ev-ent' } } as any);
+            const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+            const panel = await openAsKeeper();
+            await waitFor(() => expect(within(panel).getByRole('option', { name: 'Garden Crew' })).toBeInTheDocument());
+            fireEvent.change(within(panel).getByLabelText('Post as'), { target: { value: 'group:grp-1' } });
+            await fillAndCreate(panel);
+
+            await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+            expect(entCreate).not.toHaveBeenCalled();
+            expect(create.mock.calls[0][0]).toMatchObject({
+                type: 'event', authorPublicKey: mockIdentity.publicKey, audienceScope: 'group', targetGroupId: 'grp-1',
+            });
+        });
+    });
+
     describe('address search in the location section (settings app lookup, reused)', () => {
         const nominatim = [
             { display_name: 'Bindarrabi Hall, 12, Main Street, Mullumbimby, NSW, Australia', name: 'Bindarrabi Hall', lat: '-28.5543712', lon: '153.5026149', type: 'community_centre' },

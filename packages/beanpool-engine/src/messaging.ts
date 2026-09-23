@@ -3,6 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
+import { avatarUrlFor } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -173,11 +174,7 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
             const peerMember = membersByPubkey.get(peerPubkey);
             if (peerMember) {
                 peerCallsign = peerMember.callsign;
-                peerAvatar = peerMember.avatar_url
-                    ? (peerMember.avatar_url.startsWith('bundled://')
-                        ? peerMember.avatar_url
-                        : `/api/avatar/${peerMember.public_key}?size=thumb`)
-                    : null;
+                peerAvatar = avatarUrlFor(peerMember.public_key, peerMember.avatar_url);
             }
         }
 

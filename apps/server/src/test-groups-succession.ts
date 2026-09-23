@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     const deadline = Date.parse(opened.proposal.deadlineAt) - Date.parse(opened.proposal.createdAt);
     assert(Math.abs(deadline - GROUP_SUCCESSION_WINDOW_MS) < 1000 && GROUP_SUCCESSION_WINDOW_MS === 14 * DAY, 'it runs 14 days — never open-ended');
     const openLine = lastLine(g1);
-    assert(openLine?.system_type === GroupSystemType.CONVENOR_VOTE_OPENED && /Bob proposed Carol as convenor/.test(openLine.ciphertext),
+    assert(openLine?.system_type === GroupSystemType.CONVENOR_VOTE_OPENED && /Bob proposed Carol as lead convenor/.test(openLine.ciphertext),
         'the chat says who proposed whom, and why');
     assertThrows(() => proposeGroupConvenor(g1, dave, dave), /already open/, 'one open vote per group');
     assertThrows(() => voteGroupConvenor(opened.proposal.id, bob, 'no'), /already voted/, 'the proposer cannot vote again (a vote cannot be changed)');
@@ -143,7 +143,7 @@ async function main(): Promise<void> {
     assert(passed1.executed === true && passed1.proposal.status === 'passed', '2 of 3 say yes: settled early, it passes');
     assert(role(g1, carol) === 'convenor', 'Carol is convenor');
     assert(role(g1, alice) === 'member', 'Alice is an ordinary member now, still in the group');
-    assert(lastLine(g1)?.system_type === GroupSystemType.CONVENOR_CHOSEN && /Members chose Carol as convenor \(2 yes, 0 no\)/.test(lastLine(g1).ciphertext),
+    assert(lastLine(g1)?.system_type === GroupSystemType.CONVENOR_CHOSEN && /Members chose Carol as lead convenor \(2 yes, 0 no\)/.test(lastLine(g1).ciphertext),
         'the chat says the members chose Carol');
     assertThrows(() => voteGroupConvenor(opened.proposal.id, dave, 'yes'), /closed/, 'a closed vote takes no more votes');
 
@@ -152,7 +152,7 @@ async function main(): Promise<void> {
     const g2 = groupOf('Choir', k, [l, m, n]);
     silence(k);
     const p2 = proposeGroupConvenor(g2, l, l);
-    assert(/Lee offered to be convenor/.test(lastLine(g2).ciphertext), 'proposing yourself reads as offering');
+    assert(/Lee offered to be lead convenor/.test(lastLine(g2).ciphertext), 'proposing yourself reads as offering');
     voteGroupConvenor(p2.proposal.id, m, 'no');
     const r2 = voteGroupConvenor(p2.proposal.id, n, 'no');
     assert(r2.proposal.status === 'cancelled' && r2.proposal.closedReason === 'rejected', '1 yes, 2 no: rejected');
@@ -209,11 +209,21 @@ async function main(): Promise<void> {
     assertThrows(() => voteGroupConvenor(p7.proposal.id, f3, 'yes'), /closed/, 'the candidate leaving closes the vote');
     assert(prop(p7.proposal.id).closed_reason === 'candidate_gone', 'recorded as candidate_gone');
 
+    // A group with a second convenor used to have "nobody to replace": the vote only ever covered a SOLE
+    // convenor. Since the lead convenor (2026-09-23) the subject is the LEAD, so a silent lead with other
+    // convenors under them is reachable — and it is those convenors who vote, not the members. Without this a
+    // silent lead could never be replaced at all, because nobody may remove or demote a lead.
     const g7 = groupOf('Two Convenors', c3, [d3, e3]);
     setMemberRole(g7, c3, d3, 'convenor');
     silence(c3);
-    assert(getGroupSuccession(g7, e3).silence.isEligible === false, 'a group with another convenor has nobody to replace');
-    assertThrows(() => proposeGroupConvenor(g7, e3, e3), /single convenor/, 'so no vote can open');
+    const view7 = getGroupSuccession(g7, d3);
+    assert(view7.silence.convenorPubkey === c3 && view7.silence.electorate === 'convenors' && view7.silence.isEligible === true,
+        'a silent lead with another convenor CAN be replaced, by that convenor');
+    assert(getGroupSuccession(g7, e3).canPropose === false, 'an ordinary member has no say while a convenor does');
+    assertThrows(() => proposeGroupConvenor(g7, e3, e3), /Only an active convenor/, 'and cannot open the vote');
+    const p9 = proposeGroupConvenor(g7, d3, d3);
+    assert(p9.executed === true && role(g7, d3) === 'convenor' && role(g7, c3) === 'convenor',
+        'the only other convenor offering themselves settles it at once, and the old lead stays a convenor');
 
     // A voter who leaves loses their say.
     const h = makeMember('Hal'); const i = makeMember('Ivy'); const j = makeMember('Jo'); const k2 = makeMember('Kit'); const l2 = makeMember('Lou');

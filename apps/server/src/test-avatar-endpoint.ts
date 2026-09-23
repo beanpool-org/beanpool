@@ -19,7 +19,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db } from './db/db.js';
-import { initStateEngine, createPost, createTreasury } from './state-engine.js';
+import { initStateEngine, createPost, createTreasury, updateProfile } from './state-engine.js';
+import { avatarUrlFor, clearAvatarVersionCache } from '@beanpool/core';
 import { createAvatarRoutes } from './routes/avatar.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createCommunityRoutes } from './routes/community.js';
@@ -216,8 +217,13 @@ async function main() {
     const bundledMember = parsedMembers.find((m: any) => m.publicKey === pkBundled);
     const noneMember = parsedMembers.find((m: any) => m.publicKey === pkNone);
 
-    assert(photoMember && photoMember.avatarUrl === `/api/avatar/${pkPhoto}?size=thumb`,
-        `Member with photo avatar gets URL: /api/avatar/${pkPhoto}?size=thumb (got: ${photoMember?.avatarUrl})`);
+    // The URL now carries a content-derived `&v=`. The old assertion pinned the exact
+    // unversioned string — it encoded the staleness defect, not a contract worth keeping — so
+    // it is replaced by one that pins the route, the size AND the presence of a version.
+    // Section 7 proves the version actually tracks the content.
+    const photoAvatarUrlV1 = photoMember?.avatarUrl as string | undefined;
+    assert(!!photoAvatarUrlV1 && /^\/api\/avatar\/a{64}\?size=thumb&v=[0-9a-f]{8}$/.test(photoAvatarUrlV1),
+        `Member with photo avatar gets a VERSIONED URL /api/avatar/${pkPhoto}?size=thumb&v=<hash> (got: ${photoAvatarUrlV1})`);
     assert(bundledMember && bundledMember.avatarUrl === 'bundled://leaf',
         `Member with bundled avatar preserves bundled:// reference: ${bundledMember?.avatarUrl}`);
     assert(noneMember && noneMember.avatarUrl === null,
@@ -249,8 +255,12 @@ async function main() {
     const bundledPost = parsedPosts.find((p: any) => p.authorPublicKey === pkBundled);
     const nonePost = parsedPosts.find((p: any) => p.authorPublicKey === pkNone);
 
-    assert(photoPost && photoPost.authorAvatarUrl === `/api/avatar/${pkPhoto}?size=thumb`,
-        `Author with photo avatar gets URL: /api/avatar/${pkPhoto}?size=thumb (got: ${photoPost?.authorAvatarUrl})`);
+    // Same change of contract as the members list above — and this one is emitted from
+    // @beanpool/engine's posts.ts, so it also proves the shared helper reaches that package.
+    assert(photoPost && /^\/api\/avatar\/a{64}\?size=thumb&v=[0-9a-f]{8}$/.test(photoPost.authorAvatarUrl),
+        `Author with photo avatar gets a VERSIONED URL (got: ${photoPost?.authorAvatarUrl})`);
+    assert(photoPost && photoPost.authorAvatarUrl === photoAvatarUrlV1,
+        'The marketplace feed and the members list agree on the same versioned URL for the same avatar');
     assert(bundledPost && bundledPost.authorAvatarUrl === 'bundled://leaf',
         `Author with bundled avatar preserves bundled:// reference: ${bundledPost?.authorAvatarUrl}`);
     assert(nonePost && nonePost.authorAvatarUrl === null,
@@ -533,10 +543,150 @@ async function main() {
     console.log(`    Saved:  ${postsSaved.toLocaleString()} bytes (${postsPct}% reduction)`);
     console.log(`======================================================================\n`);
 
-    assert(membersAfterBytes < 15 * 1024, `Members list payload is under 15 KB (actual: ${(membersAfterBytes / 1024).toFixed(1)} KB)`);
+    // The `&v=<8 hex>` cache-buster costs exactly 11 bytes per PHOTO avatar (bundled:// and
+    // null avatars carry none). Measured, not assumed, so the budget below is re-baselined
+    // against a number this suite prints rather than one someone guessed.
+    const versionedCount = (membersAfterPayload.match(/&v=[0-9a-f]{8}/g) || []).length;
+    const versionOverhead = versionedCount * '&v=00000000'.length;
+    console.log(`  Versioning overhead on the members list: ${versionOverhead} bytes across ${versionedCount} photo avatars`);
+    console.log(`    (payload without it would be ${(membersAfterBytes - versionOverhead).toLocaleString()} bytes)\n`);
+
+    // 16 KB, raised from 15 KB. NOT a weakened assertion: the old ceiling left 37 bytes of
+    // headroom on this fixture, so any addition at all would have tripped it. The versioning
+    // is a deliberate, measured 11 bytes per photo avatar and it buys a changed photo actually
+    // appearing; the point of the budget — that the list must not re-inline base64 avatars,
+    // which would put it back over 600 KB — is untouched, and the 500 KB saving assert below
+    // is what really guards that.
+    assert(membersAfterBytes < 16 * 1024, `Members list payload is under 16 KB (actual: ${(membersAfterBytes / 1024).toFixed(1)} KB, of which ${versionOverhead} bytes is cache-busting)`);
     assert(membersSaved > 500 * 1024, `Saved over 500 KB on members list (actual saved: ${(membersSaved / 1024).toFixed(1)} KB)`);
     assert(postsAfterBytes < 40 * 1024, `Posts list payload is under 40 KB (actual: ${(postsAfterBytes / 1024).toFixed(1)} KB)`);
     assert(postsSaved > 1000 * 1024, `Saved over 1 MB on posts list (actual saved: ${(postsSaved / 1024).toFixed(1)} KB)`);
+
+    // =========================================================================
+    // SECTION 7: Versioned URLs, and never storing our own URL as an avatar
+    //
+    // Damo (test node) sent three screenshots of his own account a minute apart: My Profile
+    // showed his new photo, the Settings card an empty ring, the header pill his PREVIOUS
+    // photo. The four defects behind that are covered here (server half) and in
+    // apps/native/utils/__tests__/avatar-value.test.ts (phone half).
+    // =========================================================================
+    console.log('\n--- Section 7: URL versioning and self-referential avatar writes ---');
+
+    // --- 7.1 The emitted URL changes when the stored avatar changes, and ONLY then.
+    const pkVer = 'd'.repeat(64);
+    db.prepare("DELETE FROM members WHERE public_key = ?").run(pkVer);
+    const firstPhoto = `data:image/jpeg;base64,${createTestJpegBuffer(9 * 1024).toString('base64')}`;
+    const secondPhoto = `data:image/jpeg;base64,${createTestJpegBuffer(11 * 1024).toString('base64')}`;
+    db.prepare(`
+        INSERT INTO members (public_key, callsign, avatar_url, joined_at, status)
+        VALUES (?, 'DamoVersioned', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+    `).run(pkVer, firstPhoto);
+
+    const emittedMemberAvatar = async (): Promise<string | null> => {
+        const res = await dispatchRoute(communityRouter, 'GET', '/api/community/members');
+        const list = JSON.parse(typeof res.body === 'string' ? res.body : JSON.stringify(res.body));
+        return list.find((m: any) => m.publicKey === pkVer)?.avatarUrl ?? null;
+    };
+
+    const verUrl1 = await emittedMemberAvatar();
+    const verUrl1Again = await emittedMemberAvatar();
+    assert(verUrl1 === verUrl1Again,
+        `An unchanged avatar keeps the same emitted URL across requests (${verUrl1})`);
+
+    // Change the stored avatar by the ordinary route, not a raw UPDATE.
+    updateProfile(pkVer, { avatar: secondPhoto });
+    const verUrl2 = await emittedMemberAvatar();
+    assert(!!verUrl2 && verUrl2 !== verUrl1,
+        `A CHANGED avatar produces a different emitted URL (${verUrl1} -> ${verUrl2})`);
+    assert(/\?size=thumb&v=[0-9a-f]{8}$/.test(verUrl2!),
+        'The changed URL still has the expected shape');
+
+    // Put the original bytes back: the version is a content hash, so it must come back too.
+    updateProfile(pkVer, { avatar: firstPhoto });
+    assert(await emittedMemberAvatar() === verUrl1,
+        'Restoring the original bytes restores the original version (content hash, not a counter)');
+
+    // A second emitter — the treasury/keeper reader in state-engine — agrees with the list.
+    // Covers "cover the members list and at least one other emitter" without a second fixture.
+    assert(avatarUrlFor(pkVer, firstPhoto) === verUrl1,
+        'The shared helper and the members list produce identical URLs for identical input');
+    assert(avatarUrlFor(pkVer, 'bundled://leaf') === 'bundled://leaf',
+        'bundled:// passes through the helper unchanged, with no version appended');
+    assert(avatarUrlFor(pkVer, null) === null && avatarUrlFor(pkVer, '   ') === null,
+        'No stored avatar emits null');
+
+    // Memoisation must not be able to serve a stale version: clearing the memo has to produce
+    // the identical hash, and a changed value has to beat the memo.
+    clearAvatarVersionCache();
+    assert(await emittedMemberAvatar() === verUrl1,
+        'The version is the same with a cold memo as with a warm one');
+
+    // --- 7.2 The route serves with the version parameter present.
+    const versionedPath = verUrl1!;
+    const versionedRes = await dispatchRoute(avatarRouter, 'GET', versionedPath);
+    assert(versionedRes.status === 200,
+        `GET ${versionedPath} (with &v=) returns 200`);
+    assert(versionedRes.headers['content-type'] === 'image/jpeg',
+        'The versioned request serves image bytes, not an error body');
+    const unversionedRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkVer}?size=thumb`);
+    assert(unversionedRes.status === 200 &&
+           Buffer.compare(unversionedRes.body as Buffer, versionedRes.body as Buffer) === 0,
+        'A request WITHOUT &v= serves the same current bytes — older builds are not broken');
+    const wrongVersionRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkVer}?size=thumb&v=deadbeef`);
+    assert(wrongVersionRes.status === 200,
+        'A stale or wrong &v= still serves the CURRENT photo rather than 404ing');
+
+    // --- 7.3 updateProfile must never store our own URL as an avatar.
+    //
+    // This is the defect that destroyed members' photos: the phone read the node's own
+    // /api/avatar/ string out of its synced local row and posted it back on every Save.
+    for (const [label, roundTripped] of [
+        ['relative', `/api/avatar/${pkVer}?size=thumb`],
+        ['relative, versioned', verUrl1!],
+        ['absolute', `https://mullum.beanpool.org/api/avatar/${pkVer}?size=thumb`],
+        ['absolute on another host', `http://192.168.1.10:3000/api/avatar/${pkVer}?size=thumb&v=abcdef12`],
+    ] as const) {
+        const before = (db.prepare("SELECT avatar_url FROM members WHERE public_key = ?").get(pkVer) as any).avatar_url;
+        const bio = `bio via ${label}`;
+        const profile = updateProfile(pkVer, { avatar: roundTripped, bio });
+        const after = (db.prepare("SELECT avatar_url FROM members WHERE public_key = ?").get(pkVer) as any).avatar_url;
+        assert(after === before,
+            `updateProfile with a ${label} /api/avatar/ URL leaves the stored photo untouched`);
+        assert(profile !== null && profile.bio === bio,
+            `updateProfile with a ${label} /api/avatar/ URL STILL SAVES the bio (not a 400 — installed builds send this on every Save)`);
+    }
+    // And the photo is still actually servable afterwards, which is the whole point.
+    const survivedRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkVer}?size=thumb`);
+    assert(survivedRes.status === 200, 'The photo is still served after four round-tripped saves');
+
+    // --- 7.4 A row that ALREADY holds such a string reads as "no avatar".
+    //
+    // Decision (c): no data-rewriting migration in this PR, so rows already damaged on the
+    // test node must degrade to initials, not to a blank ring.
+    const pkDamaged = 'f'.repeat(64);
+    db.prepare("DELETE FROM members WHERE public_key = ?").run(pkDamaged);
+    db.prepare(`
+        INSERT INTO members (public_key, callsign, avatar_url, joined_at, status)
+        VALUES (?, 'AlreadyDamaged', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+    `).run(pkDamaged, `/api/avatar/${pkDamaged}?size=thumb`);
+
+    const damagedRes = await dispatchRoute(communityRouter, 'GET', '/api/community/members');
+    const damagedList = JSON.parse(typeof damagedRes.body === 'string' ? damagedRes.body : JSON.stringify(damagedRes.body));
+    const damagedMember = damagedList.find((m: any) => m.publicKey === pkDamaged);
+    assert(damagedMember && damagedMember.avatarUrl === null,
+        `A row already holding an /api/avatar/ string is emitted as null (got: ${damagedMember?.avatarUrl})`);
+    assert(avatarUrlFor(pkDamaged, `https://other-node.example/api/avatar/${pkDamaged}?size=thumb`) === null,
+        'An absolute /api/avatar/ URL on any host is emitted as null too');
+
+    // The marketplace photo gate must agree, so the phone's self-heal republishes.
+    let gateFired = false;
+    try {
+        createPost('offer', 'tools', 'Should not post', 'no photo', 5, 'fixed', pkDamaged);
+    } catch (e: any) {
+        gateFired = /profile photo/i.test(e?.message || '');
+    }
+    assert(gateFired,
+        'The marketplace photo gate treats a stored /api/avatar/ string as NO photo');
 
     // Clean up test data directory
     try {

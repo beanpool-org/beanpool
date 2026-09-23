@@ -6,13 +6,16 @@ import {
     removeGroupMember,
     approveGroupMember,
     setGroupMemberRole,
+    handOverGroupLead,
     updateGroup,
     type Group,
     type GroupMember,
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
+import { MAKE_OBSERVER_MEMBER_FIRST } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { buildRosterView } from '../lib/group-roster';
 
 interface Props {
     group: Group | null;
@@ -78,7 +81,10 @@ export function GroupDetailModal({
     const isPending = (myMembership && myMembership.status === 'pending_approval') || groupData.viewerStatus === 'pending_approval';
 
     const pendingMembers = members.filter(m => m.status === 'pending_approval');
-    const activeMembers = members.filter(m => m.status === 'active');
+    // Who leads the group, and what each row may offer (lead convenor, 2026-09-23). One source of truth, shared
+    // with the native roster and with the engine that enforces it: a convenor never sees the Role select or ✕ on
+    // the lead, or on another convenor.
+    const roster = buildRosterView(groupData, members, myPubkey);
 
     const handleJoin = async () => {
         setActionLoading(true);
@@ -94,8 +100,35 @@ export function GroupDetailModal({
         }
     };
 
+    const handleHandOverLead = async (targetPubkey: string, callsign?: string) => {
+        const who = callsign || 'this member';
+        if (!window.confirm(
+            `Make ${who} the lead convenor of ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back.`
+        )) return;
+        setActionLoading(true);
+        setError(null);
+        try {
+            await handOverGroupLead(groupData.id, targetPubkey);
+            await loadDetails();
+            if (onMembershipChanged) onMembershipChanged();
+        } catch (err: any) {
+            setError(err.message || 'Failed to hand the lead over');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const handleLeave = async () => {
         if (!myPubkey) return;
+        // A lead cannot leave while anyone else is active: say so here rather than letting the server refuse it.
+        if (roster.leaveNeedsHandOver) {
+            // An observer cannot take the lead, so "hand it over first" is a dead end while they are the only
+            // other active people. Name the role change that opens the way instead.
+            setError(roster.handOverBlockedByObservers
+                ? `You are the lead convenor of ${groupData.name}. ${MAKE_OBSERVER_MEMBER_FIRST}`
+                : `You are the lead convenor of ${groupData.name}. Hand the lead to someone else first, then you can leave.`);
+            return;
+        }
         if (!window.confirm(`Are you sure you want to leave ${groupData.name}?`)) return;
         setActionLoading(true);
         setError(null);
@@ -209,10 +242,18 @@ export function GroupDetailModal({
                         </span>
                         {isConvenor && (
                             <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
-                                <span aria-hidden="true">🛡️ </span>Convenor
+                                <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? 'Lead convenor' : 'Convenor'}
                             </span>
                         )}
                     </div>
+
+                    {/* Group info names the lead convenor. Never "owner" — that is the owner of a node. */}
+                    {roster.leadCallsign && (
+                        <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
+                            Lead convenor: <strong className="text-nature-900 dark:text-white">{roster.leadCallsign}</strong>
+                            {roster.viewerIsLead ? ' (you)' : ''}. Only the lead can remove or demote a convenor, and nobody can remove the lead.
+                        </p>
+                    )}
 
                     {/* Framing statement */}
                     <div className="p-3 bg-nature-200/60 dark:bg-nature-900/60 border border-nature-300 dark:border-nature-800 rounded-xl text-xs text-nature-700 dark:text-nature-300 leading-relaxed">
@@ -308,66 +349,90 @@ export function GroupDetailModal({
                     {/* Member Roster */}
                     <div>
                         <h3 className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-2">
-                            Roster ({activeMembers.length || groupData.memberCount || 0})
+                            Roster ({roster.rows.length || groupData.memberCount || 0})
                         </h3>
 
                         {loading ? (
                             <div className="py-4 text-center text-xs text-nature-500">Loading members...</div>
                         ) : (
                             <div className="divide-y divide-nature-200 dark:divide-nature-800/80 border border-nature-200 dark:border-nature-800 rounded-xl overflow-hidden">
-                                {activeMembers.map((m) => {
+                                {roster.rows.map((row) => {
+                                    const m = row.member;
                                     const resolvedAvatar = resolveAvatarUrl(m.avatarUrl);
-                                    const isUserConvenor = m.role === 'convenor';
+                                    const highlight = row.isLead || m.role === 'convenor';
                                     return (
-                                        <div key={m.memberPubkey} className="flex items-center justify-between p-3 bg-white dark:bg-nature-950">
+                                        // flex-wrap and gap-y so the row stacks rather than overflowing at 320px
+                                        // with 1.3× text.
+                                        <div key={m.memberPubkey} className="flex flex-wrap items-center justify-between gap-y-2 p-3 bg-white dark:bg-nature-950">
                                             <div className="flex items-center gap-3 min-w-0">
                                                 {resolvedAvatar ? (
-                                                    <img src={resolvedAvatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                                                    <img src={resolvedAvatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
                                                 ) : (
-                                                    <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-xs font-bold">
+                                                    <div className="w-8 h-8 shrink-0 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-xs font-bold">
                                                         {(m.callsign || '?').charAt(0).toUpperCase()}
                                                     </div>
                                                 )}
                                                 <div className="min-w-0">
                                                     <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
-                                                        {m.callsign || m.memberPubkey.slice(0, 10)} {m.memberPubkey === myPubkey && <span className="text-xs text-nature-400">(You)</span>}
+                                                        {m.callsign || m.memberPubkey.slice(0, 10)} {row.isYou && <span className="text-xs text-nature-400">(You)</span>}
                                                     </div>
-                                                    <div className="text-[11px] text-nature-500 dark:text-nature-400 capitalize">
-                                                        {m.role}
+                                                    <div className="text-[11px] text-nature-500 dark:text-nature-400">
+                                                        {row.roleLabel}
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div className="flex items-center gap-2">
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                                                    isUserConvenor
+                                                    highlight
                                                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/40'
                                                         : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400'
                                                 }`}>
-                                                    {m.role}
+                                                    {row.isLead ? 'Lead' : m.role}
                                                 </span>
 
-                                                {isConvenor && m.memberPubkey !== myPubkey && (
+                                                {/* The Role select and ✕ only where the viewer may actually act: never
+                                                    on the lead, and never on another convenor unless the viewer IS
+                                                    the lead. */}
+                                                {(row.canChangeRole || row.canRemove || row.canHandOverLead) && (
                                                     <div className="flex items-center gap-1">
-                                                        <select
-                                                            value={m.role}
-                                                            onChange={(e) => handleChangeRole(m.memberPubkey, e.target.value as GroupRole)}
-                                                            disabled={actionLoading}
-                                                            className="px-1.5 py-0.5 bg-nature-100 dark:bg-nature-900 border border-nature-300 dark:border-nature-700 rounded text-[10px] font-bold text-nature-700 dark:text-nature-300"
-                                                        >
-                                                            <option value="convenor">Convenor</option>
-                                                            <option value="member">Member</option>
-                                                            <option value="observer">Observer</option>
-                                                        </select>
-                                                        <button
-                                                            onClick={() => handleRemoveMember(m.memberPubkey, m.callsign)}
-                                                            disabled={actionLoading}
-                                                            aria-label={`Remove ${m.callsign || m.memberPubkey.slice(0, 10)} from group`}
-                                                            className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                                            title="Remove member"
-                                                        >
-                                                            ✕
-                                                        </button>
+                                                        {row.canHandOverLead && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleHandOverLead(m.memberPubkey, m.callsign)}
+                                                                disabled={actionLoading}
+                                                                aria-label={`Make ${m.callsign || m.memberPubkey.slice(0, 10)} the lead convenor`}
+                                                                title="Make lead convenor"
+                                                                className="px-1.5 py-0.5 rounded border border-nature-300 dark:border-nature-700 text-[10px] font-bold text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                            >
+                                                                Make lead
+                                                            </button>
+                                                        )}
+                                                        {row.canChangeRole && (
+                                                            <select
+                                                                value={m.role}
+                                                                onChange={(e) => handleChangeRole(m.memberPubkey, e.target.value as GroupRole)}
+                                                                disabled={actionLoading}
+                                                                aria-label={`Role for ${m.callsign || m.memberPubkey.slice(0, 10)}`}
+                                                                className="px-1.5 py-0.5 bg-nature-100 dark:bg-nature-900 border border-nature-300 dark:border-nature-700 rounded text-[10px] font-bold text-nature-700 dark:text-nature-300"
+                                                            >
+                                                                <option value="convenor">Convenor</option>
+                                                                <option value="member">Member</option>
+                                                                <option value="observer">Observer</option>
+                                                            </select>
+                                                        )}
+                                                        {row.canRemove && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveMember(m.memberPubkey, m.callsign)}
+                                                                disabled={actionLoading}
+                                                                aria-label={`Remove ${m.callsign || m.memberPubkey.slice(0, 10)} from group`}
+                                                                className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                title="Remove member"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>

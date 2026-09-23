@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 20,
-  "hash": "97c4e99676c46789fa95ea2d59bee74585ba8ebb3aa22e3bbdc96ce095a3c3be",
+  "version": 22,
+  "hash": "6093ba054132edfdf6d20cb1c591e1e0f6cff20cdd53a50cf469b50d39e1c7e2",
   "sections": [
     {
       "id": "about",
@@ -293,7 +293,7 @@
         },
         {
           "type": "p",
-          "text": "A **group** is a circle of members with its own chat and posts, run by one or more **convenors**."
+          "text": "A **group** is a circle of members with its own chat and posts, run by one or more **convenors**. One of them is its **lead convenor** — whoever created the group, to begin with."
         },
         {
           "type": "p",
@@ -304,7 +304,7 @@
     {
       "slug": "rules",
       "title": "Rules and how decisions work",
-      "summary": "Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers and convenors.",
+      "summary": "Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers, and convenors and lead convenors.",
       "section": "about",
       "related": [
         "decisions",
@@ -541,16 +541,21 @@
         },
         {
           "type": "p",
-          "text": "A group is run by its convenors."
+          "text": "A group is run by its convenors, and one of them is its **lead convenor**. Whoever creates a group is its first lead convenor."
         },
         {
           "type": "ul",
           "items": [
             "Some groups are open to anyone. Some need a convenor to approve you. Some are by invitation only.",
-            "A convenor can approve and invite members, change people's roles, remove members, remove posts and edit the group.",
+            "**Any convenor** can approve and invite members, remove a member or an observer, change a member's or an observer's role, make someone a convenor, remove posts and messages, and edit the group and who can join it.",
+            "**Only the lead convenor** can remove a convenor, or take the convenor role off someone.",
+            "**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin — admins have no say inside a group.",
+            "**Handing the lead over:** the lead can make someone else the lead. It can be another convenor, or a member, who becomes a convenor at the same time. Once it is done, the lead cannot take it back.",
+            "**Leaving, as the lead:** hand the lead over first. If nobody else is in the group, the lead can simply leave.",
             "The last convenor cannot step down or be removed while the group still has other members.",
             "Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.",
-            "**A quiet convenor:** if a group's only convenor has done nothing in the app for 30 days, any member can propose a new convenor. The members vote Yes or No for up to 14 days, in secret. It passes when more than half of those who answer say Yes. If the convenor comes back, the vote is cancelled. The screens for this are coming in a later update."
+            "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, if the lead is the group's only convenor. Any of them can propose someone from that same group of voters, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. The screens for this are coming in a later update.",
+            "**A rogue lead convenor** can be removed by a community Decision. This is coming in a later update."
           ]
         },
         {
@@ -756,7 +761,7 @@
             "**Mute a chat** for 8 hours, a week or for good. @mentions still get through.",
             "**One header for every chat**: the group's, enterprise's or event's name at the top. Tap it to see the group, enterprise or event.",
             "The old group chats in Chats have been removed, with their messages.",
-            "If a group's only convenor goes quiet for 30 days, its members will be able to choose a new one. The screens for this come in a later update."
+            "Every group now has a **lead convenor** — whoever created it, to begin with. Any convenor still looks after members and posts, but only the lead can remove or demote a convenor, and nobody can remove the lead. The lead can hand the lead on to someone else. If the lead goes quiet for 30 days, the group's other convenors — or its members, if the lead is its only convenor — will be able to choose a new one. The screens for that vote come in a later update."
           ]
         },
         {
@@ -2348,7 +2353,7 @@
             "Give it a **Group Name** and, if you like, a **Purpose / Description**.",
             "Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group**, **Project Team** and **Guild**.",
             "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
-            "Tap **Create Group**. You become its **convenor**, and the app takes you straight into the new group's chat."
+            "Tap **Create Group**. You become its **lead convenor**, and the app takes you straight into the new group's chat."
           ]
         },
         {
@@ -2480,20 +2485,42 @@
         },
         {
           "type": "h2",
-          "text": "Convenors"
+          "text": "Convenors and the lead convenor"
         },
         {
           "type": "p",
-          "text": "A convenor looks after the group. Under **Convenor Tools** they can:"
+          "text": "A convenor looks after the group. Whoever created it is its **lead convenor**, and the group's card names them, as **Lead convenor: Ali**. In the members list their row is marked **LEAD**."
+        },
+        {
+          "type": "p",
+          "text": "Under **Convenor Tools**, any convenor can:"
         },
         {
           "type": "ul",
           "items": [
             "change the join policy;",
             "**Approve** or **Decline** requests to join;",
-            "change a member's role to convenor, member or observer;",
-            "remove a member."
+            "change a member's or an observer's role — including making them a convenor;",
+            "remove a member or an observer;",
+            "remove a post or a message;",
+            "edit the group."
           ]
+        },
+        {
+          "type": "p",
+          "text": "Only the **lead convenor** can remove a convenor, or take the convenor role off someone. Beside a row you cannot act on, no **Role** or **✕** is shown at all — that is the app telling you it is not yours to do."
+        },
+        {
+          "type": "p",
+          "text": "**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin."
+        },
+        {
+          "type": "p",
+          "text": "**Handing the lead over.** The lead can pass it on: **Hand over** in **Convenor Tools**, or the shield button beside someone's name. Choose another convenor, or a member — a member becomes a convenor at the same time. An observer cannot be the lead; make them a member or a convenor first. Once it is done, you cannot take the lead back."
+        },
+        {
+          "type": "p",
+          "text": "**Leaving as the lead.** Hand the lead over first; the app offers you that when you tap **Leave Group**. If nobody else is in the group, you can simply leave."
         },
         {
           "type": "p",
@@ -2506,7 +2533,8 @@
         {
           "type": "ul",
           "items": [
-            "Choosing a new convenor when the old one has gone quiet. The rules for it are in \"Rules and how decisions work\".",
+            "Choosing a new lead convenor when the old one has gone quiet. 30 days after the lead's last activity, the group's other convenors — or its members, if the lead is its only convenor — will be able to vote one in. The rules are in \"Rules and how decisions work\"; the screens are coming in a later update. Until then the lead hands it over themselves.",
+            "Removing a rogue lead convenor by a community Decision. Coming in a later update.",
             "Groups in the web app. Today the new Groups list, chats and invitations are in the phone app."
           ]
         }
@@ -2774,7 +2802,19 @@
         },
         {
           "type": "p",
-          "text": "Tap the picture or the title. It opens in your browser or in that site's own app, such as YouTube. Nothing plays inside BeanPool."
+          "text": "**A YouTube video:** tap the picture, with the ▶ on it, and the video plays here in the card. Nothing is loaded from YouTube until you tap — scrolling past a video sends nothing to anyone. Tap the button in the corner of the video to fill the screen."
+        },
+        {
+          "type": "p",
+          "text": "The video stops when you scroll it out of sight, when you leave the Pulse, and when you start a different one. Only one plays at a time."
+        },
+        {
+          "type": "p",
+          "text": "**Everything else** — TikTok, Instagram, a blog, a website: tap the picture or the title and it opens in your browser or in that site's own app."
+        },
+        {
+          "type": "p",
+          "text": "You can always open a video on YouTube instead: tap the title, or **Open on YouTube ↗** underneath it. If a video will not play here — some people do not allow their videos to play outside YouTube, and some phones cannot — the card says so and offers you that button."
         },
         {
           "type": "h2",
@@ -2839,6 +2879,10 @@
         {
           "type": "p",
           "text": "Everything you need is written in this guide. The videos are there if you would rather watch."
+        },
+        {
+          "type": "p",
+          "text": "In the Learn lane, tap a video's picture and it plays there in the card. Nothing is loaded from YouTube until you tap. See \"The Pulse\"."
         },
         {
           "type": "p",
@@ -3938,6 +3982,7 @@
           "type": "ul",
           "items": [
             "Chats between two people are usually end-to-end encrypted. See \"Messages\" for the one exception.",
+            "Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See \"The Pulse\".",
             "Your community's server keeps your trades, posts and votes. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust."
           ]
         },

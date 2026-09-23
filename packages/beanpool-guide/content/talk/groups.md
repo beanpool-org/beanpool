@@ -25,7 +25,7 @@ The same list is in **Commons**, under **Groups**, as **Your groups**, without t
 - Give it a **Group Name** and, if you like, a **Purpose / Description**.
 - Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group**, **Project Team** and **Guild**.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
-- Tap **Create Group**. You become its **convenor**, and the app takes you straight into the new group's chat.
+- Tap **Create Group**. You become its **lead convenor**, and the app takes you straight into the new group's chat.
 
 Running something together, with beans involved? Tap **Start an enterprise** at the bottom of the categories instead. See "Enterprises".
 
@@ -92,18 +92,31 @@ A group you are invited to shows in **Commons**, under **Groups**, marked **INVI
 
 Tap the group's name at the top of its chat, then **Post to** and its name. Only the group's members see the post. It shows in the Market with a lock and the group's name.
 
-## Convenors
+## Convenors and the lead convenor
 
-A convenor looks after the group. Under **Convenor Tools** they can:
+A convenor looks after the group. Whoever created it is its **lead convenor**, and the group's card names them, as **Lead convenor: Ali**. In the members list their row is marked **LEAD**.
+
+Under **Convenor Tools**, any convenor can:
 
 - change the join policy;
 - **Approve** or **Decline** requests to join;
-- change a member's role to convenor, member or observer;
-- remove a member.
+- change a member's or an observer's role — including making them a convenor;
+- remove a member or an observer;
+- remove a post or a message;
+- edit the group.
+
+Only the **lead convenor** can remove a convenor, or take the convenor role off someone. Beside a row you cannot act on, no **Role** or **✕** is shown at all — that is the app telling you it is not yours to do.
+
+**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin.
+
+**Handing the lead over.** The lead can pass it on: **Hand over** in **Convenor Tools**, or the shield button beside someone's name. Choose another convenor, or a member — a member becomes a convenor at the same time. An observer cannot be the lead; make them a member or a convenor first. Once it is done, you cannot take the lead back.
+
+**Leaving as the lead.** Hand the lead over first; the app offers you that when you tap **Leave Group**. If nobody else is in the group, you can simply leave.
 
 The last convenor cannot step down or leave while anyone else is still in the group.
 
 ## Coming soon
 
-- Choosing a new convenor when the old one has gone quiet. The rules for it are in "Rules and how decisions work".
+- Choosing a new lead convenor when the old one has gone quiet. 30 days after the lead's last activity, the group's other convenors — or its members, if the lead is its only convenor — will be able to vote one in. The rules are in "Rules and how decisions work"; the screens are coming in a later update. Until then the lead hands it over themselves.
+- Removing a rogue lead convenor by a community Decision. Coming in a later update.
 - Groups in the web app. Today the new Groups list, chats and invitations are in the phone app.

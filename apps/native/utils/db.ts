@@ -7,7 +7,9 @@ import { eventCacheColumns, rsvpSignedMessage, type EventEditPatch, type EventRs
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
-import { parseArchetype, TIER_LEVELS } from '@beanpool/core';
+import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
+import { emitAppEvent } from './app-events';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -1616,8 +1618,20 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
     try {
         const self = await loadIdentity();
         if (self && self.publicKey === pubkey) {
+            // NEVER mirror a non-portable value. The canonical store is the only copy of the
+            // photo that is not tied to a node, so writing the node's own `/api/avatar/…` URL
+            // into it — which callers do whenever they rebuild the profile row from a synced
+            // local row, e.g. the archetype quiz — destroyed the picture device-wide and
+            // handed the broken string to the next node the member joined. `undefined` leaves
+            // the stored avatar alone, because saveCanonicalProfile merges on `!== undefined`.
+            //
+            // This also stops an explicit `avatar_url: null` from clearing canonical. That is
+            // deliberate: no caller in the app clears an avatar on purpose (the picker always
+            // sets one), and every null that reaches here today comes from a caller rebuilding
+            // the row with `?? null` — which is how the quiz path wiped it. Refusing to destroy
+            // the device's only portable copy is the safer reading of an ambiguous null.
             await saveCanonicalProfile({
-                avatar: data.avatar_url,
+                avatar: isPortableAvatarValue(data.avatar_url) ? data.avatar_url : undefined,
                 bio: data.bio,
                 contactValue: data.contact_value,
                 contactVisibility: data.contact_visibility,
@@ -1628,13 +1642,9 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
 
     // GlobalHeader loaded the avatar once, keyed on identity.publicKey — which never changes
     // during a session — so a new profile picture only appeared after the header happened to
-    // remount. Every profile write funnels through here, so this is the one place to say so.
-    // Lazy require, matching the other emitters in this file: db.ts is also loaded by the
-    // vitest suite in plain Node, where a top-level react-native import would blow up.
-    try {
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('profile_updated', { pubkey });
-    } catch { /* not in a RN runtime */ }
+    // remount. Every LOCAL profile write funnels through here; a change that arrives by SYNC
+    // is announced from applyDelta and the members-directory refresh instead.
+    emitAppEvent('profile_updated', { pubkey });
 }
 
 
@@ -1709,13 +1719,26 @@ export async function createPost(post: any) {
         ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
         ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {})
     };
-    const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
+    // "Post as → an enterprise" on the event form (NewEventModal). An enterprise's event goes through the
+    // enterprise's OWN route, with the enterprise in the PATH and never in the body: the node's signature
+    // middleware refuses any body field ending in `publicKey` that is not the signer, so naming it as
+    // `authorPublicKey` on /api/marketplace/posts is refused with "Signature validation failed" before the
+    // route runs. The node reads the enterprise from the path, checks the signer is one of its keepers, and
+    // records the event with the enterprise as author and the keeper as created_by.
+    const enterpriseHost = post.type === 'event' && post.author_pubkey && post.author_pubkey !== identity.publicKey
+        ? String(post.author_pubkey)
+        : null;
+    const { authorPublicKey: _authorInBody, ...bodyWithoutAuthor } = body;
+    const path = enterpriseHost
+        ? `/api/treasury/${encodeURIComponent(enterpriseHost)}/event`
+        : '/api/marketplace/posts';
+    const bodyString = JSON.stringify(enterpriseHost ? bodyWithoutAuthor : body);
+    const headers = await buildSignedHeaders('POST', path, bodyString, identity.privateKey, identity.publicKey);
 
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(`${anchorUrl}/api/marketplace/posts`, {
+        const res = await fetch(`${anchorUrl}${path}`, {
             method: 'POST',
             headers,
             body: bodyString,
@@ -1735,10 +1758,11 @@ export async function createPost(post: any) {
             // Auto-heal: server may not yet know about the user's avatar if the
             // onboarding publish failed. Push the profile and retry once.
             if (_isProfilePhotoError(errMsg)) {
-                const healed = await pushProfileToServer();
+                // Same signal as in `_signedRequest`: the node has told us it holds no photo.
+                const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
                 if (healed) {
-                    const retryHeaders = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
-                    const retryRes = await fetch(`${anchorUrl}/api/marketplace/posts`, {
+                    const retryHeaders = await buildSignedHeaders('POST', path, bodyString, identity.privateKey, identity.publicKey);
+                    const retryRes = await fetch(`${anchorUrl}${path}`, {
                         method: 'POST',
                         headers: retryHeaders,
                         body: bodyString,
@@ -2543,6 +2567,51 @@ export async function deletePost(id: string) {
     refreshBalanceFromServer(identity.publicKey).catch(() => null);
 }
 
+/**
+ * Would writing this synced member row actually CHANGE the viewer's own profile?
+ *
+ * The header (and anything else that listens for `profile_updated`) only ever heard about
+ * LOCAL edits, because `updateMemberProfile` was the single emitter. A photo or name changed
+ * on the PWA or on another device arrives by sync instead, and nothing told the header — so
+ * the old picture stayed in the pill until the app restarted.
+ *
+ * Called from inside the sync transaction, BEFORE the upsert, so it can compare against what
+ * the row holds now. The emit itself waits until the transaction has committed: telling the UI
+ * to re-read a row a rollback is about to undo would put the stale value straight back.
+ *
+ * "A real change" matches the upsert's own semantics. Both sync loops write
+ * `callsign = excluded.callsign` unconditionally; a null avatar is a change only when the
+ * upsert would actually act on it, which is what `avatarClears` says. In a PARTIAL member list
+ * the avatar is COALESCEd and a null leaves the stored one alone, so it is not a change —
+ * without that the event would fire on every poll and the header would re-read on every sync
+ * tick for nothing. In the node's COMPLETE list a null CLEARS the row, so it is a change, and
+ * the header must re-read or it would go on showing a photo the node no longer has.
+ */
+async function ownProfileRowWouldChange(
+    txn: any,
+    selfPubkey: string | null,
+    pk: string,
+    incomingCallsign: string,
+    incomingAvatar: string | null,
+    avatarClears = false,
+): Promise<boolean> {
+    if (!selfPubkey || pk !== selfPubkey) return false;
+    const before = await txn.getFirstAsync(
+        'SELECT callsign, avatar_url FROM members WHERE public_key = ?',
+        [pk]
+    ) as { callsign: string | null; avatar_url: string | null } | null;
+    if (!before) return Boolean(incomingCallsign || incomingAvatar);
+    if (incomingCallsign !== (before.callsign ?? '')) return true;
+    if (incomingAvatar !== null && incomingAvatar !== before.avatar_url) return true;
+    if (incomingAvatar === null && avatarClears && before.avatar_url !== null) return true;
+    return false;
+}
+
+/** Fire `profile_updated` for a sync that really did change the viewer's own row. */
+function emitOwnProfileUpdated(pubkey: string): void {
+    emitAppEvent('profile_updated', { pubkey });
+}
+
 export async function applyDelta(delta: any, expectedDbName?: string) {
     await acquireSyncLock();
     try {
@@ -2557,6 +2626,12 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             console.warn(`[DB] applyDelta: skipping write — active DB '${currentDbName}' != fetch-time DB '${expectedDbName}' (node switched mid-sync)`);
             return;
         }
+        // Read the identity OUTSIDE the transaction: it is an AsyncStorage/SecureStore read,
+        // and awaiting it between SQLite statements would hold the write transaction open on
+        // unrelated I/O. `ownRowChanged` is declared out here so it survives to after the
+        // commit, which is the only point at which it is safe to tell the UI to re-read.
+        const selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
+        let ownRowChanged = false;
         await database.withTransactionAsync(async () => {
             const txn = database;
 // Full-replace sync: server response is the source of truth
@@ -2577,6 +2652,18 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
     }
     
     if (delta.members && delta.members.length > 0) {
+        // In the node's COMPLETE member list, a null avatar is the node SAYING it has no photo
+        // for that member — including the "broken row" case, where the stored value is this
+        // node's own `/api/avatar/…` URL and is now emitted as null (decision (c)). The old
+        // unconditional COALESCE kept the phone's previously-synced URL in that case, so the
+        // phone went on believing the node held a photo: `MemberAvatar` rendered a 404ing URL,
+        // and `catchUpAvatar` read "the node has a photo, leave `avatar` out" and never
+        // republished the canonical copy. Only the marketplace photo gate could heal it.
+        //
+        // A PARTIAL list (the incremental `?updatedAfter=` delta) is not evidence of absence —
+        // it only carries members who changed — so it keeps COALESCE, exactly as the GC below
+        // only runs for a complete list.
+        const avatarNullClears = delta.membersComplete === true;
         const serverMemberSet = new Set();
         for (const m of delta.members) {
             const pk = m.publicKey || m.public_key || '';
@@ -2590,17 +2677,21 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
             const arch = m.archetype || null;
+            if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears)) ownRowChanged = true;
             await txn.runAsync(
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
                    callsign = excluded.callsign,
-                   avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
+                   avatar_url = CASE WHEN ? THEN excluded.avatar_url
+                                     ELSE COALESCE(excluded.avatar_url, members.avatar_url) END,
                    joined_at = COALESCE(excluded.joined_at, members.joined_at),
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
                    earned_credit = excluded.earned_credit,
                    elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
                    archetype = COALESCE(excluded.archetype, members.archetype)`,
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch]
+                // The CASE placeholder is the 9th `?` in the statement text, so it binds AFTER
+                // the eight VALUES parameters.
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch, avatarNullClears ? 1 : 0]
             );
         }
 
@@ -2814,6 +2905,8 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
 
         console.log(`[DB] applyDelta: replaced posts table with ${delta.posts?.length || 0} posts from server`);
         });
+        // AFTER the commit, and only on a real change — see ownProfileRowWouldChange.
+        if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
     } finally {
         releaseSyncLock();
     }
@@ -2931,32 +3024,20 @@ export async function syncMessages(publicKey: string) {
             try {
                 const dirData = await dirRes.json();
                 if (Array.isArray(dirData) && dirData.length > 0) {
-                    await acquireSyncLock();
-                    try {
-                        const database = await getDb();
-                        await database.withTransactionAsync(async () => {
-                            const txn = database;
-                            for (const m of dirData) {
-                                const pk = m.publicKey || m.public_key || '';
-                                const cs = m.callsign || '';
-                                const av = m.avatarUrl || m.avatar_url || null;
-                                const evb = m.elderVouchedBy || m.elder_vouched_by || null;
-                                const arch = m.archetype || null;
-                                await txn.runAsync(
-                                    `INSERT INTO members (public_key, callsign, avatar_url, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?)
-                                     ON CONFLICT(public_key) DO UPDATE SET
-                                       callsign = excluded.callsign,
-                                       avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
-                                       elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                                       archetype = COALESCE(excluded.archetype, members.archetype)`,
-                                    [pk, cs, av, evb, arch]
-                                );
-                            }
-                        });
-                        await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
-                    } finally {
-                        releaseSyncLock();
-                    }
+                    // This used to be a SECOND members upsert with its own COALESCE, which made
+                    // the viewer's own row follow two different rules depending on which writer
+                    // won the hour boundary: `applyDelta` clears a stored avatar when the node's
+                    // COMPLETE list says there is none, this one kept the stale URL for another
+                    // hour — and while it was kept, `catchUpAvatar` read "the node has a photo"
+                    // and refused to republish the canonical copy.
+                    //
+                    // It is the same endpoint, the same full directory and the same payload
+                    // shape pillar-sync feeds `applyDelta`, so it goes through `applyDelta`
+                    // instead: one upsert, one null-clears rule, one GC, one `profile_updated`
+                    // emit. `applyDelta` takes the sync lock and re-checks the active node
+                    // itself, so neither is done here.
+                    await applyDelta({ members: dirData, membersComplete: true }, expectedDbName);
+                    await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
                 }
             } catch (e) {}
         }
@@ -3878,7 +3959,22 @@ export async function checkInvite(code: string, nodeUrl: string): Promise<Invite
     }
 }
 
-export async function redeemInvite(code: string, callsign: string, identityToRegister?: any): Promise<{ success: true; alreadyMember: boolean }> {
+/**
+ * Redeem an invite against the active node.
+ *
+ * `nodeHasPhoto` is the node's OWN answer about the picture it holds for us, and the only
+ * reason it is here: `/api/invite/redeem` and `redeem-offline` both return the existing member
+ * row for someone who was already registered (`engine/invites.ts`), so the answer is already in
+ * the response and the caller needs no extra request. Without it, a member re-entering a node
+ * this device has never synced has an empty local row, `catchUpAvatar` reads that as "the node
+ * holds nothing" and the follow-up publish puts the canonical copy over whatever newer photo
+ * the node actually had.
+ *
+ * A self-referential `/api/avatar/<pk>` value is the broken-row case and counts as NO photo —
+ * the node cannot serve it, so there is nothing there worth protecting. A brand-new join is
+ * likewise no photo: there is no row yet.
+ */
+export async function redeemInvite(code: string, callsign: string, identityToRegister?: any): Promise<{ success: true; alreadyMember: boolean; nodeHasPhoto: boolean }> {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || (__DEV__ ? 'https://127.0.0.1:8443' : '');
 
@@ -3935,13 +4031,17 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
             throw new Error(data?.error || 'The community node did not confirm the invite. Please try again.');
         }
         const alreadyMember = !!data.alreadyMember;
+        // `member` is the engine's Member row, whose avatar field is `avatarUrl`; `avatar` is
+        // read too so an older node (or the profile shape) answers the same question.
+        const memberAvatar = data.member?.avatarUrl ?? data.member?.avatar ?? null;
+        const nodeHasPhoto = alreadyMember && isServableAvatarValue(memberAvatar);
 
         if (alreadyMember) {
             console.log('[DB] ℹ️ User is already a registered member of this community.');
         } else {
             console.log('[DB] ✅ Invite redeemed successfully!');
         }
-        return { success: true, alreadyMember };
+        return { success: true, alreadyMember, nodeHasPhoto };
     } catch (e: any) {
         console.warn('[DB] Failed to redeem invite:', e.message);
         throw e;
@@ -3961,18 +4061,51 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
 // pillar-sync's offline-edit retry loop, and a proactive push right after joining
 // a new node so the picture lands before the user ever opens the composer.
 //
-// The avatar is resolved from THIS node's local DB first, then falls back to the
-// canonical (node-independent) profile — that fallback is what makes the picture
-// follow the user onto a freshly-joined second community, where the local row
-// exists (from registration) but has no avatar yet.
-export async function pushProfileToServer(): Promise<boolean> {
+// The avatar is resolved in two steps: a photo picked during an OFFLINE save, parked in
+// `pending_profile_avatar` by the screen that could not publish it, always goes — it has
+// reached nothing yet, so it is the newest copy anywhere. Otherwise `catchUpAvatar` decides,
+// and the canonical copy goes only when the node is KNOWN to hold no photo for us. That
+// fallback is what makes the picture follow the user onto a freshly-joined second community,
+// where the local row exists (from registration) but has no avatar yet.
+//
+// The parked pick exists because the local row is NOT a durable place to keep it: both
+// full-directory writers replace it with the node's own URL, and a single members sync landing
+// before this retry succeeds used to turn the pick into "the node has a photo, say nothing"
+// — the member's chosen photo then never reached the node and nothing ever resent it.
+//
+// `nodeHasNoPhoto` must always be the NODE's answer, never an inference from local state.
+// Two callers have one: the marketplace photo gate, where the node has just said "please set
+// a profile photo", and the invite-redeem publish, where the redeem response carried the
+// member row the node holds. Both outrank the local row, which a sync may have left stale.
+// The caller WITHOUT one — the pending_profile_sync retry — can reach a node that already
+// holds a NEWER photo from another device, so it leaves `avatar` out rather than posting
+// canonical over it. The flag is passed THROUGH, undefined and all: an explicit `false` is the
+// node saying it holds a photo, which withholds the canonical copy that an empty local row
+// would otherwise license — on a node this device has never synced, empty means unsynced.
+export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): Promise<boolean> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const identity = await loadIdentity();
     if (!anchorUrl || !identity) return false;
     const profile = await getMemberProfile(identity.publicKey);
 
     const canonical = await getCanonicalProfile();
-    const avatar = profile?.avatar_url || canonical?.avatar || null;
+    // Since #725 the members sync writes the node's own `/api/avatar/<pk>?size=thumb` string
+    // into the local row, and `profile?.avatar_url || canonical?.avatar` happily preferred
+    // that — so this function published the node's URL back to the node as the member's
+    // avatar, and from then on `GET /api/avatar/<pk>` 404d: the photo was destroyed. But the
+    // canonical copy is not an unconditional replacement for it: only a local pick ever writes
+    // canonical, so when the node holds a photo this phone has not picked, canonical is the
+    // OLDER one and posting it would overwrite the member's newest choice.
+    // Through the one shared rule, which every publish path uses: a pick parked by the offline
+    // branch of settings Save / Re-run Setup first (re-checked for portability, since anything
+    // that is not a `data:`/`bundled://` value is not ours to publish), otherwise the catch-up
+    // inference below. There is no session pick on this path — it runs with no screen in front of
+    // it. `decision.clearsParkedPick` is what licenses retiring the parked copy afterwards, and
+    // only after a verified 2xx: every `return false` below leaves it for the next retry.
+    const decision = await resolveProfilePublishAvatar({
+        catchUp: { localRow: profile?.avatar_url, canonical: canonical?.avatar, nodeHasNoPhoto: opts?.nodeHasNoPhoto },
+    });
+    const avatar = decision.avatar;
 
     const callsign = profile?.callsign || identity.callsign;
     const bio = profile?.bio ?? canonical?.bio ?? '';
@@ -3987,6 +4120,11 @@ export async function pushProfileToServer(): Promise<boolean> {
     // genuinely nothing anywhere to publish.
     if (!avatar && !bio && !contactValue && !archetypeRaw) {
         await AsyncStorage.removeItem('pending_profile_sync');
+        // Safe to drop the parked value here, and the only place it is dropped unsent: `avatar`
+        // being null means the rule found nothing publishable, so anything still parked is a
+        // value that is not portable and can never be published — a portable pick would have been
+        // chosen above and kept this code out of this branch.
+        await AsyncStorage.removeItem('pending_profile_avatar');
         return false;
     }
     let publicArchetype: string | null = null;
@@ -4034,7 +4172,13 @@ export async function pushProfileToServer(): Promise<boolean> {
         } catch { /* non-JSON body — trust the 2xx */ }
         if (!avatarPersisted) return false;
 
+        // This function IS the pending-sync retry and has just published everything the flag was
+        // set for, so the flag retires unconditionally — otherwise an offline BIO-ONLY edit would
+        // re-publish on every sync for ever.
         await AsyncStorage.removeItem('pending_profile_sync');
+        // The parked pick retires only if THIS payload carried it, and only here: every
+        // `return false` above leaves it in place for the next retry.
+        await retireParkedPickAfterPublish(decision);
         // Mirror the canonical avatar into THIS node's local DB when it was
         // missing, so local reads and the marketplace pre-check see it at once.
         if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {
@@ -4103,7 +4247,10 @@ async function _signedRequest(endpoint: string, payload: any) {
         // server doesn't know about it (common for users whose initial onboarding
         // publish failed), push the profile and retry the request once.
         if (_isProfilePhotoError(errorMsg)) {
-            const healed = await pushProfileToServer();
+            // The node itself just said it holds no photo for us, so the canonical copy
+            // cannot be overwriting anything newer — push it even though the local row may
+            // still hold a (now broken) node URL.
+            const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
             if (healed) {
                 const retryHeaders = await buildSignedHeaders('POST', endpoint, bodyString, identity.privateKey, identity.publicKey);
                 const retryRes = await fetch(`${anchorUrl}${endpoint}`, {
@@ -4989,6 +5136,9 @@ export interface GroupItem {
     convenorPubkey?: string;
     convenorCallsign?: string;
     convenorAvatarUrl?: string | null;
+    /** The group's LEAD convenor (2026-09-23): the one nobody can remove or demote. */
+    leadPubkey?: string | null;
+    leadCallsign?: string;
 }
 
 export interface GroupMemberItem {
@@ -5182,6 +5332,17 @@ export async function inviteGroupMemberApi(groupId: string, memberPubkey: string
 export async function setGroupMemberRoleApi(groupId: string, memberPubkey: string, role: GroupRole): Promise<any> {
     return signedRequestWithMethod('PATCH', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`, {
         role
+    });
+}
+
+/**
+ * The lead convenor hands the lead on (2026-09-23). The target must be an active convenor, or an active member
+ * who becomes a convenor in the same step. Nobody can take the lead off the lead, so this is the only way it
+ * moves by hand.
+ */
+export async function handOverGroupLeadApi(groupId: string, targetPubkey: string): Promise<any> {
+    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/lead`, {
+        targetPubkey,
     });
 }
 

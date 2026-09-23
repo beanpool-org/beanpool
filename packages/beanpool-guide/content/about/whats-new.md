@@ -39,7 +39,7 @@ Some of these changes live on your community's server. You get them when your co
 - **Mute a chat** for 8 hours, a week or for good. @mentions still get through.
 - **One header for every chat**: the group's, enterprise's or event's name at the top. Tap it to see the group, enterprise or event.
 - The old group chats in Chats have been removed, with their messages.
-- If a group's only convenor goes quiet for 30 days, its members will be able to choose a new one. The screens for this come in a later update.
+- Every group now has a **lead convenor** — whoever created it, to begin with. Any convenor still looks after members and posts, but only the lead can remove or demote a convenor, and nobody can remove the lead. The lead can hand the lead on to someone else. If the lead goes quiet for 30 days, the group's other convenors — or its members, if the lead is its only convenor — will be able to choose a new one. The screens for that vote come in a later update.
 
 ### Safety
 

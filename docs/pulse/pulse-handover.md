@@ -146,5 +146,14 @@ an agent as a vague instruction.
 - Never merge your own PR. Never deploy.
 - Off-limits in any refactor: `GlobalHeader`, `logo.png`, `map.tsx`, `UnifiedMapPin`.
 - Do not re-propose these; they are settled and rejected: WebView DOM scraping, node-side scraping
-  of Instagram or TikTok profiles, third-party scraper APIs, and embedding or proxying video
-  playback.
+  of Instagram or TikTok profiles, third-party scraper APIs, and **proxying, re-hosting or
+  re-streaming video** through a node.
+  - **Changed 2026-09-23:** that last item used to read "embedding or proxying video playback".
+    Marty's call on the board, after Damo tested Pulse → Learn, split the two apart. **YouTube's
+    own embedded player is allowed in the native app**, loaded only when the member taps ▶ — the
+    card fetches nothing from Google before that, so the privacy reason the facade existed for
+    still holds. YouTube documents the use and its conditions at
+    <https://developers.google.com/youtube/terms/required-minimum-functionality>; they live in
+    `apps/native/utils/youtube-embed.ts`. **Proxying or re-hosting video is still rejected**, for
+    the reason it always was: a node has no rights to the content. Only YouTube plays in the app;
+    the PWA is untouched and every other platform still opens its own app.

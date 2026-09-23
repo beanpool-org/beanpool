@@ -20,6 +20,7 @@ import {
     joinGroup,
     setMemberRole,
     removeGroupMember,
+    handOverGroupLead,
     updateGroup,
     updateGroupPolicy,
     approveGroupMember,
@@ -306,6 +307,32 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         }
     });
 
+    // 8b. Hand the lead convenor over (the lead only, 2026-09-23). The new lead must be an active convenor or an
+    // active member, who becomes a convenor in the same step. It is the only way the lead moves by hand: nobody
+    // can remove or demote a lead, so there is no route that takes the lead off someone.
+    router.post('/api/groups/:id/lead', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
+
+        const body = (ctx as any).requestBody || {};
+        const targetPubkey = body.targetPubkey || body.memberPubkey;
+        if (!targetPubkey || typeof targetPubkey !== 'string') {
+            ctx.status = 400;
+            ctx.body = { error: 'targetPubkey is required' };
+            return;
+        }
+
+        try {
+            const member = handOverGroupLead(ctx.params.id, actor, targetPubkey);
+            ctx.status = 200;
+            ctx.body = { success: true, member };
+        } catch (e: any) {
+            ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to hand the lead over' };
+        }
+    });
+
     // 9. Update group details or policy (Convenor only)
     router.patch('/api/groups/:id', async (ctx) => {
         const actor = requireAuth(ctx);
@@ -365,13 +392,24 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             }
             clientId = body.clientId.toLowerCase();
         }
+        // A reply quotes a message in THIS chat (chat parity, 2026-09-23). Any message id, not only a UUID v4:
+        // the engine checks it is in this conversation and is not a system line, which is the real rule.
+        let replyToId: string | undefined;
+        if (body.replyToId !== undefined && body.replyToId !== null) {
+            if (typeof body.replyToId !== 'string' || !body.replyToId.trim()) {
+                ctx.status = 400;
+                ctx.body = { error: 'replyToId must be a message id' };
+                return;
+            }
+            replyToId = body.replyToId;
+        }
         if (!text.trim()) {
             ctx.status = 400;
             ctx.body = { error: 'Message text cannot be empty' };
             return;
         }
         try {
-            const message = postGroupThreadMessage(ctx.params.id, actor, text, clientId);
+            const message = postGroupThreadMessage(ctx.params.id, actor, text, clientId, replyToId);
             ctx.status = 201;
             ctx.body = { success: true, message };
         } catch (e: any) {

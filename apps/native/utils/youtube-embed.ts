@@ -1,0 +1,332 @@
+/**
+ * YouTube's own embedded player, as a Pulse card loads it.
+ *
+ * The Pulse feed has always been facade cards: a thumbnail the node fetched, and a tap that leaves
+ * for the platform's own app. Re-hosting or proxying video stays rejected — the node has no rights
+ * to the content and no business standing between a member and it. What this module builds is the
+ * narrow exception Marty chose on 2026-09-23: YouTube's *own* player, loaded from YouTube, inside
+ * the card, and only after the member taps play. Nothing here is fetched before that tap, so a
+ * member who scrolls past a video is still invisible to Google.
+ *
+ * YouTube documents this use and attaches conditions to it
+ * (https://developers.google.com/youtube/terms/required-minimum-functionality). The ones that land
+ * in code live here:
+ *
+ * - **Client identity.** The player must be able to tell who is embedding it. A native WebView has
+ *   no origin of its own, so the app lends it one made from its application id
+ *   (`PULSE_PLAYER_ORIGIN`): as the `baseUrl` the HTML is loaded under, which becomes the Referer,
+ *   and again as the `origin` player parameter for the platforms where a Referer cannot be set.
+ *   Without it YouTube refuses with error 153.
+ * - **Privacy host.** The player itself is `youtube-nocookie.com`, so it sets nothing until
+ *   playback starts. Its JS API script is the one exception: the no-cookie host does not serve
+ *   `/iframe_api` — it answers 404 — so that single file comes from `www.youtube.com`
+ *   (`YOUTUBE_IFRAME_API_URL`). It is requested by the player document, which is built only for a
+ *   card the member has already tapped, so the promise above is unchanged: nothing is fetched from
+ *   YouTube or Google before the tap, and the video itself still plays from the no-cookie host.
+ * - **Viewport.** At least 200x200 CSS pixels. See `YOUTUBE_MIN_VIEWPORT_PX`; the card grows its
+ *   media area to it while playing, letterboxing rather than cropping.
+ *
+ * Everything in this file is a pure string builder so it can be unit-tested without a device — the
+ * rules above are assertions in `__tests__/youtube-embed.test.ts`, not comments to be trusted.
+ */
+
+import { youtubeWatchId } from '@beanpool/core';
+
+/**
+ * The application id, from `app.json` (`expo.android.package` / `expo.ios.bundleIdentifier`).
+ *
+ * Written out rather than imported so Metro does not pull the whole app manifest into the bundle;
+ * the test asserts it still matches `app.json`, so the two cannot drift apart silently.
+ */
+export const PULSE_PLAYER_APP_ID = 'org.beanpool.pillar';
+
+/**
+ * Our own code for "the player never loaded at all" — no network, or YouTube unreachable.
+ * YouTube's own codes are all positive, so a negative one cannot collide with them.
+ */
+export const YOUTUBE_ERROR_SCRIPT_FAILED = -1;
+
+/** The player state YouTube reports when a video has finished. */
+export const YOUTUBE_STATE_ENDED = 0;
+
+/** At least 200x200 CSS pixels, which YouTube requires of a viewport showing its player. */
+export const YOUTUBE_MIN_VIEWPORT_PX = 200;
+
+/** The privacy-enhanced embed host. It stores nothing until the member actually plays something. */
+export const YOUTUBE_EMBED_HOST = 'https://www.youtube-nocookie.com';
+
+/**
+ * Where the IFrame Player API script comes from, and the only thing the card takes from
+ * `www.youtube.com`.
+ *
+ * It is not on the no-cookie host because YouTube does not serve it there: `/iframe_api` on
+ * `www.youtube-nocookie.com` is a 404 page, and a `<script>` that 404s fires `onerror`, which used
+ * to tear the player down on every single play. The privacy promise survives the move because this
+ * script is fetched by the player document, and that document exists only after the member's tap.
+ *
+ * The script itself then loads `www-widgetapi.js` from `/s/player/...` on the same host; see
+ * `playerNavigation`, which allows those two paths and nothing else there.
+ */
+export const YOUTUBE_IFRAME_API_URL = 'https://www.youtube.com/iframe_api';
+
+/** A reverse-DNS application id: lowercase labels, at least two of them, no scheme and no path. */
+const APP_ID_RE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/;
+
+/** The 11-character YouTube video id. */
+const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * The HTTPS origin this app presents to YouTube, built from its application id.
+ *
+ * Returns null for anything that is not a plain application id, so a bad value can never be
+ * concatenated into a URL or an HTML document.
+ */
+export function appEmbedOrigin(appId: string): string | null {
+    if (typeof appId !== 'string' || !APP_ID_RE.test(appId)) return null;
+    return `https://${appId}`;
+}
+
+/**
+ * The Referer/`origin` this app sends YouTube: `https://org.beanpool.pillar`.
+ *
+ * This is the "embedded player API client identity" YouTube's required-minimum-functionality terms
+ * ask for. It is not a site anyone can visit, and it is not meant to be — it identifies the client.
+ */
+export const PULSE_PLAYER_ORIGIN: string = appEmbedOrigin(PULSE_PLAYER_APP_ID)!;
+
+/**
+ * The video id behind a YouTube link, or null if this is not one we can play.
+ *
+ * `youtubeWatchId` in core covers the watch and youtu.be forms and is the shared, already-tested
+ * definition — this adds only the shapes a member's channel listing also produces.
+ */
+export function pulseYouTubeVideoId(url: string | null | undefined): string | null {
+    if (typeof url !== 'string' || !url) return null;
+    const watch = youtubeWatchId(url);
+    if (watch) return watch;
+
+    let u: URL;
+    try { u = new URL(url); } catch { return null; }
+    if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+    const host = u.hostname.toLowerCase();
+    if (host !== 'www.youtube.com' && host !== 'youtube.com' && host !== 'm.youtube.com') return null;
+
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length !== 2) return null;
+    if (parts[0] !== 'shorts' && parts[0] !== 'live' && parts[0] !== 'embed') return null;
+    return VIDEO_ID_RE.test(parts[1]) ? parts[1] : null;
+}
+
+/**
+ * The embed URL for a video id, on the no-cookie host with the parameters the card plays under.
+ *
+ * - `playsinline=1` keeps playback in the card on iOS instead of taking over the screen;
+ * - `autoplay=1` starts it, because the member has already tapped play — this is that tap;
+ * - `origin` is the client identity described at the top of this file;
+ * - `enablejsapi=1` lets the page hear the player's own error and ended events, which is how the
+ *   card can offer "Open on YouTube" instead of leaving a member staring at a black rectangle. The
+ *   script that does the listening is `YOUTUBE_IFRAME_API_URL`, on `www.youtube.com`, and the
+ *   document fetches it only once it has been built — which is to say, only after the tap;
+ * - `rel=0` keeps the end-of-video suggestions to the same channel;
+ * - `fs=1` keeps YouTube's own full-screen button, which is allowed.
+ *
+ * Throws on an invalid video id: nothing unvalidated is ever concatenated into a URL.
+ */
+export function youtubeEmbedUrl(videoId: string): string {
+    if (!VIDEO_ID_RE.test(videoId)) {
+        throw new Error(`[youtube-embed] Refusing to build a player URL for a non-video id: ${videoId}`);
+    }
+    const params = new URLSearchParams({
+        playsinline: '1',
+        autoplay: '1',
+        enablejsapi: '1',
+        rel: '0',
+        fs: '1',
+        origin: PULSE_PLAYER_ORIGIN,
+    });
+    return `${YOUTUBE_EMBED_HOST}/embed/${videoId}?${params.toString()}`;
+}
+
+/**
+ * The document the WebView loads, under `PULSE_PLAYER_ORIGIN` as its base URL.
+ *
+ * The iframe's src is `youtubeEmbedUrl` and nothing else — that function is the single definition
+ * of where the player comes from and what it is told, so the URL cannot drift out of step with what
+ * actually loads. YouTube's IFrame Player API is then attached to the iframe already on the page,
+ * which `enablejsapi=1` permits, for one reason: the API reports `onError`, so an upload whose
+ * owner has disabled embedding (101/150) produces a sentence and a way out instead of a black
+ * rectangle. That script is `YOUTUBE_IFRAME_API_URL` and is the one thing on this page that comes
+ * from `www.youtube.com` rather than the no-cookie host, for the reason given there; the player
+ * frame's own `src` stays on `youtube-nocookie.com`, and this whole document is only ever built for
+ * a card that has been tapped. The page reports back over
+ * `ReactNativeWebView.postMessage` as `{"type":"ready"}`,
+ * `{"type":"state","state":n}` and `{"type":"error","code":n}`.
+ *
+ * The video id is validated before it reaches the template, so no caller-controlled text is ever
+ * interpolated into this document.
+ */
+export function youtubePlayerHtml(videoId: string): string {
+    const src = youtubeEmbedUrl(videoId); // throws on anything that is not a video id
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+  #player { display: block; width: 100%; height: 100%; border: 0; }
+</style>
+</head>
+<body>
+<iframe id="player" src="${src}" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+<script>
+  var send = function (msg) {
+    try { window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch (e) {}
+  };
+  window.onYouTubeIframeAPIReady = function () {
+    try {
+      new YT.Player('player', {
+        events: {
+          onReady: function (e) { send({ type: 'ready' }); try { e.target.playVideo(); } catch (err) {} },
+          onStateChange: function (e) { send({ type: 'state', state: e.data }); },
+          onError: function (e) { send({ type: 'error', code: e.data }); }
+        }
+      });
+    } catch (err) {
+      send({ type: 'error', code: ${YOUTUBE_ERROR_SCRIPT_FAILED} });
+    }
+  };
+  var tag = document.createElement('script');
+  tag.src = ${JSON.stringify(YOUTUBE_IFRAME_API_URL)};
+  tag.onerror = function () { send({ type: 'error', code: ${YOUTUBE_ERROR_SCRIPT_FAILED} }); };
+  document.head.appendChild(tag);
+</script>
+</body>
+</html>`;
+}
+
+/**
+ * One plain line for a player error, to sit above an "Open on YouTube" button.
+ *
+ * The codes are YouTube's (https://developers.google.com/youtube/iframe_api_reference#onError).
+ * 101 and 150 are the same thing said twice: the uploader does not allow this video off YouTube.
+ * Nothing here blames the member or asks them to try again in a way that would not help.
+ */
+export function youtubePlayerErrorMessage(code: number): string {
+    switch (code) {
+        case YOUTUBE_ERROR_SCRIPT_FAILED:
+            return 'Could not reach YouTube. Check your connection.';
+        case 2:
+            return 'This video link does not look right.';
+        case 5:
+            return 'This video cannot play inside BeanPool on this phone.';
+        case 100:
+            return 'This video is private, or it has been taken down.';
+        case 101:
+        case 150:
+            return 'The person who uploaded this video does not allow it to play outside YouTube.';
+        case 153:
+            return 'YouTube would not start the player here.';
+        default:
+            return 'This video could not play here.';
+    }
+}
+
+/**
+ * Hosts whose files the player pulls in while it plays: thumbnails and sprites from `ytimg.com`,
+ * the video streams themselves from `googlevideo.com`, shared static assets from `gstatic.com`.
+ *
+ * These are matched by suffix because the real names are generated — `i.ytimg.com`,
+ * `rr3---sn-4g5edne7.googlevideo.com` — and they carry assets, not pages a member could be walked
+ * into. Deliberately *not* `google.com`: a suffix match on that would let `accounts.google.com` or
+ * any other Google property stay loaded inside this small unmarked rectangle.
+ */
+const PLAYER_ASSET_HOSTS = [
+    'ytimg.com',
+    'googlevideo.com',
+    'gstatic.com',
+];
+
+/** YouTube's own hosts. Anything here that is not the player is the member choosing to leave. */
+const YOUTUBE_HOSTS = [
+    'youtube.com',
+    'youtube-nocookie.com',
+];
+
+/** The two documents the player is made of, and the two paths that serve them. */
+const EMBED_HOSTNAME = 'www.youtube-nocookie.com';
+const IFRAME_API_HOSTNAME = 'www.youtube.com';
+const IFRAME_API_PATH = '/iframe_api';
+
+/**
+ * What to do with a navigation the player asks for.
+ *
+ * `allow` keeps it inside the WebView, `external` hands it to the member's browser or YouTube app
+ * (tapping the video's title, for instance), and `block` drops it. The default is `block`: a video
+ * player has no business navigating a WebView inside this app to somewhere we did not expect.
+ *
+ * The list is of *what the player is*, not of who owns it. Listing hosts and then carving out the
+ * pages we could think of gets this backwards, and left `accounts.youtube.com`,
+ * `consent.youtube.com` and `music.youtube.com` — and any path at all on the no-cookie host —
+ * loading inside the card. A consent bounce is a real destination for members outside AU/US, and it
+ * is exactly the page that must not appear in a rectangle nobody can inspect. So four things are
+ * allowed and everything else on YouTube's hosts is handed out:
+ *
+ * - `/embed/...` on `www.youtube-nocookie.com`, which is the player frame;
+ * - `/iframe_api` on `www.youtube.com`, which is the API script (`YOUTUBE_IFRAME_API_URL`);
+ * - `/s/...` on the same host, which is where that script fetches `www-widgetapi.js` from;
+ * - the asset hosts above.
+ */
+export function playerNavigation(url: string): 'allow' | 'external' | 'block' {
+    if (typeof url !== 'string' || !url) return 'block';
+    if (url === 'about:blank') return 'allow';
+
+    let u: URL;
+    try { u = new URL(url); } catch { return 'block'; }
+    if (u.protocol !== 'https:') return 'block';
+
+    // Our own document. Compared as a parsed origin, not a prefix: `org.beanpool.pillar.evil`
+    // starts with `https://org.beanpool.pillar` and is not us.
+    if (u.origin === PULSE_PLAYER_ORIGIN) return 'allow';
+
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname;
+
+    if (host === EMBED_HOSTNAME && path.startsWith('/embed/')) return 'allow';
+    if (host === IFRAME_API_HOSTNAME && (path === IFRAME_API_PATH || path.startsWith('/s/'))) return 'allow';
+    if (PLAYER_ASSET_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return 'allow';
+
+    // Somewhere else on YouTube: the watch page, a channel, a sign-in or consent bounce. The member
+    // gets it in their browser or the YouTube app, where they can see where they are.
+    if (YOUTUBE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return 'external';
+
+    return 'block';
+}
+
+/**
+ * Whether a failed load reported by the WebView was the player itself, and so worth showing the
+ * member an error for.
+ *
+ * The WebView's `onError`/`onHttpError` do not fire only for the frame the player lives in.
+ * Android's `onReceivedHttpError` reports a non-2xx on *any* request the page made — an analytics
+ * beacon, a blocked ad call, a stray asset — and a working video routinely produces several. Taking
+ * those at face value tore down a playing video and told the member to check their connection.
+ *
+ * So only two documents count: the page we handed the WebView (our own origin) and the embed frame
+ * itself. The embed's query string carries the player parameters and can be rewritten by YouTube's
+ * own redirects, so the comparison is origin plus path.
+ */
+export function isPlayerDocumentUrl(url: string | null | undefined, embedUrl: string): boolean {
+    if (typeof url !== 'string' || !url) return false;
+    if (url === PULSE_PLAYER_ORIGIN || url.startsWith(`${PULSE_PLAYER_ORIGIN}/`)) return true;
+
+    let failed: URL;
+    let embed: URL;
+    try {
+        failed = new URL(url);
+        embed = new URL(embedUrl);
+    } catch {
+        return false;
+    }
+    return failed.origin === embed.origin && failed.pathname === embed.pathname;
+}

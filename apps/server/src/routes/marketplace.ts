@@ -21,6 +21,7 @@ import { getPeerOrigins } from '../connector-manager.js';
 import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
+import { createEventFromBody } from './event-post.js';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -180,8 +181,8 @@ router.get('/api/marketplace/posts', async (ctx) => {
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo,
-        eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote } =
+    // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -189,12 +190,33 @@ router.post('/api/marketplace/posts', async (ctx) => {
         return;
     }
     if (!assertActorEntitled(ctx, authorPublicKey)) return;
-    // A keeper posting for an enterprise is recorded as the member who did it, as the enterprise routes do
-    // (routes/treasury.ts) — the web app's event form hosts through this route with "Post as" (events §3).
+    // This route posts as the SIGNER and nobody else.
+    //
+    // It used to accept a keeper naming their enterprise as `authorPublicKey` and record them as
+    // `created_by` — and the comment here said the web app's event form hosted through it with "Post as".
+    // It never could: the signature middleware (https-server.ts) refuses ANY body field ending in
+    // `pubkey`/`publickey` that is not the signer, and `authorPublicKey` is not on the allowlist of fields
+    // that name someone else on purpose — it must not be, or this route would become spoofable. So an
+    // enterprise-hosted event died with 403 "Signature validation failed" before the handler ran, while
+    // the handler's own tests passed, because they drive the router directly and never cross the
+    // middleware. That is the same trap the middleware's note about `seller` describes.
+    //
+    // Acting FOR an enterprise puts it in the URL path instead, where no spoof check applies and the
+    // treasury route checks keepership: POST /api/treasury/:treasury/{offer,need,event}. So refuse here
+    // rather than keep a keeper branch nothing can reach. A non-keeper naming an enterprise has already
+    // been refused above, with the answer that fits their case.
     const actor = ctx.state?.actor as string | undefined;
-    const createdBy = actor && actor !== authorPublicKey ? actor : undefined;
+    if (actor !== authorPublicKey) {
+        ctx.status = 403;
+        ctx.body = { error: 'Post as an enterprise through its own route: POST /api/treasury/:treasury/{offer,need,event}' };
+        return;
+    }
     try {
-        const post = createPost(
+        // Events go through the shared builder, so this route and the enterprise's own cannot drift on
+        // what an event is (routes/event-post.ts).
+        const post = type === 'event'
+            ? createEventFromBody((ctx as any).requestBody, authorPublicKey)
+            : createPost(
             type, category || 'other', title, description || '',
             Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
             lat != null ? Number(lat) : undefined,
@@ -206,8 +228,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo,
-              eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote, createdBy }
+            { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo }
         );
         if (!post) {
             ctx.status = 400;

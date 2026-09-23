@@ -327,6 +327,7 @@ run_federation_suites() {
       test-moderation-notifications
       test-polls
       test-events
+      test-enterprise-event-http
       test-event-chat
       test-event-notify
       test-posts-fts-same-ms
@@ -348,9 +349,11 @@ run_federation_suites() {
       test-groups-patch-http
       test-groups-sync-and-removal
       test-groups-chat
+      test-chat-parity
       test-keeper-read-cursor
       test-groups-chat-sync
       test-groups-succession
+      test-groups-lead-convenor
       test-member-wizards
       test-enterprise-pause
       test-enterprise-season-lifecycle

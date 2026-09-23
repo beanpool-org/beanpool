@@ -19,6 +19,7 @@ Status: complete
 
 ### 2. Facade Presentation Card Component (`apps/native/components/PulseFeedCard.tsx`)
 - **Facade Architecture**: Renders static 16:9 thumbnail posters with play badge overlays for video platforms (`youtube`, `tiktok`, `instagram`). No embedded iframes or video stream proxies (preserving member privacy and complying with platform terms & CSP restrictions).
+  > **Superseded for YouTube, 2026-09-23** (Marty's call on the board; Damo's report from Pulse → Learn). A YouTube card is still exactly this facade, and still loads nothing from Google, **until the member taps ▶** — then YouTube's own embedded player runs in the card, on `youtube-nocookie.com`, under the conditions in <https://developers.google.com/youtube/terms/required-minimum-functionality>. See `apps/native/utils/youtube-embed.ts` and `apps/native/utils/pulse-video-player.ts`. Video stream proxying is still rejected, and the PWA is unchanged.
 - **Attribution First**: Displays author avatar (`MemberAvatar`), callsign, verified badge (`✓`), platform badge (`platformMeta`), and category badge (`categoryMeta`). Tapping the author navigates to `/public-profile`.
 - **Safe External Navigation**: Tapping card opens the canonical post URL in device browser/app via `Linking.openURL`, strictly validated via `isWebUrl` before opening.
 - **Owner Muting**: When viewed by the item's owner (`ownerPubkey === currentPubkey`), renders a "Mute" button with confirmation alert triggering optimistic removal.
@@ -130,6 +131,7 @@ Results: 109/109 tests passed.
 
 ## Assumptions a reviewer must confirm
 - **Facade Cards**: Tapping a feed card opens the post externally on its native platform (YouTube, web browser, etc.) via `Linking.openURL` guarded by `isWebUrl()` rather than mounting webviews or embedding media players.
+  > **No longer true of YouTube, 2026-09-23.** Tapping the poster of a YouTube card now mounts YouTube's own player in the card; the card's title and its "Open on YouTube ↗" footer still open externally exactly as described. Every other platform is unchanged. See the note under "Facade Presentation Card Component" above.
 - **Fixture Fallback**: When connecting to a node that has no syndicated items yet or returns 404, the feed seamlessly provides the built-in fixture so the UI remains previewable and testable.
 - **Owner-Scoped Muting**: Per Contract B, only the owner can mute their own items (`ownerPubkey === identity.publicKey`).
 

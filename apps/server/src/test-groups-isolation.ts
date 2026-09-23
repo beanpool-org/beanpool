@@ -32,6 +32,7 @@ import {
     joinGroup,
     setMemberRole,
     removeGroupMember,
+    handOverGroupLead,
     updateGroupPolicy,
     approveGroupMember,
     inviteGroupMember,
@@ -466,7 +467,15 @@ async function runTests() {
         const updatedDave = setMemberRole(gardenGroup.id, bob.pubKeyHex, dave.pubKeyHex, 'observer');
         assert(updatedDave.role === 'observer', '10b. Convenor sets member to observer');
 
-        // Demotion safety: demoting Alice leaves Bob as convenor -> OK
+        // Demotion safety: demoting Alice leaves Bob as convenor -> OK.
+        // Alice created this group, so she is its LEAD convenor (2026-09-23) and Bob cannot demote her until she
+        // hands the lead over — only the lead touches a convenor, and nobody touches the lead.
+        let demoteLeadFailed = false;
+        try {
+            setMemberRole(gardenGroup.id, bob.pubKeyHex, alice.pubKeyHex, 'member');
+        } catch { demoteLeadFailed = true; }
+        assert(demoteLeadFailed, "10b2. A convenor cannot demote the group's lead convenor");
+        handOverGroupLead(gardenGroup.id, alice.pubKeyHex, bob.pubKeyHex);
         setMemberRole(gardenGroup.id, bob.pubKeyHex, alice.pubKeyHex, 'member');
 
         // Now Bob is the ONLY convenor. Demoting Bob must fail!

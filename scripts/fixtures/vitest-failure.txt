@@ -1,0 +1,274 @@
+          [0m39[0m
+          [0m to make this dump long[0m
+        [36m</p>[39m
+        [36m<span>[39m
+          [0mmore filler content [0m
+          [0m39[0m
+        [36m</span>[39m
+      [36m</section>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   × Sample capture suite > compares two numbers 2ms
+     → expected 2 to be 3 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/SampleCard.test.tsx > Sample capture suite > finds a button that is not there
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name `/nonexistent/i`
+
+Here are the accessible roles:
+
+  paragraph:
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+[… 479 lines of the same DOM dump removed to keep this fixture small …]
+        [33mdata-testid[39m=[32m"row-32"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0mFiller paragraph number [0m
+          [0m32[0m
+          [0m to make this dump long[0m
+        [36m</p>[39m
+        [36m<span>[39m
+          [0mmore filler content [0m
+          [0m32[0m
+        [36m</span>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"row row-33"[39m
+        [33mdata-testid[39m=[32m"row-33"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0mFiller paragraph number [0m
+          [0m33[0m
+          [0m to make this dump long[0m
+        [36m</p>[39m
+        [36m<span>[39m
+          [0mmore filler content [0m
+          [0m33[0m
+        [36m</span>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"row row-34"[39m
+        [33mdata-testid[39m=[32m"row-34"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0mFiller paragraph number [0m
+          [0m34[0m
+          [0m to make this dump long[0m
+        [36m</p>[39m
+        [36m<span>[39m
+          [0mmore filler content [0m
+          [0m34[0m
+        [36m</span>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"row row-35"[39m
+        [33mdata-testid[39m=[32m"row-35"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0mFiller paragraph number [0m
+          [0m35[0m
+          [0m to make this dump long[0m
+        [36m</p>[39m
+        [36m<span>[39m
+          [0mmore filler content [0m
+          [0m35[0m
+        [36m</span>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"row row-36"[39m
+        [33mdata-testid[39m=[32m"row-36"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0mFiller paragraph number [0m
+          [0m36[0m
+          [0m to make this dump long[0m
+        [36m</p>[39m
+        [36m<span>[39m
+          [0mmore filler content [0m
+          [0m36[0m
+        [36m</span>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"row row-37"[39m
+        [33mdata-testid[39m=[32m"row-37"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0mFiller paragraph number [0m
+          [0m37[0m
+          [0m to make this dump long[0m
+        [36m</p>[39m
+        [36m<span>[39m
+          [0mmore filler content [0m
+          [0m37[0m
+        [36m</span>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"row row-38"[39m
+        [33mdata-testid[39m=[32m"row-38"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0mFiller paragraph number [0m
+          [0m38[0m
+          [0m to make this dump long[0m
+        [36m</p>[39m
+        [36m<span>[39m
+          [0mmore filler content [0m
+          [0m38[0m
+        [36m</span>[39m
+      [36m</section>[39m
+      [36m<section[39m
+        [33mclass[39m=[32m"row row-39"[39m
+        [33mdata-testid[39m=[32m"row-39"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0mFiller paragraph number [0m
+          [0m39[0m
+          [0m to make this dump long[0m
+        [36m</p>[39m
+        [36m<span>[39m
+          [0mmore filler content [0m
+          [0m39[0m
+        [36m</span>[39m
+      [36m</section>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError ../../node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/components/SampleCard.test.tsx:16:19
+     14|       </div>
+     15|     );
+     16|     expect(screen.getByRole('button', { name: /nonexistent/i })).toBeT…
+       |                   ^
+     17|   });
+     18| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/components/SampleCard.test.tsx > Sample capture suite > compares two numbers
+AssertionError: expected 2 to be 3 // Object.is equality
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 3[39m
+[31m+ 2[39m
+
+ ❯ src/components/SampleCard.test.tsx:20:19
+     18| 
+     19|   it('compares two numbers', () => {
+     20|     expect(1 + 1).toBe(3);
+       |                   ^
+     21|   });
+     22| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  23:16:49
+   Duration  1.05s (transform 26ms, setup 105ms, collect 34ms, tests 107ms, environment 520ms, prepare 142ms)
+
+undefined

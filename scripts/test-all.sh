@@ -3,6 +3,12 @@
 
 set -o pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# failing_tests_summary, which names the failing tests in the report below. Kept in its own file so
+# scripts/test-failing-tests-summary.sh can run it against captured output without running this script.
+# shellcheck source=test-all-lib.sh
+. "$SCRIPT_DIR/test-all-lib.sh"
+
 FAST=0
 FORCE_ALL=0
 BYPASS=0
@@ -111,6 +117,13 @@ run_check "deploy_preserve" bash scripts/test-deploy-preserve.sh
 # Its health wait and disk preflight live in scripts/deploy-lib.sh; this runs them against a URL nothing
 # answers and stubbed container/disk state. Local only, a few seconds.
 run_check "deploy_health" bash scripts/test-deploy-health.sh
+
+# The report below has to NAME what failed. On PR #1065 it did not: the Failure Details block prints the
+# last 150 lines of the failing task, and a Testing Library failure buries the `FAIL <file> > <test>` line
+# under its own DOM dump, so a run that failed 1 of 723 tests never said which one and was re-run as a
+# flake. This runs scripts/test-all-lib.sh against captured vitest and server-suite output. Pure shell,
+# instant, and it is the only check here that tests this script rather than the product.
+run_check "fail_summary" bash scripts/test-failing-tests-summary.sh
 
 # Undeclared imports & dependency boundary guard. Ensures every bare module import in apps/manager
 # is explicitly declared in its package.json so workspace hoisting does not mask missing dependencies.
@@ -627,11 +640,19 @@ if [ $FAIL -gt 0 ]; then
         else
           echo "── $task ──"
         fi
+        # The names FIRST, from the task's FULL output, because the tail below may not contain them:
+        # a failure whose error carries a long dump pushes its own `FAIL <file> > <test>` line out.
+        printf '%s\n' "$out" | failing_tests_summary
         printf '%s\n' "$out" | tail -n $FAILED_TASK_LINES
         shown=1
       done
     fi
-    if [ $shown -eq 0 ] || [ $unread -eq 1 ]; then tail -40 "$LOGDIR/$fn.log"; fi
+    # Same for a check turbo did not run — the federation suites above all land here, and their whole
+    # log is the one to read the names out of.
+    if [ $shown -eq 0 ] || [ $unread -eq 1 ]; then
+      failing_tests_summary < "$LOGDIR/$fn.log"
+      tail -40 "$LOGDIR/$fn.log"
+    fi
   done
   echo ""
 

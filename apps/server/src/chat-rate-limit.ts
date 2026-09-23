@@ -2,7 +2,8 @@ import type Koa from 'koa';
 import { clientLimiterKey } from './client-ip.js';
 
 /**
- * Throttle for chat lines in rooms that push to many people: group chats (both send routes) and event chats.
+ * Throttle for chat lines in rooms that push to many people: group chats (both send routes, and the edit,
+ * reaction and delete routes, which push a live update to the whole room too) and event chats.
  *
  * Its own bucket, keyed by the signed member, not the IP. The auth-attempt limiter is per IP and also guards
  * recovery lookup, verify-password and pairing, so members chatting behind one NAT (a hall's wifi, carrier NAT)

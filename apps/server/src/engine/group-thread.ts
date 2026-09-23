@@ -24,9 +24,12 @@ import type { GroupRole, GroupMemberStatus } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
+import { writeMessageTombstone } from './message-tombstone.js';
 import type { MessagingCallbacks } from './messaging.js';
 
 export const GROUP_THREAD_TYPE = 'group_thread';
+/** What a live chat update is about, beside a plain new message (chat parity, 2026-09-23). */
+export type GroupChatAction = 'removed' | 'edited';
 export const GROUP_THREAD_MESSAGE_MAX = 2000;
 export const GROUP_THREAD_REMOVED_TEXT = 'removed by a convenor';
 /** The one honest line the chat screen carries (decision 3). */
@@ -37,8 +40,11 @@ export const GROUP_NOT_FOUND = 'Group not found';
 export const GROUP_CHAT_FORBIDDEN = 'Only members of this group can open its chat';
 export const GROUP_CHAT_OBSERVER = 'Observers can read this chat but not post in it';
 export const GROUP_CHAT_NONCE_ERROR = 'Group chat messages are sent as plain text (plaintext-v1)';
-export const GROUP_CHAT_EDIT_ERROR = 'Messages in a group chat cannot be edited';
-export const GROUP_CHAT_REACT_ERROR = 'Reactions are not part of a group chat yet';
+/** An author's own delete, in a DM or a group chat. A convenor's removal keeps GROUP_THREAD_REMOVED_TEXT. */
+export const GROUP_THREAD_DELETED_TEXT = 'This message was deleted';
+export const GROUP_CHAT_REPLY_NOT_FOUND = 'The message being replied to is not in this chat';
+export const GROUP_CHAT_REPLY_SYSTEM = 'A system line cannot be replied to';
+export const GROUP_CHAT_SYSTEM_REACT_ERROR = 'A system line cannot be reacted to';
 
 /** System-line kinds. The first four are membership housekeeping and never count as unread (QUIET_SYSTEM_TYPES in @beanpool/engine). */
 export const GroupSystemType = {
@@ -216,7 +222,7 @@ function participantKeys(groupId: string): string[] {
 }
 
 /** Live update to the people in the chat only — never to every socket, as the enterprise thread does. */
-function broadcastToChat(cb: MessagingCallbacks, groupId: string, message: EventThreadMessage, action?: 'removed', extra: string[] = []): void {
+function broadcastToChat(cb: MessagingCallbacks, groupId: string, message: EventThreadMessage, action?: GroupChatAction, extra: string[] = []): void {
     const recipients = Array.from(new Set([...participantKeys(groupId), ...extra]));
     cb.broadcast({
         type: 'new_message',
@@ -312,7 +318,7 @@ export function getGroupThreadMessages(groupId: string, limit = 50, offset = 0):
         ORDER BY m.timestamp DESC, m.rowid DESC
         LIMIT ? OFFSET ?
     `).all(groupId, limit, offset) as any[];
-    return rows.reverse().map(r => ({ ...toThreadMessage(r, groupId, GROUP_THREAD_REMOVED_TEXT), systemType: r.system_type || undefined }) as any);
+    return rows.reverse().map(r => ({ ...toThreadMessage(r, groupId, removedMarkerFor(r)), systemType: r.system_type || undefined }) as any);
 }
 
 /** The chat as one member sees it. Anyone who is not an active member of the group is refused. */
@@ -347,19 +353,18 @@ export function postGroupThreadMessage(
     authorPubkey: string,
     text: string,
     clientId?: string,
+    replyToId?: string,
 ): EventThreadMessage {
     const group = loadGroupForThread(groupId);
-    const role = groupChatRole(groupId, authorPubkey);
-    if (!role) throw new Error(GROUP_CHAT_FORBIDDEN);
-    if (role === 'observer') throw new Error(GROUP_CHAT_OBSERVER);
-
-    assertThreadMemberCanPost(authorPubkey);
+    assertCanWriteInGroupChat(groupId, authorPubkey);
 
     const cleanText = (text || '').trim();
     if (!cleanText) throw new Error('Message text cannot be empty');
     if (cleanText.length > GROUP_THREAD_MESSAGE_MAX) {
         throw new Error(`Message is too long (maximum ${GROUP_THREAD_MESSAGE_MAX} characters)`);
     }
+    // A reply quotes a message in THIS chat, never one from another chat and never a system line.
+    if (replyToId) assertGroupChatReplyTarget(groupId, replyToId);
 
     ensureGroupThread(groupId);
     addParticipant(groupId, authorPubkey, new Date().toISOString());
@@ -380,7 +385,11 @@ export function postGroupThreadMessage(
     const ciphertext = Buffer.from(cleanText, 'utf8').toString('base64');
     const nonce = 'plaintext-v1';
     const timestamp = new Date().toISOString();
-    const metadata = mentions.length > 0 ? JSON.stringify({ mentions }) : null;
+    // `replyToId` is stored exactly as a DM stores it, so one component draws a quoted reply in either chat.
+    const meta: Record<string, unknown> = {};
+    if (mentions.length > 0) meta.mentions = mentions;
+    if (replyToId) meta.replyToId = replyToId;
+    const metadata = Object.keys(meta).length > 0 ? JSON.stringify(meta) : null;
 
     db.prepare(`
         INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp)
@@ -430,29 +439,84 @@ export function removeGroupThreadMessage(
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, groupId) as any;
     if (!msgRow) throw new Error('Message not found');
     if (msgRow.type === 'system') throw new Error('A system line cannot be removed');
+    // Already down — a second removal is a no-op success, and must not rewrite who took it down first (an
+    // author who deleted their own line stays the author on the record, not this convenor).
+    if (msgRow.type === 'removed') return groupChatMessageOf(msgRow, groupId);
 
-    const ciphertext = Buffer.from(GROUP_THREAD_REMOVED_TEXT, 'utf8').toString('base64');
-    let metaObj: any = {};
-    if (msgRow.metadata) {
-        try { metaObj = JSON.parse(msgRow.metadata); } catch { /* keep the replacement metadata */ }
+    writeMessageTombstone(messageId, msgRow, actorPubkey, GROUP_THREAD_REMOVED_TEXT);
+    return broadcastGroupChatUpdate(cb, groupId, messageId, 'removed')!;
+}
+
+/**
+ * THE GROUP CHAT'S WRITE RULE, in one place (chat parity, 2026-09-23). Edit, react and reply all mean writing
+ * into the room, so they all ask the same question the send already asks: is this person an active convenor or
+ * member of the GROUP (never the participants mirror), and is their account in a state that may post at all?
+ * Observers read only; a removed member, someone who left, an outsider and a node admin who is not in the group
+ * are all refused. Every route goes through this, including the generic messaging routes store apps up to
+ * 1.2.37 call from their DM-style window, so no route can disagree with another about who may write here.
+ */
+export function assertCanWriteInGroupChat(groupId: string, actorPubkey: string): void {
+    loadGroupForThread(groupId);
+    const role = groupChatRole(groupId, actorPubkey);
+    if (!role) throw new Error(GROUP_CHAT_FORBIDDEN);
+    if (role === 'observer') throw new Error(GROUP_CHAT_OBSERVER);
+    assertThreadMemberCanPost(actorPubkey);
+}
+
+/**
+ * An edited group chat line, bounded exactly as a new one is: plaintext-v1 only, not empty, and the same
+ * 2000-character cap — the reason the edit route refused a group chat in slice 1 was that it had neither.
+ * Returns the base64 to store, re-encoded from the trimmed text.
+ */
+export function groupChatEditedCiphertext(ciphertext: string, nonce: string): string {
+    if (nonce !== 'plaintext-v1') throw new Error(GROUP_CHAT_NONCE_ERROR);
+    const text = Buffer.from(String(ciphertext), 'base64').toString('utf8').trim();
+    if (!text) throw new Error('Message text cannot be empty');
+    if (text.length > GROUP_THREAD_MESSAGE_MAX) {
+        throw new Error(`Message is too long (maximum ${GROUP_THREAD_MESSAGE_MAX} characters)`);
     }
-    if (!metaObj || typeof metaObj !== 'object' || Array.isArray(metaObj)) metaObj = {};
-    delete metaObj.mentions;
-    metaObj.removed = true;
-    metaObj.removedBy = actorPubkey;
-    metaObj.removedAt = new Date().toISOString();
-    const metadataStr = JSON.stringify(metaObj);
+    return Buffer.from(text, 'utf8').toString('base64');
+}
 
-    db.prepare(`UPDATE messages SET type = 'removed', ciphertext = ?, nonce = 'plaintext-v1', metadata = ? WHERE id = ?`)
-        .run(ciphertext, metadataStr, messageId);
+/** A message this group chat may be replied to: in this chat, and not a system line. */
+export function assertGroupChatReplyTarget(groupId: string, replyToId: string): void {
+    const target = db.prepare('SELECT type FROM messages WHERE id = ? AND conversation_id = ?')
+        .get(replyToId, groupId) as { type: string } | undefined;
+    if (!target) throw new Error(GROUP_CHAT_REPLY_NOT_FOUND);
+    if (target.type === 'system') throw new Error(GROUP_CHAT_REPLY_SYSTEM);
+}
 
-    const author = getMember(db, msgRow.author_pubkey) as any;
-    const updated = toThreadMessage({
-        ...msgRow, ciphertext, nonce: 'plaintext-v1', type: 'removed', metadata: metadataStr,
-        author_callsign: author?.callsign, author_avatar: author?.avatar_url,
-    }, groupId, GROUP_THREAD_REMOVED_TEXT);
-    broadcastToChat(cb, groupId, updated, 'removed');
-    return updated;
+/**
+ * What a tombstone reads as: an author's own delete says so, a convenor's removal keeps the words it has always
+ * had. The apps tell the two apart by `metadata.removedBy` (the contract), but the node's own text should not
+ * blame a convenor for a delete the author made themselves.
+ */
+export function removedMarkerFor(row: { author_pubkey?: string | null; metadata?: string | null }): string {
+    let meta: any = {};
+    try { meta = row.metadata ? JSON.parse(row.metadata) : {}; } catch { meta = {}; }
+    return meta?.removedBy && meta.removedBy === row.author_pubkey ? GROUP_THREAD_DELETED_TEXT : GROUP_THREAD_REMOVED_TEXT;
+}
+
+/** One stored message row as the chat draws it (author's callsign and avatar, tombstone text). */
+export function groupChatMessageOf(row: any, groupId: string): EventThreadMessage {
+    const author = getMember(db, row.author_pubkey) as any;
+    return toThreadMessage(
+        { ...row, author_callsign: author?.callsign, author_avatar: author?.avatar_url },
+        groupId,
+        removedMarkerFor(row),
+    );
+}
+
+/**
+ * Tell the chat's members that one message changed — an edit, a delete, a convenor's removal — exactly the way
+ * a removal has always been pushed (decision 3). `action` says which; there is no push for any of them.
+ */
+export function broadcastGroupChatUpdate(cb: MessagingCallbacks, groupId: string, messageId: string, action: GroupChatAction): EventThreadMessage | null {
+    const row = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, groupId) as any;
+    if (!row) return null;
+    const msg = groupChatMessageOf(row, groupId);
+    broadcastToChat(cb, groupId, msg, action);
+    return msg;
 }
 
 /**
@@ -469,9 +533,22 @@ export function postGroupThreadMessageFromSendRoute(
     type: string,
     hasAttachment: boolean,
     clientId?: string,
+    metadata?: string,
 ): EventThreadMessage {
     if (nonce !== 'plaintext-v1') throw new Error(GROUP_CHAT_NONCE_ERROR);
     if (type !== 'text' || hasAttachment) throw new Error('Only text can be sent to a group chat');
     const text = Buffer.from(String(ciphertext), 'base64').toString('utf8');
-    return postGroupThreadMessage(cb, groupId, authorPubkey, text, clientId);
+    // The only thing this route's metadata is allowed to carry into the chat: a reply, exactly as in a DM.
+    // Everything else (mentions, reactions) is the node's to work out, so a client cannot fabricate it.
+    return postGroupThreadMessage(cb, groupId, authorPubkey, text, clientId, replyToIdFrom(metadata));
+}
+
+/** The `replyToId` a client put in a send's metadata, or undefined. Never throws on malformed JSON. */
+export function replyToIdFrom(metadata?: string | null): string | undefined {
+    if (!metadata) return undefined;
+    try {
+        const parsed = JSON.parse(metadata);
+        const id = parsed?.replyToId;
+        return typeof id === 'string' && id.trim() ? id : undefined;
+    } catch { return undefined; }
 }

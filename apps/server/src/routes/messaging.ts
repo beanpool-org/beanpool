@@ -5,13 +5,13 @@
 
 import Router from '@koa/router';
 import {
-    createConversation, sendMessage, editMessage,
+    createConversation, sendMessage, editMessage, deleteOwnMessage,
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
     markConversationRead, getUnreadCounts,
     getMember,
 } from '../state-engine.js';
-import { MessagingError, CHAT_GROUP_REMOVED_ERROR } from '../engine/messaging.js';
+import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage } from '../engine/messaging.js';
 import { canReadEventThread, loadEventForThread, isEventThreadExpired, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
@@ -251,12 +251,46 @@ router.post('/api/messages/edit', async (ctx) => {
         ctx.body = { error: 'messageId, ciphertext, and nonce are required' };
         return;
     }
+    // Changing a group chat line is a write into a room that pushes to every member, exactly as posting one is,
+    // so it is throttled exactly as posting one is: per signed member, in the chat bucket the two send routes
+    // share (PR #1048 review). A DM keeps the DM rules — its fan-out is the other phone.
+    if (isGroupChatMessage(messageId) && !chatRateLimit(ctx, actor)) return;
     try {
         const msg = editMessage(messageId, actor, ciphertext, nonce);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
         // Thread and removed messages are refused outright (403) so the client can say why.
         respondToMessagingError(ctx, e, 'edit the message');
+    }
+});
+
+/**
+ * Delete for everyone (chat parity, 2026-09-23): the author takes their own message down, in a DM or a group
+ * chat, at any age. The author is the verified signer — never a client-supplied field — so nobody can delete
+ * someone else's. A convenor removing somebody ELSE's group chat message keeps its own route,
+ * POST /api/groups/:id/chat/remove; the apps tell the two apart by `metadata.removedBy`.
+ */
+router.post('/api/messages/delete', async (ctx) => {
+    const { messageId } = (ctx as any).requestBody || {};
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!messageId || typeof messageId !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'messageId is required' };
+        return;
+    }
+    // Changing a group chat line is a write into a room that pushes to every member, exactly as posting one is,
+    // so it is throttled exactly as posting one is: per signed member, in the chat bucket the two send routes
+    // share (PR #1048 review). A DM keeps the DM rules — its fan-out is the other phone.
+    if (isGroupChatMessage(messageId) && !chatRateLimit(ctx, actor)) return;
+    try {
+        ctx.body = { success: true, message: deleteOwnMessage(messageId, actor) };
+    } catch (e: any) {
+        respondToMessagingError(ctx, e, 'delete the message');
     }
 });
 
@@ -438,6 +472,10 @@ router.post('/api/messages/react', async (ctx) => {
         ctx.body = { error: 'messageId, authorPubkey, and a valid emoji (<=32 chars) are required' };
         return;
     }
+    // Changing a group chat line is a write into a room that pushes to every member, exactly as posting one is,
+    // so it is throttled exactly as posting one is: per signed member, in the chat bucket the two send routes
+    // share (PR #1048 review). A DM keeps the DM rules — its fan-out is the other phone.
+    if (isGroupChatMessage(messageId) && !chatRateLimit(ctx, actor)) return;
     try {
         const result = toggleMessageReaction(messageId, actor, emoji.trim());
         if (!result) {

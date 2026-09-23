@@ -1,9 +1,9 @@
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen, act, waitFor, fireEvent, createEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getConversationMessages, getEventChat, createConversationApi, type Conversation, type ApiMessage } from '../lib/api';
+import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, type Conversation, type ApiMessage } from '../lib/api';
 
 // Polyfill scrollIntoView for jsdom
 if (typeof window !== 'undefined' && window.HTMLElement) {
@@ -514,5 +514,284 @@ describe('MessagesPage: event chat (docs/events-on-the-map.md §2.2, §3)', () =
         }];
         render(<MessagesPage identity={mockIdentity} />);
         expect(await screen.findByText('Working bee')).toBeInTheDocument();
+    });
+});
+
+describe('MessagesPage: paste or drop a picture into a chat', () => {
+    const GROUP_ID = 'group-1';
+
+    /**
+     * The photo path runs a picked file through an <img> and a <canvas>, neither of
+     * which jsdom decodes. These stand in for them so the test exercises our code
+     * rather than the browser's, and are restored after each test.
+     */
+    let restoreBrowserStubs: Array<() => void> = [];
+
+    function stubImagePipeline() {
+        const originalImage = window.Image;
+        class FakeImage {
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            width = 800;
+            height = 600;
+            set src(_value: string) {
+                setTimeout(() => this.onload?.(), 0);
+            }
+        }
+        (window as any).Image = FakeImage;
+        restoreBrowserStubs.push(() => { (window as any).Image = originalImage; });
+
+        const originalGetContext = window.HTMLCanvasElement.prototype.getContext;
+        const originalToDataUrl = window.HTMLCanvasElement.prototype.toDataURL;
+        (window.HTMLCanvasElement.prototype as any).getContext = () => ({ drawImage: () => {} });
+        (window.HTMLCanvasElement.prototype as any).toDataURL = () => 'data:image/jpeg;base64,resized';
+        restoreBrowserStubs.push(() => {
+            (window.HTMLCanvasElement.prototype as any).getContext = originalGetContext;
+            (window.HTMLCanvasElement.prototype as any).toDataURL = originalToDataUrl;
+        });
+
+        const originalCreate = (URL as any).createObjectURL;
+        const originalRevoke = (URL as any).revokeObjectURL;
+        (URL as any).createObjectURL = () => 'blob:preview';
+        (URL as any).revokeObjectURL = () => {};
+        restoreBrowserStubs.push(() => {
+            (URL as any).createObjectURL = originalCreate;
+            (URL as any).revokeObjectURL = originalRevoke;
+        });
+    }
+
+    function pictureFile(name = 'screenshot.png', type = 'image/png', size = 4096): File {
+        const file = new File([new Uint8Array(1)], name, { type });
+        Object.defineProperty(file, 'size', { value: size });
+        return file;
+    }
+
+    /** A clipboard carrying a screenshot, as Chrome and Firefox present one. */
+    function imageClipboard(file: File) {
+        return {
+            files: [file],
+            items: [{ kind: 'file', type: file.type, getAsFile: () => file }],
+            types: ['Files'],
+        };
+    }
+
+    async function openDm() {
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        return await screen.findByPlaceholderText('Message...');
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        restoreBrowserStubs = [];
+        stubImagePipeline();
+        window.alert = vi.fn();
+
+        mockConversations = [
+            {
+                id: 'conv-1', type: 'dm', name: null,
+                participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+                peerCallsign: 'Bob', unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+            },
+            {
+                id: GROUP_ID, type: 'group_thread' as any, name: 'Garden crew',
+                participants: ['my-pubkey', 'peer-pubkey', 'other-pubkey'], createdBy: 'my-pubkey',
+                unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+            },
+        ];
+        mockConversationDetails = { 'conv-1': mockConversations[0], [GROUP_ID]: mockConversations[1] };
+        mockMessagesByConv = { 'conv-1': [], [GROUP_ID]: [] };
+
+        vi.mocked(getConversationMessages).mockImplementation(async (convId: string) => ({
+            conversation: mockConversationDetails[convId],
+            messages: mockMessagesByConv[convId] || [],
+        }));
+    });
+
+    afterEach(() => {
+        for (const restore of restoreBrowserStubs) restore();
+        restoreBrowserStubs = [];
+    });
+
+    it('a pasted picture opens the preview, and Send puts it down the photo path with the typed caption', async () => {
+        const composer = await openDm();
+        const file = pictureFile();
+
+        fireEvent.change(composer, { target: { value: 'the back fence' } });
+        fireEvent.paste(composer, { clipboardData: imageClipboard(file) });
+
+        const preview = await screen.findByTestId('chat-image-preview');
+        expect(preview).toHaveTextContent('caption');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        expect(sendMessageApi).toHaveBeenCalledWith(
+            'conv-1', 'my-pubkey',
+            'the back fence', '00000',        // the caption, encrypted into the message body
+            'image',
+            { data: 'data:image/jpeg;base64,resized', nonce: '00000', mime: 'image/jpeg' },
+            undefined,
+        );
+
+        // Sent: the preview closes and the draft is cleared, as an ordinary send does.
+        await waitFor(() => expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument());
+        expect((composer as HTMLTextAreaElement).value).toBe('');
+    });
+
+    it('a text-only paste is left alone: nothing is prevented and no preview appears', async () => {
+        const composer = await openDm();
+
+        const paste = createEvent.paste(composer, {
+            clipboardData: {
+                files: [],
+                items: [{ kind: 'string', type: 'text/plain', getAsFile: () => null }],
+                types: ['text/plain'],
+            },
+        });
+        fireEvent(composer, paste);
+
+        expect(paste.defaultPrevented).toBe(false);
+        expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('a dropped picture opens the same preview', async () => {
+        const composer = await openDm();
+
+        fireEvent.drop(composer, { dataTransfer: imageClipboard(pictureFile('dropped.jpg', 'image/jpeg')) });
+
+        expect(await screen.findByTestId('chat-image-preview')).toBeInTheDocument();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('a dropped file that is not a picture is still swallowed, not opened by the browser', async () => {
+        const composer = await openDm();
+        const pdf = pictureFile('minutes.pdf', 'application/pdf');
+
+        // The chat asked for this drop in onDragOver, so it owes it a
+        // preventDefault. Without one the browser navigates the tab to the file
+        // and the whole session — chat, unsent draft — goes with it.
+        const drop = createEvent.drop(composer, {
+            dataTransfer: {
+                files: [pdf],
+                items: [{ kind: 'file', type: 'application/pdf', getAsFile: () => pdf }],
+                types: ['Files'],
+            },
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(true);
+        expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('a dropped picture prevents the browser default too', async () => {
+        const composer = await openDm();
+
+        const drop = createEvent.drop(composer, {
+            dataTransfer: imageClipboard(pictureFile('dropped.jpg', 'image/jpeg')),
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(true);
+        expect(await screen.findByTestId('chat-image-preview')).toBeInTheDocument();
+    });
+
+    it('a text-only drop is left to the composer: nothing is prevented', async () => {
+        const composer = await openDm();
+
+        const drop = createEvent.drop(composer, {
+            dataTransfer: {
+                files: [],
+                items: [{ kind: 'string', type: 'text/plain', getAsFile: () => null }],
+                types: ['text/plain'],
+            },
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(false);
+        expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument();
+    });
+
+    it('in a group chat a pasted picture gets one line of explanation and nothing is sent', async () => {
+        render(<MessagesPage identity={mockIdentity} openConversationId={GROUP_ID} />);
+        const composer = await screen.findByPlaceholderText('Message...');
+
+        fireEvent.paste(composer, { clipboardData: imageClipboard(pictureFile()) });
+
+        const notice = await screen.findByTestId('chat-image-notice');
+        expect(notice).toHaveTextContent('Photos can only be sent in direct messages');
+        expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
+    it('Cancel closes the preview and sends nothing', async () => {
+        const composer = await openDm();
+        fireEvent.paste(composer, { clipboardData: imageClipboard(pictureFile()) });
+        await screen.findByTestId('chat-image-preview');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+        await waitFor(() => expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument());
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('Escape closes the preview and sends nothing', async () => {
+        const composer = await openDm();
+        fireEvent.paste(composer, { clipboardData: imageClipboard(pictureFile()) });
+        await screen.findByTestId('chat-image-preview');
+
+        fireEvent.keyDown(composer, { key: 'Escape' });
+
+        await waitFor(() => expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument());
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('Enter sends the previewed picture instead of the text underneath it', async () => {
+        const composer = await openDm();
+        fireEvent.change(composer, { target: { value: 'look at this' } });
+        fireEvent.paste(composer, { clipboardData: imageClipboard(pictureFile()) });
+        await screen.findByTestId('chat-image-preview');
+
+        fireEvent.keyDown(composer, { key: 'Enter' });
+
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(sendMessageApi).mock.calls[0][4]).toBe('image');
+        expect(vi.mocked(sendMessageApi).mock.calls[0][2]).toBe('look at this');
+    });
+
+    it('refuses a picture past the size limit, in plain words, without opening the preview', async () => {
+        const composer = await openDm();
+        const huge = pictureFile('raw.tiff', 'image/tiff', 21 * 1024 * 1024);
+
+        fireEvent.paste(composer, { clipboardData: imageClipboard(huge) });
+
+        const notice = await screen.findByTestId('chat-image-notice');
+        expect(notice).toHaveTextContent('20 MB');
+        expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('shows a drop highlight while a file is being dragged over the chat', async () => {
+        const composer = await openDm();
+
+        fireEvent.dragEnter(composer, { dataTransfer: { files: [], items: [], types: ['Files'] } });
+        expect(await screen.findByTestId('chat-drop-hint')).toBeInTheDocument();
+
+        fireEvent.dragLeave(composer, { dataTransfer: { files: [], items: [], types: ['Files'] } });
+        await waitFor(() => expect(screen.queryByTestId('chat-drop-hint')).not.toBeInTheDocument());
+    });
+
+    it('a photo carrying a caption shows it under the picture, as the phone does', async () => {
+        mockMessagesByConv['conv-1'] = [{
+            id: 'img-1', conversationId: 'conv-1', authorPubkey: 'peer-pubkey',
+            ciphertext: 'the back fence', nonce: '00000', type: 'image',
+            timestamp: '2026-09-14T00:00:00.000Z',
+        } as ApiMessage];
+
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+
+        expect(await screen.findByText('the back fence')).toBeInTheDocument();
     });
 });

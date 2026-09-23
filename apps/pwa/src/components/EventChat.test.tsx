@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, createEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventChat, decodeEventChatText } from './EventChat';
 import { EventDetail } from './EventCard';
@@ -209,5 +209,212 @@ describe('EventChat: the way back to the event (A4)', () => {
         expect(btn.className).toMatch(/min-h-\[48px\]/);
         fireEvent.click(btn);
         expect(onOpenEvent).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('EventChat: an event chat carries no photos', () => {
+    function pictureClipboard() {
+        const file = new File([new Uint8Array(1)], 'screenshot.png', { type: 'image/png' });
+        return {
+            files: [file],
+            items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }],
+            types: ['Files'],
+        };
+    }
+
+    beforeEach(() => {
+        vi.mocked(api.getEventChat).mockReset();
+        vi.mocked(api.postEventChatMessage).mockReset();
+        vi.mocked(api.getEventChat).mockResolvedValue(view() as any);
+    });
+
+    it('a pasted picture says so in one line and posts nothing', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+
+        fireEvent.paste(composer, { clipboardData: pictureClipboard() });
+
+        expect(await screen.findByTestId('event-chat-image-notice'))
+            .toHaveTextContent('Photos can only be sent in direct messages');
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+    });
+
+    it('a dropped picture does the same', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+
+        fireEvent.drop(composer, { dataTransfer: pictureClipboard() });
+
+        expect(await screen.findByTestId('event-chat-image-notice'))
+            .toHaveTextContent('Photos can only be sent in direct messages');
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+    });
+
+    it('a dropped file that is not a picture is swallowed, not opened by the browser', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+        const pdf = new File([new Uint8Array(1)], 'minutes.pdf', { type: 'application/pdf' });
+
+        // onDragOver took this drop, so onDrop owes it a preventDefault —
+        // otherwise the browser navigates the tab to the file and the event,
+        // the chat and the unsent draft all go with it.
+        const drop = createEvent.drop(composer, {
+            dataTransfer: {
+                files: [pdf],
+                items: [{ kind: 'file', type: 'application/pdf', getAsFile: () => pdf }],
+                types: ['Files'],
+            },
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(true);
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+    });
+
+    it('a text-only drop is left to the composer: nothing is prevented', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+
+        const drop = createEvent.drop(composer, {
+            dataTransfer: { files: [], items: [{ kind: 'string', type: 'text/plain', getAsFile: () => null }], types: ['text/plain'] },
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(false);
+        expect(screen.queryByTestId('event-chat-image-notice')).not.toBeInTheDocument();
+    });
+
+    it('a text-only paste is left alone', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+
+        fireEvent.paste(composer, {
+            clipboardData: { files: [], items: [{ kind: 'string', type: 'text/plain', getAsFile: () => null }], types: ['text/plain'] },
+        });
+
+        expect(screen.queryByTestId('event-chat-image-notice')).not.toBeInTheDocument();
+    });
+});
+
+describe('EventChat: the keyboard sends, not only the mouse', () => {
+    beforeEach(() => {
+        vi.mocked(api.getEventChat).mockReset();
+        vi.mocked(api.postEventChatMessage).mockReset();
+        vi.mocked(api.getEventChat).mockResolvedValue(view());
+        vi.mocked(api.postEventChatMessage).mockResolvedValue({ success: true, message: message({ id: 'm2' }) });
+    });
+
+    async function composer() {
+        renderAt320(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        return await screen.findByLabelText('Message everyone going') as HTMLTextAreaElement;
+    }
+
+    it('Enter sends the message, once, without touching the Send button', async () => {
+        const box = await composer();
+        fireEvent.change(box, { target: { value: '  See you there  ' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        await waitFor(() => expect(api.postEventChatMessage).toHaveBeenCalledWith('ev-1', 'See you there'));
+        expect(vi.mocked(api.postEventChatMessage).mock.calls.length).toBe(1);
+        await waitFor(() => expect(box.value).toBe(''));
+    });
+
+    it('Shift+Enter is a newline, not a send', async () => {
+        const box = await composer();
+        fireEvent.change(box, { target: { value: 'first line' } });
+        fireEvent.keyDown(box, { key: 'Enter', shiftKey: true });
+        await Promise.resolve();
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+        // The draft is still the person's to finish.
+        expect(box.value).toBe('first line');
+    });
+
+    it('Enter while an input method is composing never sends: it is picking characters', async () => {
+        const box = await composer();
+        fireEvent.change(box, { target: { value: 'にほんご' } });
+        fireEvent.keyDown(box, { key: 'Enter', isComposing: true });
+        // Safari and older browsers say the same thing with keyCode 229.
+        fireEvent.keyDown(box, { key: 'Enter', keyCode: 229 });
+        await Promise.resolve();
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+        expect(box.value).toBe('にほんご');
+    });
+
+    it('Enter on an empty draft sends nothing', async () => {
+        const box = await composer();
+        fireEvent.keyDown(box, { key: 'Enter' });
+        fireEvent.change(box, { target: { value: '   ' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        await Promise.resolve();
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+    });
+});
+
+describe('EventChat: the no-photos line does not stay pinned', () => {
+    function pictureClipboard() {
+        const file = new File([new Uint8Array(1)], 'screenshot.png', { type: 'image/png' });
+        return {
+            files: [file],
+            items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }],
+            types: ['Files'],
+        };
+    }
+
+    beforeEach(() => {
+        vi.mocked(api.getEventChat).mockReset();
+        vi.mocked(api.postEventChatMessage).mockReset();
+        vi.mocked(api.getEventChat).mockResolvedValue(view() as any);
+        vi.mocked(api.postEventChatMessage).mockResolvedValue({} as any);
+    });
+
+    async function pasteAPicture() {
+        const composer = await screen.findByLabelText('Message everyone going');
+        fireEvent.paste(composer, { clipboardData: pictureClipboard() });
+        expect(await screen.findByTestId('event-chat-image-notice'))
+            .toHaveTextContent('Photos can only be sent in direct messages');
+        return composer;
+    }
+
+    it('the person can dismiss it', async () => {
+        render(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        await pasteAPicture();
+
+        const dismiss = screen.getByLabelText('Dismiss');
+        expect(dismiss.className).toMatch(/min-h-\[48px\]/);
+        fireEvent.click(dismiss);
+
+        await waitFor(() => expect(screen.queryByTestId('event-chat-image-notice')).not.toBeInTheDocument());
+    });
+
+    it('sending a message clears it', async () => {
+        render(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        const composer = await pasteAPicture();
+
+        fireEvent.change(composer, { target: { value: 'Bringing a thermos' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+        await waitFor(() => expect(api.postEventChatMessage).toHaveBeenCalledWith('ev-1', 'Bringing a thermos'));
+        await waitFor(() => expect(screen.queryByTestId('event-chat-image-notice')).not.toBeInTheDocument());
+    });
+
+    it('a failed send leaves it alone', async () => {
+        vi.mocked(api.postEventChatMessage).mockRejectedValue(new Error('Node said no.'));
+        render(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        const composer = await pasteAPicture();
+
+        fireEvent.change(composer, { target: { value: 'Bringing a thermos' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+        expect(await screen.findByText('Node said no.')).toBeInTheDocument();
+        expect(screen.getByTestId('event-chat-image-notice'))
+            .toHaveTextContent('Photos can only be sent in direct messages');
+    });
+
+    it('moving to another event drops it', async () => {
+        const { rerender } = render(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        await pasteAPicture();
+
+        rerender(<EventChat postId="ev-2" identity={identity} refreshMs={0} />);
+
+        await waitFor(() => expect(screen.queryByTestId('event-chat-image-notice')).not.toBeInTheDocument());
     });
 });

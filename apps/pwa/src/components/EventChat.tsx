@@ -17,6 +17,7 @@ import {
     type EventThreadMessage, type EventThreadView,
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { imageFromTransfer, dragCarriesFile } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
 
 /** Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. */
@@ -60,6 +61,9 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
     const [posting, setPosting] = useState(false);
     const [postError, setPostError] = useState<string | null>(null);
     const [removingId, setRemovingId] = useState<string | null>(null);
+    // An event chat carries no photos: the node refuses them. A paste or a drop
+    // says so in one line here rather than failing silently or in an alert().
+    const [imageNotice, setImageNotice] = useState<string | null>(null);
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
     const load = useCallback(async () => {
@@ -74,6 +78,9 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
 
     useEffect(() => { load(); }, [load]);
 
+    // Moving to another event's chat drops the line the last one left behind.
+    useEffect(() => { setImageNotice(null); }, [postId]);
+
     useEffect(() => {
         if (!refreshMs) return;
         const t = setInterval(load, refreshMs);
@@ -85,8 +92,9 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
         bottomRef.current?.scrollIntoView?.({ block: 'end' });
     }, [view?.messages.length]);
 
-    const send = async (e: React.FormEvent) => {
-        e.preventDefault();
+    // The one way a message goes: the Send button and the Enter key share it,
+    // so they share its guard against an empty draft and a send already in flight.
+    const submitDraft = async () => {
         const text = draft.trim();
         if (!text || posting) return;
         setPosting(true);
@@ -94,12 +102,18 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
         try {
             await postEventChatMessage(postId, text);
             setDraft('');
+            setImageNotice(null);
             await load();
         } catch (err: any) {
             setPostError(err?.message || 'Could not send that message.');
         } finally {
             setPosting(false);
         }
+    };
+
+    const send = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await submitDraft();
     };
 
     const remove = async (m: EventThreadMessage) => {
@@ -218,11 +232,62 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                 <p role="alert" className="flex-shrink-0 m-0 px-3 pb-1 text-xs text-red-600 dark:text-red-400">{postError}</p>
             )}
 
+            {imageNotice && (
+                <div
+                    role="status"
+                    data-testid="event-chat-image-notice"
+                    className="flex-shrink-0 flex items-center gap-2 px-3 pb-1 min-w-0"
+                >
+                    <span className="flex-1 min-w-0 text-xs text-nature-600 dark:text-nature-300 break-words">
+                        {imageNotice}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setImageNotice(null)}
+                        aria-label="Dismiss"
+                        className="flex-shrink-0 min-h-[48px] px-3 -mr-1 bg-transparent border-0 text-sm text-nature-500 dark:text-nature-400 cursor-pointer"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
             {canPost && (
-                <form onSubmit={send} className="flex-shrink-0 flex items-end gap-2 p-3 border-t border-nature-200 dark:border-nature-800">
+                <form
+                    onSubmit={send}
+                    className="flex-shrink-0 flex items-end gap-2 p-3 border-t border-nature-200 dark:border-nature-800"
+                    onDragOver={e => { if (dragCarriesFile(e.dataTransfer)) e.preventDefault(); }}
+                    onDrop={e => {
+                        // Text dropped into the textarea is the browser's own
+                        // business. A file is only here because onDragOver took
+                        // it, so this drop has to be prevented whatever the file
+                        // is — left to itself the browser navigates the tab to
+                        // it, taking the chat and the unsent draft.
+                        if (!dragCarriesFile(e.dataTransfer)) return;
+                        e.preventDefault();
+                        if (!imageFromTransfer(e.dataTransfer)) return;
+                        setImageNotice('Photos can only be sent in direct messages');
+                    }}
+                >
                     <textarea
                         value={draft}
                         onChange={e => setDraft(e.target.value.slice(0, EVENT_CHAT_MESSAGE_MAX))}
+                        onPaste={e => {
+                            if (!imageFromTransfer(e.clipboardData)) return;
+                            e.preventDefault();
+                            setImageNotice('Photos can only be sent in direct messages');
+                        }}
+                        onKeyDown={e => {
+                            // An input method is mid-word — Japanese, Chinese, Korean and
+                            // the rest. Enter is how the person picks the characters they
+                            // are composing, so it is never a send.
+                            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                            // Enter sends; Shift+Enter inserts a newline.
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                void submitDraft();
+                            }
+                        }}
                         rows={1}
                         maxLength={EVENT_CHAT_MESSAGE_MAX}
                         placeholder="Message everyone going…"

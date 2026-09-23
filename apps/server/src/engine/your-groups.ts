@@ -64,8 +64,39 @@ export interface YourChat {
 
 const PREVIEW_MAX = 140;
 
-function previewText(row: any, removedText: string): string {
-    if (row.type === 'removed') return removedText;
+/**
+ * What an author's own delete reads as in the list. It has to be the app's wording for the same thing
+ * (DELETED_BY_AUTHOR_TEXT in apps/native/utils/chat-actions.ts) — the list and the chat are looking at one
+ * message, and must not call it two different things.
+ */
+const DELETED_BY_AUTHOR_PREVIEW = 'This message was deleted';
+
+/**
+ * What a tombstone reads in the list.
+ *
+ * A removed row stores ONE marker text, the moderator wording for its kind, whoever pressed the button. The
+ * app ignores that stored text and reads `metadata.removedBy` against the author instead (chat-actions
+ * .tombstoneText), because that is what tells an author's own delete from a convenor's removal. This read it
+ * the stored way, so a member who deleted their own message saw the chat call it "This message was deleted"
+ * and Talk call it "removed by a convenor" — about the same message.
+ *
+ * `authorDeleteText` is null for a thread that HAS no author delete — an event's, and an enterprise's (#1048
+ * refuses one there, and a keeper has no Remove of their own in the app either). The removal's own wording is
+ * the only reading those can carry, whoever pressed the button, including the host or keeper's own line.
+ */
+function tombstonePreview(row: any, removedText: string, authorDeleteText: string | null): string {
+    if (!authorDeleteText) return removedText;
+    let meta: any = null;
+    if (row.metadata) { try { meta = JSON.parse(row.metadata); } catch { /* unreadable: fall through */ } }
+    const by = meta?.removedBy;
+    if (by && row.author_pubkey && by === row.author_pubkey) return authorDeleteText;
+    if (by) return removedText;
+    // Removed before the node recorded who did it: the same neutral reading the chat gives that row.
+    return authorDeleteText;
+}
+
+function previewText(row: any, removedText: string, authorDeleteText: string | null): string {
+    if (row.type === 'removed') return tombstonePreview(row, removedText, authorDeleteText);
     if (row.type === 'system') return String(row.ciphertext ?? '');
     let text = String(row.ciphertext ?? '');
     if (row.nonce === 'plaintext-v1') {
@@ -74,9 +105,9 @@ function previewText(row: any, removedText: string): string {
     return text.length > PREVIEW_MAX ? `${text.slice(0, PREVIEW_MAX - 1)}…` : text;
 }
 
-function lastMessageOf(conversationId: string, removedText: string): YourChatLastMessage | null {
+function lastMessageOf(conversationId: string, removedText: string, authorDeleteText: string | null): YourChatLastMessage | null {
     const r = db.prepare(`
-        SELECT m.id, m.author_pubkey, m.type, m.system_type, m.ciphertext, m.nonce, m.timestamp, memb.callsign
+        SELECT m.id, m.author_pubkey, m.type, m.system_type, m.ciphertext, m.nonce, m.metadata, m.timestamp, memb.callsign
         FROM messages m LEFT JOIN members memb ON memb.public_key = m.author_pubkey
         WHERE m.conversation_id = ?
         ORDER BY m.timestamp DESC, m.rowid DESC LIMIT 1
@@ -88,7 +119,7 @@ function lastMessageOf(conversationId: string, removedText: string): YourChatLas
         authorCallsign: r.author_pubkey === 'SYSTEM' ? null : (r.callsign || r.author_pubkey?.slice(0, 8) || null),
         type: r.type,
         systemType: r.system_type || null,
-        text: previewText(r, removedText),
+        text: previewText(r, removedText, authorDeleteText),
         timestamp: r.timestamp,
     };
 }
@@ -120,7 +151,11 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
     // every quiet enterprise to the top).
     const finish = (base: Omit<YourChat, 'lastMessage' | 'unreadCount' | 'mute' | 'lastActivityAt'>, removedText: string, since?: string | null) => {
         const cursor = readCursor(base.kind, base.conversationId, pubkey);
-        const lastMessage = lastMessageOf(base.conversationId, removedText);
+        // A group chat is the only kind with an author's own delete to tell apart. An event thread holds only
+        // the host's removal and an enterprise thread only a keeper's, so there the removal's wording is the
+        // whole reading — matching tombstoneText in apps/native/utils/chat-actions.ts.
+        const lastMessage = lastMessageOf(base.conversationId, removedText,
+            base.kind === 'group' ? DELETED_BY_AUTHOR_PREVIEW : null);
         items.push({
             ...base,
             lastMessage,

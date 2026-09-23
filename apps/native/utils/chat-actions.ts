@@ -1,0 +1,453 @@
+/**
+ * One chat experience, decided here.
+ *
+ * DMs, group chats, an enterprise's discussion thread and an event's chat are four data sources behind one
+ * screen shape (chat parity, 2026-09-23). Everything that decides what a bubble SAYS or what tapping it
+ * OFFERS lives in this file, pure, so both the shared components and vitest read the same rules — the two
+ * screens drifted apart precisely because each carried its own copy of them.
+ *
+ * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
+ */
+
+/** Authors may edit a text message for this long after sending (mirrors the node's window). */
+export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+/** The one reaction row, in every kind of chat that has reactions. */
+export const CHAT_REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'] as const;
+
+/** What an author's own deletion reads as, and what a convenor's removal reads as. */
+export const DELETED_BY_AUTHOR_TEXT = 'This message was deleted';
+export const REMOVED_BY_CONVENOR_TEXT = 'Removed by a convenor';
+
+/**
+ * An event chat's one removal, whoever did it. Kept identical to utils/events.EVENT_CHAT_REMOVED_TEXT —
+ * spelled again here because this file must stay free of everything but itself for vitest.
+ */
+export const REMOVED_BY_HOST_TEXT = 'removed by the host';
+
+/**
+ * An enterprise thread's one removal, whoever did it. The keeper's own words, kept identical to what the node
+ * writes into a removed row there (apps/server/src/engine/enterprise-thread.ts) and to what "Your groups"
+ * previews it as — the list and the chat are looking at one message.
+ */
+export const REMOVED_BY_KEEPER_TEXT = 'removed by a keeper';
+
+/** An older node knows none of the new verbs. The app says this rather than showing its 403/404. */
+export const NOT_AVAILABLE_YET = 'Not available on this community yet';
+
+/** When the node refused and sent nothing readable to show for it. */
+export const CHAT_ACTION_GENERIC_ERROR = 'Could not reach the node. Try again when you have signal.';
+
+/**
+ * The two sentences an OLD node answers a group edit and a group reaction with
+ * (origin/main apps/server/src/engine/group-thread.ts:40-41, thrown at messaging.ts:349 and :272).
+ *
+ * They are the only 403s that mean "this build has never heard of the verb". Every other 403 comes from a
+ * node that HAS the verb and is refusing this particular use of it, and must be shown in the node's own words.
+ */
+export const OLD_NODE_GROUP_CHAT_REFUSALS: readonly string[] = [
+    'Messages in a group chat cannot be edited',
+    'Reactions are not part of a group chat yet',
+];
+
+export type ChatKind = 'dm' | 'group' | 'enterprise' | 'event';
+
+/** The one message shape the shared list, bubble and actions work in, whatever fetched it. */
+export interface ChatMessage {
+    id: string;
+    /** Author's pubkey. `senderId` because that is what the DM screen's rows have always called it. */
+    senderId: string;
+    text: string;
+    /** 'text' | 'image' | 'removed' | 'system' */
+    type?: string;
+    systemType?: string | null;
+    metadata?: any;
+    /** Optimistic-send state; absent once the node has it. */
+    sendState?: 'sending' | 'failed';
+    outgoing?: boolean;
+    readByPeer?: boolean;
+    edited?: boolean;
+    editedAt?: string | null;
+    rawTimestamp?: string | null;
+    /** Already formatted for display ("14:05"). */
+    timestamp?: string;
+    /** Who said it, when the chat shows names (group, enterprise, event). */
+    authorName?: string | null;
+}
+
+/** Who the viewer is in this chat, for the action rules below. */
+export interface ChatViewer {
+    kind: ChatKind;
+    myPubkey?: string | null;
+    /** False in a read-only chat, for an observer, or once someone has left. */
+    canPost: boolean;
+    /** A group's convenor or an event's host: may remove other people's messages. */
+    isModerator?: boolean;
+    now?: number;
+}
+
+export interface MessageActions {
+    reply: boolean;
+    react: boolean;
+    edit: boolean;
+    /** The author's own "delete for everyone". */
+    delete: boolean;
+    /** A convenor's or host's removal of somebody else's message. */
+    remove: boolean;
+}
+
+const NO_ACTIONS: MessageActions = { reply: false, react: false, edit: false, delete: false, remove: false };
+
+/** A system line (a join, a leave, an escrow event) is never a bubble anyone can act on. */
+export function isSystemLine(m: { type?: string; senderId?: string; systemType?: string | null } | null | undefined): boolean {
+    if (!m) return false;
+    return m.type === 'system' || m.senderId === 'SYSTEM' || !!m.systemType;
+}
+
+/** A deleted or removed message: the node replaced its text and dropped its reactions. */
+export function isTombstone(m: { type?: string; metadata?: any } | null | undefined): boolean {
+    if (!m) return false;
+    return m.type === 'removed' || m.metadata?.removed === true;
+}
+
+/**
+ * The words a tombstone shows. The node stores one marker text per thread kind; the app ignores it and reads
+ * the chat's kind and `metadata.removedBy` instead, because those are what tell an author's own delete from
+ * a moderator's removal — and the two must not read the same.
+ *
+ * Which readings a chat HAS is a property of the chat, not of who pressed the button:
+ *  - an event chat has exactly one, the host's removal, and it says so even when the host removed their own
+ *    message (the power `canRemoveMessage` deliberately keeps). It has no author delete to be confused with,
+ *    and "Removed by a convenor" would name a role an event does not have;
+ *  - an enterprise thread is the same shape: the node refuses an author delete there (#1048) and the app
+ *    offers a keeper no Remove of their own, so its only tombstone is a keeper's removal, made from the PWA —
+ *    including of the keeper's own line, which must not read as that keeper deleting it;
+ *  - a group chat has both, told apart by `removedBy`;
+ *  - a DM has no moderator at all, so every tombstone in one is the author's own delete.
+ */
+export function tombstoneText(
+    m: { senderId?: string; metadata?: any } | null | undefined,
+    kind?: ChatKind,
+): string {
+    if (kind === 'event') return REMOVED_BY_HOST_TEXT;
+    if (kind === 'enterprise') return REMOVED_BY_KEEPER_TEXT;
+    if (kind === 'dm') return DELETED_BY_AUTHOR_TEXT;
+    const by = m?.metadata?.removedBy;
+    if (by && m?.senderId && by === m.senderId) return DELETED_BY_AUTHOR_TEXT;
+    if (by) return REMOVED_BY_CONVENOR_TEXT;
+    // A node that removed a message before it recorded who did it: the neutral reading of the two.
+    return DELETED_BY_AUTHOR_TEXT;
+}
+
+/** Still on its way to the node (or stuck): its id is a local one, so nothing server-side can be asked about it. */
+function inFlight(m: ChatMessage): boolean {
+    return m.sendState === 'sending' || m.sendState === 'failed';
+}
+
+function isMine(m: ChatMessage, viewer: ChatViewer): boolean {
+    return !!viewer.myPubkey && m.senderId === viewer.myPubkey;
+}
+
+/** Only a DM and a group chat carry the author's own verbs this round; enterprise and event threads refuse them. */
+function authorVerbsAllowed(kind: ChatKind): boolean {
+    return kind === 'dm' || kind === 'group';
+}
+
+/**
+ * Edit: the author's own text, within the window, never an image, a system line, a tombstone or a message
+ * still in flight (its id is a temp id the node does not know yet).
+ */
+export function canEditMessage(m: ChatMessage, viewer: ChatViewer): boolean {
+    if (!authorVerbsAllowed(viewer.kind)) return false;
+    if (!isMine(m, viewer) || !viewer.canPost) return false;
+    if (isSystemLine(m) || isTombstone(m)) return false;
+    if (m.type === 'image') return false;
+    if (inFlight(m)) return false;
+    if (!m.rawTimestamp) return false;
+    const sentAt = new Date(m.rawTimestamp).getTime();
+    if (isNaN(sentAt)) return false;
+    return (viewer.now ?? Date.now()) - sentAt <= MESSAGE_EDIT_WINDOW_MS;
+}
+
+/** Delete for everyone: the author, any time, no window — but not a system line, a tombstone or an in-flight send. */
+export function canDeleteMessage(m: ChatMessage, viewer: ChatViewer): boolean {
+    if (!authorVerbsAllowed(viewer.kind)) return false;
+    if (!isMine(m, viewer) || !viewer.canPost) return false;
+    if (isSystemLine(m) || isTombstone(m)) return false;
+    return !inFlight(m);
+}
+
+/** A convenor's (or an event host's) removal of a message. */
+export function canRemoveMessage(m: ChatMessage, viewer: ChatViewer): boolean {
+    if (viewer.kind === 'dm') return false;
+    if (!viewer.isModerator) return false;
+    if (isSystemLine(m) || isTombstone(m)) return false;
+    if (inFlight(m)) return false;
+    // A convenor's own message is a Delete, not a Remove. Where the author has no delete of their own —
+    // an event chat, this round — the host keeps the power over every message that they already had.
+    if (isMine(m, viewer)) return !authorVerbsAllowed(viewer.kind);
+    return true;
+}
+
+/** React: whoever may post in the chat, on anything that is still a message. Not enterprise or event threads. */
+export function canReactToMessage(m: ChatMessage, viewer: ChatViewer): boolean {
+    if (!authorVerbsAllowed(viewer.kind)) return false;
+    if (!viewer.canPost) return false;
+    if (isSystemLine(m) || isTombstone(m)) return false;
+    return !inFlight(m);
+}
+
+/** Reply: quoting needs a message id the node will recognise, so a failed send cannot be quoted. */
+export function canReplyToMessage(m: ChatMessage, viewer: ChatViewer): boolean {
+    if (!authorVerbsAllowed(viewer.kind)) return false;
+    if (!viewer.canPost) return false;
+    if (isSystemLine(m) || isTombstone(m)) return false;
+    return m.sendState !== 'failed';
+}
+
+/** Everything tapping this bubble offers. One call so a screen can decide whether to open the bar at all. */
+export function messageActions(m: ChatMessage | null | undefined, viewer: ChatViewer): MessageActions {
+    if (!m) return NO_ACTIONS;
+    return {
+        reply: canReplyToMessage(m, viewer),
+        react: canReactToMessage(m, viewer),
+        edit: canEditMessage(m, viewer),
+        delete: canDeleteMessage(m, viewer),
+        remove: canRemoveMessage(m, viewer),
+    };
+}
+
+export function hasAnyAction(a: MessageActions): boolean {
+    return a.reply || a.react || a.edit || a.delete || a.remove;
+}
+
+/** WhatsApp-style day label: Today / Yesterday / "Mon, 12 May". */
+export function formatDayLabel(d: Date, now: Date = new Date()): string {
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    if (d.toDateString() === now.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+export interface ChatDaySeparator {
+    id: string;
+    type: 'day-separator';
+    label: string;
+}
+
+export type ChatListItem = ChatMessage | ChatDaySeparator;
+
+export function isDaySeparator(item: ChatListItem): item is ChatDaySeparator {
+    return (item as ChatDaySeparator).type === 'day-separator';
+}
+
+/**
+ * The rows an inverted list draws: day pills interleaved between messages from different calendar days, then
+ * the whole thing reversed, because index 0 of an inverted list renders at the visual BOTTOM.
+ *
+ * `messages` comes in oldest-first, which is what both the DM database read and the node's thread read give.
+ */
+export function buildChatListItems(messages: ChatMessage[], now: Date = new Date()): ChatListItem[] {
+    const items: ChatListItem[] = [];
+    let lastDay: string | null = null;
+    for (const m of messages) {
+        const d = m.rawTimestamp ? new Date(m.rawTimestamp) : null;
+        if (d && !isNaN(d.getTime())) {
+            const dayKey = d.toDateString();
+            if (dayKey !== lastDay) {
+                items.push({ id: `day-${dayKey}`, type: 'day-separator', label: formatDayLabel(d, now) });
+                lastDay = dayKey;
+            }
+        }
+        items.push(m);
+    }
+    return items.reverse();
+}
+
+/**
+ * Whether this bubble carries its author's name: only in a chat with more than two people, only for someone
+ * else's message, and only for the first of a run by the same person.
+ */
+export function showsAuthorName(
+    m: ChatMessage,
+    previous: ChatMessage | null | undefined,
+    viewer: Pick<ChatViewer, 'kind' | 'myPubkey'>,
+): boolean {
+    if (viewer.kind === 'dm') return false;
+    if (isSystemLine(m)) return false;
+    if (viewer.myPubkey && m.senderId === viewer.myPubkey) return false;
+    if (!previous || isSystemLine(previous)) return true;
+    return previous.senderId !== m.senderId;
+}
+
+/** The one time under a bubble, in every chat: 24-hour, zero-padded, and empty for an unreadable stamp. */
+export function formatMessageTime(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const t = new Date(iso);
+    if (isNaN(t.getTime())) return '';
+    return t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+export interface ReactionSummary {
+    /** Each emoji once, in the order it was first used. */
+    emojis: string[];
+    counts: Record<string, number>;
+    total: number;
+    /** The emoji this viewer has on the message, if any — one reaction per person. */
+    mine: string | null;
+}
+
+/** Reaction badges under a bubble. `metadata.reactions` is `[{emoji, author}]` in every kind of chat. */
+export function reactionSummary(metadata: any, myPubkey?: string | null): ReactionSummary {
+    const raw = Array.isArray(metadata?.reactions) ? metadata.reactions : [];
+    const counts: Record<string, number> = {};
+    const emojis: string[] = [];
+    let mine: string | null = null;
+    for (const r of raw) {
+        const emoji = typeof r?.emoji === 'string' ? r.emoji : null;
+        if (!emoji) continue;
+        if (!(emoji in counts)) { counts[emoji] = 0; emojis.push(emoji); }
+        counts[emoji] += 1;
+        if (myPubkey && r.author === myPubkey) mine = emoji;
+    }
+    return { emojis, counts, total: emojis.reduce((n, e) => n + counts[e], 0), mine };
+}
+
+/**
+ * An inverted list is at its newest message when its offset is ~0. A few pixels of slack so a resting list
+ * that settled at 0.5 still counts as "at the bottom".
+ */
+export const AT_BOTTOM_SLACK_PX = 80;
+
+export function isAtBottom(offsetY: number): boolean {
+    return offsetY <= AT_BOTTOM_SLACK_PX;
+}
+
+/**
+ * The bubbles this phone still owes after a read of the node. A node keeps the phone's `clientId` as the
+ * message id, so a message that came back in the read is the phone's own bubble arriving home and stops being
+ * pending; everything else stays on screen.
+ *
+ * `nodeMessages` is null when the read did not happen — it failed, or another poll already had the chat in
+ * flight. A send whose POST succeeded but whose follow-up read did not must keep its bubble: retiring it on a
+ * read that never answered takes the sender's message off the screen although the node holds it, and only the
+ * next poll brings it back.
+ */
+export function pendingAfterRead<T extends { clientId: string }>(
+    pending: T[],
+    nodeMessages: { id: string | number }[] | null | undefined,
+): T[] {
+    if (!nodeMessages) return pending;
+    const held = new Set(nodeMessages.map(m => String(m.id)));
+    return pending.filter(p => !held.has(p.clientId));
+}
+
+/**
+ * Stay at the bottom, but never yank someone reading history — the whole reason the group chat's
+ * scroll-on-content-size-change was wrong (it yanked) and the DM's foreground-only rule was incomplete
+ * (a message arriving while you sat at the bottom did not follow, so the keyboard hid it).
+ */
+export function shouldFollowNewMessages(s: { grew: boolean; isBackgroundPoll: boolean; atBottom: boolean }): boolean {
+    if (!s.grew) return false;
+    if (!s.isBackgroundPoll) return true; // my own send, an image, a resend: always show it
+    return s.atBottom;
+}
+
+/**
+ * Whether the chat shows "could not open this chat" and a Try again, instead of the thread.
+ *
+ * It asks whether there is anything to READ, not whether the first read has finished. The first read marks
+ * itself done in a `finally`, so it is done on the failing path too — gating the error on "the first read has
+ * not finished" (as this did) meant the state could never render and a member whose first read failed sat in
+ * front of an empty thread with no way to retry.
+ *
+ * A read that fails while the thread is already on screen keeps the thread: the poll will try again, and
+ * replacing messages a member is reading with an error is worse than a stale thread.
+ */
+export function shouldShowChatLoadError(s: { loadError: string | null; messageCount: number }): boolean {
+    return !!s.loadError && s.messageCount === 0;
+}
+
+/** A failed chat action, as utils/db throws it: the node's status, its words, and whether they are ITS words. */
+export interface ChatActionError {
+    status?: number | null;
+    message?: string | null;
+    /**
+     * True when the node's error body carried a JSON `error` field — the route exists and this is the node's
+     * own answer. A route an older node does not have cannot answer at all: Koa returns a bare 404 whose body
+     * is the plain text "Not Found", with no `error` field.
+     */
+    nodeAnswered?: boolean;
+}
+
+/**
+ * The words a refused chat action shows.
+ *
+ * The status alone cannot tell "this node CANNOT" from "this node WILL NOT": an up-to-date node answers a
+ * removed-message edit, a reaction to a vanished message, a lapsed membership and a mute of a chat you are
+ * not in with the same 403s and 404s an older node uses for "no such verb". Only two things mean an old node
+ * — a missing route (404 with no `error` field) and the two refusals an old node words for itself — and
+ * everything else is the node's own answer, which `respondToMessagingError` already writes as a sentence a
+ * member can read. Showing "Not available on this community yet" for those sent the member to their server
+ * operator over a message a convenor had simply removed.
+ */
+export function chatActionErrorMessage(err: ChatActionError | null | undefined): string {
+    const status = err?.status ?? null;
+    const text = (err?.message || '').trim();
+    // No route to answer with: the verb is not in this node's build.
+    if (status === 404 && !err?.nodeAnswered) return NOT_AVAILABLE_YET;
+    // The same statement, said properly.
+    if (status === 501) return NOT_AVAILABLE_YET;
+    // An old node's own words for "this build has no group edit / no group reactions".
+    if (status === 403 && OLD_NODE_GROUP_CHAT_REFUSALS.includes(text)) return NOT_AVAILABLE_YET;
+    // An up-to-date node refusing THIS action. Its sentence is the true one; ours would be a lie.
+    return text || CHAT_ACTION_GENERIC_ERROR;
+}
+
+/**
+ * The words of one message in a node-readable chat (group, enterprise, event). A tombstone reads by
+ * `removedBy`, a system line as written, and anything else is decoded from base64.
+ */
+export function threadMessageDisplayText(
+    m: { type?: string; senderId?: string; authorPubkey?: string; ciphertext?: string; metadata?: any },
+    decode: (ciphertext: string, type: string) => string,
+    kind?: ChatKind,
+): string {
+    const senderId = m.senderId ?? m.authorPubkey;
+    if (isTombstone({ type: m.type, metadata: m.metadata })) return tombstoneText({ senderId, metadata: m.metadata }, kind);
+    if (isSystemLine({ type: m.type, senderId, systemType: null })) return String(m.ciphertext ?? '');
+    return decode(String(m.ciphertext ?? ''), String(m.type ?? 'text'));
+}
+
+/**
+ * A node-readable chat's message, as the shared components want it. The node returns `authorPubkey`,
+ * `ciphertext` and an ISO timestamp; the DM path already returns this shape from utils/db.
+ */
+export function normaliseThreadMessage(
+    raw: any,
+    decode: (ciphertext: string, type: string) => string,
+    myPubkey?: string | null,
+    kind?: ChatKind,
+): ChatMessage {
+    let metadata: any = raw?.metadata;
+    if (typeof metadata === 'string') {
+        try { metadata = JSON.parse(metadata); } catch { metadata = undefined; }
+    }
+    const senderId = String(raw?.authorPubkey ?? raw?.author_pubkey ?? '');
+    const type = String(raw?.type ?? 'text');
+    const rawTimestamp = raw?.timestamp ?? raw?.created_at ?? null;
+    return {
+        id: String(raw?.id ?? ''),
+        senderId,
+        text: threadMessageDisplayText({ type, senderId, ciphertext: raw?.ciphertext, metadata }, decode, kind),
+        type,
+        systemType: raw?.systemType ?? raw?.system_type ?? null,
+        metadata,
+        outgoing: !!myPubkey && senderId === myPubkey,
+        edited: !!(raw?.editedAt ?? raw?.edited_at),
+        editedAt: raw?.editedAt ?? raw?.edited_at ?? null,
+        rawTimestamp,
+        timestamp: formatMessageTime(rawTimestamp),
+        authorName: raw?.authorCallsign ?? raw?.author_callsign ?? null,
+    };
+}

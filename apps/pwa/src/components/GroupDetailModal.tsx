@@ -13,6 +13,7 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
+import { MAKE_OBSERVER_MEMBER_FIRST } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { buildRosterView } from '../lib/group-roster';
 
@@ -121,7 +122,11 @@ export function GroupDetailModal({
         if (!myPubkey) return;
         // A lead cannot leave while anyone else is active: say so here rather than letting the server refuse it.
         if (roster.leaveNeedsHandOver) {
-            setError(`You are the lead convenor of ${groupData.name}. Hand the lead to someone else first, then you can leave.`);
+            // An observer cannot take the lead, so "hand it over first" is a dead end while they are the only
+            // other active people. Name the role change that opens the way instead.
+            setError(roster.handOverBlockedByObservers
+                ? `You are the lead convenor of ${groupData.name}. ${MAKE_OBSERVER_MEMBER_FIRST}`
+                : `You are the lead convenor of ${groupData.name}. Hand the lead to someone else first, then you can leave.`);
             return;
         }
         if (!window.confirm(`Are you sure you want to leave ${groupData.name}?`)) return;

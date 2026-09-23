@@ -25,6 +25,7 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../utils/db';
+import { MAKE_OBSERVER_MEMBER_FIRST } from '@beanpool/core';
 import { MemberAvatar } from './MemberAvatar';
 import { buildRosterView } from '../utils/group-roster';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
@@ -424,7 +425,11 @@ export function GroupDetailModal({
     const handleHandOverLead = () => {
         const candidates = roster.handOverCandidates;
         if (candidates.length === 0) {
-            Alert.alert('Hand Over Lead', 'There is nobody else in this group to hand the lead to.');
+            // Observers cannot take the lead, so a roster of only observers is not "nobody" — it is one role
+            // change away from a hand-over. Say which.
+            Alert.alert('Hand Over Lead', roster.handOverBlockedByObservers
+                ? MAKE_OBSERVER_MEMBER_FIRST
+                : 'There is nobody else in this group to hand the lead to.');
             return;
         }
         Alert.alert(
@@ -448,6 +453,15 @@ export function GroupDetailModal({
         if (!myPubkey) return;
         // A lead cannot leave while anyone else is active: say so here rather than letting the server refuse it.
         if (roster.leaveNeedsHandOver) {
+            // Everyone else an observer: offering "Hand Over Lead" here would only lead to the refusal above, so
+            // the alert names the one step that unblocks them and offers no dead-end button.
+            if (roster.handOverBlockedByObservers) {
+                Alert.alert(
+                    'Make an Observer a Member First',
+                    `You are the lead convenor of ${groupData.name}. ${MAKE_OBSERVER_MEMBER_FIRST}`,
+                );
+                return;
+            }
             Alert.alert(
                 'Hand Over the Lead First',
                 `You are the lead convenor of ${groupData.name}. Hand the lead to someone else, then you can leave.`,

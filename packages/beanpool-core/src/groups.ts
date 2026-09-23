@@ -210,3 +210,17 @@ export function groupRoleLabel(role: GroupRole, isLead: boolean): string {
 export function leadMustHandOverBeforeLeaving(isLead: boolean, otherActiveMembers: number): boolean {
     return isLead && otherActiveMembers > 0;
 }
+
+/**
+ * The one hand-over the rules leave without a route: a lead whose only other active people are observers. Leaving
+ * asks them to hand the lead over (anyone active counts), but an observer cannot take it, so the candidate list is
+ * empty and both screens used to say "there is nobody" — true, and no help. What unblocks them is promoting an
+ * observer, so the screens say that instead. The server's own hint for the same case is in handOverGroupLead.
+ */
+export function leadHandOverBlockedByObservers(handOverCandidates: number, activeObservers: number): boolean {
+    return handOverCandidates === 0 && activeObservers > 0;
+}
+
+/** Short enough for an Alert body and for the PWA's error line at 320dp with 1.3x text. */
+export const MAKE_OBSERVER_MEMBER_FIRST =
+    'Make one of the observers a member first, then hand the lead to them.';

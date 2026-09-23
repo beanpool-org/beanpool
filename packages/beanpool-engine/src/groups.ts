@@ -443,13 +443,16 @@ export const HAND_OVER_FIRST =
     'You are this group\'s lead convenor. Hand the lead over to someone else first.';
 
 /**
- * What a convenor refused by the lead rules can actually do. It names only routes that exist today: the hand-over,
- * and the 30-day-silence vote (apps/server/src/engine/group-succession.ts). No Decision effect names a group's
- * lead as its subject, so the text must not send anyone looking for one — see docs/the-commons.md, "A suspended
- * lead is still the lead".
+ * What a convenor refused by the lead rules can actually do. The hand-over is the only route they can take today,
+ * so it is the only one this names as available. The 30-day-silence vote exists on the server
+ * (apps/server/src/engine/group-succession.ts) but no client calls those routes yet — neither app has a group
+ * succession screen — so it is worded as coming, exactly as the manual's own rules page words it
+ * (packages/beanpool-guide/content/about/rules.md, "A quiet lead convenor"). A refusal that names a vote the
+ * member cannot find is the same dead end as naming a Decision that does not exist; see docs/the-commons.md,
+ * "A suspended lead is still the lead".
  */
 export const LEAD_SILENCE_VOTE =
-    "Otherwise, 30 days after the lead's last activity, the other convenors — or the members, if the lead is the group's only convenor — can vote a replacement in.";
+    'A vote to replace a lead who has gone quiet is coming in a later update.';
 
 /**
  * The lead hands the lead on: to another active convenor, or to an active member, who becomes a convenor in the
@@ -600,8 +603,9 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
         throw new Error('Target is not a member of this group');
     }
 
-    // The lead convenor. Nobody demotes them — a convenor who thinks they should go has the 30-day-silence vote,
-    // and nothing else: no Decision effect names a group's lead. The lead themselves hands the lead over first.
+    // The lead convenor. Nobody demotes them — the lead themselves hands the lead over first, and that is the only
+    // route anyone can take today: the 30-day-silence vote has server routes but no screen in either client, and
+    // no Decision effect names a group's lead at all.
     const lead = getGroupLead(db, groupId);
     const isSelf = convenorPubkey === targetPubkey;
     if (lead && targetPubkey === lead && newRole !== 'convenor') {

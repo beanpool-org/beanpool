@@ -278,7 +278,11 @@ export function OffboardMemberWizard({
                                         type="radio"
                                         name="resolution"
                                         value="gift_to_member"
-                                        {...gatedProps(giftBlocked, REASON_GIFT)}
+                                        // The reason below sits INSIDE this <label>, so it is
+                                        // already part of the radio's accessible name. Pointing
+                                        // aria-describedby at it too would read it a second time,
+                                        // so this control passes no reason id (lib/gated-control).
+                                        {...gatedProps(giftBlocked, '')}
                                         checked={hasKeyAuth && resolutionChoice === 'gift_to_member' && (preview?.activeMembers?.length ?? 0) > 0}
                                         // onClick as well as onChange: without it the browser ticks the
                                         // radio for an instant before React puts it back.

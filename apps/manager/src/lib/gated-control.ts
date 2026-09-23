@@ -32,7 +32,9 @@ export interface GatedAriaProps {
  * The ARIA for a gated control, to spread onto it. `reasonIds` names the element or elements holding
  * the visible reason — one id, or several separated by spaces, which is how a control blocked by
  * more than one rule points at all of them at once. An empty string leaves `aria-describedby` off
- * rather than pointing at nothing.
+ * rather than pointing at nothing. Pass `''` when the reason already renders inside the control's
+ * own `<label>`: it is part of the accessible name there, and describing it as well has a screen
+ * reader read the whole sentence twice (found reviewing #1077).
  */
 export function gatedProps(blocked: boolean, reasonIds: string): GatedAriaProps {
     if (!blocked) return {};

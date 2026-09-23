@@ -148,9 +148,20 @@ describe('OffboardMemberWizard', () => {
         giftRadio.focus();
         expect(document.activeElement).toBe(giftRadio);
 
-        const reason = document.getElementById(giftRadio.getAttribute('aria-describedby') as string);
-        expect(reason?.textContent).toMatch(/Requires signed key-based admin authentication/);
+        // The reason renders inside the radio's own <label>, so it is already part of the
+        // accessible name. An aria-describedby pointing back at it would have a screen reader
+        // read the whole sentence a second time as the description (found reviewing #1077).
+        const reason = screen.getByText(/Requires signed key-based admin authentication/);
         expect(reason).toBeVisible();
+        expect(giftRadio).not.toHaveAttribute('aria-describedby');
+        expect(giftRadio).toHaveAccessibleDescription('');
+
+        const accessibleName = giftRadio.closest('label')?.textContent ?? '';
+        expect(accessibleName).toMatch(/Requires signed key-based admin authentication/);
+        expect(
+            accessibleName.match(/Requires signed key-based admin authentication/g)
+        ).toHaveLength(1);
+        expect(giftRadio).toHaveAccessibleName(/Requires signed key-based admin authentication/);
 
         // Choosing it is a no-op: the recipient picker never appears.
         fireEvent.click(giftRadio);
@@ -344,6 +355,10 @@ describe('OffboardMemberWizard', () => {
             expect(giftRadio).toHaveAttribute('aria-disabled', 'true');
             expect(screen.getByText(/No other active members available to receive a gift/)).toBeDefined();
             expect(screen.queryByLabelText(/Select Recipient Member/)).toBeNull();
+            // Same reason, same place: inside the label, so announced once through the name.
+            expect(giftRadio).not.toHaveAttribute('aria-describedby');
+            expect(giftRadio).toHaveAccessibleDescription('');
+            expect(giftRadio).toHaveAccessibleName(/No other active members available to receive a gift/);
         });
     });
 

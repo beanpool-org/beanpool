@@ -115,8 +115,13 @@ Only the **lead convenor** can remove a convenor, or take the convenor role off 
 
 The last convenor cannot step down or leave while anyone else is still in the group.
 
+**When the lead goes quiet.** Nobody can take the lead off the lead, so a lead who stops using the app would leave the group stuck. After 30 days with no activity from them, the group can vote a new lead in instead. Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active.
+
+Who votes is the group's **other convenors** — or its **members**, if the lead is its only convenor. Any of them can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. Observers can see the panel but have no vote, and neither does the quiet lead.
+
+The full rules are in "Rules and how decisions work", under "A quiet lead convenor".
+
 ## Coming soon
 
-- Choosing a new lead convenor when the old one has gone quiet. 30 days after the lead's last activity, the group's other convenors — or its members, if the lead is its only convenor — will be able to vote one in. The rules are in "Rules and how decisions work"; the screens are coming in a later update. Until then the lead hands it over themselves.
 - Removing a rogue lead convenor by a community Decision. Coming in a later update.
 - Groups in the web app. Today the new Groups list, chats and invitations are in the phone app.

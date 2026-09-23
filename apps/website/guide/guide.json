@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 24,
-  "hash": "0c423961564f1eb0dde197d34790f27572b1c5a649b9fa8ffd20d0f6abe4caf2",
+  "version": 25,
+  "hash": "c25b6cdf3b2bcd9693073dc159a7ebd3334dcb2c08121c031be43f9448f64dec",
   "sections": [
     {
       "id": "about",
@@ -554,7 +554,7 @@
             "**Leaving, as the lead:** hand the lead over first. If nobody else is in the group, the lead can simply leave.",
             "The last convenor cannot step down or be removed while the group still has other members.",
             "Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.",
-            "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, if the lead is the group's only convenor. Any of them can propose someone from that same group of voters, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. The screens for this are coming in a later update.",
+            "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, if the lead is the group's only convenor. Any of them can propose someone from that same group of voters, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.",
             "**A rogue lead convenor** can be removed by a community Decision. This is coming in a later update."
           ]
         },
@@ -2527,13 +2527,24 @@
           "text": "The last convenor cannot step down or leave while anyone else is still in the group."
         },
         {
+          "type": "p",
+          "text": "**When the lead goes quiet.** Nobody can take the lead off the lead, so a lead who stops using the app would leave the group stuck. After 30 days with no activity from them, the group can vote a new lead in instead. Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active."
+        },
+        {
+          "type": "p",
+          "text": "Who votes is the group's **other convenors** — or its **members**, if the lead is its only convenor. Any of them can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. Observers can see the panel but have no vote, and neither does the quiet lead."
+        },
+        {
+          "type": "p",
+          "text": "The full rules are in \"Rules and how decisions work\", under \"A quiet lead convenor\"."
+        },
+        {
           "type": "h2",
           "text": "Coming soon"
         },
         {
           "type": "ul",
           "items": [
-            "Choosing a new lead convenor when the old one has gone quiet. 30 days after the lead's last activity, the group's other convenors — or its members, if the lead is its only convenor — will be able to vote one in. The rules are in \"Rules and how decisions work\"; the screens are coming in a later update. Until then the lead hands it over themselves.",
             "Removing a rogue lead convenor by a community Decision. Coming in a later update.",
             "Groups in the web app. Today the new Groups list, chats and invitations are in the phone app."
           ]

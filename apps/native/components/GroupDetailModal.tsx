@@ -385,10 +385,41 @@ export function GroupDetailModal({
         }
     };
 
+    /** Hand the lead to one named person. The one path that actually calls the server. */
+    const performHandOverLead = async (targetPubkey: string) => {
+        setActionLoading(true);
+        try {
+            await handOverGroupLeadApi(groupData.id, targetPubkey);
+            hapticSuccess();
+            await loadDetails();
+            if (onMembershipChanged) onMembershipChanged();
+        } catch (e: any) {
+            Alert.alert('Hand Over Failed', e.message || 'Could not hand the lead over');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     /**
-     * The lead convenor hands the lead on. To another convenor, or to a member who becomes a convenor in the same
-     * step — never to an observer, and never to nobody: if the group has no candidate the lead is on their own and
-     * can simply leave.
+     * The shield beside a name: hand the lead to that person, after confirming. Same promise as the PWA's
+     * "Make lead" button — the person whose row you pressed is the person who gets it, however long the roster.
+     */
+    const handleHandOverLeadTo = (targetPubkey: string, callsign?: string) => {
+        const who = callsign || targetPubkey.slice(0, 10);
+        Alert.alert(
+            'Hand Over Lead',
+            `Make ${who} the lead convenor of ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back.`,
+            [
+                { text: 'Cancel', style: 'cancel' as const },
+                { text: 'Make Lead', onPress: () => { void performHandOverLead(targetPubkey); } },
+            ],
+        );
+    };
+
+    /**
+     * The lead convenor hands the lead on, choosing from a list. To another convenor, or to a member who becomes a
+     * convenor in the same step — never to an observer, and never to nobody: if the group has no candidate the lead
+     * is on their own and can simply leave.
      */
     const handleHandOverLead = () => {
         const candidates = roster.handOverCandidates;
@@ -398,25 +429,15 @@ export function GroupDetailModal({
         }
         Alert.alert(
             'Hand Over Lead',
-            `Who should lead ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back.`,
+            candidates.length > 6
+                ? `Who should lead ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back. For anyone not listed here, use the shield beside their name on the roster.`
+                : `Who should lead ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back.`,
             [
-                // A long roster would overflow an Alert, so it offers the first few; the rest are reachable once
-                // those have been dealt with. 320dp-safe either way: an Alert lays its buttons out vertically.
+                // A long roster would overflow an Alert, so it offers the first few; everyone else is reachable by
+                // the shield on their own row. 320dp-safe either way: an Alert lays its buttons out vertically.
                 ...candidates.slice(0, 6).map(c => ({
                     text: c.callsign || c.memberPubkey.slice(0, 10),
-                    onPress: async () => {
-                        setActionLoading(true);
-                        try {
-                            await handOverGroupLeadApi(groupData.id, c.memberPubkey);
-                            hapticSuccess();
-                            await loadDetails();
-                            if (onMembershipChanged) onMembershipChanged();
-                        } catch (e: any) {
-                            Alert.alert('Hand Over Failed', e.message || 'Could not hand the lead over');
-                        } finally {
-                            setActionLoading(false);
-                        }
-                    },
+                    onPress: () => { void performHandOverLead(c.memberPubkey); },
                 })),
                 { text: 'Cancel', style: 'cancel' as const },
             ],
@@ -776,7 +797,7 @@ export function GroupDetailModal({
                                                         style={styles.manageBtn}
                                                         accessibilityRole="button"
                                                         accessibilityLabel={`Make ${m.callsign || 'this member'} the lead convenor`}
-                                                        onPress={handleHandOverLead}
+                                                        onPress={() => handleHandOverLeadTo(m.memberPubkey, m.callsign)}
                                                     >
                                                         <MaterialCommunityIcons name="shield-star-outline" size={18} color={colors.text.secondary} />
                                                     </Pressable>

@@ -41,7 +41,7 @@ vi.mock('../crypto', async (orig) => ({
     signData: vi.fn(async (msg: Uint8Array) => msg),
 }));
 
-import { applyDelta, getPosts, getMyPosts, getMemberPosts, rsvpEvent, fetchEventDetail } from '../db';
+import { applyDelta, createPost, getPosts, getMyPosts, getMemberPosts, rsvpEvent, fetchEventDetail } from '../db';
 import { buildSignedHeaders, signData, decodeUtf8, decodeBase64 } from '../crypto';
 
 const fetchMock = vi.fn();
@@ -185,5 +185,64 @@ describe("a member's profile listings", () => {
         expect(rows).toHaveLength(1);
         expect(rows[0].type).toBe('offer');
         expect(rows[0].photos[0]).toBe('https://test.beanpool.org/api/marketplace/posts/o1/photos/0');
+    });
+});
+
+// "Post as" on NewEventModal. An enterprise's event goes through the enterprise's OWN route, with the
+// enterprise in the PATH: the node refuses any body field ending in publicKey that is not the signer, so
+// naming it as authorPublicKey on /api/marketplace/posts died with "Signature validation failed" before the
+// route ran. Me and a group still post as the signer, so they keep the marketplace route.
+describe('createPost: who the event is hosted by decides the route', () => {
+    const draft = (authorPubkey: string, extra: Record<string, unknown> = {}) => ({
+        id: 'ev-new', type: 'event', category: 'community', title: 'Working bee', description: 'Bring gloves',
+        credits: 0, price_type: 'fixed', author_pubkey: authorPubkey, lat: -28.5, lng: 153.4,
+        photos: null, repeatable: 0, cash_also_needed: 0, created_at: '2026-09-23T00:00:00.000Z',
+        eventStartAt: '2026-09-26T23:00:00.000Z', eventEndAt: '2026-09-27T02:00:00.000Z',
+        eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234', ...extra,
+    });
+    const sent = () => {
+        const call = fetchMock.mock.calls[0];
+        return { url: String(call[0]), body: JSON.parse(call[1].body as string), headers: call[1].headers };
+    };
+
+    it('an enterprise host posts to the enterprise route, with the enterprise never in the body', async () => {
+        fetchMock.mockResolvedValue(reply(200, { success: true, post: { id: 'ev-new' } }));
+        await createPost(draft('ent-pub'));
+
+        const { url, body, headers } = sent();
+        expect(url).toBe('https://test.beanpool.org/api/treasury/ent-pub/event');
+        expect(body).toMatchObject({
+            title: 'Working bee', lat: -28.5, lng: 153.4, eventStartAt: '2026-09-26T23:00:00.000Z',
+            eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234',
+        });
+        expect(body).not.toHaveProperty('authorPublicKey');
+        // The signature covers the path it is actually sent to, or the node refuses it.
+        expect(headers).toMatchObject({ 'X-Signed': 'POST /api/treasury/ent-pub/event' });
+    });
+
+    it("a member's own event still posts to the marketplace route, as themselves", async () => {
+        fetchMock.mockResolvedValue(reply(200, { success: true, post: { id: 'ev-new' } }));
+        await createPost(draft('me-pub'));
+
+        const { url, body, headers } = sent();
+        expect(url).toBe('https://test.beanpool.org/api/marketplace/posts');
+        expect(body).toMatchObject({ authorPublicKey: 'me-pub', title: 'Working bee' });
+        expect(headers).toMatchObject({ 'X-Signed': 'POST /api/marketplace/posts' });
+    });
+
+    it('a group event is still the member posting, so it keeps the marketplace route', async () => {
+        fetchMock.mockResolvedValue(reply(200, { success: true, post: { id: 'ev-new' } }));
+        await createPost(draft('me-pub', { audienceScope: 'group', targetGroupId: 'grp-1' }));
+
+        const { url, body } = sent();
+        expect(url).toBe('https://test.beanpool.org/api/marketplace/posts');
+        expect(body).toMatchObject({ authorPublicKey: 'me-pub', audienceScope: 'group', targetGroupId: 'grp-1' });
+    });
+
+    it('an offer is untouched by the event rule, even when it names another author', async () => {
+        fetchMock.mockResolvedValue(reply(200, { success: true, post: { id: 'off-new' } }));
+        await createPost({ ...draft('ent-pub'), id: 'off-new', type: 'offer', credits: 5 });
+
+        expect(sent().url).toBe('https://test.beanpool.org/api/marketplace/posts');
     });
 });

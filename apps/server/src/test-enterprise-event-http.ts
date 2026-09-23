@@ -21,6 +21,7 @@
  *  6. Validation parity with the marketplace route, over the wire: an unparseable start, a start in the past,
  *     an end before the start, a missing title, a missing pin, and more than 5 photos are all refused.
  *  7. A member's own event still goes through /api/marketplace/posts and has no created_by.
+ *  8. A keeper can EDIT what the enterprise hosts, signing with their own key: the other half of "Post as".
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-enterprise-event-http.ts
  */
@@ -180,6 +181,25 @@ async function main(): Promise<void> {
     const ownRow = own.body?.post?.id && db.prepare('SELECT author_pubkey, created_by FROM posts WHERE id = ?').get(own.body.post.id) as any;
     assert(!!ownRow && ownRow.author_pubkey === stranger.pubKeyHex && ownRow.created_by === null,
         "...authored by the member, with no created_by");
+
+    // ── 8. Editing what the enterprise hosts ─────────────────────────────────────────────────
+    // The forms sign an edit with the member's OWN key and let the node check the host set, so an edit does
+    // not need the enterprise anywhere. Checked here because it is the other half of "Post as": an event you
+    // can create and not change would be worse than one you cannot create.
+    console.log('\n── 8. Editing the enterprise event ──');
+    const edited = await signedFetch('POST', '/api/marketplace/posts/update', {
+        id: newId, authorPublicKey: keeper.pubKeyHex, title: 'Hall working bee (bring a rake)',
+    }, keeper);
+    assert(edited.status === 200 && edited.body?.success === true,
+        `a keeper edits the enterprise's event with their own key (got ${edited.status} ${edited.error ?? ''})`);
+    const afterEdit = newId && db.prepare('SELECT title, author_pubkey FROM posts WHERE id = ?').get(newId) as any;
+    assert(!!afterEdit && afterEdit.title === 'Hall working bee (bring a rake)' && afterEdit.author_pubkey === enterprise,
+        '...and the event is still the enterprise\u2019s');
+    const strangerEdit = await signedFetch('POST', '/api/marketplace/posts/update', {
+        id: newId, authorPublicKey: stranger.pubKeyHex, title: 'Hijacked',
+    }, stranger);
+    assert(strangerEdit.status === 404 || strangerEdit.status === 403,
+        `a member who is not a host cannot edit it (got ${strangerEdit.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

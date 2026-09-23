@@ -270,6 +270,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         }
     }, [openPostId, posts, onPostOpened]);
 
+    // A Live Pulse chip names a listing that the browse list need not be holding — an older post, or one
+    // the current filters hide. Same two steps as the deep-link above: open what we already have, else
+    // ask the node once, which applies the same visibility rules it applies to every other card.
+    const openPostFromActivity = useCallback((postId: string) => {
+        const found = posts.find(p => p.id === postId);
+        if (found) {
+            setSelectedPost(found);
+            return;
+        }
+        getMarketplacePosts({ id: postId, types: CLIENT_POST_TYPES })
+            .then(rows => { if (rows[0]) setSelectedPost(rows[0]); })
+            .catch(() => { });
+    }, [posts]);
+
     const [authorProfile, setAuthorProfile] = useState<MemberProfile | null>(null);
     const [loadingProfile, setLoadingProfile] = useState(false);
     const [messaging, setMessaging] = useState(false);
@@ -2584,7 +2598,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
 
                         {filtered.length > 0 && (
-                            <ActivityWaterfall isFullView={false} isMember={isMember} />
+                            <ActivityWaterfall
+                                isFullView={false}
+                                isMember={isMember}
+                                onOpenPost={openPostFromActivity}
+                                onOpenProfile={onOpenProfile}
+                            />
                         )}
 
                         {filtered.length === 0 ? (

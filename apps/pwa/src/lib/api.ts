@@ -2134,7 +2134,9 @@ export async function submitPricingReportApi(
 
 export interface ActivityFeedItem {
     id: number;
-    eventType: 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created';
+    // Mirrors ActivityEventType on the node (apps/server/src/db/activity-feed-db.ts). 'dispute_resolved'
+    // has always been served here; leaving it out of the union only hid it from the client's own mapping.
+    eventType: 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created' | 'dispute_resolved';
     actorPubkey: string;
     actorCallsign?: string;
     targetPubkey?: string;

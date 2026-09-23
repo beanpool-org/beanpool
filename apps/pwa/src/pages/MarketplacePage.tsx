@@ -2705,7 +2705,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 // leaves the cell row-tall, and the cell is what carries the
                                                 // click and the focus ring — so in the poll's row the ring drew
                                                 // around blank space below the card and a click there opened the
-                                                // listing (Marty on #1092).
+                                                // listing (review on #1092).
                                                 className={`self-start rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                             >
                                                 <MarketplaceCard

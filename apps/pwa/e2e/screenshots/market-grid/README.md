@@ -25,9 +25,8 @@ tile heights, the gap between a description and its VIEW button, whether the VIE
 poll's column span, whether any poll answer is truncated, and whether any row of the grid has an empty cell in
 it. It exits non-zero if any of that is wrong. Nothing in it talks to a node.
 
-## Why these files are committed, and when to delete them
+## The pictures are not in git
 
-The repo does not otherwise keep screenshots in git — `apps/manager/e2e/screenshots.mjs` writes to a directory you
-name and nothing is committed. These are here only so the pictures show up in the pull request for Marty to
-approve before merge, and they are 256-colour copies of what the script emits, to keep them small. Once the
-branch is approved they can go in one commit; the script is the thing worth keeping.
+Like every other harness in the repo, this one writes pictures you regenerate, not files you commit: `*.png` under
+`e2e/screenshots/` is git-ignored. The set shown to Marty for #1092 was taken at 33d249a3 and kept with the
+review, outside the repo. The script is the thing worth keeping.

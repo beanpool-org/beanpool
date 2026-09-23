@@ -21,8 +21,9 @@
  *  8. Enterprise and event threads are unchanged: edit, react and author-delete stay refused there.
  *  9. Nothing here pushes: an edit, a reaction and a delete are silent, and an edited text raises no new
  *     @mention notification.
- * 10. An invite-only group is answered word for word as an id nobody has, whichever of the three is asked
- *     (the #828 rule, PR #1048 review).
+ * 10. The two rules the room writes share with the room's send route (PR #1048 review): an invite-only group is
+ *     answered word for word as an id nobody has, whichever of the three is asked; and all three are throttled
+ *     in the chat bucket, exactly as posting a line is.
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -35,6 +36,7 @@ import {
     setMemberRole, createPost, createTreasury, adminAssignTreasuryOperator, createConversation, submitReport,
     getReports,
 } from './state-engine.js';
+import { resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { rsvpEvent } from './engine/posts.js';
 import { postGroupThreadMessage, getGroupThread, GROUP_THREAD_MESSAGE_MAX } from './engine/group-thread.js';
 import { postEnterpriseThreadMessage } from './engine/enterprise-thread.js';
@@ -474,8 +476,9 @@ async function main(): Promise<void> {
     const stillLoud = postGroupThreadMessage(cb, crew.id, bob, 'and a NEW message still pushes');
     assert(pushes.flatMap(p => p.targets).includes(alice) && !!stillLoud, 'while a new message still does');
 
-    // ── 10. A hidden group stays hidden, whichever of the three is asked ─────────────────────
-    console.log('\n--- 10. The #828 rule on edit, react and delete ---');
+    // ── 10. A hidden group stays hidden, and the room writes are throttled ──────────────────
+    console.log('\n--- 10. The #828 rule and the room throttle ---');
+    resetChatRateLimit();
     const circle = createGroup({ name: 'Quiet Circle', joinPolicy: 'invite_only', createdBy: alice });
     inviteGroupMember(circle.id, alice, bob, 'member');
     joinGroup(circle.id, bob);
@@ -497,6 +500,25 @@ async function main(): Promise<void> {
     assert(rowOf(secret.id).type === 'text' && !metaOf(secret.id).reactions && !rowOf(secret.id).edited_at,
         'and none of that touched the message');
     assert((await del(bob, secret.id)).body?.success === true, 'while its author, who is in the group, still takes it down');
+
+    // The throttle: changing a line in a room fans out to every member, so it is counted like sending one.
+    resetChatRateLimit();
+    const frank = makeMember('Frank');
+    joinGroup(crew.id, frank); approveGroupMember(crew.id, alice, frank);
+    const franksLine = postGroupThreadMessage(cb, crew.id, frank, 'a line of my own');
+    let braked = 0;
+    for (let i = 0; i < CHAT_LINES_PER_MINUTE + 1; i++) {
+        if (statusOf(await react(frank, franksLine.id)) === 429) braked++;
+    }
+    assert(braked === 1, `only the ${CHAT_LINES_PER_MINUTE + 1}th room write in a minute is braked (got ${braked})`);
+    assert(statusOf(await edit(frank, franksLine.id, 'still braked')) === 429,
+        'and edits, reactions and deletes share the one bucket — the chat bucket the group send route uses');
+    // A DM is not a room: its fan-out is the other phone, so it keeps the DM rules.
+    const franksDm = createConversation('dm', [frank, bob], frank)!;
+    const franksDmMsg = sendEngine(cb, franksDm.id, frank, b64('hello'), 'dm-nonce-frank')!;
+    assert((await del(frank, franksDmMsg.id)).body?.success === true, 'while a DM write goes through the brake untouched');
+    resetChatRateLimit();
+    assert((await del(frank, franksLine.id)).body?.success === true, 'and the next window lets the room write through again');
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

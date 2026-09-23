@@ -347,6 +347,19 @@ export const EVENT_THREAD_REACT_ERROR = 'Reactions are not part of an event chat
 export const ENTERPRISE_THREAD_SEND_ERROR = "Post to an enterprise's discussion through the enterprise, not this route";
 export const ENTERPRISE_THREAD_REACT_ERROR = 'Reactions are not part of an enterprise discussion';
 
+/**
+ * Does this id name a line in a Commons group's chat? The write routes ask before they act, so that changing a
+ * line in a room that pushes to every member is throttled exactly as posting one there is (PR #1048 review).
+ * An id nobody has and a DM message both answer false, so the answer itself tells a caller nothing — the only
+ * thing it changes is which bucket the request is counted in.
+ */
+export function isGroupChatMessage(messageId: unknown): boolean {
+    if (typeof messageId !== 'string' || !messageId) return false;
+    return !!db.prepare(
+        "SELECT 1 FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.id = ? AND c.type = ?"
+    ).get(messageId, GROUP_THREAD_TYPE);
+}
+
 export function editMessage(
     cb: MessagingCallbacks,
     messageId: string,

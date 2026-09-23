@@ -8,6 +8,7 @@ import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, publishableAvatar } from './avatar-value';
+import { emitAppEvent } from './app-events';
 import { parseArchetype, TIER_LEVELS } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -1624,13 +1625,9 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
 
     // GlobalHeader loaded the avatar once, keyed on identity.publicKey — which never changes
     // during a session — so a new profile picture only appeared after the header happened to
-    // remount. Every profile write funnels through here, so this is the one place to say so.
-    // Lazy require, matching the other emitters in this file: db.ts is also loaded by the
-    // vitest suite in plain Node, where a top-level react-native import would blow up.
-    try {
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('profile_updated', { pubkey });
-    } catch { /* not in a RN runtime */ }
+    // remount. Every LOCAL profile write funnels through here; a change that arrives by SYNC
+    // is announced from applyDelta and the members-directory refresh instead.
+    emitAppEvent('profile_updated', { pubkey });
 }
 
 
@@ -2577,10 +2574,7 @@ async function ownProfileRowWouldChange(
 
 /** Fire `profile_updated` for a sync that really did change the viewer's own row. */
 function emitOwnProfileUpdated(pubkey: string): void {
-    try {
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('profile_updated', { pubkey });
-    } catch { /* not in a RN runtime */ }
+    emitAppEvent('profile_updated', { pubkey });
 }
 
 export async function applyDelta(delta: any, expectedDbName?: string) {

@@ -567,7 +567,7 @@ function ChatScreen() {
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert('Not deleted', chatActionErrorMessage(e?.status, e?.message));
+                    Alert.alert('Not deleted', chatActionErrorMessage(e));
                 }
             } },
         ]);
@@ -580,7 +580,7 @@ function ChatScreen() {
             const res = await muteChatApi(id as string, duration);
             setMute(duration === 'off' ? null : (res?.mute ?? { conversationId: String(id), mutedUntil: null, always: duration === 'always' }));
         } catch (e: any) {
-            Alert.alert('Not changed', chatActionErrorMessage(e?.status, e?.message));
+            Alert.alert('Not changed', chatActionErrorMessage(e));
         }
     };
 
@@ -973,7 +973,7 @@ function ChatScreen() {
                 loadMessages(true);
             } catch (e: any) {
                 console.error('Failed to react to message:', e);
-                Alert.alert('Not reacted', chatActionErrorMessage(e?.status, e?.message));
+                Alert.alert('Not reacted', chatActionErrorMessage(e));
             }
         };
 

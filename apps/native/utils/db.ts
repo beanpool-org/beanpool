@@ -4069,9 +4069,12 @@ async function _signedRequest(endpoint: string, payload: any) {
 
     if (!res.ok) {
         let errorMsg = `Server returned ${res.status}`;
+        // Whether the body carried a JSON `error` field, which is what tells a node ANSWERING from a node
+        // that has no such route to answer with — see utils/chat-actions.chatActionErrorMessage.
+        let nodeAnswered = false;
         try {
             const errJson = await res.json();
-            if (errJson.error) errorMsg = errJson.error;
+            if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
         } catch {
             try {
                 const txt = await res.text();
@@ -4093,11 +4096,12 @@ async function _signedRequest(endpoint: string, payload: any) {
                 if (retryRes.ok) return await retryRes.json();
             }
         }
-        // The status rides along on the error: an edit, a reaction or a delete that an older node has
-        // never heard of answers 403/404, and the chat says "Not available on this community yet" rather
-        // than showing the node's raw words (utils/chat-actions.chatActionErrorMessage).
+        // The status and whether the node answered in its own words both ride along on the error: only a
+        // missing route (404 with no `error` field) means "an older node has never heard of this verb", and
+        // the chat shows the node's own sentence for everything else (utils/chat-actions.chatActionErrorMessage).
         const err: any = new Error(errorMsg);
         err.status = res.status;
+        err.nodeAnswered = nodeAnswered;
         throw err;
     }
 

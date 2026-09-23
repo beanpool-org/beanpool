@@ -299,18 +299,45 @@ describe('following the newest message', () => {
 });
 
 describe('what an older node\'s refusal reads as', () => {
-    it('says so plainly for the statuses a node without the new verbs answers', () => {
-        expect(chatActionErrorMessage(403, 'Forbidden')).toBe(NOT_AVAILABLE_YET);
-        expect(chatActionErrorMessage(404, 'Cannot POST /api/messages/delete')).toBe(NOT_AVAILABLE_YET);
+    it('says so plainly when the route is not in the node\'s build at all', () => {
+        // Koa's bare 404: plain text, no JSON `error` field, so nothing answered.
+        expect(chatActionErrorMessage({ status: 404, message: 'Not Found', nodeAnswered: false }))
+            .toBe(NOT_AVAILABLE_YET);
+        expect(chatActionErrorMessage({ status: 404, message: 'Cannot POST /api/messages/delete' }))
+            .toBe(NOT_AVAILABLE_YET);
+        expect(chatActionErrorMessage({ status: 501, message: 'Not Implemented', nodeAnswered: true }))
+            .toBe(NOT_AVAILABLE_YET);
+    });
+
+    it('says so plainly for the two refusals an old node words for itself', () => {
+        // origin/main apps/server/src/engine/group-thread.ts:40-41.
+        expect(chatActionErrorMessage({ status: 403, message: 'Messages in a group chat cannot be edited', nodeAnswered: true }))
+            .toBe(NOT_AVAILABLE_YET);
+        expect(chatActionErrorMessage({ status: 403, message: 'Reactions are not part of a group chat yet', nodeAnswered: true }))
+            .toBe(NOT_AVAILABLE_YET);
+    });
+
+    it('shows an up-to-date node\'s own words for a refusal it really means', () => {
+        // Every one of these is a 403/404 from a node that HAS the verb. Sending the member to their server
+        // operator over any of them is the bug this covers.
+        expect(chatActionErrorMessage({ status: 403, message: 'A removed message cannot be edited', nodeAnswered: true }))
+            .toBe('A removed message cannot be edited');
+        expect(chatActionErrorMessage({ status: 404, message: 'Message not found', nodeAnswered: true }))
+            .toBe('Message not found');
+        expect(chatActionErrorMessage({ status: 403, message: 'You are not in this group chat', nodeAnswered: true }))
+            .toBe('You are not in this group chat');
+        expect(chatActionErrorMessage({ status: 403, message: 'You are not a participant in this conversation', nodeAnswered: true }))
+            .toBe('You are not a participant in this conversation');
     });
 
     it('keeps the node\'s own words for a real refusal', () => {
-        expect(chatActionErrorMessage(400, 'Message is too long (maximum 2000 characters)'))
+        expect(chatActionErrorMessage({ status: 400, message: 'Message is too long (maximum 2000 characters)', nodeAnswered: true }))
             .toBe('Message is too long (maximum 2000 characters)');
     });
 
     it('falls back to a plain line when there is no message at all', () => {
-        expect(chatActionErrorMessage(null, '')).toMatch(/signal/);
+        expect(chatActionErrorMessage({ status: null, message: '' })).toMatch(/signal/);
+        expect(chatActionErrorMessage(undefined)).toMatch(/signal/);
     });
 });
 

@@ -64,7 +64,9 @@ Photos cannot be sent in a group's chat, and a deal cannot be started in one. Bo
 
 An **observer** can read the chat but not write in it, react or reply.
 
-Your community's server needs to be up to date for reply, reactions, edit and delete. If yours is not, the app says **Not available on this community yet** — ask whoever looks after it.
+Your community's server needs to be up to date for reply, reactions, edit and delete. Only if yours is not does the app say **Not available on this community yet** — that one is worth taking to whoever looks after the server.
+
+Anything else the server turns down, it turns down in its own words, and the app shows you those words rather than that line. "A removed message cannot be edited" means a convenor removed it while you were typing, not that your server is behind.
 
 ## Joining a group
 

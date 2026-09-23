@@ -308,7 +308,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     await load();
                 } catch (e: any) {
                     await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
-                    Alert.alert('Not changed', chatActionErrorMessage(e?.status, e?.message));
+                    Alert.alert('Not changed', chatActionErrorMessage(e));
                 }
                 return;
             }
@@ -354,7 +354,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             await load();
         } catch (e: any) {
             hapticWarning();
-            Alert.alert('Not reacted', chatActionErrorMessage(e?.status, e?.message));
+            Alert.alert('Not reacted', chatActionErrorMessage(e));
         }
     };
 
@@ -370,7 +370,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     await removeGroupChatMessage(id, item.id);
                     await load();
                 } catch (e: any) {
-                    Alert.alert('Not removed', chatActionErrorMessage(e?.status, e?.message) || `Could not remove ${author}'s message.`);
+                    Alert.alert('Not removed', chatActionErrorMessage(e) || `Could not remove ${author}'s message.`);
                 }
             } },
         ]);
@@ -389,7 +389,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     await load();
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert('Not deleted', chatActionErrorMessage(e?.status, e?.message));
+                    Alert.alert('Not deleted', chatActionErrorMessage(e));
                 }
             } },
         ]);

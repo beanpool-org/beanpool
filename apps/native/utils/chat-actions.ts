@@ -22,6 +22,21 @@ export const REMOVED_BY_CONVENOR_TEXT = 'Removed by a convenor';
 /** An older node knows none of the new verbs. The app says this rather than showing its 403/404. */
 export const NOT_AVAILABLE_YET = 'Not available on this community yet';
 
+/** When the node refused and sent nothing readable to show for it. */
+export const CHAT_ACTION_GENERIC_ERROR = 'Could not reach the node. Try again when you have signal.';
+
+/**
+ * The two sentences an OLD node answers a group edit and a group reaction with
+ * (origin/main apps/server/src/engine/group-thread.ts:40-41, thrown at messaging.ts:349 and :272).
+ *
+ * They are the only 403s that mean "this build has never heard of the verb". Every other 403 comes from a
+ * node that HAS the verb and is refusing this particular use of it, and must be shown in the node's own words.
+ */
+export const OLD_NODE_GROUP_CHAT_REFUSALS: readonly string[] = [
+    'Messages in a group chat cannot be edited',
+    'Reactions are not part of a group chat yet',
+];
+
 export type ChatKind = 'dm' | 'group' | 'enterprise' | 'event';
 
 /** The one message shape the shared list, bubble and actions work in, whatever fetched it. */
@@ -309,14 +324,40 @@ export function shouldFollowNewMessages(s: { grew: boolean; isBackgroundPoll: bo
     return s.atBottom;
 }
 
+/** A failed chat action, as utils/db throws it: the node's status, its words, and whether they are ITS words. */
+export interface ChatActionError {
+    status?: number | null;
+    message?: string | null;
+    /**
+     * True when the node's error body carried a JSON `error` field — the route exists and this is the node's
+     * own answer. A route an older node does not have cannot answer at all: Koa returns a bare 404 whose body
+     * is the plain text "Not Found", with no `error` field.
+     */
+    nodeAnswered?: boolean;
+}
+
 /**
- * An older node knows nothing of a group edit, a group reaction or the new delete: it answers 403 or 404.
- * The app says so plainly rather than showing a raw error, and keeps the node's own words for anything else.
+ * The words a refused chat action shows.
+ *
+ * The status alone cannot tell "this node CANNOT" from "this node WILL NOT": an up-to-date node answers a
+ * removed-message edit, a reaction to a vanished message, a lapsed membership and a mute of a chat you are
+ * not in with the same 403s and 404s an older node uses for "no such verb". Only two things mean an old node
+ * — a missing route (404 with no `error` field) and the two refusals an old node words for itself — and
+ * everything else is the node's own answer, which `respondToMessagingError` already writes as a sentence a
+ * member can read. Showing "Not available on this community yet" for those sent the member to their server
+ * operator over a message a convenor had simply removed.
  */
-export function chatActionErrorMessage(status: number | null | undefined, nodeMessage?: string | null): string {
-    if (status === 403 || status === 404 || status === 501) return NOT_AVAILABLE_YET;
-    const msg = (nodeMessage || '').trim();
-    return msg || 'Could not reach the node. Try again when you have signal.';
+export function chatActionErrorMessage(err: ChatActionError | null | undefined): string {
+    const status = err?.status ?? null;
+    const text = (err?.message || '').trim();
+    // No route to answer with: the verb is not in this node's build.
+    if (status === 404 && !err?.nodeAnswered) return NOT_AVAILABLE_YET;
+    // The same statement, said properly.
+    if (status === 501) return NOT_AVAILABLE_YET;
+    // An old node's own words for "this build has no group edit / no group reactions".
+    if (status === 403 && OLD_NODE_GROUP_CHAT_REFUSALS.includes(text)) return NOT_AVAILABLE_YET;
+    // An up-to-date node refusing THIS action. Its sentence is the true one; ours would be a lie.
+    return text || CHAT_ACTION_GENERIC_ERROR;
 }
 
 /**

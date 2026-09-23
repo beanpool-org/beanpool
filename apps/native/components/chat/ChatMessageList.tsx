@@ -23,7 +23,7 @@
 
 import React, { useCallback } from 'react';
 import { FlatList, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
-import { useGenericKeyboardHandler } from 'react-native-keyboard-controller';
+import { useKeyboardHandler } from 'react-native-keyboard-controller';
 import { scheduleOnRN } from 'react-native-worklets';
 import { isAtBottom, isDaySeparator, type ChatListItem } from '../../utils/chat-actions';
 import { ChatDaySeparator } from './ChatBubble';
@@ -62,12 +62,7 @@ export function ChatMessageList({
 
     // Keep the newest messages pinned to the bottom as the keyboard slides in, following it frame by frame
     // (WhatsApp-style) instead of a single delayed jump that lands before the avoid-view padding has settled.
-    //
-    // The GENERIC variant: the plain `useKeyboardHandler` also runs `useResizeMode()`, which sets the window to
-    // ADJUST_RESIZE on mount and back to the default on unmount. That would undo the ADJUST_NOTHING that
-    // ChatKeyboardAvoidingView owns — permanently in the DM, where this list mounts only after the first read,
-    // and on popping a chat that sat on top of another chat. This handler only scrolls; it needs no mode.
-    useGenericKeyboardHandler({
+    useKeyboardHandler({
         onMove: () => {
             'worklet';
             scheduleOnRN(scrollToBottom, false);

@@ -216,6 +216,9 @@ import {
     getGroupMember as getGroupMemberEngine,
     isGroupConvenor as isGroupConvenorEngine,
     isGroupMember as isGroupMemberEngine,
+    getGroupLead as getGroupLeadEngine,
+    isGroupLead as isGroupLeadEngine,
+    handOverGroupLead as handOverGroupLeadEngine,
     getMemberGroupIds as getMemberGroupIdsEngine,
     joinGroup as joinGroupEngine,
     setMemberRole as setMemberRoleEngine,
@@ -7045,6 +7048,35 @@ export function isGroupConvenor(groupId: string, memberPubkey: string): boolean 
 
 export function isGroupMember(groupId: string, memberPubkey: string): boolean {
     return isGroupMemberEngine(db, groupId, memberPubkey);
+}
+
+export function getGroupLead(groupId: string): string | null {
+    return getGroupLeadEngine(db, groupId);
+}
+
+export function isGroupLead(groupId: string, memberPubkey: string): boolean {
+    return isGroupLeadEngine(db, groupId, memberPubkey);
+}
+
+/**
+ * The lead convenor hands the lead on (2026-09-23). An active member becomes a convenor in the same step; the
+ * outgoing lead stays a convenor. The group's chat says so — who leads a group is the group's business, not a
+ * quiet database change.
+ */
+export function handOverGroupLead(groupId: string, leadPubkey: string, targetPubkey: string): GroupMember {
+    const res = handOverGroupLeadEngine(db, groupId, leadPubkey, targetPubkey);
+    try {
+        syncGroupThreadMembership(groupId, targetPubkey);
+        postGroupSystemLine(getMessagingCb(), groupId, GroupSystemType.LEAD_HANDED_OVER,
+            `${callsignOf(leadPubkey)} made ${callsignOf(targetPubkey)} the group's lead convenor`,
+            { actorPubkey: leadPubkey, targetPubkey, role: res.role });
+    } catch (e) { console.warn('[Groups] Could not write the lead hand-over line:', e); }
+    bumpGroupsVersion();
+    const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
+    broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
+    const group = getGroupEngine(db, groupId);
+    if (group) broadcast({ type: 'group_updated', group }, recipients);
+    return res;
 }
 
 export function getMemberGroupIds(memberPubkey: string): string[] {

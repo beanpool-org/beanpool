@@ -269,6 +269,12 @@ export interface SyncGroup {
     avatarUrl: string | null;
     category: string;
     createdBy: string;
+    /**
+     * The group's lead convenor (2026-09-23). Replicated with the group: a node restored from its mirror must
+     * come back knowing who leads each group, or the fallback would hand the lead to whoever joined earliest.
+     * Null from a node older than this change — the importer leaves the local column alone in that case.
+     */
+    leadPubkey: string | null;
     joinPolicy: string;
     createdAt: string;
     updatedAt: string;
@@ -707,6 +713,7 @@ export function exportSyncState(
             avatarUrl: r.avatar_url ?? null,
             category: r.category || 'general',
             createdBy: r.created_by,
+            leadPubkey: r.lead_pubkey ?? null,
             joinPolicy: r.join_policy,
             createdAt: r.created_at,
             updatedAt: r.updated_at || r.created_at,

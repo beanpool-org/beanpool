@@ -55,6 +55,8 @@ export const GroupSystemType = {
     CONVENOR_VOTE_OPENED: 'GROUP_CONVENOR_VOTE_OPENED',
     CONVENOR_VOTE_CLOSED: 'GROUP_CONVENOR_VOTE_CLOSED',
     CONVENOR_CHOSEN: 'GROUP_CONVENOR_CHOSEN',
+    /** The lead convenor handed the lead on (2026-09-23). Who leads the group is the group's business. */
+    LEAD_HANDED_OVER: 'GROUP_LEAD_HANDED_OVER',
     EVENT_POSTED: 'GROUP_EVENT_POSTED',
     POLL_POSTED: 'GROUP_POLL_POSTED',
 } as const;

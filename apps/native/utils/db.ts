@@ -7,7 +7,7 @@ import { eventCacheColumns, rsvpSignedMessage, type EventEditPatch, type EventRs
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
-import { isPortableAvatarValue, publishableAvatar } from './avatar-value';
+import { isPortableAvatarValue, catchUpAvatar } from './avatar-value';
 import { emitAppEvent } from './app-events';
 import { parseArchetype, TIER_LEVELS } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -1728,7 +1728,8 @@ export async function createPost(post: any) {
             // Auto-heal: server may not yet know about the user's avatar if the
             // onboarding publish failed. Push the profile and retry once.
             if (_isProfilePhotoError(errMsg)) {
-                const healed = await pushProfileToServer();
+                // Same signal as in `_signedRequest`: the node has told us it holds no photo.
+                const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
                 if (healed) {
                     const retryHeaders = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
                     const retryRes = await fetch(`${anchorUrl}/api/marketplace/posts`, {
@@ -2549,10 +2550,12 @@ export async function deletePost(id: string) {
  * to re-read a row a rollback is about to undo would put the stale value straight back.
  *
  * "A real change" matches the upsert's own semantics. Both sync loops write
- * `callsign = excluded.callsign` unconditionally but
- * `avatar_url = COALESCE(excluded.avatar_url, members.avatar_url)`, so a null avatar in the
- * payload leaves the stored one alone and is not a change. Without this the event would fire
- * on every poll, and the header would re-read on every sync tick for nothing.
+ * `callsign = excluded.callsign` unconditionally; a null avatar is a change only when the
+ * upsert would actually act on it, which is what `avatarClears` says. In a PARTIAL member list
+ * the avatar is COALESCEd and a null leaves the stored one alone, so it is not a change —
+ * without that the event would fire on every poll and the header would re-read on every sync
+ * tick for nothing. In the node's COMPLETE list a null CLEARS the row, so it is a change, and
+ * the header must re-read or it would go on showing a photo the node no longer has.
  */
 async function ownProfileRowWouldChange(
     txn: any,
@@ -2560,6 +2563,7 @@ async function ownProfileRowWouldChange(
     pk: string,
     incomingCallsign: string,
     incomingAvatar: string | null,
+    avatarClears = false,
 ): Promise<boolean> {
     if (!selfPubkey || pk !== selfPubkey) return false;
     const before = await txn.getFirstAsync(
@@ -2569,6 +2573,7 @@ async function ownProfileRowWouldChange(
     if (!before) return Boolean(incomingCallsign || incomingAvatar);
     if (incomingCallsign !== (before.callsign ?? '')) return true;
     if (incomingAvatar !== null && incomingAvatar !== before.avatar_url) return true;
+    if (incomingAvatar === null && avatarClears && before.avatar_url !== null) return true;
     return false;
 }
 
@@ -2617,6 +2622,18 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
     }
     
     if (delta.members && delta.members.length > 0) {
+        // In the node's COMPLETE member list, a null avatar is the node SAYING it has no photo
+        // for that member — including the "broken row" case, where the stored value is this
+        // node's own `/api/avatar/…` URL and is now emitted as null (decision (c)). The old
+        // unconditional COALESCE kept the phone's previously-synced URL in that case, so the
+        // phone went on believing the node held a photo: `MemberAvatar` rendered a 404ing URL,
+        // and `catchUpAvatar` read "the node has a photo, leave `avatar` out" and never
+        // republished the canonical copy. Only the marketplace photo gate could heal it.
+        //
+        // A PARTIAL list (the incremental `?updatedAfter=` delta) is not evidence of absence —
+        // it only carries members who changed — so it keeps COALESCE, exactly as the GC below
+        // only runs for a complete list.
+        const avatarNullClears = delta.membersComplete === true;
         const serverMemberSet = new Set();
         for (const m of delta.members) {
             const pk = m.publicKey || m.public_key || '';
@@ -2630,18 +2647,21 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
             const arch = m.archetype || null;
-            if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av)) ownRowChanged = true;
+            if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears)) ownRowChanged = true;
             await txn.runAsync(
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
                    callsign = excluded.callsign,
-                   avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
+                   avatar_url = CASE WHEN ? THEN excluded.avatar_url
+                                     ELSE COALESCE(excluded.avatar_url, members.avatar_url) END,
                    joined_at = COALESCE(excluded.joined_at, members.joined_at),
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
                    earned_credit = excluded.earned_credit,
                    elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
                    archetype = COALESCE(excluded.archetype, members.archetype)`,
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch]
+                // The CASE placeholder is the 9th `?` in the statement text, so it binds AFTER
+                // the eight VALUES parameters.
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch, avatarNullClears ? 1 : 0]
             );
         }
 
@@ -3983,25 +4003,32 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
 // pillar-sync's offline-edit retry loop, and a proactive push right after joining
 // a new node so the picture lands before the user ever opens the composer.
 //
-// The avatar is resolved from THIS node's local DB first, then falls back to the
-// canonical (node-independent) profile — that fallback is what makes the picture
-// follow the user onto a freshly-joined second community, where the local row
-// exists (from registration) but has no avatar yet.
-export async function pushProfileToServer(): Promise<boolean> {
+// The avatar is resolved by `catchUpAvatar`: a photo picked during an offline save
+// (portable, still sitting in the local row) always goes; otherwise the canonical copy
+// goes only when the node is KNOWN to hold no photo for us. That fallback is what makes
+// the picture follow the user onto a freshly-joined second community, where the local
+// row exists (from registration) but has no avatar yet.
+//
+// `nodeHasNoPhoto` is the marketplace photo gate's signal — the node has just answered
+// "please set a profile photo", which is proof there is nothing there to overwrite even
+// if the local row still holds a URL. Callers WITHOUT it (the pending_profile_sync retry,
+// invite redeem for an `alreadyMember`) can reach a node that already holds a NEWER photo
+// from another device, so they must leave `avatar` out rather than post canonical over it.
+export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): Promise<boolean> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const identity = await loadIdentity();
     if (!anchorUrl || !identity) return false;
     const profile = await getMemberProfile(identity.publicKey);
 
     const canonical = await getCanonicalProfile();
-    // The local row is only preferred when it holds a PORTABLE value. Since #725 the members
-    // sync writes the node's own `/api/avatar/<pk>?size=thumb` string into it, and
-    // `profile?.avatar_url || canonical?.avatar` happily preferred that — so this function
-    // published the node's URL back to the node as the member's avatar, and the node stored
-    // it. From then on `GET /api/avatar/<pk>` 404d: the photo was destroyed. Falling back to
-    // the canonical copy publishes the real picture instead, which is also exactly what makes
-    // the photo follow the member onto a freshly-joined node.
-    const avatar = publishableAvatar(profile?.avatar_url, canonical?.avatar);
+    // Since #725 the members sync writes the node's own `/api/avatar/<pk>?size=thumb` string
+    // into the local row, and `profile?.avatar_url || canonical?.avatar` happily preferred
+    // that — so this function published the node's URL back to the node as the member's
+    // avatar, and from then on `GET /api/avatar/<pk>` 404d: the photo was destroyed. But the
+    // canonical copy is not an unconditional replacement for it: only a local pick ever writes
+    // canonical, so when the node holds a photo this phone has not picked, canonical is the
+    // OLDER one and posting it would overwrite the member's newest choice.
+    const avatar = catchUpAvatar(profile?.avatar_url, canonical?.avatar, opts?.nodeHasNoPhoto === true);
 
     const callsign = profile?.callsign || identity.callsign;
     const bio = profile?.bio ?? canonical?.bio ?? '';
@@ -4129,7 +4156,10 @@ async function _signedRequest(endpoint: string, payload: any) {
         // server doesn't know about it (common for users whose initial onboarding
         // publish failed), push the profile and retry the request once.
         if (_isProfilePhotoError(errorMsg)) {
-            const healed = await pushProfileToServer();
+            // The node itself just said it holds no photo for us, so the canonical copy
+            // cannot be overwriting anything newer — push it even though the local row may
+            // still hold a (now broken) node URL.
+            const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
             if (healed) {
                 const retryHeaders = await buildSignedHeaders('POST', endpoint, bodyString, identity.privateKey, identity.publicKey);
                 const retryRes = await fetch(`${anchorUrl}${endpoint}`, {

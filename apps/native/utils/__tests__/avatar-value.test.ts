@@ -9,13 +9,26 @@
  * local row first. The node stored it, `GET /api/avatar/<pk>` then 404d, and the canonical
  * mirror destroyed the device's only portable copy on the way past.
  *
- * Four things are pinned here:
+ * The FIX-ROUND defect is the other direction. The canonical store is written only by a LOCAL
+ * pick, so after Damo changes his photo on the PWA this phone holds local row = the node's URL
+ * and canonical = the PREVIOUS photo. Anything that "falls back to canonical" then republishes
+ * the older picture over the newer one — a bio-only Save, Re-run Setup, or a catch-up publish
+ * that assumed the node had nothing. The rule now is: an explicit edit sends `avatar` only for a
+ * photo picked in that session, and a catch-up sends canonical only when the node is KNOWN to
+ * hold no photo for us.
+ *
+ * Six things are pinned here:
  *   1. the portable-value helper itself,
- *   2. the canonical mirror refusing a non-portable value,
- *   3. pushProfileToServer choosing the canonical copy over a node URL,
- *   4. the own-row-changed detection behind the sync `profile_updated` event.
+ *   2. the per-path publish rules (explicit edit, Re-run Setup, catch-up),
+ *   3. the canonical mirror refusing a non-portable value,
+ *   4. pushProfileToServer sending canonical only when the node has nothing,
+ *   5. a null avatar in the node's COMPLETE member list clearing the local row,
+ *   6. the own-row-changed detection behind the sync `profile_updated` event.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // vi.mock factories are hoisted above every const in this file, so the shared doubles have to
 // be created inside vi.hoisted() or the factories close over a TDZ binding.
@@ -74,7 +87,13 @@ vi.mock('../crypto', () => ({ buildSignedHeaders: h.buildSignedHeaders }));
 
 const SELF_PK = 'damo'.repeat(16);
 
-import { isPortableAvatarValue, publishableAvatar } from '../avatar-value';
+import {
+    isPortableAvatarValue,
+    explicitEditAvatar,
+    catchUpAvatar,
+    profileSetupAvatar,
+    localRowHasNoAvatar,
+} from '../avatar-value';
 import { updateMemberProfile, pushProfileToServer, applyDelta } from '../db';
 
 const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
@@ -124,26 +143,171 @@ describe('isPortableAvatarValue', () => {
     });
 });
 
-describe('publishableAvatar', () => {
-    it('prefers the local row when it is portable — it is what the user just picked', () => {
-        expect(publishableAvatar(PHOTO, 'bundled://leaf')).toBe(PHOTO);
+// ---------------------------------------------------------------------------
+// 2. What each path is allowed to publish
+//
+// `OLD_PHOTO` is the canonical copy: the last photo picked ON THIS PHONE. `NODE_URL_VERSIONED`
+// in the local row means the node holds a photo — in the multi-device case, a NEWER one that
+// this phone has never seen the bytes of.
+// ---------------------------------------------------------------------------
+const OLD_PHOTO = 'data:image/jpeg;base64,T0xEUEhPVE8=';
+
+describe('explicitEditAvatar — the settings Save and the wizard', () => {
+    it('sends the photo the member picked in this session', () => {
+        expect(explicitEditAvatar(PHOTO)).toBe(PHOTO);
+        expect(explicitEditAvatar('bundled://leaf')).toBe('bundled://leaf');
     });
 
-    it('falls back to canonical when the local row holds the node URL', () => {
-        expect(publishableAvatar(NODE_URL_RELATIVE, PHOTO)).toBe(PHOTO);
-        expect(publishableAvatar(NODE_URL_ABSOLUTE, PHOTO)).toBe(PHOTO);
+    it('sends NOTHING for a bio-only Save, even though a canonical copy exists', () => {
+        // The blocking defect: `publishableAvatar(localRow, canonical)` returned OLD_PHOTO here
+        // and the Save posted it, silently replacing the newer photo set on the PWA. A Save the
+        // member did not make about their photo must not touch their photo.
+        expect(explicitEditAvatar(null)).toBeNull();
+        expect(explicitEditAvatar(undefined)).toBeNull();
     });
 
-    it('returns null — meaning "omit the field" — when neither side is portable', () => {
-        // Callers must not turn this into `avatar: null`: the server reads an explicit null
-        // as "clear it", which would finish the job the round-trip started.
-        expect(publishableAvatar(NODE_URL_RELATIVE, null)).toBeNull();
-        expect(publishableAvatar(null, null)).toBeNull();
+    it('refuses a non-portable value even if one somehow reaches it as a pick', () => {
+        expect(explicitEditAvatar(NODE_URL_VERSIONED)).toBeNull();
+        expect(explicitEditAvatar('file:///data/user/0/org.beanpool/cache/pic.jpg')).toBeNull();
+    });
+});
+
+describe('profileSetupAvatar — Re-run Setup', () => {
+    it('does not republish the stale canonical copy when the node has a photo', () => {
+        // Re-run Setup used to SEED its preview from canonical and then publish it, so opening
+        // the wizard to change a name put the previous picture back.
+        expect(profileSetupAvatar(null, NODE_URL_VERSIONED, OLD_PHOTO)).toBeNull();
+    });
+
+    it('publishes a photo picked in the wizard, over anything else', () => {
+        expect(profileSetupAvatar(PHOTO, NODE_URL_VERSIONED, OLD_PHOTO)).toBe(PHOTO);
+    });
+
+    it('publishes canonical only when the node holds no photo for us', () => {
+        // Nothing on the node to overwrite — this is the case that makes the picture follow the
+        // member onto a freshly-joined community, and keeps the photo gate satisfiable.
+        expect(profileSetupAvatar(null, null, OLD_PHOTO)).toBe(OLD_PHOTO);
+    });
+
+    it('publishes nothing when there is nothing anywhere', () => {
+        expect(profileSetupAvatar(null, null, null)).toBeNull();
+    });
+});
+
+describe('catchUpAvatar — pushProfileToServer', () => {
+    it('leaves `avatar` out when the local row holds the node\'s own URL', () => {
+        // The node has a photo; it may be newer than canonical, and this path has no way to
+        // tell. Omitting the field is how the node is told "unchanged".
+        expect(catchUpAvatar(NODE_URL_VERSIONED, OLD_PHOTO)).toBeNull();
+        expect(catchUpAvatar(NODE_URL_ABSOLUTE, OLD_PHOTO)).toBeNull();
+    });
+
+    it('sends canonical when the local row has no avatar at all', () => {
+        expect(catchUpAvatar(null, OLD_PHOTO)).toBe(OLD_PHOTO);
+        expect(catchUpAvatar('', OLD_PHOTO)).toBe(OLD_PHOTO);
+        expect(catchUpAvatar('null', OLD_PHOTO)).toBe(OLD_PHOTO);
+    });
+
+    it('sends canonical over a node URL when the node itself said it has no photo', () => {
+        // The marketplace photo gate: the node has just answered "please set a profile photo",
+        // which outranks a local row left stale by a sync.
+        expect(catchUpAvatar(NODE_URL_VERSIONED, OLD_PHOTO, true)).toBe(OLD_PHOTO);
+    });
+
+    it('always sends a photo picked during an OFFLINE save', () => {
+        // It never reached the node, so it is the newest copy anywhere.
+        expect(catchUpAvatar(PHOTO, OLD_PHOTO)).toBe(PHOTO);
+        expect(catchUpAvatar(PHOTO, OLD_PHOTO, true)).toBe(PHOTO);
+    });
+
+    it('never invents an avatar out of nothing', () => {
+        expect(catchUpAvatar(null, null)).toBeNull();
+        expect(catchUpAvatar(null, null, true)).toBeNull();
+        expect(catchUpAvatar(NODE_URL_VERSIONED, null, true)).toBeNull();
+    });
+});
+
+describe('localRowHasNoAvatar', () => {
+    it('reads every empty shape the row has historically held as "the node has none"', () => {
+        expect(localRowHasNoAvatar(null)).toBe(true);
+        expect(localRowHasNoAvatar(undefined)).toBe(true);
+        expect(localRowHasNoAvatar('')).toBe(true);
+        expect(localRowHasNoAvatar('   ')).toBe(true);
+        expect(localRowHasNoAvatar('null')).toBe(true);
+        expect(localRowHasNoAvatar('undefined')).toBe(true);
+    });
+
+    it('reads a node URL as "the node HAS a photo" — that is the whole point', () => {
+        expect(localRowHasNoAvatar(NODE_URL_VERSIONED)).toBe(false);
+        expect(localRowHasNoAvatar(PHOTO)).toBe(false);
     });
 });
 
 // ---------------------------------------------------------------------------
-// 2. The canonical mirror
+// 2b. The two explicit-edit SCREENS are wired to those rules
+//
+// The rules above are only worth anything if the screens go through them. Screens need a device
+// (see vitest.config.ts), so what is checkable here is the wiring: that the Save and the wizard
+// build their `avatar` field from the session pick, and never from the value they DISPLAY. That
+// is the exact shape of the defect — `publishableAvatar(avatar, canonical)` read the displayed
+// value and posted a stale canonical copy over a newer photo — so it is the shape worth pinning.
+// ---------------------------------------------------------------------------
+describe('the explicit-edit screens publish only a session pick', () => {
+    const read = (rel: string) =>
+        readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../..', rel), 'utf8');
+
+    it('settings Save derives `avatar` from the session pick alone', () => {
+        const src = read('app/(tabs)/settings.tsx');
+        expect(src).toContain('explicitEditAvatar(avatarPickedThisSession)');
+        // The only assignment of the payload's avatar is that value.
+        expect(src.match(/payloadObj\.avatar\s*=\s*([A-Za-z0-9_.]+)/g)).toEqual(['payloadObj.avatar = publishAvatar']);
+        // And the displayed `avatar` state never reaches the publish decision again.
+        expect(src).not.toContain('publishableAvatar');
+    });
+
+    it('settings Save writes only a session pick back to the local members row', () => {
+        // Writing the displayed value would put the node's own URL into the row as if the
+        // member had chosen it, which is how the round-trip started.
+        const src = read('app/(tabs)/settings.tsx');
+        expect(src.match(/localUpdate\.avatar_url\s*=\s*([A-Za-z0-9_.]+)/g))
+            .toEqual(['localUpdate.avatar_url = avatarPickedThisSession']);
+    });
+
+    it('Re-run Setup builds its payload through profileSetupAvatar, not from the preview', () => {
+        const src = read('app/profile-setup.tsx');
+        expect(src).toContain('profileSetupAvatar(pendingAvatar, nodeAvatar, canonicalAvatar)');
+        // `avatar: pendingAvatar` in the request body was the stale-preview publish itself.
+        expect(src).not.toMatch(/avatar:\s*pendingAvatar/);
+        expect(src).not.toContain('publishableAvatar');
+    });
+
+    it('only the marketplace photo gate claims the node has no photo', () => {
+        // `nodeHasNoPhoto` overrides the local row, so it must come ONLY from the node saying
+        // so. Both heal sites pass it; the pending-sync retry and the invite-redeem publish
+        // must not, or they are back to posting canonical over a newer photo.
+        const src = read('utils/db.ts');
+        const healBranches = src.match(/_isProfilePhotoError\([a-zA-Z]+\)\)\s*\{[\s\S]{0,400}?pushProfileToServer\([^)]*\)/g) ?? [];
+        expect(healBranches).toHaveLength(2);
+        for (const branch of healBranches) {
+            expect(branch).toContain('pushProfileToServer({ nodeHasNoPhoto: true })');
+        }
+        // Every other caller in the app takes no argument.
+        for (const rel of ['services/pillar-sync.ts', 'app/_layout.tsx']) {
+            expect(read(rel)).not.toContain('nodeHasNoPhoto');
+        }
+    });
+
+    it('Re-run Setup shows the node\'s photo through MemberAvatar', () => {
+        // The preview used to render the canonical copy as if it were current. MemberAvatar
+        // resolves the node's relative `/api/avatar/<pk>` path and falls back to the initial.
+        const src = read('app/profile-setup.tsx');
+        expect(src).toMatch(/<MemberAvatar[\s\S]{0,200}avatarUrl=\{displayAvatar\}/);
+        expect(src).toContain('const displayAvatar = pendingAvatar ?? nodeAvatar ?? canonicalAvatar;');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 3. The canonical mirror
 // ---------------------------------------------------------------------------
 describe('updateMemberProfile canonical mirror', () => {
     beforeEach(() => {
@@ -181,7 +345,7 @@ describe('updateMemberProfile canonical mirror', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. pushProfileToServer
+// 4. pushProfileToServer
 // ---------------------------------------------------------------------------
 describe('pushProfileToServer avatar choice', () => {
     const postedBody = (): any => {
@@ -196,10 +360,33 @@ describe('pushProfileToServer avatar choice', () => {
         globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as any;
     });
 
-    it('publishes the canonical photo when the local row holds the node URL', async () => {
-        // The exact state after any members sync: the row points back at the node.
+    /** The exact local state after any members sync: the row points back at the node. */
+    const rowHoldsNodeUrl = (extra: Record<string, unknown> = {}) => {
         h.getFirstAsync.mockResolvedValue({
             public_key: SELF_PK, callsign: 'Damo', avatar_url: NODE_URL_VERSIONED,
+            bio: null, contact_value: null, contact_visibility: null, archetype: null, ...extra,
+        });
+    };
+
+    it('leaves `avatar` out when the local row holds the node URL — the node may have a NEWER photo', async () => {
+        // This assertion is the reverse of the one it replaces. The old test pinned
+        // `publishableAvatar`'s unconditional canonical fallback, which the deciding review
+        // found to be a silent overwrite: after a photo change on the PWA, canonical is the
+        // PREVIOUS photo, and the pending-sync retry and the invite-redeem publish both reach
+        // a node that already holds the newer one.
+        rowHoldsNodeUrl({ bio: 'still has a bio' });
+        h.getCanonicalProfile.mockResolvedValue({ avatar: PHOTO });
+
+        await pushProfileToServer();
+
+        expect('avatar' in postedBody()).toBe(false);
+    });
+
+    it('publishes the canonical photo when the local row has no avatar at all', async () => {
+        // A freshly-joined second community: the row exists from registration with no photo, so
+        // there is nothing on the node to overwrite and the picture should follow the member.
+        h.getFirstAsync.mockResolvedValue({
+            public_key: SELF_PK, callsign: 'Damo', avatar_url: null,
             bio: null, contact_value: null, contact_visibility: null, archetype: null,
         });
         h.getCanonicalProfile.mockResolvedValue({ avatar: PHOTO });
@@ -207,6 +394,45 @@ describe('pushProfileToServer avatar choice', () => {
         await pushProfileToServer();
 
         expect(postedBody().avatar).toBe(PHOTO);
+    });
+
+    it('publishes canonical over a stale node URL when the photo gate says the node has none', async () => {
+        // `nodeHasNoPhoto` is the node's own answer to a marketplace action, which outranks a
+        // local row a sync left stale — this is the heal path, and it must still heal.
+        rowHoldsNodeUrl();
+        h.getCanonicalProfile.mockResolvedValue({ avatar: PHOTO });
+
+        await pushProfileToServer({ nodeHasNoPhoto: true });
+
+        expect(postedBody().avatar).toBe(PHOTO);
+    });
+
+    it('sends the photo picked during an OFFLINE save, and not the older canonical one', async () => {
+        // The `pending_profile_sync` retry after an offline pick: the picked photo is sitting
+        // portable in the local row and has never reached the node.
+        h.getFirstAsync.mockResolvedValue({
+            public_key: SELF_PK, callsign: 'Damo', avatar_url: PHOTO,
+            bio: null, contact_value: null, contact_visibility: null, archetype: null,
+        });
+        h.getCanonicalProfile.mockResolvedValue({ avatar: OLD_PHOTO });
+
+        await pushProfileToServer();
+
+        expect(postedBody().avatar).toBe(PHOTO);
+    });
+
+    it('sends no photo at all on the retry after an offline BIO-ONLY save', async () => {
+        // The case the deciding review named: the member saved a bio while offline, and by the
+        // time the retry runs the node holds a newer photo from another device. The retry must
+        // publish the bio and say nothing about the avatar.
+        rowHoldsNodeUrl({ bio: 'wrote this on the train' });
+        h.getCanonicalProfile.mockResolvedValue({ avatar: OLD_PHOTO });
+
+        await pushProfileToServer();
+
+        const body = postedBody();
+        expect('avatar' in body).toBe(false);
+        expect(body.bio).toBe('wrote this on the train');
     });
 
     it('prefers the local row when it really does hold the photo', async () => {
@@ -222,6 +448,8 @@ describe('pushProfileToServer avatar choice', () => {
     });
 
     it('omits `avatar` entirely — never sends null — when nothing portable is available', async () => {
+        // Callers must not turn a null into `avatar: null`: the server reads an explicit null as
+        // "clear it", which would finish the job the round-trip started.
         h.getFirstAsync.mockResolvedValue({
             public_key: SELF_PK, callsign: 'Damo', avatar_url: NODE_URL_RELATIVE,
             bio: 'still has a bio', contact_value: null, contact_visibility: null, archetype: null,
@@ -238,7 +466,51 @@ describe('pushProfileToServer avatar choice', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. The sync telling the UI that the viewer's OWN row changed
+// 5. A null avatar in the node's COMPLETE member list clears the local row
+// ---------------------------------------------------------------------------
+describe('applyDelta avatar clearing', () => {
+    /** The members upsert `applyDelta` ran, as SQL text plus its bound parameters. */
+    const membersUpsert = () => {
+        const call = h.runAsync.mock.calls.find(
+            (c: any[]) => typeof c[0] === 'string' && /INSERT INTO members/.test(c[0]) && /joined_at/.test(c[0])
+        );
+        expect(call, 'applyDelta did not run the members upsert').toBeTruthy();
+        return { sql: call![0] as string, params: call![1] as any[] };
+    };
+
+    beforeEach(() => {
+        h.loadIdentity.mockResolvedValue({ publicKey: SELF_PK, callsign: 'Damo', privateKey: 'k' });
+        h.db.withTransactionAsync.mockImplementation(async (cb: () => Promise<void>) => { await cb(); });
+        h.db.getAllAsync.mockResolvedValue([]);
+    });
+
+    it('clears a stored avatar when the node\'s COMPLETE list says the member has none', async () => {
+        await applyDelta({ members: [{ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: null }], membersComplete: true });
+        const { sql, params } = membersUpsert();
+        // The CASE placeholder is the last `?` in the statement text, so it is the last param.
+        expect(sql).toMatch(/avatar_url = CASE WHEN \? THEN excluded\.avatar_url/);
+        expect((sql.match(/\?/g) || []).length).toBe(params.length);
+        expect(params[params.length - 1]).toBe(1);
+        expect(params[2]).toBeNull(); // avatar_url column stays the incoming null
+    });
+
+    it('keeps COALESCE for a PARTIAL list, which is not evidence of absence', async () => {
+        // The incremental `?updatedAfter=` delta only carries members who changed; a member
+        // absent from it has not lost their photo, and neither has one whose row it omits.
+        await applyDelta({ members: [{ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: null }] });
+        const { params } = membersUpsert();
+        expect(params[params.length - 1]).toBe(0);
+    });
+
+    it('still writes an incoming avatar on a partial list', async () => {
+        await applyDelta({ members: [{ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: NODE_URL_VERSIONED }] });
+        const { params } = membersUpsert();
+        expect(params[2]).toBe(NODE_URL_VERSIONED);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 6. The sync telling the UI that the viewer's OWN row changed
 // ---------------------------------------------------------------------------
 describe('applyDelta emits profile_updated for the viewer\'s own row', () => {
     /** What the local DB holds BEFORE the sync writes over it. */
@@ -284,9 +556,23 @@ describe('applyDelta emits profile_updated for the viewer\'s own row', () => {
         })).toHaveLength(0);
     });
 
-    it('stays silent when the payload carries no avatar, because COALESCE keeps the stored one', async () => {
+    it('stays silent when a PARTIAL payload carries no avatar, because COALESCE keeps the stored one', async () => {
         localRowIs({ callsign: 'Damo', avatar_url: '/api/avatar/x?size=thumb&v=aaaaaaaa' });
         expect(await syncMember({ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: null })).toHaveLength(0);
+    });
+
+    it('emits when the COMPLETE list clears the viewer\'s photo', async () => {
+        // The row really does change now, and the header must stop showing a photo the node no
+        // longer has — the old `incomingAvatar !== null` guard would have stayed silent.
+        localRowIs({ callsign: 'Damo', avatar_url: '/api/avatar/x?size=thumb&v=aaaaaaaa' });
+        await applyDelta({ members: [{ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: null }], membersComplete: true });
+        expect(h.emit.mock.calls.filter(c => c[0] === 'profile_updated')).toHaveLength(1);
+    });
+
+    it('stays silent when the COMPLETE list clears an avatar that was already absent', async () => {
+        localRowIs({ callsign: 'Damo', avatar_url: null });
+        await applyDelta({ members: [{ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: null }], membersComplete: true });
+        expect(h.emit.mock.calls.filter(c => c[0] === 'profile_updated')).toHaveLength(0);
     });
 
     it('stays silent for another member\'s row, however much it changed', async () => {

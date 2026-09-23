@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,9 +9,9 @@ import { OnboardingGuide } from '../components/OnboardingGuide';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
-import { publishableAvatar } from '../utils/avatar-value';
+import { profileSetupAvatar } from '../utils/avatar-value';
 import { buildSignedHeaders } from '../utils/crypto';
-import { resolveBundledAvatar } from '../utils/bundled-avatars';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
 import { colors, palette } from '../constants/colors';
 
@@ -39,7 +39,20 @@ export default function ProfileSetupScreen() {
 
     const [step, setStep] = useState<Step>('name');
     const [callsign, setCallsign] = useState(identity?.callsign ?? '');
+    // Three separate things, deliberately not one `avatar` state:
+    //  - `pendingAvatar`  the photo picked in THIS session, and the only thing an explicit edit
+    //                     may publish;
+    //  - `nodeAvatar`     what the node holds for us, read from the synced `members` row (since
+    //                     #725 that is the node's own `/api/avatar/<pk>?size=thumb` URL, and
+    //                     null when the node has no photo);
+    //  - `canonicalAvatar` the node-independent copy, written only by a local pick.
+    // Seeding one state from canonical made Re-run Setup PREVIEW the canonical copy as if it
+    // were current and then publish it — so after a photo change on the PWA or a paired device
+    // (where canonical is the PREVIOUS photo) finishing the wizard silently put the old picture
+    // back. Canonical is now shown, and sent, only when the node has no photo of its own.
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
+    const [nodeAvatar, setNodeAvatar] = useState<string | null>(null);
+    const [canonicalAvatar, setCanonicalAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -56,28 +69,29 @@ export default function ProfileSetupScreen() {
         let cancelled = false;
         (async () => {
             if (!identity) { router.back(); return; }
-            // Seed with a PORTABLE value only. The local members row holds this node's own
-            // `/api/avatar/<pk>?size=thumb` string after a sync, not the photo — seeding from it
-            // meant Re-run Setup published the node's URL back as the member's avatar and
-            // destroyed the photo. `publishableAvatar` falls back to the canonical copy, which
-            // is the real picture.
-            let avatar: string | null = null;
+            let row: string | null = null;
             try {
-                const p = await getMemberProfile(identity.publicKey);
-                avatar = publishableAvatar(p?.avatar_url, await getCanonicalAvatar());
-            } catch {
-                avatar = publishableAvatar(null, await getCanonicalAvatar());
-            }
+                row = (await getMemberProfile(identity.publicKey))?.avatar_url ?? null;
+            } catch { row = null; }
+            const canonical = await getCanonicalAvatar().catch(() => null);
             if (cancelled) return;
-            if (avatar) setPendingAvatar(avatar);
+            setNodeAvatar(row && row !== 'null' && row !== 'undefined' && row.trim() !== '' ? row : null);
+            setCanonicalAvatar(canonical ?? null);
+            const haveAvatar = Boolean(row || canonical);
             const nameOk = (identity.callsign?.trim().length ?? 0) >= 2;
-            if (nameOk && !avatar) setStep('avatar');
+            if (nameOk && !haveAvatar) setStep('avatar');
         })();
         return () => { cancelled = true; };
     }, [identity]);
 
     const nameOk = callsign.trim().length >= 2;
     const stepIndex = STEP_ORDER.indexOf(step);
+
+    // What the wizard SHOWS: this session's pick, else the node's current photo, else — only
+    // when the node has none — the canonical copy. It is also what "do you have an avatar yet?"
+    // means for the Next button, so someone whose photo is already on the node is not forced to
+    // re-pick one to get through a step they only opened to change their name.
+    const displayAvatar = pendingAvatar ?? nodeAvatar ?? canonicalAvatar;
 
     // Live per-node availability check while editing the name (debounced). Runs only
     // on the name step. 'unknown' (node unreachable) never blocks — the server still
@@ -113,7 +127,7 @@ export default function ProfileSetupScreen() {
     };
 
     async function handleFinish() {
-        if (!identity || !nameOk || !pendingAvatar) return;
+        if (!identity || !nameOk || !displayAvatar) return;
         setLoading(true);
         setError(null);
         const finalCallsign = callsign.trim();
@@ -127,9 +141,14 @@ export default function ProfileSetupScreen() {
             try {
                 const url = await AsyncStorage.getItem('beanpool_anchor_url');
                 if (url) {
+                    // `avatar` goes only when the member picked one here, or when the node has
+                    // no photo for us and the canonical copy can therefore overwrite nothing.
+                    // Omitting it is how the node is told "avatar unchanged"; sending what the
+                    // wizard merely displayed is what put an older photo back.
+                    const publishAvatar = profileSetupAvatar(pendingAvatar, nodeAvatar, canonicalAvatar);
                     const bodyString = JSON.stringify({
                         publicKey: identity.publicKey,
-                        avatar: pendingAvatar,
+                        ...(publishAvatar ? { avatar: publishAvatar } : {}),
                         callsign: finalCallsign,
                     });
                     const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
@@ -153,7 +172,9 @@ export default function ProfileSetupScreen() {
             }
             await updateMemberProfile(identity.publicKey, {
                 callsign: finalCallsign,
-                avatar_url: pendingAvatar,
+                // Only a pick from this session is written back to the members row; `undefined`
+                // is COALESCEd away and leaves the synced value alone.
+                avatar_url: pendingAvatar ?? undefined,
             });
 
             if (published) await AsyncStorage.removeItem('pending_profile_sync');
@@ -249,30 +270,27 @@ export default function ProfileSetupScreen() {
                                 Add a photo, or pick a fun avatar — whatever feels like you.
                             </Text>
                             <View style={styles.previewContainer}>
-                                {pendingAvatar ? (
-                                    <Image
-                                        source={pendingAvatar.startsWith('bundled://') ? resolveBundledAvatar(pendingAvatar)! : { uri: pendingAvatar }}
-                                        style={styles.previewImage}
-                                        accessibilityLabel="Your selected profile picture"
-                                    />
-                                ) : (
-                                    <View style={styles.previewPlaceholder}>
-                                        <Text style={styles.previewPlaceholderText}>
-                                            {(callsign.trim()[0] || '?').toUpperCase()}
-                                        </Text>
-                                    </View>
-                                )}
+                                {/* Through MemberAvatar, like every other avatar in the app: it
+                                    resolves the node's RELATIVE `/api/avatar/<pk>` path against
+                                    the anchor, handles `data:` and `bundled://`, and draws the
+                                    initial when there is no picture at all. */}
+                                <MemberAvatar
+                                    avatarUrl={displayAvatar}
+                                    pubkey={identity?.publicKey ?? ''}
+                                    callsign={callsign.trim()}
+                                    size={96}
+                                />
                                 <Text style={styles.previewCallsign}>{callsign.trim()}</Text>
                             </View>
                             <Pressable style={styles.secondaryBtn} onPress={() => setShowAvatarPicker(true)} accessibilityRole="button">
                                 <Text style={styles.secondaryBtnText}>
-                                    {pendingAvatar ? 'Change Photo or Avatar' : 'Choose Photo or Avatar'}
+                                    {displayAvatar ? 'Change Photo or Avatar' : 'Choose Photo or Avatar'}
                                 </Text>
                             </Pressable>
                             {error && <Text style={styles.error}>{error}</Text>}
                             <Pressable
-                                style={[styles.primaryBtn, !pendingAvatar && styles.disabledBtn]}
-                                disabled={!pendingAvatar}
+                                style={[styles.primaryBtn, !displayAvatar && styles.disabledBtn]}
+                                disabled={!displayAvatar}
                                 onPress={() => { setError(null); setStep('guide'); }}
                                 accessibilityRole="button"
                             >
@@ -330,12 +348,6 @@ const styles = StyleSheet.create({
         borderRadius: 10, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16,
     },
     previewContainer: { alignItems: 'center', marginBottom: 16 },
-    previewImage: { width: 96, height: 96, borderRadius: 48, backgroundColor: colors.surface.app },
-    previewPlaceholder: {
-        width: 96, height: 96, borderRadius: 48, backgroundColor: colors.surface.app,
-        alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border.strong,
-    },
-    previewPlaceholderText: { fontSize: 40, fontWeight: '800', color: colors.text.secondary },
     previewCallsign: { marginTop: 8, fontSize: 16, fontWeight: '700', color: colors.text.heading },
     primaryBtn: { backgroundColor: palette.blue600, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 4 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '700' },

@@ -12,7 +12,7 @@ import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
 import { getCanonicalProfile } from '../../utils/canonical-profile';
-import { publishableAvatar } from '../../utils/avatar-value';
+import { explicitEditAvatar } from '../../utils/avatar-value';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
@@ -534,6 +534,13 @@ export default function SettingsScreen() {
     const [holidayLoading, setHolidayLoading] = useState(false);
     const [editCallsign, setEditCallsign] = useState(identity?.callsign || '');
     const [avatar, setAvatar] = useState<string | null>(null);
+    // The photo the member picked in THIS session, and nothing else. `avatar` above is what the
+    // card DISPLAYS — after a sync it is the node's own `/api/avatar/…` URL, and when the node
+    // has none it is the canonical copy, which may be an OLDER photo than the one the node now
+    // holds (only a local pick writes canonical; a change made on the PWA or a paired device
+    // never reaches it). Publishing what is displayed therefore silently replaced the member's
+    // newest photo on every bio or name Save. A Save only sends `avatar` when this is set.
+    const [avatarPickedThisSession, setAvatarPickedThisSession] = useState<string | null>(null);
     // Callsign as held by the node we're currently anchored to. Callsigns are per-node
     // (unique per node, chosen at join), so the device-global identity.callsign is only
     // ever right by coincidence — display this instead and fall back while it loads.
@@ -914,17 +921,11 @@ export default function SettingsScreen() {
                     contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
                     callsign: newCallsign,
                 };
-                // Publish only a PORTABLE avatar. `avatar` was loaded from this node's local
-                // members row, which since #725 holds the node's own
-                // `/api/avatar/<pk>?size=thumb` string rather than the photo — so every bio or
-                // name Save after a sync posted that URL back and the node stored it, wiping
-                // the member's photo. Fall back to the canonical (node-independent) copy, and
-                // if neither is portable leave `avatar` OUT of the payload entirely: the
-                // server reads an explicit null as "clear it".
-                const publishAvatar = publishableAvatar(
-                    avatar,
-                    (await getCanonicalProfile().catch(() => null))?.avatar,
-                );
+                // Send `avatar` only when the member actually picked a photo in this session.
+                // This Save is a bio/name/contact edit; leaving the field out is how the node
+                // is told "avatar unchanged" (it reads an explicit null as "clear it"), and it
+                // is the only thing that cannot overwrite a newer photo set elsewhere.
+                const publishAvatar = explicitEditAvatar(avatarPickedThisSession);
                 if (publishAvatar) payloadObj.avatar = publishAvatar;
                 if (archetypeRaw) {
                     const parsed = parseArchetype(archetypeRaw);
@@ -976,7 +977,10 @@ export default function SettingsScreen() {
                 contact_value: contact.trim(),
                 contact_visibility: contact.trim() ? contactVisibility : 'hidden',
             };
-            if (avatar) localUpdate.avatar_url = avatar;
+            // Same rule locally: only a pick from this session is written back to the members
+            // row. Writing `avatar` would put the node's own URL (or a stale canonical copy)
+            // into the row as if the member had chosen it.
+            if (avatarPickedThisSession) localUpdate.avatar_url = avatarPickedThisSession;
             if (archetypeRaw) localUpdate.archetype = archetypeRaw;
             await updateMemberProfile(identity.publicKey, localUpdate);
             // The card renders nodeCallsign, so it would keep showing the pre-edit name
@@ -2663,6 +2667,7 @@ export default function SettingsScreen() {
                 onSelectImage={(uri) => {
                     const cleaned = (uri && uri !== 'null' && uri !== 'undefined' && uri.trim() !== '') ? uri : null;
                     setAvatar(cleaned);
+                    setAvatarPickedThisSession(cleaned);
                 }}
             />
 

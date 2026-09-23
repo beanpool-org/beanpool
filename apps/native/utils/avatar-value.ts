@@ -17,6 +17,11 @@
  * a `data:` URI, or `bundled://<id>`. Those are the only two things worth sending anywhere.
  * Everything else — a node URL, a device-local `file://` path, an empty or sentinel string —
  * is not.
+ *
+ * Portability alone is not enough to decide what to SEND, though: the canonical copy is
+ * portable and may still be OLDER than the photo the node holds, because only a local pick ever
+ * writes it. So there is no single `publishableAvatar` any more — an explicit edit and a
+ * catch-up publish have different rules, and each gets its own function below.
  */
 
 /**
@@ -34,20 +39,82 @@ export function isPortableAvatarValue(value: string | null | undefined): value i
 }
 
 /**
- * The avatar to PUBLISH, given what the local per-node row holds and what the canonical store
- * holds.
+ * The avatar an EXPLICIT edit publishes — the settings Save and the Re-run Setup wizard.
  *
- * Prefers the local row when it is portable — it is the freshest thing the user picked on this
- * node — and otherwise falls back to the canonical copy. Returns null when neither is portable,
- * which callers must treat as "leave `avatar` out of the payload entirely", never as
- * `avatar: null`: the server reads an explicit null as "clear it" (engine/members.ts), so
- * sending one would finish the job the round-trip started.
+ * Only a photo the member picked in THIS session. Anything else is omitted from the payload,
+ * which the node reads as "avatar unchanged" (`update.avatar !== undefined ? … : existing`).
+ *
+ * The rule exists because the phone cannot tell a fresh canonical copy from a stale one. The
+ * canonical store is written only by a LOCAL pick; both sync loops write the node's
+ * `/api/avatar/…` URL into the `members` row without touching canonical. So after the member
+ * changes their photo on the PWA or a paired device, this phone holds local row = the node's
+ * URL and canonical = the PREVIOUS photo — and a bio-only Save that fell back to canonical
+ * would post that previous photo and silently replace the newer one. A Save the member did not
+ * make about their photo must not touch their photo.
  */
-export function publishableAvatar(
-    local: string | null | undefined,
+export function explicitEditAvatar(sessionPick: string | null | undefined): string | null {
+    return isPortableAvatarValue(sessionPick) ? sessionPick.trim() : null;
+}
+
+/**
+ * Does this node hold no photo for us?
+ *
+ * The members sync fills the local row from the node: a photo arrives as the node's own
+ * `/api/avatar/<pk>?size=thumb` URL, and since decision (c) a node that holds a broken
+ * (self-referential) value emits null for it. So a local row with NO avatar at all is the
+ * phone's evidence that there is nothing on the node to overwrite.
+ *
+ * Only sound because `applyDelta` lets a null in the node's COMPLETE member list clear the
+ * stored avatar — under the old unconditional COALESCE the row kept a stale URL forever and
+ * this would have answered "the node has a photo" about a node that had none.
+ */
+export function localRowHasNoAvatar(localRow: string | null | undefined): boolean {
+    if (typeof localRow !== 'string') return true;
+    const trimmed = localRow.trim();
+    return !trimmed || trimmed === 'null' || trimmed === 'undefined';
+}
+
+/**
+ * The avatar a CATCH-UP publish sends — `pushProfileToServer`: the pending-sync retry after an
+ * offline save, the publish right after redeeming an invite, and the marketplace photo-gate
+ * heal.
+ *
+ * Unlike an explicit edit there is no session pick to go on, so the canonical copy is sent only
+ * when the node is KNOWN to hold no photo for us — either because the local row has no avatar
+ * at all, or because the node itself just answered "please set a profile photo"
+ * (`nodeHasNoPhoto`), which is stronger evidence than any local row. When the local row holds
+ * the node's own URL the node has a photo, it may well be newer than canonical, and `avatar` is
+ * left out.
+ *
+ * A photo picked during an OFFLINE save is sitting portable in the local row — nothing has
+ * reached the node yet, so it is the newest copy anywhere and always goes.
+ */
+export function catchUpAvatar(
+    localRow: string | null | undefined,
+    canonical: string | null | undefined,
+    nodeHasNoPhoto = false,
+): string | null {
+    if (isPortableAvatarValue(localRow)) return localRow.trim();
+    if (nodeHasNoPhoto || localRowHasNoAvatar(localRow)) {
+        return isPortableAvatarValue(canonical) ? canonical.trim() : null;
+    }
+    return null;
+}
+
+/**
+ * The avatar the Re-run Setup wizard publishes.
+ *
+ * The wizard is an explicit edit, so a photo picked here wins outright. Without a pick it may
+ * still publish the canonical copy, but ONLY when the node holds no photo for us — which is
+ * also the only case in which the wizard displays the canonical copy. That keeps the
+ * "finish your profile" gate that sent the member here satisfiable without a re-pick, while
+ * making it impossible to put an older photo back over a newer one: when the node has a photo,
+ * there is nothing this screen can publish except a fresh pick.
+ */
+export function profileSetupAvatar(
+    sessionPick: string | null | undefined,
+    nodeAvatar: string | null | undefined,
     canonical: string | null | undefined,
 ): string | null {
-    if (isPortableAvatarValue(local)) return local.trim();
-    if (isPortableAvatarValue(canonical)) return canonical.trim();
-    return null;
+    return explicitEditAvatar(sessionPick) ?? catchUpAvatar(nodeAvatar, canonical);
 }

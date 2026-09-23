@@ -16,6 +16,7 @@ import {
 import { MAKE_OBSERVER_MEMBER_FIRST } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { buildRosterView } from '../lib/group-roster';
+import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 
 interface Props {
     group: Group | null;
@@ -344,6 +345,22 @@ export function GroupDetailModal({
                                 </div>
                             )}
                         </div>
+                    )}
+
+                    {/* The quiet-lead vote, beside the roster it is about. It draws nothing unless the lead is
+                        eligible for replacement or a vote has been held, so a healthy group sees no change. */}
+                    {isMember && (
+                        <GroupSuccessionPanel
+                            groupId={groupData.id}
+                            members={members}
+                            myPubkey={myPubkey}
+                            onLeadChanged={() => {
+                                // A vote that passes moves the lead: reload so the new Lead badge and the roster's
+                                // controls are right without a restart.
+                                void loadDetails();
+                                if (onMembershipChanged) onMembershipChanged();
+                            }}
+                        />
                     )}
 
                     {/* Member Roster */}

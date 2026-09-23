@@ -15,6 +15,7 @@ import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey,
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
 import type { OwnDecisionVote } from './decision-own-vote';
+import type { GroupSuccessionData } from './group-succession';
 import { mergeIncomingMessage, isRemovedPayload, type LocalMessageRow } from './chat-sync';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
@@ -5443,6 +5444,41 @@ export async function handOverGroupLeadApi(groupId: string, targetPubkey: string
     return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/lead`, {
         targetPubkey,
     });
+}
+
+/**
+ * The quiet-lead vote (2026-09-23). A group's lead cannot be removed or demoted by anyone, so a lead who has gone
+ * quiet — or whose account a node admin has suspended — leaves the group stuck; the 30-day-silence vote is its way
+ * out. The rules are the server's alone (apps/server/src/engine/group-succession.ts); these three calls are all a
+ * screen needs, and `silence`, `proposals` and `canPropose` are what it may read.
+ *
+ * Signed, and for group members only. A node older than the route answers 404 and this throws RouteMissingError,
+ * which is the screen's cue to show nothing at all rather than an error about a feature that community lacks.
+ */
+export async function fetchGroupSuccession(groupId: string): Promise<GroupSuccessionData> {
+    const path = `/api/groups/${encodeURIComponent(groupId)}/succession`;
+    const res = await signedGet(path);
+    if (res.status === 404) throw new RouteMissingError(path);
+    if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let message = `Could not read the lead vote (${res.status})`;
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        throw new Error(message);
+    }
+    return await res.json();
+}
+
+/** Propose one member of the electorate as the new lead. Proposing yourself is allowed; it counts as your yes. */
+export async function proposeGroupSuccessionApi(groupId: string, candidatePubkey: string): Promise<any> {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/succession/propose`, { candidatePubkey });
+}
+
+/** Yes or no, once. The server refuses a second vote; nothing here can change one. */
+export async function voteGroupSuccessionApi(groupId: string, proposalId: string, choice: 'yes' | 'no'): Promise<any> {
+    return _signedRequest(
+        `/api/groups/${encodeURIComponent(groupId)}/succession/${encodeURIComponent(proposalId)}/vote`,
+        { choice },
+    );
 }
 
 export async function leaveGroupApi(groupId: string, memberPubkey: string): Promise<boolean> {

@@ -15,6 +15,8 @@ import {
 import type { OwnDecisionVote } from './decision-own-vote';
 import type { MyEvent } from './event-extras';
 export type { MyEvent };
+import type { GroupSuccessionData, GroupSuccessionProposal } from './group-succession';
+export type { GroupSuccessionData, GroupSuccessionProposal };
 
 export type { PublicCreatorChannel, ChannelPlatform, ChannelCategory };
 
@@ -1060,6 +1062,40 @@ export async function removeGroupMember(groupId: string, memberPubkey: string): 
  */
 export async function handOverGroupLead(groupId: string, targetPubkey: string): Promise<{ success: boolean; member: GroupMember }> {
     return request('POST', `/api/groups/${encodeURIComponent(groupId)}/lead`, { targetPubkey });
+}
+
+/**
+ * The quiet-lead vote (2026-09-23). A group's lead cannot be removed or demoted by anyone, so a lead who has gone
+ * quiet — or whose account a node admin has suspended — leaves the group stuck; the 30-day-silence vote is its way
+ * out. The rules are the server's alone (apps/server/src/engine/group-succession.ts); these three calls are all a
+ * screen needs, and `silence`, `proposals` and `canPropose` are what it may read.
+ *
+ * Group members only. A node older than the route answers 404, which `isRouteMissing` turns into a quiet hide.
+ */
+export async function getGroupSuccession(groupId: string): Promise<GroupSuccessionData> {
+    return request('GET', `/api/groups/${encodeURIComponent(groupId)}/succession`);
+}
+
+/** Propose one member of the electorate as the new lead. Proposing yourself is allowed; it counts as your yes. */
+export async function proposeGroupSuccession(groupId: string, candidatePubkey: string): Promise<{
+    success: boolean;
+    executed: boolean;
+    proposal: GroupSuccessionProposal;
+}> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/succession/propose`, { candidatePubkey });
+}
+
+/** Yes or no, once. The server refuses a second vote; nothing here can change one. */
+export async function voteGroupSuccession(groupId: string, proposalId: string, choice: 'yes' | 'no'): Promise<{
+    success: boolean;
+    executed: boolean;
+    proposal: GroupSuccessionProposal;
+}> {
+    return request(
+        'POST',
+        `/api/groups/${encodeURIComponent(groupId)}/succession/${encodeURIComponent(proposalId)}/vote`,
+        { choice },
+    );
 }
 
 export async function updateGroup(groupId: string, data: {

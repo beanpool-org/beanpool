@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { NodeProfile } from '../../lib/profiles';
 
@@ -226,16 +227,76 @@ describe('NodeRolesPanel', () => {
         await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'a' } });
         const list = screen.getByRole('list', { name: 'Matching members' });
-        // alice holds owner: offered, but not choosable, and told why.
-        expect(within(list).getByRole('button', { name: /alice/ })).toBeDisabled();
-        expect(within(list).getByText(/Only an owner can change this/)).toBeInTheDocument();
+        // alice holds owner: offered, but not choosable, and told why. aria-disabled rather than
+        // disabled, so a keyboard or screen-reader user can still reach the row and its reason.
+        expect(within(list).getByRole('button', { name: /alice/ })).toHaveAttribute('aria-disabled', 'true');
+        expect(within(list).getByText(/Only an owner can change an owner's role/)).toBeInTheDocument();
         // bob holds admin. Searched separately: 'a' does not match "bob", so asserting it in the
         // list above only looked like coverage -- the admin branch of the guard was untested.
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'bob' } });
-        expect(suggestion('bob')).toBeDisabled();
+        expect(suggestion('bob')).toHaveAttribute('aria-disabled', 'true');
         // carol is already a moderator, so an admin may still act on her.
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'carol' } });
-        expect(suggestion('carol')).not.toBeDisabled();
+        expect(suggestion('carol')).not.toHaveAttribute('aria-disabled');
+    });
+
+    // The reason beside a blocked row only reaches sighted mouse users while the row is natively
+    // `disabled`: that takes it out of the Tab order and out of most screen readers' reading order.
+    it('a row an admin may not pick stays in the Tab order, is announced unavailable, and says why', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, bobAdmin, carolModerator]);
+        await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'alice' } });
+
+        const row = suggestion('alice');
+        expect(row).not.toBeDisabled();
+        expect(row).toHaveAttribute('aria-disabled', 'true');
+
+        row.focus();
+        expect(document.activeElement).toBe(row);
+
+        // Its accessible description is the VISIBLE reason, not a title tooltip.
+        const describedBy = row.getAttribute('aria-describedby');
+        expect(describedBy).toBeTruthy();
+        const reason = document.getElementById(describedBy as string);
+        expect(reason).not.toBeNull();
+        expect(reason?.textContent).toMatch(/Only an owner can change an owner's role/);
+        expect(reason).toBeVisible();
+    });
+
+    it('a row an admin may not pick does nothing on click, Enter or Space', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, bobAdmin, carolModerator]);
+        await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'alice' } });
+
+        const user = userEvent.setup();
+        const row = suggestion('alice');
+
+        await act(async () => { await user.click(row); });
+        row.focus();
+        await act(async () => { await user.keyboard('{Enter}'); });
+        row.focus();
+        await act(async () => { await user.keyboard(' '); });
+
+        // Nobody was picked: the search list is still up and the "Adding …" step never opened.
+        expect(screen.getByRole('list', { name: 'Matching members' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
+        expect(grant).not.toHaveBeenCalled();
+    });
+
+    it('a control that is merely busy keeps native disabled', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, carolModerator]);
+        let release: (value: { success: boolean }) => void = () => {};
+        revoke.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+        await renderPanel();
+
+        await click(within(screen.getByTestId(`role-row-${CAROL}`)).getByRole('button', { name: /^Remove / }));
+        const yes = screen.getByRole('button', { name: /^Yes, remove/ });
+        await click(yes);
+
+        // Saving says nothing worth reading and clears by itself, so it is left alone.
+        expect(yes).toBeDisabled();
+        expect(yes).not.toHaveAttribute('aria-disabled');
+        await act(async () => { release({ success: true }); });
     });
 
     it('with no owner, the guard steps aside so an admin can make a fellow admin the first owner', async () => {
@@ -244,8 +305,8 @@ describe('NodeRolesPanel', () => {
         fetchRoles.mockResolvedValue([bobAdmin, { ...bobAdmin, member_pubkey: ALICE, callsign: 'alice' }]);
         await renderPanel({ kind: 'key', memberPubkey: BOB, role: 'admin' });
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'alice' } });
-        expect(suggestion('alice')).not.toBeDisabled();
-        expect(screen.queryByText(/Only an owner can change this/)).not.toBeInTheDocument();
+        expect(suggestion('alice')).not.toHaveAttribute('aria-disabled');
+        expect(screen.queryByText(/Only an owner can change/)).not.toBeInTheDocument();
     });
 
     it('an admin appointing a moderator sends role=moderator', async () => {

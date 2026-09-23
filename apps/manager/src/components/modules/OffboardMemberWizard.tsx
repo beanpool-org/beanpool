@@ -5,6 +5,13 @@ import {
     type OffboardPreviewResponse,
 } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { GATED_FOCUS, gatedProps, guardGated } from '../../lib/gated-control';
+
+/** The elements holding the visible reason each rule gives, so a blocked control can point at them. */
+const REASON_SOLE_OWNER = 'offboard-blocked-sole-owner';
+const REASON_PENDING_ESCROWS = 'offboard-blocked-escrows';
+const REASON_SELF_DEALING = 'offboard-blocked-self-dealing';
+const REASON_GIFT = 'offboard-gift-blocked';
 
 export interface OffboardMemberWizardProps {
     member: {
@@ -84,6 +91,23 @@ export function OffboardMemberWizard({
         currentAdminPubkey &&
         giftRecipient.toLowerCase() === currentAdminPubkey.toLowerCase()
     );
+
+    // Who is signed in decides this one: a password-only session may not hand a departing balance to
+    // a named member at all, and with nobody left to receive it there is nothing to hand over.
+    const giftBlockedByAuth = !hasKeyAuth;
+    const giftBlockedNoRecipients = hasKeyAuth && (preview?.activeMembers?.length ?? 0) === 0;
+    const giftBlocked = giftBlockedByAuth || giftBlockedNoRecipients;
+
+    // The rules that stop the offboarding itself, each already explained in plain words on screen.
+    // None of them clears by waiting, so the button keeps aria-disabled and points at whichever ones
+    // apply, instead of dropping out of the Tab order with its reasons (lib/gated-control). Being
+    // busy is different -- that stays native `disabled` below.
+    const blockingReasonIds = [
+        preview?.isSoleOwner ? REASON_SOLE_OWNER : null,
+        (preview?.pendingEscrowsCount ?? 0) > 0 ? REASON_PENDING_ESCROWS : null,
+        isSelfDealing ? REASON_SELF_DEALING : null,
+    ].filter(Boolean).join(' ');
+    const blockedByRule = blockingReasonIds.length > 0;
 
     const submittingRef = useRef(false);
 
@@ -193,14 +217,14 @@ export function OffboardMemberWizard({
 
                         {/* Sole Owner Guard */}
                         {preview.isSoleOwner && (
-                            <div className="p-3 bg-amber-950/40 border border-amber-800/70 rounded-2xl text-amber-200">
+                            <div id={REASON_SOLE_OWNER} className="p-3 bg-amber-950/40 border border-amber-800/70 rounded-2xl text-amber-200">
                                 <strong>⚠️ Sole Owner Protection:</strong> This member is the only registered owner of the node. You must appoint another owner before this account can be pruned.
                             </div>
                         )}
 
                         {/* Pending Escrow Warning */}
                         {preview.pendingEscrowsCount > 0 && (
-                            <div className="p-3 bg-amber-950/40 border border-amber-800/70 rounded-2xl text-amber-300">
+                            <div id={REASON_PENDING_ESCROWS} className="p-3 bg-amber-950/40 border border-amber-800/70 rounded-2xl text-amber-300">
                                 <strong>⚠️ Active Escrow Deals:</strong> @{member.callsign} has {preview.pendingEscrowsCount} pending escrow deal(s). Resolve disputes in the Escrow Arbitrator before offboarding.
                             </div>
                         )}
@@ -248,34 +272,34 @@ export function OffboardMemberWizard({
                                 </label>
 
                                 <label className={`flex items-start gap-2.5 p-2 rounded-xl transition-all ${
-                                    !hasKeyAuth || (preview?.activeMembers?.length ?? 0) === 0 ? 'opacity-60 cursor-not-allowed bg-nature-950/40' : 'hover:bg-nature-800/40 cursor-pointer'
+                                    giftBlocked ? 'opacity-60 cursor-not-allowed bg-nature-950/40' : 'hover:bg-nature-800/40 cursor-pointer'
                                 }`}>
                                     <input
                                         type="radio"
                                         name="resolution"
                                         value="gift_to_member"
-                                        disabled={!hasKeyAuth || (preview?.activeMembers?.length ?? 0) === 0}
+                                        {...gatedProps(giftBlocked, REASON_GIFT)}
                                         checked={hasKeyAuth && resolutionChoice === 'gift_to_member' && (preview?.activeMembers?.length ?? 0) > 0}
-                                        onChange={() => {
-                                            if (hasKeyAuth && (preview?.activeMembers?.length ?? 0) > 0) {
-                                                setResolutionChoice('gift_to_member');
-                                            }
-                                        }}
-                                        className="mt-0.5 text-emerald-500 focus:ring-0 disabled:opacity-50"
+                                        // onClick as well as onChange: without it the browser ticks the
+                                        // radio for an instant before React puts it back.
+                                        onClick={guardGated(giftBlocked)}
+                                        onChange={guardGated(giftBlocked, () => setResolutionChoice('gift_to_member'))}
+                                        className={`mt-0.5 text-emerald-500 focus:ring-0 ${giftBlocked ? GATED_FOCUS : ''}`}
                                     />
                                     <div>
                                         <span className="font-bold text-white block">Gift to another community member</span>
                                         <span className="text-[11px] text-nature-300">
                                             Transfer the departing balance directly to another active member.
                                         </span>
-                                        {!hasKeyAuth && (
-                                            <span className="block mt-1 text-[11px] text-amber-400">
-                                                ⚠️ Requires signed key-based admin authentication. Please authenticate with your admin key to enable member gifting; password-only sessions must donate departing balances to the Commons Pool.
-                                            </span>
-                                        )}
-                                        {hasKeyAuth && (preview?.activeMembers?.length ?? 0) === 0 && (
-                                            <span className="block mt-1 text-[11px] text-nature-400">
-                                                No other active members available to receive a gift. Departing balance will be donated to the Commons Pool.
+                                        {/* One element, one stable id, whichever rule is the one blocking it. */}
+                                        {giftBlocked && (
+                                            <span
+                                                id={REASON_GIFT}
+                                                className={`block mt-1 text-[11px] ${giftBlockedByAuth ? 'text-amber-400' : 'text-nature-400'}`}
+                                            >
+                                                {giftBlockedByAuth
+                                                    ? '⚠️ Requires signed key-based admin authentication. Please authenticate with your admin key to enable member gifting; password-only sessions must donate departing balances to the Commons Pool.'
+                                                    : 'No other active members available to receive a gift. Departing balance will be donated to the Commons Pool.'}
                                             </span>
                                         )}
                                     </div>
@@ -299,7 +323,7 @@ export function OffboardMemberWizard({
                                         </select>
 
                                         {isSelfDealing && (
-                                            <div className="p-2.5 bg-red-950/80 border border-red-800 rounded-xl text-red-200 text-[11px] space-y-1">
+                                            <div id={REASON_SELF_DEALING} className="p-2.5 bg-red-950/80 border border-red-800 rounded-xl text-red-200 text-[11px] space-y-1">
                                                 <strong>⚠️ Two-Person Rule Violation:</strong>
                                                 <p className="m-0">
                                                     You cannot gift a departing member's balance to yourself. A different admin must execute this offboarding, or choose another recipient.
@@ -347,12 +371,15 @@ export function OffboardMemberWizard({
                             </button>
                             <button
                                 type="button"
-                                disabled={submitting || submittingRef.current || preview.isSoleOwner || isSelfDealing || (preview.pendingEscrowsCount > 0)}
-                                onClick={handleConfirmOffboard}
+                                // Busy is transient and says nothing worth reading, so it stays
+                                // natively disabled; the rules above are neither, so they do not.
+                                disabled={submitting || submittingRef.current}
+                                {...gatedProps(blockedByRule, blockingReasonIds)}
+                                onClick={guardGated(blockedByRule, () => void handleConfirmOffboard())}
                                 className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg text-xs ${
-                                    !submitting && !submittingRef.current && !preview.isSoleOwner && !isSelfDealing && (preview.pendingEscrowsCount === 0)
+                                    !submitting && !submittingRef.current && !blockedByRule
                                         ? 'bg-red-600 hover:bg-red-500 text-white'
-                                        : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
+                                        : `bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700 ${blockedByRule ? GATED_FOCUS : ''}`
                                 }`}
                             >
                                 {submitting || submittingRef.current ? 'Offboarding...' : 'Confirm & Prune Member'}

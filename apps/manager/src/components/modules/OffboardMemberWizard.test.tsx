@@ -89,9 +89,24 @@ describe('OffboardMemberWizard', () => {
 
         await waitFor(() => {
             expect(screen.getByText(/Two-Person Rule Violation/)).toBeDefined();
-            const submitBtn = screen.getByRole('button', { name: /Confirm & Prune Member/ });
-            expect((submitBtn as HTMLButtonElement).disabled).toBe(true);
         });
+
+        // Blocked by WHO is acting, not by anything transient: the button stays reachable and is
+        // announced as unavailable, rather than dropping out of the Tab order with its reason.
+        const submitBtn = screen.getByRole('button', { name: /Confirm & Prune Member/ }) as HTMLButtonElement;
+        expect(submitBtn.disabled).toBe(false);
+        expect(submitBtn).toHaveAttribute('aria-disabled', 'true');
+        submitBtn.focus();
+        expect(document.activeElement).toBe(submitBtn);
+
+        const reason = document.getElementById(submitBtn.getAttribute('aria-describedby') as string);
+        expect(reason?.textContent).toMatch(/You cannot gift a departing member's balance to yourself/);
+        expect(reason).toBeVisible();
+
+        // And pressing it does nothing at all.
+        const executeSpy = vi.spyOn(nodeClient, 'executeOffboardApi');
+        fireEvent.click(submitBtn);
+        expect(executeSpy).not.toHaveBeenCalled();
     });
 
     it('disables gifting to member under password-only authentication', async () => {
@@ -124,10 +139,23 @@ describe('OffboardMemberWizard', () => {
 
         await waitFor(() => {
             expect(screen.getByText('+100.00 Beans')).toBeDefined();
-            const giftRadio = screen.getByLabelText(/Gift to another community member/) as HTMLInputElement;
-            expect(giftRadio.disabled).toBe(true);
-            expect(screen.getByText(/Requires signed key-based admin authentication/)).toBeDefined();
         });
+
+        // Gated on who is signed in, so it stays focusable and carries its reason.
+        const giftRadio = screen.getByLabelText(/Gift to another community member/) as HTMLInputElement;
+        expect(giftRadio.disabled).toBe(false);
+        expect(giftRadio).toHaveAttribute('aria-disabled', 'true');
+        giftRadio.focus();
+        expect(document.activeElement).toBe(giftRadio);
+
+        const reason = document.getElementById(giftRadio.getAttribute('aria-describedby') as string);
+        expect(reason?.textContent).toMatch(/Requires signed key-based admin authentication/);
+        expect(reason).toBeVisible();
+
+        // Choosing it is a no-op: the recipient picker never appears.
+        fireEvent.click(giftRadio);
+        expect(giftRadio.checked).toBe(false);
+        expect(screen.queryByText(/Select Recipient Member/)).toBeNull();
     });
 
     it('displays cost to community for negative debt write-off', async () => {
@@ -216,9 +244,17 @@ describe('OffboardMemberWizard', () => {
 
         await waitFor(() => {
             expect(screen.getByText(/Sole Owner Protection/)).toBeDefined();
-            const submitBtn = screen.getByRole('button', { name: /Confirm & Prune Member/ });
-            expect((submitBtn as HTMLButtonElement).disabled).toBe(true);
         });
+
+        const submitBtn = screen.getByRole('button', { name: /Confirm & Prune Member/ }) as HTMLButtonElement;
+        expect(submitBtn.disabled).toBe(false);
+        expect(submitBtn).toHaveAttribute('aria-disabled', 'true');
+        const reason = document.getElementById(submitBtn.getAttribute('aria-describedby') as string);
+        expect(reason?.textContent).toMatch(/Sole Owner Protection/);
+
+        const executeSpy = vi.spyOn(nodeClient, 'executeOffboardApi');
+        fireEvent.click(submitBtn);
+        expect(executeSpy).not.toHaveBeenCalled();
     });
 
     it('prevents double-click race condition on confirm button', async () => {
@@ -305,9 +341,68 @@ describe('OffboardMemberWizard', () => {
         await waitFor(() => {
             expect(screen.getByText('+100.00 Beans')).toBeDefined();
             const giftRadio = screen.getByLabelText(/Gift to another community member/) as HTMLInputElement;
-            expect(giftRadio.disabled).toBe(true);
+            expect(giftRadio).toHaveAttribute('aria-disabled', 'true');
             expect(screen.getByText(/No other active members available to receive a gift/)).toBeDefined();
             expect(screen.queryByLabelText(/Select Recipient Member/)).toBeNull();
+        });
+    });
+
+    // Busy is transient: it says nothing worth reading and clears by itself, so it keeps the native
+    // `disabled` that takes the button out of the Tab order while the request is in flight.
+    it('leaves the confirm button natively disabled while it is saving', async () => {
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: {
+                publicKey: mockMember.publicKey,
+                callsign: 'dave',
+                status: 'active',
+                joinedAt: '2026-01-01',
+            },
+            balance: 0,
+            commonsBalance: 500,
+            costToCommunity: 0,
+            projectedCommonsBalance: 500,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [],
+        });
+
+        let release: (value: nodeClient.OffboardResponse) => void = () => {};
+        vi.spyOn(nodeClient, 'executeOffboardApi').mockImplementation(
+            () => new Promise<nodeClient.OffboardResponse>((resolve) => { release = resolve; })
+        );
+
+        render(
+            <OffboardMemberWizard
+                member={mockMember}
+                nodeUrl="http://localhost:3000"
+                onClose={() => {}}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Confirm & Prune Member/ })).toBeDefined();
+        });
+
+        const submitBtn = screen.getByRole('button', { name: /Confirm & Prune Member/ }) as HTMLButtonElement;
+        // Nothing blocks it, so nothing is announced as unavailable.
+        expect(submitBtn).not.toHaveAttribute('aria-disabled');
+
+        fireEvent.click(submitBtn);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Offboarding/ })).toBeDisabled();
+        });
+        expect(screen.getByRole('button', { name: /Offboarding/ })).not.toHaveAttribute('aria-disabled');
+
+        release({
+            success: true,
+            memberPubkey: mockMember.publicKey,
+            callsign: 'dave',
+            resolution: 'prune_zero_balance',
+            balanceSettled: 0,
+        });
+        await waitFor(() => {
+            expect(screen.getByText('Member Offboarded')).toBeDefined();
         });
     });
 });

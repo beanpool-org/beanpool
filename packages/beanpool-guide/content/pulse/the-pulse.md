@@ -18,7 +18,13 @@ The buttons along the top slide away as you scroll down. Scroll up a little and 
 
 ## Opening a post
 
-Tap the picture or the title. It opens in your browser or in that site's own app, such as YouTube. Nothing plays inside BeanPool.
+**A YouTube video:** tap the picture, with the ▶ on it, and the video plays here in the card. Nothing is loaded from YouTube until you tap — scrolling past a video sends nothing to anyone. Tap the button in the corner of the video to fill the screen.
+
+The video stops when you scroll it out of sight, when you leave the Pulse, and when you start a different one. Only one plays at a time.
+
+**Everything else** — TikTok, Instagram, a blog, a website: tap the picture or the title and it opens in your browser or in that site's own app.
+
+You can always open a video on YouTube instead: tap the title, or **Open on YouTube ↗** underneath it. If a video will not play here — some people do not allow their videos to play outside YouTube, and some phones cannot — the card says so and offers you that button.
 
 ## Something wrong with a post
 

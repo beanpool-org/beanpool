@@ -29,6 +29,7 @@ Your posts and their pins, and anything you share to the Pulse, can also be seen
 ## Who else can see things
 
 - Chats between two people are usually end-to-end encrypted. See "Messages" for the one exception.
+- Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See "The Pulse".
 - Your community's server keeps your trades, posts and votes. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.
 
 ## Read more

@@ -21,6 +21,8 @@
  *  8. Enterprise and event threads are unchanged: edit, react and author-delete stay refused there.
  *  9. Nothing here pushes: an edit, a reaction and a delete are silent, and an edited text raises no new
  *     @mention notification.
+ * 10. An invite-only group is answered word for word as an id nobody has, whichever of the three is asked
+ *     (the #828 rule, PR #1048 review).
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -29,7 +31,7 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
-    initStateEngine, createGroup, joinGroup, approveGroupMember, removeGroupMember,
+    initStateEngine, createGroup, joinGroup, approveGroupMember, removeGroupMember, inviteGroupMember,
     setMemberRole, createPost, createTreasury, adminAssignTreasuryOperator, createConversation, submitReport,
     getReports,
 } from './state-engine.js';
@@ -471,6 +473,30 @@ async function main(): Promise<void> {
     assert(pushes.length === 0, 'a delete pushes nobody');
     const stillLoud = postGroupThreadMessage(cb, crew.id, bob, 'and a NEW message still pushes');
     assert(pushes.flatMap(p => p.targets).includes(alice) && !!stillLoud, 'while a new message still does');
+
+    // ── 10. A hidden group stays hidden, whichever of the three is asked ─────────────────────
+    console.log('\n--- 10. The #828 rule on edit, react and delete ---');
+    const circle = createGroup({ name: 'Quiet Circle', joinPolicy: 'invite_only', createdBy: alice });
+    inviteGroupMember(circle.id, alice, bob, 'member');
+    joinGroup(circle.id, bob);
+    const secret = postGroupThreadMessage(cb, circle.id, bob, 'only the circle sees this');
+    const ghost = crypto.randomUUID();  // an id nobody has
+    /** Status and words: all a prober can see. The two answers must be the same string. */
+    const answer = (ctx: any) => `${statusOf(ctx)} ${ctx.body?.error ?? ''}`;
+    for (const [pk, who] of [[erin, 'an outsider'], [admin, 'a node admin']] as const) {
+        const [realDel, ghostDel] = [await del(pk, secret.id), await del(pk, ghost)];
+        assert(answer(realDel) === answer(ghostDel),
+            `${who} deleting a message inside an invite-only group is answered exactly as an id nobody has (got ${answer(realDel)} vs ${answer(ghostDel)})`);
+        const [realEdit, ghostEdit] = [await edit(pk, secret.id, 'mine now'), await edit(pk, ghost, 'mine now')];
+        assert(answer(realEdit) === answer(ghostEdit),
+            `${who} editing one is answered the same way (got ${answer(realEdit)} vs ${answer(ghostEdit)})`);
+        const [realReact, ghostReact] = [await react(pk, secret.id), await react(pk, ghost)];
+        assert(answer(realReact) === answer(ghostReact),
+            `${who} reacting to one is answered the same way (got ${answer(realReact)} vs ${answer(ghostReact)})`);
+    }
+    assert(rowOf(secret.id).type === 'text' && !metaOf(secret.id).reactions && !rowOf(secret.id).edited_at,
+        'and none of that touched the message');
+    assert((await del(bob, secret.id)).body?.success === true, 'while its author, who is in the group, still takes it down');
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

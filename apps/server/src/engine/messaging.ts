@@ -267,6 +267,12 @@ export function toggleMessageReaction(
     if (convType?.type === GROUP_THREAD_TYPE) {
         // A group chat reacts exactly as a DM does (chat parity), under the group's own write rule: whoever may
         // post there may react there. The participants mirror is never the authority — group_members is.
+        // Who may SEE the chat is settled first (PR #1048 review): an invite-only group the caller has no live
+        // row in returns null, which this route answers with the same 404 as an id nobody has, rather than the
+        // write rule's 403 — which would confirm the id is a real message in a hidden group (the #828 rule).
+        const refusal = groupChatRefusal(row.conversation_id, authorPubkey);
+        if (refusal?.status === 404) return null;
+        if (refusal) throw new MessagingError(refusal.error, refusal.status);
         if (row.type === 'system') throw new MessagingError(GROUP_CHAT_SYSTEM_REACT_ERROR, 400);
         try { assertCanWriteInGroupChat(row.conversation_id, authorPubkey); }
         catch (e: any) { throw toGroupChatMessagingError(e); }
@@ -325,6 +331,9 @@ export function toggleMessageReaction(
 }
 
 export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+/** What an id nobody has is answered with — and, word for word, what a message in a group chat the caller
+ *  may not see is answered with, so the two cannot be told apart (the #828 rule). */
+export const MESSAGE_NOT_FOUND_ERROR = 'Message not found';
 export const MESSAGE_REMOVED_EDIT_ERROR = 'A removed message cannot be edited';
 export const MESSAGE_REMOVED_REACT_ERROR = 'A removed message cannot be reacted to';
 export const MESSAGE_DELETE_NOT_AUTHOR_ERROR = 'Only the author can delete a message';
@@ -347,11 +356,7 @@ export function editMessage(
 ): Message {
     assertMemberActive(authorPubkey);
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
-    if (!row) throw new MessagingError('Message not found');
-    if (row.author_pubkey !== authorPubkey) throw new MessagingError('Only the author can edit a message');
-    if (row.type === 'system') throw new MessagingError('System messages cannot be edited');
-    // A keeper-removed message is a tombstone: never editable, by any route.
-    if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
+    if (!row) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR);
     // Enterprise discussion-thread messages are not editable. This route has no size bound
     // and knows nothing of thread moderation or a wound-up enterprise's read-only thread.
     // Fails closed: a message whose conversation row is missing cannot be shown to be outside a thread.
@@ -362,12 +367,28 @@ export function editMessage(
     // neither, so it refuses (docs/events-on-the-map.md §2.2).
     if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
 
+    const isGroupChat = conv.type === GROUP_THREAD_TYPE;
+    // Whether this caller may SEE the chat at all is settled BEFORE the author match and before anything else
+    // that depends on this particular message (PR #1048 review). An invite-only group answers an outsider
+    // exactly as an id nobody has — same status, same words (the #828 rule) — so 'Only the author can edit a
+    // message' can never be the thing that confirms a real message id inside a chat they cannot see.
+    if (isGroupChat) {
+        const refusal = groupChatRefusal(row.conversation_id, authorPubkey);
+        if (refusal) throw refusal.status === 404
+            ? new MessagingError(MESSAGE_NOT_FOUND_ERROR)
+            : new MessagingError(refusal.error, refusal.status);
+    }
+    if (row.author_pubkey !== authorPubkey) throw new MessagingError('Only the author can edit a message');
+    if (row.type === 'system') throw new MessagingError('System messages cannot be edited');
+    // A keeper-removed message is a tombstone: never editable, by any route.
+    if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
+
     // A group chat is editable under the group's own rules (chat parity, 2026-09-23 — slice 1 refused it here
     // because this route had no size bound and no membership re-check; it has both now, from the engine the
-    // group send uses). The two things slice 1 was missing, applied before anything is written:
+    // group send uses). The two things slice 1 was missing, applied before anything is written — the write
+    // rule (an observer reads but does not post) on top of the read rule checked above:
     let storedCiphertext = ciphertext;
     let storedNonce = nonce;
-    const isGroupChat = conv.type === GROUP_THREAD_TYPE;
     if (isGroupChat) {
         try {
             assertCanWriteInGroupChat(row.conversation_id, authorPubkey);
@@ -436,29 +457,34 @@ export function deleteOwnMessage(
 ): Message {
     assertMemberActive(authorPubkey);
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
-    if (!row) throw new MessagingError('Message not found', 404);
+    if (!row) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
     // Fails closed, as the edit does: a message whose conversation row is missing cannot be shown to be
     // outside a thread this route may not write to.
     const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (!conv) throw new MessagingError('Conversation not found', 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_DELETE_ERROR, 403);
     if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_DELETE_ERROR, 403);
-    // Before the author check: a system line's author is 'SYSTEM', so "only the author" would refuse it for the
-    // wrong reason and tell a caller nothing about why a join line will not go away.
-    if (row.type === 'system') throw new MessagingError(SYSTEM_MESSAGE_DELETE_ERROR, 400);
-    if (row.author_pubkey !== authorPubkey) throw new MessagingError(MESSAGE_DELETE_NOT_AUTHOR_ERROR, 403);
 
     const isGroupChat = conv.type === GROUP_THREAD_TYPE;
+    // Who may SEE this chat comes FIRST — before the author match, and before the system-line refusal, both of
+    // which describe the message itself (PR #1048 review). Still able to READ the chat is the bar, not still
+    // able to post: an observer may take down the line they wrote while they were a member. An invite-only group
+    // answers someone with no live row in it exactly as an id nobody has — the same 404, the same words (the
+    // #828 rule) — so no refusal here can confirm that a hidden group's message id is real.
     if (isGroupChat) {
-        // Still able to READ the chat is the bar, not still able to post: an observer may take down the line
-        // they wrote while they were a member. An invite-only group answers 404 to someone with no live row in
-        // it, word for word as an id nobody has (the #828 rule).
         const refusal = groupChatRefusal(row.conversation_id, authorPubkey);
-        if (refusal) throw new MessagingError(refusal.error, refusal.status);
+        if (refusal) throw refusal.status === 404
+            ? new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404)
+            : new MessagingError(refusal.error, refusal.status);
     } else if (!db.prepare("SELECT 1 FROM conversation_participants WHERE conversation_id=? AND public_key=?")
         .get(row.conversation_id, authorPubkey)) {
         throw new MessagingError('You are not a participant in this conversation', 403);
     }
+
+    // A system line's author is 'SYSTEM', so "only the author" would refuse it for the wrong reason and tell a
+    // caller nothing about why a join line will not go away — hence before the author check, after the one above.
+    if (row.type === 'system') throw new MessagingError(SYSTEM_MESSAGE_DELETE_ERROR, 400);
+    if (row.author_pubkey !== authorPubkey) throw new MessagingError(MESSAGE_DELETE_NOT_AUTHOR_ERROR, 403);
 
     if (row.type === 'removed') {
         // Idempotent: already a tombstone, whoever made it. Answered as a success with the message as it is.

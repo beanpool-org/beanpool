@@ -17,11 +17,12 @@
  *  7. A backup node sends nothing.
  *  8. "Your events" is the signer's own RSVPs, soonest first, without the cancelled and the ended.
  *  9. A reminder cannot be set on an event the member has no RSVP on, and the offsets are a closed set.
+ * 10. Every reminder body is the same sentence whatever timezone the process runs in.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-event-reminders.ts
  */
 
-// Fixed so "tomorrow at 10:00" is the same sentence wherever this runs. Set before anything reads a Date.
+// The footing every check starts from: check 10 moves it on purpose and puts it back. Set before any Date.
 process.env.TZ = 'UTC';
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -37,6 +38,7 @@ import {
     runEventReminderSweep, tickEventReminders, setEventReminderOffsets, listMyEvents,
     parseReminderOffsets, setMemberDefaultReminderOffsets, getMemberDefaultReminderOffsets,
     reminderPushTitle, reminderPushBody, NO_RSVP_MESSAGE, DEFAULT_EVENT_REMINDER_OFFSETS,
+    EVENT_REMINDER_OFFSETS,
 } from './engine/event-reminders.js';
 
 let run = 0, passed = 0;
@@ -100,6 +102,18 @@ function rsvpAt(postId: string, member: string, status: 'going' | 'interested', 
         .run(at(armedMs), postId, member);
 }
 
+/**
+ * Milliseconds from T0 to 22:00 UTC, `days` days ahead — 08:00 the NEXT morning in Sydney.
+ *
+ * The hour and the calendar day both differ between the two zones at that instant, which is what makes it
+ * the instant to test a reminder's words against.
+ */
+function eveningUtcStart(days: number): number {
+    const d = new Date(T0 + days * DAY);
+    d.setUTCHours(22, 0, 0, 0);
+    return d.getTime() - T0;
+}
+
 /** Run one sweep at a chosen moment and hand back the pushes it made. */
 function sweepAt(ms: number): PushCall[] {
     pushes = [];
@@ -134,8 +148,8 @@ async function main(): Promise<void> {
     assert(first[0]?.data?.screen === 'post' && first[0]?.data?.postId === ev.id,
         '...carrying the payload the phone routes to /post/:id');
     assert(first[0]?.title === reminderPushTitle('Working bee'), '...titled with the event');
-    assert(first[0]?.body === 'Starts tomorrow at ' + new Date(T0 + 10 * DAY).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-        `...and saying when it starts (got "${first[0]?.body}")`);
+    assert(first[0]?.body === 'Starts in 1 day',
+        `...and saying how long there is left, in words no timezone can shift (got "${first[0]?.body}")`);
 
     assert(sentMarks(ev.id).join() === '1440', 'the send is marked in event_reminders_sent');
     assert(sweepAt(9 * DAY).length === 0, 'the same sweep run again sends nothing');
@@ -240,7 +254,7 @@ async function main(): Promise<void> {
         .run(at(0), ev7.id, goer);
     assert(sweepAt(69 * DAY).length === 0, 'the reminder does not fire on the OLD date after the event moved');
     const rearmed = sweepAt(72 * DAY);
-    assert(rearmed.length === 1 && rearmed[0]?.body.startsWith('Starts tomorrow'),
+    assert(rearmed.length === 1 && rearmed[0]?.body === 'Starts in 1 day',
         're-arms against the new time and fires a day before THAT');
 
     // A start pulled backwards puts a moment in the past. It stays silent rather than arriving stale.
@@ -338,13 +352,44 @@ async function main(): Promise<void> {
     assert(parseReminderOffsets([])?.length === 0, 'an empty list is valid — it is how reminders are turned off');
     assert(parseReminderOffsets(null) === null, 'and null is "my default applies"');
 
-    assert(reminderPushBody(60, at(0), T0 - HOUR) === 'Starts in an hour'
-        && reminderPushBody(30, at(0), T0 - 30 * MIN) === 'Starts in 30 minutes'
-        && reminderPushBody(120, at(0), T0 - 2 * HOUR) === 'Starts in 2 hours',
-        'the short offsets read as plain relative time');
+    assert(reminderPushBody(10080) === 'Starts in 1 week'
+        && reminderPushBody(1440) === 'Starts in 1 day'
+        && reminderPushBody(120) === 'Starts in 2 hours'
+        && reminderPushBody(60) === 'Starts in 1 hour'
+        && reminderPushBody(30) === 'Starts in 30 minutes',
+        'every offset reads as plain relative time, worded from the offset itself');
 
-    // ── 10. All the way out to Expo, and the preference that silences it ─────────────────────
-    console.log('\n--- 10. The dispatcher and the preference ---');
+    // ── 10. The same words wherever the process clock stands ────────────────────────────────
+    console.log('\n--- 10. Any timezone, the same reminder ---');
+    // A node has no timezone. The runtime image sets no TZ, deploy sets none, and there is no timezone
+    // field in node config or the schema — so the process clock is UTC while the community the node serves
+    // is not. A body naming a clock time or a calendar day would therefore be wrong by the node's own
+    // offset for every member reading it. The check is that property, not the wording: swept at the same
+    // moment, in UTC and in the zone a live node's members actually live in, each offset must produce the
+    // SAME sentence. These events start at 22:00 UTC, which is 08:00 the next morning in Sydney, so an
+    // absolute hour and a calendar day both diverge between the two runs.
+    for (const offset of EVENT_REMINDER_OFFSETS) {
+        const tzStart = eveningUtcStart(200 + EVENT_REMINDER_OFFSETS.indexOf(offset));
+        const evTz = newEvent(tzStart, `Timezone ${offset}`);
+        rsvpAt(evTz.id, goer, 'going', 0);
+        setEventReminderOffsets(evTz.id, goer, [offset]);
+        db.prepare('UPDATE event_rsvps SET updated_at = ? WHERE post_id = ? AND member_pubkey = ?')
+            .run(at(0), evTz.id, goer);
+
+        const bodies = ['UTC', 'Australia/Sydney'].map(tz => {
+            process.env.TZ = tz;                                  // Node re-reads it for the next Date
+            db.prepare('DELETE FROM event_reminders_sent WHERE post_id = ?').run(evTz.id);
+            return sweepAt(tzStart - offset * MIN)[0]?.body;
+        });
+        process.env.TZ = 'UTC';                                   // back to the suite's own footing
+
+        assert(!!bodies[0] && bodies[0] === bodies[1],
+            `the ${offset}-minute reminder reads the same in UTC as in the community's own zone `
+            + `(UTC "${bodies[0]}", Sydney "${bodies[1]}")`);
+    }
+
+    // ── 11. All the way out to Expo, and the preference that silences it ─────────────────────
+    console.log('\n--- 11. The dispatcher and the preference ---');
     const realFetch = globalThis.fetch;
     const sent: any[] = [];
     (globalThis as any).fetch = async (url: any, init: any) => {

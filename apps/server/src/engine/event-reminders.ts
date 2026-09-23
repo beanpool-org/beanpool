@@ -47,6 +47,9 @@ import { getNodeRole } from './sync.js';
 /** The five offsets the picker offers, in minutes before the start. Nothing else is storable. */
 export const EVENT_REMINDER_OFFSETS = [10080, 1440, 120, 60, 30] as const;
 
+/** One of the five. `REMINDER_BODY` is keyed on it, so a sixth offset cannot be added without wording it. */
+type EventReminderOffset = (typeof EVENT_REMINDER_OFFSETS)[number];
+
 /** What everyone gets until they say otherwise: the day before (board decision, 2026-09-23). */
 export const DEFAULT_EVENT_REMINDER_OFFSETS: number[] = [1440];
 
@@ -214,35 +217,31 @@ export const reminderPushTitle = (eventTitle: string): string =>
     `📅 ${(eventTitle || 'An event').trim() || 'An event'}`;
 
 /**
- * "Starts tomorrow at 10:00", "Starts in 2 hours".
+ * "Starts in 1 week", "Starts in 2 hours" — always relative to the moment the reminder is sent.
  *
- * Under two hours it is relative, which needs no calendar and cannot be wrong. From a day out it names the
- * day and the clock time, because "in 7 days" is not something anyone can act on — and the day is worked
- * out from the actual local dates rather than from the offset, so a daylight-saving change cannot make a
- * reminder say "tomorrow" about today.
+ * No clock time, no weekday, no date, and no "today"/"tomorrow", because a node has no timezone: the
+ * runtime image sets no TZ, deploy sets none, and there is no timezone field in node config or the
+ * schema. The process clock is therefore UTC while the community the node serves is not, and an absolute
+ * time rendered here would be wrong by that offset for every member — "Starts tomorrow at 22:00" for an
+ * event at eight the next morning, and the wrong weekday a week out. Relative words cannot be wrong
+ * wherever the process happens to stand, and tapping the push opens the event, which already renders
+ * `startAt` in the reader's own local time.
  *
- * The clock is the NODE's: a BeanPool node serves one locality and its members are in it. A member reading
- * this on a phone in another timezone sees their community's time, which is the time the event happens in.
+ * The sentence comes from the offset the member chose, not from a day difference computed between two
+ * dates, so there is no calendar arithmetic left here to get wrong.
  */
-export function reminderPushBody(offsetMin: number, startAtIso: string, nowMs: number): string {
-    const start = new Date(startAtIso);
-    if (offsetMin < 1440) {
-        if (offsetMin >= 120 && offsetMin % 60 === 0) return `Starts in ${offsetMin / 60} hours`;
-        if (offsetMin === 60) return 'Starts in an hour';
-        return `Starts in ${offsetMin} minutes`;
-    }
-    const at = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    const days = calendarDaysBetween(new Date(nowMs), start);
-    if (days === 0) return `Starts today at ${at}`;
-    if (days === 1) return `Starts tomorrow at ${at}`;
-    return `Starts ${start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} at ${at}`;
-}
+const REMINDER_BODY: Record<EventReminderOffset, string> = {
+    10080: 'Starts in 1 week',
+    1440: 'Starts in 1 day',
+    120: 'Starts in 2 hours',
+    60: 'Starts in 1 hour',
+    30: 'Starts in 30 minutes',
+};
 
-/** Whole local days from one instant to another, counted on the calendar rather than in milliseconds. */
-function calendarDaysBetween(from: Date, to: Date): number {
-    const a = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
-    const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
-    return Math.round((b - a) / 86_400_000);
+export function reminderPushBody(offsetMin: number): string {
+    // The offsets are a closed set (`parseReminderOffsets`), so the lookup always hits; the fallback is
+    // for a stored row from some future picker, and stays relative like the rest.
+    return REMINDER_BODY[offsetMin as EventReminderOffset] ?? `Starts in ${offsetMin} minutes`;
 }
 
 /** One reminder that has come round and has not been sent. */
@@ -346,14 +345,14 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
 
     // Keyed on the push that would be sent, not on the event: two members of the same event with different
     // offsets get different words and must not be collapsed into one message.
-    const batches = new Map<string, { postId: string; title: string; startAt: string; offsetMin: number; targets: string[] }>();
+    const batches = new Map<string, { postId: string; title: string; offsetMin: number; targets: string[] }>();
     for (const d of due) {
         // The due list already excludes everything marked. This is the atomic re-check on top of it:
         // losing the insert means another process claimed the same reminder between the read and here.
         if (claim.run(d.postId, d.memberPubkey, d.offsetMin, sentAt).changes === 0) continue;
         const key = `${d.postId}|${d.offsetMin}`;
         if (!batches.has(key)) {
-            batches.set(key, { postId: d.postId, title: d.title, startAt: d.startAt, offsetMin: d.offsetMin, targets: [] });
+            batches.set(key, { postId: d.postId, title: d.title, offsetMin: d.offsetMin, targets: [] });
         }
         batches.get(key)!.targets.push(d.memberPubkey);
     }
@@ -366,7 +365,7 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
                 b.targets,
                 'SYSTEM',
                 reminderPushTitle(b.title),
-                reminderPushBody(b.offsetMin, b.startAt, nowMs),
+                reminderPushBody(b.offsetMin),
                 { screen: 'post', postId: b.postId },
                 REMINDER_PUSH_CATEGORY,
             );

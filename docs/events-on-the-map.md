@@ -255,8 +255,14 @@ member's own choice: a default in Settings → Notifications, and an optional pe
   for having Marketplace notifications off, so turning them on an hour later does not release a stale
   reminder.
 - Push goes out on the same `marketplace` category and `{ screen: 'post', postId }` payload as the change
-  and cancel notifications, titled `📅 <title>` with a body of "Starts tomorrow at 10:00" or "Starts in 2
-  hours". The clock is the node's: a node serves one locality.
+  and cancel notifications, titled `📅 <title>` with a body worded from the offset alone: "Starts in 1 week",
+  "Starts in 1 day", "Starts in 2 hours", "Starts in 1 hour", "Starts in 30 minutes". **No clock time, no
+  weekday, no date and no "today"/"tomorrow" in the push.** A node has no timezone — the runtime image sets
+  no `TZ`, deploy sets none, and neither node config nor the schema has a field for one — so the process
+  clock is UTC while the community is not, and any absolute time rendered on the server would be wrong by
+  that offset for every member. Relative words cannot be; tapping the push opens the event, which renders
+  `startAt` in the reader's own local time. A per-node timezone setting would only be needed if absolute
+  times ever came back into push text.
 - A cancelled event, an ended event and a withdrawn RSVP all drop out of the sweep's join, which is the
   whole of "never for a cancelled or ended event, or a removed RSVP". The 30-day scrub deletes an event's
   sent marks with its RSVPs.

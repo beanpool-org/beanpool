@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Platform, Linking, Modal, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
-import { KeyboardAvoidingView, KeyboardController, AndroidSoftInputModes, useKeyboardState } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
+import { KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -23,12 +23,13 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { makeChatStyles } from '../../components/chat/styles';
 import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatMessageList';
+import { ChatKeyboardAvoidingView } from '../../components/chat/ChatKeyboardAvoidingView';
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import {
     buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions, tombstoneText,
-    shouldFollowNewMessages, type ChatViewer,
+    shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
 } from '../../utils/chat-actions';
 import { normaliseTappedUrl } from '../../utils/chat-links';
 import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-groups';
@@ -162,7 +163,7 @@ function ChatScreen() {
     const msgLimitRef = useRef(MESSAGE_PAGE_SIZE);
     const messagesLenRef = useRef(0);
     const loadingOlderRef = useRef(false);
-    // While the keyboard is up, KeyboardAvoidingView already lifts the input bar to sit
+    // While the keyboard is up, ChatKeyboardAvoidingView already lifts the input bar to sit
     // on the keyboard — adding the nav-bar inset on top of that shows as a dead gap.
     const keyboardVisible = useKeyboardState(s => s.isVisible);
     // Modals get their own native window, and keyboard-controller only hears keyboard
@@ -249,22 +250,6 @@ function ChatScreen() {
     // The list is inverted (newest message = index 0), so "bottom" is offset 0.
     const scrollToBottom = useCallback((animated: boolean) => {
         scrollChatToBottom(flatListRef, animated);
-    }, []);
-
-    // On Android, tell the OS not to resize/pan the window when the keyboard
-    // opens. This makes react-native-keyboard-controller's KeyboardAvoidingView
-    // the sole owner of keyboard compensation — eliminating the intermittent
-    // race where Android's OS-level resize and the library's padding would
-    // double-compensate or mis-time, hiding the input bar.
-    useEffect(() => {
-        if (Platform.OS === 'android') {
-            KeyboardController.setInputMode(AndroidSoftInputModes.SOFT_INPUT_ADJUST_NOTHING);
-        }
-        return () => {
-            if (Platform.OS === 'android') {
-                KeyboardController.setDefaultMode();
-            }
-        };
     }, []);
 
     const loadRatedTransactions = useCallback(async () => {
@@ -1254,12 +1239,9 @@ function ChatScreen() {
                 </View>
             )}
 
-            <KeyboardAvoidingView
-                style={styles.keyboardView}
-                behavior="padding"
-            >
+            <ChatKeyboardAvoidingView style={styles.keyboardView}>
                 {/* The thread. Inverted, day-separated and keyboard-following — the shared list every chat uses. */}
-                {loadError && !firstLoadDone ? (
+                {shouldShowChatLoadError({ loadError, messageCount: messages.length }) ? (
                     <View style={{ flex: 1 }}>
                         <Text style={chat.errorText} accessibilityRole="alert">{loadError}</Text>
                         <Pressable style={chat.retryBtn} accessibilityRole="button" onPress={() => { setLoadError(null); loadMessages(); }}>
@@ -1339,7 +1321,7 @@ function ChatScreen() {
                         }
                     />
                 )}
-            </KeyboardAvoidingView>
+            </ChatKeyboardAvoidingView>
 
             {/* The ⋮ menu: the same sheet, the same mute wording, as every group chat (groups decision 12). */}
             <ChatMenuSheet

@@ -17,7 +17,7 @@
  * message actually offers is decided once, in utils/chat-actions — an enterprise thread is read-and-write only,
  * this round, and its bubbles offer nothing.
  *
- * Keyboard: KeyboardAvoidingView from react-native-keyboard-controller, padding on both platforms, no nested
+ * Keyboard: ChatKeyboardAvoidingView (the shared lift, live keyboard height + ADJUST_NOTHING), no nested
  * provider (memory keyboard-avoidance-pattern). At 320dp and 1.3× text the header truncates the name, the
  * composer keeps a Send that never shrinks and the notice wraps.
  */
@@ -27,7 +27,8 @@ import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking } from 'rea
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
+import { KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
+import { ChatKeyboardAvoidingView } from './chat/ChatKeyboardAvoidingView';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
@@ -579,7 +580,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     };
 
     return (
-        <KeyboardAvoidingView style={[styles.container, { paddingTop: insets.top }]} behavior="padding">
+        <ChatKeyboardAvoidingView style={[styles.container, { paddingTop: insets.top }]}>
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             {header}
 
@@ -673,7 +674,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     onMembershipChanged={() => { loadDetails().catch(() => { }); load(); }}
                 />
             )}
-        </KeyboardAvoidingView>
+        </ChatKeyboardAvoidingView>
     );
 }
 

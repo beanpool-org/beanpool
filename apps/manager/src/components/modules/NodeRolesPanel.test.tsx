@@ -271,6 +271,11 @@ describe('NodeRolesPanel', () => {
         const user = userEvent.setup();
         const row = suggestion('alice');
 
+        // The point of the pair: a keyboard user can REACH it, and it still does nothing.
+        // `disabled` would make the second half true by making the first half impossible.
+        row.focus();
+        expect(document.activeElement).toBe(row);
+
         await act(async () => { await user.click(row); });
         row.focus();
         await act(async () => { await user.keyboard('{Enter}'); });

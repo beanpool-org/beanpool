@@ -620,12 +620,18 @@ export function initSchema() {
         const alreadyBackfilled = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_group_lead_pubkey_v1'").get();
         if (!alreadyBackfilled) {
             db.transaction(() => {
+                // Two branches, not one ORDER BY that prefers the creator: SQLite resolves a subquery's ORDER BY
+                // against that subquery's own FROM clause, where groups.created_by is not visible. Same shape as
+                // leadPubkeySql in @beanpool/engine, which the read path falls back to.
                 const res = db.prepare(`
-                    UPDATE groups SET lead_pubkey = (
-                        SELECT gm.member_pubkey FROM group_members gm
-                        WHERE gm.group_id = groups.id AND gm.role = 'convenor' AND gm.status = 'active'
-                        ORDER BY (gm.member_pubkey = groups.created_by) DESC, gm.joined_at ASC, gm.member_pubkey ASC
-                        LIMIT 1
+                    UPDATE groups SET lead_pubkey = COALESCE(
+                        (SELECT gmc.member_pubkey FROM group_members gmc
+                          WHERE gmc.group_id = groups.id AND gmc.member_pubkey = groups.created_by
+                            AND gmc.role = 'convenor' AND gmc.status = 'active'),
+                        (SELECT gmf.member_pubkey FROM group_members gmf
+                          WHERE gmf.group_id = groups.id AND gmf.role = 'convenor' AND gmf.status = 'active'
+                          ORDER BY gmf.joined_at ASC, gmf.member_pubkey ASC
+                          LIMIT 1)
                     )
                     WHERE lead_pubkey IS NULL
                       AND EXISTS (

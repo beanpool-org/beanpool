@@ -388,14 +388,20 @@ export function getGroupMember(db: Db, groupId: string, memberPubkey: string): G
  * went away with their account — the same rule the backfill uses decides: the creator while they are an active
  * convenor, otherwise the longest-serving active convenor. So the answer never depends on whether a particular
  * node has run the migration, and a stale pointer can never be read as a live lead.
+ *
+ * Three COALESCE branches rather than one ORDER BY that prefers the creator, because SQLite resolves a
+ * subquery's ORDER BY against that subquery's own FROM clause: `g.created_by` is not visible there.
  */
 const leadPubkeySql = (g: string) => `COALESCE(
     (SELECT gml.member_pubkey FROM group_members gml
       WHERE gml.group_id = ${g}.id AND gml.member_pubkey = ${g}.lead_pubkey
         AND gml.role = 'convenor' AND gml.status = 'active'),
+    (SELECT gmc.member_pubkey FROM group_members gmc
+      WHERE gmc.group_id = ${g}.id AND gmc.member_pubkey = ${g}.created_by
+        AND gmc.role = 'convenor' AND gmc.status = 'active'),
     (SELECT gmf.member_pubkey FROM group_members gmf
       WHERE gmf.group_id = ${g}.id AND gmf.role = 'convenor' AND gmf.status = 'active'
-      ORDER BY (gmf.member_pubkey = ${g}.created_by) DESC, gmf.joined_at ASC, gmf.member_pubkey ASC
+      ORDER BY gmf.joined_at ASC, gmf.member_pubkey ASC
       LIMIT 1)
 )`;
 

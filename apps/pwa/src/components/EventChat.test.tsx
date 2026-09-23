@@ -211,3 +211,53 @@ describe('EventChat: the way back to the event (A4)', () => {
         expect(onOpenEvent).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('EventChat: an event chat carries no photos', () => {
+    function pictureClipboard() {
+        const file = new File([new Uint8Array(1)], 'screenshot.png', { type: 'image/png' });
+        return {
+            files: [file],
+            items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }],
+            types: ['Files'],
+        };
+    }
+
+    beforeEach(() => {
+        vi.mocked(api.getEventChat).mockReset();
+        vi.mocked(api.postEventChatMessage).mockReset();
+        vi.mocked(api.getEventChat).mockResolvedValue(view() as any);
+    });
+
+    it('a pasted picture says so in one line and posts nothing', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+
+        fireEvent.paste(composer, { clipboardData: pictureClipboard() });
+
+        expect(await screen.findByTestId('event-chat-image-notice'))
+            .toHaveTextContent('Photos can only be sent in direct messages');
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+    });
+
+    it('a dropped picture does the same', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+
+        fireEvent.drop(composer, { dataTransfer: pictureClipboard() });
+
+        expect(await screen.findByTestId('event-chat-image-notice'))
+            .toHaveTextContent('Photos can only be sent in direct messages');
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+    });
+
+    it('a text-only paste is left alone', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+
+        fireEvent.paste(composer, {
+            clipboardData: { files: [], items: [{ kind: 'string', type: 'text/plain', getAsFile: () => null }], types: ['text/plain'] },
+        });
+
+        expect(screen.queryByTestId('event-chat-image-notice')).not.toBeInTheDocument();
+    });
+});

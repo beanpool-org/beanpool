@@ -17,6 +17,7 @@ import {
     type EventThreadMessage, type EventThreadView,
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { imageFromTransfer, dragCarriesFile } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
 
 /** Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. */
@@ -60,6 +61,9 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
     const [posting, setPosting] = useState(false);
     const [postError, setPostError] = useState<string | null>(null);
     const [removingId, setRemovingId] = useState<string | null>(null);
+    // An event chat carries no photos: the node refuses them. A paste or a drop
+    // says so in one line here rather than failing silently or in an alert().
+    const [imageNotice, setImageNotice] = useState<string | null>(null);
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
     const load = useCallback(async () => {
@@ -218,11 +222,35 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                 <p role="alert" className="flex-shrink-0 m-0 px-3 pb-1 text-xs text-red-600 dark:text-red-400">{postError}</p>
             )}
 
+            {imageNotice && (
+                <p
+                    role="status"
+                    data-testid="event-chat-image-notice"
+                    className="flex-shrink-0 m-0 px-3 pb-1 text-xs text-nature-600 dark:text-nature-300 break-words"
+                >
+                    {imageNotice}
+                </p>
+            )}
+
             {canPost && (
-                <form onSubmit={send} className="flex-shrink-0 flex items-end gap-2 p-3 border-t border-nature-200 dark:border-nature-800">
+                <form
+                    onSubmit={send}
+                    className="flex-shrink-0 flex items-end gap-2 p-3 border-t border-nature-200 dark:border-nature-800"
+                    onDragOver={e => { if (dragCarriesFile(e.dataTransfer)) e.preventDefault(); }}
+                    onDrop={e => {
+                        if (!imageFromTransfer(e.dataTransfer)) return;
+                        e.preventDefault();
+                        setImageNotice('Photos can only be sent in direct messages');
+                    }}
+                >
                     <textarea
                         value={draft}
                         onChange={e => setDraft(e.target.value.slice(0, EVENT_CHAT_MESSAGE_MAX))}
+                        onPaste={e => {
+                            if (!imageFromTransfer(e.clipboardData)) return;
+                            e.preventDefault();
+                            setImageNotice('Photos can only be sent in direct messages');
+                        }}
                         rows={1}
                         maxLength={EVENT_CHAT_MESSAGE_MAX}
                         placeholder="Message everyone going…"

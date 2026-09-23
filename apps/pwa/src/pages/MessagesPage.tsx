@@ -21,6 +21,7 @@ import { onSyncActivity } from '../lib/sync';
 import { consumeChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
+import { imageFromTransfer, dragCarriesFile, chatImageRefusal } from '../lib/chat-image-transfer';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
 
@@ -164,6 +165,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const draftRef = useRef<HTMLTextAreaElement>(null);
     const activeConvIdRef = useRef<string | null>(null);
     const messageRequestIdRef = useRef<number>(0);
+    // A picture that arrived by paste or drop, waiting for Send or Cancel. 📎 has no
+    // preview: picking a file from a dialog is already a deliberate act.
+    const [pendingImage, setPendingImage] = useState<{ file: File; previewUrl: string | null } | null>(null);
+    // Why the last paste or drop went nowhere — shown inline above the composer.
+    const [imageNotice, setImageNotice] = useState<string | null>(null);
+    const [dragActive, setDragActive] = useState(false);
+    // `dragleave` fires for every child the pointer crosses, so count enters and
+    // leaves instead of trusting a single leave to mean the drag has gone.
+    const dragDepthRef = useRef(0);
 
     // ⚡ Bolt: O(1) Map lookups for member details and completed transactions in conversation list and chat views
     const membersByPublicKey = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
@@ -575,15 +585,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
     }
 
-    async function handleSendImage(file: File) {
-        if (!activeConv) return;
+    /**
+     * The one path a photo leaves by — 📎, paste and drop all end up here, and
+     * nothing inside it changed: resize, encrypt the blob as the attachment,
+     * encrypt the caption as the message body. Returns whether it got away, so a
+     * caller holding a draft knows whether to clear it.
+     */
+    async function handleSendImage(file: File, caption = ''): Promise<boolean> {
+        if (!activeConv) return false;
         const ctx = dmCtxFor(activeConv);
-        if (!ctx) { alert('Photos can only be sent in direct messages.'); return; }
+        if (!ctx) { alert('Photos can only be sent in direct messages.'); return false; }
         setSending(true);
         try {
             const dataUri = await resizeImageToDataUri(file, 1000, 0.7);
-            const encImg = encryptDM(dataUri, ctx);   // big blob -> lazy attachment
-            const encCap = encryptDM('', ctx);          // empty caption -> message body
+            const encImg = encryptDM(dataUri, ctx);       // big blob -> lazy attachment
+            const encCap = encryptDM(caption, ctx);        // caption (often empty) -> message body
             let metadata: string | undefined = undefined;
             if (replyToMessage) {
                 metadata = JSON.stringify({ replyToId: replyToMessage.id });
@@ -592,12 +608,108 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata);
             setReplyToMessage(null);
             await loadMessages(activeConv.id);
+            return true;
         } catch (err: any) {
             alert(err.message || 'Failed to send image');
+            return false;
         } finally {
             setSending(false);
         }
     }
+
+    /** Let go of the preview and the object URL behind its thumbnail. */
+    function clearPendingImage() {
+        setPendingImage(prev => {
+            if (prev?.previewUrl) {
+                try { URL.revokeObjectURL(prev.previewUrl); } catch {}
+            }
+            return null;
+        });
+    }
+
+    /**
+     * Where a pasted or dropped picture lands: checked, then held in the preview
+     * until the person says Send. Anything we refuse says so in one line above
+     * the composer rather than in an alert() the person has to dismiss.
+     */
+    function offerImage(file: File) {
+        if (!activeConv) return;
+
+        // Groups and event chats have no photos — the node refuses them, so we
+        // never start. Say so where the person is looking and send nothing.
+        if (!dmCtxFor(activeConv)) {
+            clearPendingImage();
+            setImageNotice('Photos can only be sent in direct messages');
+            return;
+        }
+
+        const refusal = chatImageRefusal(file);
+        if (refusal) {
+            clearPendingImage();
+            setImageNotice(refusal);
+            return;
+        }
+
+        setImageNotice(null);
+        let previewUrl: string | null = null;
+        try { previewUrl = URL.createObjectURL(file); } catch { previewUrl = null; }
+        setPendingImage(prev => {
+            if (prev?.previewUrl) {
+                try { URL.revokeObjectURL(prev.previewUrl); } catch {}
+            }
+            return { file, previewUrl };
+        });
+    }
+
+    /** Send the previewed picture, carrying whatever is in the composer as its caption. */
+    async function sendPendingImage() {
+        if (!pendingImage || sending) return;
+        const sent = await handleSendImage(pendingImage.file, draft.trim());
+        if (!sent) return;
+        clearPendingImage();
+        setDraft('');   // a normal send clears the draft; so does this one
+    }
+
+    /** A paste only becomes ours when it is carrying a picture. */
+    function handleComposerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+        const file = imageFromTransfer(e.clipboardData);
+        if (!file) return;   // text and everything else: exactly as before
+        e.preventDefault();
+        offerImage(file);
+    }
+
+    // While the preview is open it owns Enter and Escape, wherever focus sits —
+    // the person may still be typing the caption, or be on one of the buttons.
+    useEffect(() => {
+        if (!pendingImage) return;
+        function onKeyDown(e: KeyboardEvent) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                clearPendingImage();
+                return;
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+                // Enter on a focused button already means "press it".
+                if ((e.target as HTMLElement | null)?.tagName === 'BUTTON') return;
+                e.preventDefault();
+                void sendPendingImage();
+            }
+        }
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    });
+
+    // Leaving a conversation drops anything it was holding.
+    useEffect(() => {
+        clearPendingImage();
+        setImageNotice(null);
+        setDragActive(false);
+        dragDepthRef.current = 0;
+    }, [activeConv?.id]);
+
+    // What decryptMessage() puts in place of a body it could not read. A photo's
+    // body is its caption, so these must never be shown as one.
+    const UNREADABLE_BODIES = ['[Encrypted — update your app to read]', '[Unable to decrypt this message]'];
 
     function decryptMessage(msg: ApiMessage): string {
         try {
@@ -772,8 +884,49 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             : '';
         const isPeerBlocked = peerPubkey ? isUserBlocked(peerPubkey) : false;
 
+        // Dropping onto a blocked conversation would only produce a message the
+        // person cannot send, so the chat takes no drops at all while blocked.
+        const acceptsDrop = !isPeerBlocked;
+
         return (
-            <div className="h-full max-w-4xl mx-auto w-full flex flex-col">
+            <div
+                className="h-full max-w-4xl mx-auto w-full flex flex-col"
+                style={dragActive ? { outline: '2px dashed var(--accent)', outlineOffset: '-4px' } : undefined}
+                onDragEnter={acceptsDrop ? (e) => {
+                    if (!dragCarriesFile(e.dataTransfer)) return;
+                    e.preventDefault();
+                    dragDepthRef.current += 1;
+                    setDragActive(true);
+                } : undefined}
+                onDragOver={acceptsDrop ? (e) => {
+                    if (!dragCarriesFile(e.dataTransfer)) return;
+                    e.preventDefault();   // without this the browser navigates to the file
+                } : undefined}
+                onDragLeave={acceptsDrop ? () => {
+                    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+                    if (dragDepthRef.current === 0) setDragActive(false);
+                } : undefined}
+                onDrop={acceptsDrop ? (e) => {
+                    dragDepthRef.current = 0;
+                    setDragActive(false);
+                    const file = imageFromTransfer(e.dataTransfer);
+                    if (!file) return;
+                    e.preventDefault();
+                    offerImage(file);
+                } : undefined}
+            >
+                {dragActive && (
+                    <div
+                        data-testid="chat-drop-hint"
+                        aria-hidden="true"
+                        style={{
+                            padding: '0.5rem 1rem', textAlign: 'center', fontWeight: 600,
+                            fontSize: '0.9rem', color: 'var(--accent)', background: 'var(--bg-hover)',
+                        }}
+                    >
+                        Drop the picture to send it
+                    </div>
+                )}
                 {/* Chat header */}
                 <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1196,14 +1349,29 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     }
                                                 } catch (e) {}
                                             }
-                                            return <ChatImageBubble 
-                                                messageId={msg.id} 
-                                                conversationId={ctx.conversationId} 
-                                                peerPubHex={ctx.peerEdPubHex} 
-                                                myPrivHex={ctx.myEdPrivHex} 
-                                                originalConversationId={originalConversationId}
-                                                originalConversationIds={originalConversationIds}
-                                            />;
+                                            // An image message's body is its caption, which is
+                                            // usually empty. The phone already shows it; show it
+                                            // here too, or a caption typed on the web would be
+                                            // invisible to the person who typed it.
+                                            const body = decryptMessage(msg).trim();
+                                            const caption = UNREADABLE_BODIES.includes(body) ? '' : body;
+                                            return (
+                                                <>
+                                                    <ChatImageBubble
+                                                        messageId={msg.id}
+                                                        conversationId={ctx.conversationId}
+                                                        peerPubHex={ctx.peerEdPubHex}
+                                                        myPrivHex={ctx.myEdPrivHex}
+                                                        originalConversationId={originalConversationId}
+                                                        originalConversationIds={originalConversationIds}
+                                                    />
+                                                    {caption && (
+                                                        <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                                            {caption}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
                                         })() : decryptMessage(msg)}
                                     </div>
                                     <span style={{
@@ -1402,6 +1570,70 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     </div>
                 )}
 
+                {imageNotice && (
+                    <div
+                        role="status"
+                        data-testid="chat-image-notice"
+                        style={{
+                            display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px',
+                            padding: '0.5rem 1rem', background: 'var(--bg-secondary)',
+                            borderTop: '1px solid var(--border-primary)',
+                            fontSize: '0.85rem', color: 'var(--text-secondary)',
+                        }}
+                    >
+                        <span style={{ minWidth: 0, flex: 1, wordBreak: 'break-word' }}>{imageNotice}</span>
+                        <button
+                            type="button"
+                            onClick={() => setImageNotice(null)}
+                            aria-label="Dismiss"
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '6px', minWidth: '28px', minHeight: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
+
+                {pendingImage && (
+                    <div
+                        data-testid="chat-image-preview"
+                        style={{
+                            display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px',
+                            padding: '0.5rem 1rem', background: 'var(--bg-secondary)',
+                            borderTop: '1px solid var(--border-primary)',
+                        }}
+                    >
+                        {pendingImage.previewUrl ? (
+                            <img
+                                src={pendingImage.previewUrl}
+                                alt=""
+                                style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }}
+                            />
+                        ) : (
+                            <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>🖼️</div>
+                        )}
+                        <div style={{ minWidth: 0, flex: 1, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            {draft.trim() ? 'Send this picture, with what you have typed as its caption?' : 'Send this picture?'}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                            <button
+                                type="button"
+                                onClick={clearPendingImage}
+                                style={{ minHeight: '32px', padding: '0 12px', borderRadius: '8px', border: '1px solid var(--border-primary)', background: 'transparent', color: 'var(--text-secondary)', fontFamily: 'inherit', fontSize: '0.85rem', cursor: 'pointer' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={sendPendingImage}
+                                disabled={sending}
+                                style={{ minHeight: '32px', padding: '0 12px', borderRadius: '8px', border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1 }}
+                            >
+                                {sending ? 'Sending…' : 'Send'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Send bar / Blocked Notice */}
                 {isPeerBlocked ? (
                     <div
@@ -1453,7 +1685,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             ref={draftRef}
                             value={draft}
                             onChange={(e) => setDraft(e.target.value)}
+                            onPaste={handleComposerPaste}
                             onKeyDown={(e) => {
+                                // While a picture is waiting, Enter and Escape belong to
+                                // the preview — it handles them on the window.
+                                if (pendingImage) return;
                                 // Enter sends; Shift+Enter inserts a newline.
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                     e.preventDefault();

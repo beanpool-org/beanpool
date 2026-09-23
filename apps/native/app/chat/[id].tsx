@@ -29,7 +29,7 @@ import { ChatComposer, type ChatComposerHandle } from '../../components/chat/Cha
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
 import {
     buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions, tombstoneText,
-    shouldFollowNewMessages, type ChatViewer,
+    shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
 } from '../../utils/chat-actions';
 import { normaliseTappedUrl } from '../../utils/chat-links';
 import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-groups';
@@ -1247,7 +1247,7 @@ function ChatScreen() {
                 behavior="padding"
             >
                 {/* The thread. Inverted, day-separated and keyboard-following — the shared list every chat uses. */}
-                {loadError && !firstLoadDone ? (
+                {shouldShowChatLoadError({ loadError, messageCount: messages.length }) ? (
                     <View style={{ flex: 1 }}>
                         <Text style={chat.errorText} accessibilityRole="alert">{loadError}</Text>
                         <Pressable style={chat.retryBtn} accessibilityRole="button" onPress={() => { setLoadError(null); loadMessages(); }}>

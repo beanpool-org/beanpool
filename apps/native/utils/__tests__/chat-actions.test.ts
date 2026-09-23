@@ -7,6 +7,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
     MESSAGE_EDIT_WINDOW_MS, DELETED_BY_AUTHOR_TEXT, REMOVED_BY_CONVENOR_TEXT, REMOVED_BY_HOST_TEXT,
     REMOVED_BY_KEEPER_TEXT, NOT_AVAILABLE_YET,
@@ -18,6 +20,8 @@ import {
 } from '../chat-actions';
 // The wording the event chat has always shown, so the two cannot drift apart unnoticed.
 import { EVENT_CHAT_REMOVED_TEXT } from '../events';
+
+const NATIVE_ROOT = join(__dirname, '..', '..');
 
 const ME = 'me-pubkey';
 const THEM = 'them-pubkey';
@@ -352,6 +356,29 @@ describe('the chat\'s "could not open this chat" state', () => {
     it('stays away while the read is fine', () => {
         expect(shouldShowChatLoadError({ loadError: null, messageCount: 0 })).toBe(false);
         expect(shouldShowChatLoadError({ loadError: null, messageCount: 3 })).toBe(false);
+    });
+
+    /**
+     * The helper above was right and unreached: the DM screen kept its own `loadError && !firstLoadDone`
+     * gate, so the fix shipped as dead code. The screens are not rendered here (see vitest.config.ts), so
+     * this reads the DM's source and holds it to the helper.
+     */
+    it('is what the DM screen actually asks — not a first-read flag it decides for itself', () => {
+        const src = readFileSync(join(NATIVE_ROOT, 'app', 'chat', '[id].tsx'), 'utf8');
+
+        // The error branch is chosen by the helper, counting the messages on screen.
+        expect(src).toMatch(
+            /\{shouldShowChatLoadError\(\{ loadError, messageCount: messages\.length \}\) \? \(/
+        );
+        // ...and the branch it guards is the one carrying the error text and the Try again.
+        const gate = src.indexOf('shouldShowChatLoadError({ loadError, messageCount: messages.length })');
+        expect(gate).toBeGreaterThan(-1);
+        const branch = src.slice(gate, gate + 600);
+        expect(branch).toContain('accessibilityRole="alert"');
+        expect(branch).toContain('Try again');
+
+        // No screen may re-derive the answer from "the first read has not finished": that is the bug.
+        expect(src).not.toMatch(/loadError && !firstLoadDone/);
     });
 });
 

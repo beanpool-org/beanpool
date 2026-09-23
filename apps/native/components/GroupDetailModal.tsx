@@ -18,6 +18,7 @@ import {
     leaveGroupApi,
     approveGroupMemberApi,
     setGroupMemberRoleApi,
+    handOverGroupLeadApi,
     updateGroupApi,
     type GroupItem,
     type GroupMemberItem,
@@ -25,6 +26,7 @@ import {
     type JoinPolicy
 } from '../utils/db';
 import { MemberAvatar } from './MemberAvatar';
+import { buildRosterView } from '../utils/group-roster';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 
 interface GroupDetailModalProps {
@@ -340,6 +342,19 @@ export function GroupDetailModal({
             color: colors.text.secondary,
             fontWeight: '600',
         },
+        // "lead convenor" beside the LEAD badge. flexShrink so it gives way before the badge does at 320dp.
+        leadNote: {
+            fontSize: 11,
+            color: colors.text.muted,
+            fontWeight: '600',
+            flexShrink: 1,
+        },
+        leadLine: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            marginBottom: 12,
+            lineHeight: 18,
+        },
     }));
 
     if (!groupData) return null;
@@ -351,6 +366,10 @@ export function GroupDetailModal({
 
     const pendingMembers = members.filter(m => m.status === 'pending_approval');
     const activeMembers = members.filter(m => m.status === 'active');
+    // Who leads the group, and what each row may offer (lead convenor, 2026-09-23). One source of truth, shared
+    // with the PWA and with the engine that enforces it: a convenor never sees Role or ✕ on the lead, or on
+    // another convenor.
+    const roster = buildRosterView(groupData, members, myPubkey);
 
     const handleJoin = async () => {
         setActionLoading(true);
@@ -366,8 +385,58 @@ export function GroupDetailModal({
         }
     };
 
+    /**
+     * The lead convenor hands the lead on. To another convenor, or to a member who becomes a convenor in the same
+     * step — never to an observer, and never to nobody: if the group has no candidate the lead is on their own and
+     * can simply leave.
+     */
+    const handleHandOverLead = () => {
+        const candidates = roster.handOverCandidates;
+        if (candidates.length === 0) {
+            Alert.alert('Hand Over Lead', 'There is nobody else in this group to hand the lead to.');
+            return;
+        }
+        Alert.alert(
+            'Hand Over Lead',
+            `Who should lead ${groupData.name}? They can remove and demote convenors, and you cannot take the lead back.`,
+            [
+                // A long roster would overflow an Alert, so it offers the first few; the rest are reachable once
+                // those have been dealt with. 320dp-safe either way: an Alert lays its buttons out vertically.
+                ...candidates.slice(0, 6).map(c => ({
+                    text: c.callsign || c.memberPubkey.slice(0, 10),
+                    onPress: async () => {
+                        setActionLoading(true);
+                        try {
+                            await handOverGroupLeadApi(groupData.id, c.memberPubkey);
+                            hapticSuccess();
+                            await loadDetails();
+                            if (onMembershipChanged) onMembershipChanged();
+                        } catch (e: any) {
+                            Alert.alert('Hand Over Failed', e.message || 'Could not hand the lead over');
+                        } finally {
+                            setActionLoading(false);
+                        }
+                    },
+                })),
+                { text: 'Cancel', style: 'cancel' as const },
+            ],
+        );
+    };
+
     const handleLeave = async () => {
         if (!myPubkey) return;
+        // A lead cannot leave while anyone else is active: say so here rather than letting the server refuse it.
+        if (roster.leaveNeedsHandOver) {
+            Alert.alert(
+                'Hand Over the Lead First',
+                `You are the lead convenor of ${groupData.name}. Hand the lead to someone else, then you can leave.`,
+                [
+                    { text: 'Not Now', style: 'cancel' },
+                    { text: 'Hand Over Lead', onPress: handleHandOverLead },
+                ],
+            );
+            return;
+        }
         Alert.alert(
             'Leave Group',
             `Are you sure you want to leave ${groupData.name}?`,
@@ -549,11 +618,25 @@ export function GroupDetailModal({
                             </View>
                             {isConvenor && (
                                 <View style={[styles.pill, { backgroundColor: colors.brand.tint, borderColor: colors.brand.primary }]}>
-                                    <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
-                                    <Text style={[styles.pillText, { color: colors.brand.primary }]}>Convenor</Text>
+                                    <MaterialCommunityIcons
+                                        name={roster.viewerIsLead ? 'shield-star' : 'shield-account'}
+                                        size={14}
+                                        color={colors.brand.primary}
+                                    />
+                                    <Text style={[styles.pillText, { color: colors.brand.primary }]}>
+                                        {roster.viewerIsLead ? 'Lead convenor' : 'Convenor'}
+                                    </Text>
                                 </View>
                             )}
                         </View>
+
+                        {/* Group info names the lead convenor. Never "owner" — that is the owner of a node. */}
+                        {roster.leadCallsign ? (
+                            <Text style={styles.leadLine}>
+                                Lead convenor: <Text style={{ fontWeight: '800', color: colors.text.heading }}>{roster.leadCallsign}</Text>
+                                {roster.viewerIsLead ? ' (you)' : ''}. Only the lead can remove or demote a convenor, and nobody can remove the lead.
+                            </Text>
+                        ) : null}
 
                         <View style={styles.infoNotice}>
                             <MaterialCommunityIcons name="information-outline" size={16} color={colors.text.secondary} />
@@ -594,6 +677,24 @@ export function GroupDetailModal({
                                         <Text style={styles.manageBtnText}>Change</Text>
                                     </Pressable>
                                 </View>
+
+                                {/* Hand over the lead — the lead only, and only when there is somebody to hand to. */}
+                                {roster.viewerIsLead && roster.handOverCandidates.length > 0 && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                        <Text style={{ flex: 1, marginRight: 8, fontSize: 13, color: colors.text.secondary }}>
+                                            You are the lead convenor
+                                        </Text>
+                                        <Pressable
+                                            style={styles.manageBtn}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Hand over lead convenor"
+                                            disabled={actionLoading}
+                                            onPress={handleHandOverLead}
+                                        >
+                                            <Text style={styles.manageBtnText} numberOfLines={2}>Hand over</Text>
+                                        </Pressable>
+                                    </View>
+                                )}
 
                                 {/* Pending requests */}
                                 {pendingMembers.length > 0 && (
@@ -643,39 +744,63 @@ export function GroupDetailModal({
                         {loading ? (
                             <ActivityIndicator size="small" color={colors.brand.primary} style={{ marginVertical: 20 }} />
                         ) : (
-                            activeMembers.map(m => {
-                                const isUserConvenor = m.role === 'convenor';
+                            roster.rows.map(row => {
+                                const m = row.member;
+                                const highlight = row.isLead || m.role === 'convenor';
                                 return (
                                     <View key={m.memberPubkey} style={styles.memberRow}>
                                         <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
                                         <View style={styles.memberInfo}>
                                             <Text style={styles.memberCallsign} numberOfLines={1}>
-                                                {m.callsign || m.memberPubkey.slice(0, 10)}{m.memberPubkey === myPubkey ? ' (You)' : ''}
+                                                {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}
                                             </Text>
-                                            <View style={[styles.roleBadge, isUserConvenor && styles.roleBadgeConvenor]}>
-                                                <Text style={[styles.roleBadgeText, isUserConvenor && styles.roleBadgeConvenorText]} numberOfLines={1}>
-                                                    {m.role.toUpperCase()}
-                                                </Text>
+                                            {/* The badge says LEAD on the one row it belongs to. It wraps rather than
+                                                squeezing the callsign at 320dp with 1.3× text. */}
+                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                                                <View style={[styles.roleBadge, highlight && styles.roleBadgeConvenor]}>
+                                                    <Text style={[styles.roleBadgeText, highlight && styles.roleBadgeConvenorText]} numberOfLines={1}>
+                                                        {row.isLead ? 'LEAD' : m.role.toUpperCase()}
+                                                    </Text>
+                                                </View>
+                                                {row.isLead && (
+                                                    <Text style={styles.leadNote} numberOfLines={1}>lead convenor</Text>
+                                                )}
                                             </View>
                                         </View>
-                                        {isConvenor && m.memberPubkey !== myPubkey && (
+                                        {/* Role and ✕ only where the viewer may actually act: never on the lead, and
+                                            never on another convenor unless the viewer IS the lead. */}
+                                        {(row.canChangeRole || row.canRemove || row.canHandOverLead) && (
                                             <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
-                                                <Pressable
-                                                    style={styles.manageBtn}
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={`Change role for ${m.callsign || 'this member'}`}
-                                                    onPress={() => handleChangeRole(m.memberPubkey, m.role, m.callsign)}
-                                                >
-                                                    <Text style={styles.manageBtnText} numberOfLines={1}>Role</Text>
-                                                </Pressable>
-                                                <Pressable
-                                                    style={[styles.manageBtn, { borderColor: colors.feedback.danger.solid }]}
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={`Remove ${m.callsign || 'this member'} from the group`}
-                                                    onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
-                                                >
-                                                    <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.solid} />
-                                                </Pressable>
+                                                {row.canHandOverLead && (
+                                                    <Pressable
+                                                        style={styles.manageBtn}
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={`Make ${m.callsign || 'this member'} the lead convenor`}
+                                                        onPress={handleHandOverLead}
+                                                    >
+                                                        <MaterialCommunityIcons name="shield-star-outline" size={18} color={colors.text.secondary} />
+                                                    </Pressable>
+                                                )}
+                                                {row.canChangeRole && (
+                                                    <Pressable
+                                                        style={styles.manageBtn}
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={`Change role for ${m.callsign || 'this member'}`}
+                                                        onPress={() => handleChangeRole(m.memberPubkey, m.role, m.callsign)}
+                                                    >
+                                                        <Text style={styles.manageBtnText} numberOfLines={1}>Role</Text>
+                                                    </Pressable>
+                                                )}
+                                                {row.canRemove && (
+                                                    <Pressable
+                                                        style={[styles.manageBtn, { borderColor: colors.feedback.danger.solid }]}
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={`Remove ${m.callsign || 'this member'} from the group`}
+                                                        onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
+                                                    >
+                                                        <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.solid} />
+                                                    </Pressable>
+                                                )}
                                             </View>
                                         )}
                                     </View>

@@ -74,6 +74,8 @@ import { useSidebarMode, nextSidebarMode } from './lib/sidebar-mode';
 import { defaultSubTab } from './lib/sections';
 import { PhoneReturnLink } from './components/layout/ReturnLinks';
 import { PhoneTopBar, PhoneMenu, useSettingsHistory, pushMenuEntry, closeMenuEntry, readSettingsEntry } from './components/layout/PhoneNav';
+import { ActivityPauseProvider, usePausablePoll } from './lib/activity-pause';
+import { IdlePausedBanner } from './components/common/IdlePausedBanner';
 
 /**
  * Does this error mean "wrong password" rather than "node unreachable"?
@@ -112,10 +114,42 @@ function credentialDigest(password?: string): string {
     return `${password.length}:${(h >>> 0).toString(36)}`;
 }
 
+/**
+ * How long a node's full data payload (`/api/local/admin/data`, ~4 MB on a busy node) is allowed
+ * to stand in for itself before the security-flag check pays for a fresh one.
+ *
+ * It used to be fetched on every five-second diagnostics tick, for every saved profile, purely to
+ * read `health.flags` and `reports` — which is how one open Node Settings tab sent 8.28 GB out of
+ * the test node in three hours. Five minutes is well inside "an alert must not sit unseen", and a
+ * manual refresh or a first load still fetches at once.
+ */
+const FLAG_REFRESH_MS = 5 * 60 * 1000;
+
+/**
+ * How long a *failed* flag fetch holds the window shut before the next diagnostics tick may try
+ * again.
+ *
+ * The window above is stamped when the request goes out, not when it comes back, so that a manual
+ * refresh and the tick cannot fetch the same 4 MB payload twice over. Left alone, that also means
+ * a node whose payload request fails — briefly unreachable, a 500, a 429, a dropped connection —
+ * records the failure as a refresh and stops being checked for security flags for five minutes,
+ * which is the one guarantee this screen owes. So a failure winds the stamp back to here instead:
+ * far enough to retry soon, not so far that a node answering diagnostics but failing on data gets
+ * a fresh attempt every five seconds.
+ */
+const FLAG_RETRY_MS = 30 * 1000;
+
+/** The stamp to leave behind when a flag/gateway fetch fails, so the next attempt is due in FLAG_RETRY_MS. */
+function retryStamp(now: number) {
+    return now - FLAG_REFRESH_MS + FLAG_RETRY_MS;
+}
+
 export function App(props: { isFleetMode?: boolean } = {}) {
     return (
         <ManualProvider>
-            <AppBody {...props} />
+            <ActivityPauseProvider>
+                <AppBody {...props} />
+            </ActivityPauseProvider>
         </ManualProvider>
     );
 }
@@ -433,9 +467,75 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     };
 
     /**
-     * Handle successful diagnostics response: update state, fetch secondary data.
+     * When each profile last had its full data payload and its gateway config fetched, and whether
+     * a fetch for it is in flight.
+     *
+     * Refs rather than state for the same reason as `authBlockedRef`: they are read inside
+     * callbacks the poll captured, and nothing renders from them. `loadNodeData` and `loadGateway`
+     * stamp them too, so a refresh the operator asked for counts as the fetch for that window
+     * rather than being followed by a second copy of the same 4 MB a moment later.
      */
-    const diagSuccess = useCallback((p: NodeProfile, data: DiagnosticsResponse) => {
+    const lastFlagFetchRef = useRef<Record<string, number>>({});
+    const lastGatewayFetchRef = useRef<Record<string, number>>({});
+    const dataInFlightRef = useRef<Record<string, boolean>>({});
+    const gatewayInFlightRef = useRef<Record<string, boolean>>({});
+    const diagInFlightRef = useRef<Record<string, boolean>>({});
+
+    /** The newest data payload per profile, readable from callbacks the poll captured. */
+    const fleetNodeDataRef = useRef<Record<string, NodeDataPayload>>({});
+    fleetNodeDataRef.current = fleetNodeData;
+
+    /**
+     * The node whose sections are on screen *right now* — not the one that was on screen when a
+     * request left.
+     *
+     * `nodeData`, `gateway` and `diag` are the active node's alone, and every write to them comes
+     * out of a fetch that started earlier. Comparing against the `activeNode` captured in that
+     * fetch's closure answers "was this node active when I asked?", which is the wrong question:
+     * an operator who switches node while a ~4 MB payload is in flight then gets the old node's
+     * members, reports and health painted over the new node's screen when it lands. Every such
+     * write is gated on this ref instead, which the render above keeps current.
+     */
+    const activeNodeIdRef = useRef<string | undefined>(undefined);
+    activeNodeIdRef.current = activeNode?.id;
+
+    /**
+     * Work out a node's sidebar health from a data payload we already have. No request: this is
+     * what keeps a dismissal showing up at once, and the dot honest between the five-minutely
+     * fetches, without paying for the payload again.
+     */
+    const applyHealthFromData = useCallback((profileId: string, nData: NodeDataPayload | null | undefined) => {
+        if (!nData) return;
+        let savedDismissed = new Set<string>();
+        try {
+            const saved = localStorage.getItem('bp_dismissed_flags');
+            if (saved) savedDismissed = new Set(JSON.parse(saved));
+        } catch {}
+
+        const flags = (nData?.health?.flags || []).filter(
+            (f: NodeHealthFlag) => !savedDismissed.has(f.id || f.type || f.description || '')
+        );
+        const reports = (nData?.reports || []).filter(
+            (r: NodeReport) => !savedDismissed.has(r.id || r.targetPubkey || r.reason || '')
+        );
+
+        const hasAlert = flags.some((f: NodeHealthFlag) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
+        const hasWarning = flags.some((f: NodeHealthFlag) => f.severity === 'warning');
+
+        const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
+        setNodeHealthMap((prev) => ({ ...prev, [profileId]: status }));
+    }, []);
+
+    /**
+     * Handle successful diagnostics response: update state, and refresh the secondary data the
+     * security alerts are read from — at most once every `FLAG_REFRESH_MS` per node.
+     *
+     * Diagnostics itself is about a kilobyte and stays on its five-second tick. The two fetches
+     * below are not: the data payload alone is ~4 MB on the test node, and riding it on every tick
+     * is the whole bandwidth bug. Between fetches the flags are re-read from the copy already in
+     * hand, so a dismissal still takes effect immediately.
+     */
+    const diagSuccess = useCallback((p: NodeProfile, data: DiagnosticsResponse, opts?: { manual?: boolean }) => {
         // Lifted on any success, not just on a credential edit. The password can
         // also start working without this manager touching it — the operator
         // resets it on the node itself to the value already stored here — and
@@ -448,51 +548,69 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             [p.id]: { diag: data, loading: false, error: null },
         }));
 
+        const now = Date.now();
+        const manual = !!opts?.manual;
+
         // Fetch node gateway config for security alerts
-        (async () => {
-            try {
-                const gData = await fetchGatewayConfig(p.url, p.adminPassword, getTfaSessionToken(p.id));
-                if (gData) {
-                    setFleetGateways((prev) => ({ ...prev, [p.id]: gData }));
-                    if (p.id === activeNode?.id && gData) {
-                        setGateway((prev) => (prev === null ? gData : prev));
+        const gatewayDue = manual || now - (lastGatewayFetchRef.current[p.id] || 0) >= FLAG_REFRESH_MS;
+        if (gatewayDue && !gatewayInFlightRef.current[p.id]) {
+            lastGatewayFetchRef.current[p.id] = now;
+            gatewayInFlightRef.current[p.id] = true;
+            (async () => {
+                try {
+                    const gData = await fetchGatewayConfig(p.url, p.adminPassword, getTfaSessionToken(p.id));
+                    if (gData) {
+                        setFleetGateways((prev) => ({ ...prev, [p.id]: gData }));
+                        if (p.id === activeNodeIdRef.current && gData) {
+                            setGateway((prev) => (prev === null ? gData : prev));
+                        }
                     }
+                } catch {
+                    lastGatewayFetchRef.current[p.id] = retryStamp(Date.now());
+                } finally {
+                    gatewayInFlightRef.current[p.id] = false;
                 }
-            } catch {}
-        })();
+            })();
+        }
 
         // Fetch node data to check for active abuse/security flags
-        (async () => {
-            try {
-                const nData = await fetchNodeData(p.url, p.adminPassword, getTfaSessionToken(p.id));
-                setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
-
-                let savedDismissed = new Set<string>();
+        const flagsDue = manual || now - (lastFlagFetchRef.current[p.id] || 0) >= FLAG_REFRESH_MS;
+        if (!flagsDue || dataInFlightRef.current[p.id]) {
+            applyHealthFromData(p.id, fleetNodeDataRef.current[p.id]);
+        } else {
+            lastFlagFetchRef.current[p.id] = now;
+            dataInFlightRef.current[p.id] = true;
+            (async () => {
                 try {
-                    const saved = localStorage.getItem('bp_dismissed_flags');
-                    if (saved) savedDismissed = new Set(JSON.parse(saved));
-                } catch {}
+                    const nData = await fetchNodeData(p.url, p.adminPassword, getTfaSessionToken(p.id));
+                    setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
+                    applyHealthFromData(p.id, nData);
+                    // The active node's sections read `nodeData`, and this is the same payload
+                    // they would have paid for. Without this the one fetch in five minutes would
+                    // refresh the sidebar's dot and leave the screen in front of the operator
+                    // stale — and a Refresh pressed while it was in flight would be skipped as an
+                    // overlap and deliver nothing.
+                    if (p.id === activeNodeIdRef.current) {
+                        setNodeData(nData);
+                    }
+                } catch {
+                    // A failure must not buy this node five minutes of no flag checking — that is
+                    // the one thing the five-minute window is not allowed to cost. Wind the stamp
+                    // back so the tick tries again shortly.
+                    lastFlagFetchRef.current[p.id] = retryStamp(Date.now());
+                } finally {
+                    dataInFlightRef.current[p.id] = false;
+                }
+            })();
+        }
 
-                const flags = (nData?.health?.flags || []).filter(
-                    (f: NodeHealthFlag) => !savedDismissed.has(f.id || f.type || f.description || '')
-                );
-                const reports = (nData?.reports || []).filter(
-                    (r: NodeReport) => !savedDismissed.has(r.id || r.targetPubkey || r.reason || '')
-                );
-
-                const hasAlert = flags.some((f: NodeHealthFlag) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
-                const hasWarning = flags.some((f: NodeHealthFlag) => f.severity === 'warning');
-
-                const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
-                setNodeHealthMap((prev) => ({ ...prev, [p.id]: status }));
-            } catch {}
-        })();
-
-        if (p.id === activeNode?.id) {
+        // Same closure, same trap: diagSuccess runs when the diagnostics response lands, which can
+        // be after the operator has moved on to another node.
+        if (p.id === activeNodeIdRef.current) {
             setDiag(data);
             setDiagError(null);
         }
-    }, [activeNode]);
+    }, [applyHealthFromData]);
 
     /**
      * Nodes whose stored admin password the node itself rejected — profile id → digest of
@@ -608,6 +726,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             if (!opts?.manual && (authBlockedRef.current[p.id] === credentialDigest(p.adminPassword) || totpPromptNode?.profileId === p.id)) {
                 return;
             }
+            // Never two at once for the same node. A slow or stalled node used to collect a
+            // fresh request every five seconds on top of the ones still outstanding, each of
+            // which drags its own secondary fetches behind it; the answer already on its way
+            // is the answer this tick wanted.
+            if (diagInFlightRef.current[p.id]) {
+                return;
+            }
+            diagInFlightRef.current[p.id] = true;
             setFleetDiags((prev) => ({
                 ...prev,
                 [p.id]: { ...(prev[p.id] || { diag: null }), loading: true, error: null },
@@ -648,7 +774,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                 throw new Error(`HTTP ${retryRes.status}: ${retryRes.statusText}`);
                             }
                             const data = await retryRes.json();
-                            diagSuccess(p, data);
+                            diagSuccess(p, data, opts);
                         } else {
                             // User cancelled the TOTP prompt
                             throw new Error('2FA code required');
@@ -661,7 +787,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     throw new Error(`HTTP ${diagRes.status}: ${diagRes.statusText}`);
                 }
                 const data = await diagRes.json();
-                diagSuccess(p, data);
+                diagSuccess(p, data, opts);
             } catch (e: unknown) {
                 const errMsg = e instanceof Error ? e.message : 'Failed to connect';
                 if (!errMsg.includes('429') && errMsg !== '2FA_PROMPT_BUSY') {
@@ -678,10 +804,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     // every request it was asked — the sidebar now says which of the two
                     // it is, and they need different things done about them.
                     setNodeHealthMap((prev) => ({ ...prev, [p.id]: authFailed ? 'auth_required' : 'offline' }));
-                    if (p.id === activeNode?.id) {
+                    if (p.id === activeNodeIdRef.current) {
                         setDiagError(errMsg);
                     }
                 }
+            } finally {
+                diagInFlightRef.current[p.id] = false;
             }
         });
     };
@@ -711,28 +839,53 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     // Load gateway config
     const loadGateway = async () => {
         if (!activeNode || moderatorRef.current) return;
+        if (gatewayInFlightRef.current[activeNode.id]) return;
+        gatewayInFlightRef.current[activeNode.id] = true;
+        lastGatewayFetchRef.current[activeNode.id] = Date.now();
         setGatewayLoading(true);
+        const requestedFor = activeNode.id;
         try {
             const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-            setGateway(data);
+            if (requestedFor === activeNodeIdRef.current) {
+                setGateway(data);
+            }
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : '';
+            // The window is stamped before the request goes out; a failure winds it back so the
+            // tick retries rather than counting this as five minutes' worth of refresh.
+            lastGatewayFetchRef.current[requestedFor] = retryStamp(Date.now());
             // Only set gateway to null on explicit auth error, NOT on 429 rate limiting
             if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
-                setGateway(null);
+                if (requestedFor === activeNodeIdRef.current) {
+                    setGateway(null);
+                }
             }
         } finally {
+            gatewayInFlightRef.current[activeNode.id] = false;
             setGatewayLoading(false);
         }
     };
 
-    // Load member data
+    /**
+     * Load member data — the full ~4 MB payload, and the only place the active node should be
+     * paying for it. Stamping `lastFlagFetchRef` here is what lets the diagnostics tick reuse
+     * this copy for its flag check instead of fetching a second one of its own.
+     */
     const loadNodeData = async () => {
         if (!activeNode || moderatorRef.current) return;
+        if (dataInFlightRef.current[activeNode.id]) return;
+        dataInFlightRef.current[activeNode.id] = true;
+        lastFlagFetchRef.current[activeNode.id] = Date.now();
         setNodeDataLoading(true);
+        const requestedFor = activeNode.id;
         try {
             const data = await fetchNodeData(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-            setNodeData(data);
+            // Only if this node is still the one on screen. A ~4 MB payload is long enough in
+            // flight for the operator to have switched node, and the sidebar's own copies below
+            // are keyed by id, so they are safe either way.
+            if (requestedFor === activeNodeIdRef.current) {
+                setNodeData(data);
+            }
             setFleetNodeData((prev) => ({ ...prev, [activeNode.id]: data }));
 
             const flags = data?.health?.flags || [];
@@ -744,10 +897,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             setNodeHealthMap((prev) => ({ ...prev, [activeNode.id]: status }));
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
+            lastFlagFetchRef.current[requestedFor] = retryStamp(Date.now());
             if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
-                setNodeData(null);
+                if (requestedFor === activeNodeIdRef.current) {
+                    setNodeData(null);
+                }
             }
         } finally {
+            dataInFlightRef.current[activeNode.id] = false;
             setNodeDataLoading(false);
         }
     };
@@ -818,13 +975,21 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         return () => { cancelled = true; };
     }, [isFleetMode]);
 
-    useEffect(() => {
-        refreshFleetDiagnostics();
-        const interval = setInterval(() => {
-            refreshFleetDiagnostics();
-        }, 5000);
-        return () => clearInterval(interval);
-    }, [profiles]);
+    /**
+     * The fleet tick. Diagnostics is about a kilobyte a node, so five seconds is cheap and stays —
+     * but it stops entirely while the tab is hidden or the operator has been away ten minutes, and
+     * resumes with one immediate refresh (lib/activity-pause).
+     *
+     * No longer keyed on `profiles`. The hook keeps the callback in a ref, so the tick always sees
+     * the current list without the interval being torn down and rebuilt — which it was on every
+     * profile-state change, each rebuild firing an extra immediate round of requests at every node
+     * for something as slight as reordering the sidebar. The operator actions that genuinely need
+     * fresh state (adding a node, saving credentials, selecting a node) already ask for a manual
+     * refresh of their own.
+     */
+    usePausablePoll(() => {
+        void refreshFleetDiagnostics();
+    }, 5000);
 
     useEffect(() => {
         setDiag(null);
@@ -1175,6 +1340,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         </button>
                     </div>
                 )}
+
+                {/* Nothing has refreshed itself for the last ten minutes, and why. */}
+                <IdlePausedBanner />
 
                 {/* Workspace Body */}
                 <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">

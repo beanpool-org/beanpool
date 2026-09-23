@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 33,
-  "hash": "faffdc54d60b155820ef3b0a2476c6b09c3896d3c8c04474376533e7c28aa07f",
+  "version": 34,
+  "hash": "9c129d337f5b8f373deb469c545aac8f3c22a3ffacc4280c1f9d3973117a15bd",
   "sections": [
     {
       "id": "setup",
@@ -917,7 +917,7 @@
         },
         {
           "type": "p",
-          "text": "Open **People & Safety**, then **Onboarding Funnel**. It sits next to Invites & QR because it is what happens after an invite: how many people tried to join over the last 7, 30 or 90 days, and how far down the join flow each of them got, from entering a code to posting their first offer."
+          "text": "Open **People & Safety**, then **Onboarding Funnel**. It sits next to Invites & QR because it is what happens after an invite: it follows the people who joined over the last 7, 30 or 90 days, and shows how far those same people have got since."
         },
         {
           "type": "img",
@@ -926,18 +926,23 @@
         },
         {
           "type": "p",
-          "text": "Reading it:"
+          "text": "**Counts only.** Nobody is named and nobody can be picked out of any of this. Your server keeps no per-person record of it, so there is none to show — and that is a deliberate choice, not a missing feature."
         },
         {
-          "type": "ul",
-          "items": [
-            "**Counts only.** Nobody is named and nobody can be picked out of it. Your server keeps no per-person record of any of this, so there is none to show.",
-            "Steps the server **tallies as they happen** only have figures from the day counting started on your server, which the screen names at the top. Two steps, **Joined** and **Actually got started**, are worked out from records your server already kept, so they reach further back; where one knows about more, it says so under the number.",
-            "**Already-a-member re-entries** come off the top of the funnel: that is somebody arriving twice, not somebody new. Left in, they would quietly halve every rate below.",
-            "A step marked **not measured yet** is one your members' app does not report yet. It is not a step where everyone gave up.",
-            "A rate **above 100%** means people arrived without an invite code being counted. That is worth knowing, not a fault.",
-            "**Why codes were rejected** lists expired, unrecognised and already-used codes. A run of expired ones usually means printed cards sat around too long: invites last 30 days."
-          ]
+          "type": "p",
+          "text": "The screen has three parts, and they answer three different questions. Read each on its own."
+        },
+        {
+          "type": "p",
+          "text": "**The people who joined.** One group of people, followed. **Joined** is everyone who joined in the window you picked, and is 100%. **Has a photo** and **Has posted** are how many of those same people have a profile photo now, and have ever listed something here. Because they are counted from the same people, these can never pass 100%. Somebody who joined before the window is not in the group, even if they posted inside it — the question is how the people who arrived are getting on, not how much happened this month."
+        },
+        {
+          "type": "p",
+          "text": "**Steps inside the app.** Seeing the protection screen, choosing how to be protected, finishing the guide. These happen on a member's own phone, so their app tells your server about them. Your server does not record who reported what, so it **cannot tie these to the people above** — do not read them as a percentage of anything. Each is counted once per person, from the date the screen names. Older figures, from before apps counted this way, are left out and the screen says how many: back then an app counted every time a screen was drawn, so one person could be counted several times over, and there is no way to go back and work out which."
+        },
+        {
+          "type": "p",
+          "text": "**Codes.** How many invite codes were entered, and why any were rejected. These are **attempts, not people**: one person trying a code three times is three attempts, which is why nothing above is worked out as a share of them. Already-a-member re-entries are named separately — that is somebody arriving twice, neither a rejection nor a signup. A run of **expired** codes usually means printed cards sat around too long: invites last 30 days."
         },
         {
           "type": "p",

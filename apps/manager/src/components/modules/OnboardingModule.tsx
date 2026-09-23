@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { isOncePerPersonVariant } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { fetchOnboardingFunnel, getTfaSessionToken, type FunnelRow } from '../../lib/node-client';
 
@@ -17,18 +18,33 @@ export interface OnboardingModuleProps {
 const WINDOWS = [7, 30, 90] as const;
 
 /**
- * The join flow, in order. `counted` marks the steps the node tallies as they happen;
- * the rest are derived from data it already had, which is what lets them show history
- * from before this feature existed.
+ * THE COHORT — one group of people, followed.
+ *
+ * Every row here is a subset of the row above it, computed by the node in a single pass over
+ * the members who joined inside the window, so "Joined" is 100% and nothing can exceed it.
+ * That is the whole change: this screen used to put four numbers about four different groups
+ * of people in one column and draw a funnel through them, which is how it came to show 350%
+ * of joiners reaching step 3 and to count people who joined months ago as having "actually
+ * got started" this month.
  */
-const STEPS: { event: string; label: string; hint: string; counted: boolean }[] = [
-    { event: 'invite_attempt', label: 'Entered an invite code', hint: 'Someone submitted a code — the top of the flow', counted: true },
-    { event: 'member_created', label: 'Joined', hint: 'Step 1 done — the account exists', counted: false },
-    { event: 'avatar_published', label: 'Added a photo', hint: 'Step 2 done — first photo only', counted: true },
-    { event: 'protection_shown', label: 'Saw the protection screen', hint: 'Step 3 — arrives with Phase A', counted: true },
-    { event: 'protection_choice', label: 'Chose how to be protected', hint: 'Step 3 answered — arrives with Phase A', counted: true },
-    { event: 'guide_complete', label: 'Finished the guide', hint: 'Step 4 — arrives with Phase A', counted: true },
-    { event: 'activated', label: 'Actually got started', hint: 'Posted their first offer', counted: false },
+const COHORT: { event: string; label: string; hint: string }[] = [
+    { event: 'member_created', label: 'Joined', hint: 'People who joined here in this window — every figure below is a share of them' },
+    { event: 'cohort_photo', label: 'Has a photo', hint: 'Of those same people, how many have a profile photo now' },
+    { event: 'cohort_posted', label: 'Has posted', hint: 'Of those same people, how many have ever listed something here' },
+];
+
+/**
+ * THE IN-APP STEPS — reported by members' own apps, and NOT linked to the cohort above.
+ *
+ * The node cannot tie these to the people who joined, and will not be able to: M2 gives the
+ * counter table no column that could identify anyone. So they are shown apart, with their own
+ * heading and their own date, rather than as rows in a funnel whose percentages would be
+ * dividing one set of people by a different one.
+ */
+const IN_APP: { event: string; label: string; hint: string }[] = [
+    { event: 'protection_shown', label: 'Saw the protection screen', hint: 'Step 3 drawn on their device' },
+    { event: 'protection_choice', label: 'Chose how to be protected', hint: 'Step 3 answered — their words, or skip' },
+    { event: 'guide_complete', label: 'Finished the guide', hint: 'Step 4 done' },
 ];
 
 const FAILURE_LABELS: Record<string, string> = {
@@ -73,61 +89,37 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
     const view = useMemo(() => {
         if (!rows) return null;
 
-        // Counting began the first day a tallied row was written. Everything before that
-        // exists only for the derived steps, and mixing the two spans would produce
-        // nonsense — more people "joined" than ever "entered a code", which reads as a
-        // broken dashboard rather than as two different measurement windows.
-        const countedDays = rows.filter(r => STEPS.some(s => s.event === r.event && s.counted)).map(r => r.day);
-        const countingSince = countedDays.length ? countedDays.sort()[0] : null;
+        const tally = (event: string, from: FunnelRow[] = rows) => sum(from.filter(r => r.event === event));
 
-        const comparable = countingSince ? rows.filter(r => r.day >= countingSince) : [];
-        const tally = (event: string, from: FunnelRow[]) => sum(from.filter(r => r.event === event));
-
-        // The top of the funnel is people trying to join, and every percentage below is a
-        // share of it — so an already-a-member re-entry has to come off it. That is the
-        // same person arriving twice, not somebody new, which is why it is already kept
-        // out of `invite_failed`; leaving it in the denominator quietly halves every
-        // conversion rate instead. The first real test showed exactly that: one tablet
-        // signing up, submitting twice, read as 2 attempts and therefore 50% joined.
-        const submitted = tally('invite_attempt', comparable);
-        const comparableReentry = tally('invite_reentry', comparable);
-        const top = Math.max(0, submitted - comparableReentry);
-
-        const steps = STEPS.map(step => {
-            const total = tally(step.event, rows);                 // everything in the window
-            const comparableTotal = tally(step.event, comparable); // only since counting began
-            const isTopRow = step.event === 'invite_attempt';
-
-            // Which figure this row shows. Once counting has begun, the number and the
-            // percentage beside it MUST describe the same span: rendering a 30-day derived
-            // total next to a percentage of the counted window produced rows reading
-            // "5 ... 50%" and "1 ... 0%", which is not arithmetic anyone can follow. The
-            // longer history is not thrown away — it moves to `note`.
-            const primary = !countingSince ? total : isTopRow ? top : comparableTotal;
-            const pct = top > 0 ? Math.round((primary / top) * 100) : 0;
-
-            let note: string | null = null;
-            if (isTopRow && comparableReentry > 0) {
-                // 'already a members' is what the old plural produced, and this screen now goes to every node owner.
-                note = `${submitted} submitted, ${comparableReentry} ${comparableReentry === 1 ? 'already a member' : 'already members'} excluded`;
-            } else if (countingSince && total > comparableTotal) {
-                note = `${total} across the full ${days} days`;
-            }
-
-            // Over 100% is reachable and is deliberately NOT clamped away. A derived step
-            // counts member rows, and a member can appear without any invite code being
-            // tallied — so a rate above 100% is real information: people are arriving by a
-            // route this funnel cannot see. Rounding it down to a comfortable 100% would
-            // erase the only clue. The bar is capped because a bar cannot overflow; the
-            // number is left alone and explained.
-            if (pct > 100) {
-                const why = 'more than the codes tallied — some arrived without one being counted';
-                note = note ? `${note} · ${why}` : why;
-            }
-
-            return { ...step, primary, note, pct, everSeen: total > 0 };
+        // ---- the cohort ----
+        const joined = tally('member_created');
+        const cohort = COHORT.map(step => {
+            const count = tally(step.event);
+            const isBase = step.event === 'member_created';
+            // A subset of a group, so this is a true share and cannot exceed 100. With nobody
+            // in the group there is no share to take: the row reads 0 of 0, not 0%.
+            const pct = isBase ? 100 : joined > 0 ? Math.round((count / joined) * 100) : 0;
+            return { ...step, count, pct, isBase };
         });
 
+        // ---- the in-app steps ----
+        // Only rows a client has deduplicated per person are added up. The rest are the old
+        // one-per-showing counts; they cannot be corrected after the fact, so they are left
+        // where they are and ignored rather than quietly inflating these figures.
+        const perPerson = rows.filter(r => isOncePerPersonVariant(r.variant));
+        const perPersonDays = perPerson.map(r => r.day).sort();
+        const countedSince = perPersonDays.length ? perPersonDays[0] : null;
+        const inApp = IN_APP.map(step => ({ ...step, count: tally(step.event, perPerson) }));
+
+        // Worth naming out loud when it is there: an operator who sees a small number beside a
+        // step wants to know whether it is a drop-off or an old build still double-reporting.
+        const staleReports = sum(rows.filter(
+            r => IN_APP.some(s => s.event === r.event) && !isOncePerPersonVariant(r.variant),
+        ));
+
+        // ---- the codes ----
+        const attempts = tally('invite_attempt');
+        const reentry = tally('invite_reentry');
         const failures = rows
             .filter(r => r.event === 'invite_failed')
             .reduce<Record<string, number>>((acc, r) => {
@@ -139,16 +131,8 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
                 return acc;
             }, {});
 
-        const reentry = sum(rows.filter(r => r.event === 'invite_reentry'));
-        const protectionStates = rows
-            .filter(r => r.event === 'protection_shown')
-            .reduce<Record<string, number>>((acc, r) => {
-                acc[r.variant || '?'] = (acc[r.variant || '?'] || 0) + r.count;
-                return acc;
-            }, {});
-
-        return { steps, failures, reentry, comparableReentry, protectionStates, countingSince, top };
-    }, [rows, days]);
+        return { cohort, joined, inApp, countedSince, staleReports, attempts, reentry, failures };
+    }, [rows]);
 
     if (!active) {
         return (
@@ -225,156 +209,141 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
 
             {view && !loading && (
                 <>
-                    {view.countingSince ? (
+                    <section aria-labelledby="funnel-cohort-heading" className="space-y-2">
+                        <h4 id="funnel-cohort-heading" className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 m-0">
+                            The people who joined
+                        </h4>
                         <p className="text-[11px] text-nature-500 m-0">
-                            Tallied steps have been counted since <span className="font-mono text-nature-300">{view.countingSince}</span>.
-                            The two derived steps — <em>Joined</em> and <em>Actually got started</em> — are worked out from
-                            records this node already kept, so they reach further back. Every figure below is that
-                            overlapping period only, so each number and the percentage beside it describe the same
-                            stretch of time; where a step knows about more, it says so underneath.
+                            One group of people, followed: everyone who joined here in the last{' '}
+                            <span className="font-mono text-nature-300">{days}</span> days, and how far those same
+                            people have got since. Each figure below is a share of that first row, so none of them
+                            can pass 100%.
                         </p>
-                    ) : (
-                        <p className="text-[11px] text-amber-400/90 m-0">
-                            Nothing has been tallied yet on this node — either nobody has tried to join since it was
-                            redeployed, or it's still running an older build. The two derived steps below are still accurate.
-                        </p>
-                    )}
-
-                    <div className="space-y-2">
-                        {view.steps.map(step => {
-                            const notYetBuilt = step.counted && !step.everSeen;
-                            return (
+                        {view.joined === 0 && (
+                            <p className="text-[11px] text-amber-400/90 m-0">
+                                Nobody joined in this window. Try a longer one.
+                            </p>
+                        )}
+                        {view.cohort.map(step => (
+                            <div
+                                key={step.event}
+                                className="p-3 rounded-xl bg-nature-800/60 border border-nature-700 flex items-center gap-4"
+                            >
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-bold text-white truncate">{step.label}</div>
+                                    <div className="text-[10px] text-nature-500">{step.hint}</div>
+                                </div>
+                                {/*
+                                  aria-hidden rather than role="progressbar": the count and the
+                                  percentage are both rendered as text immediately to the right, so
+                                  marking this up as a progress bar would have a screen reader
+                                  announce the same figure twice. The bar decorates the number.
+                                */}
                                 <div
-                                    key={step.event}
-                                    className="p-3 rounded-xl bg-nature-800/60 border border-nature-700 flex items-center gap-4"
+                                    aria-hidden="true"
+                                    className="w-32 h-2 rounded-full bg-nature-900 overflow-hidden hidden sm:block"
                                 >
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-bold text-white truncate">{step.label}</div>
-                                        <div className="text-[10px] text-nature-500">{step.hint}</div>
-                                        {step.note && !notYetBuilt && (
-                                            // Not italic, and a step lighter than the hint above it: this line carries
-                                            // arithmetic the reader needs in order to trust the number beside it, so it
-                                            // has to be legible. Kept at the hint's size rather than bumped up, which
-                                            // would make the footnote louder than the label it hangs off.
-                                            <div className="text-[10px] text-nature-300 mt-0.5">{step.note}</div>
-                                        )}
-                                    </div>
-
-                                    {notYetBuilt ? (
-                                        // Crucially NOT rendered as a 100% drop-off. A screen that does not exist
-                                        // yet would otherwise look like the place everyone abandons, and somebody
-                                        // would go hunting for a bug that is really just an unbuilt feature.
-                                        <span className="px-2.5 py-1 rounded-full bg-nature-700/60 text-nature-400 text-[10px] font-bold whitespace-nowrap">
-                                            not measured yet
-                                        </span>
-                                    ) : (
-                                        <>
-                                            {/*
-                                              aria-hidden rather than role="progressbar":
-                                              the count and the percentage are both
-                                              rendered as text immediately to the right,
-                                              so marking this up as a progress bar would
-                                              have a screen reader announce the same
-                                              figure twice. The bar is decoration for the
-                                              number, not a second source of it.
-                                            */}
-                                            <div
-                                                aria-hidden="true"
-                                                className="w-32 h-2 rounded-full bg-nature-900 overflow-hidden hidden sm:block"
-                                            >
-                                                <div
-                                                    className="h-full bg-emerald-500"
-                                                    style={{ width: `${Math.min(100, step.pct)}%` }}
-                                                />
-                                            </div>
-                                            <div className="text-right shrink-0">
-                                                <div className="text-lg font-black text-white font-mono leading-none">
-                                                    {step.primary}
-                                                </div>
-                                                {view.countingSince && (
-                                                    <div className="text-[10px] text-nature-500 font-mono">{step.pct}%</div>
-                                                )}
-                                            </div>
-                                        </>
+                                    <div className="h-full bg-emerald-500" style={{ width: `${step.pct}%` }} />
+                                </div>
+                                <div className="text-right shrink-0">
+                                    <div className="text-lg font-black text-white font-mono leading-none">{step.count}</div>
+                                    {(step.isBase || view.joined > 0) && (
+                                        <div className="text-[10px] text-nature-500 font-mono">{step.pct}%</div>
                                     )}
                                 </div>
-                            );
-                        })}
-                    </div>
+                            </div>
+                        ))}
+                    </section>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className="p-4 rounded-xl bg-nature-800/60 border border-nature-700">
-                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block mb-2">
-                                Why codes were rejected
-                            </span>
-                            {Object.keys(view.failures).length === 0 ? (
-                                <p className="text-xs text-nature-500 italic m-0">No rejected codes in this window.</p>
-                            ) : (
-                                <ul className="m-0 p-0 list-none space-y-1.5">
-                                    {Object.entries(view.failures)
-                                        .sort((a, b) => b[1] - a[1])
-                                        .map(([reason, n]) => (
-                                            <li key={reason} className="flex justify-between text-xs">
-                                                <span className="text-nature-300">{FAILURE_LABELS[reason] || reason}</span>
-                                                <span className="font-mono font-bold text-amber-300">{n}</span>
-                                            </li>
-                                        ))}
-                                </ul>
-                            )}
-                            {view.reentry > 0 && (
-                                <p className="text-[10px] text-nature-500 mt-3 mb-0">
-                                    {/*
-                                      Quotes the figure the deduction actually used, not the
-                                      window-wide one. The two are equal today — a re-entry is
-                                      always recorded alongside an attempt, so no re-entry can
-                                      predate the first counted day — but a sentence that
-                                      explains an arithmetic step should cite the number that
-                                      step used, so it cannot drift from it later.
-                                    */}
-                                    Plus <span className="font-mono text-nature-300">
-                                        {view.countingSince ? view.comparableReentry : view.reentry}
-                                    </span>{' '}
-                                    already-a-member re-{(view.countingSince ? view.comparableReentry : view.reentry) === 1 ? 'entry' : 'entries'} —
-                                    neither rejections nor signups, so they are counted apart and taken off the top of
-                                    the funnel rather than diluting the rates above.
-                                </p>
-                            )}
-                        </div>
+                    <section aria-labelledby="funnel-in-app-heading" className="space-y-2">
+                        <h4 id="funnel-in-app-heading" className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 m-0">
+                            Steps inside the app
+                        </h4>
+                        <p className="text-[11px] text-nature-500 m-0">
+                            These happen on a member's own device, so their app reports them. Your server keeps no
+                            record of who reported what, and so <strong className="text-nature-300">cannot link these
+                            to the people above</strong>. Read them on their own, not as a percentage of anything.
+                            {view.countedSince ? (
+                                <> Counted once per person since{' '}
+                                    <span className="font-mono text-nature-300">{view.countedSince}</span>.</>
+                            ) : null}
+                        </p>
+                        {!view.countedSince && (
+                            <p className="text-[11px] text-amber-400/90 m-0">
+                                Nothing counted once per person yet. Members' apps report these from the build that
+                                added per-person counting; until some of them update, there is nothing here to show.
+                            </p>
+                        )}
+                        {view.staleReports > 0 && (
+                            <p className="text-[11px] text-nature-500 m-0">
+                                <span className="font-mono text-nature-300">{view.staleReports}</span> older report
+                                {view.staleReports === 1 ? ' is' : 's are'} left out: before this change an app counted
+                                every time a screen was drawn, so the same person could be counted several times over.
+                                Those figures can't be corrected after the fact, so they are ignored rather than mixed in.
+                            </p>
+                        )}
+                        {view.inApp.map(step => (
+                            <div
+                                key={step.event}
+                                className="p-3 rounded-xl bg-nature-800/60 border border-nature-700 flex items-center gap-4"
+                            >
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-bold text-white truncate">{step.label}</div>
+                                    <div className="text-[10px] text-nature-500">{step.hint}</div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                    <div className="text-lg font-black text-white font-mono leading-none">{step.count}</div>
+                                    <div className="text-[10px] text-nature-500">people</div>
+                                </div>
+                            </div>
+                        ))}
+                    </section>
 
-                        <div className="p-4 rounded-xl bg-nature-800/60 border border-nature-700">
-                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block mb-2">
-                                Keepers at signup (historical)
-                            </span>
-                            {Object.keys(view.protectionStates).length === 0 ? (
-                                <p className="text-xs text-nature-500 italic m-0">
-                                    Nothing recorded. Keeper enrolment was removed from both
-                                    clients, so no new signups land here.
-                                </p>
-                            ) : (
-                                <ul className="m-0 p-0 list-none space-y-1.5">
-                                    {Object.entries(view.protectionStates)
-                                        .sort()
-                                        .map(([state, n]) => (
-                                            <li key={state} className="flex justify-between text-xs">
-                                                <span className="text-nature-300">
-                                                    {state === 'A' ? '3 keepers — had a spare to offer'
-                                                        : state === 'B' ? '2 keepers — needed a third'
-                                                        : state === 'C' ? '1 keeper — shown their words'
-                                                        : state}
-                                                </span>
-                                                <span className="font-mono font-bold text-emerald-300">{n}</span>
-                                            </li>
-                                        ))}
-                                </ul>
-                            )}
-                            {Object.keys(view.protectionStates).length > 0 && (
-                                <p className="text-[10px] text-nature-500 italic mt-2 mb-0">
-                                    Closed funnel — keeper enrolment was removed from both
-                                    clients, so these counts no longer grow.
-                                </p>
-                            )}
+                    <section aria-labelledby="funnel-codes-heading" className="space-y-2">
+                        <h4 id="funnel-codes-heading" className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 m-0">
+                            Codes
+                        </h4>
+                        <p className="text-[11px] text-nature-500 m-0">
+                            Attempts, not people — one person trying a code three times is three attempts. That is why
+                            nothing above is worked out as a share of these.
+                        </p>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="p-4 rounded-xl bg-nature-800/60 border border-nature-700">
+                                <div className="flex justify-between items-baseline">
+                                    <span className="text-sm font-bold text-white">Entered an invite code</span>
+                                    <span className="text-lg font-black text-white font-mono leading-none">{view.attempts}</span>
+                                </div>
+                                {view.reentry > 0 && (
+                                    <p className="text-[10px] text-nature-500 mt-3 mb-0">
+                                        Including <span className="font-mono text-nature-300">{view.reentry}</span>{' '}
+                                        already-a-member re-{view.reentry === 1 ? 'entry' : 'entries'} — neither
+                                        rejections nor signups, which is why they are named here rather than hidden
+                                        among the failures.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="p-4 rounded-xl bg-nature-800/60 border border-nature-700">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block mb-2">
+                                    Why codes were rejected
+                                </span>
+                                {Object.keys(view.failures).length === 0 ? (
+                                    <p className="text-xs text-nature-500 italic m-0">No rejected codes in this window.</p>
+                                ) : (
+                                    <ul className="m-0 p-0 list-none space-y-1.5">
+                                        {Object.entries(view.failures)
+                                            .sort((a, b) => b[1] - a[1])
+                                            .map(([reason, n]) => (
+                                                <li key={reason} className="flex justify-between text-xs">
+                                                    <span className="text-nature-300">{FAILURE_LABELS[reason] || reason}</span>
+                                                    <span className="font-mono font-bold text-amber-300">{n}</span>
+                                                </li>
+                                            ))}
+                                    </ul>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    </section>
                 </>
             )}
         </div>

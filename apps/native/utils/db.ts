@@ -9,7 +9,7 @@ import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue } from '@beanpool/core';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -4259,6 +4259,19 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
  * Report one onboarding step that only the device can see — a screen drawn, a choice made,
  * a guide finished. The server counts the rest for itself.
  *
+ * ONCE PER PERSON, per node. The screen a caller sits on can be drawn many times over one
+ * join — a remount, a back-and-forward, an app restart part way through — and every one of
+ * those used to become another tally, which is how an operator came to be shown 56 people
+ * reaching step 3 out of 20 who joined. The node cannot fix this for us: M2 gives the
+ * counter table no column that could tell those 56 apart, and the whole point of M2 is that
+ * it never will. So the phone keeps the one bit the node refuses to, and keeps it here
+ * rather than in each caller, so a future fourth step cannot forget to.
+ *
+ * The flag is written only AFTER the report has actually landed. Written before, a member
+ * joining on a flaky connection is marked as counted for a request that never arrived, and
+ * is then missing from the funnel forever — the same "book it on the tap" mistake that
+ * `hasNoAvatarYet` exists to prevent for step 2.
+ *
  * Swallows everything, including the throw from being off-grid. A person joining a
  * community must never see an error, a delay, or a blocked button because a counter could
  * not be incremented; a funnel that costs somebody their signup has done more damage than
@@ -4267,7 +4280,18 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
  */
 export async function recordOnboardingEvent(event: string, variant = ''): Promise<void> {
     try {
-        await _signedRequest('/api/funnel-event', { event, variant });
+        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        const identity = await loadIdentity();
+        // Without both of these there is nothing to key the flag by, and _signedRequest
+        // would throw on the next line anyway. Returning here means no flag is written, so
+        // the step is still reported once the phone is anchored and signed in.
+        if (!anchorUrl || !identity?.publicKey) return;
+
+        const alreadyCounted = onboardingEventKey(anchorUrl, identity.publicKey, event);
+        if (await AsyncStorage.getItem(alreadyCounted)) return;
+
+        await _signedRequest('/api/funnel-event', { event, variant: oncePerPersonVariant(variant) });
+        await AsyncStorage.setItem(alreadyCounted, '1');
     } catch {
         // Deliberately silent. Not even a console.warn: this runs on the join path, and a
         // red box in a fresh user's face over telemetry would be its own bug.

@@ -1,6 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import { DeviceEventEmitter, Platform } from 'react-native';
 import { linkRoutePath, isReturnFromSettings } from '../utils/settings-return';
+import { postIdFromLink } from '../utils/event-extras';
 
 /**
  * Intercept incoming native deep links before Expo Router matches routes.
@@ -53,6 +54,13 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
             console.warn('[NativeIntent] Failed to complete auth session:', e);
         }
     }
+
+    // A shared event: `https://<node>/?post=<id>` (apps/native/utils/event-extras.ts). Path "/" is what the
+    // app links claim on every node host, so a link a member sends from the event screen opens the event
+    // here rather than the home tab. Last, and only when `post=` is actually in the URL, so the foreground
+    // link, a Settings return, an invite and an OAuth callback all keep the behaviour they had.
+    const sharedPostId = postIdFromLink(path);
+    if (sharedPostId) return `/post/${encodeURIComponent(sharedPostId)}`;
 
     return path;
 }

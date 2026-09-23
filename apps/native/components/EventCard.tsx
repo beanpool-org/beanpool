@@ -54,6 +54,10 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
         ? formatDistance(distanceKm(myLocation.lat, myLocation.lng, post.lat, post.lng))
         : null;
     const placeLine = [placeName, distance].filter(Boolean).join(' · ');
+    // "Your events" is built from /api/events/mine, which carries no counts — and "0 going" on an event the
+    // viewer is going to is not a smaller truth, it is a wrong one. A row that does not know keeps quiet.
+    const countsKnown = post.goingCount != null || post.interestedCount != null
+        || post.event_going_count != null || post.event_interested_count != null;
 
     const handleRsvp = async (tapped: EventRsvpStatus) => {
         if (pending || closed) return;
@@ -117,7 +121,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
             </View>
             <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
             {!!placeLine && <Text style={styles.meta} numberOfLines={1}>📍 {placeLine}</Text>}
-            <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
+            {countsKnown && <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>}
             {/* The host is running it: no Going / Interested on their own event (round 2, B4). */}
             {isOwnEvent(post, currentPubkey) ? (
                 <Text style={styles.hosting} numberOfLines={1}>You're hosting this event</Text>

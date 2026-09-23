@@ -4,6 +4,7 @@ import { loadIdentity } from './identity';
 import * as Crypto from 'expo-crypto';
 import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders, signData, hexToBytes } from './crypto';
 import { eventCacheColumns, rsvpSignedMessage, type EventEditPatch, type EventRsvpStatus } from './events';
+import { sortMyEvents, type MyEvent } from './event-extras';
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
@@ -1917,6 +1918,80 @@ export async function fetchEventDetail(postId: string): Promise<any | null> {
     const identity = await loadIdentity();
     if (identity?.publicKey) await persistEventView(post, identity.publicKey);
     return post;
+}
+
+/** What a node older than a route answers. Carried on the error so a screen can hide a feature quietly. */
+export class RouteMissingError extends Error {
+    readonly status = 404;
+    constructor(path: string) {
+        super(`This community's node does not have ${path} yet.`);
+        this.name = 'RouteMissingError';
+    }
+}
+
+/** True when a route does not exist on this node — an older node, not a failure worth showing anyone. */
+export function isRouteMissing(e: unknown): boolean {
+    return (e as { status?: number } | null)?.status === 404;
+}
+
+/**
+ * The signer's own upcoming RSVPs, soonest first — what "Your events" shows (the shared contract).
+ *
+ * Signed, because the node decides whose list this is from the signature and never from a parameter. A node
+ * without the route answers 404 and this throws RouteMissingError, which is the caller's cue to show
+ * nothing at all rather than an error about a feature that community does not have.
+ */
+export async function fetchMyEvents(): Promise<MyEvent[]> {
+    const path = '/api/events/mine';
+    const res = await signedGet(path);
+    if (res.status === 404) throw new RouteMissingError(path);
+    if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let message = `Could not read your events (${res.status})`;
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        throw new Error(message);
+    }
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : (data?.events ?? []);
+    return sortMyEvents(rows as MyEvent[]);
+}
+
+/**
+ * A member's preference bag (holiday_mode, notify_*, eventReminderOffsets). Values come back as the node
+ * stored them, which for most of them is a string; each caller reads its own key.
+ */
+export async function fetchMemberPreferences(publicKey: string): Promise<Record<string, unknown>> {
+    const res = await signedGet(`/api/members/preferences?publicKey=${encodeURIComponent(publicKey)}`);
+    if (!res.ok) throw new Error(`Could not read your preferences (${res.status})`);
+    return await res.json();
+}
+
+/**
+ * This member's reminders for ONE event: the allowed offsets, or `null` to go back to their default.
+ * Allowed only on an event they have an RSVP on — the node answers 403 otherwise.
+ */
+export async function setEventReminder(postId: string, offsets: number[] | null): Promise<{ success: boolean }> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are currently offline.');
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found.');
+
+    const path = `/api/events/${encodeURIComponent(postId)}/reminder`;
+    const bodyString = JSON.stringify({ offsets });
+    const headers = await buildSignedHeaders('PUT', path, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}${path}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', ...headers },
+        body: bodyString,
+    });
+    if (res.status === 404) throw new RouteMissingError(path);
+    if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let message = 'Could not save your reminder';
+        try { message = JSON.parse(txt)?.error || message; } catch { if (txt) message = txt; }
+        throw new Error(message);
+    }
+    return await res.json();
 }
 
 /**

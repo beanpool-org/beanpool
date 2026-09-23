@@ -11,6 +11,10 @@ import { updateCallsign, wipeIdentity, getMnemonic, hasMnemonic } from '../../ut
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
+import {
+    DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
+    reminderOffsetLabel,
+} from '../../utils/event-extras';
 import { getCanonicalProfile } from '../../utils/canonical-profile';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../../utils/avatar-value';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -131,6 +135,18 @@ export default function SettingsScreen() {
             borderBottomWidth: 1, borderBottomColor: colors.surface.subtle,
         },
         menuBtnLast: { borderBottomWidth: 0 },
+        reminderRow: {
+            flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingHorizontal: 14,
+            borderBottomWidth: 1, borderBottomColor: colors.surface.subtle,
+        },
+        reminderTick: {
+            width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.accent.primary,
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        },
+        reminderTickOn: { backgroundColor: colors.accent.primary },
+        reminderTickMark: { color: colors.text.inverse, fontSize: 14, fontWeight: '900', lineHeight: 16 },
+        reminderLabel: { flex: 1, fontSize: 15, color: colors.text.body },
+        reminderNote: { fontSize: 12, color: colors.text.secondary, paddingHorizontal: 14, paddingVertical: 10 },
         menuIconWrap: {
             width: 36, height: 36, borderRadius: 12,
             backgroundColor: theme === 'dark' ? 'rgba(34, 197, 94, 0.15)' : palette.green50,
@@ -530,6 +546,20 @@ export default function SettingsScreen() {
     const [notifMarketplace, setNotifMarketplace] = useState(true);
     const [notifEscrow, setNotifEscrow] = useState(true);
     const [notifLoading, setNotifLoading] = useState(false);
+    // How long before an event starts this member wants to be told. The day before until they say otherwise
+    // (the shared contract), and an empty list means no reminders at all.
+    const [eventReminders, setEventReminders] = useState<number[]>(DEFAULT_REMINDER_OFFSETS);
+    const saveEventReminders = async (next: number[]) => {
+        setEventReminders(next);
+        try {
+            if (identity?.publicKey) {
+                await signedRequest('/api/members/preferences', {
+                    publicKey: identity.publicKey,
+                    preferences: { [REMINDER_PREF_KEY]: next },
+                });
+            }
+        } catch (e) { console.warn('[Prefs]', e); }
+    };
     const [holidayMode, setHolidayMode] = useState(false);
     const [holidayLoading, setHolidayLoading] = useState(false);
     const [editCallsign, setEditCallsign] = useState(identity?.callsign || '');
@@ -617,6 +647,7 @@ export default function SettingsScreen() {
                     if (res.ok) {
                         const prefs = await res.json();
                         setHolidayMode(prefs.holiday_mode === 'true');
+                        setEventReminders(parseReminderOffsets(prefs[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
                     }
                 }
             } catch { }
@@ -1667,6 +1698,7 @@ export default function SettingsScreen() {
                                     const prefs = await res.json();
                                     setNotifChat(prefs.notify_chat !== 'false');
                                     setNotifMarketplace(prefs.notify_marketplace !== 'false');
+                                    setEventReminders(parseReminderOffsets(prefs[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
                                     setNotifEscrow(prefs.notify_escrow !== 'false');
                                 }
                             }
@@ -2103,6 +2135,56 @@ export default function SettingsScreen() {
                                     <View style={[styles.toggleThumb, notifEscrow && styles.toggleThumbOn]} />
                                 </Pressable>
                             </View>
+                        </View>
+                    )}
+
+                    {/* Event reminders (decision 2). Ticks rather than switches: this is one setting with
+                        several answers, and "Off" is one of them, not a fourth category of alert. They ride
+                        the Marketplace category, so they stop when that switch does — which the line says. */}
+                    {!notifLoading && (
+                        <View style={styles.menuGroup}>
+                            <View style={styles.menuBtn}>
+                                <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>⏰</Text></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.menuText}>Event reminders</Text>
+                                    <Text style={styles.menuSub}>Before an event you are going to, or interested in, starts</Text>
+                                </View>
+                            </View>
+                            {REMINDER_OFFSETS.map(minutes => {
+                                const on = eventReminders.includes(minutes);
+                                return (
+                                    <Pressable
+                                        key={minutes}
+                                        style={styles.reminderRow}
+                                        onPress={() => saveEventReminders(normaliseReminderOffsets(
+                                            on ? eventReminders.filter(m => m !== minutes) : [...eventReminders, minutes]
+                                        ))}
+                                        accessibilityRole="checkbox"
+                                        accessibilityLabel={`${reminderOffsetLabel(minutes)} before`}
+                                        accessibilityState={{ checked: on }}
+                                    >
+                                        <View style={[styles.reminderTick, on && styles.reminderTickOn]}>
+                                            {on && <Text style={styles.reminderTickMark}>✓</Text>}
+                                        </View>
+                                        <Text style={styles.reminderLabel} numberOfLines={2}>{reminderOffsetLabel(minutes)} before</Text>
+                                    </Pressable>
+                                );
+                            })}
+                            <Pressable
+                                style={[styles.reminderRow, styles.menuBtnLast]}
+                                onPress={() => { if (eventReminders.length > 0) saveEventReminders([]); }}
+                                accessibilityRole="checkbox"
+                                accessibilityLabel="Off"
+                                accessibilityState={{ checked: eventReminders.length === 0 }}
+                            >
+                                <View style={[styles.reminderTick, eventReminders.length === 0 && styles.reminderTickOn]}>
+                                    {eventReminders.length === 0 && <Text style={styles.reminderTickMark}>✓</Text>}
+                                </View>
+                                <Text style={styles.reminderLabel} numberOfLines={2}>Off</Text>
+                            </Pressable>
+                            <Text style={styles.reminderNote}>
+                                Reminders arrive with your Marketplace alerts, so they stop if you switch those off. You can change the reminder on any one event.
+                            </Text>
                         </View>
                     )}
 

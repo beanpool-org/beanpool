@@ -38,6 +38,7 @@ import {
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
     type EventCopy, type EventEditValues,
 } from '../utils/events';
+import { effectiveEventAudience } from '../utils/event-extras';
 import { EVENT_ACCENT } from './EventCard';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
@@ -154,8 +155,11 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         ...memberGroups.filter(g => g.convenor).map(g => ({ key: `grp:${g.id}`, label: g.name, authorPubkey: identity?.publicKey || '', groupId: g.id })),
     ];
     const host = hostOptions.find(h => h.key === hostKey) || copiedHost || hostOptions[0];
-    // A group host posts to that group only.
-    const effectiveAudience = host.groupId ?? audienceGroupId;
+    // An enterprise hosts for the whole community: the node refuses an enterprise event aimed at a group,
+    // and it used to do so with a message about signatures (#1054). So the pair cannot be chosen here, and
+    // cannot be sent either — the audience is cleared when the host is picked, and again on the way out.
+    const enterpriseHosts = host.key.startsWith('ent:');
+    const effectiveAudience = effectiveEventAudience(host, audienceGroupId);
 
     const reset = () => {
         setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false);
@@ -625,7 +629,10 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             <View style={styles.field}>
                                 <Text style={styles.label}>POST AS</Text>
                                 <View style={styles.chipWrap}>
-                                    {hostOptions.map(h => chip(h.key, h.label, h.key === host.key, () => setHostKey(h.key)))}
+                                    {hostOptions.map(h => chip(h.key, h.label, h.key === host.key, () => {
+                                        setHostKey(h.key);
+                                        if (h.key.startsWith('ent:')) setAudienceGroupId(null);
+                                    }))}
                                 </View>
                             </View>
                         )}
@@ -634,6 +641,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             <Text style={styles.label}>WHO CAN SEE IT</Text>
                             {host.groupId ? (
                                 <Text style={styles.helper}>🔒 Only {host.label} members, because the group is hosting.</Text>
+                            ) : enterpriseHosts ? (
+                                <Text style={styles.helper}>{host.label} hosts for the whole community, so this event is not group-only.</Text>
                             ) : (
                                 <View style={styles.chipWrap}>
                                     {chip('public', 'This community', audienceGroupId === null, () => setAudienceGroupId(null))}

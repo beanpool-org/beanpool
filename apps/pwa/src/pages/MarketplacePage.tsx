@@ -12,6 +12,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
+import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, isEventOpen, type EventWindow } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
@@ -244,6 +245,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             setSelectedTxId(null);
         }
     }, [marketClickCount]);
+
+    // "Your events" is its own read of /api/events/mine, so an RSVP made on this page has to tell it to
+    // read again — otherwise leaving an event still shows it in the row until the next full load.
+    const [yourEventsKey, setYourEventsKey] = useState(0);
 
     // Handle deep-link from Map pins or routes
     const deepLinkFetched = useRef<string | null>(null);
@@ -758,8 +763,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onCopyToNewDate={(p) => onNavigate?.('map-copy-event', p.id)}
                         onEdit={(p) => onNavigate?.('map-edit-event', p.id)}
                         onOpenProfile={onOpenProfile}
-                        onChange={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
-                        onCancelled={(p) => { if (p) setSelectedPost(p); refresh().catch(() => {}); }}
+                        onChange={(p) => { setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
+                        onCancelled={(p) => { if (p) setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
                     />
                 </div>
             );
@@ -2581,6 +2586,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     LIVE
                                 </span>
                             </div>
+                        )}
+
+                        {/* What you said you would be at, above what you might like: it is the one part of
+                            For You you have already committed to (decision 1). Outside the feed's own empty
+                            state on purpose — your events do not stop existing because no starred listing
+                            matched today. */}
+                        {typeFilter === 'for-you' && (
+                            <YourEvents
+                                identity={identity}
+                                refreshKey={yourEventsKey}
+                                onOpen={(postId) => {
+                                    const found = posts.find(p => p.id === postId);
+                                    if (found) { setSelectedPost(found); return; }
+                                    // Not in the feed (a group event, or one the filters hide): ask the node.
+                                    getMarketplacePosts({ id: postId, types: CLIENT_POST_TYPES })
+                                        .then(rows => { if (rows[0]) setSelectedPost(rows[0]); })
+                                        .catch(() => {});
+                                }}
+                            />
                         )}
 
                         {filtered.length > 0 && (

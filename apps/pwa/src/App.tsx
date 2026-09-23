@@ -33,6 +33,7 @@ import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { takeProfileFragment } from './lib/profile-link';
+import { takePostParam } from './lib/event-extras';
 
 function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
     return (
@@ -240,6 +241,18 @@ export function App() {
         setOpenProfilePubkey(linkedProfile);
         setLinkedProfile(null);
     }, [identity, linkedProfile]);
+
+    // `/?post=<id>` — a shared event (or any shared post). The same link the phone app claims, so one link
+    // works for everyone; somebody who is not a member of this community never gets here, because the
+    // identity gate shows them the join page instead, which is the right landing for them.
+    const [linkedPost, setLinkedPost] = useState<string | null>(null);
+    useEffect(() => { setLinkedPost(takePostParam()); }, []);
+    useEffect(() => {
+        if (!identity || !linkedPost) return;
+        setActiveTab('marketplace');
+        setOpenMarketPostId(linkedPost);
+        setLinkedPost(null);
+    }, [identity, linkedPost]);
 
     // Load existing identity and initial community health on mount
     useEffect(() => {

@@ -12,6 +12,10 @@ import {
     updateNotificationPreferences, getNodeStats, purgeAccountApi,
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
+import {
+    DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
+    reminderOffsetLabel,
+} from '../lib/event-extras';
 import { ProfilePage } from './ProfilePage';
 import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme';
 import { loadPatternPreference, setPatternPreference } from '../lib/usePatternBackground';
@@ -141,6 +145,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [notifMarketplace, setNotifMarketplace] = useState(true);
     const [notifEscrow, setNotifEscrow] = useState(true);
 
+    // How long before an event starts this member wants to be told. The day before until they say otherwise
+    // (the shared contract), and an empty list means no reminders at all.
+    const [eventReminders, setEventReminders] = useState<number[]>(DEFAULT_REMINDER_OFFSETS);
+
     const loadNotificationPreferences = async () => {
         setNotifLoading(true);
         try {
@@ -149,11 +157,38 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 setNotifChat(prefs.notify_chat !== 'false' && prefs.notify_chat !== false);
                 setNotifMarketplace(prefs.notify_marketplace !== 'false' && prefs.notify_marketplace !== false);
                 setNotifEscrow(prefs.notify_escrow !== 'false' && prefs.notify_escrow !== false);
+                setEventReminders(parseReminderOffsets(prefs[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
             }
         } catch (e) {
             console.warn('[NotifPrefs] Failed:', e);
         } finally {
             setNotifLoading(false);
+        }
+    };
+
+    /**
+     * Tick or untick one reminder. Saved on the spot, like the switches above it: there is no Save button
+     * on this screen, and adding one only for this row would be the odd one out.
+     */
+    const handleToggleReminder = async (minutes: number) => {
+        const next = normaliseReminderOffsets(
+            eventReminders.includes(minutes) ? eventReminders.filter(m => m !== minutes) : [...eventReminders, minutes]
+        );
+        setEventReminders(next);
+        try {
+            await updateNotificationPreferences(identity.publicKey, { [REMINDER_PREF_KEY]: next });
+        } catch (e) {
+            console.warn('[NotifPrefs] Save failed:', e);
+        }
+    };
+
+    /** Off: no reminders for any event, unless one of them is given its own. */
+    const handleRemindersOff = async () => {
+        setEventReminders([]);
+        try {
+            await updateNotificationPreferences(identity.publicKey, { [REMINDER_PREF_KEY]: [] });
+        } catch (e) {
+            console.warn('[NotifPrefs] Save failed:', e);
         }
     };
 
@@ -1228,6 +1263,43 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         onChange={() => handleToggleNotif('escrow')}
                                         label="Escrow & Deals Notifications"
                                     />
+                                </div>
+
+                                {/* Event reminders (decision 2). Ticks rather than switches: this is one
+                                    setting with several answers, and "Off" is one of them, not a fourth
+                                    category of alert. It travels on the Marketplace category, so it only
+                                    reaches a phone with that switch on — which the line below says. */}
+                                <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                    <div className="text-sm font-bold text-nature-900 dark:text-white">Event reminders</div>
+                                    <div className="text-xs text-nature-500 dark:text-nature-400 mb-3">
+                                        How long before an event you are going to, or interested in, starts. You can change it on any one event.
+                                    </div>
+                                    <fieldset className="m-0 p-0 border-0 flex flex-col gap-1">
+                                        <legend className="sr-only">Event reminders</legend>
+                                        {REMINDER_OFFSETS.map(minutes => (
+                                            <label key={minutes} className="flex items-center gap-2 min-h-[48px] text-sm font-semibold text-nature-800 dark:text-nature-200 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    className="w-5 h-5 accent-nature-700"
+                                                    checked={eventReminders.includes(minutes)}
+                                                    onChange={() => handleToggleReminder(minutes)}
+                                                />
+                                                {reminderOffsetLabel(minutes)} before
+                                            </label>
+                                        ))}
+                                        <label className="flex items-center gap-2 min-h-[48px] text-sm font-semibold text-nature-800 dark:text-nature-200 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="w-5 h-5 accent-nature-700"
+                                                checked={eventReminders.length === 0}
+                                                onChange={() => { if (eventReminders.length > 0) handleRemindersOff(); }}
+                                            />
+                                            Off
+                                        </label>
+                                    </fieldset>
+                                    <p className="m-0 mt-2 text-xs text-nature-500 dark:text-nature-400">
+                                        Reminders arrive with your Marketplace alerts, so they stop if you switch those off.
+                                    </p>
                                 </div>
                             </div>
                         )}

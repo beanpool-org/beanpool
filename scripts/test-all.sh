@@ -189,6 +189,7 @@ run_federation_suites() {
       test-pulse-admin-channels
       test-pulse-report-takedown
       test-pulse-thumbnail
+      test-pulse-thumbnail-recovery
       test-pulse-cache-eviction
       test-callsign-predicates
       test-recovery-shares

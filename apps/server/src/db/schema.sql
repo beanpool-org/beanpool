@@ -1198,6 +1198,29 @@ CREATE INDEX IF NOT EXISTS idx_pulse_items_owner
     ON pulse_items(owner_pubkey) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_pulse_items_updated ON pulse_items(updated_at);
 
+-- Per-item memory of a thumbnail fetch that cannot be fixed by trying again soon.
+--
+-- On 2026-09-23 four Instagram items on the test node repeated the same pair of failed
+-- outbound fetches every five minutes for an hour and a half: the cached CDN URL had
+-- expired (403) and the embed-page recovery behind it could not complete either. The only
+-- memory of that was a five-minute in-process TTL, which a restart also wiped, so the node
+-- kept paying for the same two requests and kept writing the same two log lines forever.
+--
+-- Local operational state, not content: it is never synced, carries no foreign key (pulse
+-- items are tombstoned rather than deleted, and the tombstone path clears these rows through
+-- the thumbnail cache evictor), and losing the whole table only costs one more attempt per
+-- item. thumbnail_url is recorded so that a later sync writing a DIFFERENT URL for the item
+-- is tried at once instead of waiting out a backoff the previous URL earned.
+CREATE TABLE IF NOT EXISTS pulse_thumbnail_backoff (
+    item_id        TEXT PRIMARY KEY,
+    thumbnail_url  TEXT,             -- the URL that failed; NULL when the item had none at all
+    failure_count  INTEGER NOT NULL DEFAULT 0,
+    status         INTEGER NOT NULL, -- the refusal to keep serving while backed off
+    error          TEXT NOT NULL,
+    last_failed_at DATETIME NOT NULL,
+    retry_after    DATETIME NOT NULL
+);
+
 -- 23. Community Decisions & Decision Votes (docs/the-commons.md §3.2–§3.8, Slice 5)
 -- The binding half of governance: proposals typed by what they touch (member or pool),
 -- auto-closing on a tick after a fixed 7-day window, evaluated against active-member quorum (30%, floor 3)

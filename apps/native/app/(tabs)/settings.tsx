@@ -7,12 +7,13 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { processProfileImage } from '../../utils/image-processing';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
-import { resolveBundledAvatar } from '../../utils/bundled-avatars';
 import { updateCallsign, wipeIdentity, getMnemonic, hasMnemonic } from '../../utils/identity';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
 import { getCanonicalProfile } from '../../utils/canonical-profile';
+import { publishableAvatar } from '../../utils/avatar-value';
+import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -88,11 +89,6 @@ export default function SettingsScreen() {
         avatarWrap: {
             width: 96, height: 96, borderRadius: 48,
             marginBottom: 16, position: 'relative',
-        },
-        avatarImg: { width: 96, height: 96, borderRadius: 48, overflow: 'hidden' },
-        avatarPlaceholder: {
-            width: 96, height: 96, borderRadius: 48,
-            backgroundColor: palette.emerald900, justifyContent: 'center', alignItems: 'center',
         },
         avatarRing: {
             position: 'absolute', top: -3, left: -3, right: -3, bottom: -3,
@@ -918,7 +914,18 @@ export default function SettingsScreen() {
                     contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
                     callsign: newCallsign,
                 };
-                if (avatar) payloadObj.avatar = avatar;
+                // Publish only a PORTABLE avatar. `avatar` was loaded from this node's local
+                // members row, which since #725 holds the node's own
+                // `/api/avatar/<pk>?size=thumb` string rather than the photo — so every bio or
+                // name Save after a sync posted that URL back and the node stored it, wiping
+                // the member's photo. Fall back to the canonical (node-independent) copy, and
+                // if neither is portable leave `avatar` OUT of the payload entirely: the
+                // server reads an explicit null as "clear it".
+                const publishAvatar = publishableAvatar(
+                    avatar,
+                    (await getCanonicalProfile().catch(() => null))?.avatar,
+                );
+                if (publishAvatar) payloadObj.avatar = publishAvatar;
                 if (archetypeRaw) {
                     const parsed = parseArchetype(archetypeRaw);
                     payloadObj.archetype = parsed ? JSON.stringify({
@@ -1373,14 +1380,20 @@ export default function SettingsScreen() {
                     </Pressable>
 
                     {/* Avatar */}
+                    {/* Rendered through MemberAvatar, like every other avatar in the app. A raw
+                        react-native Image was given the local members row verbatim — which since
+                        #725 is the RELATIVE `/api/avatar/<pk>?size=thumb` the node emits, and
+                        RN Image cannot load a relative path. The card showed an empty ring while
+                        My Profile showed the photo. MemberAvatar resolves the path against the
+                        anchor node and falls back to initials, never to a blank circle. Same
+                        96px, same ring, same tap target and labels. */}
                     <Pressable onPress={() => setMode('profile')} style={styles.avatarWrap} accessibilityRole="button" accessibilityLabel="Edit profile">
-                        {avatar && avatar !== 'null' && avatar !== 'undefined' && avatar.trim() !== '' ? (
-                            <Image source={avatar.startsWith('bundled://') ? resolveBundledAvatar(avatar)! : { uri: avatar }} style={styles.avatarImg} accessibilityLabel="Your profile avatar" />
-                        ) : (
-                            <View style={styles.avatarPlaceholder}>
-                                <Text style={{ fontSize: 42 }}>👤</Text>
-                            </View>
-                        )}
+                        <MemberAvatar
+                            avatarUrl={avatar}
+                            pubkey={identity.publicKey}
+                            callsign={nodeCallsign || identity.callsign}
+                            size={96}
+                        />
                         <View style={styles.avatarRing} />
                     </Pressable>
 
@@ -1929,8 +1942,16 @@ export default function SettingsScreen() {
                     <View style={{ alignItems: 'center', marginBottom: 20 }}>
                         <Pressable onPress={handlePickImage} style={{ alignItems: 'center' }} accessibilityRole="button" accessibilityLabel="Change profile photo">
                             <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.border.default, overflow: 'hidden' }}>
+                                {/* Same resolver as the card above, for the same reason. The
+                                    camera glyph stays the empty state: here it is an invitation
+                                    to pick a photo, not a broken picture. */}
                                 {avatar && avatar !== 'null' && avatar !== 'undefined' && avatar.trim() !== '' ? (
-                                    <Image source={avatar.startsWith('bundled://') ? resolveBundledAvatar(avatar)! : { uri: avatar }} style={{ width: 96, height: 96, borderRadius: 48, overflow: 'hidden' }} accessibilityLabel="Your profile avatar" />
+                                    <MemberAvatar
+                                        avatarUrl={avatar}
+                                        pubkey={identity.publicKey}
+                                        callsign={nodeCallsign || identity.callsign}
+                                        size={96}
+                                    />
                                 ) : (
                                     <Text style={{ fontSize: 32 }}>📷</Text>
                                 )}

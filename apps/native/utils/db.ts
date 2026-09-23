@@ -7,6 +7,7 @@ import { eventCacheColumns, rsvpSignedMessage, type EventEditPatch, type EventRs
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
+import { isPortableAvatarValue, publishableAvatar } from './avatar-value';
 import { parseArchetype, TIER_LEVELS } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -1599,8 +1600,20 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
     try {
         const self = await loadIdentity();
         if (self && self.publicKey === pubkey) {
+            // NEVER mirror a non-portable value. The canonical store is the only copy of the
+            // photo that is not tied to a node, so writing the node's own `/api/avatar/…` URL
+            // into it — which callers do whenever they rebuild the profile row from a synced
+            // local row, e.g. the archetype quiz — destroyed the picture device-wide and
+            // handed the broken string to the next node the member joined. `undefined` leaves
+            // the stored avatar alone, because saveCanonicalProfile merges on `!== undefined`.
+            //
+            // This also stops an explicit `avatar_url: null` from clearing canonical. That is
+            // deliberate: no caller in the app clears an avatar on purpose (the picker always
+            // sets one), and every null that reaches here today comes from a caller rebuilding
+            // the row with `?? null` — which is how the quiz path wiped it. Refusing to destroy
+            // the device's only portable copy is the safer reading of an ambiguous null.
             await saveCanonicalProfile({
-                avatar: data.avatar_url,
+                avatar: isPortableAvatarValue(data.avatar_url) ? data.avatar_url : undefined,
                 bio: data.bio,
                 contactValue: data.contact_value,
                 contactVisibility: data.contact_visibility,
@@ -2526,6 +2539,50 @@ export async function deletePost(id: string) {
     refreshBalanceFromServer(identity.publicKey).catch(() => null);
 }
 
+/**
+ * Would writing this synced member row actually CHANGE the viewer's own profile?
+ *
+ * The header (and anything else that listens for `profile_updated`) only ever heard about
+ * LOCAL edits, because `updateMemberProfile` was the single emitter. A photo or name changed
+ * on the PWA or on another device arrives by sync instead, and nothing told the header — so
+ * the old picture stayed in the pill until the app restarted.
+ *
+ * Called from inside the sync transaction, BEFORE the upsert, so it can compare against what
+ * the row holds now. The emit itself waits until the transaction has committed: telling the UI
+ * to re-read a row a rollback is about to undo would put the stale value straight back.
+ *
+ * "A real change" matches the upsert's own semantics. Both sync loops write
+ * `callsign = excluded.callsign` unconditionally but
+ * `avatar_url = COALESCE(excluded.avatar_url, members.avatar_url)`, so a null avatar in the
+ * payload leaves the stored one alone and is not a change. Without this the event would fire
+ * on every poll, and the header would re-read on every sync tick for nothing.
+ */
+async function ownProfileRowWouldChange(
+    txn: any,
+    selfPubkey: string | null,
+    pk: string,
+    incomingCallsign: string,
+    incomingAvatar: string | null,
+): Promise<boolean> {
+    if (!selfPubkey || pk !== selfPubkey) return false;
+    const before = await txn.getFirstAsync(
+        'SELECT callsign, avatar_url FROM members WHERE public_key = ?',
+        [pk]
+    ) as { callsign: string | null; avatar_url: string | null } | null;
+    if (!before) return Boolean(incomingCallsign || incomingAvatar);
+    if (incomingCallsign !== (before.callsign ?? '')) return true;
+    if (incomingAvatar !== null && incomingAvatar !== before.avatar_url) return true;
+    return false;
+}
+
+/** Fire `profile_updated` for a sync that really did change the viewer's own row. */
+function emitOwnProfileUpdated(pubkey: string): void {
+    try {
+        const { DeviceEventEmitter } = require('react-native');
+        DeviceEventEmitter.emit('profile_updated', { pubkey });
+    } catch { /* not in a RN runtime */ }
+}
+
 export async function applyDelta(delta: any, expectedDbName?: string) {
     await acquireSyncLock();
     try {
@@ -2540,6 +2597,12 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             console.warn(`[DB] applyDelta: skipping write — active DB '${currentDbName}' != fetch-time DB '${expectedDbName}' (node switched mid-sync)`);
             return;
         }
+        // Read the identity OUTSIDE the transaction: it is an AsyncStorage/SecureStore read,
+        // and awaiting it between SQLite statements would hold the write transaction open on
+        // unrelated I/O. `ownRowChanged` is declared out here so it survives to after the
+        // commit, which is the only point at which it is safe to tell the UI to re-read.
+        const selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
+        let ownRowChanged = false;
         await database.withTransactionAsync(async () => {
             const txn = database;
 // Full-replace sync: server response is the source of truth
@@ -2573,6 +2636,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
             const arch = m.archetype || null;
+            if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av)) ownRowChanged = true;
             await txn.runAsync(
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
@@ -2797,6 +2861,8 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
 
         console.log(`[DB] applyDelta: replaced posts table with ${delta.posts?.length || 0} posts from server`);
         });
+        // AFTER the commit, and only on a real change — see ownProfileRowWouldChange.
+        if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
     } finally {
         releaseSyncLock();
     }
@@ -2895,6 +2961,10 @@ export async function syncMessages(publicKey: string) {
                     await acquireSyncLock();
                     try {
                         const database = await getDb();
+                        // As in applyDelta: identity read outside the transaction, flag
+                        // declared outside it, emit only after the commit.
+                        const selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
+                        let ownRowChanged = false;
                         await database.withTransactionAsync(async () => {
                             const txn = database;
                             for (const m of dirData) {
@@ -2903,6 +2973,7 @@ export async function syncMessages(publicKey: string) {
                                 const av = m.avatarUrl || m.avatar_url || null;
                                 const evb = m.elderVouchedBy || m.elder_vouched_by || null;
                                 const arch = m.archetype || null;
+                                if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av)) ownRowChanged = true;
                                 await txn.runAsync(
                                     `INSERT INTO members (public_key, callsign, avatar_url, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?)
                                      ON CONFLICT(public_key) DO UPDATE SET
@@ -2914,6 +2985,7 @@ export async function syncMessages(publicKey: string) {
                                 );
                             }
                         });
+                        if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
                         await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
                     } finally {
                         releaseSyncLock();
@@ -3928,7 +4000,14 @@ export async function pushProfileToServer(): Promise<boolean> {
     const profile = await getMemberProfile(identity.publicKey);
 
     const canonical = await getCanonicalProfile();
-    const avatar = profile?.avatar_url || canonical?.avatar || null;
+    // The local row is only preferred when it holds a PORTABLE value. Since #725 the members
+    // sync writes the node's own `/api/avatar/<pk>?size=thumb` string into it, and
+    // `profile?.avatar_url || canonical?.avatar` happily preferred that — so this function
+    // published the node's URL back to the node as the member's avatar, and the node stored
+    // it. From then on `GET /api/avatar/<pk>` 404d: the photo was destroyed. Falling back to
+    // the canonical copy publishes the real picture instead, which is also exactly what makes
+    // the photo follow the member onto a freshly-joined node.
+    const avatar = publishableAvatar(profile?.avatar_url, canonical?.avatar);
 
     const callsign = profile?.callsign || identity.callsign;
     const bio = profile?.bio ?? canonical?.bio ?? '';

@@ -9,6 +9,7 @@ import { OnboardingGuide } from '../components/OnboardingGuide';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
+import { publishableAvatar } from '../utils/avatar-value';
 import { buildSignedHeaders } from '../utils/crypto';
 import { resolveBundledAvatar } from '../utils/bundled-avatars';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
@@ -55,12 +56,17 @@ export default function ProfileSetupScreen() {
         let cancelled = false;
         (async () => {
             if (!identity) { router.back(); return; }
+            // Seed with a PORTABLE value only. The local members row holds this node's own
+            // `/api/avatar/<pk>?size=thumb` string after a sync, not the photo — seeding from it
+            // meant Re-run Setup published the node's URL back as the member's avatar and
+            // destroyed the photo. `publishableAvatar` falls back to the canonical copy, which
+            // is the real picture.
             let avatar: string | null = null;
             try {
                 const p = await getMemberProfile(identity.publicKey);
-                avatar = p?.avatar_url || (await getCanonicalAvatar());
+                avatar = publishableAvatar(p?.avatar_url, await getCanonicalAvatar());
             } catch {
-                avatar = await getCanonicalAvatar();
+                avatar = publishableAvatar(null, await getCanonicalAvatar());
             }
             if (cancelled) return;
             if (avatar) setPendingAvatar(avatar);

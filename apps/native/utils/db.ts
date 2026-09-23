@@ -20,6 +20,22 @@ import { mergeIncomingMessage, isRemovedPayload, type LocalMessageRow } from './
 const CHAT_IMAGE_CACHE_DIR = `${FileSystem.cacheDirectory}chat-images/`;
 
 /**
+ * Take the decrypted copy of a chat photo off this phone.
+ *
+ * getDecryptedAttachment writes the plaintext JPEG to the cache so an image is decrypted once per device.
+ * A "delete for everyone" has to take it with it — on the deleter's phone AND on the peer's, when the
+ * tombstone arrives in a sync — or the picture outlives the message it belonged to and sits in the cache
+ * until the OS decides to trim it. The bubble already hides the attachment; this removes the file.
+ *
+ * Never throws: the tombstone is what matters, and a cache file we could not remove must not fail a delete.
+ */
+async function forgetCachedChatImage(messageId: string): Promise<void> {
+    try {
+        await FileSystem.deleteAsync(`${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`, { idempotent: true });
+    } catch { /* nothing to do: the message is gone either way */ }
+}
+
+/**
  * Singleton database instance.
  * Using the synchronous API available in expo-sqlite version 14.x+ 
  */
@@ -2860,6 +2876,8 @@ async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversatio
            edited_at = excluded.edited_at`,
         [m.id, conversationId, m.author_pubkey || m.authorPubkey || '', merged.ciphertext, merged.nonce, merged.type, m.systemType || m.system_type || null, merged.metadata, m.timestamp || m.created_at || new Date().toISOString(), merged.editedAt]
     );
+    // The other end deleted it for everyone: this phone's decrypted copy of the photo goes too.
+    if (merged.contentReplaced && merged.type === 'removed') await forgetCachedChatImage(m.id);
 }
 
 export async function syncMessages(publicKey: string) {
@@ -5319,6 +5337,9 @@ export async function deleteMessageApi(messageId: string): Promise<any> {
             );
         }
     } catch { /* the node has it; the next sync brings the tombstone anyway */ }
+    // The plaintext photo goes with the message, whether or not the local mirror above found a row: a group
+    // chat has no local row, and its image was decrypted into the same cache.
+    await forgetCachedChatImage(messageId);
     return res;
 }
 

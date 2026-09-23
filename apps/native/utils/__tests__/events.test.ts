@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     buildEventDraft, buildEventCopy, defaultEventEnd, formatEventWhen, formatPickerValue, isEventInFeed, eventBadge,
-    nextRsvp, applyRsvp, formatDistance, eventCacheColumns, approximatePin, rsvpSignedMessage,
+    nextRsvp, applyRsvp, formatDistance, eventCacheColumns, approximatePin, rsvpSignedMessage, eventCoverPhoto,
     EVENT_TYPES_QUERY, type EventFormInput,
 } from '../events';
 
@@ -259,5 +259,45 @@ describe('Copy to a new date', () => {
             audienceGroupId: copy.groupId, authorPubkey: 'host', start: null, end: null,
         }, new Date(2026, 8, 20, 8, 0));
         expect(built.ok).toBe(false);
+    });
+});
+
+/**
+ * The feed card shows the event's photo, as the offer cards beside it do (Damo, 2026-09-23).
+ *
+ * This runner is node-only on purpose — screens need a device (see vitest.config.ts) — so what is held here is
+ * the card's decision, not its render: which URL EventCard hands to <Image>, and when it hands over nothing.
+ * That the card then draws it is covered on the web client, whose EventCard test renders the real thing.
+ */
+describe("the event's photo on the feed card (Damo, 2026-09-23)", () => {
+    it('is the first photo when the event has one', () => {
+        expect(eventCoverPhoto({ photos: ['https://node.example/uploads/a.jpg', 'https://node.example/uploads/b.jpg'] }))
+            .toBe('https://node.example/uploads/a.jpg');
+    });
+
+    it('reads a cache row that still holds the raw JSON string', () => {
+        expect(eventCoverPhoto({ photos: '["https://node.example/uploads/a.jpg"]' }))
+            .toBe('https://node.example/uploads/a.jpg');
+    });
+
+    it('is nothing when the event has no photo, so the card stays exactly as it was', () => {
+        expect(eventCoverPhoto({ photos: [] })).toBeNull();
+        expect(eventCoverPhoto({ photos: '[]' })).toBeNull();
+        expect(eventCoverPhoto({})).toBeNull();
+        expect(eventCoverPhoto(null)).toBeNull();
+    });
+
+    it('never shows a placeholder as if it were a picture', () => {
+        for (const junk of ['', '   ', 'null', 'undefined']) {
+            expect(eventCoverPhoto({ photos: [junk] })).toBeNull();
+        }
+        expect(eventCoverPhoto({ photos: 'not json' })).toBeNull();
+        expect(eventCoverPhoto({ photos: [{ url: 'a.jpg' }] })).toBeNull();
+    });
+
+    it('hands back the URL the loader resolved, untouched — this is not a second resolver', () => {
+        // db.ts getPosts has already turned '/uploads/a.jpg' into an absolute URL against the anchor.
+        expect(eventCoverPhoto({ photos: ['https://mullum.beanpool.org/uploads/a.jpg'] }))
+            .toBe('https://mullum.beanpool.org/uploads/a.jpg');
     });
 });

@@ -2614,6 +2614,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         <EventCard
                                                             post={post}
                                                             identity={identity}
+                                                            viewMode={viewMode}
                                                             distanceKm={eventDistance(post)}
                                                             onOpen={() => setSelectedPost(post)}
                                                             onRsvpChange={() => { refresh().catch(() => {}); }}
@@ -2711,6 +2712,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                             <EventCard
                                                                 post={post}
                                                                 identity={identity}
+                                                                viewMode={viewMode}
                                                                 distanceKm={eventDistance(post)}
                                                                 onOpen={() => setSelectedPost(post)}
                                                                 onRsvpChange={() => { refresh().catch(() => {}); }}

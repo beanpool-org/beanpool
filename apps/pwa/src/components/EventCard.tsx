@@ -7,6 +7,10 @@
  * detail, not the card. Built for 320px at 130% text: every row truncates, the buttons never shrink, and every
  * target is at least 48px tall.
  *
+ * An event with a photo shows it above (grid) or beside (list) those lines, the same size and crop the offer
+ * cards around it use — the host put it there, and a feed of pictures with one blank tile among them reads as
+ * the event being the lesser thing.
+ *
  * Who is the host is the node's call, not the client's: the RSVP list (`eventRsvps`) is sent to the author, a
  * keeper of an enterprise author, or a convenor of the group, and to nobody else — so its presence is what
  * shows the host controls here.
@@ -149,14 +153,49 @@ interface EventCardProps {
     identity?: BeanPoolIdentity | null;
     /** Kilometres from the viewer, when the page knows where they are. */
     distanceKm?: number | null;
+    /**
+     * Which shape the feed is in, so the event's photo takes the same size, crop and rounding the offer cards
+     * beside it are using (MarketplaceCard): a banner in the grid, a square thumbnail on the left in the list,
+     * and — because the compact offer card carries no photo at all — nothing in compact. Defaults to the grid,
+     * which is how the Market opens.
+     */
+    viewMode?: 'grid' | 'list' | 'compact';
     onOpen?: () => void;
     onRsvpChange?: (post: MarketplacePost) => void;
 }
 
-export function EventCard({ post, identity, distanceKm, onOpen, onRsvpChange }: EventCardProps) {
+export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange }: EventCardProps) {
     const rsvp = useEventRsvp(post, identity, onRsvpChange);
     const p = rsvp.livePost;
     const place = [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ');
+    // The host gave the event a photo; the card showed everything but. It is read straight off the post, the way
+    // the offer cards and the event page read theirs — there is no second resolver on the web client.
+    const firstPhoto = p.photos && p.photos.length > 0 ? p.photos[0] : null;
+    // Compact is the one view where the offer card beside it has no photo: MarketplaceCard's compact branch is a
+    // single condensed row of emoji, title, price and badge, built to double the listings on screen. Matching the
+    // card beside it there means showing nothing — a thumbnail only this card had would make the event the odd
+    // one out again, in the view that can least afford the height.
+    const photo = viewMode === 'compact' ? null : firstPhoto;
+    // Only a photo turns the card's text into a column beside a thumbnail. Without one the card is exactly what
+    // it has always been, in every view.
+    const asRow = !!photo && viewMode === 'list';
+
+    const lines = (
+        <>
+            <EventWhen post={p} testId="event-when" className="text-lg font-black text-violet-800 dark:text-violet-200 leading-tight" />
+            <span className="block w-full truncate text-base font-extrabold text-nature-950 dark:text-white leading-snug">
+                {p.title}
+            </span>
+            {place && (
+                <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
+                    <span aria-hidden="true">📍 </span>{place}
+                </span>
+            )}
+            <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
+                <span aria-hidden="true">👥 </span>{countsLine(p)}
+            </span>
+        </>
+    );
 
     return (
         <div data-testid="event-card" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-violet-200 dark:border-violet-900/60 rounded-2xl p-3 shadow-sm flex flex-col gap-2 overflow-hidden">
@@ -165,20 +204,24 @@ export function EventCard({ post, identity, distanceKm, onOpen, onRsvpChange }: 
                 onClick={onOpen}
                 disabled={!onOpen}
                 aria-label={`Open event: ${p.title}`}
-                className="w-full min-w-0 text-left bg-transparent border-0 p-0 flex flex-col gap-1 cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-lg"
+                className={`w-full min-w-0 text-left bg-transparent border-0 p-0 flex cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-lg ${
+                    asRow ? 'flex-row items-start gap-3' : 'flex-col gap-1'
+                }`}
             >
-                <EventWhen post={p} testId="event-when" className="text-lg font-black text-violet-800 dark:text-violet-200 leading-tight" />
-                <span className="block w-full truncate text-base font-extrabold text-nature-950 dark:text-white leading-snug">
-                    {p.title}
-                </span>
-                {place && (
-                    <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
-                        <span aria-hidden="true">📍 </span>{place}
-                    </span>
+                {photo && (
+                    // Inside the tap target that opens the event, never a second one: an offer card's photo
+                    // opens a lightbox, and two answers under one thumb is how a card stops being tappable.
+                    // The alt is the title, which the button's own aria-label already carries, so a screen
+                    // reader hears the event once.
+                    <img
+                        src={photo}
+                        alt={p.title}
+                        className={`object-cover rounded-xl bg-nature-100 dark:bg-nature-900 ${
+                            asRow ? 'w-16 h-16 flex-shrink-0' : 'w-full h-[110px] mb-1'
+                        }`}
+                    />
                 )}
-                <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
-                    <span aria-hidden="true">👥 </span>{countsLine(p)}
-                </span>
+                {asRow ? <span className="min-w-0 flex-1 flex flex-col gap-1">{lines}</span> : lines}
             </button>
             <RsvpButtons rsvp={rsvp} />
             {rsvp.error && (

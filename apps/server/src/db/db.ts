@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
+import { isSelfAvatarUrl } from '@beanpool/core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -471,6 +472,11 @@ export function initSchema() {
         console.error("[DB] ❌ Failed to migrate group_members for the 'removed' status:", err?.message || err);
     }
 
+    // groups.lead_pubkey: the group's LEAD convenor (2026-09-23). A plain ADD COLUMN, on purpose — a fourth value
+    // in group_members.role would mean rebuilding that table for its CHECK constraint. Before the schema.sql exec
+    // so anything the exec re-creates already sees the column. The backfill is further down, behind a marker.
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN lead_pubkey TEXT REFERENCES members(public_key)`).run(); } catch { }
+
     // Escrow dispute arbitration (§5 item 2, §6 correction 2)
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }
@@ -601,6 +607,45 @@ export function initSchema() {
             })();
         }
     } catch { }
+
+    // Every existing group gets its lead convenor (2026-09-23). The rule, and the ONLY thing this touches:
+    //   groups.lead_pubkey, where it is NULL — the creator while they are an active convenor of the group,
+    //   otherwise the longest-serving active convenor (joined_at ascending, member_pubkey to break a tie so two
+    //   nodes reach the same answer). A group with no active convenor keeps a NULL lead and gains one the moment
+    //   it has a convenor again, because the read path falls back to this same rule.
+    // No membership row, no role and no other column is written. Gated by a marker so it runs strictly once: a
+    // later boot must never hand the lead back to a creator the group has since replaced through hand-over, the
+    // silence vote or a Decision.
+    try {
+        const alreadyBackfilled = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_group_lead_pubkey_v1'").get();
+        if (!alreadyBackfilled) {
+            db.transaction(() => {
+                // Two branches, not one ORDER BY that prefers the creator: SQLite resolves a subquery's ORDER BY
+                // against that subquery's own FROM clause, where groups.created_by is not visible. Same shape as
+                // leadPubkeySql in @beanpool/engine, which the read path falls back to.
+                const res = db.prepare(`
+                    UPDATE groups SET lead_pubkey = COALESCE(
+                        (SELECT gmc.member_pubkey FROM group_members gmc
+                          WHERE gmc.group_id = groups.id AND gmc.member_pubkey = groups.created_by
+                            AND gmc.role = 'convenor' AND gmc.status = 'active'),
+                        (SELECT gmf.member_pubkey FROM group_members gmf
+                          WHERE gmf.group_id = groups.id AND gmf.role = 'convenor' AND gmf.status = 'active'
+                          ORDER BY gmf.joined_at ASC, gmf.member_pubkey ASC
+                          LIMIT 1)
+                    )
+                    WHERE lead_pubkey IS NULL
+                      AND EXISTS (
+                        SELECT 1 FROM group_members gm
+                        WHERE gm.group_id = groups.id AND gm.role = 'convenor' AND gm.status = 'active'
+                      )
+                `).run();
+                db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_group_lead_pubkey_v1', '1')").run();
+                if (res.changes > 0) console.log(`[DB] ✅ Gave ${res.changes} group(s) a lead convenor`);
+            })();
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to backfill groups.lead_pubkey:', err?.message || err);
+    }
 
     // PR #839 Blocker A: a wound-up enterprise never keeps its map location. finaliseWindUp now clears it, but
     // an enterprise wound up before that fix still holds the coordinates a keeper may have set on their own
@@ -1295,7 +1340,12 @@ export function createCrowdfundProject(
 ) {
     if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
-    const photoUrl = photos && photos.length > 0 ? photos[0] : '';
+    // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. An
+    // editor that read the enterprise back from the node holds THIS node's own avatar URL
+    // there, not the photo; storing it would point the avatar at itself. Same rule as
+    // updateProfile: read it as "no photo" rather than rejecting the whole save.
+    const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
+    const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
     const now = new Date().toISOString();
     const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
     const existingCallsign = db.prepare(
@@ -1349,7 +1399,11 @@ export function updateCrowdfundProject(
     }
 
     const now = new Date().toISOString();
-    const photoUrl = photos && photos.length > 0 ? photos[0] : '';
+    // As in createCrowdfundProject: this node's own avatar URL, sent back by an editor that
+    // loaded the enterprise from the node, means "unchanged" — the UPDATEs below COALESCE a
+    // null onto the existing avatar_url, so the stored photo survives the edit.
+    const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
+    const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
 
     db.transaction(() => {
         if (deadline_at !== undefined) {

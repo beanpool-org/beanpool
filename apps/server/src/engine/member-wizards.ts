@@ -348,7 +348,13 @@ export function completeRekey(
         db.prepare('UPDATE OR IGNORE thread_read_cursors SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
         db.prepare('DELETE FROM thread_read_cursors WHERE member_pubkey = ?').run(cleanOld);
 
-        // (o2) Commons groups: membership (and so the group's chat), and convenor votes
+        // (o2) Commons groups: membership (and so the group's chat), the lead convenor, and convenor votes.
+        // groups.lead_pubkey and groups.created_by both decide authorisation (the lead is the stored pointer
+        // while it names an active convenor, and the creator is the backfill branch behind it). Leave either on
+        // the invalidated key and a lead who recovers on a new key silently stops being the lead: the next
+        // reconcile writes somebody else in for good, and the hand-over has been reversed by nobody's decision.
+        db.prepare('UPDATE groups SET lead_pubkey = ? WHERE lead_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE groups SET created_by = ? WHERE created_by = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE group_members SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE group_members SET invited_by = ? WHERE invited_by = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE group_convenor_proposals SET convenor_pubkey = ? WHERE convenor_pubkey = ?').run(cleanNew, cleanOld);

@@ -17,6 +17,7 @@ import {
     canReadEventThread, loadEventForThread, isEventThreadExpired, eventThreadReadOnlyReason, EVENT_THREAD_REMOVED_TEXT,
 } from './event-thread.js';
 import { getChatMutesFor, type ChatMute } from './chat-mutes.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
 
@@ -109,10 +110,6 @@ function unreadCountOf(conversationId: string, pubkey: string, lastReadAt: strin
     return Number(r?.c || 0);
 }
 
-function avatarFor(pubkeyOrId: string, stored: string | null | undefined): string | null {
-    if (!stored) return null;
-    return stored.startsWith('bundled://') ? stored : `/api/avatar/${pubkeyOrId}?size=thumb`;
-}
 
 export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread: number } {
     const mutes = getChatMutesFor(pubkey);
@@ -160,7 +157,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
         ensureKeeperReadCursor(e.id, pubkey);
         finish({
             kind: 'enterprise', badge: YOUR_CHAT_BADGES.enterprise, id: e.id, conversationId: e.id, name: e.callsign,
-            avatarUrl: avatarFor(e.id, e.avatar_url), role: e.role === 'lead' ? 'lead' : 'keeper',
+            avatarUrl: avatarUrlFor(e.id, e.avatar_url), role: e.role === 'lead' ? 'lead' : 'keeper',
             readOnly: isEnterpriseThreadReadOnly(e.status),
         }, 'removed by a keeper', e.joined_at);
     }

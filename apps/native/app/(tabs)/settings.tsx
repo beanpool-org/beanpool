@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Image, Share, Linking, Platform, AppState, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Share, Linking, Platform, AppState, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Clipboard from 'expo-clipboard';
 import { useIdentity } from '../IdentityContext';
@@ -7,12 +7,13 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { processProfileImage } from '../../utils/image-processing';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
-import { resolveBundledAvatar } from '../../utils/bundled-avatars';
 import { updateCallsign, wipeIdentity, getMnemonic, hasMnemonic } from '../../utils/identity';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
 import { getCanonicalProfile } from '../../utils/canonical-profile';
+import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../../utils/avatar-value';
+import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -88,11 +89,6 @@ export default function SettingsScreen() {
         avatarWrap: {
             width: 96, height: 96, borderRadius: 48,
             marginBottom: 16, position: 'relative',
-        },
-        avatarImg: { width: 96, height: 96, borderRadius: 48, overflow: 'hidden' },
-        avatarPlaceholder: {
-            width: 96, height: 96, borderRadius: 48,
-            backgroundColor: palette.emerald900, justifyContent: 'center', alignItems: 'center',
         },
         avatarRing: {
             position: 'absolute', top: -3, left: -3, right: -3, bottom: -3,
@@ -538,6 +534,13 @@ export default function SettingsScreen() {
     const [holidayLoading, setHolidayLoading] = useState(false);
     const [editCallsign, setEditCallsign] = useState(identity?.callsign || '');
     const [avatar, setAvatar] = useState<string | null>(null);
+    // The photo the member picked in THIS session, and nothing else. `avatar` above is what the
+    // card DISPLAYS — after a sync it is the node's own `/api/avatar/…` URL, and when the node
+    // has none it is the canonical copy, which may be an OLDER photo than the one the node now
+    // holds (only a local pick writes canonical; a change made on the PWA or a paired device
+    // never reaches it). Publishing what is displayed therefore silently replaced the member's
+    // newest photo on every bio or name Save. A Save only sends `avatar` when this is set.
+    const [avatarPickedThisSession, setAvatarPickedThisSession] = useState<string | null>(null);
     // Callsign as held by the node we're currently anchored to. Callsigns are per-node
     // (unique per node, chosen at join), so the device-global identity.callsign is only
     // ever right by coincidence — display this instead and fall back while it loads.
@@ -908,6 +911,9 @@ export default function SettingsScreen() {
             // falls through to the offline queue — an explicit rejection from the node aborts
             // the save, so local state can never drift from what the server accepted.
             let offline = false;
+            // What this Save decided about the photo, kept in scope because the pending keys may
+            // only be retired on the strength of what the payload actually carried.
+            let avatarDecision: ProfilePublishAvatar | null = null;
             const url = await AsyncStorage.getItem('beanpool_anchor_url');
             if (!url) {
                 offline = true;
@@ -918,7 +924,14 @@ export default function SettingsScreen() {
                     contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
                     callsign: newCallsign,
                 };
-                if (avatar) payloadObj.avatar = avatar;
+                // The one shared rule decides, so this Save cannot disagree with the wizard or
+                // with the pending-sync retry. It sends a photo picked in this session, else a
+                // pick an earlier offline save parked and nothing has managed to publish yet;
+                // for a plain bio/name/contact edit it sends nothing, which is how the node is
+                // told "avatar unchanged" (it reads an explicit null as "clear it").
+                avatarDecision = await resolveProfilePublishAvatar({ sessionPick: avatarPickedThisSession });
+                const publishAvatar = avatarDecision.avatar;
+                if (publishAvatar) payloadObj.avatar = publishAvatar;
                 if (archetypeRaw) {
                     const parsed = parseArchetype(archetypeRaw);
                     payloadObj.archetype = parsed ? JSON.stringify({
@@ -957,9 +970,21 @@ export default function SettingsScreen() {
 
             if (offline) {
                 await AsyncStorage.setItem('pending_profile_sync', 'true');
+                // Park the session pick NEXT TO the flag, not only in the members row. The row
+                // is the retry's only other source for it, and the first members sync to land
+                // before the retry succeeds replaces it with the node's own URL — after which
+                // the retry reads "the node has a photo" and publishes no avatar at all, so the
+                // pick never reaches the node and nothing ever resends it. A bio-only save
+                // stores nothing here and so still says nothing about the photo.
+                const offlinePick = explicitEditAvatar(avatarPickedThisSession);
+                if (offlinePick) await AsyncStorage.setItem('pending_profile_avatar', offlinePick);
                 Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
-            } else {
-                await AsyncStorage.removeItem('pending_profile_sync');
+            } else if (avatarDecision) {
+                // The node has accepted. Retire the parked pick ONLY if this payload carried it
+                // (or a newer pick that supersedes it): a bio-only Save publishes no photo, and
+                // clearing the keys here used to disarm the retry for a pick that had reached
+                // nothing — the member kept seeing it locally and it never left the phone.
+                await retireParkedPickAfterPublish(avatarDecision);
             }
 
             // Commit locally now that the node has accepted (or we know we are offline)
@@ -969,7 +994,10 @@ export default function SettingsScreen() {
                 contact_value: contact.trim(),
                 contact_visibility: contact.trim() ? contactVisibility : 'hidden',
             };
-            if (avatar) localUpdate.avatar_url = avatar;
+            // Same rule locally: only a pick from this session is written back to the members
+            // row. Writing `avatar` would put the node's own URL (or a stale canonical copy)
+            // into the row as if the member had chosen it.
+            if (avatarPickedThisSession) localUpdate.avatar_url = avatarPickedThisSession;
             if (archetypeRaw) localUpdate.archetype = archetypeRaw;
             await updateMemberProfile(identity.publicKey, localUpdate);
             // The card renders nodeCallsign, so it would keep showing the pre-edit name
@@ -1373,14 +1401,20 @@ export default function SettingsScreen() {
                     </Pressable>
 
                     {/* Avatar */}
+                    {/* Rendered through MemberAvatar, like every other avatar in the app. A raw
+                        react-native Image was given the local members row verbatim — which since
+                        #725 is the RELATIVE `/api/avatar/<pk>?size=thumb` the node emits, and
+                        RN Image cannot load a relative path. The card showed an empty ring while
+                        My Profile showed the photo. MemberAvatar resolves the path against the
+                        anchor node and falls back to initials, never to a blank circle. Same
+                        96px, same ring, same tap target and labels. */}
                     <Pressable onPress={() => setMode('profile')} style={styles.avatarWrap} accessibilityRole="button" accessibilityLabel="Edit profile">
-                        {avatar && avatar !== 'null' && avatar !== 'undefined' && avatar.trim() !== '' ? (
-                            <Image source={avatar.startsWith('bundled://') ? resolveBundledAvatar(avatar)! : { uri: avatar }} style={styles.avatarImg} accessibilityLabel="Your profile avatar" />
-                        ) : (
-                            <View style={styles.avatarPlaceholder}>
-                                <Text style={{ fontSize: 42 }}>👤</Text>
-                            </View>
-                        )}
+                        <MemberAvatar
+                            avatarUrl={avatar}
+                            pubkey={identity.publicKey}
+                            callsign={nodeCallsign || identity.callsign}
+                            size={96}
+                        />
                         <View style={styles.avatarRing} />
                     </Pressable>
 
@@ -1929,8 +1963,16 @@ export default function SettingsScreen() {
                     <View style={{ alignItems: 'center', marginBottom: 20 }}>
                         <Pressable onPress={handlePickImage} style={{ alignItems: 'center' }} accessibilityRole="button" accessibilityLabel="Change profile photo">
                             <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.border.default, overflow: 'hidden' }}>
+                                {/* Same resolver as the card above, for the same reason. The
+                                    camera glyph stays the empty state: here it is an invitation
+                                    to pick a photo, not a broken picture. */}
                                 {avatar && avatar !== 'null' && avatar !== 'undefined' && avatar.trim() !== '' ? (
-                                    <Image source={avatar.startsWith('bundled://') ? resolveBundledAvatar(avatar)! : { uri: avatar }} style={{ width: 96, height: 96, borderRadius: 48, overflow: 'hidden' }} accessibilityLabel="Your profile avatar" />
+                                    <MemberAvatar
+                                        avatarUrl={avatar}
+                                        pubkey={identity.publicKey}
+                                        callsign={nodeCallsign || identity.callsign}
+                                        size={96}
+                                    />
                                 ) : (
                                     <Text style={{ fontSize: 32 }}>📷</Text>
                                 )}
@@ -2642,6 +2684,7 @@ export default function SettingsScreen() {
                 onSelectImage={(uri) => {
                     const cleaned = (uri && uri !== 'null' && uri !== 'undefined' && uri.trim() !== '') ? uri : null;
                     setAvatar(cleaned);
+                    setAvatarPickedThisSession(cleaned);
                 }}
             />
 

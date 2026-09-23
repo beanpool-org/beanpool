@@ -938,6 +938,9 @@ export interface Group {
     convenorPubkey?: string;
     convenorCallsign?: string;
     convenorAvatarUrl?: string | null;
+    /** The group's LEAD convenor (2026-09-23): the one nobody can remove or demote. */
+    leadPubkey?: string | null;
+    leadCallsign?: string;
 }
 
 export interface GroupMember {
@@ -1013,6 +1016,15 @@ export async function setGroupMemberRole(groupId: string, memberPubkey: string, 
 
 export async function removeGroupMember(groupId: string, memberPubkey: string): Promise<{ success: boolean }> {
     return request('DELETE', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`);
+}
+
+/**
+ * The lead convenor hands the lead on (2026-09-23). The target must be an active convenor, or an active member who
+ * becomes a convenor in the same step. Nobody can take the lead off the lead, so this is the only way it moves
+ * by hand.
+ */
+export async function handOverGroupLead(groupId: string, targetPubkey: string): Promise<{ success: boolean; member: GroupMember }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/lead`, { targetPubkey });
 }
 
 export async function updateGroup(groupId: string, data: {

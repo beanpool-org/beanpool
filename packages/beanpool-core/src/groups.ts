@@ -84,6 +84,13 @@ export interface Group {
     convenorPubkey?: string;
     convenorCallsign?: string;
     convenorAvatarUrl?: string | null;
+    /**
+     * The group's LEAD convenor (2026-09-23). One per group, stored as `groups.lead_pubkey`. The creator to
+     * begin with; it moves only by hand-over, by the lead stepping down or leaving, by the 30-day-silence vote,
+     * or by a community Decision. Null only for a group with no active convenor at all.
+     */
+    leadPubkey?: string | null;
+    leadCallsign?: string;
 }
 
 export interface GroupMember {
@@ -123,3 +130,83 @@ export const isJoinPolicy = isValidJoinPolicy;
 export const isAudienceScope = isValidAudienceScope;
 export const isGroupCategory = isValidGroupCategory;
 export const isGroupMemberStatus = isValidGroupMemberStatus;
+
+// ===================== THE LEAD CONVENOR (2026-09-23) =====================
+//
+// A group has ONE lead convenor and any number of ordinary convenors. Never "owner": in BeanPool an owner owns a
+// community node (docs/the-commons.md §2.3 vocabulary line). The powers, as the engine enforces them
+// (packages/beanpool-engine/src/groups.ts):
+//
+//  - Any convenor: approve, invite and remove members and observers; promote someone to convenor; remove posts
+//    and messages; edit the group and its join policy.
+//  - Only the lead: remove or demote another convenor.
+//  - Nobody: remove or demote the lead. Node admins included — they hold no power over groups, and this change
+//    does not give them one.
+//
+// These predicates are what the rosters ask before drawing Role and ✕ on a row, so a convenor never sees an
+// action the server would refuse. They say the SAME thing the engine says; the engine is still what enforces it.
+
+/** The viewer, as the roster knows them. */
+export interface GroupRowViewer {
+    role?: GroupRole | null;
+    status?: GroupMemberStatus | null;
+    /** Is the viewer this group's lead convenor? */
+    isLead: boolean;
+}
+
+/** One roster row. */
+export interface GroupRowTarget {
+    memberPubkey: string;
+    role: GroupRole;
+    status?: GroupMemberStatus | null;
+    /** Is this row the group's lead convenor? */
+    isLead: boolean;
+}
+
+export interface GroupRowActions {
+    /** Show the Role control on this row. */
+    canChangeRole: boolean;
+    /** Show the ✕ (remove, decline, withdraw) on this row. */
+    canRemove: boolean;
+    /** Show "Hand over lead" on this row. */
+    canHandOverLead: boolean;
+}
+
+const NO_GROUP_ROW_ACTIONS: GroupRowActions = { canChangeRole: false, canRemove: false, canHandOverLead: false };
+
+/** An active convenor — the only viewer who moderates anything. */
+export function isActiveGroupConvenor(viewer: GroupRowViewer): boolean {
+    return viewer.role === 'convenor' && (viewer.status == null || viewer.status === 'active');
+}
+
+/**
+ * What the viewer may do to one roster row. Their own row: nothing — leaving is the Leave Group button, and a
+ * lead hands the lead over rather than demoting themselves.
+ */
+export function groupRowActions(viewer: GroupRowViewer, target: GroupRowTarget, viewerPubkey?: string): GroupRowActions {
+    if (!isActiveGroupConvenor(viewer)) return NO_GROUP_ROW_ACTIONS;
+    if (viewerPubkey && target.memberPubkey === viewerPubkey) return NO_GROUP_ROW_ACTIONS;
+    // Nobody removes or demotes the lead — not another convenor, not a node admin.
+    if (target.isLead) return NO_GROUP_ROW_ACTIONS;
+    const targetIsActiveConvenor = target.role === 'convenor' && (target.status == null || target.status === 'active');
+    // Only the lead may touch another convenor.
+    if (targetIsActiveConvenor && !viewer.isLead) return NO_GROUP_ROW_ACTIONS;
+    return {
+        canChangeRole: true,
+        canRemove: true,
+        // Hand over: to another active convenor, or to an active member who becomes a convenor in the same step.
+        // An observer only watches — promote them first.
+        canHandOverLead: viewer.isLead && target.role !== 'observer' && (target.status == null || target.status === 'active'),
+    };
+}
+
+/** "Lead convenor" / "Convenor" / "Member" / "Observer", as the roster badge prints it. */
+export function groupRoleLabel(role: GroupRole, isLead: boolean): string {
+    if (isLead) return 'Lead convenor';
+    return role === 'convenor' ? 'Convenor' : role === 'member' ? 'Member' : 'Observer';
+}
+
+/** A lead who tries to leave is asked to hand over first — but only while somebody else is still active. */
+export function leadMustHandOverBeforeLeaving(isLead: boolean, otherActiveMembers: number): boolean {
+    return isLead && otherActiveMembers > 0;
+}

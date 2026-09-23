@@ -352,6 +352,7 @@ run_federation_suites() {
       test-keeper-read-cursor
       test-groups-chat-sync
       test-groups-succession
+      test-groups-lead-convenor
       test-member-wizards
       test-enterprise-pause
       test-enterprise-season-lifecycle

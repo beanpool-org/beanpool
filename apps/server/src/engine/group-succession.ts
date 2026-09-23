@@ -1,24 +1,33 @@
-// Convenor succession for Commons groups (answer B and decision 17, 2026-09-19).
+// Convenor succession for Commons groups (answer B and decision 17, 2026-09-19; extended to the lead convenor
+// 2026-09-23).
 //
 // Groups hold no binding votes — a Poll is how a group asks what it thinks — with one exception borrowed from
-// enterprise succession (state-engine.ts proposeLeadSuccession, #920): a group whose ONLY convenor has shown no
-// activity on the node for 30 days can choose a new one.
+// enterprise succession (state-engine.ts proposeLeadSuccession, #920): a group whose LEAD CONVENOR has shown no
+// activity on the node for 30 days can choose a new one. Until 2026-09-23 this covered only a group whose SOLE
+// convenor was silent, which left a silent lead with other convenors under them unreachable — the lead cannot be
+// removed or demoted by anyone, so the silence vote is the group's own way out.
 //
-//  - Who may propose: any active member of the group (role member; observers watch, the silent convenor is the
-//    subject). The candidate is an active member too — proposing yourself is fine.
-//  - Who votes: the same set, the electorate — active members with role 'member' whose account is active.
-//    Yes or No; a vote cannot be changed; the proposal counts as the proposer's yes.
-//  - Passing: more than half of the members who answer say yes. The vote runs 14 days (no deadline-less
-//    proposals); it closes early the moment the result can no longer change. At the deadline, yes must
-//    outnumber no.
-//  - The convenor coming back — any signed activity on the node after the proposal opened — cancels it.
-//  - Passing makes the candidate convenor and the silent convenor an ordinary member.
+//  - The subject: the group's lead convenor. (A group with no lead at all — no active convenor — has nobody to
+//    replace.)
+//  - The electorate: the group's OTHER active convenors, or its active members (role 'member') when the lead is
+//    its only convenor. Whoever they are, they propose, stand and vote; observers watch, and the silent lead has
+//    no vote on their own replacement. Proposing yourself is fine.
+//  - Yes or No; a vote cannot be changed; the proposal counts as the proposer's yes.
+//  - Passing: more than half of those who answer say yes. The vote runs 14 days (no deadline-less proposals); it
+//    closes early the moment the result can no longer change. At the deadline, yes must outnumber no.
+//  - The lead coming back — any signed activity on the node after the proposal opened — cancels it.
+//  - Passing makes the candidate a convenor and the group's lead. The silent lead keeps the convenor role when
+//    the other convenors were the ones who voted — they lost the lead, not the role, exactly as an enterprise
+//    lead keeper does. When the MEMBERS voted, because the lead was the group's only convenor, the silent lead
+//    becomes an ordinary member: a group that has just voted its only convenor out cannot be left with them
+//    still holding convenor powers.
 //
 // Every step writes a line into the group's chat. Ballots are secret, as for Decisions (answer I): members see
 // the totals and their own vote, never who voted how.
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
+import { getGroupLead } from '@beanpool/engine';
 import { postGroupSystemLine, callsignOf, GroupSystemType, loadGroupForThread } from './group-thread.js';
 import type { MessagingCallbacks } from './messaging.js';
 
@@ -29,13 +38,20 @@ export type GroupSuccessionClosedReason = 'rejected' | 'convenor_returned' | 'ca
 type Outcome = 'passed' | GroupSuccessionClosedReason | 'open';
 
 export interface ConvenorSilence {
-    /** The group's only active convenor, or null when there are none or several. */
+    /**
+     * The group's LEAD convenor — the one a vote can replace — or null when the group has no active convenor.
+     * Kept under its old name: every client reads `silence.convenorPubkey`.
+     */
     convenorPubkey: string | null;
     convenorCallsign: string | null;
     lastActiveAt: string | null;
     daysInactive: number;
-    /** A member may propose a new convenor now. */
+    /** 30 days with no recorded activity on the node. */
+    isSilent: boolean;
+    /** Silent AND somebody is left who may vote — only then can a proposal open. */
     isEligible: boolean;
+    /** Who votes: the lead's fellow convenors, or the group's members when the lead is its only convenor. */
+    electorate: 'convenors' | 'members';
 }
 
 export interface GroupSuccessionProposalInfo {
@@ -61,34 +77,62 @@ export interface GroupSuccessionProposalInfo {
     canVote: boolean;
 }
 
-const activeConvenors = (groupId: string): string[] =>
-    (db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active'").all(groupId) as any[])
-        .map(r => r.member_pubkey);
+/** The group's other active convenors, account active — the electorate whenever there is one. */
+function otherActiveConvenors(groupId: string, leadPubkey: string): string[] {
+    return (db.prepare(`
+        SELECT gm.member_pubkey FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
+        WHERE gm.group_id = ? AND gm.status = 'active' AND gm.role = 'convenor' AND m.status = 'active'
+          AND gm.member_pubkey != ?
+    `).all(groupId, leadPubkey) as any[]).map(r => r.member_pubkey);
+}
+
+/** Who votes on replacing this lead: their fellow convenors, or the members when the lead is the only convenor. */
+export function electorateKind(groupId: string, leadPubkey: string): 'convenors' | 'members' {
+    return otherActiveConvenors(groupId, leadPubkey).length > 0 ? 'convenors' : 'members';
+}
 
 export function getConvenorSilence(groupId: string, nowMs = Date.now()): ConvenorSilence {
-    const convenors = activeConvenors(groupId);
-    if (convenors.length !== 1) {
-        return { convenorPubkey: null, convenorCallsign: null, lastActiveAt: null, daysInactive: 0, isEligible: false };
+    const lead = getGroupLead(db, groupId);
+    if (!lead) {
+        return {
+            convenorPubkey: null, convenorCallsign: null, lastActiveAt: null, daysInactive: 0,
+            isSilent: false, isEligible: false, electorate: 'members',
+        };
     }
-    const m = db.prepare('SELECT callsign, last_active_at, joined_at FROM members WHERE public_key = ?').get(convenors[0]) as any;
+    const m = db.prepare('SELECT callsign, last_active_at, joined_at FROM members WHERE public_key = ?').get(lead) as any;
     const lastActiveAt: string | null = m?.last_active_at || m?.joined_at || null;
     const lastMs = lastActiveAt ? Date.parse(lastActiveAt) : 0;
     const msInactive = Math.max(0, nowMs - (Number.isFinite(lastMs) ? lastMs : 0));
+    const electorate = electorateKind(groupId, lead);
+    const isSilent = msInactive >= GROUP_CONVENOR_SILENCE_MS;
     return {
-        convenorPubkey: convenors[0],
+        convenorPubkey: lead,
         convenorCallsign: m?.callsign ?? null,
         lastActiveAt,
         daysInactive: msInactive / (24 * 60 * 60 * 1000),
-        isEligible: msInactive >= GROUP_CONVENOR_SILENCE_MS,
+        isSilent,
+        // A vote nobody can vote in is not eligible: a lead alone in their group has no electorate.
+        isEligible: isSilent && successionElectorate(groupId, lead).length > 0,
+        electorate,
     };
 }
 
-/** Active members (role member) of the group whose account is active — who may propose, stand and vote. */
-export function successionElectorate(groupId: string): string[] {
+/**
+ * Who may propose, stand and vote: the lead's fellow active convenors, or — when the lead is the group's only
+ * convenor — its active members with role 'member'. Accounts must be active either way. Observers never vote,
+ * and the lead has no vote on their own replacement.
+ */
+export function successionElectorate(groupId: string, leadPubkey?: string | null): string[] {
+    const lead = leadPubkey === undefined ? getGroupLead(db, groupId) : leadPubkey;
+    if (lead) {
+        const convenors = otherActiveConvenors(groupId, lead);
+        if (convenors.length > 0) return convenors;
+    }
     return (db.prepare(`
         SELECT gm.member_pubkey FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
         WHERE gm.group_id = ? AND gm.status = 'active' AND gm.role = 'member' AND m.status = 'active'
-    `).all(groupId) as any[]).map(r => r.member_pubkey);
+          AND (? IS NULL OR gm.member_pubkey != ?)
+    `).all(groupId, lead, lead) as any[]).map(r => r.member_pubkey);
 }
 
 /** Has the convenor a proposal targets done anything on the node since it opened? */
@@ -113,7 +157,7 @@ const REASON_TEXT: Record<GroupSuccessionClosedReason, string> = {
     rejected: 'not enough members said yes',
     convenor_returned: 'the convenor is back',
     candidate_gone: 'the person proposed is no longer a member',
-    no_longer_needed: 'the group has another convenor now',
+    no_longer_needed: 'the group has another lead convenor now',
 };
 
 function closeProposal(cb: MessagingCallbacks, prop: any, reason: GroupSuccessionClosedReason): boolean {
@@ -133,12 +177,13 @@ function closeProposal(cb: MessagingCallbacks, prop: any, reason: GroupSuccessio
  */
 function settle(cb: MessagingCallbacks, prop: any, final: boolean, nowIso: string): Outcome {
     if (convenorReturnedSince(prop)) { closeProposal(cb, prop, 'convenor_returned'); return 'convenor_returned'; }
-    const convenors = activeConvenors(prop.group_id);
-    if (convenors.length !== 1 || convenors[0] !== prop.convenor_pubkey) {
+    // The vote is about THIS lead. If the group has since handed the lead to someone else, or lost its last
+    // convenor, the question no longer stands.
+    if (getGroupLead(db, prop.group_id) !== prop.convenor_pubkey) {
         closeProposal(cb, prop, 'no_longer_needed');
         return 'no_longer_needed';
     }
-    const electorate = successionElectorate(prop.group_id);
+    const electorate = successionElectorate(prop.group_id, prop.convenor_pubkey);
     if (!electorate.includes(prop.candidate_pubkey)) { closeProposal(cb, prop, 'candidate_gone'); return 'candidate_gone'; }
 
     const { yes, no } = tally(prop, electorate);
@@ -146,15 +191,23 @@ function settle(cb: MessagingCallbacks, prop: any, final: boolean, nowIso: strin
     const passes = final ? yes > no : yes > no + outstanding;
     const fails = final ? yes <= no : no >= yes + outstanding;
     if (passes) {
+        // The outgoing lead keeps the convenor role when their fellow convenors voted — they lost the lead, not
+        // the role (the enterprise rule: "old lead becomes ordinary keeper"). When the MEMBERS voted, the lead
+        // was the group's only convenor and the group has just voted them out of running it: they become an
+        // ordinary member, as they did before the lead convenor existed.
+        const votedByConvenors = electorateKind(prop.group_id, prop.convenor_pubkey) === 'convenors';
         db.transaction(() => {
-            db.prepare("UPDATE group_members SET role = 'member', updated_at = ? WHERE group_id = ? AND member_pubkey = ?")
-                .run(nowIso, prop.group_id, prop.convenor_pubkey);
+            db.prepare("UPDATE group_members SET role = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?")
+                .run(votedByConvenors ? 'convenor' : 'member', nowIso, prop.group_id, prop.convenor_pubkey);
             db.prepare("UPDATE group_members SET role = 'convenor', updated_at = ? WHERE group_id = ? AND member_pubkey = ?")
                 .run(nowIso, prop.group_id, prop.candidate_pubkey);
+            // The candidate is the group's lead from here on, written down, not inferred.
+            db.prepare('UPDATE groups SET lead_pubkey = ?, updated_at = ? WHERE id = ?')
+                .run(prop.candidate_pubkey, nowIso, prop.group_id);
             db.prepare("UPDATE group_convenor_proposals SET status = 'passed', executed_at = ? WHERE id = ?").run(nowIso, prop.id);
         })();
         postGroupSystemLine(cb, prop.group_id, GroupSystemType.CONVENOR_CHOSEN,
-            `Members chose ${callsignOf(prop.candidate_pubkey)} as convenor (${yes} yes, ${no} no).`,
+            `${votedByConvenors ? 'Convenors' : 'Members'} chose ${callsignOf(prop.candidate_pubkey)} as lead convenor (${yes} yes, ${no} no).`,
             { proposalId: prop.id, candidatePubkey: prop.candidate_pubkey, previousConvenorPubkey: prop.convenor_pubkey, yes, no });
         return 'passed';
     }
@@ -163,7 +216,7 @@ function settle(cb: MessagingCallbacks, prop: any, final: boolean, nowIso: strin
 }
 
 function toInfo(r: any, viewer?: string): GroupSuccessionProposalInfo {
-    const electorate = successionElectorate(r.group_id);
+    const electorate = successionElectorate(r.group_id, r.convenor_pubkey);
     const { yes, no } = tally(r, electorate);
     const mine = viewer
         ? (db.prepare('SELECT choice FROM group_convenor_votes WHERE proposal_id = ? AND voter_pubkey = ?').get(r.id, viewer) as any)?.choice ?? null
@@ -238,13 +291,17 @@ export function proposeGroupConvenor(
     }
 
     const silence = getConvenorSilence(groupId);
-    if (!silence.convenorPubkey) throw new Error('Only a group with a single convenor can choose a new one this way');
-    if (!silence.isEligible) throw new Error('The convenor has been active on the node within the last 30 days');
+    if (!silence.convenorPubkey) throw new Error('Only a group with a lead convenor can choose a new one this way');
+    if (!silence.isSilent) throw new Error('The convenor has been active on the node within the last 30 days');
+    if (!silence.isEligible) throw new Error('Nobody else in this group can vote on its lead convenor');
 
-    const electorate = successionElectorate(groupId);
-    if (!electorate.includes(proposerPubkey)) throw new Error('Only an active member of this group may propose a convenor');
+    // Convenors when the lead has fellow convenors, members when the lead is the group's only convenor. Both the
+    // proposer and the candidate come from that set, so the error says which one it is.
+    const electorate = successionElectorate(groupId, silence.convenorPubkey);
+    const voterWord = silence.electorate === 'convenors' ? 'convenor' : 'member';
+    if (!electorate.includes(proposerPubkey)) throw new Error(`Only an active ${voterWord} of this group may propose a convenor`);
     if (candidatePubkey === silence.convenorPubkey) throw new Error('The candidate cannot be the current convenor');
-    if (!electorate.includes(candidatePubkey)) throw new Error('The candidate must be an active member of this group');
+    if (!electorate.includes(candidatePubkey)) throw new Error(`The candidate must be an active ${voterWord} of this group`);
 
     const id = crypto.randomUUID();
     const nowIso = new Date().toISOString();
@@ -266,11 +323,12 @@ export function proposeGroupConvenor(
     }
 
     const who = proposerPubkey === candidatePubkey
-        ? `${callsignOf(proposerPubkey)} offered to be convenor`
-        : `${callsignOf(proposerPubkey)} proposed ${callsignOf(candidatePubkey)} as convenor`;
+        ? `${callsignOf(proposerPubkey)} offered to be lead convenor`
+        : `${callsignOf(proposerPubkey)} proposed ${callsignOf(candidatePubkey)} as lead convenor`;
     postGroupSystemLine(cb, groupId, GroupSystemType.CONVENOR_VOTE_OPENED,
-        `${who}, because ${callsignOf(silence.convenorPubkey)} has not been active for 30 days. Members have 14 days to vote.`,
-        { proposalId: id, candidatePubkey, proposerPubkey, deadlineAt });
+        `${who}, because ${callsignOf(silence.convenorPubkey)} has not been active for 30 days. `
+        + `${silence.electorate === 'convenors' ? 'The other convenors' : 'Members'} have 14 days to vote.`,
+        { proposalId: id, candidatePubkey, proposerPubkey, deadlineAt, electorate: silence.electorate });
 
     const row = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(id) as any;
     const outcome = settle(cb, row, false, nowIso);
@@ -285,8 +343,8 @@ export function proposeGroupConvenor(
         proposerPubkey,
         `👥 ${groupName}`,
         outcome === 'passed'
-            ? 'Members chose a new convenor while you were away'
-            : 'Members opened a vote on a new convenor. Open the group to see it.',
+            ? 'The group chose a new lead convenor while you were away'
+            : 'The group opened a vote on a new lead convenor. Open the group to see it.',
         { screen: 'chat', conversationId: groupId, groupId },
         'chat',
     );
@@ -309,7 +367,7 @@ export function voteGroupConvenor(
     const cur = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(proposalId) as any;
     if (cur.status !== 'active' || settle(cb, cur, false, nowIso) !== 'open') throw new Error('This vote has closed');
 
-    if (!successionElectorate(prop.group_id).includes(voterPubkey)) {
+    if (!successionElectorate(prop.group_id, prop.convenor_pubkey).includes(voterPubkey)) {
         throw new Error('Only an active member of this group may vote on its convenor');
     }
     if (db.prepare('SELECT 1 FROM group_convenor_votes WHERE proposal_id = ? AND voter_pubkey = ?').get(proposalId, voterPubkey)) {
@@ -344,6 +402,7 @@ export function getGroupSuccession(cb: MessagingCallbacks, groupId: string, view
     return {
         silence,
         proposals,
-        canPropose: silence.isEligible && !stillOpen && !!viewerPubkey && successionElectorate(groupId).includes(viewerPubkey),
+        canPropose: silence.isEligible && !stillOpen && !!viewerPubkey
+            && successionElectorate(groupId, silence.convenorPubkey).includes(viewerPubkey),
     };
 }

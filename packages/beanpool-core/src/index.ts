@@ -31,3 +31,4 @@ export * from './member-guide.js';
 export * from './settings-signin-qr.js';
 export * from './owner-words-check.js';
 export * from './owner-unlock.js';
+export * from './avatar-url.js';

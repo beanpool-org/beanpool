@@ -8,6 +8,7 @@ import { getMember, getProfile, type Member, type MemberProfile } from '@beanpoo
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptableAvatarValue } from './avatar.js';
+import { isSelfAvatarUrl } from '@beanpool/core';
 
 /**
  * Record activity timestamp for a member.
@@ -329,7 +330,18 @@ export function updateProfile(
 
     if (update.avatar !== undefined && !isAcceptableAvatarValue(update.avatar)) throw new Error('AVATAR_INVALID');
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
-    const avatar = update.avatar !== undefined ? update.avatar : existing.avatar_url;
+    // The node never stores its OWN avatar URL as an avatar. Installed builds read
+    // `members.avatar_url` out of their synced local row — which since #725 holds this node's
+    // `/api/avatar/<pk>?size=thumb` string, not the photo — and post it straight back here on
+    // every Save. Storing it replaced the member's photo with a pointer to itself, and from
+    // then on `GET /api/avatar/<pk>` 404d: the photo was destroyed, on the node and (via the
+    // phone's canonical mirror) on the device.
+    //
+    // Deliberately NOT a 400. Those builds are already on members' phones and send this on
+    // every bio or name edit; rejecting it would mean they could no longer save a bio or a
+    // name at all. Read as "avatar unchanged" instead, which is what the sender meant.
+    const avatarUnchanged = update.avatar === undefined || isSelfAvatarUrl(update.avatar);
+    const avatar = avatarUnchanged ? existing.avatar_url : update.avatar;
     const bio = typeof update.bio === 'string' ? update.bio.slice(0, 200) : (update.bio === null ? null : existing.bio);
     // Rename gate: enforce per-node uniqueness, but ONLY when the callsign actually
     // changes — re-saving your own name (e.g. the background profile push) must not

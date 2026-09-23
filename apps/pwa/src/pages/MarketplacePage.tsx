@@ -2667,10 +2667,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             }
                                             if (post.type === 'poll') {
                                                 return (
-                                                    <div key={post.id} className="h-full">
+                                                    // A poll is the tallest thing in the grid: four answers, the open-ballot
+                                                    // note and the turnout row. One column of a 3+ column grid is too narrow
+                                                    // for its answers ("It's Am…"), so from `md` up it takes two.
+                                                    <div key={post.id} className="h-full md:col-span-2">
                                                         <PollCard
                                                             post={post}
                                                             identity={identity}
+                                                            viewMode={viewMode}
                                                             onVoteSuccess={() => refresh()}
                                                             onOpenProfile={onOpenProfile}
                                                         />
@@ -2686,7 +2690,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 role={isPulse ? undefined : "button"}
                                                 tabIndex={isPulse ? undefined : 0}
                                                 aria-label={isPulse ? `Daily Pulse: ${post.title}` : `Open listing: ${post.title}${remoteOriginLabel(post)}`}
-                                                className={`h-full rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
+                                                // No `h-full`: the tile keeps its own height rather than stretching to
+                                                // whatever shares its row (see MarketplaceCard's grid return).
+                                                className={`rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                             >
                                                 <MarketplaceCard
                                                     post={post as any}
@@ -2769,6 +2775,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                             <PollCard
                                                                 post={post}
                                                                 identity={identity}
+                                                                viewMode={viewMode}
                                                                 onVoteSuccess={() => refresh()}
                                                                 onOpenProfile={onOpenProfile}
                                                             />

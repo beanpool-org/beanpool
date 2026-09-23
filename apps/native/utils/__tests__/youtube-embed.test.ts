@@ -174,6 +174,14 @@ describe('what the player may navigate to', () => {
         expect(playerNavigation('https://www.youtube.com/@beanpool')).toBe('external');
     });
 
+    it('never keeps a Google property loaded inside the card', () => {
+        // A suffix match on a bare `google.com` used to allow every one of these. A sign-in page
+        // rendered inside a small unmarked rectangle is the thing this rule exists to stop.
+        expect(playerNavigation('https://accounts.google.com/signin')).toBe('block');
+        expect(playerNavigation('https://ads.google.com/')).toBe('block');
+        expect(playerNavigation('https://www.google.com/')).toBe('block');
+    });
+
     it('blocks everywhere else — a video player is not a browser', () => {
         expect(playerNavigation('https://evil.example/phish')).toBe('block');
         expect(playerNavigation('http://www.youtube.com/watch?v=' + ID)).toBe('block');

@@ -207,13 +207,20 @@ export function youtubePlayerErrorMessage(code: number): string {
     }
 }
 
-/** Hosts the player is allowed to navigate to on its own: YouTube's and the assets it pulls in. */
+/**
+ * Hosts the player is allowed to navigate to on its own: YouTube's and the assets it pulls in.
+ *
+ * Deliberately *not* `google.com`. Matching is by suffix, so a bare `google.com` here would let the
+ * player keep `accounts.google.com`, `ads.google.com` or any other Google property loaded inside
+ * this small unmarked rectangle — a sign-in page in a card the member cannot inspect is exactly the
+ * thing "a video player is not a browser" is meant to prevent. The embed's own assets and video
+ * streams come from `ytimg.com`, `googlevideo.com` and `gstatic.com`, which are listed.
+ */
 const PLAYER_HOSTS = [
     'youtube-nocookie.com',
     'youtube.com',
     'ytimg.com',
     'googlevideo.com',
-    'google.com',
     'gstatic.com',
 ];
 

@@ -2,7 +2,13 @@
  * PulseFeedCard — Facade presentation card for Pulse community feed items (Phase 3).
  *
  * Rules:
- * - Facade cards, NOT embeds. Renders a static thumbnail, title, platform, category, and author.
+ * - Facade cards until the member asks for more. A card renders a static thumbnail, title, platform,
+ *   category and author, and fetches nothing from the platform it came from.
+ * - YouTube, and only YouTube, then plays in place: tapping ▶ mounts YouTube's own embedded player
+ *   in the card (`PulseYouTubePlayer`). Before that tap there is no WebView and nothing has been
+ *   requested from Google — `pulseCardMedia` is what decides, and it is unit-tested. Every other
+ *   platform opens its own app exactly as it always has. Marty's call, 2026-09-23; the standing
+ *   rejection of proxying or re-hosting video is untouched.
  * - External linking: Tapping the card opens the post URL in the device browser/app via Linking.openURL,
  *   strictly validated via `isWebUrl` before invocation.
  * - Emphasizes community: "my neighbour made this" — shows author avatar, callsign, and verified status.
@@ -12,7 +18,7 @@
  * - Responsive at 320dp and 1.3x font scale: cards reflow and titles wrap cleanly with no horizontal overflow.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import {
     View,
     Text,
@@ -29,10 +35,17 @@ import {
     isWebUrl,
     platformMeta,
     categoryMeta,
-    VIDEO_PLATFORMS,
 } from '@beanpool/core';
 import { type PulseFeedItem, formatRelativeTime, isOfficialSource, canReportPulseItem, resolvePulseThumbnailUrl, PULSE_REPORT_REASONS } from '../utils/pulse';
+import {
+    pulseCardMedia,
+    playPulseVideo,
+    playingPulseVideo,
+    subscribeToPulseVideo,
+} from '../utils/pulse-video-player';
+import { YOUTUBE_MIN_VIEWPORT_PX } from '../utils/youtube-embed';
 import { MemberAvatar } from './MemberAvatar';
+import { PulseYouTubePlayer } from './PulseYouTubePlayer';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 interface PulseFeedCardProps {
@@ -59,11 +72,23 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
     const [reportReason, setReportReason] = useState<string | null>(null);
     const [submittingReport, setSubmittingReport] = useState(false);
 
+    const [playerError, setPlayerError] = useState<string | null>(null);
+
+    // Which card — of all of them — is playing. One player at a time is a property of the feed, not
+    // of any single card, so it lives in a store the cards subscribe to rather than in state here.
+    const playingItemId = useSyncExternalStore(subscribeToPulseVideo, playingPulseVideo, playingPulseVideo);
+    const media = pulseCardMedia(item, playingItemId);
+    const isPlaying = media.kind === 'player';
+
+    // A card that starts playing again has left its last failure behind.
+    useEffect(() => { if (isPlaying) setPlayerError(null); }, [isPlaying]);
+
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
     const canReport = Boolean(onReport) && canReportPulseItem(item, currentPubkey);
     const platMeta = platformMeta(item.platform);
     const catMeta = categoryMeta(item.category);
-    const isVideo = VIDEO_PLATFORMS.includes(item.platform as any);
+    const isVideo = media.kind === 'poster' && media.isVideo;
+    const canPlayInApp = media.kind === 'poster' && media.canPlayInApp;
     const timeAgo = formatRelativeTime(item.publishedAt);
     const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : 'Neighbour');
 
@@ -81,6 +106,12 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
             console.warn('[PulseFeedCard] Error opening URL:', e);
             Alert.alert('Cannot Open Link', 'The link could not be opened on this device.');
         }
+    };
+
+    /** The tap that — and only that — makes this card reach YouTube for the first time. */
+    const handlePlayInApp = () => {
+        setPlayerError(null);
+        playPulseVideo(item.id);
     };
 
     const handleAuthorPress = () => {
@@ -250,7 +281,90 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                 </View>
             )}
 
-            {/* Facade Poster / Thumbnail with Open Link Handler */}
+            {/* The media area: YouTube's player once the member has tapped ▶, a plain line if that
+                player failed, and otherwise the facade poster this feed has always shown. The
+                three are mutually exclusive, which is how "nothing is drawn over a playing player"
+                is guaranteed structurally rather than by a z-index. */}
+            {media.kind === 'player' ? (
+                // Grown to at least 200px tall while playing: at 320dp a 16:9 card is about 162px,
+                // and YouTube's terms require a viewport of at least 200x200. The player letterboxes
+                // inside it rather than the video being cropped.
+                <View style={[styles.thumbnailWrap, styles.playerWrap]}>
+                    <PulseYouTubePlayer
+                        itemId={item.id}
+                        html={media.html}
+                        baseUrl={media.baseUrl}
+                        onError={setPlayerError}
+                    />
+                </View>
+            ) : playerError ? (
+                <View style={[styles.thumbnailWrap, styles.playerErrorWrap]}>
+                    <Text style={styles.playerErrorText}>{playerError}</Text>
+                    {item.url ? (
+                        <Pressable
+                            onPress={handleOpenPost}
+                            style={styles.playerErrorBtn}
+                            accessibilityRole="link"
+                            accessibilityLabel={`Open ${item.title || 'this video'} on ${platMeta.label}`}
+                        >
+                            <Text style={styles.playerErrorBtnText}>Open on {platMeta.label} ↗</Text>
+                        </Pressable>
+                    ) : null}
+                </View>
+            ) : (
+                <Pressable
+                    disabled={!item.url}
+                    onPress={canPlayInApp ? handlePlayInApp : (item.url ? handleOpenPost : undefined)}
+                    style={({ pressed }) => [
+                        styles.contentPressable,
+                        item.url && pressed && styles.contentPressed,
+                    ]}
+                    accessibilityRole={canPlayInApp ? 'button' : (item.url ? 'link' : undefined)}
+                    accessibilityLabel={canPlayInApp ? `Play ${cardAccessibilityLabel}` : cardAccessibilityLabel}
+                    accessibilityHint={
+                        canPlayInApp
+                            ? 'Plays the video here, in this card'
+                            : (item.url ? 'Opens external post in browser or app' : undefined)
+                    }
+                >
+                    {thumbnailUri && !imageFailed ? (
+                        <View style={styles.thumbnailWrap}>
+                            <Image
+                                source={{ uri: thumbnailUri }}
+                                style={styles.thumbnail}
+                                contentFit="cover"
+                                transition={200}
+                                onError={() => setImageFailed(true)}
+                                accessible={false}
+                            />
+                            {isVideo && (
+                                <View style={styles.playOverlay} aria-hidden={true}>
+                                    <View style={styles.playCircle}>
+                                        <Text style={styles.playIcon} allowFontScaling={false}>▶</Text>
+                                    </View>
+                                </View>
+                            )}
+                            {item.url ? (
+                                <View style={styles.externalBadge}>
+                                    <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
+                                </View>
+                            ) : null}
+                        </View>
+                    ) : (
+                        <View style={[styles.thumbnailWrap, styles.placeholderThumbnail]}>
+                            <Text style={styles.placeholderIcon}>{item.callsign === 'Daily Pulse' ? '🌱' : platMeta.icon}</Text>
+                            {item.url ? (
+                                <View style={styles.externalBadge}>
+                                    <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
+                                </View>
+                            ) : null}
+                        </View>
+                    )}
+                </Pressable>
+            )}
+
+            {/* Title and permalink action. "Open on YouTube ↗" stays under every card, playing or
+                not: playing here is an extra, never the only way to reach the video. */}
             <Pressable
                 disabled={!item.url}
                 onPress={item.url ? handleOpenPost : undefined}
@@ -258,45 +372,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                     styles.contentPressable,
                     item.url && pressed && styles.contentPressed,
                 ]}
-                accessibilityRole={item.url ? "link" : undefined}
-                accessibilityLabel={cardAccessibilityLabel}
-                accessibilityHint={item.url ? "Opens external post in browser or app" : undefined}
+                accessibilityRole={item.url ? 'link' : undefined}
+                accessibilityLabel={item.url ? `Open ${cardAccessibilityLabel} on ${platMeta.label}` : undefined}
+                accessibilityHint={item.url ? 'Opens external post in browser or app' : undefined}
             >
-                {thumbnailUri && !imageFailed ? (
-                    <View style={styles.thumbnailWrap}>
-                        <Image
-                            source={{ uri: thumbnailUri }}
-                            style={styles.thumbnail}
-                            contentFit="cover"
-                            transition={200}
-                            onError={() => setImageFailed(true)}
-                            accessible={false}
-                        />
-                        {isVideo && (
-                            <View style={styles.playOverlay} aria-hidden={true}>
-                                <View style={styles.playCircle}>
-                                    <Text style={styles.playIcon} allowFontScaling={false}>▶</Text>
-                                </View>
-                            </View>
-                        )}
-                        {item.url ? (
-                            <View style={styles.externalBadge}>
-                                <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
-                            </View>
-                        ) : null}
-                    </View>
-                ) : (
-                    <View style={[styles.thumbnailWrap, styles.placeholderThumbnail]}>
-                        <Text style={styles.placeholderIcon}>{item.callsign === 'Daily Pulse' ? '🌱' : platMeta.icon}</Text>
-                        {item.url ? (
-                            <View style={styles.externalBadge}>
-                                <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
-                            </View>
-                        ) : null}
-                    </View>
-                )}
-
-                {/* Title and permalink action */}
                 <View style={styles.bodyWrap}>
                     <Text style={styles.title} numberOfLines={3}>
                         {item.title || 'View post on ' + platMeta.label}
@@ -549,6 +628,39 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         },
         placeholderThumbnail: {
             backgroundColor: theme === 'dark' ? '#1f2937' : '#f3f4f6',
+        },
+        // YouTube requires at least 200x200 CSS pixels for its player. `aspectRatio` sets the
+        // height from the width first and these clamp it, so a 16:9 card that would be ~162px tall
+        // at 320dp becomes 200px and the video letterboxes inside it.
+        playerWrap: {
+            minHeight: YOUTUBE_MIN_VIEWPORT_PX,
+            minWidth: YOUTUBE_MIN_VIEWPORT_PX,
+            backgroundColor: '#000000',
+        },
+        playerErrorWrap: {
+            paddingHorizontal: 16,
+            gap: 12,
+            backgroundColor: theme === 'dark' ? '#1f2937' : '#f3f4f6',
+        },
+        playerErrorText: {
+            fontSize: 14,
+            lineHeight: 20,
+            textAlign: 'center',
+            color: colors.text.body,
+        },
+        playerErrorBtn: {
+            minHeight: 48,
+            justifyContent: 'center',
+            paddingHorizontal: 16,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.surface.card,
+        },
+        playerErrorBtnText: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.text.link,
         },
         placeholderIcon: {
             fontSize: 48,

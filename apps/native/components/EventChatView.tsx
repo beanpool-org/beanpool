@@ -19,11 +19,12 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller';
+import { useChatSoftInputMode } from './chat/useChatSoftInputMode';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { getEventChat, postEventChatMessage, removeEventChatMessage, markConversationRead } from '../utils/db';
@@ -54,6 +55,8 @@ export function EventChatView({ eventId }: Props) {
     const chat = useStyles(makeChatStyles);
     const { identity } = useIdentity();
     const keyboardVisible = useKeyboardState(s => s.isVisible);
+    // The window's soft-input mode — the same hook the DM calls.
+    useChatSoftInputMode();
     const me = identity?.publicKey;
 
     const [view, setView] = useState<any | null>(null);
@@ -232,8 +235,7 @@ export function EventChatView({ eventId }: Props) {
     return (
         <KeyboardAvoidingView
             style={[styles.container, { paddingTop: insets.top }]}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={0}
+            behavior="padding"
         >
             {header}
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Platform, Linking, Modal, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
-import { KeyboardAvoidingView, KeyboardController, AndroidSoftInputModes, useKeyboardState } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
+import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -26,6 +26,7 @@ import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatM
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
+import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
 import {
     buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, type ChatViewer,
@@ -251,21 +252,8 @@ function ChatScreen() {
         scrollChatToBottom(flatListRef, animated);
     }, []);
 
-    // On Android, tell the OS not to resize/pan the window when the keyboard
-    // opens. This makes react-native-keyboard-controller's KeyboardAvoidingView
-    // the sole owner of keyboard compensation — eliminating the intermittent
-    // race where Android's OS-level resize and the library's padding would
-    // double-compensate or mis-time, hiding the input bar.
-    useEffect(() => {
-        if (Platform.OS === 'android') {
-            KeyboardController.setInputMode(AndroidSoftInputModes.SOFT_INPUT_ADJUST_NOTHING);
-        }
-        return () => {
-            if (Platform.OS === 'android') {
-                KeyboardController.setDefaultMode();
-            }
-        };
-    }, []);
+    // The window's soft-input mode — the same hook every chat calls.
+    useChatSoftInputMode();
 
     const loadRatedTransactions = useCallback(async () => {
         if (!identity?.publicKey) return;

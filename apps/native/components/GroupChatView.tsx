@@ -28,6 +28,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
+import { useChatSoftInputMode } from './chat/useChatSoftInputMode';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
@@ -92,6 +93,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const chat = useStyles(makeChatStyles);
     const { identity } = useIdentity();
     const keyboardVisible = useKeyboardState(s => s.isVisible);
+    // The window's soft-input mode — the same hook the DM calls.
+    useChatSoftInputMode();
     const me = identity?.publicKey;
 
     const [view, setView] = useState<any | null>(null);

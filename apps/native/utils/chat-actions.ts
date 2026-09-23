@@ -133,13 +133,16 @@ export function canDeleteMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     return !inFlight(m);
 }
 
-/** A convenor's (or an event host's) removal: somebody else's message only — their own is a Delete. */
+/** A convenor's (or an event host's) removal of a message. */
 export function canRemoveMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     if (viewer.kind === 'dm') return false;
     if (!viewer.isModerator) return false;
     if (isSystemLine(m) || isTombstone(m)) return false;
     if (inFlight(m)) return false;
-    return !isMine(m, viewer);
+    // A convenor's own message is a Delete, not a Remove. Where the author has no delete of their own —
+    // an event chat, this round — the host keeps the power over every message that they already had.
+    if (isMine(m, viewer)) return !authorVerbsAllowed(viewer.kind);
+    return true;
 }
 
 /** React: whoever may post in the chat, on anything that is still a message. Not enterprise or event threads. */

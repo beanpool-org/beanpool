@@ -120,7 +120,6 @@ function ChatScreen() {
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
     const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top');
-    const [draft, setDraft] = useState('');
     const [peerName, setPeerName] = useState('Loading...');
     const [peerPubkey, setPeerPubkey] = useState<string | null>(null);
     const [isPeerBlocked, setIsPeerBlocked] = useState(false);

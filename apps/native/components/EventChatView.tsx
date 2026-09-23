@@ -19,12 +19,11 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useKeyboardState } from 'react-native-keyboard-controller';
-import { ChatKeyboardAvoidingView } from './chat/ChatKeyboardAvoidingView';
+import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { getEventChat, postEventChatMessage, removeEventChatMessage, markConversationRead } from '../utils/db';
@@ -231,7 +230,11 @@ export function EventChatView({ eventId }: Props) {
     };
 
     return (
-        <ChatKeyboardAvoidingView style={[styles.container, { paddingTop: insets.top }]}>
+        <KeyboardAvoidingView
+            style={[styles.container, { paddingTop: insets.top }]}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={0}
+        >
             {header}
 
             {!!view.privateNote && (
@@ -275,7 +278,7 @@ export function EventChatView({ eventId }: Props) {
             ) : (
                 <Text style={[chat.composerNotice, { paddingBottom: insets.bottom + 8 }]}>{view.notice}</Text>
             )}
-        </ChatKeyboardAvoidingView>
+        </KeyboardAvoidingView>
     );
 }
 

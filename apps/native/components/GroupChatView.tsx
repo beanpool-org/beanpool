@@ -45,7 +45,7 @@ import {
 } from '../utils/your-groups';
 import {
     buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions,
-    normaliseThreadMessage, shouldFollowNewMessages, showsAuthorName, tombstoneText,
+    normaliseThreadMessage, pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneText,
     type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
 import { normaliseTappedUrl } from '../utils/chat-links';
@@ -156,8 +156,10 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     }, [id, me]);
 
     // One request per poll (the chat), and never two at once on a slow connection.
-    const load = useCallback(async () => {
-        if (inFlight.current) return;
+    // Answers with the node's messages, or null when this read did not happen (it failed, or a poll already had
+    // the chat in flight) — deliver() needs to tell those apart from a read that came back without its message.
+    const load = useCallback(async (): Promise<any[] | null> => {
+        if (inFlight.current) return null;
         inFlight.current = true;
         try {
             let answer: any;
@@ -173,7 +175,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             setError(null);
             const msgs: any[] = answer?.messages || [];
             // A message of mine that the node now holds is no longer pending here.
-            setPending(prev => prev.filter(p => !msgs.some((m: any) => String(m.id) === p.clientId)));
+            setPending(prev => pendingAfterRead(prev, msgs));
             if (shouldFollowNewMessages({ grew: msgs.length > messageCountRef.current, isBackgroundPoll: true, atBottom: atBottomRef.current })) {
                 setTimeout(() => scrollChatToBottom(listRef, true), 100);
             }
@@ -186,8 +188,10 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 lastSystemId.current = systemId;
                 if (!firstAnswer) loadDetails().catch(() => { });
             }
+            return msgs;
         } catch (e: any) {
             setError(e?.message || 'Could not open this chat.');
+            return null;
         } finally {
             inFlight.current = false;
         }
@@ -278,8 +282,11 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             else await postEnterpriseChatMessage(id, p.text, p.clientId);
             // A poll may be mid-flight with the chat as it was before this message; wait for it, then read again.
             while (inFlight.current) await new Promise(r => setTimeout(r, 100));
-            await load();
-            setPending(prev => prev.filter(x => x.clientId !== p.clientId));
+            const msgs = await load();
+            // Only the node's own copy retires the bubble. load() swallows its read errors, so a read that failed
+            // after this POST succeeded would otherwise take a delivered message off the sender's screen until a
+            // later poll happened to bring it back; the bubble stays, and the next poll retires it.
+            setPending(prev => pendingAfterRead(prev, msgs));
             scrollChatToBottom(listRef, true);
         } catch (e: any) {
             // The bubble stays, marked "not delivered" — tapping it offers Resend or Discard, as in a DM.

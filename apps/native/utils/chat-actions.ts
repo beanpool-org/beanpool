@@ -280,6 +280,25 @@ export function isAtBottom(offsetY: number): boolean {
 }
 
 /**
+ * The bubbles this phone still owes after a read of the node. A node keeps the phone's `clientId` as the
+ * message id, so a message that came back in the read is the phone's own bubble arriving home and stops being
+ * pending; everything else stays on screen.
+ *
+ * `nodeMessages` is null when the read did not happen — it failed, or another poll already had the chat in
+ * flight. A send whose POST succeeded but whose follow-up read did not must keep its bubble: retiring it on a
+ * read that never answered takes the sender's message off the screen although the node holds it, and only the
+ * next poll brings it back.
+ */
+export function pendingAfterRead<T extends { clientId: string }>(
+    pending: T[],
+    nodeMessages: { id: string | number }[] | null | undefined,
+): T[] {
+    if (!nodeMessages) return pending;
+    const held = new Set(nodeMessages.map(m => String(m.id)));
+    return pending.filter(p => !held.has(p.clientId));
+}
+
+/**
  * Stay at the bottom, but never yank someone reading history — the whole reason the group chat's
  * scroll-on-content-size-change was wrong (it yanked) and the DM's foreground-only rule was incomplete
  * (a message arriving while you sat at the bottom did not follow, so the keyboard hid it).

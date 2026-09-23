@@ -11,7 +11,7 @@ import {
     MESSAGE_EDIT_WINDOW_MS, DELETED_BY_AUTHOR_TEXT, REMOVED_BY_CONVENOR_TEXT, NOT_AVAILABLE_YET,
     buildChatListItems, canDeleteMessage, canEditMessage, canReactToMessage, canRemoveMessage,
     canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator,
-    isSystemLine, isTombstone, messageActions, normaliseThreadMessage, reactionSummary,
+    isSystemLine, isTombstone, messageActions, normaliseThreadMessage, pendingAfterRead, reactionSummary,
     shouldFollowNewMessages, showsAuthorName, threadMessageDisplayText, tombstoneText,
     type ChatMessage, type ChatViewer,
 } from '../chat-actions';
@@ -359,5 +359,35 @@ describe('a node-readable chat\'s message, in the shape the components want', ()
     it('leaves a system line as it was written', () => {
         const m = normaliseThreadMessage({ id: 's1', authorPubkey: 'SYSTEM', type: 'system', ciphertext: 'Ana joined' }, decode, ME);
         expect(m.text).toBe('Ana joined');
+    });
+});
+
+describe('which bubbles a read of the node retires', () => {
+    const pending = [
+        { clientId: 'c1', text: 'first' },
+        { clientId: 'c2', text: 'second' },
+    ];
+
+    it('retires the bubble the node came back holding', () => {
+        const left = pendingAfterRead(pending, [{ id: 'older' }, { id: 'c1' }]);
+        expect(left.map(p => p.clientId)).toEqual(['c2']);
+    });
+
+    it('matches a node that numbers its messages', () => {
+        const left = pendingAfterRead([{ clientId: '77' }], [{ id: 77 }]);
+        expect(left).toEqual([]);
+    });
+
+    it('keeps every bubble when the read did not happen', () => {
+        expect(pendingAfterRead(pending, null)).toEqual(pending);
+        expect(pendingAfterRead(pending, undefined)).toEqual(pending);
+    });
+
+    it('keeps a bubble the read came back without, rather than taking it off the screen', () => {
+        expect(pendingAfterRead(pending, [{ id: 'someone-elses' }])).toEqual(pending);
+    });
+
+    it('retires nothing on an empty chat', () => {
+        expect(pendingAfterRead(pending, [])).toEqual(pending);
     });
 });

@@ -125,6 +125,37 @@ assert_has "keeps the roll-up when it names a suite that left no other trace" \
   "$KILLED" "test-d(TIMEOUT)"
 assert_has "names the check that did report too" "$KILLED" "test-a: ✗ check one"
 
+# ── a suite RE-RUN under a flag, which is announced and listed under two different names ──
+# run_federation_suites heads these with a descriptive suffix (`test-x (settlement ON)`) but lists them
+# in the closing roll-up under a terser tag of its own (`test-x(on)`), or under no suffix at all. Matching
+# the roll-up against the header text meant the bare id was never found, so the roll-up was judged
+# "uncovered" and appended to every one of the ~10 re-run suites — the exact overcount this block exists
+# to prevent, reported as "Failing tests (2)" for one broken assertion (review of PR #1069).
+VARIANT=$(printf '━━━ test-federation-purchase-route (settlement ON) ━━━\n✗ 1a. commission is applied\n\n❌ Test failed: Error: 1 check(s) failed\n\n❌ Federation suites failed: test-federation-purchase-route(on)\n' | failing_tests_summary)
+assert_has "counts a flag-variant suite once, not twice" "$VARIANT" "Failing tests (1)"
+assert_has "names the variant it failed under" \
+  "$VARIANT" "test-federation-purchase-route (settlement ON): ✗ 1a. commission is applied"
+assert_lacks "drops the roll-up for a variant that did report a check" \
+  "$VARIANT" "Federation suites failed:"
+
+# The same, where the roll-up carries NO tag at all and only the header is decorated.
+UNTAGGED=$(printf '━━━ test-recovery-ws (read + ws auth ON) ━━━\n✗ 2. unauthenticated subscriber is refused\n\n❌ Federation suites failed: test-recovery-ws\n' | failing_tests_summary)
+assert_has "counts an undecorated roll-up name against a decorated header once" \
+  "$UNTAGGED" "Failing tests (1)"
+
+# … but a variant killed by the timeout still leaves the roll-up as its only trace, tag and all.
+VTIMEOUT=$(printf '━━━ test-a ━━━\n✗ check one\n━━━ test-ws-http-port (ws auth ON) ━━━\nRunning…\n\n❌ Federation suites failed: test-a test-ws-http-port(wsauth,TIMEOUT)\n' | failing_tests_summary)
+assert_has "keeps the roll-up when the suite it names is a variant that left no trace" \
+  "$VTIMEOUT" "test-ws-http-port(wsauth,TIMEOUT)"
+assert_has "and counts it beside the check that did report" "$VTIMEOUT" "Failing tests (2)"
+
+# Two variants of ONE suite, each throwing before any check: they are separate runs, so the bare id
+# they share must not let the first one silence the second.
+TWOVARIANTS=$(printf '━━━ test-ws-http-port (ws auth ON) ━━━\n❌ Test failed: Error: boom ON\n━━━ test-ws-http-port (ws auth OFF, open feed) ━━━\n❌ Test failed: Error: boom OFF\n\n❌ Federation suites failed: test-ws-http-port(wsauth) test-ws-http-port(open)\n' | failing_tests_summary)
+assert_has "keeps both variants of one suite" "$TWOVARIANTS" "Failing tests (2)"
+assert_has "names the first variant" "$TWOVARIANTS" "(ws auth ON): ❌ Test failed: Error: boom ON"
+assert_has "names the second variant" "$TWOVARIANTS" "(ws auth OFF, open feed): ❌ Test failed: Error: boom OFF"
+
 # ── quiet on anything it does not recognise, so an unfamiliar log reads exactly as before ──
 CLEAN_OUT=$(printf 'Everything is fine\n✓ one\n✓ two\n2/2 checks passed.\n' | failing_tests_summary)
 run=$((run + 1))

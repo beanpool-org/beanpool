@@ -48,6 +48,13 @@ FAILING_TESTS_LOOKAHEAD=${FAILING_TESTS_LOOKAHEAD:-20}
 #                Named only when its suite produced no `✗` of its own.
 #   run-level    `❌ <group> suites failed: <names>` is all that is left of a suite killed by the
 #                timeout, which prints neither. Named only when a suite it lists has nothing else.
+#
+# TWO NAMES FOR ONE SUITE. A suite re-run under a flag is announced by a header carrying a descriptive
+# suffix (`━━━ test-keeper-http (read auth opted out) ━━━`) but listed in the closing roll-up under a
+# terser tag of its own (`test-keeper-http(readauth-off)`), or under none at all. So the roll-up is
+# matched on the BARE suite id (coveredId), while the suite-level fallback stays keyed on the full
+# header text (covered) — two variant runs of one suite are separate runs, and each keeps its own
+# catch-all when that is all it printed.
 failing_tests_summary() {
   awk -v esc="$(printf '\033')" \
       -v cap="$FAILING_TESTS_CAP" \
@@ -80,8 +87,8 @@ failing_tests_summary() {
       }
 
       # A real failing test. These, and only these, are counted.
-      if (t ~ /^FAIL[[:space:]]/) { covered[suite] = 1; record(trim(substr(t, 5))); want_err = 1; look = 0; next }
-      if (t ~ /^✗/)              { covered[suite] = 1; record(tag(t)); want_err = 0; next }
+      if (t ~ /^FAIL[[:space:]]/) { cover(suite); record(trim(substr(t, 5))); want_err = 1; look = 0; next }
+      if (t ~ /^✗/)              { cover(suite); record(tag(t)); want_err = 0; next }
 
       # A summary. Held back, and printed at the end only if nothing better turned up — see the header.
       if (t ~ /^❌/) {
@@ -102,6 +109,13 @@ failing_tests_summary() {
     # Which suite a script-style line came from. Skipped when the line already names it, so the
     # closing roll-up ("❌ Federation suites failed: test-x") does not repeat itself.
     function tag(t) { return (suite == "" || index(t, suite) > 0) ? t : suite ": " t }
+    # The bare suite id behind either name for it. NO APOSTROPHES IN THIS AWK BLOCK: it is one
+    # single-quoted string, and one apostrophe closes it and breaks the file (same trap as
+    # run_federation_suites). A descriptive header suffix ` (settlement ON)` and a terser roll-up tag
+    # `(on)` / `(TIMEOUT)` are both a trailing parenthetical, so one cut matches the two to each other.
+    function suite_id(s) { sub(/[[:space:]]*\(.*\)$/, "", s); return trim(s) }
+    # Records that this suite accounted for itself, under both names it may be listed by.
+    function cover(s,   id) { covered[s] = 1; id = suite_id(s); if (id != "") coveredId[id] = 1 }
     # Does the run-level roll-up name a suite that nothing else accounted for? That suite left no
     # trace but this line — a timeout kills it mid-check — so the line is worth printing.
     function rollup_adds(t,   names, parts, i, k, name) {
@@ -110,16 +124,15 @@ failing_tests_summary() {
       k = split(names, parts, " ")
       if (k == 0) return 1
       for (i = 1; i <= k; i++) {
-        name = parts[i]
-        sub(/\(.*\)$/, "", name)   # test-x(TIMEOUT) is still test-x
-        if (name != "" && !(name in covered)) return 1
+        name = suite_id(parts[i])   # test-x(TIMEOUT) and test-x(on) are both test-x
+        if (name != "" && !(name in coveredId)) return 1
       }
       return 0
     }
     END {
       # Suites that printed no ✗ of their own: their catch-all line is the only name they have.
       for (i = 1; i <= nc; i++) {
-        if (!(cand[i] in covered)) { covered[cand[i]] = 1; record(candline[cand[i]]) }
+        if (!(cand[i] in covered)) { cover(cand[i]); record(candline[cand[i]]) }
       }
       for (i = 1; i <= nr; i++) if (rollup_adds(rollup[i])) record(rollup[i])
 

@@ -17,7 +17,7 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import {
-    getMarketplacePosts, createMarketplacePost, updateMarketplacePost, getNodeInfo, getRemotePosts,
+    getMarketplacePosts, createMarketplacePost, updateMarketplacePost, treasuryPostEvent, getNodeInfo, getRemotePosts,
     getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses,
     getEnterpriseMapPins, type EnterpriseMapPin,
     getGroups, type MarketplacePost, type PostReach, type ReachablePeer, type Group
@@ -698,15 +698,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         const hostEnterprise = eventHost.startsWith('ent:') ? eventHost.slice(4) : null;
         setPosting(true);
         try {
-            const res = await createMarketplacePost({
-                type: 'event',
-                category: 'community',
+            // The event as the node takes it, minus who is hosting — the two routes below differ only in
+            // where the host goes.
+            const event = {
                 title: newPostTitle.trim(),
                 description: newPostDescription.trim(),
-                credits: 0,
-                priceType: 'fixed',
-                authorPublicKey: hostEnterprise || identity.publicKey || '',
-                repeatable: false,
                 lat: postLat!,
                 lng: postLng!,
                 ...(newPostPhotos.length > 0 ? { photos: newPostPhotos } : {}),
@@ -716,7 +712,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 ...(endIso ? { eventEndAt: endIso } : {}),
                 ...(eventPlaceName.trim() ? { eventPlaceName: eventPlaceName.trim() } : {}),
                 ...(eventNote.trim() ? { eventPrivateNote: eventNote.trim() } : {}),
-            });
+            };
+            // Hosting AS an enterprise goes through the enterprise's own route, with the enterprise in the
+            // PATH. Naming it in the body is refused by the node's spoof check before the route runs — every
+            // body field ending in `publicKey` must be the signer — which is why "Post as → an enterprise"
+            // used to fail with "Signature validation failed". Me and a group still post as the signer, so
+            // they keep the marketplace route.
+            const res = hostEnterprise
+                ? await treasuryPostEvent(hostEnterprise, event)
+                : await createMarketplacePost({
+                    type: 'event',
+                    category: 'community',
+                    credits: 0,
+                    priceType: 'fixed',
+                    authorPublicKey: identity.publicKey || '',
+                    repeatable: false,
+                    ...event,
+                });
             setNewPostTitle('');
             setNewPostDescription('');
             setNewPostPhotos([]);

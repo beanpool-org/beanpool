@@ -106,13 +106,46 @@ skip_check() {
   SKIPPED_NAMES+=("$name")
 }
 
+# Turbo fan-out caps, CI only.
+#
+# A public-repo `ubuntu-latest` runner has FOUR vCPUs. The four turbo checks below all start at
+# +0s, each is its own `pnpm turbo run` fanning out across the workspace at turbo's default
+# concurrency of 10, and five of the eight `test` tasks are vitest, which sizes its worker pool
+# from the machine's cores. That is comfortably thirty-odd processes competing for four cores, and
+# it is why five PRs failed in one night on timing-sensitive tests that passed on re-run: the
+# manager polling tests, a pwa chat test, the registrar clock-skew check — all inside `test`, all
+# running in that window.
+#
+# Measured on this PR (#1073), the run is 14m41s and its critical path is:
+#     build 2m40s (+0s)  ->  federation 12m01s (+2m40s)  ->  end
+# federation waits on build and then IS the rest of the run, so `build` is deliberately NOT
+# capped: every second build spends sharing the runner is a second on the whole job.
+#
+# lint (1m52s), test (3m48s) and typecheck (2m32s) all finish ~11 minutes before the run does.
+# That slack is the budget being spent here — they are capped, they get slower, and the job does
+# not, while the timing-sensitive suites inside `test` stop being run four-abreast.
+#
+# Local runs are untouched. A developer machine has the cores, and a cap there would only make
+# `pnpm test-all` slower for no one benefit.
+if [ -n "${CI:-}" ]; then
+  TURBO_TEST_ARGS="--concurrency=2"   # at most 2 vitest processes at a time
+  TURBO_AUX_ARGS="--concurrency=1"    # lint and typecheck have the most slack of all
+else
+  TURBO_TEST_ARGS=""
+  TURBO_AUX_ARGS=""
+fi
+
 echo "🚀 Running BeanPool checks (max $MAX_CONCURRENT_JOBS parallel jobs)..."
+if [ -n "${CI:-}" ]; then
+  echo "   CI: turbo capped — test $TURBO_TEST_ARGS, lint/typecheck $TURBO_AUX_ARGS, build uncapped (critical path)"
+fi
 echo ""
 
-# Core Monorepo Checks
+# Core Monorepo Checks. The *_ARGS expansions are deliberately unquoted: empty off-CI, they must
+# disappear rather than become an empty argument that turbo would reject.
 run_check "build"         pnpm turbo run build
-run_check "lint"          pnpm turbo run lint
-run_check "test"          pnpm turbo run test
+run_check "lint"          pnpm turbo run lint $TURBO_AUX_ARGS
+run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
 
 # Typecheck. `build` is what typechecks most of this repo — server, pwa, core and engine all run
 # `tsc` as their build — but apps/native has NO build script (an Expo app is built by EAS, not by
@@ -121,7 +154,7 @@ run_check "test"          pnpm turbo run test
 # That is the package where an unchecked type error is most expensive: native changes are verified
 # on a standalone build, not a dev client, so the feedback loop is a full rebuild rather than a
 # reload. This is a separate task from 'build' precisely so it does not imply an artifact.
-run_check "typecheck"     pnpm turbo run typecheck
+run_check "typecheck"     pnpm turbo run typecheck $TURBO_AUX_ARGS
 
 # Every apps/server/src/test-*.ts must be reachable from a run below. The suites are script-style,
 # so `turbo run test` cannot see them and only the hand-maintained lists in this file run them —

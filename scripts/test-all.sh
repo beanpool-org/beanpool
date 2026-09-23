@@ -264,6 +264,7 @@ run_federation_suites() {
       test-pulse-thumbnail-recovery
       test-pulse-cache-eviction
       test-callsign-predicates
+      test-message-tombstone
       test-recovery-shares
       test-sso
       test-daily-pulse

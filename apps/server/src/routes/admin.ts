@@ -1198,7 +1198,12 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
         return;
     }
     try {
-        adminRejectProject(projectId);
+        const ok = adminRejectProject(projectId);
+        if (!ok) {
+            ctx.status = 404;
+            ctx.body = { error: 'Project not found' };
+            return;
+        }
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;

@@ -54,6 +54,11 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-24 — Labels on a Pressable that wraps a whole card. Closed #1087.
+A card Pressable with no label is read from all its child text (status, amount, title, member). An
+`accessibilityLabel` on the wrapper replaces every word of it with your label, so the screen reader loses the
+details. Leave card wrappers unlabelled; use `accessibilityHint` for what the tap does if anything is needed.
+
 ### 2026-09-23 — Labels that repeat a button's only text. Closed #1036.
 `<Pressable accessibilityRole="button"><Text>Close</Text></Pressable>` is already announced as "Close, button": React
 Native names an accessible element from its child text on iOS and Android. Adding `accessibilityLabel="Close"` changes

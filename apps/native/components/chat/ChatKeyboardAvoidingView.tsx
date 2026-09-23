@@ -33,7 +33,9 @@ import {
     AndroidSoftInputModes,
     KeyboardController,
     useGenericKeyboardHandler,
+    useKeyboardState,
 } from 'react-native-keyboard-controller';
+import { initialChatKeyboardLift } from '../../utils/chat-keyboard-lift';
 
 /** How many chat screens are mounted. The window's mode belongs to the last one to leave. */
 let chatScreensMounted = 0;
@@ -58,7 +60,15 @@ interface Props {
 export function ChatKeyboardAvoidingView({ style, children }: Props) {
     useAndroidAdjustNothing();
 
-    const keyboardHeight = useSharedValue(0);
+    // A chat can mount with the keyboard already up — the DM opened straight from a search field's results,
+    // which keep their taps and `router.replace` to the chat. There is no keyboard event in that, so the
+    // handler below would not hear a height until the keyboard next MOVED, and the composer would sit under
+    // it until then. The provider already knows the height: start there. (Only the initial render's value is
+    // read; every later height comes from the handler.)
+    const keyboardHeight = useSharedValue(initialChatKeyboardLift({
+        height: useKeyboardState(s => s.height),
+        isVisible: useKeyboardState(s => s.isVisible),
+    }));
     // `useGenericKeyboardHandler` is the variant that does NOT set the window to adjustResize on mount —
     // the plain `useKeyboardHandler` does, and would undo the ADJUST_NOTHING above.
     useGenericKeyboardHandler({

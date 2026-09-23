@@ -342,6 +342,21 @@ export function shouldFollowNewMessages(s: { grew: boolean; isBackgroundPoll: bo
     return s.atBottom;
 }
 
+/**
+ * Whether the chat shows "could not open this chat" and a Try again, instead of the thread.
+ *
+ * It asks whether there is anything to READ, not whether the first read has finished. The first read marks
+ * itself done in a `finally`, so it is done on the failing path too — gating the error on "the first read has
+ * not finished" (as this did) meant the state could never render and a member whose first read failed sat in
+ * front of an empty thread with no way to retry.
+ *
+ * A read that fails while the thread is already on screen keeps the thread: the poll will try again, and
+ * replacing messages a member is reading with an error is worse than a stale thread.
+ */
+export function shouldShowChatLoadError(s: { loadError: string | null; messageCount: number }): boolean {
+    return !!s.loadError && s.messageCount === 0;
+}
+
 /** A failed chat action, as utils/db throws it: the node's status, its words, and whether they are ITS words. */
 export interface ChatActionError {
     status?: number | null;

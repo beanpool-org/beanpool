@@ -12,7 +12,7 @@ import {
     buildChatListItems, canDeleteMessage, canEditMessage, canReactToMessage, canRemoveMessage,
     canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator,
     isSystemLine, isTombstone, messageActions, normaliseThreadMessage, pendingAfterRead, reactionSummary,
-    shouldFollowNewMessages, showsAuthorName, threadMessageDisplayText, tombstoneText,
+    shouldFollowNewMessages, shouldShowChatLoadError, showsAuthorName, threadMessageDisplayText, tombstoneText,
     type ChatMessage, type ChatViewer,
 } from '../chat-actions';
 // The wording the event chat has always shown, so the two cannot drift apart unnoticed.
@@ -318,6 +318,24 @@ describe('following the newest message', () => {
         expect(isAtBottom(0)).toBe(true);
         expect(isAtBottom(12)).toBe(true);
         expect(isAtBottom(900)).toBe(false);
+    });
+});
+
+describe('the chat\'s "could not open this chat" state', () => {
+    it('renders when the first read fails and there is nothing to show', () => {
+        // The state it replaces was gated on the first read NOT being done, and the first read marks itself
+        // done in a `finally` — so it ran on the failing path too and this could never render. A member whose
+        // first read failed sat in front of an empty thread with no Try again.
+        expect(shouldShowChatLoadError({ loadError: 'Could not open this chat.', messageCount: 0 })).toBe(true);
+    });
+
+    it('keeps the thread when a later read fails with messages already on screen', () => {
+        expect(shouldShowChatLoadError({ loadError: 'Could not open this chat.', messageCount: 3 })).toBe(false);
+    });
+
+    it('stays away while the read is fine', () => {
+        expect(shouldShowChatLoadError({ loadError: null, messageCount: 0 })).toBe(false);
+        expect(shouldShowChatLoadError({ loadError: null, messageCount: 3 })).toBe(false);
     });
 });
 

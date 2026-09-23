@@ -621,14 +621,16 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
         }
     }
 
+    // Pin down whoever leads the group now — BEFORE the role is written. It changes nothing for a group whose
+    // lead is already stored; it settles the fallback for one whose lead_pubkey has never been written (a group
+    // imported from a node older than the lead convenor). Written afterwards it came too late: the fallback was
+    // evaluated with the promoted person already a convenor, so promoting someone who joined earlier, or the
+    // group's creator, moved the lead to them — the convenor doing the promoting lost the lead by promoting.
     const now = membershipWriteAt(db, groupId, targetPubkey);
+    reconcileGroupLead(db, groupId);
     db.prepare(
         "UPDATE group_members SET role = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
     ).run(newRole, now, groupId, targetPubkey);
-    // Pin down whoever leads the group now. It changes nothing for a group whose lead is already stored; it
-    // settles the fallback for one whose lead_pubkey has never been written, so a later promotion cannot quietly
-    // move the lead to whoever happens to have joined earliest.
-    reconcileGroupLead(db, groupId);
 
     return getGroupMember(db, groupId, targetPubkey)!;
 }

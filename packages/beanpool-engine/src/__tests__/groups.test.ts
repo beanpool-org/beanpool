@@ -407,6 +407,54 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.strictEqual(getGroupLead(db, stale.id), 'alice_pub');
     });
 
+    it('the lead convenor: a promotion never moves the lead, even with lead_pubkey NULL', () => {
+        // The mixed-version window: importRemoteState INSERTs a group row from a node older than the lead convenor,
+        // so lead_pubkey is NULL while the group has active convenors. reconcileGroupLead has to pin the current
+        // fallback lead BEFORE the role write, or the promotion is evaluated with the promoted person already a
+        // convenor — and the convenor who did the promoting loses the lead by promoting someone.
+
+        // (a) An earlier-joined MEMBER is promoted: the fallback would rather have them.
+        const earlier = createGroup(db, { name: 'Earlier Member', createdBy: 'alice_pub' });
+        joinGroup(db, earlier.id, 'carol_pub');
+        joinGroup(db, earlier.id, 'bob_pub');
+        setMemberRole(db, earlier.id, 'alice_pub', 'bob_pub', 'convenor');
+        handOverGroupLead(db, earlier.id, 'alice_pub', 'bob_pub');
+        // The creator is gone, and Carol joined before Bob.
+        assert.ok(removeGroupMember(db, earlier.id, 'alice_pub', 'alice_pub'));
+        db.prepare('UPDATE groups SET lead_pubkey = NULL WHERE id = ?').run(earlier.id);
+        // Explicitly older than Bob: joins one millisecond apart would otherwise be settled by the pubkey
+        // tie-break, and the fallback would pick Bob for a reason this test is not about.
+        db.prepare("UPDATE group_members SET joined_at = '2020-01-01T00:00:00.000Z' WHERE group_id = ? AND member_pubkey = 'carol_pub'")
+            .run(earlier.id);
+        assert.strictEqual(getGroupLead(db, earlier.id), 'bob_pub');
+
+        setMemberRole(db, earlier.id, 'bob_pub', 'carol_pub', 'convenor');
+        assert.strictEqual(getGroupLead(db, earlier.id), 'bob_pub');
+        assert.strictEqual(
+            (db.prepare('SELECT lead_pubkey FROM groups WHERE id = ?').get(earlier.id) as any).lead_pubkey,
+            'bob_pub',
+        );
+
+        // (b) The CREATOR is promoted back to convenor: the fallback's creator branch would rather have them.
+        const creator = createGroup(db, { name: 'Creator Back', createdBy: 'dave_pub' });
+        joinGroup(db, creator.id, 'bob_pub');
+        setMemberRole(db, creator.id, 'dave_pub', 'bob_pub', 'convenor');
+        handOverGroupLead(db, creator.id, 'dave_pub', 'bob_pub');
+        // The creator stays in the group as an ordinary member, so the creator branch does not match — yet.
+        setMemberRole(db, creator.id, 'dave_pub', 'dave_pub', 'member');
+        db.prepare('UPDATE groups SET lead_pubkey = NULL WHERE id = ?').run(creator.id);
+        assert.strictEqual(getGroupLead(db, creator.id), 'bob_pub');
+
+        setMemberRole(db, creator.id, 'bob_pub', 'dave_pub', 'convenor');
+        assert.strictEqual(getGroupLead(db, creator.id), 'bob_pub');
+        assert.strictEqual(
+            (db.prepare('SELECT lead_pubkey FROM groups WHERE id = ?').get(creator.id) as any).lead_pubkey,
+            'bob_pub',
+        );
+        // And the promotion itself still happened.
+        assert.strictEqual(getGroupMembers(db, creator.id).find(m => m.memberPubkey === 'dave_pub')?.role, 'convenor');
+    });
+
     it('convenor moderation: member removal and policy update', () => {
         const group = createGroup(db, {
             name: 'Team B',

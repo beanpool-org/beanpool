@@ -234,3 +234,118 @@ describe('MarketplacePage: "Your events" under ★ For You', () => {
         expect(screen.queryByTestId('your-events')).toBeNull();
     });
 });
+
+// Card View used to stretch every tile to the tallest cell in its row. A poll — four answers, the open-ballot
+// note, the turnout row — is much taller than a listing tile, so the tiles sharing its row grew a dead gap
+// between their description and VIEW (Marty, 2026-09-24). The grid still stretches cells; a tile no longer opts
+// into it, and the poll is given two columns so it is less often the reason a row is tall at all.
+describe('MarketplacePage: Card View gives tiles their own height', () => {
+    const poll = {
+        id: 'poll-1', type: 'poll', category: 'community', title: 'Where should the tool shed go?',
+        description: 'North gate or south barn?', credits: 0, priceType: 'fixed', status: 'active', active: true,
+        authorPublicKey: 'member-ada', authorCallsign: 'Ada', createdAt: '2026-09-16T00:00:00Z',
+        pollOptions: [
+            { id: 'o1', text: 'It is Amazing and we should start on it this weekend', votes: 2, percentage: 50 },
+            { id: 'o2', text: 'By the north gate', votes: 1, percentage: 25 },
+            { id: 'o3', text: 'Behind the south barn', votes: 1, percentage: 25 },
+            { id: 'o4', text: 'Neither', votes: 0, percentage: 0 },
+        ],
+        totalVotes: 4, pollVotes: [],
+    };
+    // One tile with a photo and a long description, one with neither: the two extremes of a tile's own height.
+    const chainsaw = {
+        id: 'post-2', title: 'Chainsaw', description: 'A very long description. '.repeat(20), type: 'offer',
+        category: 'tools', credits: 5, status: 'active', authorPublicKey: 'member-eve', authorCallsign: 'Eve',
+        createdAt: '2026-09-14T00:00:00Z', photos: ['/assets/bean.png'],
+    };
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([...posts, chainsaw, poll] as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    });
+
+    /** The clickable grid cell around a listing, and the card inside it. */
+    const cellOf = (title: string) => screen.getByRole('button', { name: new RegExp(`^Open listing: ${title}`) });
+    const tileOf = (title: string) => cellOf(title).firstElementChild as HTMLElement;
+    const pollCard = () => screen.getByText('Where should the tool shed go?').closest('div') as HTMLElement;
+    const pollOptions = () => screen.getByText('Neither').closest('button')!.parentElement as HTMLElement;
+
+    const openGrid = async () => {
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+    };
+
+    it('does not stretch a tile, or its cell, to the height of the row', async () => {
+        await openGrid();
+        for (const title of ['Bicycle Repair', 'Chainsaw']) {
+            // Anchor: this really is the tile's own root, not some wrapper.
+            expect(tileOf(title).className).toContain('flex flex-col');
+            expect(tileOf(title).className).not.toMatch(/(^|\s)h-full(\s|$)/);
+            expect(cellOf(title).className).not.toMatch(/(^|\s)h-full(\s|$)/);
+            // Dropping `h-full` is only half of it. The cell IS the grid item, and a grid with no `items-*`
+            // stretches its items to the row, so the cell stayed row-tall while the tile shrank — and the cell
+            // is what carries the click and the focus ring. `self-start` is what actually shrinks the cell.
+            // jsdom does no layout, so the height itself is measured in e2e/market-grid-shots.mjs.
+            expect(cellOf(title).className).toMatch(/(^|\s)self-start(\s|$)/);
+        }
+    });
+
+    it('reserves the clamped description line instead of letting it absorb the row', async () => {
+        await openGrid();
+        for (const title of ['Bicycle Repair', 'Chainsaw']) {
+            const description = tileOf(title).querySelector('p') as HTMLElement;
+            expect(description.className).toContain('line-clamp-1');
+            expect(description.className).toContain('min-h-[1.625em]');
+            // `flex-1` is the stretch: in a cell taller than the tile it swallowed the difference.
+            expect(description.className).not.toMatch(/(^|\s)flex-1(\s|$)/);
+        }
+    });
+
+    it('gives a tile with a photo and one without the same media height, so VIEW lines up', async () => {
+        await openGrid();
+        const mediaHeight = (title: string) =>
+            (tileOf(title).querySelector('div.relative.w-full') as HTMLElement).className.match(/h-\[\d+px\]/)?.[0];
+        expect(mediaHeight('Bicycle Repair')).toBe('h-[110px]'); // emoji placeholder
+        expect(mediaHeight('Chainsaw')).toBe('h-[110px]');       // photo
+    });
+
+    it('gives the poll two of the columns from md up, and lays its answers out in two', async () => {
+        await openGrid();
+        expect(pollCard().parentElement!.className).toContain('md:col-span-2');
+        expect(pollOptions().className).toContain('md:grid-cols-2');
+    });
+
+    // A two-column tile cannot start in the last column of a row: auto-placement moves it down and leaves that
+    // cell empty. Where the poll falls depends on the feed and the window, so the hole walks about. Dense flow
+    // lets the tiles after it take the cell instead (Marty on #1092).
+    it('lets the tiles after the poll fill a cell its two columns are too wide for', async () => {
+        await openGrid();
+        const gridEl = pollCard().parentElement!.parentElement as HTMLElement;
+        // Anchor: this really is the Card View grid, not a wrapper.
+        expect(gridEl.className).toContain('grid-cols-1');
+        expect(gridEl.className).toContain('xl:grid-cols-5');
+        expect(gridEl.className).toContain('grid-flow-row-dense');
+    });
+
+    it('shows poll answers in full in the grid — a ballot option you cannot read is not a choice', async () => {
+        await openGrid();
+        const label = screen.getByText('It is Amazing and we should start on it this weekend');
+        expect(label.className).toContain('break-words');
+        expect(label.className).not.toMatch(/(^|\s)truncate(\s|$)/);
+    });
+
+    it('leaves List View exactly as it was', async () => {
+        await openGrid();
+        await act(async () => { screen.getByRole('button', { name: 'Switch to List View' }).click(); });
+        await screen.findByRole('button', { name: 'Switch to Compact View' }); // the toggle has moved on: List View it is
+
+        expect(pollCard().parentElement!.className).toBe('w-full my-1');
+        expect(pollOptions().className).toBe('space-y-2 mb-3 mt-1');
+        expect(screen.getByText('It is Amazing and we should start on it this weekend').className)
+            .toMatch(/(^|\s)truncate(\s|$)/);
+    });
+});

@@ -129,4 +129,26 @@ describe('PollCard (PWA)', () => {
         const optionButton = screen.getByText('North Gate').closest('button');
         expect(optionButton).toHaveClass('focus-visible:ring-2');
     });
+
+    // In the Market grid a poll is given two columns (MarketplacePage), so it can afford two columns of answers
+    // and full labels. Everywhere else — List View, the single-post view — it keeps the column it had.
+    describe('answers in the Market grid', () => {
+        const optionsOf = (label: string) => screen.getByText(label).closest('button')!.parentElement as HTMLElement;
+
+        it('lays answers out in two columns from md up, and stops truncating them', () => {
+            render(<PollCard post={mockPost} identity={mockIdentity} viewMode="grid" />);
+            expect(optionsOf('North Gate').className).toBe('grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 mt-1');
+            expect(screen.getByText('North Gate').className).toContain('break-words');
+            expect(screen.getByText('North Gate').className).not.toMatch(/(^|\s)truncate(\s|$)/);
+        });
+
+        it('leaves the single-column, truncating layout alone anywhere else', () => {
+            for (const viewMode of [undefined, 'list' as const, 'compact' as const]) {
+                const view = render(<PollCard post={mockPost} identity={mockIdentity} viewMode={viewMode} />);
+                expect(optionsOf('North Gate').className).toBe('space-y-2 mb-3 mt-1');
+                expect(screen.getByText('North Gate').className).toMatch(/(^|\s)truncate(\s|$)/);
+                view.unmount();
+            }
+        });
+    });
 });

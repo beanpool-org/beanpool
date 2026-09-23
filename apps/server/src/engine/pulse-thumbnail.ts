@@ -271,11 +271,25 @@ export class PulseThumbnailCache {
  * Failures that trying again in five minutes cannot fix.
  *
  * A 403 from an expired CDN URL, a gone post, a body over the cap: the same request will get
- * the same answer tomorrow. Anything that might genuinely be transient — a 502, a timeout — is
- * deliberately NOT here, and keeps only the short in-memory negative cache.
+ * the same answer tomorrow. Anything that might genuinely be transient is deliberately NOT
+ * here, and keeps only the short in-memory negative cache, which a restart clears.
+ *
+ * 400 is the one that has to be argued for, because it looks definitive and is not:
+ *
+ *  - Every SsrfSecurityError becomes a 400 here, and resolveAndPinHost raises one for an
+ *    ordinary DNS failure — EAI_AGAIN, a resolver outage, a lookup timeout — exactly as it does
+ *    for a policy block. A thirty-second blip on the node's resolver would otherwise cost every
+ *    item scrolled past in that window an hour, then six, then a day, and survive the restart
+ *    that used to clear it.
+ *  - A genuine upstream HTTP 400 is transient often enough at a CDN to belong on the same side.
+ *
+ * A real policy block loses nothing by being here: it is refused before any connection is made,
+ * so repeating it costs the node no outbound request, and the five-minute cache is protection
+ * enough. The classification in pulse-resolver.ts is left exactly as it is; this is only about
+ * which outcomes are worth writing to disk.
  */
 export function isPersistentThumbnailFailure(status: number): boolean {
-    return status === 400 || status === 403 || status === 404 || status === 410 || status === 413;
+    return status === 403 || status === 404 || status === 410 || status === 413;
 }
 
 export interface ThumbnailBackoffEntry {

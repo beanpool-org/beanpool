@@ -18,6 +18,9 @@
  * 2. A failed item is not fetched again inside its backoff window — including after a restart.
  * 3. The backoff escalates 1 h -> 6 h -> 24 h, caps there, and a success clears it.
  * 4. One failure log line per backoff step, not one per request.
+ * 5. Which outcomes may be persisted at all: only 403/404/410/413. A DNS failure and an
+ *    upstream 400 stay on the five-minute in-memory cache, so a resolver blip cannot cost
+ *    an hour of blank thumbnails that a restart no longer clears.
  *
  * No network: the embed page is a committed fixture and every fetch is a mock that mirrors
  * ssrfSafeFetch's byte-limit behaviour. Nothing here contacts Instagram or any CDN.
@@ -37,7 +40,7 @@ import {
     INSTAGRAM_EMBED_MAX_BYTES,
     THUMBNAIL_BACKOFF_STEPS_MS,
 } from './engine/pulse-thumbnail.js';
-import { PayloadTooLargeError, type SsrfSafeResponse } from './engine/pulse-resolver.js';
+import { PayloadTooLargeError, SsrfSecurityError, type SsrfSafeResponse } from './engine/pulse-resolver.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -150,6 +153,21 @@ function makeFetchFn(page: Buffer, state: FetchState) {
     };
 }
 
+/** A plain non-2xx upstream answer, for the tests that only care about the status. */
+function errorResponse(url: string, status: number): SsrfSafeResponse {
+    return {
+        status,
+        statusText: 'Error',
+        headers: { 'content-type': 'text/plain' },
+        url,
+        buffer: async () => Buffer.from('Error'),
+        text: async () => 'Error',
+        json: async <T = any>(): Promise<T> => ({} as T),
+    };
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 function freshState(over: Partial<FetchState> = {}): FetchState {
     return { fetches: [], embedMaxBytesAsked: 0, ...over };
 }
@@ -180,6 +198,19 @@ function makeInstagramItem(channelId: string, ownerPubkey: string, externalId: s
         `INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, url, external_id, title, thumbnail_url, category, source, created_at, updated_at)
          VALUES (?, ?, ?, 'instagram', ?, ?, 'A post', ?, 'art', 'autolist', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(id, channelId, ownerPubkey, `https://www.instagram.com/p/${externalId}/`, externalId, STALE_THUMBNAIL_URL);
+    return id;
+}
+
+/**
+ * An item on no platform with an embed recovery, so a failed fetch is just a failed fetch.
+ * Section 5 is about which statuses are persisted, not about Instagram.
+ */
+function makePlainItem(channelId: string, ownerPubkey: string, thumbnailUrl: string): string {
+    const id = 'item_' + crypto.randomBytes(12).toString('hex');
+    db.prepare(
+        `INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, url, external_id, title, thumbnail_url, category, source, created_at, updated_at)
+         VALUES (?, ?, ?, 'rss', 'https://blog.example.org/a-post', NULL, 'A post', ?, 'art', 'autolist', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+    ).run(id, channelId, ownerPubkey, thumbnailUrl);
     return id;
 }
 
@@ -373,6 +404,93 @@ async function main(): Promise<void> {
     } finally {
         (logger as any).warn = realWarn;
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 6. Only a definitive failure may be written to disk
+    //
+    // The persisted backoff is a heavy instrument: an hour, then six, then a day, and a
+    // restart no longer clears it. So it may only be reached for an answer that will be the
+    // same tomorrow. Everything below keeps the old five-minute in-memory behaviour, which is
+    // what origin/main did with every failure.
+    //
+    // The Instagram loop this PR exists to fix runs on 403 + a failed recovery, and section 3
+    // still asserts that it earns a row.
+    // ──────────────────────────────────────────────────────────────────────────
+
+    // 6a. A DNS failure. resolveAndPinHost wraps EVERY dns.lookup error in SsrfSecurityError —
+    // EAI_AGAIN, a resolver outage, a lookup timeout — and getThumbnail maps that to 400. A
+    // thirty-second blip while a member scrolls the feed must not cost every item an hour.
+    const dnsFetches: string[] = [];
+    const dnsService = new PulseThumbnailService({
+        diskStore: null,
+        negativeTtlMs: 5,
+        fetchFn: (async (url: string): Promise<SsrfSafeResponse> => {
+            dnsFetches.push(url);
+            throw new SsrfSecurityError('DNS resolution failed for images.example.org: getaddrinfo EAI_AGAIN images.example.org');
+        }) as any,
+    });
+    const dnsItem = makePlainItem(chan, alice, 'https://images.example.org/during-a-resolver-blip.jpg');
+
+    const blipped = await dnsService.getThumbnail(dnsItem);
+    assert(blipped.status === 400, 'A DNS failure still refuses the request, exactly as it did before');
+    assert(backoffRowCount(dnsItem) === 0, 'A DNS failure writes NO backoff row — a resolver blip cannot cost an hour');
+
+    await dnsService.getThumbnail(dnsItem);
+    assert(dnsFetches.length === 1, 'Inside the in-memory TTL the refusal is served from memory, without a second fetch');
+
+    // Past the TTL the item goes back to the network — a blip costs minutes, as on origin/main.
+    await sleep(12);
+    const afterTtl = await dnsService.getThumbnail(dnsItem);
+    assert(dnsFetches.length === 2, 'Once the in-memory TTL expires the item is retried, not held for an hour');
+    assert(afterTtl.status === 400, 'The retry still refuses while the resolver is down');
+    assert(backoffRowCount(dnsItem) === 0, 'A second DNS failure still writes no row — there is no ladder to climb');
+
+    // 6b. A genuine upstream HTTP 400, which a CDN also returns transiently.
+    const badRequestFetches: string[] = [];
+    const badRequestItem = makePlainItem(chan, alice, 'https://images.example.org/bad-request.jpg');
+    const badRequestService = new PulseThumbnailService({
+        diskStore: null,
+        fetchFn: (async (url: string): Promise<SsrfSafeResponse> => {
+            badRequestFetches.push(url);
+            return errorResponse(url, 400);
+        }) as any,
+    });
+    const badRequest = await badRequestService.getThumbnail(badRequestItem);
+    assert(badRequest.status === 400, 'An upstream HTTP 400 is passed through as 400');
+    assert(backoffRowCount(badRequestItem) === 0, 'An upstream HTTP 400 writes no backoff row');
+
+    // 6c. The four that do escalate, unchanged.
+    const definitive: Array<{ status: number; why: string }> = [
+        { status: 403, why: 'an expired signed CDN URL' },
+        { status: 404, why: 'an image that is gone' },
+        { status: 410, why: 'a deleted post' },
+        { status: 413, why: 'a body over the cap' },
+    ];
+    for (const { status, why } of definitive) {
+        const item = makePlainItem(chan, alice, `https://images.example.org/definitive-${status}.jpg`);
+        const service = new PulseThumbnailService({
+            diskStore: null,
+            fetchFn: (async (url: string): Promise<SsrfSafeResponse> => {
+                if (status === 413) {
+                    throw new PayloadTooLargeError('Response exceeded maximum size limit of 2097152 bytes');
+                }
+                return errorResponse(url, status);
+            }) as any,
+        });
+        const res = await service.getThumbnail(item);
+        assert(res.status === status, `A ${status} (${why}) is refused with ${status}`);
+        assert(backoffRowCount(item) === 1, `A ${status} still escalates into the persisted backoff`);
+    }
+
+    // And a 5xx, which was never persisted and still is not.
+    const upstreamDownItem = makePlainItem(chan, alice, 'https://images.example.org/upstream-down.jpg');
+    const upstreamDownService = new PulseThumbnailService({
+        diskStore: null,
+        fetchFn: (async (url: string): Promise<SsrfSafeResponse> => errorResponse(url, 503)) as any,
+    });
+    const upstreamDown = await upstreamDownService.getThumbnail(upstreamDownItem);
+    assert(upstreamDown.status === 502, 'A 5xx is reported as 502');
+    assert(backoffRowCount(upstreamDownItem) === 0, 'A 5xx writes no backoff row');
 
     console.log(`\nResults: ${passed}/${run} assertions passed.`);
     process.exit(passed === run ? 0 : 1);

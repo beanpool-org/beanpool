@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 /**
  * The row of sub-tab buttons under a Settings section's title.
@@ -11,7 +11,7 @@ export function SubTabStrip({ wrap, children }: { wrap: boolean; children: React
     const ref = useRef<HTMLDivElement>(null);
     const last = useRef<{ active: Element | null; width: number }>({ active: null, width: 0 });
 
-    useLayoutEffect(() => {
+    const align = useCallback(() => {
         const strip = ref.current;
         const active = strip?.querySelector('[aria-current="page"]') ?? null;
         if (!strip || !active) return;
@@ -26,6 +26,34 @@ export function SubTabStrip({ wrap, children }: { wrap: boolean; children: React
         if (a.left < s.left || a.right > s.right) {
             strip.scrollLeft += a.left - s.left - 16;
         }
+    }, []);
+
+    useLayoutEffect(align);
+
+    /**
+     * A render is not the only thing that moves these buttons, and the effect above only sees renders.
+     *
+     * The strip is laid out again when the web font finally applies, when a label gains a count
+     * (`Escrow Disputes (3)`), and when the phone's text size changes — none of which is a React render. Measured
+     * on #1063 at 320px: a hand-off link to Proposals left the strip unscrolled because the tab genuinely fitted
+     * in the fallback font; the real font then landed, widened every label, and pushed the active tab 33px past
+     * the strip's right edge, where it stayed, because nothing rendered again to notice. It only ever passed
+     * before by luck — the polling this PR removed happened to deliver one more render after the font had
+     * settled, and the first thing to make the renders land earlier uncovered it.
+     *
+     * A ResizeObserver fires on the re-layout itself, which is the event that actually matters. It cannot fight
+     * an owner scrolling the strip by hand: the guard above makes a fire with unchanged metrics a no-op, and
+     * setting `scrollLeft` resizes nothing, so this cannot feed itself.
+     */
+    useEffect(() => {
+        const strip = ref.current;
+        if (!strip || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => align());
+        ro.observe(strip);
+        // The buttons too: the strip itself is `max-w-full`, so a font that widens every label changes the
+        // children's boxes and leaves the strip's own box exactly as it was.
+        for (const child of Array.from(strip.children)) ro.observe(child);
+        return () => ro.disconnect();
     });
 
     return (

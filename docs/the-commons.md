@@ -267,7 +267,24 @@ lead moves by hand-over, by stepping down or leaving (hand over first while anyo
 the 30-day-silence vote — which now covers a silent lead, with the group's other convenors voting, or
 its members when the lead is its only convenor — or by a community Decision. Stored as
 `groups.lead_pubkey`, backfilled to the creator while they are an active convenor and otherwise to the
-longest-serving active convenor.
+longest-serving active convenor. Both that column and `groups.created_by` move with a member's key when
+they re-key, so somebody who loses their phone and recovers on a new key comes back as the same lead —
+without that, the hand-over would quietly reverse itself.
+
+**A suspended lead is still the lead, and that is deliberate, not a bug.** Who leads a group is read from
+group membership alone — it does not consult `members.status`. So a lead whose *account* a node admin
+suspends, or who is offboarded from the node, keeps the group's lead: nobody can demote or remove them,
+and their group carries on with a lead who cannot act. This follows directly from the rule above. Node
+admins hold no power over groups, and letting a suspension move a group's lead would hand them exactly
+that power through the back door — a rogue lead has to be dealt with by the community, not by the node.
+
+What a community actually does about one today is the **30-day-silence vote**: a suspended lead stops
+being active, so 30 days after their last activity the other convenors — or the members, when the lead is
+the group's only convenor — can vote a replacement in. Until that window opens there is nothing to be
+done, because the paths that are faster all need the lead themselves: hand-over and stepping down. The
+Decisions the node has (`suspend_member`, `remove_member`) act on the *account*, not on the group, and
+none of them names a group's lead as their subject; a group-scoped Decision effect that replaces a lead
+outright does not exist yet, and is the obvious thing to add if 30 days ever proves too long to wait.
 
 Why ownership is the wrong shape for this specific object:
 

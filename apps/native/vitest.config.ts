@@ -19,5 +19,11 @@ export default defineConfig({
     test: {
         environment: 'node',
         include: ['utils/__tests__/**/*.test.ts'],
+        // CI only. One four-vCPU runner hosts build, lint, test and typecheck at once, and vitest
+        // otherwise sizes its pool from the machine's cores — five packages each doing that is what
+        // starved the timing-sensitive suites elsewhere in this workspace into failing on a
+        // stopwatch. See scripts/test-all.sh. Uncapped locally.
+        minWorkers: process.env.CI ? 1 : undefined,
+        maxWorkers: process.env.CI ? 2 : undefined,
     },
 });

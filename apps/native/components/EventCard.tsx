@@ -98,12 +98,23 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                 accessibilityLabel={selected ? `${label}, selected. Tap to clear` : label}
                 accessibilityState={{ selected, disabled: closed || !!pending, busy: pending === status }}
             >
-                {pending === status ? (
-                    <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
-                ) : (
-                    <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-                        {selected ? `${label} ✓` : label}
-                    </Text>
+                {/*
+                  * The label stays in the layout while the RSVP is in flight, hidden under the spinner rather
+                  * than replaced by it. The buttons size to their own labels now, so a spinner-only child would
+                  * shrink the button to spinner width the moment it is tapped: a stacked row would re-flow onto
+                  * one line under the finger, and back again when the save lands.
+                  */}
+                <Text
+                    style={[styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]}
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={1.3}
+                >
+                    {selected ? `${label} ✓` : label}
+                </Text>
+                {pending === status && (
+                    <View style={styles.rsvpSpinner} pointerEvents="none">
+                        <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
+                    </View>
                 )}
             </Pressable>
         );
@@ -268,6 +279,14 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             fontSize: 14,
             fontWeight: '700',
             color: EVENT_ACCENT,
+        },
+        rsvpTextBusy: {
+            opacity: 0,
+        },
+        rsvpSpinner: {
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         rsvpTextSelected: {
             color: '#fff',

@@ -188,9 +188,17 @@ export function EventDetail({ post }: EventDetailProps) {
                 accessibilityLabel={selected ? `${label}, selected. Tap to clear` : label}
                 accessibilityState={{ selected, disabled: closed || !!pending, busy: pending === status }}
             >
-                {pending === status
-                    ? <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
-                    : <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected]} numberOfLines={1}>{selected ? `${label} ✓` : label}</Text>}
+                {/*
+                  * The label holds the button's width while the RSVP is in flight (the card does the same): the
+                  * buttons size to their own labels, so swapping the label out for the spinner would shrink the
+                  * button under the finger and re-flow a stacked row mid-tap.
+                  */}
+                <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]} numberOfLines={1}>{selected ? `${label} ✓` : label}</Text>
+                {pending === status && (
+                    <View style={styles.rsvpSpinner} pointerEvents="none">
+                        <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
+                    </View>
+                )}
             </Pressable>
         );
     };
@@ -392,6 +400,8 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         rsvpBtnSelected: { backgroundColor: EVENT_ACCENT },
         rsvpText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
         rsvpTextSelected: { color: '#fff' },
+        rsvpTextBusy: { opacity: 0 },
+        rsvpSpinner: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
         chatBtn: {
             minHeight: 48, justifyContent: 'center', paddingHorizontal: 12, marginBottom: 14,
             borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT, backgroundColor: colors.surface.card,

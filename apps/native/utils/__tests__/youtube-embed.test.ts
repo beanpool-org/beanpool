@@ -181,17 +181,46 @@ describe('the video id behind a link', () => {
 });
 
 describe('what the player may navigate to', () => {
-    it('lets the player load itself and YouTube\'s assets', () => {
+    it('lets the player load the two documents it is made of', () => {
         expect(playerNavigation('about:blank')).toBe('allow');
         expect(playerNavigation(PULSE_PLAYER_ORIGIN)).toBe('allow');
+        expect(playerNavigation(`${PULSE_PLAYER_ORIGIN}/`)).toBe('allow');
         expect(playerNavigation(youtubeEmbedUrl(ID))).toBe('allow');
+        expect(playerNavigation(`${YOUTUBE_EMBED_HOST}/embed/${ID}`)).toBe('allow');
         expect(playerNavigation(YOUTUBE_IFRAME_API_URL)).toBe('allow');
+        // The API script's own next hop, which it names in its first line.
+        expect(playerNavigation('https://www.youtube.com/s/player/dac2d7b2/www-widgetapi.vflset/www-widgetapi.js')).toBe('allow');
+    });
+
+    it("lets the player fetch the assets and streams it actually plays from", () => {
         expect(playerNavigation('https://i.ytimg.com/vi/x/hq.jpg')).toBe('allow');
+        expect(playerNavigation('https://s.ytimg.com/yts/jsbin/x.js')).toBe('allow');
+        expect(playerNavigation('https://rr3---sn-4g5edne7.googlevideo.com/videoplayback?x=1')).toBe('allow');
+        expect(playerNavigation('https://fonts.gstatic.com/s/roboto/v1/x.woff2')).toBe('allow');
     });
 
     it('hands a tap that would leave the player to the browser or the YouTube app', () => {
         expect(playerNavigation(`https://www.youtube.com/watch?v=${ID}`)).toBe('external');
         expect(playerNavigation('https://www.youtube.com/@beanpool')).toBe('external');
+    });
+
+    it('never keeps another corner of YouTube loaded inside the card', () => {
+        // The allow-list used to be a list of hosts with the pages we could think of carved out, so
+        // every `*.youtube.com` that was not www/m/bare matched by suffix and stayed in the card —
+        // and so did any path at all on the no-cookie host. A sign-in or consent page in a small
+        // unmarked rectangle is the thing "a video player is not a browser" exists to stop, and a
+        // consent bounce is a real destination for members outside AU/US.
+        expect(playerNavigation('https://accounts.youtube.com/signin')).toBe('external');
+        expect(playerNavigation('https://consent.youtube.com/m?continue=x')).toBe('external');
+        expect(playerNavigation('https://music.youtube.com/watch?v=' + ID)).toBe('external');
+        expect(playerNavigation('https://studio.youtube.com/')).toBe('external');
+        expect(playerNavigation(`${YOUTUBE_EMBED_HOST}/watch?v=${ID}`)).toBe('external');
+        expect(playerNavigation(`${YOUTUBE_EMBED_HOST}/`)).toBe('external');
+        // The API path is allowed on the host that serves it, and nowhere else.
+        expect(playerNavigation(`${YOUTUBE_EMBED_HOST}/iframe_api`)).toBe('external');
+        expect(playerNavigation('https://music.youtube.com/iframe_api')).toBe('external');
+        // ...and an embed path is allowed on the embed host, not wherever it turns up.
+        expect(playerNavigation(`https://www.youtube.com/embed/${ID}`)).toBe('external');
     });
 
     it('never keeps a Google property loaded inside the card', () => {
@@ -204,9 +233,13 @@ describe('what the player may navigate to', () => {
 
     it('blocks everywhere else — a video player is not a browser', () => {
         expect(playerNavigation('https://evil.example/phish')).toBe('block');
+        expect(playerNavigation('https://somewhere.example/embed/' + ID)).toBe('block');
         expect(playerNavigation('http://www.youtube.com/watch?v=' + ID)).toBe('block');
         expect(playerNavigation('javascript:alert(1)')).toBe('block');
         expect(playerNavigation('https://youtube.com.evil.example/')).toBe('block');
+        expect(playerNavigation('https://ytimg.com.evil.example/')).toBe('block');
+        // Our own origin is compared as an origin, not as a prefix of the string.
+        expect(playerNavigation(`${PULSE_PLAYER_ORIGIN}.evil.example/`)).toBe('block');
         expect(playerNavigation('')).toBe('block');
     });
 });

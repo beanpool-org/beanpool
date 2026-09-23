@@ -233,21 +233,30 @@ export function youtubePlayerErrorMessage(code: number): string {
 }
 
 /**
- * Hosts the player is allowed to navigate to on its own: YouTube's and the assets it pulls in.
+ * Hosts whose files the player pulls in while it plays: thumbnails and sprites from `ytimg.com`,
+ * the video streams themselves from `googlevideo.com`, shared static assets from `gstatic.com`.
  *
- * Deliberately *not* `google.com`. Matching is by suffix, so a bare `google.com` here would let the
- * player keep `accounts.google.com`, `ads.google.com` or any other Google property loaded inside
- * this small unmarked rectangle — a sign-in page in a card the member cannot inspect is exactly the
- * thing "a video player is not a browser" is meant to prevent. The embed's own assets and video
- * streams come from `ytimg.com`, `googlevideo.com` and `gstatic.com`, which are listed.
+ * These are matched by suffix because the real names are generated — `i.ytimg.com`,
+ * `rr3---sn-4g5edne7.googlevideo.com` — and they carry assets, not pages a member could be walked
+ * into. Deliberately *not* `google.com`: a suffix match on that would let `accounts.google.com` or
+ * any other Google property stay loaded inside this small unmarked rectangle.
  */
-const PLAYER_HOSTS = [
-    'youtube-nocookie.com',
-    'youtube.com',
+const PLAYER_ASSET_HOSTS = [
     'ytimg.com',
     'googlevideo.com',
     'gstatic.com',
 ];
+
+/** YouTube's own hosts. Anything here that is not the player is the member choosing to leave. */
+const YOUTUBE_HOSTS = [
+    'youtube.com',
+    'youtube-nocookie.com',
+];
+
+/** The two documents the player is made of, and the two paths that serve them. */
+const EMBED_HOSTNAME = 'www.youtube-nocookie.com';
+const IFRAME_API_HOSTNAME = 'www.youtube.com';
+const IFRAME_API_PATH = '/iframe_api';
 
 /**
  * What to do with a navigation the player asks for.
@@ -255,25 +264,43 @@ const PLAYER_HOSTS = [
  * `allow` keeps it inside the WebView, `external` hands it to the member's browser or YouTube app
  * (tapping the video's title, for instance), and `block` drops it. The default is `block`: a video
  * player has no business navigating a WebView inside this app to somewhere we did not expect.
+ *
+ * The list is of *what the player is*, not of who owns it. Listing hosts and then carving out the
+ * pages we could think of gets this backwards, and left `accounts.youtube.com`,
+ * `consent.youtube.com` and `music.youtube.com` — and any path at all on the no-cookie host —
+ * loading inside the card. A consent bounce is a real destination for members outside AU/US, and it
+ * is exactly the page that must not appear in a rectangle nobody can inspect. So four things are
+ * allowed and everything else on YouTube's hosts is handed out:
+ *
+ * - `/embed/...` on `www.youtube-nocookie.com`, which is the player frame;
+ * - `/iframe_api` on `www.youtube.com`, which is the API script (`YOUTUBE_IFRAME_API_URL`);
+ * - `/s/...` on the same host, which is where that script fetches `www-widgetapi.js` from;
+ * - the asset hosts above.
  */
 export function playerNavigation(url: string): 'allow' | 'external' | 'block' {
     if (typeof url !== 'string' || !url) return 'block';
-    if (url === 'about:blank' || url.startsWith(PULSE_PLAYER_ORIGIN)) return 'allow';
+    if (url === 'about:blank') return 'allow';
 
     let u: URL;
     try { u = new URL(url); } catch { return 'block'; }
     if (u.protocol !== 'https:') return 'block';
 
-    const host = u.hostname.toLowerCase();
-    const isPlayerHost = PLAYER_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
-    if (!isPlayerHost) return 'block';
+    // Our own document. Compared as a parsed origin, not a prefix: `org.beanpool.pillar.evil`
+    // starts with `https://org.beanpool.pillar` and is not us.
+    if (u.origin === PULSE_PLAYER_ORIGIN) return 'allow';
 
-    // The player itself lives under /embed and the API assets; anything else on youtube.com is the
-    // member choosing to leave — the watch page, the channel, a share link.
-    if (host === 'www.youtube.com' || host === 'youtube.com' || host === 'm.youtube.com') {
-        return u.pathname.startsWith('/embed/') || u.pathname === '/iframe_api' ? 'allow' : 'external';
-    }
-    return 'allow';
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname;
+
+    if (host === EMBED_HOSTNAME && path.startsWith('/embed/')) return 'allow';
+    if (host === IFRAME_API_HOSTNAME && (path === IFRAME_API_PATH || path.startsWith('/s/'))) return 'allow';
+    if (PLAYER_ASSET_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return 'allow';
+
+    // Somewhere else on YouTube: the watch page, a channel, a sign-in or consent bounce. The member
+    // gets it in their browser or the YouTube app, where they can see where they are.
+    if (YOUTUBE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return 'external';
+
+    return 'block';
 }
 
 /**

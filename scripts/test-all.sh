@@ -278,6 +278,7 @@ run_federation_suites() {
       test-logger-sanitization
       test-manager-build
       test-onboarding-funnel
+      test-funnel-cohort
       test-request-auth
       test-api-path-auth
       test-read-auth-default

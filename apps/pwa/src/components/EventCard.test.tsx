@@ -117,6 +117,89 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
     });
 });
 
+describe("The event's photo on the card (Damo, 2026-09-23)", () => {
+    const withPhoto: any = { ...baseEvent, photos: ['/uploads/working-bee.jpg', '/uploads/second.jpg'] };
+
+    it('shows the first photo, with the title as its alt text', () => {
+        renderAt320(<EventCard post={withPhoto} identity={identity} distanceKm={2.4} />);
+        const img = within(screen.getByTestId('event-card')).getByRole('img');
+        expect(img).toHaveAttribute('src', '/uploads/working-bee.jpg');
+        expect(img).toHaveAttribute('alt', baseEvent.title);
+    });
+
+    it('shows no photo at all when the event has none, and the card reads as it always did', () => {
+        renderAt320(<EventCard post={baseEvent} identity={identity} distanceKm={2.4} />);
+        const card = screen.getByTestId('event-card');
+        expect(within(card).queryByRole('img')).toBeNull();
+        const lines = within(card).getByRole('button', { name: /Open event/ }).querySelectorAll(':scope > span');
+        expect(lines[0].textContent).toBe('SAT 28 SEP ·9:00–12:00');
+        expect(lines[1].textContent).toBe(baseEvent.title);
+    });
+
+    it('treats an empty photo list as no photo', () => {
+        renderAt320(<EventCard post={{ ...baseEvent, photos: [] }} identity={identity} />);
+        expect(within(screen.getByTestId('event-card')).queryByRole('img')).toBeNull();
+    });
+
+    // Decision 3: the photo lives inside the tap target that opens the event. It must not become a second one —
+    // an offer card's photo opens a lightbox, and a second target here would put two answers under one thumb.
+    it('is inside the card’s one tap target, not a second one', () => {
+        renderAt320(<EventCard post={withPhoto} identity={identity} onOpen={() => {}} />);
+        const card = screen.getByTestId('event-card');
+        const open = within(card).getByRole('button', { name: /Open event/ });
+        const img = within(card).getByRole('img');
+        expect(open.contains(img)).toBe(true);
+        expect(img.closest('button')).toBe(open);
+        expect(within(card).queryByRole('button', { name: /photo/i })).toBeNull();
+    });
+
+    // Decision 1: an event should sit among the offers, so the photo takes the same size, crop and rounding the
+    // offer card uses in that view — MarketplaceCard's 110px banner in the grid, its 64px square in the list.
+    it('matches the offer card: a banner in the grid, a square thumbnail in the list', () => {
+        const { unmount } = renderAt320(<EventCard post={withPhoto} identity={identity} />);
+        const grid = within(screen.getByTestId('event-card')).getByRole('img');
+        expect(grid.className).toMatch(/h-\[110px\]/);
+        expect(grid.className).toMatch(/w-full/);
+        expect(grid.className).toMatch(/object-cover/);
+        expect(grid.className).toMatch(/rounded-xl/);
+        unmount();
+
+        renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="list" />);
+        const list = within(screen.getByTestId('event-card')).getByRole('img');
+        expect(list.className).toMatch(/w-16/);
+        expect(list.className).toMatch(/h-16/);
+        expect(list.className).toMatch(/object-cover/);
+        expect(list.className).toMatch(/rounded-xl/);
+        expect(list.className).toMatch(/flex-shrink-0/);
+    });
+
+    // Decision 1 again, in the one view where matching the offer card means showing nothing: MarketplaceCard's
+    // compact branch is a condensed row with no photo at all, built to double the listings on screen. A thumbnail
+    // only the event had would make it the odd card out again, in the view with the least room for it.
+    it('shows no photo in the compact view, where the offer cards beside it have none either', () => {
+        renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="compact" />);
+        const card = screen.getByTestId('event-card');
+        expect(within(card).queryByRole('img')).toBeNull();
+        // And the lines stay the stack they have always been, not a column beside an empty gap.
+        const lines = within(card).getByRole('button', { name: /Open event/ }).querySelectorAll(':scope > span');
+        expect(lines[0].textContent).toBe('SAT 28 SEP ·9:00–12:00');
+        expect(lines[1].textContent).toBe(baseEvent.title);
+    });
+
+    // Decision 4: at 320px with 1.3× text the photo gives way before the card does, and the RSVP row keeps the
+    // card's full width under it rather than being squeezed into the column beside the thumbnail.
+    it('holds at 320px: the photo cannot push the card wider, and the RSVP row keeps its own row', () => {
+        renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="list" />);
+        const card = screen.getByTestId('event-card');
+        expect(card.className).toMatch(/overflow-hidden/);
+        const img = within(card).getByRole('img');
+        const going = screen.getByRole('button', { name: 'Going ✓' });
+        expect(going.className).toContain('min-h-[48px]');
+        // The RSVP buttons are siblings of the row that holds the photo, never inside it.
+        expect(img.parentElement?.contains(going)).toBe(false);
+    });
+});
+
 describe('EventDetail', () => {
     beforeEach(() => {
         vi.mocked(api.rsvpEvent).mockReset();

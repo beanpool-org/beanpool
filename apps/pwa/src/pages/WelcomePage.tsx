@@ -328,16 +328,19 @@ export function WelcomePage({ onComplete }: Props) {
         };
     }, [showQrPairing, pairingSession, pairingStatus, onComplete]);
 
-    // Count the backup step being drawn — once per join, not once per render. The variant is
-    // the keeper-count state from the design doc; in Phase A it is always 'C', the user's
-    // twelve words and nothing else. Sent anyway rather than left blank, so that when states
-    // A and B become reachable the dashboard already has the shape to compare against.
+    // Count the backup step being drawn. The ref holds it to once per mount;
+    // recordOnboardingEvent holds it to once per person per node, which is what a reload or
+    // a reopened tab part way through a join needs.
+    //
+    // The keeper-count variant is gone. It was hard-coded 'C' on every signup here, states A
+    // and B never became reachable, keeper recovery has been removed, and the panel that
+    // showed those states is gone with it — so it was recording one constant forever.
     const protectionShownRef = useRef(false);
     useEffect(() => {
         const onBackupStep = hasMnemonic(pendingIdentity) && !showAvatarSetup && !showOnboardingGuide;
         if (!onBackupStep || protectionShownRef.current) return;
         protectionShownRef.current = true;
-        recordOnboardingEvent('protection_shown', 'C');
+        recordOnboardingEvent('protection_shown');
     }, [pendingIdentity, showAvatarSetup, showOnboardingGuide]);
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
 

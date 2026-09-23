@@ -32,6 +32,14 @@ describe('OnboardingModule', () => {
 
     const mockSelectNode = vi.fn();
 
+    const renderModule = () => render(
+        <OnboardingModule
+            profiles={mockProfiles}
+            activeProfileId="node-1"
+            onSelectNode={mockSelectNode}
+        />
+    );
+
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -41,13 +49,7 @@ describe('OnboardingModule', () => {
             () => new Promise(() => {}) // pending promise
         );
 
-        render(
-            <OnboardingModule
-                profiles={mockProfiles}
-                activeProfileId="node-1"
-                onSelectNode={mockSelectNode}
-            />
-        );
+        renderModule();
 
         expect(screen.getByRole('heading', { name: /Onboarding/i })).toBeInTheDocument();
         expect(screen.getByText(/How many people tried to join Node Alpha/i)).toBeInTheDocument();
@@ -65,13 +67,7 @@ describe('OnboardingModule', () => {
             new Error('Network error reaching node')
         );
 
-        render(
-            <OnboardingModule
-                profiles={mockProfiles}
-                activeProfileId="node-1"
-                onSelectNode={mockSelectNode}
-            />
-        );
+        renderModule();
 
         await waitFor(() => {
             expect(screen.getByText("Couldn't read this node")).toBeInTheDocument();
@@ -94,65 +90,145 @@ describe('OnboardingModule', () => {
         ).toBeInTheDocument();
     });
 
-    it('renders empty funnel notice when no tallied data exists', async () => {
-        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
-            days: 30,
-            rows: [],
-        });
+    it('says plainly when nobody joined and when no step has been counted per person', async () => {
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({ days: 30, rows: [] });
 
-        render(
-            <OnboardingModule
-                profiles={mockProfiles}
-                activeProfileId="node-1"
-                onSelectNode={mockSelectNode}
-            />
-        );
+        renderModule();
 
         await waitFor(() => {
-            expect(
-                screen.getByText(/Nothing has been tallied yet on this node/i)
-            ).toBeInTheDocument();
+            expect(screen.getByText(/Nobody joined in this window/i)).toBeInTheDocument();
         });
-        expect(screen.getAllByText('not measured yet').length).toBeGreaterThan(0);
+        expect(screen.getByText(/Nothing counted once per person yet/i)).toBeInTheDocument();
     });
 
-    it('renders funnel steps, calculated conversion percentages, rejections, and protection choices', async () => {
+    /**
+     * The cohort: one group of people, followed. "Joined" is the base and is 100%; the rows
+     * under it are subsets of that same group, so their percentages are shares of it.
+     */
+    it('renders the cohort with Joined as 100% and the follow-ups as shares of it', async () => {
         vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
             days: 30,
             rows: [
-                { day: '2026-03-01', event: 'invite_attempt', variant: 'standard', count: 10 },
-                { day: '2026-03-01', event: 'member_created', variant: 'standard', count: 8 },
-                { day: '2026-03-01', event: 'avatar_published', variant: 'standard', count: 6 },
-                { day: '2026-03-01', event: 'invite_failed', variant: 'invalid', count: 2 },
-                { day: '2026-03-01', event: 'invite_failed', variant: 'expired', count: 1 },
-                { day: '2026-03-01', event: 'invite_reentry', variant: 'standard', count: 1 },
-                { day: '2026-03-01', event: 'protection_shown', variant: 'A', count: 5 },
+                { day: '2026-09-01', event: 'member_created', variant: '', count: 8 },
+                { day: '2026-09-01', event: 'cohort_photo', variant: '', count: 6 },
+                { day: '2026-09-01', event: 'cohort_posted', variant: '', count: 2 },
+                { day: '2026-09-02', event: 'member_created', variant: '', count: 2 },
             ],
         });
 
-        render(
-            <OnboardingModule
-                profiles={mockProfiles}
-                activeProfileId="node-1"
-                onSelectNode={mockSelectNode}
-            />
-        );
+        renderModule();
+
+        await waitFor(() => {
+            expect(screen.getByText('Joined')).toBeInTheDocument();
+        });
+
+        const row = (label: string) =>
+            screen.getByText(label).closest('div.p-3') as HTMLElement;
+
+        // 10 joined across the two days, and every rate below is a share of that.
+        expect(row('Joined')).toHaveTextContent('10');
+        expect(row('Joined')).toHaveTextContent('100%');
+        expect(row('Has a photo')).toHaveTextContent('6');
+        expect(row('Has a photo')).toHaveTextContent('60%');
+        expect(row('Has posted')).toHaveTextContent('2');
+        expect(row('Has posted')).toHaveTextContent('20%');
+
+        // The screen says out loud that the in-app steps are not tied to these people.
+        expect(screen.getByText(/cannot link these/i)).toBeInTheDocument();
+    });
+
+    /**
+     * The in-app steps count only rows a client deduplicated per person. The old
+     * one-per-showing rows are what produced "56 showings from 20 joins, shown as 350%";
+     * they cannot be corrected after the fact, so they are named and left out.
+     */
+    it('adds up only the per-person in-app reports, and names the day they start from', async () => {
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
+            days: 30,
+            rows: [
+                { day: '2026-09-01', event: 'member_created', variant: '', count: 20 },
+                // Old, one-per-showing: 56 reports from 20 people. Ignored.
+                { day: '2026-09-01', event: 'protection_shown', variant: 'C', count: 56 },
+                { day: '2026-09-01', event: 'guide_complete', variant: '', count: 9 },
+                // New, one per person.
+                { day: '2026-09-10', event: 'protection_shown', variant: 'once', count: 7 },
+                { day: '2026-09-11', event: 'protection_choice', variant: 'once:words', count: 3 },
+                { day: '2026-09-11', event: 'protection_choice', variant: 'once:skip', count: 1 },
+                { day: '2026-09-12', event: 'guide_complete', variant: 'once', count: 4 },
+            ],
+        });
+
+        renderModule();
+
+        await waitFor(() => {
+            expect(screen.getByText('Saw the protection screen')).toBeInTheDocument();
+        });
+
+        const row = (label: string) =>
+            screen.getByText(label).closest('div.p-3') as HTMLElement;
+
+        expect(row('Saw the protection screen')).toHaveTextContent('7');
+        expect(row('Saw the protection screen')).not.toHaveTextContent('56');
+        // Both sub-types of the same step add up into one figure for the step.
+        expect(row('Chose how to be protected')).toHaveTextContent('4');
+        expect(row('Finished the guide')).toHaveTextContent('4');
+
+        // The earliest per-person day, not the earliest day in the window.
+        expect(screen.getByText(/Counted once per person since/i)).toHaveTextContent('2026-09-10');
+        // 56 + 9 older reports, named rather than silently dropped.
+        expect(screen.getByText(/older reports are left out/i)).toHaveTextContent('65');
+    });
+
+    it('keeps codes as their own box, counted as attempts rather than people', async () => {
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
+            days: 30,
+            rows: [
+                { day: '2026-09-01', event: 'invite_attempt', variant: '', count: 10 },
+                { day: '2026-09-01', event: 'invite_reentry', variant: '', count: 1 },
+                { day: '2026-09-01', event: 'invite_failed', variant: 'invalid', count: 2 },
+                { day: '2026-09-01', event: 'invite_failed', variant: 'expired', count: 1 },
+                { day: '2026-09-01', event: 'member_created', variant: '', count: 6 },
+            ],
+        });
+
+        renderModule();
 
         await waitFor(() => {
             expect(screen.getByText('Entered an invite code')).toBeInTheDocument();
         });
 
-        expect(screen.getAllByText('Joined').length).toBeGreaterThan(0);
-        expect(screen.getByText('Added a photo')).toBeInTheDocument();
-
-        // Rejections section
+        expect(screen.getByText(/Attempts, not people/i)).toBeInTheDocument();
         expect(screen.getByText('Code not recognised')).toBeInTheDocument();
-        expect(screen.getByText('2')).toBeInTheDocument();
         expect(screen.getByText('Code had expired')).toBeInTheDocument();
-        expect(screen.getAllByText('1').length).toBeGreaterThan(0);
+        expect(screen.getByText(/already-a-member re-entry/i)).toBeInTheDocument();
+    });
 
-        // Keeper protection states
-        expect(screen.getByText('3 keepers — had a spare to offer')).toBeInTheDocument();
+    /**
+     * Both were stale: keeper recovery is gone, so nothing lands in the keepers panel and
+     * nothing "arrives with Phase A" any more. Leaving either on screen tells an operator
+     * something untrue about their own community.
+     */
+    it('no longer shows the keepers panel or the Phase A hints', async () => {
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
+            days: 30,
+            rows: [
+                { day: '2026-09-01', event: 'member_created', variant: '', count: 4 },
+                { day: '2026-09-01', event: 'protection_shown', variant: 'A', count: 5 },
+            ],
+        });
+
+        renderModule();
+
+        await waitFor(() => {
+            expect(screen.getByText('Joined')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByText(/Keepers at signup/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/had a spare to offer/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/no longer grow/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Phase A/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/not measured yet/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Actually got started/i)).not.toBeInTheDocument();
     });
 
     it('allows switching lookback window days and changing target node', async () => {
@@ -161,13 +237,7 @@ describe('OnboardingModule', () => {
             rows: [],
         });
 
-        render(
-            <OnboardingModule
-                profiles={mockProfiles}
-                activeProfileId="node-1"
-                onSelectNode={mockSelectNode}
-            />
-        );
+        renderModule();
 
         await waitFor(() => {
             expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(
@@ -203,13 +273,7 @@ describe('OnboardingModule', () => {
             rows: [],
         });
 
-        render(
-            <OnboardingModule
-                profiles={mockProfiles}
-                activeProfileId="node-1"
-                onSelectNode={mockSelectNode}
-            />
-        );
+        renderModule();
 
         await waitFor(() => {
             expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(

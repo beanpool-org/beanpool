@@ -10,16 +10,33 @@ import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue } from '@beanpool/core';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
 import type { OwnDecisionVote } from './decision-own-vote';
+import { mergeIncomingMessage, isRemovedPayload, type LocalMessageRow } from './chat-sync';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
 // user actually opens), never bulk-pulled on sync.
 const CHAT_IMAGE_CACHE_DIR = `${FileSystem.cacheDirectory}chat-images/`;
+
+/**
+ * Take the decrypted copy of a chat photo off this phone.
+ *
+ * getDecryptedAttachment writes the plaintext JPEG to the cache so an image is decrypted once per device.
+ * A "delete for everyone" has to take it with it — on the deleter's phone AND on the peer's, when the
+ * tombstone arrives in a sync — or the picture outlives the message it belonged to and sits in the cache
+ * until the OS decides to trim it. The bubble already hides the attachment; this removes the file.
+ *
+ * Never throws: the tombstone is what matters, and a cache file we could not remove must not fail a delete.
+ */
+async function forgetCachedChatImage(messageId: string): Promise<void> {
+    try {
+        await FileSystem.deleteAsync(`${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`, { idempotent: true });
+    } catch { /* nothing to do: the message is gone either way */ }
+}
 
 /**
  * Singleton database instance.
@@ -2975,8 +2992,8 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
 // flags), or a new edit. Runs WITHOUT the sync lock so the common poll outcome —
 // "nothing changed" — never joins the write queue at all.
 async function diffChangedMessages(database: SQLite.SQLiteDatabase, conversationId: string, messages: any[]): Promise<any[]> {
-    const localRows = await database.getAllAsync<{ id: string; metadata: string | null; edited_at: string | null }>(
-        'SELECT id, metadata, edited_at FROM messages WHERE conversation_id = ?',
+    const localRows = await database.getAllAsync<{ id: string; metadata: string | null; edited_at: string | null; type: string | null }>(
+        'SELECT id, metadata, edited_at, type FROM messages WHERE conversation_id = ?',
         [conversationId]
     );
     const localById = new Map(localRows.map(r => [r.id, r]));
@@ -2986,15 +3003,34 @@ async function diffChangedMessages(database: SQLite.SQLiteDatabase, conversation
         if ((m.metadata || null) !== (local.metadata || null)) return true;
         const editedAt = m.editedAt || m.edited_at || null;
         if (editedAt && editedAt !== local.edited_at) return true;
+        // A delete or a removal that the node recorded without touching the metadata we hold (an older row
+        // with none at all) still has to land: the row's type is what changed.
+        if (isRemovedPayload({ type: m.type, metadata: m.metadata || null }) &&
+            !isRemovedPayload({ type: local.type, metadata: local.metadata })) return true;
         return false;
     });
 }
 
 // Single-message upsert shared by the batch and single-conversation sync paths.
-// metadata always refreshes (reactions/read-state). Content (ciphertext/nonce) only
-// changes when the server sends a strictly-newer edit — so a stale in-flight sync
-// carrying the pre-edit content can't revert a fresh edit.
+//
+// What the node's copy does to the phone's row is decided in utils/chat-sync.mergeIncomingMessage, not in
+// SQL: the old `ON CONFLICT` could express "a newer edit replaces the text" and nothing else, so a DELETE
+// (the node replaces the ciphertext and sets type = 'removed', with no editedAt) landed as a metadata-only
+// update and the deleted words stayed on screen. The local row is read first — only CHANGED messages reach
+// here, so that is one small read per actually-changed message, not one per poll tick.
 async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversationId: string, m: any) {
+    const local = await database.getFirstAsync<LocalMessageRow>(
+        'SELECT ciphertext, nonce, type, edited_at, metadata FROM messages WHERE id = ?',
+        [m.id]
+    );
+    const merged = mergeIncomingMessage(local, {
+        id: m.id,
+        ciphertext: m.ciphertext || '',
+        nonce: m.nonce || '',
+        type: m.type || 'text',
+        metadata: m.metadata || null,
+        editedAt: m.editedAt || m.edited_at || null,
+    });
     await database.runAsync(
         `INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -3002,11 +3038,14 @@ async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversatio
            conversation_id = excluded.conversation_id,
            metadata = excluded.metadata,
            timestamp = excluded.timestamp,
-           ciphertext = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.ciphertext ELSE messages.ciphertext END,
-           nonce = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.nonce ELSE messages.nonce END,
-           edited_at = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.edited_at ELSE messages.edited_at END`,
-        [m.id, conversationId, m.author_pubkey || m.authorPubkey || '', m.ciphertext || '', m.nonce || '', m.type || 'text', m.systemType || m.system_type || null, m.metadata || null, m.timestamp || m.created_at || new Date().toISOString(), m.editedAt || m.edited_at || null]
+           ciphertext = excluded.ciphertext,
+           nonce = excluded.nonce,
+           type = excluded.type,
+           edited_at = excluded.edited_at`,
+        [m.id, conversationId, m.author_pubkey || m.authorPubkey || '', merged.ciphertext, merged.nonce, merged.type, m.systemType || m.system_type || null, merged.metadata, m.timestamp || m.created_at || new Date().toISOString(), merged.editedAt]
     );
+    // The other end deleted it for everyone: this phone's decrypted copy of the photo goes too.
+    if (merged.contentReplaced && merged.type === 'removed') await forgetCachedChatImage(m.id);
 }
 
 export async function syncMessages(publicKey: string) {
@@ -3093,6 +3132,8 @@ export async function syncMessages(publicKey: string) {
             // inbox focus, WS nudges); unconditionally rewriting every conv row was
             // one of the writers starving the sync lock (2026-07-18 on-device logs).
             const postPhotoString = conv.postPhoto ? JSON.stringify([conv.postPhoto]) : null;
+            // The chat's ⋮ menu reads this to show Mute or Unmute without a request of its own.
+            if ('mute' in conv) rememberChatMute(conv.id, conv.mute ?? null);
             let needsConvWrite = false;
             try {
                 const localConv = await database.getFirstAsync<any>(
@@ -3292,6 +3333,9 @@ export async function syncSingleConversation(conversationId: string) {
         }
 
         const msgData = await msgRes.json();
+        if (msgData?.conversation && 'mute' in msgData.conversation) {
+            rememberChatMute(conversationId, msgData.conversation.mute ?? null);
+        }
         const messages = msgData.messages;
         if (!Array.isArray(messages)) return;
 
@@ -4262,9 +4306,12 @@ async function _signedRequest(endpoint: string, payload: any) {
 
     if (!res.ok) {
         let errorMsg = `Server returned ${res.status}`;
+        // Whether the body carried a JSON `error` field, which is what tells a node ANSWERING from a node
+        // that has no such route to answer with — see utils/chat-actions.chatActionErrorMessage.
+        let nodeAnswered = false;
         try {
             const errJson = await res.json();
-            if (errJson.error) errorMsg = errJson.error;
+            if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
         } catch {
             try {
                 const txt = await res.text();
@@ -4289,7 +4336,13 @@ async function _signedRequest(endpoint: string, payload: any) {
                 if (retryRes.ok) return await retryRes.json();
             }
         }
-        throw new Error(errorMsg);
+        // The status and whether the node answered in its own words both ride along on the error: only a
+        // missing route (404 with no `error` field) means "an older node has never heard of this verb", and
+        // the chat shows the node's own sentence for everything else (utils/chat-actions.chatActionErrorMessage).
+        const err: any = new Error(errorMsg);
+        err.status = res.status;
+        err.nodeAnswered = nodeAnswered;
+        throw err;
     }
 
     return await res.json();
@@ -4334,6 +4387,19 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
  * Report one onboarding step that only the device can see — a screen drawn, a choice made,
  * a guide finished. The server counts the rest for itself.
  *
+ * ONCE PER PERSON, per node. The screen a caller sits on can be drawn many times over one
+ * join — a remount, a back-and-forward, an app restart part way through — and every one of
+ * those used to become another tally, which is how an operator came to be shown 56 people
+ * reaching step 3 out of 20 who joined. The node cannot fix this for us: M2 gives the
+ * counter table no column that could tell those 56 apart, and the whole point of M2 is that
+ * it never will. So the phone keeps the one bit the node refuses to, and keeps it here
+ * rather than in each caller, so a future fourth step cannot forget to.
+ *
+ * The flag is written only AFTER the report has actually landed. Written before, a member
+ * joining on a flaky connection is marked as counted for a request that never arrived, and
+ * is then missing from the funnel forever — the same "book it on the tap" mistake that
+ * `hasNoAvatarYet` exists to prevent for step 2.
+ *
  * Swallows everything, including the throw from being off-grid. A person joining a
  * community must never see an error, a delay, or a blocked button because a counter could
  * not be incremented; a funnel that costs somebody their signup has done more damage than
@@ -4342,7 +4408,18 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
  */
 export async function recordOnboardingEvent(event: string, variant = ''): Promise<void> {
     try {
-        await _signedRequest('/api/funnel-event', { event, variant });
+        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        const identity = await loadIdentity();
+        // Without both of these there is nothing to key the flag by, and _signedRequest
+        // would throw on the next line anyway. Returning here means no flag is written, so
+        // the step is still reported once the phone is anchored and signed in.
+        if (!anchorUrl || !identity?.publicKey) return;
+
+        const alreadyCounted = onboardingEventKey(anchorUrl, identity.publicKey, event);
+        if (await AsyncStorage.getItem(alreadyCounted)) return;
+
+        await _signedRequest('/api/funnel-event', { event, variant: oncePerPersonVariant(variant) });
+        await AsyncStorage.setItem(alreadyCounted, '1');
     } catch {
         // Deliberately silent. Not even a console.warn: this runs on the join path, and a
         // red box in a fresh user's face over telemetry would be its own bug.
@@ -5426,8 +5503,8 @@ export async function getGroupChat(groupId: string, limit = 50, offset = 0): Pro
     return body;
 }
 
-export async function postGroupChatMessage(groupId: string, text: string, clientId?: string): Promise<any> {
-    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId });
+export async function postGroupChatMessage(groupId: string, text: string, clientId?: string, replyToId?: string | null): Promise<any> {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
 }
 
 /** An enterprise's discussion thread — public to every member of the community, not only its keepers. */
@@ -5464,9 +5541,83 @@ export async function getInvitablePeople(): Promise<{ publicKey: string; callsig
     return local.filter(m => !notPeople(m.publicKey)).map(m => ({ ...m, avatarUrl: null }));
 }
 
-/** Mute one chat for 8 hours, a week or always, or unmute it (groups decision 12). */
+/**
+ * Mute one chat for 8 hours, a week or always, or unmute it (groups decision 12). Works for a DM as well
+ * as a group-like chat, so the ⋮ menu is the same menu in both.
+ */
 export async function muteChatApi(conversationId: string, duration: '8h' | '1w' | 'always' | 'off'): Promise<any> {
-    return _signedRequest('/api/messages/mute', { conversationId, duration });
+    const res = await _signedRequest('/api/messages/mute', { conversationId, duration });
+    rememberChatMute(conversationId, duration === 'off' ? null : (res?.mute ?? { conversationId, mutedUntil: null, always: duration === 'always' }));
+    return res;
+}
+
+/**
+ * What the node last said about a chat's mute, remembered from whichever read went past it.
+ *
+ * A DM has no row of its own on the phone to hold this (a group's mute rides on its "Your groups" row), and
+ * opening a chat must not cost an extra request to find out. The conversations sync and the per-conversation
+ * read both carry it once the node is new enough; an older node never sets it and the menu simply offers
+ * Mute, which is the truthful default.
+ */
+const _knownChatMutes = new Map<string, import('./your-groups').YourChatMute | null>();
+
+export function rememberChatMute(conversationId: string, mute: import('./your-groups').YourChatMute | null): void {
+    _knownChatMutes.set(conversationId, mute);
+}
+
+export function getKnownChatMute(conversationId: string): import('./your-groups').YourChatMute | null {
+    return _knownChatMutes.get(conversationId) ?? null;
+}
+
+/**
+ * Delete for everyone (chat parity, 2026-09-23). The author only, any time, no window — the node turns the
+ * message into a tombstone and pushes it to everyone in the chat, and a DM's ciphertext is replaced on the
+ * node so both phones pick it up on their next sync. Deleting twice is a no-op success.
+ *
+ * A convenor removing SOMEBODY ELSE'S message is the separate call below; the two are told apart by
+ * `metadata.removedBy`.
+ */
+export async function deleteMessageApi(messageId: string): Promise<any> {
+    const res = await _signedRequest('/api/messages/delete', { messageId });
+    // Mirror the tombstone locally at once (a DM's row is on this phone) so the bubble changes under the
+    // finger rather than at the next 3s poll. A group chat has no local row and simply re-reads.
+    try {
+        const database = await getDb();
+        const row = await database.getFirstAsync<any>('SELECT metadata, author_pubkey FROM messages WHERE id = ?', [messageId]);
+        if (row) {
+            let meta: any = {};
+            if (row.metadata) { try { meta = JSON.parse(row.metadata) || {}; } catch { meta = {}; } }
+            delete meta.reactions; delete meta.mentions; delete meta.replyToId;
+            meta.removed = true;
+            meta.removedBy = res?.message?.metadata?.removedBy || row.author_pubkey;
+            meta.removedAt = res?.message?.metadata?.removedAt || new Date().toISOString();
+            await database.runAsync(
+                "UPDATE messages SET type = 'removed', ciphertext = ?, nonce = 'plaintext-v1', metadata = ? WHERE id = ?",
+                [res?.message?.ciphertext ?? encodeBase64(encodeUtf8('This message was deleted')), JSON.stringify(meta), messageId]
+            );
+        }
+    } catch { /* the node has it; the next sync brings the tombstone anyway */ }
+    // The plaintext photo goes with the message, whether or not the local mirror above found a row: a group
+    // chat has no local row, and its image was decrypted into the same cache.
+    await forgetCachedChatImage(messageId);
+    return res;
+}
+
+/** A convenor removes somebody else's message from a group chat. Unchanged endpoint, now reachable from the chat. */
+export async function removeGroupChatMessage(groupId: string, messageId: string): Promise<any> {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/remove`, { messageId });
+}
+
+/**
+ * Edit a message in a node-readable chat (a group's). Same endpoint as a DM edit, with the text as base64
+ * `plaintext-v1` because the node has to be able to read a group chat.
+ */
+export async function editThreadMessage(messageId: string, newText: string): Promise<any> {
+    return _signedRequest('/api/messages/edit', {
+        messageId,
+        ciphertext: encodeBase64(encodeUtf8(newText)),
+        nonce: 'plaintext-v1',
+    });
 }
 
 /**

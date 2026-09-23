@@ -21,6 +21,7 @@
 // replicate across federation or to a backup node unless somebody deliberately adds
 // it. Do not add it.
 
+import { isServableAvatarValue } from '@beanpool/core';
 import { db } from '../db/db.js';
 
 /** Steps the node cannot reconstruct later, so they are counted as they happen. */
@@ -31,14 +32,23 @@ export type CountedEvent =
                             // and not a signup — kept off invite_failed so the dashboard's
                             // failure rate means what it says)
     | 'avatar_published'    // step 2 done — first avatar only, not later edits
-    | 'protection_shown'    // step 3 drawn — variant is the keeper-count state A|B|C
-    | 'protection_choice'   // step 3 answered — variant is sso|words|skip
+    | 'protection_shown'    // step 3 drawn
+    | 'protection_choice'   // step 3 answered — sub-type is sso|words|skip
     | 'guide_complete';     // step 4 done
+
+// The three above are reported by the phone and the PWA, and since this change each client
+// reports each of them at most ONCE per identity per node: those rows carry a variant of
+// `once` or `once:<sub-type>` (see @beanpool/core's onboarding-funnel helpers). Rows without
+// that marker are the older one-per-showing counts, which cannot be corrected after the
+// fact — the node never kept the per-person trail that would let it — and which the
+// operator's screen therefore ignores rather than silently mixing in.
 
 /** Steps computed from tables that already hold the answer. */
 export type DerivedEvent =
-    | 'member_created'      // step 1 done — a local member row exists
-    | 'activated';          // first post authored on this node
+    | 'member_created'      // step 1 done — a local member row exists. The cohort's base.
+    | 'cohort_photo'        // ...and that same member has a servable photo TODAY
+    | 'cohort_posted'       // ...and that same member has posted locally at least once, ever
+    | 'activated';          // first post authored on this node, whenever they joined
 
 export interface FunnelRow {
     day: string;        // YYYY-MM-DD, UTC
@@ -112,20 +122,88 @@ export function hasNoAvatarYet(publicKey: string): boolean {
  */
 const JOINED_HERE = `m.home_node_url IS NULL AND COALESCE(m.invite_code, '') != 'genesis'`;
 
-/** Members who joined HERE, per day. */
-function derivedMemberCreated(since: string): FunnelRow[] {
+/**
+ * A stored avatar is long — a `data:` URI can be megabytes — and the cohort query reads one
+ * per member. Only the START of the value decides whether it is a real photo: the rule is
+ * "non-empty, and not one of our own `/api/avatar/…` URLs round-tripped back to us", and
+ * both of those tests are anchored at the beginning of the string. So SQL trims and hands
+ * back a short prefix, and the ONE helper that owns the rule (@beanpool/core, shared with
+ * every emission site) decides on that. Reading whole avatars to look at their first forty
+ * characters would make an operator opening this panel load the node's entire photo library
+ * into memory.
+ */
+const AVATAR_PREFIX_CHARS = 256;
+
+interface CohortMemberRow {
+    day: string;
+    avatarHead: string | null;
+    posted: number;
+}
+
+/**
+ * THE COHORT: the people who joined here inside the window, and how far those same people
+ * have since got.
+ *
+ * All three numbers come from ONE pass over one predicate, which is the whole point. The
+ * screen's percentages are shares of "Joined", so if the rows could disagree about who is
+ * in the group the percentages would be meaningless — and disagreeing is exactly what the
+ * old screen did, counting joins over one span and photos over another and putting them in
+ * the same column. Here "has a photo" and "has posted" are literally filtered subsets of
+ * the members counted as "joined", row by row, so they cannot exceed it.
+ *
+ * Both follow-up questions are asked about NOW, not about the window: "does this person
+ * have a photo today", "has this person ever posted". That is what an operator is actually
+ * asking of a cohort — of the people who arrived in September, how many are really here —
+ * and it is why someone who joined before the window is absent even if they posted inside
+ * it. A cohort is a group of people, not a span of activity.
+ *
+ * Aggregate out, per M2: the rows read here carry a join day, an avatar prefix and a
+ * yes/no, and are reduced to counts inside this function. No public key is selected.
+ */
+function derivedCohort(since: string): FunnelRow[] {
     const rows = db.prepare(`
-        SELECT date(m.joined_at) AS day, COUNT(*) AS count
+        SELECT date(m.joined_at) AS day,
+               substr(trim(COALESCE(m.avatar_url, '')), 1, ${AVATAR_PREFIX_CHARS}) AS avatarHead,
+               EXISTS (
+                   SELECT 1 FROM posts p
+                   WHERE p.author_pubkey = m.public_key AND p.origin_node IS NULL
+               ) AS posted
         FROM members m
         WHERE ${JOINED_HERE}
           AND m.joined_at >= ?
-        GROUP BY day
-    `).all(since) as { day: string; count: number }[];
-    return rows.map(r => ({ day: r.day, event: 'member_created' as const, variant: '', count: r.count }));
+    `).all(since) as CohortMemberRow[];
+
+    const perDay = new Map<string, { joined: number; photo: number; posted: number }>();
+    for (const r of rows) {
+        const day = r.day;
+        if (!day) continue;
+        const bucket = perDay.get(day) ?? { joined: 0, photo: 0, posted: 0 };
+        bucket.joined++;
+        if (isServableAvatarValue(r.avatarHead)) bucket.photo++;
+        if (r.posted) bucket.posted++;
+        perDay.set(day, bucket);
+    }
+
+    const out: FunnelRow[] = [];
+    for (const [day, b] of perDay) {
+        out.push({ day, event: 'member_created', variant: '', count: b.joined });
+        // Zero-count rows are omitted, not emitted as 0: every other producer here reports
+        // only what happened, and `getFunnel`'s callers already read a missing row as none.
+        if (b.photo > 0) out.push({ day, event: 'cohort_photo', variant: '', count: b.photo });
+        if (b.posted > 0) out.push({ day, event: 'cohort_posted', variant: '', count: b.posted });
+    }
+    return out;
 }
 
 /**
  * The day each local member first posted, counted per day.
+ *
+ * NOT the cohort's "has posted" row, and no longer what the operator's screen shows as
+ * getting started. This is activity dated by the POST — it includes someone who joined two
+ * years ago and finally listed something last week, which is a real and useful number but
+ * is not a fact about the people who joined in this window. `cohort_posted` is that, dated
+ * by the JOIN day. Both are kept because they answer different questions; the screen is
+ * explicit about which one it is showing.
  *
  * Listing an offer is the act that opens the app up — under the trust model you must
  * have listed one before you can post a Need — so first post is the honest activation
@@ -204,6 +282,6 @@ export function getFunnel(days = 30): FunnelRow[] {
         WHERE day >= ?
     `).all(since) as FunnelRow[];
 
-    return [...counted, ...derivedMemberCreated(since), ...derivedActivated(since)]
+    return [...counted, ...derivedCohort(since), ...derivedActivated(since)]
         .sort((a, b) => a.day.localeCompare(b.day) || a.event.localeCompare(b.event));
 }

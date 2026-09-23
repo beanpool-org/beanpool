@@ -18,11 +18,11 @@ At the top, a pinned box shows the host's **Note for people who are going**, suc
 
 ## Writing
 
-Type in **Message everyone going…** and tap **Send**. You can send up to 30 messages a minute.
+Type in **Message everyone going…** and tap the send button. You can send up to 30 messages a minute. The newest message sits just above the message box and stays there when the keyboard opens.
 
 ## Good to know
 
-- Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so at the bottom.
-- The host can remove any message. It then says "removed by the host".
-- Messages cannot be edited, and there are no reactions.
+- Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so above the message box.
+- The host can remove any message. Tap it, then **Remove**. It then says "removed by the host".
+- An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret.
 - When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away.

@@ -6,6 +6,8 @@
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import {
     toEd25519Pkcs8,
+    onboardingEventKey,
+    oncePerPersonVariant,
     type PublicCreatorChannel,
     type ChannelPlatform,
     type ChannelCategory,
@@ -245,13 +247,35 @@ export interface Member {
  * Report one onboarding step that only the browser can see — a screen drawn, a choice made,
  * a guide finished. The server counts everything else for itself.
  *
+ * ONCE PER PERSON, per node — the browser's half of the same rule the phone keeps. A
+ * refresh, a re-render or a tab reopened part way through a join used to add another tally
+ * each time, which is how 20 people who joined came to be shown as 56 reaching step 3. The
+ * node cannot deduplicate this: M2 gives its counter table no column that could tell those
+ * reports apart, deliberately and permanently. So the browser remembers the one bit, in
+ * localStorage, and it never leaves the browser.
+ *
+ * Marked only AFTER the report lands, so a failed request does not silently retire the
+ * step for this person forever.
+ *
  * Swallows every failure. Somebody joining a community must never meet an error or a stall
  * because a counter could not be incremented; a funnel that costs a signup has done more
- * damage than the missing number was ever worth. Callers do not await it either.
+ * damage than the missing number was ever worth. Callers do not await it either. A browser
+ * with storage blocked throws on the read, lands in the catch, and reports nothing rather
+ * than reporting every render — under-counting is recoverable, the 350% was not.
  */
 export async function recordOnboardingEvent(event: string, variant = ''): Promise<void> {
     try {
-        await request('POST', '/api/funnel-event', { event, variant });
+        const identity = await loadIdentity();
+        if (!identity?.publicKey) return;
+        // Same-origin is the normal case, where getNodeApiUrl() is '': key by the origin
+        // actually being talked to, so the flag still names one node rather than none.
+        const node = getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
+
+        const alreadyCounted = onboardingEventKey(node, identity.publicKey, event);
+        if (localStorage.getItem(alreadyCounted)) return;
+
+        await request('POST', '/api/funnel-event', { event, variant: oncePerPersonVariant(variant) });
+        localStorage.setItem(alreadyCounted, '1');
     } catch {
         // Deliberately silent — this runs on the join path.
     }
@@ -2161,7 +2185,9 @@ export async function submitPricingReportApi(
 
 export interface ActivityFeedItem {
     id: number;
-    eventType: 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created';
+    // Mirrors ActivityEventType on the node (apps/server/src/db/activity-feed-db.ts). 'dispute_resolved'
+    // has always been served here; leaving it out of the union only hid it from the client's own mapping.
+    eventType: 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created' | 'dispute_resolved';
     actorPubkey: string;
     actorCallsign?: string;
     targetPubkey?: string;

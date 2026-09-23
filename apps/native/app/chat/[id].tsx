@@ -1,8 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Platform, Linking, Modal, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
-import { KeyboardAvoidingView, KeyboardController, AndroidSoftInputModes, useKeyboardHandler, useKeyboardState } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
+import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { scheduleOnRN } from 'react-native-worklets';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -12,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, getConversationKind } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -22,27 +21,27 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
+import { makeChatStyles } from '../../components/chat/styles';
+import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatMessageList';
+import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
+import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
+import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
+import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
+import {
+    buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions, tombstoneText,
+    shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
+} from '../../utils/chat-actions';
+import { normaliseTappedUrl } from '../../utils/chat-links';
+import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-groups';
 
-// Splits message text into plain runs and tappable URLs. The capturing group keeps the
-// matched URLs in the split output so they can be rendered as <Text> links inline.
-const URL_SPLIT_REGEX = /((?:https?:\/\/|www\.)[^\s]+)/gi;
-const URL_TEST_REGEX = /^(?:https?:\/\/|www\.)[^\s]+$/i;
-
-// Authors may edit a text message for this long after sending (mirrors the server's window).
-const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+// The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
+// the composer all moved to utils/chat-actions, utils/chat-links and components/chat/* (chat parity,
+// 2026-09-23), so a group chat behaves the same way rather than nearly the same way.
 
 // History window (WhatsApp-style): open with the newest page, grow by a page each
 // time the user scrolls up to the oldest loaded message. Keeps open-a-chat cost
 // (SQLite read + per-message decrypt) flat no matter how long the thread is.
 const MESSAGE_PAGE_SIZE = 50;
-
-// Composer height bounds (dp). JS owns the input height — see the inputHeight
-// note in the component — so these live here for both the style and the clamp.
-const CHAT_INPUT_MIN_HEIGHT = 40;
-const CHAT_INPUT_MAX_HEIGHT = 100;
-// Vertical padding inside the composer (paddingTop + paddingBottom in styles.input);
-// onContentSizeChange reports the text height only, so the clamp adds this back.
-const CHAT_INPUT_V_PADDING = 16;
 
 // Bound an await so a hung step can never latch sendingRef forever — a hung
 // insertMessage left the send button silently dead until an app restart
@@ -53,29 +52,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
         promise,
         new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} is taking too long — please try again.`)), ms)),
     ]);
-}
-
-function renderTextWithLinks(text: string, linkStyle: any, onPressUrl: (url: string) => void) {
-    if (!text) return text;
-    const parts = text.split(URL_SPLIT_REGEX);
-    return parts.map((part, i) =>
-        URL_TEST_REGEX.test(part)
-            ? (
-                <Text key={i} style={linkStyle} onPress={() => onPressUrl(part)}>
-                    {part}
-                </Text>
-            )
-            : part
-    );
-}
-
-/** WhatsApp-style day label: Today / Yesterday / "Mon, 12 May". */
-function formatDayLabel(d: Date): string {
-    const today = new Date();
-    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-    if (d.toDateString() === today.toDateString()) return 'Today';
-    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 /** Image bubble that lazily fetches + decrypts an encrypted attachment for display.
@@ -145,7 +121,6 @@ function ChatScreen() {
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
     const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top');
-    const [draft, setDraft] = useState('');
     const [peerName, setPeerName] = useState('Loading...');
     const [peerPubkey, setPeerPubkey] = useState<string | null>(null);
     const [isPeerBlocked, setIsPeerBlocked] = useState(false);
@@ -162,85 +137,27 @@ function ChatScreen() {
     const [editingMessage, setEditingMessage] = useState<any | null>(null);
     const [deals, setDeals] = useState<any[]>([]);
     const [viewerUri, setViewerUri] = useState<string | null>(null);
+    // The first local read has come back (a cold database open is not instant), and what went wrong if it did not.
+    const [firstLoadDone, setFirstLoadDone] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [muteOpen, setMuteOpen] = useState(false);
+    const [mute, setMute] = useState<YourChatMute | null>(() => getKnownChatMute(String(id ?? '')));
     const flatListRef = useRef<FlatList>(null);
-    const inputRef = useRef<TextInput>(null);
+    const composerRef = useRef<ChatComposerHandle>(null);
+    // Whether the newest message is on screen. A message arriving while it is must follow the thread down;
+    // one arriving while someone reads history must not yank them (utils/chat-actions.shouldFollowNewMessages).
+    const atBottomRef = useRef(true);
     const insets = useSafeAreaInsets();
     const sendingRef = useRef(false);
-    // Mirror of the native input's text for SEND LOGIC. `draft` state is only for
-    // styling the send button: handleSend receives state through a render closure,
-    // and renders commit late whenever the JS thread is busy — reading state at
-    // press time sent a stale prefix of the box ("Go test your core business" went
-    // out as "Go test your"; observed on two devices, 2026-07-18). The ref is
-    // written synchronously inside every change event, and input events precede
-    // the press in the event queue, so it holds the full text when the press runs.
-    const draftRef = useRef('');
-    // Counts draft writes so the clear sweep can tell a dropped-clear echo
-    // (one write carrying the full sent text) from the user re-typing the same
-    // text (one write per keystroke) — see scheduleClearSweep.
-    const draftWritesRef = useRef(0);
-    const updateDraft = (text: string) => {
-        draftWritesRef.current += 1;
-        draftRef.current = text;
-        setDraft(text);
-    };
+    // The message box — its draft mirror, its height and its dropped-clear sweep — is components/chat/
+    // ChatComposer now. Every hard-won Android lesson in it is unchanged; it is simply shared.
 
     useEffect(() => {
         if (prefill && typeof prefill === 'string') {
-            updateDraft(prefill);
+            composerRef.current?.setText(prefill);
         }
     }, [prefill]);
-    // Android's multiline TextInput auto-GROWS on keystrokes but never shrinks
-    // after a programmatic clear until the next real keystroke (field report
-    // 2026-07-18: box stays tall after send). So JS owns the height: measured
-    // via onContentSizeChange, clamped, and reset by resetInputBox below.
-    const [inputHeight, setInputHeight] = useState(CHAT_INPUT_MIN_HEIGHT);
-    // Empty the box and both mirrors, and collapse the height — the one true
-    // "reset the composer" path (send, edit-cancel, and the clear sweep).
-    const resetInputBox = () => {
-        updateDraft('');
-        inputRef.current?.clear();
-        setInputHeight(CHAT_INPUT_MIN_HEIGHT);
-    };
-    // inputRef.clear() can be silently DROPPED: the native command carries the
-    // count of text events JS has processed, and Android's ReactEditText skips
-    // stale-counted updates (protection against clobbering typing JS hasn't seen).
-    // Under JS-thread lag the IME emits one more event (autocorrect finalizing on
-    // the send tap) just before clear() dispatches -> the box keeps the sent text
-    // while draftRef says '' -> grey dead send button over a full box.
-    //
-    // Field history (2026-07-18, keep for context — three designs failed before this):
-    //  v1.1.79  no sweep: stuck box + dead button.
-    //  v1.1.80  sweep gated on OBSERVING the pending event drain back within 600ms:
-    //           never fired — the drain can take seconds under JS-thread blocks.
-    //  v1.1.81  added unconditional rungs (clear + height reset whenever draftRef
-    //           was still ''): rescued the stuck box but acted BLINDLY while the
-    //           user typed the next message before their keystrokes drained —
-    //           squishing the growing box and racing real typing ("glitching").
-    //
-    // Current design: act only on POSITIVE EVIDENCE, never blindly. A dropped
-    // clear always leaves its rejected-count event in flight, and in-flight
-    // events always drain eventually — so wait for the drain: when the residue
-    // equals the just-sent text and it arrived as EXACTLY ONE write (the echo
-    // signature; human re-typing is one write per keystroke), re-clear — that
-    // retry now carries a current event count and sticks. Rungs spread to 6s to
-    // outlast multi-second JS blocks (2.4s observed). No action on any other
-    // state: an undrained box is untouchable (a stale-counted retry would be
-    // rejected anyway) and new typing is sacred. Only a single-write identical
-    // reproduction (re-pasting the exact sent text mid-ladder) is
-    // indistinguishable from the echo — accepted residual.
-    const clearSweepTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-    const scheduleClearSweep = (sentText: string) => {
-        if (!sentText) return;
-        const writesBaseline = draftWritesRef.current;
-        clearSweepTimersRef.current.forEach(clearTimeout);
-        clearSweepTimersRef.current = [400, 1200, 3000, 6000].map(ms => setTimeout(() => {
-            if (draftWritesRef.current - writesBaseline === 1 && draftRef.current.trim() === sentText) {
-                console.log(`[Chat] clear sweep: re-clearing dropped-clear residue at ${ms}ms`);
-                resetInputBox();
-            }
-        }, ms));
-    };
-    useEffect(() => () => clearSweepTimersRef.current.forEach(clearTimeout), []);
     // History-window paging. Refs (not state) because loadMessages is called from
     // long-lived closures (poll interval, ws listener) that must see current values.
     const msgLimitRef = useRef(MESSAGE_PAGE_SIZE);
@@ -266,6 +183,11 @@ function ChatScreen() {
         KeyboardController.dismiss().then(() => setViewerUri(uri));
     }, []);
 
+    // The chat's own pieces — bubbles, actions, the emoji picker, quotes, day pills, the banners and the
+    // composer — are the shared set every chat draws (components/chat/styles). Below are only the things
+    // this screen has that a group chat does not: the peer header, the deals strip, the escrow action bar
+    // and the full-screen photo viewer.
+    const chat = useStyles(makeChatStyles);
     const styles = useStyles(({ theme, colors, patternEnabled }) => StyleSheet.create({
         // The wallpaper shows behind the thread; with it off, the chat keeps its plain card white.
         container: { flex: 1, backgroundColor: patternEnabled ? colors.surface.page : colors.surface.card },
@@ -283,23 +205,6 @@ function ChatScreen() {
         statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
         statusBadgeText: { fontSize: 11, fontWeight: '800' },
         keyboardView: { flex: 1 },
-        // Inverted list: the container's TOP edge renders at the visual bottom,
-        // so paddingTop is the gap above the input bar and paddingBottom the gap
-        // under the header.
-        listContent: { padding: 16, paddingTop: 8, gap: 4 },
-        systemMessageContainer: { width: '100%', alignItems: 'center', marginVertical: 8 },
-        systemMessageBubble: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
-        systemMessageText: { fontSize: 13, color: theme === 'dark' ? colors.text.body : palette.gray600, fontWeight: '600' },
-        systemActionBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: colors.surface.card, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary },
-        systemActionText: { color: colors.brand.primary, fontWeight: '700', fontSize: 12 },
-        messageBubble: { maxWidth: '80%', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12 },
-        messageMe: { backgroundColor: colors.chat.messageMeBg, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
-        messageOther: { backgroundColor: colors.chat.messageOtherBg, alignSelf: 'flex-start', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: colors.border.default },
-        messageText: { fontSize: 16, lineHeight: 22 },
-        messageTextMe: { color: colors.chat.messageTextMe },
-        messageTextOther: { color: colors.chat.messageTextOther },
-        linkMe: { color: colors.chat.messageTextMe, textDecorationLine: 'underline', fontWeight: '600' },
-        linkOther: { color: colors.text.link, textDecorationLine: 'underline' },
         // Pinned active-deals strip
         dealStrip: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, borderBottomWidth: 1, borderBottomColor: theme === 'dark' ? colors.border.default : palette.green200 },
         dealCard: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.emerald100, width: 200 },
@@ -318,19 +223,6 @@ function ChatScreen() {
         imageViewerOverlay: { flex: 1, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center' },
         imageViewerImage: { width: '100%', height: '100%' },
         imageViewerClose: { position: 'absolute', top: 50, right: 20, width: 44, height: 44, borderRadius: 22, backgroundColor: colors.overlay.imageViewerCloseBg, alignItems: 'center', justifyContent: 'center' },
-        messageTime: { fontSize: 10, marginTop: 4, alignSelf: 'flex-end' },
-        messageTimeMe: { color: colors.chat.messageTimeMe },
-        messageTimeOther: { color: colors.text.muted },
-        inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.surface.subtle, backgroundColor: colors.surface.card },
-        attachBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-        input: { flex: 1, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.slate300, borderRadius: 20, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, fontSize: 16, maxHeight: CHAT_INPUT_MAX_HEIGHT, minHeight: CHAT_INPUT_MIN_HEIGHT, color: colors.text.body },
-        sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
-        sendBtnActive: { backgroundColor: colors.accent.primary },
-        sendBtnInactive: { backgroundColor: colors.surface.subtle },
-        systemTimestamp: { fontSize: 10, color: colors.text.muted, marginTop: 4 },
-        daySeparatorRow: { alignItems: 'center', marginVertical: 4 },
-        daySeparatorPill: { backgroundColor: colors.chat.daySeparatorBg, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
-        daySeparatorText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
         // Inline Action Bar
         inlineActionBar: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.yellow50, borderBottomWidth: 1, borderBottomColor: theme === 'dark' ? colors.border.default : palette.yellow200 },
         inlineActionBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 10 },
@@ -338,171 +230,10 @@ function ChatScreen() {
         inlineActionReleaseText: { color: colors.text.inverse, fontWeight: '800', fontSize: 14 },
         inlineActionCancel: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red300 },
         inlineActionCancelText: { color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 14 },
-        // Reactions and Custom Message Rows
-        messageRowContainer: {
-            width: '100%',
-            marginVertical: 2,
-            position: 'relative',
-        },
-        messageRowMe: {
-            alignItems: 'flex-end',
-        },
-        messageRowOther: {
-            alignItems: 'flex-start',
-        },
-        actionButtonsContainer: {
-            flexDirection: 'row',
-            gap: 6,
-            alignItems: 'center',
-        },
-        actionButtonsMe: {
-            marginRight: 8,
-        },
-        actionButtonsOther: {
-            marginLeft: 8,
-        },
-        circleActionButton: {
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.gray600,
-            justifyContent: 'center',
-            alignItems: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.2,
-            shadowRadius: 1,
-            elevation: 2,
-        },
-        circleActionButtonActive: {
-            backgroundColor: colors.accent.primary,
-        },
-        reactionPickerContainer: {
-            position: 'absolute',
-            top: -45,
-            backgroundColor: colors.text.body,
-            borderRadius: 24,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            flexDirection: 'row',
-            alignItems: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 4,
-            elevation: 8,
-            zIndex: 100,
-            gap: 10,
-        },
-        reactionPickerMe: {
-            right: 10,
-        },
-        reactionPickerOther: {
-            left: 10,
-        },
-        reactionEmojiButton: {
-            padding: 2,
-        },
-        reactionEmojiText: {
-            fontSize: 22,
-        },
-        reactionBadgeContainer: {
-            position: 'absolute',
-            bottom: -5,
-            height: 28,
-            minWidth: 28,
-            backgroundColor: colors.surface.subtle,
-            borderWidth: 1,
-            borderColor: colors.text.inverse,
-            borderRadius: 14,
-            paddingHorizontal: 8,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.15,
-            shadowRadius: 1.5,
-            elevation: 3,
-            zIndex: 10,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        reactionBadgeMe: {
-            right: 12,
-        },
-        reactionBadgeOther: {
-            left: 12,
-        },
-        reactionBadgeText: {
-            fontSize: 15,
-            fontWeight: '600',
-            color: theme === 'dark' ? colors.text.body : palette.gray700,
-            textAlign: 'center',
-            textAlignVertical: 'center',
-            includeFontPadding: false,
-        },
-        // Reply & Quotes styling
-        replyPreviewContainer: {
-            backgroundColor: colors.surface.app,
-            borderTopWidth: 1,
-            borderTopColor: colors.border.default,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-        },
-        replyPreviewBar: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-        },
-        replyPreviewAuthor: {
-            fontSize: 12,
-            fontWeight: '700',
-            color: colors.accent.primary,
-            marginBottom: 2,
-        },
-        replyPreviewText: {
-            fontSize: 14,
-            color: colors.text.secondary,
-        },
-        replyPreviewClose: {
-            padding: 4,
-        },
-        quoteContainer: {
-            padding: 8,
-            borderRadius: 8,
-            marginBottom: 6,
-            borderLeftWidth: 3,
-            maxWidth: '100%',
-        },
-        quoteMe: {
-            backgroundColor: colors.chat.quoteMeBg,
-            borderLeftColor: colors.chat.messageTextMe,
-        },
-        quoteOther: {
-            backgroundColor: colors.chat.quoteOtherBg,
-            borderLeftColor: colors.accent.primary,
-        },
-        quoteAuthor: {
-            fontSize: 11,
-            fontWeight: '700',
-            marginBottom: 2,
-        },
-        quoteAuthorMe: {
-            color: colors.chat.messageTextMe,
-            opacity: 0.9,
-        },
-        quoteAuthorOther: {
-            color: colors.accent.primary,
-        },
-        quoteText: {
-            fontSize: 13,
-        },
-        quoteTextMe: {
-            color: colors.chat.quoteTextMe,
-        },
-        quoteTextOther: {
-            color: colors.text.secondary,
-        },
+        blockedNotice: { padding: 14, alignItems: 'center', marginHorizontal: 12, borderRadius: 12, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border },
+        blockedNoticeText: { color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' },
     }));
+
     const promptedRef = useRef(false);
     // Set briefly when a URL link inside a bubble is tapped, so the bubble's own onPress
     // (which opens the reaction/actions menu) doesn't also fire on the same tap.
@@ -511,46 +242,18 @@ function ChatScreen() {
     const openUrl = useCallback((raw: string) => {
         linkPressedRef.current = true;
         setTimeout(() => { linkPressedRef.current = false; }, 350);
-        let url = raw.replace(/[.,;:!?)\]}'"]+$/, ''); // drop trailing punctuation
-        if (/^www\./i.test(url)) url = 'https://' + url;
-        if (!/^https?:\/\//i.test(url)) return;
+        const url = normaliseTappedUrl(raw);
+        if (!url) return;
         Linking.openURL(url).catch(() => Alert.alert('Cannot open link', url));
     }, []);
 
     // The list is inverted (newest message = index 0), so "bottom" is offset 0.
     const scrollToBottom = useCallback((animated: boolean) => {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated });
+        scrollChatToBottom(flatListRef, animated);
     }, []);
 
-    // On Android, tell the OS not to resize/pan the window when the keyboard
-    // opens. This makes react-native-keyboard-controller's KeyboardAvoidingView
-    // the sole owner of keyboard compensation — eliminating the intermittent
-    // race where Android's OS-level resize and the library's padding would
-    // double-compensate or mis-time, hiding the input bar.
-    useEffect(() => {
-        if (Platform.OS === 'android') {
-            KeyboardController.setInputMode(AndroidSoftInputModes.SOFT_INPUT_ADJUST_NOTHING);
-        }
-        return () => {
-            if (Platform.OS === 'android') {
-                KeyboardController.setDefaultMode();
-            }
-        };
-    }, []);
-
-    // Keep the latest messages pinned to the bottom as the keyboard slides in,
-    // following it frame-by-frame (WhatsApp-style) instead of a single delayed
-    // jump that lands before the avoid-view padding has settled.
-    useKeyboardHandler({
-        onMove: () => {
-            'worklet';
-            scheduleOnRN(scrollToBottom, false);
-        },
-        onEnd: () => {
-            'worklet';
-            scheduleOnRN(scrollToBottom, false);
-        },
-    }, [scrollToBottom]);
+    // The window's soft-input mode — the same hook every chat calls.
+    useChatSoftInputMode();
 
     const loadRatedTransactions = useCallback(async () => {
         if (!identity?.publicKey) return;
@@ -768,44 +471,51 @@ function ChatScreen() {
     // what made ticks expensive once the history window grew. Metadata stays in
     // (it's tiny and carries reactions/reply refs/send state).
     const messagesSignature = (rows: any[]) => rows.map(m =>
-        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : ''].join('\u0001')
+        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : ''].join('\u0001')
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
-        const data = await getMessages(id as string, { limit: msgLimitRef.current });
+        let data: any[];
+        try {
+            data = await getMessages(id as string, { limit: msgLimitRef.current });
+            setLoadError(null);
+        } catch (e: any) {
+            console.warn('[Chat] Could not read this conversation:', e?.message || e);
+            setLoadError(e?.message || 'Could not open this chat.');
+            return;
+        } finally {
+            setFirstLoadDone(true);
+        }
         messagesLenRef.current = data.length;
         if (identity?.publicKey) {
             await markConversationRead(id as string, identity.publicKey).catch(() => {});
         }
-        
+
         setMessages(prev => {
             // Unchanged thread → keep the previous reference so 3s poll ticks don't
             // re-render every bubble ("VirtualizedList slow to update" churn).
             if (prev.length === data.length && messagesSignature(prev) === messagesSignature(data)) return prev;
-            // Inverted list: offset 0 IS the newest message, so the view is already
-            // pinned to the bottom on open and stays there as new rows arrive. Only
-            // a foreground action (own send, image, resend) snaps back explicitly —
-            // background polls must not yank someone who scrolled up to read history.
-            if (!isBackgroundPoll && data.length > prev.length) {
+            // Inverted list: offset 0 IS the newest message. A foreground action (own send, image, resend)
+            // always snaps back; a message that arrives on the poll follows the thread down only while the
+            // newest message is already in view, so nobody reading history is yanked
+            // (utils/chat-actions.shouldFollowNewMessages).
+            if (shouldFollowNewMessages({ grew: data.length > prev.length, isBackgroundPoll, atBottom: atBottomRef.current })) {
                 setTimeout(() => scrollToBottom(true), 100);
             }
             return data;
         });
     };
 
-    const handleSend = async () => {
-        // Guard and payload both come from draftRef, never `draft` state — see the
-        // draftRef note. Guarding on state made the button silently swallow presses
-        // whenever state lagged the box (the "chat locked up" report, 2026-07-18).
-        const currentDraft = draftRef.current.trim();
-        if (!currentDraft || !identity?.publicKey || isPeerBlocked) return;
-        if (sendingRef.current) return;
+    // Asked before the composer empties the box, so a refused send keeps what was typed.
+    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !sendingRef.current;
+
+    // The composer owns the box and hands over the text it has already cleared and put under its sweep.
+    const handleSend = async (currentDraft: string) => {
+        if (!currentDraft || !canSendNow() || !identity?.publicKey) return;
 
         sendingRef.current = true;
         const wasEditing = editingMessage;
         try {
-            resetInputBox(); // uncontrolled input: state alone doesn't clear the box
-            scheduleClearSweep(currentDraft); // clear() may be dropped under load — see note at definition
             if (wasEditing) {
                 await withTimeout(editMessage(id as string, wasEditing.id, currentDraft), 15_000, 'Editing');
                 setEditingMessage(null);
@@ -825,6 +535,47 @@ function ChatScreen() {
         } finally {
             sendingRef.current = false;
         }
+    };
+
+    /**
+     * Delete for everyone. One question, no window, and the node turns the message into a tombstone both
+     * phones pick up. A node that has not been updated yet answers 404, which reads as
+     * "Not available on this community yet" rather than as a raw error.
+     */
+    const handleDeletePress = async (item: any) => {
+        setActiveMessageActionsId(null);
+        setActiveEmojiPickerId(null);
+        await KeyboardController.dismiss(); // Alert = separate window; see the phantom-keyboard note above
+        Alert.alert('Delete for everyone?', 'It will read "This message was deleted" for both of you.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: async () => {
+                try {
+                    await deleteMessageApi(item.id);
+                    hapticSuccess();
+                    loadMessages(true);
+                } catch (e: any) {
+                    hapticWarning();
+                    Alert.alert('Not deleted', chatActionErrorMessage(e));
+                }
+            } },
+        ]);
+    };
+
+    const setMuteTo = async (duration: '8h' | '1w' | 'always' | 'off') => {
+        setMuteOpen(false);
+        setMenuOpen(false);
+        try {
+            const res = await muteChatApi(id as string, duration);
+            setMute(duration === 'off' ? null : (res?.mute ?? { conversationId: String(id), mutedUntil: null, always: duration === 'always' }));
+        } catch (e: any) {
+            Alert.alert('Not changed', chatActionErrorMessage(e));
+        }
+    };
+
+    const openMenu = async () => {
+        await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+        setMute(getKnownChatMute(String(id)));
+        setMenuOpen(true);
     };
 
     // A failed optimistic send renders a red "!" — tapping the bubble lands here.
@@ -1086,162 +837,119 @@ function ChatScreen() {
     // ⚡ Bolt: O(1) Map lookup for parent messages in reply threads instead of repeated O(M) .find() scans
     const messagesById = React.useMemo(() => new Map(messages.map(m => [m.id, m])), [messages]);
 
-    // Interleave day-separator pills between messages from different calendar days
-    const listItems = React.useMemo(() => {
-        const items: any[] = [];
-        let lastDay: string | null = null;
-        for (const m of messages) {
-            const d = m.rawTimestamp ? new Date(m.rawTimestamp) : null;
-            if (d && !isNaN(d.getTime())) {
-                const dayKey = d.toDateString();
-                if (dayKey !== lastDay) {
-                    items.push({ id: `day-${dayKey}`, type: 'day-separator', label: formatDayLabel(d) });
-                    lastDay = dayKey;
-                }
-            }
-            items.push(m);
-        }
-        // Reversed for the inverted FlatList: index 0 renders at the visual bottom,
-        // so the reversed-chronological array reads correctly top-to-bottom on screen.
-        return items.reverse();
-    }, [messages]);
+    // Day pills interleaved, then reversed for the inverted list. Shared with every chat so a group's
+    // Today / Yesterday / "Mon, 12 May" reads exactly like a DM's (utils/chat-actions).
+    const listItems = React.useMemo(() => buildChatListItems(messages), [messages]);
 
-    // List cells are siblings, and a later-mounted cell paints over an earlier one —
-    // so the reaction picker / action buttons (positioned at top/bottom: -45, overflowing into
-    // adjacent rows) rendered BEHIND sibling bubbles. zIndex inside the row can't win
-    // across cells; the whole cell has to be lifted while its picker or action bar is open.
-    const renderCell = useCallback(({ children, item, style, ...props }: any) => {
-        const isActive = item?.id && (item.id === activeEmojiPickerId || item.id === activeMessageActionsId);
+    // Who this member is in this chat. The one place the action rules are asked, so a DM and a group chat
+    // can never disagree about what tapping a bubble offers.
+    const viewer: ChatViewer = React.useMemo(() => ({
+        kind: 'dm' as const,
+        myPubkey: identity?.publicKey ?? null,
+        canPost: !isPeerBlocked,
+        isModerator: false,
+    }), [identity?.publicKey, isPeerBlocked]);
+
+    /** Escrow events, join notices and the like: a centred grey line with the deal actions under it. */
+    const renderSystemMessage = (item: any) => {
+        let iconName: any = 'information-outline';
+        let iconColor: string = colors.text.secondary;
+        let bgColor: string = colors.chatSystem.defaultBg;
+        let borderColor: string = colors.chatSystem.defaultBorder;
+
+        if (item.systemType === 'ESCROW_FUNDED') {
+            iconName = 'lock-check';
+            iconColor = colors.brand.primary;
+            bgColor = colors.chatSystem.fundedBg;
+            borderColor = colors.brand.primary;
+        }
+        if (item.systemType === 'ESCROW_RELEASED') {
+            iconName = 'check-decagram';
+            iconColor = colors.brand.dark;
+            bgColor = colors.chatSystem.releasedBg;
+            borderColor = colors.brand.dark;
+        }
+        if (item.systemType === 'ESCROW_CANCELLED') {
+            iconName = 'cash-refund';
+            iconColor = colors.feedback.danger.solid;
+            bgColor = colors.chatSystem.cancelledBg;
+            borderColor = colors.feedback.danger.solid;
+        }
+
         return (
-            <View
-                {...props}
-                style={[
-                    style,
-                    isActive ? { zIndex: 9999, elevation: 9999, overflow: 'visible' } : { zIndex: 1 }
-                ]}
-            >
-                {children}
-            </View>
-        );
-    }, [activeEmojiPickerId, activeMessageActionsId]);
-
-    const renderMessage = ({ item }: { item: any }) => {
-        if (item.type === 'day-separator') {
-            return (
-                <View style={styles.daySeparatorRow}>
-                    <View style={styles.daySeparatorPill}>
-                        <Text style={styles.daySeparatorText}>{item.label}</Text>
-                    </View>
+            <View style={[chat.systemMessageContainer, { marginTop: 16, marginBottom: 16 }]}>
+                <View style={[chat.systemMessageBubble, { backgroundColor: bgColor, borderColor: borderColor, borderWidth: 1 }]}>
+                    <MaterialCommunityIcons name={iconName} size={16} color={iconColor} style={{ marginRight: 6 }} />
+                    <Text style={[chat.systemMessageText, { color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
+                        {item.metadata?.postId && dealTitleByPostId[item.metadata.postId] ? `${dealTitleByPostId[item.metadata.postId]}: ` : ''}{item.text}
+                    </Text>
                 </View>
-            );
-        }
+                <Text style={chat.systemTimestamp}>{item.timestamp}</Text>
 
-        const isSystem = item.type === 'system' || item.senderId === 'SYSTEM';
-        
-        if (isSystem) {
-            let iconName: any = 'information-outline';
-            let iconColor: string = colors.text.secondary;
-            let bgColor: string = colors.chatSystem.defaultBg;
-            let borderColor: string = colors.chatSystem.defaultBorder;
+                {/* Inline post link — only when it points somewhere the sticky header doesn't already cover */}
+                {item.metadata?.postId && item.metadata.postId !== postContext?.id && (
+                    <Pressable
+                        accessibilityRole="button"
+                        style={chat.systemActionBtn}
+                        onPress={() => router.push(`/post/${item.metadata.postId}`)}
+                    >
+                        <MaterialCommunityIcons name="tag-outline" size={14} color={colors.brand.primary} style={{ marginRight: 4 }} />
+                        <Text style={chat.systemActionText}>View Post</Text>
+                    </Pressable>
+                )}
 
-            if (item.systemType === 'ESCROW_FUNDED') {
-                iconName = 'lock-check';
-                iconColor = colors.brand.primary;
-                bgColor = colors.chatSystem.fundedBg;
-                borderColor = colors.brand.primary;
-            }
-            if (item.systemType === 'ESCROW_RELEASED') {
-                iconName = 'check-decagram';
-                iconColor = colors.brand.dark;
-                bgColor = colors.chatSystem.releasedBg;
-                borderColor = colors.brand.dark;
-            }
-            if (item.systemType === 'ESCROW_CANCELLED') {
-                iconName = 'cash-refund';
-                iconColor = colors.feedback.danger.solid;
-                bgColor = colors.chatSystem.cancelledBg;
-                borderColor = colors.feedback.danger.solid;
-            }
-
-            return (
-                <View style={[styles.systemMessageContainer, { marginTop: 16, marginBottom: 16 }]}>
-                    <View style={[styles.systemMessageBubble, { backgroundColor: bgColor, borderColor: borderColor, borderWidth: 1 }]}>
-                        <MaterialCommunityIcons name={iconName} size={16} color={iconColor} style={{ marginRight: 6 }} />
-                        <Text style={[styles.systemMessageText, { color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
-                            {item.metadata?.postId && dealTitleByPostId[item.metadata.postId] ? `${dealTitleByPostId[item.metadata.postId]}: ` : ''}{item.text}
-                        </Text>
-                    </View>
-                    <Text style={styles.systemTimestamp}>{item.timestamp}</Text>
-                    
-                    {/* Inline post link — only when it points somewhere the sticky header doesn't already cover */}
-                    {item.metadata?.postId && item.metadata.postId !== postContext?.id && (
+                {item.systemType === 'ESCROW_RELEASED' && item.metadata?.postId && (() => {
+                    const hasRated = ratedPostIds.has(item.metadata.postId);
+                    return (
                         <Pressable
                             accessibilityRole="button"
-                            style={styles.systemActionBtn}
-                            onPress={() => router.push(`/post/${item.metadata.postId}`)}
-                        >
-                            <MaterialCommunityIcons name="tag-outline" size={14} color={colors.brand.primary} style={{ marginRight: 4 }} />
-                            <Text style={styles.systemActionText}>View Post</Text>
-                        </Pressable>
-                    )}
-                    
-                    {item.systemType === 'ESCROW_RELEASED' && item.metadata?.postId && (() => {
-                        const hasRated = ratedPostIds.has(item.metadata.postId);
-                        return (
-                            <Pressable
-                                accessibilityRole="button"
-                                style={[styles.systemActionBtn, { borderColor: hasRated ? colors.brand.primary : colors.feedback.warning.solid }]}
-                                onPress={async () => {
-                                    try {
-                                        const db = await getDb();
-                                        const txRow = await db.getFirstAsync<any>(
-                                            "SELECT id, buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id=? AND status='completed' LIMIT 1",
-                                            [item.metadata.postId]
-                                        );
-                                        if (txRow && identity?.publicKey) {
-                                            const targetPubkey = txRow.buyer_pubkey === identity.publicKey ? txRow.seller_pubkey : txRow.buyer_pubkey;
-                                            setPromptReviewForTx({
-                                                txId: txRow.id,
-                                                targetPubkey,
-                                                targetCallsign: peerName
-                                            });
-                                        } else {
-                                            Alert.alert("Notice", "Transaction details not found locally. Please try viewing the post.");
-                                        }
-                                    } catch (e) {
-                                        console.error(e);
-                                        Alert.alert("Error", "Could not load transaction details for rating.");
+                            style={[chat.systemActionBtn, { borderColor: hasRated ? colors.brand.primary : colors.feedback.warning.solid }]}
+                            onPress={async () => {
+                                try {
+                                    const db = await getDb();
+                                    const txRow = await db.getFirstAsync<any>(
+                                        "SELECT id, buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id=? AND status='completed' LIMIT 1",
+                                        [item.metadata.postId]
+                                    );
+                                    if (txRow && identity?.publicKey) {
+                                        const targetPubkey = txRow.buyer_pubkey === identity.publicKey ? txRow.seller_pubkey : txRow.buyer_pubkey;
+                                        setPromptReviewForTx({
+                                            txId: txRow.id,
+                                            targetPubkey,
+                                            targetCallsign: peerName
+                                        });
+                                    } else {
+                                        Alert.alert("Notice", "Transaction details not found locally. Please try viewing the post.");
                                     }
-                                }}
-                            >
-                                <MaterialCommunityIcons 
-                                    name={hasRated ? "star" : "star-outline"} 
-                                    size={14} 
-                                    color={hasRated ? colors.brand.primary : colors.feedback.warning.solid}
-                                    style={{ marginRight: 4 }}
-                                />
-                                <Text style={[styles.systemActionText, { color: hasRated ? colors.brand.primary : colors.feedback.warning.solid }]}>
-                                    {hasRated ? '✓ Rating submitted (Tap to edit)' : 'Rate your partner'}
-                                </Text>
-                            </Pressable>
-                        );
-                    })()}
-                </View>
-            );
-        }
+                                } catch (e) {
+                                    console.error(e);
+                                    Alert.alert("Error", "Could not load transaction details for rating.");
+                                }
+                            }}
+                        >
+                            <MaterialCommunityIcons
+                                name={hasRated ? "star" : "star-outline"}
+                                size={14}
+                                color={hasRated ? colors.brand.primary : colors.feedback.warning.solid}
+                                style={{ marginRight: 4 }}
+                            />
+                            <Text style={[chat.systemActionText, { color: hasRated ? colors.brand.primary : colors.feedback.warning.solid }]}>
+                                {hasRated ? '✓ Rating submitted (Tap to edit)' : 'Rate your partner'}
+                            </Text>
+                        </Pressable>
+                    );
+                })()}
+            </View>
+        );
+    };
+
+    const renderMessage = (item: any) => {
+        if (item.type === 'system' || item.senderId === 'SYSTEM') return renderSystemMessage(item);
 
         const isMe = identity?.publicKey ? item.senderId === identity.publicKey : false;
         const showActions = activeMessageActionsId === item.id;
         const showEmojiPicker = activeEmojiPickerId === item.id;
-
-        // Parse reactions
-        const reactions: { emoji: string; author: string }[] = item.metadata?.reactions || [];
-        const reactionCounts = reactions.reduce((acc: { [key: string]: number }, r: any) => {
-            acc[r.emoji] = (acc[r.emoji] || 0) + 1;
-            return acc;
-        }, {});
-        const uniqueEmojis = Object.keys(reactionCounts);
-        const totalReactionsCount = reactions.length;
+        const actions = messageActions(item, viewer);
 
         const handleEmojiSelect = async (emoji: string) => {
             if (!identity?.publicKey) return;
@@ -1251,9 +959,9 @@ function ChatScreen() {
                 setActiveEmojiPickerId(null);
                 setActiveMessageActionsId(null);
                 loadMessages(true);
-            } catch (e) {
+            } catch (e: any) {
                 console.error('Failed to react to message:', e);
-                Alert.alert('Error', 'Could not react to message');
+                Alert.alert('Not reacted', chatActionErrorMessage(e));
             }
         };
 
@@ -1262,6 +970,8 @@ function ChatScreen() {
             if (linkPressedRef.current) { linkPressedRef.current = false; return; }
             // Failed sends get the resend/discard prompt instead of the actions menu.
             if (item.sendState === 'failed') { handleFailedMessagePress(item); return; }
+            // Nothing on offer (a tombstone, a blocked peer): no empty bar.
+            if (!hasAnyAction(actions)) return;
             const pageY = event?.nativeEvent?.pageY;
             // If the touch is within the top 230px of the viewport, position the picker below the bubble
             const isNearTop = pageY && pageY < 230;
@@ -1276,14 +986,6 @@ function ChatScreen() {
             }
         };
 
-        const handleSmileyPress = () => {
-            if (activeEmojiPickerId === item.id) {
-                setActiveEmojiPickerId(null);
-            } else {
-                setActiveEmojiPickerId(item.id);
-            }
-        };
-
         const handleReplyPress = () => {
             setReplyToMessage(item);
             setEditingMessage(null);
@@ -1293,197 +995,105 @@ function ChatScreen() {
         const handleEditPress = () => {
             setEditingMessage(item);
             setReplyToMessage(null);
-            updateDraft(item.text || '');
-            // Uncontrolled input: push the text into the native field explicitly.
-            inputRef.current?.setNativeProps({ text: item.text || '' });
+            composerRef.current?.setText(item.text || '');
             setActiveMessageActionsId(null);
             setActiveEmojiPickerId(null);
         };
 
-        // Only the author can edit, only text (not images/system), only within the window,
-        // and never a message still in flight (its id is a local temp id the server doesn't know).
-        const canEdit = isMe && item.type !== 'image' && !item.systemType && !item.sendState && !!item.rawTimestamp &&
-            (Date.now() - new Date(item.rawTimestamp).getTime() <= MESSAGE_EDIT_WINDOW_MS);
+        const quote = item.metadata?.replyToId ? (() => {
+            const parentMsg = messagesById.get(item.metadata.replyToId);
+            const parentText = !parentMsg
+                ? 'Message not found'
+                : isTombstone(parentMsg)
+                    ? tombstoneText(parentMsg, 'dm')
+                    : parentMsg.type === 'image' ? '🔒 Photo' : parentMsg.text;
+            const parentAuthor = parentMsg ? (parentMsg.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')) : 'Someone';
+            return {
+                author: parentAuthor,
+                text: parentText,
+                onPress: () => {
+                    const index = listItems.findIndex((m: any) => m.id === item.metadata.replyToId);
+                    if (index > -1) {
+                        try {
+                            flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+                        } catch (e) {
+                            console.warn(e);
+                        }
+                    }
+                },
+            };
+        })() : null;
 
-        const renderActionButtons = () => {
-            return (
-                <View style={[styles.actionButtonsContainer, isMe ? styles.actionButtonsMe : styles.actionButtonsOther]}>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Reply"
-                        style={styles.circleActionButton}
-                        onPress={handleReplyPress}
-                    >
-                        <MaterialCommunityIcons name="reply" size={16} color={colors.text.inverse} />
-                    </Pressable>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="React"
-                        style={[styles.circleActionButton, showEmojiPicker ? styles.circleActionButtonActive : {}]}
-                        onPress={handleSmileyPress}
-                    >
-                        <MaterialCommunityIcons name="emoticon-happy-outline" size={16} color={colors.text.inverse} />
-                    </Pressable>
-                    {canEdit && (
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel="Edit message"
-                            style={styles.circleActionButton}
-                            onPress={handleEditPress}
-                        >
-                            <MaterialCommunityIcons name="pencil" size={15} color={colors.text.inverse} />
-                        </Pressable>
-                    )}
-                </View>
-            );
-        };
+        const status = isMe && item.outgoing ? (
+            item.sendState === 'sending' ? (
+                <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
+            ) : item.sendState === 'failed' ? (
+                <Text style={{ fontSize: 10, color: colors.feedback.danger.solid, fontWeight: '800' }}> ! not delivered</Text>
+            ) : (
+                <Text style={{ fontSize: 10, color: item.readByPeer ? palette.cyan200 : colors.chat.tickUnread }}>
+                    {item.readByPeer ? ' ✓✓' : ' ✓'}
+                </Text>
+            )
+        ) : null;
 
         return (
-            <View style={[
-                styles.messageRowContainer,
-                isMe ? styles.messageRowMe : styles.messageRowOther
-            ]}>
-                {showEmojiPicker && (
-                    <View style={[
-                        styles.reactionPickerContainer, 
-                        isMe ? styles.reactionPickerMe : styles.reactionPickerOther,
-                        pickerPosition === 'bottom' ? { top: undefined, bottom: -45 } : { bottom: undefined, top: -45 }
-                    ]}>
-                        {['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'].map((emoji) => (
-                            <Pressable
-                                key={emoji}
-                                accessibilityRole="button"
-                                accessibilityLabel={`React with ${emoji}`}
-                                style={styles.reactionEmojiButton}
-                                onPress={() => handleEmojiSelect(emoji)}
-                            >
-                                <Text style={styles.reactionEmojiText}>{emoji}</Text>
-                            </Pressable>
-                        ))}
+            <ChatMessageRow
+                item={item}
+                kind="dm"
+                isMe={isMe}
+                styles={chat}
+                actions={actions}
+                showActions={showActions}
+                showEmojiPicker={showEmojiPicker}
+                pickerPosition={pickerPosition}
+                onPressBubble={toggleActions}
+                onReply={handleReplyPress}
+                onToggleEmojiPicker={() => setActiveEmojiPickerId(activeEmojiPickerId === item.id ? null : item.id)}
+                onEdit={handleEditPress}
+                onDelete={() => handleDeletePress(item)}
+                onRemove={() => { /* a DM has no convenor: nobody removes anybody else's message here */ }}
+                onPickEmoji={handleEmojiSelect}
+                onPressUrl={openUrl}
+                quote={quote}
+                attachment={item.type === 'image' ? (
+                    <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} />
+                ) : null}
+                status={status}
+                footer={item.type === 'image' && !item.text ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
+                        <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther]}>
+                            {item.timestamp}
+                        </Text>
+                        {isMe && item.outgoing && (
+                            <MaterialCommunityIcons
+                                name={item.readByPeer ? 'check-all' : 'check'}
+                                size={14}
+                                color={item.readByPeer ? palette.cyan200 : colors.chat.tickUnread}
+                                style={{ marginLeft: 3 }}
+                            />
+                        )}
                     </View>
-                )}
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', maxWidth: '85%' }}>
-                    {isMe && showActions && renderActionButtons()}
-                    
-                    <Pressable
-                        accessibilityRole="button"
-                        onPress={toggleActions}
-                        style={[
-                            styles.messageBubble,
-                            isMe ? styles.messageMe : styles.messageOther,
-                            { position: 'relative', zIndex: 1 },
-                            totalReactionsCount > 0 ? { paddingBottom: 24 } : null
-                        ]}
-                    >
-                        {item.metadata?.replyToId && (() => {
-                            const parentMsg = messagesById.get(item.metadata.replyToId);
-                            const parentText = parentMsg ? (parentMsg.type === 'image' ? '🔒 Photo' : parentMsg.text) : 'Message not found';
-                            const parentAuthor = parentMsg ? (parentMsg.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')) : 'Someone';
-                            return (
-                                <Pressable
-                                    accessibilityRole="button"
-                                    onPress={() => {
-                                        const index = listItems.findIndex(m => m.id === item.metadata.replyToId);
-                                        if (index > -1) {
-                                            try {
-                                                flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-                                            } catch (e) {
-                                                console.warn(e);
-                                            }
-                                        }
-                                    }}
-                                    style={[
-                                        styles.quoteContainer,
-                                        isMe ? styles.quoteMe : styles.quoteOther
-                                    ]}
-                                >
-                                    <Text style={[styles.quoteAuthor, isMe ? styles.quoteAuthorMe : styles.quoteAuthorOther]}>
-                                        {parentAuthor}
-                                    </Text>
-                                    <Text style={[styles.quoteText, isMe ? styles.quoteTextMe : styles.quoteTextOther]} numberOfLines={1}>
-                                        {parentText}
-                                    </Text>
-                                </Pressable>
-                            );
-                        })()}
-                        {item.type === 'image' ? (
-                            <>
-                                <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} />
-                                {!!item.text && (
-                                    <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther, { marginTop: 6 }]}>
-                                        {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, openUrl)}
-                                        {"  "}
-                                        <Text style={[styles.messageTime, isMe ? styles.messageTimeMe : styles.messageTimeOther, { fontSize: 10 }]}>
-                                            {item.timestamp}
-                                        </Text>
-                                        {isMe && item.outgoing && (
-                                            <Text style={{ fontSize: 10, color: item.readByPeer ? palette.cyan200 : colors.chat.tickUnread }}>
-                                                {item.readByPeer ? ' ✓✓' : ' ✓'}
-                                            </Text>
-                                        )}
-                                    </Text>
-                                )}
-                            </>
-                        ) : (
-                            <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
-                                {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, openUrl)}
-                                {"  "}
-                                <Text style={[styles.messageTime, isMe ? styles.messageTimeMe : styles.messageTimeOther, { fontSize: 10 }]}>
-                                    {item.edited ? 'edited · ' : ''}{item.timestamp}
-                                </Text>
-                                {isMe && item.outgoing && (
-                                    item.sendState === 'sending' ? (
-                                        <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
-                                    ) : item.sendState === 'failed' ? (
-                                        <Text style={{ fontSize: 10, color: colors.feedback.danger.solid, fontWeight: '800' }}> ! not delivered</Text>
-                                    ) : (
-                                        <Text style={{ fontSize: 10, color: item.readByPeer ? palette.cyan200 : colors.chat.tickUnread }}>
-                                            {item.readByPeer ? ' ✓✓' : ' ✓'}
-                                        </Text>
-                                    )
-                                )}
-                            </Text>
-                        )}
-                        {item.type === 'image' && !item.text && (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
-                                <Text style={[styles.messageTime, isMe ? styles.messageTimeMe : styles.messageTimeOther]}>
-                                    {item.timestamp}
-                                </Text>
-                                {isMe && item.outgoing && (
-                                    <MaterialCommunityIcons
-                                        name={item.readByPeer ? 'check-all' : 'check'}
-                                        size={14}
-                                        color={item.readByPeer ? palette.cyan200 : colors.chat.tickUnread}
-                                        style={{ marginLeft: 3 }}
-                                    />
-                                )}
-                            </View>
-                        )}
-
-                        {totalReactionsCount > 0 && (
-                            <View style={[
-                                styles.reactionBadgeContainer, 
-                                isMe ? styles.reactionBadgeMe : styles.reactionBadgeOther,
-                                totalReactionsCount === 1 ? { width: 28, paddingHorizontal: 0, justifyContent: 'center' } : {}
-                            ]}>
-                                <Text style={[
-                                    styles.reactionBadgeText,
-                                    totalReactionsCount === 1 
-                                        ? { fontSize: 14, lineHeight: 14, marginTop: 1.5, marginLeft: 3.5 } 
-                                        : { marginTop: -1 }
-                                ]}>
-                                    {uniqueEmojis.join(' ')} {totalReactionsCount > 1 ? totalReactionsCount : ''}
-                                </Text>
-                            </View>
-                        )}
-                    </Pressable>
-
-                    {!isMe && showActions && renderActionButtons()}
-                </View>
-            </View>
+                ) : null}
+            />
         );
     };
+
+    const menuItems: ChatMenuItem[] = [
+        {
+            icon: isMuted(mute) ? 'bell-ring-outline' : 'bell-off-outline',
+            label: muteMenuLabel(mute),
+            onPress: () => { setMenuOpen(false); if (isMuted(mute)) setMuteTo('off'); else setMuteOpen(true); },
+        },
+        {
+            icon: 'account-outline',
+            label: 'View profile',
+            hidden: !peerPubkey,
+            onPress: () => {
+                setMenuOpen(false);
+                if (peerPubkey) router.push({ pathname: '/public-profile', params: { publicKey: peerPubkey, callsign: peerName } });
+            },
+        },
+    ];
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -1521,7 +1131,7 @@ function ChatScreen() {
                     </View>
                 </Pressable>
 
-                <Pressable accessibilityRole="button" accessibilityLabel="More options" style={styles.moreButton}>
+                <Pressable accessibilityRole="button" accessibilityLabel="More options" style={styles.moreButton} onPress={openMenu}>
                     <MaterialCommunityIcons name="dots-horizontal" size={28} color={colors.text.secondary} />
                 </Pressable>
             </View>
@@ -1636,113 +1246,100 @@ function ChatScreen() {
                 style={styles.keyboardView}
                 behavior="padding"
             >
-                {/* Messages List */}
-                <FlatList
-                    ref={flatListRef}
-                    data={listItems}
-                    keyExtractor={item => item.id}
-                    renderItem={renderMessage}
-                    CellRendererComponent={renderCell}
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    // Inverted = newest message (index 0) is on-screen from the first
-                    // frame. The old non-inverted list rendered the thread top-down in
-                    // batches while animating scrollToEnd after EVERY batch — the
-                    // jerky ride-to-the-bottom on opening a conversation.
-                    inverted
-                    initialNumToRender={15}
-                    windowSize={9}
-                    // Inverted list: "end" = the oldest loaded message (visual top).
-                    // Reaching it grows the history window by one page, WhatsApp-style.
-                    // If the last load came back short of the window, there is no
-                    // older history to fetch and the grow is skipped.
-                    onEndReachedThreshold={0.8}
-                    onEndReached={() => {
-                        if (loadingOlderRef.current) return;
-                        if (messagesLenRef.current < msgLimitRef.current) return;
-                        loadingOlderRef.current = true;
-                        msgLimitRef.current += MESSAGE_PAGE_SIZE;
-                        loadMessages(true).finally(() => { loadingOlderRef.current = false; });
-                    }}
-                    onScrollBeginDrag={() => {
-                        setActiveMessageActionsId(null);
-                        setActiveEmojiPickerId(null);
-                    }}
-                />
+                {/* The thread. Inverted, day-separated and keyboard-following — the shared list every chat uses. */}
+                {shouldShowChatLoadError({ loadError, messageCount: messages.length }) ? (
+                    <View style={{ flex: 1 }}>
+                        <Text style={chat.errorText} accessibilityRole="alert">{loadError}</Text>
+                        <Pressable style={chat.retryBtn} accessibilityRole="button" onPress={() => { setLoadError(null); loadMessages(); }}>
+                            <Text style={chat.retryText}>Try again</Text>
+                        </Pressable>
+                    </View>
+                ) : !firstLoadDone ? (
+                    // The thread's outline while the first read comes back: the header already names who it is with.
+                    <View style={[chat.listContent, { flex: 1 }]} accessibilityRole="progressbar" accessibilityLabel="Loading the chat">
+                        {[{ w: '62%', mine: false }, { w: '48%', mine: true }, { w: '70%', mine: false }].map((b, k) => (
+                            <View key={k} style={[chat.skeletonRow, b.mine && chat.skeletonRowMine]}>
+                                <View style={[chat.skeletonBubble, { width: b.w as any }]} />
+                            </View>
+                        ))}
+                    </View>
+                ) : (
+                    <ChatMessageList
+                        listRef={flatListRef}
+                        items={listItems}
+                        styles={chat}
+                        renderMessage={renderMessage}
+                        activeId={activeEmojiPickerId || activeMessageActionsId}
+                        onAtBottomChange={atBottom => { atBottomRef.current = atBottom; }}
+                        onScrollBeginDrag={() => {
+                            setActiveMessageActionsId(null);
+                            setActiveEmojiPickerId(null);
+                        }}
+                        // Inverted list: "end" = the oldest loaded message (visual top). Reaching it grows the
+                        // history window by one page, WhatsApp-style. If the last load came back short of the
+                        // window, there is no older history to fetch and the grow is skipped.
+                        onEndReached={() => {
+                            if (loadingOlderRef.current) return;
+                            if (messagesLenRef.current < msgLimitRef.current) return;
+                            loadingOlderRef.current = true;
+                            msgLimitRef.current += MESSAGE_PAGE_SIZE;
+                            loadMessages(true).finally(() => { loadingOlderRef.current = false; });
+                        }}
+                    />
+                )}
 
-                {/* Edit Banner */}
                 {editingMessage && (
-                    <View style={styles.replyPreviewContainer}>
-                        <View style={styles.replyPreviewBar}>
-                            <View style={{ flex: 1, borderLeftWidth: 3, borderLeftColor: colors.brand.primary, paddingLeft: 8 }}>
-                                <Text style={[styles.replyPreviewAuthor, { color: colors.brand.primary }]}>Editing message</Text>
-                                <Text style={styles.replyPreviewText} numberOfLines={1}>{editingMessage.text}</Text>
-                            </View>
-                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { const prior = draftRef.current.trim(); setEditingMessage(null); resetInputBox(); scheduleClearSweep(prior); }} style={styles.replyPreviewClose}>
-                                <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
-                            </Pressable>
-                        </View>
-                    </View>
+                    <ChatEditBanner
+                        styles={chat}
+                        text={editingMessage.text}
+                        onCancel={() => { setEditingMessage(null); composerRef.current?.reset(); }}
+                    />
                 )}
 
-                {/* Reply Preview */}
                 {replyToMessage && !editingMessage && (
-                    <View style={styles.replyPreviewContainer}>
-                        <View style={styles.replyPreviewBar}>
-                            <View style={{ flex: 1, borderLeftWidth: 3, borderLeftColor: colors.accent.primary, paddingLeft: 8 }}>
-                                <Text style={styles.replyPreviewAuthor}>
-                                    Replying to {replyToMessage.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')}
-                                </Text>
-                                <Text style={styles.replyPreviewText} numberOfLines={1}>
-                                    {replyToMessage.type === 'image' ? '🔒 Photo' : replyToMessage.text}
-                                </Text>
-                            </View>
-                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel reply" onPress={() => setReplyToMessage(null)} style={styles.replyPreviewClose}>
-                                <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
-                            </Pressable>
-                        </View>
-                    </View>
+                    <ChatReplyBanner
+                        styles={chat}
+                        author={replyToMessage.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')}
+                        text={replyToMessage.type === 'image' ? '🔒 Photo' : replyToMessage.text}
+                        onCancel={() => setReplyToMessage(null)}
+                    />
                 )}
 
-                {/* Input Area */}
                 {isPeerBlocked ? (
-                    <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ padding: 14, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, alignItems: 'center', marginHorizontal: 12, marginBottom: Math.max(insets.bottom, 12), borderRadius: 12 }}>
-                        <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' }}>
+                    <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
+                        <Text style={styles.blockedNoticeText}>
                             <Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>You have blocked this user. Messaging is disabled.
                         </Text>
                     </View>
                 ) : (
-                    <View style={[
-                        styles.inputContainer,
-                        { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 12) }
-                    ]}>
-                        <Pressable accessibilityRole="button" accessibilityLabel="Attach image" style={styles.attachBtn} onPress={pickAndSendImage}>
-                            <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />
-                        </Pressable>
-                        <TextInput
-                            ref={inputRef}
-                            accessibilityLabel="Message"
-                            style={[styles.input, { height: inputHeight }]}
-                            onContentSizeChange={e => setInputHeight(Math.min(CHAT_INPUT_MAX_HEIGHT,
-                                Math.max(CHAT_INPUT_MIN_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height) + CHAT_INPUT_V_PADDING)))}
-                            placeholder="Message..."
-                            placeholderTextColor={colors.text.muted}
-                            onChangeText={updateDraft}
-                            multiline
-                            submitBehavior="newline"
-                        />
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel="Send message"
-                            style={[styles.sendBtn, draft.trim().length > 0 ? styles.sendBtnActive : styles.sendBtnInactive]}
-                            onPress={handleSend}
-                        >
-                            <MaterialCommunityIcons name="send" size={20} color={draft.trim().length > 0 ? colors.text.inverse : colors.text.muted} />
-                        </Pressable>
-                    </View>
+                    <ChatComposer
+                        ref={composerRef}
+                        styles={chat}
+                        onSend={handleSend}
+                        canSend={canSendNow}
+                        placeholder="Message..."
+                        accessibilityLabel="Message"
+                        bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
+                        leading={
+                            <Pressable accessibilityRole="button" accessibilityLabel="Attach image" style={chat.attachBtn} onPress={pickAndSendImage}>
+                                <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />
+                            </Pressable>
+                        }
+                    />
                 )}
             </KeyboardAvoidingView>
+
+            {/* The ⋮ menu: the same sheet, the same mute wording, as every group chat (groups decision 12). */}
+            <ChatMenuSheet
+                styles={chat}
+                menuOpen={menuOpen}
+                muteOpen={muteOpen}
+                title={peerName}
+                items={menuItems}
+                onClose={() => { setMenuOpen(false); setMuteOpen(false); }}
+                onPickMute={setMuteTo}
+                bottomInset={insets.bottom}
+            />
 
             {promptReviewForTx && reviewModalReady && (
                 <ReviewModal

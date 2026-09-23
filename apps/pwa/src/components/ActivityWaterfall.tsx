@@ -5,7 +5,7 @@
  * and posts to ensure communities feel alive and welcoming during cold-start or quiet periods.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getActivityFeedApi, type ActivityFeedItem } from '../lib/api';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
@@ -16,6 +16,11 @@ interface Props {
      *  Beans). A guest (false) is not sent to fetch a 403 — the full view says why it is empty instead;
      *  null means membership is still being checked, so nothing is fetched yet. */
     isMember?: boolean | null;
+    /** Open the listing a Live Pulse chip names, the way the Market's own cards open one. Omitted
+     *  means chips that would open a listing stay plain text rather than pretending to be controls. */
+    onOpenPost?: (postId: string) => void;
+    /** Open a member's profile from a Live Pulse chip. Same rule as `onOpenPost` when omitted. */
+    onOpenProfile?: (pubkey: string) => void;
 }
 
 function formatRelativeTime(isoDate: string): string {
@@ -29,9 +34,219 @@ function formatRelativeTime(isoDate: string): string {
     return `${diffDays}d ago`;
 }
 
-export function ActivityWaterfall({ isFullView = false, isMember = true }: Props) {
+type PulseTarget =
+    | { kind: 'post'; postId: string }
+    | { kind: 'profile'; pubkey: string }
+    | null;
+
+/** The emoji that heads a Live Pulse chip. */
+function pulseEmoji(eventType: ActivityFeedItem['eventType']): string {
+    switch (eventType) {
+        case 'member_joined': return '🎉';
+        case 'trade_completed': return '✅';
+        case 'rating_given': return '⭐️';
+        case 'post_created': return '📍';
+        case 'dispute_resolved': return '⚖️';
+        default: return '✨';
+    }
+}
+
+/**
+ * What a Live Pulse chip reads at rest, and the longer line it reveals while the pointer is over it.
+ *
+ * `full` only ever uses detail the feed already carries and already shows members elsewhere — a
+ * listing's title, a rating's comment. Nothing is fetched per chip, and nothing private is added.
+ */
+function pulseText(item: ActivityFeedItem): { short: string; full: string } {
+    const actor = item.actorCallsign || 'Someone';
+    const target = item.targetCallsign || 'another member';
+    const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : '');
+
+    switch (item.eventType) {
+        case 'trade_completed': {
+            const title = text(item.metadata?.postTitle);
+            return {
+                short: `${actor} traded`,
+                full: title ? `${actor} traded with ${target}: ${title}` : `${actor} traded with ${target}`,
+            };
+        }
+        case 'rating_given': {
+            const comment = text(item.metadata?.comment);
+            return {
+                short: `${actor} rated ★`,
+                full: comment ? `${actor} rated ${target}: “${comment}”` : `${actor} rated ${target}`,
+            };
+        }
+        case 'post_created': {
+            const title = text(item.metadata?.title);
+            return {
+                short: `${actor} posted`,
+                full: title ? `${actor} posted: ${title}` : `${actor} posted`,
+            };
+        }
+        case 'dispute_resolved':
+            // The actor here is whoever ruled — an admin, or the owner password. Naming them would put a
+            // moderator in front of every member, so this chip stays impersonal and opens nothing.
+            // (Before this mapping it fell through to the default and read "<admin> joined".)
+            return { short: 'Dispute resolved', full: 'A trade dispute was resolved' };
+        case 'member_joined':
+        default:
+            return { short: `${actor} joined`, full: `${actor} joined the community` };
+    }
+}
+
+/**
+ * Where a chip goes when it is opened. Every event type is mapped; one with nothing sensible to open
+ * returns null and stays plain text rather than pretending to be a control.
+ *
+ * Nothing here decides visibility on its own: a profile and a listing are both opened through the
+ * Market's own handlers, so the node applies the rules it applies to every other card.
+ */
+function pulseTarget(item: ActivityFeedItem): PulseTarget {
+    const raw = item.metadata?.postId;
+    const postId = raw === undefined || raw === null || raw === '' ? '' : String(raw);
+
+    switch (item.eventType) {
+        case 'member_joined':
+            return item.actorPubkey ? { kind: 'profile', pubkey: item.actorPubkey } : null;
+        case 'post_created':
+            // Only public posts are recorded to this feed (server engine/posts.ts), so the listing a
+            // chip names is one every member may open.
+            return postId ? { kind: 'post', postId } : null;
+        case 'trade_completed':
+        case 'rating_given':
+            // The related listing when the item carries one, otherwise the other member's profile.
+            if (postId) return { kind: 'post', postId };
+            if (item.targetPubkey) return { kind: 'profile', pubkey: item.targetPubkey };
+            return item.actorPubkey ? { kind: 'profile', pubkey: item.actorPubkey } : null;
+        case 'dispute_resolved':
+        default:
+            return null;
+    }
+}
+
+/** Slow enough to read a listing title, rather than a ticker: ~40 CSS pixels a second. */
+const PULSE_SCROLL_PX_PER_SECOND = 40;
+const PULSE_MIN_SCROLL_SECONDS = 1.5;
+
+function usePrefersReducedMotion(): boolean {
+    const [reduced, setReduced] = useState(false);
+    useEffect(() => {
+        // jsdom has no matchMedia, and neither does an old WebView; no query means no reduction asked for.
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+        const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+        setReduced(mq.matches);
+        const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
+        mq.addEventListener?.('change', onChange);
+        return () => mq.removeEventListener?.('change', onChange);
+    }, []);
+    return reduced;
+}
+
+const PULSE_CHIP_SHELL =
+    'flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 ' +
+    'border border-zinc-200/60 dark:border-zinc-700/60 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium';
+
+/**
+ * One chip in the Live Pulse strip.
+ *
+ * Clickable when the item has somewhere to go, plain text when it has not. The reveal is CSS: the
+ * chip's visible width comes from a hidden sizer holding the short line, the full line sits on top of
+ * it and is clipped, and `is-scrolling` slides it by the measured overflow. Nothing moves until a
+ * pointer is over the chip or it takes keyboard focus, and dropping the class snaps it back with no
+ * transition. The stylesheet gates the movement on a real hovering pointer, so a tap only opens.
+ */
+function PulseChip({
+    item,
+    onOpenPost,
+    onOpenProfile,
+    prefersReducedMotion,
+}: {
+    item: ActivityFeedItem;
+    onOpenPost?: (postId: string) => void;
+    onOpenProfile?: (pubkey: string) => void;
+    prefersReducedMotion: boolean;
+}) {
+    const viewportRef = useRef<HTMLSpanElement | null>(null);
+    const trackRef = useRef<HTMLSpanElement | null>(null);
+
+    const { short, full } = pulseText(item);
+    const timeStr = formatRelativeTime(item.createdAt);
+    const target = pulseTarget(item);
+
+    const reveal = () => {
+        if (prefersReducedMotion) return;
+        const viewport = viewportRef.current;
+        const track = trackRef.current;
+        if (!viewport || !track) return;
+        // Measured on every reveal: the overflow moves with the font size, the zoom and the text itself.
+        const overflow = Math.round(track.scrollWidth - viewport.clientWidth);
+        if (overflow <= 0) return;
+        const seconds = Math.max(PULSE_MIN_SCROLL_SECONDS, overflow / PULSE_SCROLL_PX_PER_SECOND);
+        viewport.style.setProperty('--pulse-overflow', `${overflow}px`);
+        viewport.style.setProperty('--pulse-duration', `${seconds.toFixed(2)}s`);
+        viewport.classList.add('is-scrolling');
+    };
+
+    const snapBack = () => {
+        viewportRef.current?.classList.remove('is-scrolling');
+    };
+
+    const inner = (
+        <>
+            <span aria-hidden="true">{pulseEmoji(item.eventType)}</span>
+            <span className="pulse-chip-viewport" ref={viewportRef} aria-hidden="true">
+                <span className="pulse-chip-sizer">{short}</span>
+                <span className="pulse-chip-track" ref={trackRef}>{full}</span>
+            </span>
+            <span className="text-zinc-400 text-[10px] ml-0.5" aria-hidden="true">{timeStr}</span>
+        </>
+    );
+
+    const canOpen = target !== null
+        && ((target.kind === 'post' && !!onOpenPost) || (target.kind === 'profile' && !!onOpenProfile));
+
+    if (target === null || !canOpen) {
+        return (
+            <span
+                className={PULSE_CHIP_SHELL}
+                title={prefersReducedMotion && full !== short ? full : undefined}
+                onMouseEnter={reveal}
+                onMouseLeave={snapBack}
+            >
+                {/* The chip's own text is hidden from a screen reader: the sizer would read it twice. */}
+                <span className="sr-only">{`${full}, ${timeStr}`}</span>
+                {inner}
+            </span>
+        );
+    }
+
+    return (
+        <button
+            type="button"
+            className={`${PULSE_CHIP_SHELL} text-left cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-700/70 hover:border-zinc-300 dark:hover:border-zinc-600`}
+            aria-label={`${full}, ${timeStr} — open`}
+            title={prefersReducedMotion && full !== short ? full : undefined}
+            onClick={() => {
+                if (target.kind === 'post') onOpenPost?.(target.postId);
+                else onOpenProfile?.(target.pubkey);
+            }}
+            onMouseEnter={reveal}
+            onMouseLeave={snapBack}
+            onFocus={reveal}
+            onBlur={snapBack}
+        >
+            {inner}
+        </button>
+    );
+}
+
+export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenPost, onOpenProfile }: Props) {
     const [feed, setFeed] = useState<ActivityFeedItem[]>([]);
     const [loading, setLoading] = useState(true);
+    // Read here, not inside PulseChip: the early returns below sit between the two, and a hook may not
+    // be called conditionally.
+    const prefersReducedMotion = usePrefersReducedMotion();
 
     useEffect(() => {
         if (isMember !== true) return;
@@ -270,24 +485,15 @@ export function ActivityWaterfall({ isFullView = false, isMember = true }: Props
                 </div>
 
                 <div className="flex-1 overflow-x-auto scrollbar-none flex items-center gap-2">
-                    {latestItems.map((item) => {
-                        const actor = item.actorCallsign || 'Someone';
-                        let label = `${actor} joined`;
-                        if (item.eventType === 'trade_completed') label = `${actor} traded`;
-                        if (item.eventType === 'rating_given') label = `${actor} rated ★`;
-                        if (item.eventType === 'post_created') label = `${actor} posted`;
-
-                        return (
-                            <span
-                                key={item.id}
-                                className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium"
-                            >
-                                <span aria-hidden="true">{item.eventType === 'member_joined' ? '🎉' : item.eventType === 'trade_completed' ? '✅' : item.eventType === 'rating_given' ? '⭐️' : '📍'}</span>
-                                {label}
-                                <span className="text-zinc-400 text-[10px] ml-0.5">{formatRelativeTime(item.createdAt)}</span>
-                            </span>
-                        );
-                    })}
+                    {latestItems.map((item) => (
+                        <PulseChip
+                            key={item.id}
+                            item={item}
+                            onOpenPost={onOpenPost}
+                            onOpenProfile={onOpenProfile}
+                            prefersReducedMotion={prefersReducedMotion}
+                        />
+                    ))}
                 </div>
             </div>
         </div>

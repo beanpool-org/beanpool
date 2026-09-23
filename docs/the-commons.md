@@ -1187,6 +1187,11 @@ and co-hosted nodes are a real thing. The rules are deliberately minimal:
 - **exactly two owners:** an owner **cannot** be removed unilaterally. It takes mutual resignation,
   or a community Decision at 66%
 - never fewer than one owner; self-resignation always allowed unless you are the last
+- **a suspended owner is still an owner.** A node with no owner at all — a fresh one, or one whose
+  owners were all removed — lets a signed-in admin create the first owner, because otherwise nobody
+  could. A community Decision that suspends an owner holds their role aside instead, and that still
+  counts: no admin may appoint themselves while it is parked. The node is not stuck either way, since
+  the admin password is owner-level (§2.5 of `admin-surface.md`) and can appoint an owner at any time
 
 **The two-owner rule is not pedantry.** Without it, two co-owners who fall out get a race: A clicks
 "remove B", and B's only recourse is to click "remove A" faster. Putting the community between two

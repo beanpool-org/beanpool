@@ -97,6 +97,42 @@ export function listNodeRoles(): NodeRoleRecord[] {
 }
 
 /**
+ * Whether this node has an owner AT ALL — the one question the owner-bootstrap branch of
+ * `grantNodeRole` asks. An owner role parked in `suspended_node_roles` counts: a community that
+ * suspended its owner still HAS one. The role is held aside, it comes back the moment the
+ * suspension lifts, and the member is still there. Genuinely ownerless means a node that never had
+ * an owner, or whose owners were all removed outright (#1006).
+ *
+ * THE INVARIANT THIS RELIES ON: a parked row exists only while the member it names is still here and
+ * still able to come back. Every path that takes them away for good deletes it — `adminPruneUser`,
+ * `purgeMemberSelf` (which a suspended member CAN still reach: the signing middleware does not check
+ * `members.status`), and the Decision machinery that settles a suspension one way or the other
+ * (`restoreSuspendedNodeRole`, `liftEmergencySuspensionRow`, keeping the suspension). Break that and
+ * this function reports an owner a node does not have, with no way to clear it.
+ *
+ * Revoking a role is deliberately NOT one of those paths: a suspended member's role is not in
+ * `node_roles` for `revokeNodeRole` to reach, and it must not be — the community may yet lift the
+ * suspension and get it back. Revocation only ever clears an ACTIVE owner, who has no parked row.
+ *
+ * NOT the "is this the last owner?" question. Every guard that stops a node losing its last USABLE
+ * owner — demotion and revocation below, `adminPruneUser`, `purgeMemberSelf`, `isSoleOwner` — goes
+ * on counting ACTIVE owners only, and so does who can open a sealed backup
+ * (`services/takeover-envelope.ts`). A suspended owner cannot sign anything, so treating them as the
+ * one owner still standing would let the last signing owner walk away and strand the node.
+ */
+export function nodeHasOwner(): boolean {
+    const row = db.prepare(
+        `SELECT 1 FROM node_roles nr
+         JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'owner' AND m.status = 'active'
+         UNION ALL
+         SELECT 1 FROM suspended_node_roles WHERE role = 'owner'
+         LIMIT 1`
+    ).get();
+    return !!row;
+}
+
+/**
  * Grants a node role ('owner', 'admin' or 'moderator') to a member.
  * Each member holds at most ONE node role.
  *
@@ -104,7 +140,7 @@ export function listNodeRoles(): NodeRoleRecord[] {
  * - Target member must exist in members table and be active
  * - SYSTEM placeholder account can NEVER hold a node role
  * - A treasury (is_treasury=1) can NEVER hold a node role
- * - Only an owner may grant 'owner' (unless bootstrapping on a node with 0 owners)
+ * - Only an owner may grant 'owner' (unless bootstrapping a node that has no owner at all — see nodeHasOwner)
  * - Only an owner may grant 'admin'
  * - An ADMIN may grant 'moderator', but only to someone who holds no role or is already a
  *   moderator (see below). Owners may grant it to anyone the other rules allow.
@@ -166,8 +202,21 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         const currentRole = existing?.role ?? null;
 
         if (role === 'owner') {
-            if (ownerCount > 0 && !isOwner) {
-                throw new Error('Only an owner may grant the owner role');
+            if (!isOwner) {
+                if (ownerCount > 0) {
+                    throw new Error('Only an owner may grant the owner role');
+                }
+                // No ACTIVE owner. That is the bootstrap case — a fresh node whose first owner has to
+                // come from somewhere — but ONLY if the node has no owner at all. A community Decision
+                // that suspends the sole owner parks their role, which used to read as zero owners and
+                // let any admin key session make itself owner (#1006). `isOwner` above is already true
+                // for 'owner:password', so the operator's password remains the way out of this: the
+                // node is never stranded.
+                if (nodeHasOwner()) {
+                    const err: any = new Error("This node has an owner (currently suspended). Ask the community, or use the node's admin password.");
+                    err.status = 403;
+                    throw err;
+                }
             }
         } else if (role === 'admin') {
             if (!isOwner) {
@@ -209,7 +258,7 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
  * - Only an owner may revoke 'owner'
  * - Never allow the last owner to be removed
  * - Only an owner may revoke 'admin'
- * - An owner OR an admin may revoke 'moderator' -- including a moderator an OWNER appointed
+ * - An owner OR an admin may revoke 'moderator' — including a moderator an OWNER appointed
  *   (Marty, 2026-09-20: one uniform rule, "if you can appoint you can un-appoint"; the
  *   granted_by-based variant was rejected because a list where some moderators are removable
  *   and some are not needs explaining). An owner can always re-appoint, and can revoke the admin.

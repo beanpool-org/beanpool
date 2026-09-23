@@ -6194,6 +6194,15 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         } catch { }
         try { db.prepare("DELETE FROM treasury_operators WHERE member_pubkey = ? OR treasury_pubkey = ?").run(publicKey, publicKey); } catch { }
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        // The same line `adminPruneUser` carries, and for the same reason. A SUSPENDED member's node
+        // role is not in node_roles at all — the suspension parked it in `suspended_node_roles`, to be
+        // given back if the community does not keep the suspension — and the request-signing middleware
+        // does not check `members.status`, so a suspended member can still sign this route. Without this,
+        // a suspended owner who deletes their account leaves an `owner` row naming a member who has been
+        // anonymized and can never be reinstated: `nodeHasOwner()` would report an owner forever on a
+        // node that genuinely has none, and the admin-key bootstrap it guards would be blocked for good
+        // (#1006 review). Removing the member outright removes what was being held for them.
+        db.prepare("DELETE FROM suspended_node_roles WHERE member_pubkey = ?").run(publicKey);
     });
     noteTakeoverInputsChanged('member purged their account');
 

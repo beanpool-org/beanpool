@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { GroupDetailModal } from './GroupDetailModal';
-import { getGroup, getGroupMembers, type Group, type GroupMember } from '../lib/api';
+import { getGroup, getGroupMembers, getGroupSuccession, type Group, type GroupMember } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
     getGroup: vi.fn().mockResolvedValue({
@@ -20,7 +20,21 @@ vi.mock('../lib/api', () => ({
     approveGroupMember: vi.fn(),
     setGroupMemberRole: vi.fn(),
     handOverGroupLead: vi.fn(),
-    updateGroup: vi.fn()
+    updateGroup: vi.fn(),
+    // The quiet-lead vote reads the group's succession on open (2026-09-23). These groups are healthy — the lead
+    // is not eligible and no vote was ever held — so the panel draws nothing and the roster below is unchanged.
+    // GroupSuccessionPanel.test.tsx is where the panel itself is covered.
+    getGroupSuccession: vi.fn().mockResolvedValue({
+        silence: {
+            convenorPubkey: null, convenorCallsign: null, lastActiveAt: null, daysInactive: 0,
+            isSilent: false, isEligible: false, electorate: 'convenors',
+        },
+        proposals: [],
+        canPropose: false,
+    }),
+    proposeGroupSuccession: vi.fn(),
+    voteGroupSuccession: vi.fn(),
+    isRouteMissing: (e: unknown) => (e as { status?: number } | null)?.status === 404
 }));
 
 describe('GroupDetailModal Accessibility', () => {
@@ -147,5 +161,27 @@ describe('GroupDetailModal roster and the lead convenor', () => {
     it('marks exactly one row Lead', async () => {
         await open(CONVENOR);
         expect(screen.getAllByText('Lead')).toHaveLength(1);
+    });
+
+    /**
+     * Where the quiet-lead vote lives (2026-09-23): the group's own info screen, beside the roster it is about.
+     * The panel's own rules are covered in GroupSuccessionPanel.test.tsx; what is checked here is that this
+     * screen shows it at all — and that a healthy group's screen is untouched.
+     */
+    it('shows the quiet-lead vote beside the roster when the lead is eligible, and nothing when they are not', async () => {
+        await open(CONVENOR);
+        expect(screen.queryByText(/Choosing a new lead convenor/)).toBeNull();
+
+        vi.mocked(getGroupSuccession).mockResolvedValue({
+            silence: {
+                convenorPubkey: LEAD, convenorCallsign: 'Marty Party2', lastActiveAt: '2026-08-10T00:00:00.000Z',
+                daysInactive: 44.6, isSilent: true, isEligible: true, electorate: 'convenors',
+            },
+            proposals: [],
+            canPropose: true,
+        });
+        await open(CONVENOR);
+        expect(await screen.findByText(/Choosing a new lead convenor/)).toBeInTheDocument();
+        expect(screen.getByText(/Marty Party2 hasn't been active for 44 days/)).toBeInTheDocument();
     });
 });

@@ -385,6 +385,10 @@ const handleEnrol = async (ctx: any) => {
     const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth || (isBreakGlassMode() && !(ctx.state as any)?.isKeySession);
     const requestedRole = body.role || 'owner';
 
+    // Enrol never bootstraps an owner: an owner key comes from an owner, the password, or break-glass,
+    // full stop. The node-roles route DOES bootstrap, and #1006 was the two disagreeing about whether a
+    // node whose sole owner is suspended has an owner. They cannot disagree again: both reach
+    // `grantNodeRole`, and `nodeHasOwner()` answers that question once, inside it.
     if (requestedRole === 'owner' && !isBreakGlass && callerRole !== 'owner') {
         ctx.status = 403;
         ctx.body = { error: 'Only a node owner can enrol an owner key or generate break-glass credentials' };
@@ -409,7 +413,7 @@ const handleEnrol = async (ctx: any) => {
             alertEmitted: res.alertEmitted,
         };
     } catch (e: any) {
-        ctx.status = 400;
+        ctx.status = Number(e?.status) || 400;
         ctx.body = { error: e?.message || 'Failed to enrol admin key' };
     }
 };
@@ -1474,7 +1478,9 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { success: true, message: `Granted ${role} role to ${targetPubkey}` };
     } catch (e: any) {
         const msg = e?.message || 'Failed to grant node role';
-        ctx.status = msg.includes('Only an owner') ? 403 : (msg === 'Member not found' ? 404 : 400);
+        // A guard that carries its own status says so (the suspended-owner refusal, #1006, is a 403
+        // whose wording is for the person reading it, not a string for this line to match on).
+        ctx.status = Number(e?.status) || (msg.includes('Only an owner') ? 403 : (msg === 'Member not found' ? 404 : 400));
         ctx.body = { error: msg };
     }
 });

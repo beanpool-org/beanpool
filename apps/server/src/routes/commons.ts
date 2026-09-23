@@ -9,7 +9,7 @@ import {
     getCommonsBalance,
     adminRejectProject,
     createDecision, getDecision, publicDecision, getAllDecisions, getOpenDecisions,
-    castDecisionVote, tallyDecision, tickDecisions,
+    castDecisionVote, tallyDecision,
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
     checkProposalStanding,
 } from '../state-engine.js';
@@ -26,7 +26,6 @@ import type { RouteDeps } from './types.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { checkAdminAuth } = deps;
 
 // ===================== COMMUNITY COMMONS =====================
 
@@ -208,12 +207,11 @@ router.post('/api/commons/decisions/:id/vote', async (ctx) => {
     ctx.body = { success: true, creditsUsed: result.creditsUsed };
 });
 
-router.post('/api/commons/decisions/tick', async (ctx) => {
-    if (!(await deps.checkAdminAuth(ctx as any))) return;
-
-    const result = tickDecisions();
-    ctx.body = { success: true, ...result };
-});
+// Decisions close and execute on the periodic tickDecisions() in state-engine.ts, every 60 seconds. There is
+// no route for it: the one that used to be here needed a signature AND node admin credentials at once, which
+// no client ever sent, so it only ever duplicated the timer. A POST to /api/commons/decisions/tick now gets
+// 405 from allowedMethods() — the GET :id route above still matches that path — and runs nothing;
+// test-decisions-tick-route-gone.ts pins it over real HTTPS.
 
 // ==========================================
 // CROWDFUNDING API

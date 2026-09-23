@@ -265,9 +265,12 @@ and edits the group; only the lead can remove or demote a convenor; and nobody c
 lead, node admins included (they hold no power over groups, and this changed nothing about that). The
 lead moves by hand-over, by stepping down or leaving (hand over first while anyone else is active), or by
 the 30-day-silence vote — which now covers a silent lead, with the group's other convenors voting, or
-its members when the lead is its only convenor. There is no community Decision route: no Decision effect
+its members when the lead is its only convenor. That vote got its screens on 2026-09-23, in both apps, on
+the group's own info screen above the roster: it is hidden entirely while the lead is active and no vote is
+running, apart from a single line saying how the last vote ended, which stays for a fortnight after it closed
+(PR #1062 review). So a healthy group never sees it. There is no community Decision route: no Decision effect
 names a group's lead as its subject (see "A suspended lead is still the lead" below), and the refusal
-text a convenor sees names only the two routes that exist. Stored as
+text a convenor sees names only the two routes that exist — hand-over first, then the vote. Stored as
 `groups.lead_pubkey`, backfilled to the creator while they are an active convenor and otherwise to the
 longest-serving active convenor. Both that column and `groups.created_by` move with a member's key when
 they re-key, so somebody who loses their phone and recovers on a new key comes back as the same lead —
@@ -280,9 +283,10 @@ and their group carries on with a lead who cannot act. This follows directly fro
 admins hold no power over groups, and letting a suspension move a group's lead would hand them exactly
 that power through the back door — a rogue lead has to be dealt with by the community, not by the node.
 
-What a community actually does about one today is the **30-day-silence vote**: a suspended lead stops
-being active, so 30 days after their last activity the other convenors — or the members, when the lead is
-the group's only convenor — can vote a replacement in. Until that window opens there is nothing to be
+What a community actually does about one today is the **30-day-silence vote**, which both apps have had
+screens for since 2026-09-23: a suspended lead stops being active, so 30 days after their last activity
+the other convenors — or the members, when the lead is the group's only convenor — can vote a replacement
+in, from the group's own screen. Until that window opens there is nothing to be
 done, because the paths that are faster all need the lead themselves: hand-over and stepping down. The
 Decisions the node has (`suspend_member`, `remove_member`) act on the *account*, not on the group, and
 none of them names a group's lead as their subject; a group-scoped Decision effect that replaces a lead
@@ -1183,6 +1187,11 @@ and co-hosted nodes are a real thing. The rules are deliberately minimal:
 - **exactly two owners:** an owner **cannot** be removed unilaterally. It takes mutual resignation,
   or a community Decision at 66%
 - never fewer than one owner; self-resignation always allowed unless you are the last
+- **a suspended owner is still an owner.** A node with no owner at all — a fresh one, or one whose
+  owners were all removed — lets a signed-in admin create the first owner, because otherwise nobody
+  could. A community Decision that suspends an owner holds their role aside instead, and that still
+  counts: no admin may appoint themselves while it is parked. The node is not stuck either way, since
+  the admin password is owner-level (§2.5 of `admin-surface.md`) and can appoint an owner at any time
 
 **The two-owner rule is not pedantry.** Without it, two co-owners who fall out get a race: A clicks
 "remove B", and B's only recourse is to click "remove A" faster. Putting the community between two

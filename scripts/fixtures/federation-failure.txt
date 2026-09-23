@@ -1,0 +1,26 @@
+━━━ test-schema-upgrade ━━━
+✓ schema upgrades from v1
+✓ schema upgrades from v2
+
+4/4 checks passed.
+
+━━━ test-version-resolution ━━━
+Running version resolution test suite...
+
+✗ 1a. getVersion() returns a non-empty string ("1.2.24")
+✓ 1b. getVersion() returns a valid semver version string ("1.2.24")
+✓ 2. Subsequent call returns cached version ("1.2.24")
+(node:14293) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✓ 3. APP_VERSION environment variable takes precedence ("9.9.9-test")
+
+3/4 checks passed.
+
+❌ Test failed: Error: 1 check(s) failed
+    at main (/repo/apps/server/src/test-version-resolution.ts:58:15)
+    at <anonymous> (/repo/apps/server/src/test-version-resolution.ts:63:1)
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+❌ Federation suites failed: test-version-resolution

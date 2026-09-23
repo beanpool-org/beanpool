@@ -328,6 +328,19 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.throws(() => removeGroupMember(db, group.id, 'carol_pub', 'alice_pub'),
             /lead convenor cannot be removed/);
 
+        // Both refusals name the two routes that DO exist, in order: the hand-over first, then the 30-day-silence
+        // vote — which has had screens in both apps since 2026-09-23, so it is named as a thing to go and do and
+        // never as something coming later. A refusal that sends a member looking for a screen that is not there
+        // is the same dead end as naming a Decision that does not exist.
+        for (const refuse of [
+            () => setMemberRole(db, group.id, 'bob_pub', 'alice_pub', 'member'),
+            () => removeGroupMember(db, group.id, 'carol_pub', 'alice_pub'),
+        ]) {
+            assert.throws(refuse, /hand the lead over/);
+            assert.throws(refuse, /the group can vote a new lead in from the group's screen/);
+            assert.throws(refuse, (e: Error) => !/later update|coming/i.test(e.message));
+        }
+
         // A convenor still manages members and observers, exactly as before.
         setMemberRole(db, group.id, 'bob_pub', 'dan_pub', 'observer');
         assert.strictEqual(getGroupMembers(db, group.id).find(m => m.memberPubkey === 'dan_pub')?.role, 'observer');

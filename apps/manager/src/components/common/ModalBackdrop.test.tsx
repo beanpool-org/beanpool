@@ -8,13 +8,30 @@ import { ModalBackdrop } from './ModalBackdrop';
  * ✕. The real-browser check (e2e/phone-width.mjs) opens each modal; this covers the rules themselves.
  */
 
-async function settle() {
-    await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+/**
+ * jsdom runs a history traversal on a later task, and dropClosedModalEntries queues its `history.go` behind a timer,
+ * so neither has happened when the call returns. Waiting a fixed few milliseconds for it is what made these flake on a
+ * loaded runner: the wait ran out before the event arrived and the assertion read the entry that was still on top.
+ * Wait for the event itself instead.
+ */
+async function awaitingPop(step: () => void) {
+    await act(async () => {
+        const landed = new Promise<void>(resolve => {
+            window.addEventListener('popstate', () => resolve(), { once: true });
+        });
+        step();
+        await landed;
+    });
 }
 
-async function back() {
-    await act(async () => { window.history.back(); });
-    await settle();
+/** The phone's Back button. */
+function back() {
+    return awaitingPop(() => window.history.back());
+}
+
+/** Let a render's effects run; they push their history entries as they go. Nothing here waits on the clock. */
+async function mounted() {
+    await act(async () => {});
 }
 
 function Modal({ name, busy = false, children }: { name: string; busy?: boolean; children?: React.ReactNode }) {
@@ -65,7 +82,7 @@ describe('ModalBackdrop', () => {
 
     it('Back closes the top modal and stays on the screen', async () => {
         render(<Modal name="Member"><Modal name="Offboard" /></Modal>);
-        await settle();
+        await mounted();
         expect(window.history.state.bpModal).toBe(2);
 
         await back();
@@ -78,18 +95,18 @@ describe('ModalBackdrop', () => {
 
     it('closing with the ✕ drops its history entry, so the next Back is not spent on it', async () => {
         render(<Modal name="Member" />);
-        await settle();
+        await mounted();
         expect(window.history.state.bpModal).toBe(1);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-        await settle();
+        // ✕ drops the modal's history entry (dropClosedModalEntries), so this click goes back one.
+        await awaitingPop(() => { fireEvent.click(screen.getByRole('button', { name: 'Close' })); });
         expect(screen.getByText('Member closed')).toBeInTheDocument();
         expect(window.history.state).toEqual({ bpSettings: { tab: 'people', sub: 'directory' } });
     });
 
     it('while it cannot be left, the backdrop, Escape and Back leave it open', async () => {
         render(<Modal name="Prune" busy />);
-        await settle();
+        await mounted();
         const backdrop = screen.getByTestId('Prune-backdrop');
         fireEvent.mouseDown(backdrop);
         fireEvent.click(backdrop);

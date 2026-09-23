@@ -443,16 +443,16 @@ export const HAND_OVER_FIRST =
     'You are this group\'s lead convenor. Hand the lead over to someone else first.';
 
 /**
- * What a convenor refused by the lead rules can actually do. The hand-over is the only route they can take today,
- * so it is the only one this names as available. The 30-day-silence vote exists on the server
- * (apps/server/src/engine/group-succession.ts) but no client calls those routes yet — neither app has a group
- * succession screen — so it is worded as coming, exactly as the manual's own rules page words it
- * (packages/beanpool-guide/content/about/rules.md, "A quiet lead convenor"). A refusal that names a vote the
- * member cannot find is the same dead end as naming a Decision that does not exist; see docs/the-commons.md,
- * "A suspended lead is still the lead".
+ * What a convenor refused by the lead rules can actually do. The hand-over comes first, because it is immediate
+ * and needs nobody's vote. The 30-day-silence vote (apps/server/src/engine/group-succession.ts) is the second
+ * route, and since 2026-09-23 both apps have the screens for it — on the group's own info screen, beside the
+ * roster — so this names it as something the member can go and use rather than as something coming. A refusal
+ * that names a route the member cannot find is the same dead end as naming a Decision that does not exist; see
+ * docs/the-commons.md, "A suspended lead is still the lead", and the manual's own rules page
+ * (packages/beanpool-guide/content/about/rules.md, "A quiet lead convenor").
  */
 export const LEAD_SILENCE_VOTE =
-    'A vote to replace a lead who has gone quiet is coming in a later update.';
+    'If the lead has done nothing for 30 days, the group can vote a new lead in from the group\'s screen.';
 
 /**
  * The lead hands the lead on: to another active convenor, or to an active member, who becomes a convenor in the

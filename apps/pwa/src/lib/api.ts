@@ -14,6 +14,7 @@ import {
 } from '@beanpool/core';
 import type { OwnDecisionVote } from './decision-own-vote';
 import type { MyEvent } from './event-extras';
+export type { MyEvent };
 
 export type { PublicCreatorChannel, ChannelPlatform, ChannelCategory };
 

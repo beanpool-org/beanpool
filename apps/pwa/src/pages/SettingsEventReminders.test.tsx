@@ -21,7 +21,7 @@ const identity: any = { publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me' }
 /** Settings → Notification Preferences, with the preferences the node holds today. */
 async function openNotifications(prefs: Record<string, unknown> = {}) {
     vi.mocked(api.getNotificationPreferences).mockResolvedValue(prefs as any);
-    render(<SettingsPage identity={identity} themePreference="system" onThemePreferenceChange={() => {}} />);
+    render(<SettingsPage identity={identity} onIdentityUpdated={() => {}} onBack={() => {}} themePreference="system" onThemePreferenceChange={() => {}} />);
     fireEvent.click(screen.getByText('Notification Preferences'));
     await screen.findByText('Event reminders');
 }

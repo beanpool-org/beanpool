@@ -22,6 +22,7 @@ import {
     type RegistrarAllocation,
 } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { usePausablePoll } from '../../lib/activity-pause';
 
 interface TopologyModuleProps {
     activeNode: NodeProfile;
@@ -92,12 +93,15 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         }
     }, [activeTab, activeNode?.url, activeNode?.adminPassword]);
 
-    useEffect(() => {
-        if (activeTab === 'name-claims' && autoRefreshRegistrar) {
-            const timer = setInterval(loadRegistrar, 10000);
-            return () => clearInterval(timer);
-        }
-    }, [activeTab, autoRefreshRegistrar, activeNode?.url, activeNode?.adminPassword]);
+    // Ten seconds while someone is watching the claims list; nothing at all while the tab is
+    // hidden or the screen has been sitting untouched (lib/activity-pause). `runOnStart: false`
+    // because the effect above already loads the list when the panel opens — but coming back
+    // from a pause still refreshes once, immediately.
+    usePausablePoll(loadRegistrar, 10000, {
+        enabled: activeTab === 'name-claims' && autoRefreshRegistrar,
+        runOnStart: false,
+        restartKey: `${activeNode?.url || ''}|${activeNode?.adminPassword || ''}`,
+    });
 
     const handleApproveClaim = async (name: string) => {
         try {
@@ -166,11 +170,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         }
     };
 
-    useEffect(() => {
-        loadHarvester();
-        const interval = setInterval(loadHarvester, 15000);
-        return () => clearInterval(interval);
-    }, [activeNode?.adminPassword]);
+    // Same fifteen seconds as before, and the same immediate load on mount or on a credential
+    // change — but it stops while the tab is hidden or the operator is away.
+    usePausablePoll(loadHarvester, 15000, { restartKey: activeNode?.adminPassword });
 
     // Load Snapshots for target node
     const loadSnapshots = async () => {

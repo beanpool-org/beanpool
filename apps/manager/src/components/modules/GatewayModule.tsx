@@ -1,5 +1,6 @@
 import React from 'react';
 import type { GatewayConfig } from '../../lib/node-client';
+import { usePausablePoll } from '../../lib/activity-pause';
 
 interface GatewayModuleProps {
     gateway: GatewayConfig | null;
@@ -32,19 +33,19 @@ export function GatewayModule({
     });
     const [recordedPeak, setRecordedPeak] = React.useState<number>(() => Math.max(...reqHistory, Math.floor(targetBaseRate * 1.25)));
 
-    React.useEffect(() => {
-        if (!gateway?.rateLimiting?.enabled) return;
-        const interval = setInterval(() => {
-            const nextVal = (activeWsConnections || 0) * 15;
-            // Track peak in its own functional updater — not nested inside the
-            // setReqHistory updater (impure; fires twice under StrictMode) — and
-            // keep recordedPeak out of the deps so the interval isn't torn down
-            // and recreated every time a new peak is recorded.
-            setRecordedPeak((prevPeak) => Math.max(prevPeak, nextVal));
-            setReqHistory((prev) => [...prev.slice(-24), nextVal]);
-        }, 3000);
-        return () => clearInterval(interval);
-    }, [gateway?.rateLimiting?.enabled, activeWsConnections]);
+    // Three seconds, as before — but nothing ticks while the tab is hidden or the screen has been
+    // left untouched (lib/activity-pause); a chart nobody is looking at is not worth a timer.
+    // `activeWsConnections` is read through the hook's callback ref rather than restarting the
+    // interval, so the chart keeps an even cadence while the count moves.
+    usePausablePoll(() => {
+        const nextVal = (activeWsConnections || 0) * 15;
+        // Track peak in its own functional updater — not nested inside the
+        // setReqHistory updater (impure; fires twice under StrictMode) — and
+        // keep recordedPeak out of the deps so the interval isn't torn down
+        // and recreated every time a new peak is recorded.
+        setRecordedPeak((prevPeak) => Math.max(prevPeak, nextVal));
+        setReqHistory((prev) => [...prev.slice(-24), nextVal]);
+    }, 3000, { enabled: !!gateway?.rateLimiting?.enabled, runOnStart: false });
 
     if (!gateway) {
         return (

@@ -147,6 +147,14 @@ async function main(): Promise<void> {
     db.prepare('DELETE FROM event_reminders_sent WHERE post_id = ?').run(ev.id);
     assert(sweepAt(9 * DAY + 2 * MIN).length === 1, 'with the mark removed it would fire again — the mark is the whole mechanism');
 
+    // And a mark written by something OTHER than a sweep — a node that got half way through before it was
+    // killed, say — stops the next sweep just as flatly. Nothing in the process has to remember anything.
+    const evMarked = newEvent(15 * DAY, 'Already told');
+    rsvpAt(evMarked.id, goer, 'going', 0);
+    db.prepare(`INSERT INTO event_reminders_sent (post_id, member_pubkey, offset_min, sent_at) VALUES (?, ?, 1440, ?)`)
+        .run(evMarked.id, goer, at(14 * DAY));
+    assert(sweepAt(14 * DAY).length === 0, 'a reminder already marked sent is never sent again');
+
     // ── 2. A per-event choice, and null ──────────────────────────────────────────────────────
     console.log('\n--- 2. Per event beats the default ---');
     const ev2 = newEvent(20 * DAY, 'Seed swap');
@@ -202,6 +210,25 @@ async function main(): Promise<void> {
     assert(sweepAt(58 * DAY).length === 0, 'the week-before offset, already past when they RSVPed, is skipped');
     assert(sweepAt(58 * DAY + 5 * MIN).length === 0, '...and is not waiting to fire on the next sweep either');
     assert(sweepAt(59 * DAY).length === 1, 'the day-before offset, still ahead of them, fires normally');
+
+    // The case the grace window CANNOT cover, and the reason the armed-at check exists on its own: a member
+    // who RSVPs five minutes after a moment went by. It is inside the window — a sweep a minute later is
+    // looking straight at it — and it must still stay quiet, because it was already behind them when they
+    // said yes.
+    const ev6b = newEvent(65 * DAY, 'Joined a moment late');
+    rsvpAt(ev6b.id, goer, 'going', 64 * DAY + 5 * MIN);
+    assert(sweepAt(64 * DAY + 6 * MIN).length === 0,
+        'an offset that went by five minutes before the RSVP stays quiet, though it is well inside the grace window');
+
+    // Same again for CHOOSING the offset rather than RSVPing: the write bumps updated_at, so picking
+    // "the day before" after that day has begun is a choice for next time, not a reminder now.
+    const ev6c = newEvent(70 * DAY, 'Chose it a moment late');
+    rsvpAt(ev6c.id, goer, 'going', 0);
+    setEventReminderOffsets(ev6c.id, goer, [1440]);
+    db.prepare('UPDATE event_rsvps SET updated_at = ? WHERE post_id = ? AND member_pubkey = ?')
+        .run(at(69 * DAY + 5 * MIN), ev6c.id, goer);
+    assert(sweepAt(69 * DAY + 6 * MIN).length === 0,
+        '...and one CHOSEN five minutes after its moment stays quiet too');
 
     // ── 5. The host moves the time ───────────────────────────────────────────────────────────
     console.log('\n--- 5. A time change ---');

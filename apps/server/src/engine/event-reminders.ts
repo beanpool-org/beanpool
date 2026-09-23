@@ -33,10 +33,12 @@
  *
  * ── Never twice ───────────────────────────────────────────────────────────────────────────────────────
  *
- * `event_reminders_sent` is keyed on exactly (post_id, member_pubkey, offset_min), and the sweep CLAIMS a
- * reminder with `INSERT OR IGNORE` before it sends: the send happens only if the insert changed a row. A
- * restart, an overlapping tick, or a host who moves the event back and forth all land on a key that is
- * already there and send nothing. One push per (event, member, offset), for the life of the event.
+ * `event_reminders_sent` is keyed on exactly (post_id, member_pubkey, offset_min), and nothing about
+ * "already sent" lives in this process — which is what makes a restart a non-event. `dueEventReminders`
+ * drops anything the table already holds, and the sweep then CLAIMS each one with `INSERT OR IGNORE` and
+ * sends only if the insert changed a row. The claim is not the ordinary gate (the filter is): it is the
+ * atomic one, for the case the filter cannot see — two processes on the same `state.db`. One push per
+ * (event, member, offset), for the life of the event.
  */
 
 import { db } from '../db/db.js';
@@ -346,7 +348,8 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
     // offsets get different words and must not be collapsed into one message.
     const batches = new Map<string, { postId: string; title: string; startAt: string; offsetMin: number; targets: string[] }>();
     for (const d of due) {
-        // INSERT OR IGNORE is the claim: losing the race means somebody already sent this one.
+        // The due list already excludes everything marked. This is the atomic re-check on top of it:
+        // losing the insert means another process claimed the same reminder between the read and here.
         if (claim.run(d.postId, d.memberPubkey, d.offsetMin, sentAt).changes === 0) continue;
         const key = `${d.postId}|${d.offsetMin}`;
         if (!batches.has(key)) {

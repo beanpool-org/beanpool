@@ -35,6 +35,14 @@ let calls: string[] = [];
 let dataPayload: Record<string, unknown> = { success: true, health: { flags: [] }, reports: [], members: [] };
 /** Endpoints whose response never settles, so an "in flight" request can be held open. */
 let stalled: string[] = [];
+/** Endpoints that answer, badly — every fragment listed here returns a 503. */
+let failing: string[] = [];
+/**
+ * Requests to hold open and hand back later, one entry per set of fragments that must all appear
+ * in the URL (so a single node's data payload can be held while the other node's answers).
+ */
+let holds: string[][] = [];
+let held: { href: string; resolve: (body: unknown) => void }[] = [];
 
 function jsonOk(body: unknown) {
     return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) } as unknown as Response);
@@ -43,6 +51,9 @@ function jsonOk(body: unknown) {
 function installFetch() {
     calls = [];
     stalled = [];
+    failing = [];
+    holds = [];
+    held = [];
     vi.stubGlobal(
         'fetch',
         vi.fn().mockImplementation((url: string) => {
@@ -50,6 +61,14 @@ function installFetch() {
             calls.push(href);
             if (stalled.some((fragment) => href.includes(fragment))) {
                 return new Promise(() => {});
+            }
+            if (holds.some((fragments) => fragments.every((fragment) => href.includes(fragment)))) {
+                return new Promise((resolve) => {
+                    held.push({ href, resolve: (body) => resolve(jsonOk(body)) });
+                });
+            }
+            if (failing.some((fragment) => href.includes(fragment))) {
+                return Promise.resolve({ ok: false, status: 503, statusText: 'Service Unavailable' } as unknown as Response);
             }
             if (href.includes(GATEWAY)) {
                 return jsonOk({ features: { marketplace: true }, corsAllowedOrigins: ['*'], rateLimiting: { enabled: true } });
@@ -83,6 +102,16 @@ async function tick(ms: number) {
             await vi.advanceTimersByTimeAsync(1000);
         });
     }
+}
+
+/** Answer the requests held open for `fragment`, and let React settle. */
+async function release(fragment: string, body: unknown) {
+    const matching = held.filter((h) => h.href.includes(fragment));
+    held = held.filter((h) => !h.href.includes(fragment));
+    await act(async () => {
+        matching.forEach((h) => h.resolve(body));
+        await vi.advanceTimersByTimeAsync(0);
+    });
 }
 
 function setHidden(hidden: boolean) {
@@ -277,6 +306,69 @@ describe('Node Settings polling cadence', () => {
         await tick(10_000);
         expect(countOf(DATA)).toBe(0);
         expect(screen.queryAllByText(/ALERT \(Inspect\)/i).length).toBe(0);
+    });
+
+    it('retries a failed data payload instead of counting it as five minutes of refresh', async () => {
+        // The five-minute window is stamped when the request goes out, so a node that answers
+        // diagnostics but fails on `/data` — a 503, a 429, a dropped connection — used to record
+        // the failure as a refresh and stop being checked for security flags until the window
+        // rolled over. The nodes most likely to need the check are exactly the flaky ones.
+        seedProfiles('https://localhost:8443');
+        failing = [DATA];
+        await act(async () => {
+            render(<App isFleetMode={true} />);
+        });
+        await tick(5_000);
+        calls = [];
+
+        await tick(60_000);
+
+        // Tried again well inside the five minutes...
+        expect(countOf(DATA)).toBeGreaterThanOrEqual(1);
+        // ...but backed off to roughly every thirty seconds rather than riding the 5-second tick,
+        // which is the bandwidth bug this PR exists to fix.
+        expect(countOf(DATA)).toBeLessThanOrEqual(3);
+    });
+
+    it('never paints a payload that arrived after the operator switched node', async () => {
+        // Node 0's ~4 MB payload is in flight when the operator moves to Node 1. It must not
+        // overwrite the screen they are now looking at: the sidebar copies are keyed by node id
+        // and stay correct either way, but `nodeData` belongs to whichever node is on screen now.
+        localStorage.setItem('bp_fleet_active_tab', 'members');
+        seedProfiles('https://localhost:8443', 'https://other.example.org');
+        await act(async () => {
+            render(<App isFleetMode={true} />);
+        });
+        await tick(5_000);
+
+        // Hold the next payload Node 0 asks for — the one the five-minute window is about to
+        // trigger from the diagnostics tick, with no section of its own on screen to ask for it.
+        holds = [['localhost:8443', DATA]];
+        await tick(6 * 60_000);
+        expect(held.length).toBeGreaterThanOrEqual(1);
+
+        dataPayload = {
+            success: true,
+            health: { flags: [] },
+            reports: [],
+            members: [{ publicKey: 'bbbb', name: 'Bravo Member', standing: 'Newcomer' }],
+        };
+        await act(async () => {
+            fireEvent.click(screen.getAllByText('Node 1')[0]);
+        });
+        await tick(2_000);
+        expect(screen.getAllByText('Bravo Member').length).toBeGreaterThan(0);
+
+        // Node 0's payload finally lands, long after Node 0 stopped being the node on screen.
+        await release('localhost:8443', {
+            success: true,
+            health: { flags: [] },
+            reports: [],
+            members: [{ publicKey: 'aaaa', name: 'Alfa Member', standing: 'Newcomer' }],
+        });
+
+        expect(screen.queryByText('Alfa Member')).toBeNull();
+        expect(screen.getAllByText('Bravo Member').length).toBeGreaterThan(0);
     });
 });
 

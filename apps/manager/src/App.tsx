@@ -125,6 +125,25 @@ function credentialDigest(password?: string): string {
  */
 const FLAG_REFRESH_MS = 5 * 60 * 1000;
 
+/**
+ * How long a *failed* flag fetch holds the window shut before the next diagnostics tick may try
+ * again.
+ *
+ * The window above is stamped when the request goes out, not when it comes back, so that a manual
+ * refresh and the tick cannot fetch the same 4 MB payload twice over. Left alone, that also means
+ * a node whose payload request fails — briefly unreachable, a 500, a 429, a dropped connection —
+ * records the failure as a refresh and stops being checked for security flags for five minutes,
+ * which is the one guarantee this screen owes. So a failure winds the stamp back to here instead:
+ * far enough to retry soon, not so far that a node answering diagnostics but failing on data gets
+ * a fresh attempt every five seconds.
+ */
+const FLAG_RETRY_MS = 30 * 1000;
+
+/** The stamp to leave behind when a flag/gateway fetch fails, so the next attempt is due in FLAG_RETRY_MS. */
+function retryStamp(now: number) {
+    return now - FLAG_REFRESH_MS + FLAG_RETRY_MS;
+}
+
 export function App(props: { isFleetMode?: boolean } = {}) {
     return (
         <ManualProvider>
@@ -467,6 +486,20 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     fleetNodeDataRef.current = fleetNodeData;
 
     /**
+     * The node whose sections are on screen *right now* — not the one that was on screen when a
+     * request left.
+     *
+     * `nodeData`, `gateway` and `diag` are the active node's alone, and every write to them comes
+     * out of a fetch that started earlier. Comparing against the `activeNode` captured in that
+     * fetch's closure answers "was this node active when I asked?", which is the wrong question:
+     * an operator who switches node while a ~4 MB payload is in flight then gets the old node's
+     * members, reports and health painted over the new node's screen when it lands. Every such
+     * write is gated on this ref instead, which the render above keeps current.
+     */
+    const activeNodeIdRef = useRef<string | undefined>(undefined);
+    activeNodeIdRef.current = activeNode?.id;
+
+    /**
      * Work out a node's sidebar health from a data payload we already have. No request: this is
      * what keeps a dismissal showing up at once, and the dot honest between the five-minutely
      * fetches, without paying for the payload again.
@@ -528,11 +561,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     const gData = await fetchGatewayConfig(p.url, p.adminPassword, getTfaSessionToken(p.id));
                     if (gData) {
                         setFleetGateways((prev) => ({ ...prev, [p.id]: gData }));
-                        if (p.id === activeNode?.id && gData) {
+                        if (p.id === activeNodeIdRef.current && gData) {
                             setGateway((prev) => (prev === null ? gData : prev));
                         }
                     }
                 } catch {
+                    lastGatewayFetchRef.current[p.id] = retryStamp(Date.now());
                 } finally {
                     gatewayInFlightRef.current[p.id] = false;
                 }
@@ -556,21 +590,27 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     // refresh the sidebar's dot and leave the screen in front of the operator
                     // stale — and a Refresh pressed while it was in flight would be skipped as an
                     // overlap and deliver nothing.
-                    if (p.id === activeNode?.id) {
+                    if (p.id === activeNodeIdRef.current) {
                         setNodeData(nData);
                     }
                 } catch {
+                    // A failure must not buy this node five minutes of no flag checking — that is
+                    // the one thing the five-minute window is not allowed to cost. Wind the stamp
+                    // back so the tick tries again shortly.
+                    lastFlagFetchRef.current[p.id] = retryStamp(Date.now());
                 } finally {
                     dataInFlightRef.current[p.id] = false;
                 }
             })();
         }
 
-        if (p.id === activeNode?.id) {
+        // Same closure, same trap: diagSuccess runs when the diagnostics response lands, which can
+        // be after the operator has moved on to another node.
+        if (p.id === activeNodeIdRef.current) {
             setDiag(data);
             setDiagError(null);
         }
-    }, [activeNode, applyHealthFromData]);
+    }, [applyHealthFromData]);
 
     /**
      * Nodes whose stored admin password the node itself rejected — profile id → digest of
@@ -764,7 +804,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     // every request it was asked — the sidebar now says which of the two
                     // it is, and they need different things done about them.
                     setNodeHealthMap((prev) => ({ ...prev, [p.id]: authFailed ? 'auth_required' : 'offline' }));
-                    if (p.id === activeNode?.id) {
+                    if (p.id === activeNodeIdRef.current) {
                         setDiagError(errMsg);
                     }
                 }
@@ -803,14 +843,22 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         gatewayInFlightRef.current[activeNode.id] = true;
         lastGatewayFetchRef.current[activeNode.id] = Date.now();
         setGatewayLoading(true);
+        const requestedFor = activeNode.id;
         try {
             const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-            setGateway(data);
+            if (requestedFor === activeNodeIdRef.current) {
+                setGateway(data);
+            }
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : '';
+            // The window is stamped before the request goes out; a failure winds it back so the
+            // tick retries rather than counting this as five minutes' worth of refresh.
+            lastGatewayFetchRef.current[requestedFor] = retryStamp(Date.now());
             // Only set gateway to null on explicit auth error, NOT on 429 rate limiting
             if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
-                setGateway(null);
+                if (requestedFor === activeNodeIdRef.current) {
+                    setGateway(null);
+                }
             }
         } finally {
             gatewayInFlightRef.current[activeNode.id] = false;
@@ -829,9 +877,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         dataInFlightRef.current[activeNode.id] = true;
         lastFlagFetchRef.current[activeNode.id] = Date.now();
         setNodeDataLoading(true);
+        const requestedFor = activeNode.id;
         try {
             const data = await fetchNodeData(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-            setNodeData(data);
+            // Only if this node is still the one on screen. A ~4 MB payload is long enough in
+            // flight for the operator to have switched node, and the sidebar's own copies below
+            // are keyed by id, so they are safe either way.
+            if (requestedFor === activeNodeIdRef.current) {
+                setNodeData(data);
+            }
             setFleetNodeData((prev) => ({ ...prev, [activeNode.id]: data }));
 
             const flags = data?.health?.flags || [];
@@ -843,8 +897,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             setNodeHealthMap((prev) => ({ ...prev, [activeNode.id]: status }));
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
+            lastFlagFetchRef.current[requestedFor] = retryStamp(Date.now());
             if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
-                setNodeData(null);
+                if (requestedFor === activeNodeIdRef.current) {
+                    setNodeData(null);
+                }
             }
         } finally {
             dataInFlightRef.current[activeNode.id] = false;

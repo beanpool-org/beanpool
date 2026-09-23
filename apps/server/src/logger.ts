@@ -1,5 +1,10 @@
 import { WebSocket } from 'ws';
 import { db } from './db/db.js';
+import { sanitizeMessage } from './sanitize-message.js';
+
+// Re-exported so `import { sanitizeMessage } from './logger.js'` keeps working. The function itself moved
+// to a database-free file so the process-level error net can redact without importing the database.
+export { sanitizeMessage };
 
 export const logClients = new Set<WebSocket>();
 
@@ -9,30 +14,6 @@ export function addLogClient(ws: WebSocket) {
 
 export function removeLogClient(ws: WebSocket) {
     logClients.delete(ws);
-}
-
-/**
- * Sanitizes input message by redacting sensitive items (private keys, passwords, mnemonics).
- */
-export function sanitizeMessage(msg: string): string {
-    if (!msg) return '';
-    let sanitized = msg;
-
-    // 1. BIP39 Mnemonic Seed Phrase (12 to 24 words)
-    // Matches 12 to 24 lowercase space-separated words of 3-12 chars.
-    sanitized = sanitized.replace(/\b(?:[a-z]{3,12}\s+){11,23}[a-z]{3,12}\b/gi, '[REDACTED_MNEMONIC]');
-
-    // 2. PEM Private Keys
-    sanitized = sanitized.replace(/-----BEGIN\s*(?:RSA\s*|EC\s*|ED25519\s*)?PRIVATE\s*KEY-----[\s\S]+?-----END\s*(?:RSA\s*|EC\s*|ED25519\s*)?PRIVATE\s*KEY-----/gi, '[REDACTED_PRIVATE_KEY]');
-
-    // 3. Secrets, passwords, tokens, salt, hashes, api keys in JSON / form / query formats
-    sanitized = sanitized.replace(/(["']?(?:password|authToken|token|salt|adminHash|newPassword|currentPassword|secret|privateKey|private_key|seed|keyBytes|apiKey|api_key|authorization)["']?\s*[:=]\s*["']?)[a-zA-Z0-9_\-\.\+=\/]{12,}(["']?)/gi, '$1[REDACTED_CREDENTIAL]$2');
-
-    // 4. Standalone Hex seed strings / keys (64 or 128 hex chars)
-    sanitized = sanitized.replace(/\b[0-9a-fA-F]{64}\b/gi, '[REDACTED_HEX_KEY_64]');
-    sanitized = sanitized.replace(/\b[0-9a-fA-F]{128}\b/gi, '[REDACTED_HEX_KEY_128]');
-
-    return sanitized;
 }
 
 /**

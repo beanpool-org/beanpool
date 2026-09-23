@@ -14,6 +14,12 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { installProcessHandlers } from './process-handlers.js';
+
+// Step 0: the process-level error net, before anything else in this file runs. A stray rejected promise
+// is recorded and the node keeps serving; a true uncaught exception still crashes and Docker still
+// restarts. Both leave a record in the data dir. See process-handlers.ts for why the two differ.
+installProcessHandlers();
 
 // Force load root .env (bypass Turborepo filters)
 const envPath = path.join(process.cwd(), '../../.env');

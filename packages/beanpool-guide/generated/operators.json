@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 34,
-  "hash": "9c129d337f5b8f373deb469c545aac8f3c22a3ffacc4280c1f9d3973117a15bd",
+  "version": 35,
+  "hash": "f9603b0dd1558c140755605335c640203d8da48c0673d841caca20089c359b2e",
   "sections": [
     {
       "id": "setup",
@@ -1999,6 +1999,30 @@
         {
           "type": "p",
           "text": "The server keeps its most recent log lines, which Settings shows under Logs. Some messages only appear in Docker's own log: docker compose logs --tail 200 beanpool-node"
+        },
+        {
+          "type": "h2",
+          "text": "When a background job fails"
+        },
+        {
+          "type": "p",
+          "text": "Sometimes a job the server started in the background fails on its own — a peer answers oddly, a lookup times out. The server used to stop and start again when that happened, which signed everybody out of the app for about a minute. It no longer does: it writes the failure down and keeps serving."
+        },
+        {
+          "type": "p",
+          "text": "The full record is the file **data/unhandled-rejections.log**, one line per failure, with the message and the place in the code it came from. The same failure repeating is written once every ten minutes with a count beside it, so a job failing over and over cannot fill the disk; the file stops at about 1 MB and the one before it is kept as unhandled-rejections.log.1."
+        },
+        {
+          "type": "p",
+          "text": "How many have happened since the server last started, and what the last one said, also come back in the server's own diagnostics answer, and the community health check raises a flag while the number is above zero. The number starts again at zero each time the server starts, so anything there happened during this run."
+        },
+        {
+          "type": "p",
+          "text": "A few of these are not an emergency, and the server is still doing its work. Many of the same one is worth reporting — see Feedback."
+        },
+        {
+          "type": "p",
+          "text": "A real crash is different. The server still stops and starts again, because carrying on half-way through a change could damage the ledger, and it leaves a report file in data named report-something.json, beside the freeze reports."
         },
         {
           "type": "h2",

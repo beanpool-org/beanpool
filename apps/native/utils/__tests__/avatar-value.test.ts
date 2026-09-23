@@ -94,7 +94,7 @@ import {
     profileSetupAvatar,
     localRowHasNoAvatar,
 } from '../avatar-value';
-import { updateMemberProfile, pushProfileToServer, applyDelta } from '../db';
+import { updateMemberProfile, pushProfileToServer, applyDelta, syncMessages } from '../db';
 
 const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
 const NODE_URL_RELATIVE = `/api/avatar/${SELF_PK}?size=thumb`;
@@ -651,6 +651,75 @@ describe('applyDelta avatar clearing', () => {
         await applyDelta({ members: [{ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: NODE_URL_VERSIONED }] });
         const { params } = membersUpsert();
         expect(params[2]).toBe(NODE_URL_VERSIONED);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 5b. Both full-directory writers obey the SAME rule for the viewer's own row
+//
+// `syncMessages` does its own `/api/members` fetch, gated on the same hourly key as
+// pillar-sync's, and used to run a SECOND members upsert with an unconditional COALESCE. So
+// whichever of the two won the hour boundary decided whether a node that says "no photo"
+// cleared the stored URL or left it for another hour — and while it was left, `catchUpAvatar`
+// read "the node has a photo" and would not republish the canonical copy. There is now one
+// writer: this fetch goes through `applyDelta` with `membersComplete: true`.
+// ---------------------------------------------------------------------------
+describe('the syncMessages directory fetch goes through applyDelta', () => {
+    const membersUpserts = () =>
+        h.runAsync.mock.calls.filter(
+            (c: any[]) => typeof c[0] === 'string' && /INSERT INTO members/.test(c[0])
+        );
+
+    beforeEach(() => {
+        h.loadIdentity.mockResolvedValue({ publicKey: SELF_PK, callsign: 'Damo', privateKey: 'k' });
+        h.buildSignedHeaders.mockResolvedValue({});
+        h.db.withTransactionAsync.mockImplementation(async (cb: () => Promise<void>) => { await cb(); });
+        h.db.getAllAsync.mockResolvedValue([]);
+        h.getFirstAsync.mockImplementation(async (sql: string) =>
+            /COUNT\(\*\)/.test(sql) ? { count: 3 }
+                : /SELECT callsign, avatar_url FROM members/.test(sql)
+                    ? { callsign: 'Damo', avatar_url: NODE_URL_VERSIONED }
+                    : null);
+        h.asyncStorage.getItem.mockImplementation(async (k: string) =>
+            k === 'beanpool_anchor_url' ? 'https://test.beanpool.org' : null);
+        globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+            if (url.includes('/api/members')) {
+                // The node's complete directory, saying it holds no photo for the viewer.
+                return { ok: true, json: async () => ([{ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: null }]) };
+            }
+            // Conversations: enough to get past the directory block and stop.
+            return { ok: true, json: async () => ({}) };
+        }) as any;
+    });
+
+    it('writes the directory with the COMPLETE-list rule, so a null clears the stored avatar', async () => {
+        await syncMessages(SELF_PK);
+
+        const upserts = membersUpserts();
+        // One writer, not two: the second upsert this function used to run is gone.
+        expect(upserts).toHaveLength(1);
+        const [sql, params] = upserts[0] as [string, any[]];
+        expect(sql).toMatch(/avatar_url = CASE WHEN \? THEN excluded\.avatar_url/);
+        expect(params[params.length - 1]).toBe(1); // complete list → the incoming null wins
+        expect(params[2]).toBeNull();
+    });
+
+    it('emits profile_updated once the clear has landed on the viewer\'s own row', async () => {
+        // The old path emitted too, but only for its own COALESCE view of "changed" — under
+        // which a clear was not a change at all.
+        await syncMessages(SELF_PK);
+        expect(h.emit.mock.calls.filter(c => c[0] === 'profile_updated')).toHaveLength(1);
+    });
+
+    it('leaves exactly one writer of the node\'s member directory in db.ts', () => {
+        // A source check as well as the behavioural one: a future second directory writer
+        // would bring back the split rule, and the test above would still pass on its own.
+        // Matched on `elder_vouched_by`, which only a directory upsert carries —
+        // `updateMemberProfile`'s upsert writes a LOCAL edit and keeps its own COALESCE,
+        // because there an absent field means "not edited", not "the node has none".
+        const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../db.ts'), 'utf8');
+        expect(src.match(/INSERT INTO members \([^)]*elder_vouched_by/g)).toHaveLength(1);
+        expect(src).toContain('applyDelta({ members: dirData, membersComplete: true }, expectedDbName)');
     });
 });
 

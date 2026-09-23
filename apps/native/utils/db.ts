@@ -2972,38 +2972,20 @@ export async function syncMessages(publicKey: string) {
             try {
                 const dirData = await dirRes.json();
                 if (Array.isArray(dirData) && dirData.length > 0) {
-                    await acquireSyncLock();
-                    try {
-                        const database = await getDb();
-                        // As in applyDelta: identity read outside the transaction, flag
-                        // declared outside it, emit only after the commit.
-                        const selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
-                        let ownRowChanged = false;
-                        await database.withTransactionAsync(async () => {
-                            const txn = database;
-                            for (const m of dirData) {
-                                const pk = m.publicKey || m.public_key || '';
-                                const cs = m.callsign || '';
-                                const av = m.avatarUrl || m.avatar_url || null;
-                                const evb = m.elderVouchedBy || m.elder_vouched_by || null;
-                                const arch = m.archetype || null;
-                                if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av)) ownRowChanged = true;
-                                await txn.runAsync(
-                                    `INSERT INTO members (public_key, callsign, avatar_url, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?)
-                                     ON CONFLICT(public_key) DO UPDATE SET
-                                       callsign = excluded.callsign,
-                                       avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
-                                       elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                                       archetype = COALESCE(excluded.archetype, members.archetype)`,
-                                    [pk, cs, av, evb, arch]
-                                );
-                            }
-                        });
-                        if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
-                        await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
-                    } finally {
-                        releaseSyncLock();
-                    }
+                    // This used to be a SECOND members upsert with its own COALESCE, which made
+                    // the viewer's own row follow two different rules depending on which writer
+                    // won the hour boundary: `applyDelta` clears a stored avatar when the node's
+                    // COMPLETE list says there is none, this one kept the stale URL for another
+                    // hour — and while it was kept, `catchUpAvatar` read "the node has a photo"
+                    // and refused to republish the canonical copy.
+                    //
+                    // It is the same endpoint, the same full directory and the same payload
+                    // shape pillar-sync feeds `applyDelta`, so it goes through `applyDelta`
+                    // instead: one upsert, one null-clears rule, one GC, one `profile_updated`
+                    // emit. `applyDelta` takes the sync lock and re-checks the active node
+                    // itself, so neither is done here.
+                    await applyDelta({ members: dirData, membersComplete: true }, expectedDbName);
+                    await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
                 }
             } catch (e) {}
         }

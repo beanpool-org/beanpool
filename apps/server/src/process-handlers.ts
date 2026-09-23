@@ -250,13 +250,25 @@ export function installProcessHandlers(options?: { dataDir?: string }): void {
             const dataDir = resolveDataDir();
             let reportPath: string | null = null;
             if (shouldWriteOwnReport()) {
+                const previousDirectory = process.report?.directory;
                 try {
                     fs.mkdirSync(dataDir, { recursive: true });
                     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-                    reportPath = path.join(dataDir, `report-uncaught-${stamp}-${process.pid}.json`);
-                    process.report?.writeReport(reportPath, err instanceof Error ? err : undefined);
+                    const name = `report-uncaught-${stamp}-${process.pid}.json`;
+                    // `writeReport` joins its filename onto `process.report.directory`, and joins it
+                    // naively: hand it an absolute path while --report-directory is set and Node tries to
+                    // open "/data//tmp/whatever.json", fails with ENOENT and prints a line nobody reads.
+                    // Point the directory at the data dir and pass a bare name, which lands the report
+                    // where the owner will look for it whatever the flags say. Nodes DO set that flag.
+                    process.report!.directory = dataDir;
+                    process.report!.writeReport(name, err instanceof Error ? err : undefined);
+                    reportPath = path.join(dataDir, name);
                 } catch {
                     reportPath = null;
+                } finally {
+                    try {
+                        if (process.report && previousDirectory !== undefined) process.report.directory = previousDirectory;
+                    } catch { /* the process is ending anyway */ }
                 }
             }
             const where = reportPath ? ` — diagnostic report: ${reportPath}` : '';

@@ -13,7 +13,7 @@
  *   2. `Promise.reject(undefined)`, a bare string and a plain object do not make the handler itself throw;
  *   3. a burst of 50 identical rejections writes ONE full entry plus a count, not 50 entries;
  *   4. a synchronous `throw` still kills the child (non-zero exit) AND leaves a diagnostic report in the
- *      data dir — and when Node is already writing that report itself, only one is written, not two.
+ *      data dir — wherever --report-directory points, and only one report when Node writes one itself.
  *   5. the count, last time and last message reach the admin diagnostics response, a health flag appears,
  *      and the message carries no secrets.
  *
@@ -198,7 +198,24 @@ async function childProcessTests(root: string): Promise<void> {
     assert(boomReports[0]?.startsWith('report-uncaught-'), 'named so the owner can tell a crash report from a freeze report');
     assert(logEntries(boom.dataDir).length === 0, 'and nothing was added to the rejection log: an exception is not a rejection');
 
-    console.log('\n— 4b. on a node where Node writes the report itself, only one is written —');
+    console.log('\n— 4b. the report lands in the data dir even when --report-directory points elsewhere —');
+    // Nodes run with --report-directory. Node joins a report filename onto that directory, and joins it
+    // naively, so an absolute path is silently unopenable: the report is lost and only a line in Docker's
+    // log says so. This case fails if the handler ever goes back to passing an absolute path.
+    const elsewhere = path.join(root, 'report-directory-elsewhere');
+    const ownDir = path.join(root, 'boom-own-dir');
+    fs.mkdirSync(elsewhere, { recursive: true });
+    const redirected = await spawnChild('boom', ownDir, {
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --report-directory=${elsewhere}`.trim(),
+    });
+    assert(redirected.code !== 0, `the child still crashes (code ${redirected.code})`);
+    const redirectedReports = reportFiles(ownDir);
+    assert(redirectedReports.length === 1 && redirectedReports[0].startsWith('report-uncaught-'),
+        `the report is in the data dir, not wherever --report-directory points (got ${JSON.stringify(redirectedReports)})`);
+    assert(fs.readdirSync(elsewhere).length === 0, 'and nothing was written to the flag’s directory instead');
+    assert(!redirected.stderr.includes('Failed to open Node.js report file'), 'Node did not refuse to open the path it was given');
+
+    console.log('\n— 4c. on a node where Node writes the report itself, only one is written —');
     const boomDir = path.join(root, 'boom-node-report');
     fs.mkdirSync(boomDir, { recursive: true });
     const nodeReport = await spawnChild('boom', boomDir, {
@@ -250,7 +267,9 @@ async function diagnosticsAndHealthTests(): Promise<void> {
     assert(body?.unhandledRejections?.count === summary.count, `diagnostics reports the count (got ${body?.unhandledRejections?.count})`);
     assert(typeof body?.unhandledRejections?.lastAt === 'string', 'diagnostics reports when the last one happened');
     assert(body?.unhandledRejections?.lastMessage?.includes('background task failed') === true, 'diagnostics reports the last message');
-    assert(!JSON.stringify(body.unhandledRejections).includes(SECRET_HEX), 'and the response carries no secret');
+    // `?? null` so that a MISSING field fails this assertion rather than throwing out of the suite and
+    // taking every assertion after it with it — a failure must not hide its neighbours.
+    assert(!JSON.stringify(body.unhandledRejections ?? null).includes(SECRET_HEX), 'and the response carries no secret');
 
     const health = getCommunityHealth();
     const flag = health.flags.find((f) => f.type === 'unhandled_rejections');

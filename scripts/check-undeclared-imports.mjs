@@ -299,10 +299,13 @@ function checkWorkspace({ path: relPath, enforceTypes = [], testFilePattern = nu
 
   for (const file of files) {
     const wsRelative = path.relative(wsDir, file).split(path.sep).join('/');
+    // Every test matched against the package-relative path, never the absolute one: a
+    // checkout under e.g. /ci/__tests__/beanpool would otherwise make every file a test file
+    // and quietly stop the check enforcing production dependencies at all.
     const isTest =
-      file.includes('.test.') ||
-      file.includes('__tests__') ||
-      file.endsWith('setupTests.ts') ||
+      wsRelative.includes('.test.') ||
+      wsRelative.includes('__tests__') ||
+      wsRelative.endsWith('setupTests.ts') ||
       (testFilePattern !== null && testFilePattern.test(wsRelative));
     const { code: content, inString } = scanSource(fs.readFileSync(file, 'utf8'));
 

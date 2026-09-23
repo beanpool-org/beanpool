@@ -12,6 +12,8 @@ import {
     groupRoleLabel,
     isActiveGroupConvenor,
     leadMustHandOverBeforeLeaving,
+    leadHandOverBlockedByObservers,
+    MAKE_OBSERVER_MEMBER_FIRST,
     type GroupRowTarget,
     type GroupRowViewer,
 } from '../groups.js';
@@ -87,5 +89,15 @@ describe('who may act on a group roster row', () => {
         expect(leadMustHandOverBeforeLeaving(true, 3)).toBe(true);
         expect(leadMustHandOverBeforeLeaving(true, 0)).toBe(false);
         expect(leadMustHandOverBeforeLeaving(false, 3)).toBe(false);
+    });
+
+    it('names the observer promotion when that is the only thing left to do', () => {
+        // Nobody to hand to, but observers are there to promote: the dead end the screens have to explain.
+        expect(leadHandOverBlockedByObservers(0, 2)).toBe(true);
+        // Somebody can take the lead, so the ordinary hand-over wording stands.
+        expect(leadHandOverBlockedByObservers(1, 2)).toBe(false);
+        // A lead genuinely on their own: not blocked, they may simply leave.
+        expect(leadHandOverBlockedByObservers(0, 0)).toBe(false);
+        expect(MAKE_OBSERVER_MEMBER_FIRST).toMatch(/observers a member first/);
     });
 });

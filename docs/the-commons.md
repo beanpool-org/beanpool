@@ -263,9 +263,11 @@ owner — a **lead convenor**, exactly as an enterprise has a lead keeper. Any c
 invites and removes members and observers, promotes someone to convenor, removes posts and messages,
 and edits the group; only the lead can remove or demote a convenor; and nobody can remove or demote the
 lead, node admins included (they hold no power over groups, and this changed nothing about that). The
-lead moves by hand-over, by stepping down or leaving (hand over first while anyone else is active), by
+lead moves by hand-over, by stepping down or leaving (hand over first while anyone else is active), or by
 the 30-day-silence vote — which now covers a silent lead, with the group's other convenors voting, or
-its members when the lead is its only convenor — or by a community Decision. Stored as
+its members when the lead is its only convenor. There is no community Decision route: no Decision effect
+names a group's lead as its subject (see "A suspended lead is still the lead" below), and the refusal
+text a convenor sees names only the two routes that exist. Stored as
 `groups.lead_pubkey`, backfilled to the creator while they are an active convenor and otherwise to the
 longest-serving active convenor. Both that column and `groups.created_by` move with a member's key when
 they re-key, so somebody who loses their phone and recovers on a new key comes back as the same lead —

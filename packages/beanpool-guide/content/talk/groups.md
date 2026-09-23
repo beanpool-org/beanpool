@@ -96,5 +96,6 @@ The last convenor cannot step down or leave while anyone else is still in the gr
 
 ## Coming soon
 
-- Choosing a new lead convenor when the old one has gone quiet, and removing a rogue one by a community Decision. The rules for both are in "Rules and how decisions work".
+- Choosing a new lead convenor when the old one has gone quiet. 30 days after the lead's last activity, the group's other convenors — or its members, if the lead is its only convenor — will be able to vote one in. The rules are in "Rules and how decisions work"; the screens are coming in a later update. Until then the lead hands it over themselves.
+- Removing a rogue lead convenor by a community Decision. Coming in a later update.
 - Groups in the web app. Today the new Groups list, chats and invitations are in the phone app.

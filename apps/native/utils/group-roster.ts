@@ -11,6 +11,7 @@ import {
     groupRowActions,
     groupRoleLabel,
     leadMustHandOverBeforeLeaving,
+    leadHandOverBlockedByObservers,
     type GroupRowActions,
 } from '@beanpool/core';
 import type { GroupItem, GroupMemberItem } from './db';
@@ -37,6 +38,11 @@ export interface RosterView {
     leaveNeedsHandOver: boolean;
     /** Who the lead may hand the lead to, in roster order. */
     handOverCandidates: GroupMemberItem[];
+    /**
+     * The lead has nobody to hand to because everyone else active is an observer. The screens say to make one of
+     * them a member first, rather than sending the lead round the hand-over dead end.
+     */
+    handOverBlockedByObservers: boolean;
 }
 
 /**
@@ -74,6 +80,8 @@ export function buildRosterView(
 
     const leadRow = activeMembers.find(m => m.memberPubkey === leadPubkey);
     const othersActive = activeMembers.filter(m => m.memberPubkey !== myPubkey).length;
+    const handOverCandidates = rows.filter(r => r.canHandOverLead).map(r => r.member);
+    const activeObservers = activeMembers.filter(m => m.role === 'observer' && m.memberPubkey !== myPubkey).length;
 
     return {
         rows,
@@ -82,6 +90,8 @@ export function buildRosterView(
         leadCallsign: leadRow?.callsign ?? group?.leadCallsign ?? group?.convenorCallsign ?? null,
         leadPubkey,
         leaveNeedsHandOver: leadMustHandOverBeforeLeaving(viewer.isLead, othersActive),
-        handOverCandidates: rows.filter(r => r.canHandOverLead).map(r => r.member),
+        handOverCandidates,
+        handOverBlockedByObservers: viewer.isLead
+            && leadHandOverBlockedByObservers(handOverCandidates.length, activeObservers),
     };
 }

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 21,
-  "hash": "439c9725e1c9fd912565c1bef63881d6e087d1132cc55eaa03cdacfa558d3f9b",
+  "version": 22,
+  "hash": "2e538bce228bfd50a3ae6f9f9f523a6dd5489f36d2209bcde8a268df2eac584f",
   "sections": [
     {
       "id": "about",
@@ -2471,7 +2471,8 @@
         {
           "type": "ul",
           "items": [
-            "Choosing a new lead convenor when the old one has gone quiet, and removing a rogue one by a community Decision. The rules for both are in \"Rules and how decisions work\".",
+            "Choosing a new lead convenor when the old one has gone quiet. 30 days after the lead's last activity, the group's other convenors — or its members, if the lead is its only convenor — will be able to vote one in. The rules are in \"Rules and how decisions work\"; the screens are coming in a later update. Until then the lead hands it over themselves.",
+            "Removing a rogue lead convenor by a community Decision. Coming in a later update.",
             "Groups in the web app. Today the new Groups list, chats and invitations are in the phone app."
           ]
         }

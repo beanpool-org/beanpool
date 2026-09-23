@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, createEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventChat, decodeEventChatText } from './EventChat';
 import { EventDetail } from './EventCard';
@@ -248,6 +248,40 @@ describe('EventChat: an event chat carries no photos', () => {
         expect(await screen.findByTestId('event-chat-image-notice'))
             .toHaveTextContent('Photos can only be sent in direct messages');
         expect(api.postEventChatMessage).not.toHaveBeenCalled();
+    });
+
+    it('a dropped file that is not a picture is swallowed, not opened by the browser', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+        const pdf = new File([new Uint8Array(1)], 'minutes.pdf', { type: 'application/pdf' });
+
+        // onDragOver took this drop, so onDrop owes it a preventDefault —
+        // otherwise the browser navigates the tab to the file and the event,
+        // the chat and the unsent draft all go with it.
+        const drop = createEvent.drop(composer, {
+            dataTransfer: {
+                files: [pdf],
+                items: [{ kind: 'file', type: 'application/pdf', getAsFile: () => pdf }],
+                types: ['Files'],
+            },
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(true);
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+    });
+
+    it('a text-only drop is left to the composer: nothing is prevented', async () => {
+        render(<EventChat postId="ev-1" identity={identity} />);
+        const composer = await screen.findByLabelText('Message everyone going');
+
+        const drop = createEvent.drop(composer, {
+            dataTransfer: { files: [], items: [{ kind: 'string', type: 'text/plain', getAsFile: () => null }], types: ['text/plain'] },
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(false);
+        expect(screen.queryByTestId('event-chat-image-notice')).not.toBeInTheDocument();
     });
 
     it('a text-only paste is left alone', async () => {

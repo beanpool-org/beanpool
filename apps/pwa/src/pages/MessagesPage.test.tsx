@@ -664,6 +664,55 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
         expect(sendMessageApi).not.toHaveBeenCalled();
     });
 
+    it('a dropped file that is not a picture is still swallowed, not opened by the browser', async () => {
+        const composer = await openDm();
+        const pdf = pictureFile('minutes.pdf', 'application/pdf');
+
+        // The chat asked for this drop in onDragOver, so it owes it a
+        // preventDefault. Without one the browser navigates the tab to the file
+        // and the whole session — chat, unsent draft — goes with it.
+        const drop = createEvent.drop(composer, {
+            dataTransfer: {
+                files: [pdf],
+                items: [{ kind: 'file', type: 'application/pdf', getAsFile: () => pdf }],
+                types: ['Files'],
+            },
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(true);
+        expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('a dropped picture prevents the browser default too', async () => {
+        const composer = await openDm();
+
+        const drop = createEvent.drop(composer, {
+            dataTransfer: imageClipboard(pictureFile('dropped.jpg', 'image/jpeg')),
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(true);
+        expect(await screen.findByTestId('chat-image-preview')).toBeInTheDocument();
+    });
+
+    it('a text-only drop is left to the composer: nothing is prevented', async () => {
+        const composer = await openDm();
+
+        const drop = createEvent.drop(composer, {
+            dataTransfer: {
+                files: [],
+                items: [{ kind: 'string', type: 'text/plain', getAsFile: () => null }],
+                types: ['text/plain'],
+            },
+        });
+        fireEvent(composer, drop);
+
+        expect(drop.defaultPrevented).toBe(false);
+        expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument();
+    });
+
     it('in a group chat a pasted picture gets one line of explanation and nothing is sent', async () => {
         render(<MessagesPage identity={mockIdentity} openConversationId={GROUP_ID} />);
         const composer = await screen.findByPlaceholderText('Message...');

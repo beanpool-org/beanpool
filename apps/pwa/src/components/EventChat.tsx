@@ -252,8 +252,14 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                     className="flex-shrink-0 flex items-end gap-2 p-3 border-t border-nature-200 dark:border-nature-800"
                     onDragOver={e => { if (dragCarriesFile(e.dataTransfer)) e.preventDefault(); }}
                     onDrop={e => {
-                        if (!imageFromTransfer(e.dataTransfer)) return;
+                        // Text dropped into the textarea is the browser's own
+                        // business. A file is only here because onDragOver took
+                        // it, so this drop has to be prevented whatever the file
+                        // is — left to itself the browser navigates the tab to
+                        // it, taking the chat and the unsent draft.
+                        if (!dragCarriesFile(e.dataTransfer)) return;
                         e.preventDefault();
+                        if (!imageFromTransfer(e.dataTransfer)) return;
                         setImageNotice('Photos can only be sent in direct messages');
                     }}
                 >

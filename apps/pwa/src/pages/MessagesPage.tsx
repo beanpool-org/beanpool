@@ -909,9 +909,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 onDrop={acceptsDrop ? (e) => {
                     dragDepthRef.current = 0;
                     setDragActive(false);
+                    // A drag with no file in it is text going into the composer —
+                    // the browser's own business, so leave it alone.
+                    if (!dragCarriesFile(e.dataTransfer)) return;
+                    // Any file, though, is only here because onDragOver above
+                    // took it, so this drop has to be prevented whatever the file
+                    // turns out to be. Left to itself the browser navigates the
+                    // tab to the file, taking the chat and the unsent draft.
+                    e.preventDefault();
                     const file = imageFromTransfer(e.dataTransfer);
                     if (!file) return;
-                    e.preventDefault();
                     offerImage(file);
                 } : undefined}
             >

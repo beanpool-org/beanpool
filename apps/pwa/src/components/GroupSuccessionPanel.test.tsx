@@ -186,16 +186,27 @@ describe('GroupSuccessionPanel — an open vote', () => {
         await waitFor(() => expect(onLeadChanged).toHaveBeenCalled());
     });
 
+    /** The one fixed sentence that says ballots are secret; it is the only other place the word appears. */
+    const SECRECY_NOTE = 'Votes are secret, and nobody sees who voted which way.';
+
     it('names no voter but the viewer themselves: ballots are secret', async () => {
-        answer({ proposals: [proposal({ yesCount: 2, noCount: 1, electorateSize: 3, canVote: false, myVote: 'yes' })] });
+        // The proposer is Pia, and proposing is a Yes on the record — so naming the proposer would be publishing
+        // a ballot. Damo, the candidate, is the only name this may carry.
+        answer({
+            proposals: [proposal({
+                proposerPubkey: OTHER, proposerCallsign: 'Pia',
+                yesCount: 2, noCount: 1, electorateSize: 3, canVote: false, myVote: 'yes',
+            })],
+        });
         const { container } = panel();
         await screen.findByText(/Proposed as the new lead/);
         const text = container.textContent || '';
-        // Damo is named as the CANDIDATE. Nobody else on the roster is named at all, and no wording attributes a
-        // vote to a person other than "You voted…".
+
         expect(text).not.toContain('Pia');
-        expect(text).not.toContain('Marty voted');
-        expect(text).not.toMatch(/voted (yes|no)\b(?!\.)/);
+        // Every "… voted" in the panel, once the fixed secrecy note is taken out: the viewer's own, and nothing
+        // else. A "Proposed by X, who voted yes" would land here.
+        const attributions = (text.replace(SECRECY_NOTE, '').match(/[\w'’]+ voted/g) ?? []);
+        expect(attributions).toEqual(['You voted']);
         expect(text).toContain('You voted yes');
         expect(text).toContain('nobody sees who voted which way');
     });

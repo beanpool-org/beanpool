@@ -78,6 +78,9 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
 
     useEffect(() => { load(); }, [load]);
 
+    // Moving to another event's chat drops the line the last one left behind.
+    useEffect(() => { setImageNotice(null); }, [postId]);
+
     useEffect(() => {
         if (!refreshMs) return;
         const t = setInterval(load, refreshMs);
@@ -98,6 +101,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
         try {
             await postEventChatMessage(postId, text);
             setDraft('');
+            setImageNotice(null);
             await load();
         } catch (err: any) {
             setPostError(err?.message || 'Could not send that message.');
@@ -223,13 +227,23 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
             )}
 
             {imageNotice && (
-                <p
+                <div
                     role="status"
                     data-testid="event-chat-image-notice"
-                    className="flex-shrink-0 m-0 px-3 pb-1 text-xs text-nature-600 dark:text-nature-300 break-words"
+                    className="flex-shrink-0 flex items-center gap-2 px-3 pb-1 min-w-0"
                 >
-                    {imageNotice}
-                </p>
+                    <span className="flex-1 min-w-0 text-xs text-nature-600 dark:text-nature-300 break-words">
+                        {imageNotice}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setImageNotice(null)}
+                        aria-label="Dismiss"
+                        className="flex-shrink-0 min-h-[48px] px-3 -mr-1 bg-transparent border-0 text-sm text-nature-500 dark:text-nature-400 cursor-pointer"
+                    >
+                        ✕
+                    </button>
+                </div>
             )}
 
             {canPost && (

@@ -455,6 +455,87 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.strictEqual(getGroupMembers(db, creator.id).find(m => m.memberPubkey === 'dave_pub')?.role, 'convenor');
     });
 
+    it('the lead convenor: accepting a convenor invitation never moves the lead, even with lead_pubkey NULL', () => {
+        // The same NULL-lead window as the promotion above, one route over. inviteGroupMember writes role on a
+        // row that is not active yet, so the write that makes them an active convenor — and re-decides the
+        // fallback — is joinGroup accepting the invitation. That accept has to pin the lead first.
+        const group = createGroup(db, { name: 'Invite Creator Back', createdBy: 'dave_pub' });
+        joinGroup(db, group.id, 'bob_pub');
+        setMemberRole(db, group.id, 'dave_pub', 'bob_pub', 'convenor');
+        handOverGroupLead(db, group.id, 'dave_pub', 'bob_pub');
+        // The creator leaves: the creator branch of the fallback stops matching while they are not active.
+        assert.ok(removeGroupMember(db, group.id, 'dave_pub', 'dave_pub'));
+        db.prepare('UPDATE groups SET lead_pubkey = NULL WHERE id = ?').run(group.id);
+        assert.strictEqual(getGroupLead(db, group.id), 'bob_pub');
+
+        // Bob re-admits the creator as a convenor. The invitation alone must not move anything...
+        inviteGroupMember(db, group.id, 'bob_pub', 'dave_pub', 'convenor');
+        assert.strictEqual(getGroupLead(db, group.id), 'bob_pub');
+        // ...and neither must the creator accepting it, which is what makes the row an active convenor.
+        joinGroup(db, group.id, 'dave_pub');
+        assert.strictEqual(getGroupLead(db, group.id), 'bob_pub');
+        assert.strictEqual(
+            (db.prepare('SELECT lead_pubkey FROM groups WHERE id = ?').get(group.id) as any).lead_pubkey,
+            'bob_pub',
+        );
+        // The invitation itself still landed: Dave is back, and a convenor.
+        const dave = getGroupMembers(db, group.id).find(m => m.memberPubkey === 'dave_pub');
+        assert.strictEqual(dave?.status, 'active');
+        assert.strictEqual(dave?.role, 'convenor');
+    });
+
+    it('the lead convenor: direct-approving a pending request as convenor never moves the lead', () => {
+        // inviteGroupMember on a pending_approval row goes active AND convenor in one UPDATE — the whole move,
+        // with no separate promotion to pin the lead. An older pending request wins the fallback's joined_at
+        // ordering, so the convenor who approves it would hand the lead to the person they just let in.
+        const group = createGroup(db, { name: 'Direct Approve', joinPolicy: 'request_to_join', createdBy: 'dave_pub' });
+        joinGroup(db, group.id, 'bob_pub');
+        approveGroupMember(db, group.id, 'dave_pub', 'bob_pub');
+        setMemberRole(db, group.id, 'dave_pub', 'bob_pub', 'convenor');
+        handOverGroupLead(db, group.id, 'dave_pub', 'bob_pub');
+        assert.ok(removeGroupMember(db, group.id, 'dave_pub', 'dave_pub'));
+
+        // Carol asked to join long before any of them — still waiting.
+        joinGroup(db, group.id, 'carol_pub');
+        db.prepare("UPDATE group_members SET joined_at = '2020-01-01T00:00:00.000Z' WHERE group_id = ? AND member_pubkey = 'carol_pub'")
+            .run(group.id);
+        db.prepare('UPDATE groups SET lead_pubkey = NULL WHERE id = ?').run(group.id);
+        assert.strictEqual(getGroupLead(db, group.id), 'bob_pub');
+
+        inviteGroupMember(db, group.id, 'bob_pub', 'carol_pub', 'convenor');
+        assert.strictEqual(getGroupLead(db, group.id), 'bob_pub');
+        assert.strictEqual(
+            (db.prepare('SELECT lead_pubkey FROM groups WHERE id = ?').get(group.id) as any).lead_pubkey,
+            'bob_pub',
+        );
+        const carol = getGroupMembers(db, group.id).find(m => m.memberPubkey === 'carol_pub');
+        assert.strictEqual(carol?.status, 'active');
+        assert.strictEqual(carol?.role, 'convenor');
+    });
+
+    it('the lead convenor: a stored lead survives both routes untouched (control)', () => {
+        // The same two steps with lead_pubkey actually written: the first COALESCE branch answers, and neither
+        // route has anything to fix. This is what says the two tests above are about the NULL window and not
+        // about invitations moving a lead that is on record.
+        const group = createGroup(db, { name: 'Stored Lead Control', createdBy: 'dave_pub' });
+        joinGroup(db, group.id, 'bob_pub');
+        setMemberRole(db, group.id, 'dave_pub', 'bob_pub', 'convenor');
+        handOverGroupLead(db, group.id, 'dave_pub', 'bob_pub');
+        assert.ok(removeGroupMember(db, group.id, 'dave_pub', 'dave_pub'));
+        assert.strictEqual(
+            (db.prepare('SELECT lead_pubkey FROM groups WHERE id = ?').get(group.id) as any).lead_pubkey,
+            'bob_pub',
+        );
+
+        inviteGroupMember(db, group.id, 'bob_pub', 'dave_pub', 'convenor');
+        joinGroup(db, group.id, 'dave_pub');
+        assert.strictEqual(getGroupLead(db, group.id), 'bob_pub');
+
+        inviteGroupMember(db, group.id, 'bob_pub', 'carol_pub', 'convenor');
+        joinGroup(db, group.id, 'carol_pub');
+        assert.strictEqual(getGroupLead(db, group.id), 'bob_pub');
+    });
+
     it('convenor moderation: member removal and policy update', () => {
         const group = createGroup(db, {
             name: 'Team B',

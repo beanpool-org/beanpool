@@ -554,7 +554,11 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
             throw new Error('A convenor removed you from this group. Only a convenor can add you back.');
         }
         if (existing.status === 'invited') {
-            // Accepting an invitation
+            // Accepting an invitation. The invitation may carry role = 'convenor', so THIS is the write that makes
+            // the row an active convenor and re-decides the fallback — pin the lead first, as setMemberRole does.
+            // Without it, a group whose lead_pubkey is NULL hands the lead to whoever the fallback prefers among
+            // the convenors it can now see: the group's creator accepting a re-invitation, or an older joined_at.
+            reconcileGroupLead(db, groupId);
             db.prepare(
                 "UPDATE group_members SET status = 'active', updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
             ).run(now, groupId, memberPubkey);
@@ -784,6 +788,12 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
     return updated;
 }
 
+/**
+ * A convenor approves a request to join. No reconcileGroupLead here, unlike joinGroup and inviteGroupMember: this
+ * one only ever writes `status`, never `role`, so the person it activates is whatever they already were — and the
+ * only route that can have made a not-yet-active row a convenor is setMemberRole, which already pinned the lead
+ * before writing that role. Add a role to this UPDATE and that stops being true: pin the lead first if you do.
+ */
 export function approveGroupMember(db: Db, groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
         throw new Error('UNAUTHORIZED: Only a group convenor can approve member join requests');
@@ -824,7 +834,10 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
             return existing;
         }
         if (existing.status === 'pending_approval') {
-            // Direct approve
+            // Direct approve: status and role move in one UPDATE, so with role = 'convenor' this single write
+            // makes an active convenor out of a pending request. Pin the lead before it, for the same reason
+            // setMemberRole does — otherwise the convenor approving an older request loses the lead to them.
+            reconcileGroupLead(db, groupId);
             db.prepare(
                 "UPDATE group_members SET status = 'active', role = ?, invited_by = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
             ).run(role, convenorPubkey, now, groupId, targetPubkey);

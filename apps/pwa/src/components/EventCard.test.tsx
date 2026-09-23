@@ -99,6 +99,30 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
         expect(row.className).toMatch(/flex-wrap/);
     });
 
+    /**
+     * The other half of sizing each button to its own label: the label has to stay in the layout while the save
+     * is in flight. A button whose only child became a spinner (or a differently-sized "Saving…") would resize
+     * on tap, and a row near its wrap threshold would re-flow under the finger and again when the save landed.
+     */
+    it('keeps a button at its label width while the RSVP is saving', async () => {
+        let settle: (res: any) => void = () => {};
+        vi.mocked(api.rsvpEvent).mockImplementationOnce(() => new Promise((resolve) => { settle = resolve; }));
+        renderAt320(<EventCard post={baseEvent} identity={identity} />);
+        const [going, interested] = within(screen.getByTestId('event-rsvp-row')).getAllByRole('button');
+        fireEvent.click(interested);
+
+        await waitFor(() => expect(interested).toHaveAttribute('aria-busy', 'true'));
+        // The label is still there, hidden, holding the width — and the busy indicator is out of the flow on
+        // top of it, so neither button moves.
+        const label = within(interested).getByText('Interested');
+        expect(label.className).toContain('invisible');
+        expect(interested.querySelector('.animate-spin')!.closest('span[aria-hidden="true"]')!.className).toContain('absolute');
+        expect(going.textContent).toBe('Going ✓');
+
+        settle({ success: true, post: { ...baseEvent, myRsvp: 'interested', goingCount: 6, interestedCount: 4 } });
+        await waitFor(() => expect(interested).toHaveAttribute('aria-busy', 'false'));
+    });
+
     it('does not show the host name on the card', () => {
         renderAt320(<EventCard post={baseEvent} identity={identity} />);
         expect(screen.queryByText(/Hazel/)).not.toBeInTheDocument();

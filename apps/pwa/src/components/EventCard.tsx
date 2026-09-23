@@ -112,13 +112,29 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
                 aria-pressed={mine}
                 disabled={!canRsvp || busy !== null}
                 onClick={(e) => { e.stopPropagation(); tap(status); }}
-                className={`grow basis-auto shrink-0 min-w-fit min-h-[48px] px-2 py-1 rounded-xl border text-sm font-extrabold leading-tight whitespace-nowrap transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${
+                aria-busy={busy === status}
+                className={`relative grow basis-auto shrink-0 min-w-fit min-h-[48px] px-2 py-1 rounded-xl border text-sm font-extrabold leading-tight whitespace-nowrap transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${
                     mine
                         ? 'bg-violet-700 border-violet-700 text-white dark:bg-violet-500 dark:border-violet-500'
                         : 'bg-white border-violet-300 text-violet-800 hover:bg-violet-50 dark:bg-nature-900 dark:border-violet-800 dark:text-violet-200'
                 }`}
             >
-                {busy === status ? 'Saving…' : mine ? `${label} ✓` : label}
+                {/*
+                  * While the save is in flight the label stays in the layout, hidden under a spinner, instead of
+                  * being swapped for one. Each button is now as wide as its own label, so a different busy label
+                  * ("Saving…" is shorter than "Interested" and longer than "Going") would resize the button on
+                  * tap and could flip the row between stacked and side by side under the finger, then back when
+                  * the save lands. A spinner fits inside the narrowest label, so the width never moves.
+                  */}
+                <span className={busy === status ? 'invisible' : undefined}>{mine ? `${label} ✓` : label}</span>
+                {busy === status && (
+                    <>
+                        <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+                            <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        </span>
+                        <span className="sr-only">, saving…</span>
+                    </>
+                )}
             </button>
         );
     };

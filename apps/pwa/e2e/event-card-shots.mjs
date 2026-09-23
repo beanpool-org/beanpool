@@ -53,10 +53,24 @@ const MEASURE = () => {
         const card = row.closest('[data-testid="event-card"]') || row.parentElement;
         const cardRect = card.getBoundingClientRect();
         const rowRect = row.getBoundingClientRect();
+        // The label's own text node, not the button: a range over the button's contents returns a rect for each
+        // inline child box as well as each line box, so wrapping the label in a <span> (it is held in the layout
+        // while a save is in flight) would otherwise read as a split label. A range over the text node itself is
+        // exactly one rect per line box, which is what "Intereste / d" is.
+        const labelTextNode = (function deepest(node) {
+            for (const child of node.childNodes) {
+                if (child.nodeType === Node.TEXT_NODE && child.textContent.trim()) return child;
+                if (child.nodeType === Node.ELEMENT_NODE) {
+                    const found = deepest(child);
+                    if (found) return found;
+                }
+            }
+            return null;
+        });
         const buttons = Array.from(row.querySelectorAll('button')).map((b) => {
             const r = b.getBoundingClientRect();
             const range = document.createRange();
-            range.selectNodeContents(b);
+            range.selectNodeContents(labelTextNode(b) || b);
             return {
                 label: (b.textContent || '').trim(),
                 lines: range.getClientRects().length,

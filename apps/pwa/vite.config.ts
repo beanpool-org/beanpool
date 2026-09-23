@@ -82,6 +82,16 @@ export default defineConfig({
         globals: true,
         environment: 'jsdom',
         setupFiles: './src/setupTests.ts',
+        // CI runs four suites across two cores, and a test that takes 400 ms here has been
+        // measured 17x slower under that contention (#1063). Both limits are set well above
+        // the worst time measured under load — the slowest passing test in the suite is 427 ms
+        // — rather than trimmed to fit it, because the point is headroom, not a tighter fit.
+        // The wait that actually expires on CI is React Testing Library's, not this one; see
+        // asyncUtilTimeout in src/setupTests.ts. This pair is the backstop behind it, and is
+        // deliberately larger so a genuinely stuck wait still fails with RTL's message and DOM
+        // dump instead of a bare "test timed out" that says nothing about what was missing.
+        testTimeout: 30_000,
+        hookTimeout: 30_000,
         alias: {
             'react': path.resolve(__dirname, '../../node_modules/react'),
             'react-dom': path.resolve(__dirname, '../../node_modules/react-dom'),

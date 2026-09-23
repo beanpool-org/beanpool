@@ -14,7 +14,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { installProcessHandlers } from './process-handlers.js';
+import { installProcessHandlers, scrubReportEnvironment } from './process-handlers.js';
 
 // Step 0: the process-level error net, before anything else in this file runs. A stray rejected promise
 // is recorded and the node keeps serving; a true uncaught exception still crashes and Docker still
@@ -35,6 +35,12 @@ if (fs.existsSync(envPath)) {
         }
     }
 }
+
+// Now that the .env above has been read, the data dir is certain. On a self-hoster who sets
+// BEANPOOL_DATA_DIR there rather than in the real environment, the scrub inside installProcessHandlers()
+// looked in the wrong directory — this is the one that finds their old reports. Idempotent and, on a node
+// with nothing to scrub, one readdir.
+scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
 import { initAdminPassword } from './config/local-config.js';

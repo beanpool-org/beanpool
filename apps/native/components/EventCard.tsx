@@ -98,12 +98,23 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                 accessibilityLabel={selected ? `${label}, selected. Tap to clear` : label}
                 accessibilityState={{ selected, disabled: closed || !!pending, busy: pending === status }}
             >
-                {pending === status ? (
-                    <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
-                ) : (
-                    <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-                        {selected ? `${label} ✓` : label}
-                    </Text>
+                {/*
+                  * The label stays in the layout while the RSVP is in flight, hidden under the spinner rather
+                  * than replaced by it. The buttons size to their own labels now, so a spinner-only child would
+                  * shrink the button to spinner width the moment it is tapped: a stacked row would re-flow onto
+                  * one line under the finger, and back again when the save lands.
+                  */}
+                <Text
+                    style={[styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]}
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={1.3}
+                >
+                    {selected ? `${label} ✓` : label}
+                </Text>
+                {pending === status && (
+                    <View style={styles.rsvpSpinner} pointerEvents="none">
+                        <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
+                    </View>
                 )}
             </Pressable>
         );
@@ -234,13 +245,21 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: colors.text.secondary,
             marginBottom: 2,
         },
+        // The label is never cut: RN won't break inside a word, but `flex: 1` with numberOfLines={1} ellipsized
+        // it ("Intereste…") once the row was narrower than the text — at 320dp with 130% text there are only
+        // ~111dp of text space per button and "Interested ✓" wants ~120. So each button sizes to its own label
+        // and only grows to share the row, and the row wraps: Interested takes a full-width row of its own.
+        // (The web card had the same cause with a worse symptom — see EventCard.tsx in apps/pwa.)
         rsvpRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             gap: 8,
             marginTop: 10,
         },
         rsvpBtn: {
-            flex: 1,
+            flexGrow: 1,
+            flexBasis: 'auto',
+            flexShrink: 0,
             minHeight: 48,
             borderRadius: 12,
             borderWidth: 1.5,
@@ -260,6 +279,14 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             fontSize: 14,
             fontWeight: '700',
             color: EVENT_ACCENT,
+        },
+        rsvpTextBusy: {
+            opacity: 0,
+        },
+        rsvpSpinner: {
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         rsvpTextSelected: {
             color: '#fff',

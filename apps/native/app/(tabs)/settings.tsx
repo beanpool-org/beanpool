@@ -12,7 +12,7 @@ import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
 import { getCanonicalProfile } from '../../utils/canonical-profile';
-import { explicitEditAvatar } from '../../utils/avatar-value';
+import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../../utils/avatar-value';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
@@ -911,6 +911,9 @@ export default function SettingsScreen() {
             // falls through to the offline queue — an explicit rejection from the node aborts
             // the save, so local state can never drift from what the server accepted.
             let offline = false;
+            // What this Save decided about the photo, kept in scope because the pending keys may
+            // only be retired on the strength of what the payload actually carried.
+            let avatarDecision: ProfilePublishAvatar | null = null;
             const url = await AsyncStorage.getItem('beanpool_anchor_url');
             if (!url) {
                 offline = true;
@@ -921,11 +924,13 @@ export default function SettingsScreen() {
                     contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
                     callsign: newCallsign,
                 };
-                // Send `avatar` only when the member actually picked a photo in this session.
-                // This Save is a bio/name/contact edit; leaving the field out is how the node
-                // is told "avatar unchanged" (it reads an explicit null as "clear it"), and it
-                // is the only thing that cannot overwrite a newer photo set elsewhere.
-                const publishAvatar = explicitEditAvatar(avatarPickedThisSession);
+                // The one shared rule decides, so this Save cannot disagree with the wizard or
+                // with the pending-sync retry. It sends a photo picked in this session, else a
+                // pick an earlier offline save parked and nothing has managed to publish yet;
+                // for a plain bio/name/contact edit it sends nothing, which is how the node is
+                // told "avatar unchanged" (it reads an explicit null as "clear it").
+                avatarDecision = await resolveProfilePublishAvatar({ sessionPick: avatarPickedThisSession });
+                const publishAvatar = avatarDecision.avatar;
                 if (publishAvatar) payloadObj.avatar = publishAvatar;
                 if (archetypeRaw) {
                     const parsed = parseArchetype(archetypeRaw);
@@ -974,9 +979,12 @@ export default function SettingsScreen() {
                 const offlinePick = explicitEditAvatar(avatarPickedThisSession);
                 if (offlinePick) await AsyncStorage.setItem('pending_profile_avatar', offlinePick);
                 Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
-            } else {
-                await AsyncStorage.removeItem('pending_profile_sync');
-                await AsyncStorage.removeItem('pending_profile_avatar');
+            } else if (avatarDecision) {
+                // The node has accepted. Retire the parked pick ONLY if this payload carried it
+                // (or a newer pick that supersedes it): a bio-only Save publishes no photo, and
+                // clearing the keys here used to disarm the retry for a pick that had reached
+                // nothing — the member kept seeing it locally and it never left the phone.
+                await retireParkedPickAfterPublish(avatarDecision);
             }
 
             // Commit locally now that the node has accepted (or we know we are offline)

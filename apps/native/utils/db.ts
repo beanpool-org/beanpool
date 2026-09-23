@@ -7,7 +7,7 @@ import { eventCacheColumns, rsvpSignedMessage, type EventEditPatch, type EventRs
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
-import { isPortableAvatarValue, catchUpAvatar } from './avatar-value';
+import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -4039,13 +4039,16 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
     // canonical copy is not an unconditional replacement for it: only a local pick ever writes
     // canonical, so when the node holds a photo this phone has not picked, canonical is the
     // OLDER one and posting it would overwrite the member's newest choice.
-    // Parked by the offline branch of settings Save / Re-run Setup, and cleared only when this
-    // function has actually published (or found there is nothing to publish) — never on a
-    // failure, so a flaky POST cannot lose it. Re-checked for portability because anything that
-    // is not a `data:`/`bundled://` value is not ours to publish.
-    const offlinePick = await AsyncStorage.getItem('pending_profile_avatar');
-    const avatar = (isPortableAvatarValue(offlinePick) ? offlinePick.trim() : null)
-        ?? catchUpAvatar(profile?.avatar_url, canonical?.avatar, opts?.nodeHasNoPhoto);
+    // Through the one shared rule, which every publish path uses: a pick parked by the offline
+    // branch of settings Save / Re-run Setup first (re-checked for portability, since anything
+    // that is not a `data:`/`bundled://` value is not ours to publish), otherwise the catch-up
+    // inference below. There is no session pick on this path — it runs with no screen in front of
+    // it. `decision.clearsParkedPick` is what licenses retiring the parked copy afterwards, and
+    // only after a verified 2xx: every `return false` below leaves it for the next retry.
+    const decision = await resolveProfilePublishAvatar({
+        catchUp: { localRow: profile?.avatar_url, canonical: canonical?.avatar, nodeHasNoPhoto: opts?.nodeHasNoPhoto },
+    });
+    const avatar = decision.avatar;
 
     const callsign = profile?.callsign || identity.callsign;
     const bio = profile?.bio ?? canonical?.bio ?? '';
@@ -4060,6 +4063,10 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
     // genuinely nothing anywhere to publish.
     if (!avatar && !bio && !contactValue && !archetypeRaw) {
         await AsyncStorage.removeItem('pending_profile_sync');
+        // Safe to drop the parked value here, and the only place it is dropped unsent: `avatar`
+        // being null means the rule found nothing publishable, so anything still parked is a
+        // value that is not portable and can never be published — a portable pick would have been
+        // chosen above and kept this code out of this branch.
         await AsyncStorage.removeItem('pending_profile_avatar');
         return false;
     }
@@ -4108,10 +4115,13 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
         } catch { /* non-JSON body — trust the 2xx */ }
         if (!avatarPersisted) return false;
 
+        // This function IS the pending-sync retry and has just published everything the flag was
+        // set for, so the flag retires unconditionally — otherwise an offline BIO-ONLY edit would
+        // re-publish on every sync for ever.
         await AsyncStorage.removeItem('pending_profile_sync');
-        // The pick is now on the node, so it stops being pending. Cleared HERE and not one
-        // line earlier: every `return false` above leaves it in place for the next retry.
-        await AsyncStorage.removeItem('pending_profile_avatar');
+        // The parked pick retires only if THIS payload carried it, and only here: every
+        // `return false` above leaves it in place for the next retry.
+        await retireParkedPickAfterPublish(decision);
         // Mirror the canonical avatar into THIS node's local DB when it was
         // missing, so local reads and the marketplace pre-check see it at once.
         if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {

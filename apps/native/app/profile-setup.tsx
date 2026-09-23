@@ -9,7 +9,7 @@ import { OnboardingGuide } from '../components/OnboardingGuide';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
-import { profileSetupAvatar, explicitEditAvatar } from '../utils/avatar-value';
+import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../utils/avatar-value';
 import { buildSignedHeaders } from '../utils/crypto';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
@@ -138,14 +138,23 @@ export default function ProfileSetupScreen() {
             //    name step (where the effect re-checks and offers fresh suggestions)
             //    without touching local state.
             let published = false;
+            // Kept in scope for the same reason as in settings Save: the pending keys may only be
+            // retired on the strength of what the payload actually carried.
+            let avatarDecision: ProfilePublishAvatar | null = null;
             try {
                 const url = await AsyncStorage.getItem('beanpool_anchor_url');
                 if (url) {
-                    // `avatar` goes only when the member picked one here, or when the node has
-                    // no photo for us and the canonical copy can therefore overwrite nothing.
-                    // Omitting it is how the node is told "avatar unchanged"; sending what the
-                    // wizard merely displayed is what put an older photo back.
-                    const publishAvatar = profileSetupAvatar(pendingAvatar, nodeAvatar, canonicalAvatar);
+                    // The one shared rule, as in settings Save. `avatar` goes when the member
+                    // picked one here, or when an earlier offline save parked a pick that nothing
+                    // has published yet, or — this screen being the "finish your profile" gate —
+                    // when the node holds no photo for us and the canonical copy can therefore
+                    // overwrite nothing. Omitting it is how the node is told "avatar unchanged";
+                    // sending what the wizard merely displayed is what put an older photo back.
+                    avatarDecision = await resolveProfilePublishAvatar({
+                        sessionPick: pendingAvatar,
+                        catchUp: { localRow: nodeAvatar, canonical: canonicalAvatar },
+                    });
+                    const publishAvatar = avatarDecision.avatar;
                     const bodyString = JSON.stringify({
                         publicKey: identity.publicKey,
                         ...(publishAvatar ? { avatar: publishAvatar } : {}),
@@ -178,8 +187,11 @@ export default function ProfileSetupScreen() {
             });
 
             if (published) {
-                await AsyncStorage.removeItem('pending_profile_sync');
-                await AsyncStorage.removeItem('pending_profile_avatar');
+                // Only what this payload carried is retired. A wizard run that published no
+                // photo — the node already holds one, so the rule correctly inferred nothing —
+                // used to clear a parked pick that had reached nothing, and the member's photo
+                // was then lost with no retry armed to resend it.
+                if (avatarDecision) await retireParkedPickAfterPublish(avatarDecision);
             } else {
                 await AsyncStorage.setItem('pending_profile_sync', 'true');
                 // As in the settings Save: the pick is parked beside the flag so a members sync

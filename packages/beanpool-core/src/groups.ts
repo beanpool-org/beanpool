@@ -86,8 +86,9 @@ export interface Group {
     convenorAvatarUrl?: string | null;
     /**
      * The group's LEAD convenor (2026-09-23). One per group, stored as `groups.lead_pubkey`. The creator to
-     * begin with; it moves only by hand-over, by the lead stepping down or leaving, by the 30-day-silence vote,
-     * or by a community Decision. Null only for a group with no active convenor at all.
+     * begin with; it moves only by hand-over, by the lead stepping down or leaving, or by the
+     * 30-day-silence vote. No community Decision names a group's lead as its subject, so that is not a
+     * route today. Null only for a group with no active convenor at all.
      */
     leadPubkey?: string | null;
     leadCallsign?: string;

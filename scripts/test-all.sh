@@ -342,6 +342,7 @@ run_federation_suites() {
       test-decisions-engine
       test-decisions-client-api
       test-decisions-voting-answers
+      test-decisions-tick-route-gone
       test-rip-out-legacy-voting
       test-escrow-disputes
       test-shutdown-recovery

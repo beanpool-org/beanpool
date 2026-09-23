@@ -354,8 +354,12 @@ function RootLayoutNav() {
                                             }
                                             // Land the user's canonical picture on the newly-joined node so the
                                             // marketplace never blocks them for a "missing" profile photo they
-                                            // already set on another community.
-                                            pushProfileToServer().catch(() => {});
+                                            // already set on another community. `nodeHasNoPhoto` is the node's own
+                                            // answer, taken from the redeem response: for a member re-entering a
+                                            // node this device has never synced, the empty local row would
+                                            // otherwise read as "nothing there" and put the canonical copy over
+                                            // the newer photo the node actually holds.
+                                            pushProfileToServer({ nodeHasNoPhoto: !redeemRes?.nodeHasPhoto }).catch(() => {});
                                             requestSync().catch(console.error);
                                             // Refresh membership for the new node before routing, so a stale
                                             // 'stranger' verdict can't bounce us to the wrong-node screen.
@@ -433,8 +437,9 @@ function RootLayoutNav() {
                                                 } else {
                                                     Alert.alert('Success', 'Invite redeemed! Your connection is registered.');
                                                 }
-                                                // Publish the canonical picture to this node up front.
-                                                pushProfileToServer().catch(() => {});
+                                                // Publish the canonical picture to this node up front, unless the
+                                                // redeem response said the node already holds one (see above).
+                                                pushProfileToServer({ nodeHasNoPhoto: !redeemRes?.nodeHasPhoto }).catch(() => {});
                                                 requestSync().catch(console.error);
                                                 await recheck();
                                                 router.replace('/(tabs)');

@@ -33,6 +33,7 @@ import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import type { RouteDeps } from './types.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -207,11 +208,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 return {
                     publicKey: r.public_key, name: r.callsign,
                     callsign: r.callsign,
-                    avatar: r.avatar_url
-                        ? (r.avatar_url.startsWith('bundled://')
-                            ? r.avatar_url
-                            : `/api/avatar/${r.public_key}?size=thumb`)
-                        : null,
+                    avatar: avatarUrlFor(r.public_key, r.avatar_url),
                     avatarUrl: r.avatar_url,
                     balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
                     allowance: floorInfo.allowance,
@@ -290,11 +287,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 publicKey: r.public_key,
                 name: r.callsign || 'Unnamed',
                 callsign: r.callsign || 'Unnamed',
-                avatar: r.avatar_url
-                    ? (r.avatar_url.startsWith('bundled://')
-                        ? r.avatar_url
-                        : `/api/avatar/${r.public_key}?size=thumb`)
-                    : null,
+                avatar: avatarUrlFor(r.public_key, r.avatar_url),
                 avatarUrl: r.avatar_url,
                 purpose: r.purpose ?? null,
                 lat: Number(r.lat),
@@ -389,11 +382,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ctx.body = {
             publicKey: treasury, name: m.callsign,
             callsign: m.callsign,
-            avatar: m.avatar_url
-                ? (m.avatar_url.startsWith('bundled://')
-                    ? m.avatar_url
-                    : `/api/avatar/${treasury}?size=thumb`)
-                : null,
+            avatar: avatarUrlFor(treasury, m.avatar_url),
             avatarUrl: m.avatar_url,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
             allowance: floorInfo.allowance,

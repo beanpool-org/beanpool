@@ -149,6 +149,7 @@ import {
     redeemInvite as redeemInviteEngine,
     redeemOfflineTicket as redeemOfflineTicketEngine
 } from './engine/invites.js';
+import { avatarUrlFor, isServableAvatarValue } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
@@ -1067,7 +1068,8 @@ export function assertMemberActive(publicKey: string): void {
 export function assertProfileComplete(publicKey: string): void {
     const member = db.prepare("SELECT avatar_url, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return; // Let assertMemberActive handle missing members
-    if (!member.avatar_url) {
+    // See the identical gate in engine/posts.ts: a stored /api/avatar/ URL is not a photo.
+    if (!isServableAvatarValue(member.avatar_url)) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {
@@ -1349,11 +1351,7 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
         kind: 'member',
         publicKey: inviterKey,
         callsign: inviter.callsign,
-        avatarUrl: inviter.avatarUrl
-            ? (inviter.avatarUrl.startsWith('bundled://')
-                ? inviter.avatarUrl
-                : `/api/avatar/${inviter.publicKey}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(inviter.publicKey, inviter.avatarUrl),
         tier: getMemberTrustProfile(inviterKey).tier.name,
     };
 }
@@ -1394,11 +1392,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         `).all(viewerPubkey, targetPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
             publicKey: r.publicKey,
             callsign: r.callsign,
-            avatarUrl: r.avatarUrl
-                ? (r.avatarUrl.startsWith('bundled://')
-                    ? r.avatarUrl
-                    : `/api/avatar/${r.publicKey}?size=thumb`)
-                : null
+            avatarUrl: avatarUrlFor(r.publicKey, r.avatarUrl)
         }))
         : [];
     const mutualCount = mutualConnections.length;
@@ -1448,11 +1442,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
             elderVouch = {
                 publicKey: voucher.publicKey,
                 callsign: voucher.callsign,
-                avatarUrl: voucher.avatarUrl
-                    ? (voucher.avatarUrl.startsWith('bundled://')
-                        ? voucher.avatarUrl
-                        : `/api/avatar/${voucher.publicKey}?size=thumb`)
-                    : null,
+                avatarUrl: avatarUrlFor(voucher.publicKey, voucher.avatarUrl),
             };
         }
     }
@@ -2255,11 +2245,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
     `).all(treasuryPubkey) as any[]).map(r => ({
         publicKey: r.public_key,
         callsign: r.callsign,
-        avatarUrl: r.avatar_url
-            ? (r.avatar_url.startsWith('bundled://')
-                ? r.avatar_url
-                : `/api/avatar/${r.public_key}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(r.public_key, r.avatar_url),
         grantedAt: r.granted_at ?? null,
         role: r.role || 'keeper',
         backing: Number(r.backing || 0),
@@ -2471,9 +2457,7 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
         id: r.id,
         keeper: r.keeper,
         callsign: r.callsign,
-        avatarUrl: r.avatar_url
-            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.keeper}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(r.keeper, r.avatar_url),
         amount: Number(r.amount),
         pledgedAt: r.pledged_at,
     }));
@@ -2500,9 +2484,7 @@ export function getKeeperPledges(keeperPubkey: string): Array<{
         id: r.id,
         enterprise: r.enterprise,
         callsign: r.callsign,
-        avatarUrl: r.avatar_url
-            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.enterprise}?size=thumb`)
-            : null,
+        avatarUrl: avatarUrlFor(r.enterprise, r.avatar_url),
         amount: Number(r.amount),
         pledgedAt: r.pledged_at,
     }));
@@ -2796,9 +2778,7 @@ export function getKeeperRequests(enterprisePubkey: string, filterStatus?: strin
             enterprisePubkey: r.enterprise_pubkey,
             memberPubkey: r.member_pubkey,
             callsign: r.callsign,
-            avatarUrl: r.avatar_url
-                ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.member_pubkey}?size=thumb`)
-                : null,
+            avatarUrl: avatarUrlFor(r.member_pubkey, r.avatar_url),
             pledgedBacking: Number(r.pledged_backing),
             status: r.status,
             createdAt: r.created_at,

@@ -16,6 +16,7 @@
  *  7. The stored lead (`groups.lead_pubkey`) is what travels — in the group APIs and in replication — and the
  *     backfill rule decides for a group whose column was never written.
  *  8. The routes: statuses, invite-only still hidden, and POST /api/groups/:id/lead.
+ *  9. Re-keying carries the lead: a member who recovers on a new key is still the lead, and still the creator.
  *
  * Local only — it touches no node. Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-groups-lead-convenor.ts
  */
@@ -31,6 +32,7 @@ import {
     GroupSystemType,
 } from './state-engine.js';
 import { createGroupRoutes } from './routes/groups.js';
+import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -71,6 +73,16 @@ const storedLead = (g: string) =>
 const lastLine = (g: string) => db.prepare(
     "SELECT system_type, ciphertext FROM messages WHERE conversation_id = ? AND type = 'system' ORDER BY rowid DESC LIMIT 1"
 ).get(g) as any;
+
+const createdBy = (g: string) =>
+    (db.prepare('SELECT created_by FROM groups WHERE id = ?').get(g) as any)?.created_by ?? null;
+/** Lose the phone and recover: the member comes back on a brand new key. Returns the new key. */
+function rekey(oldPub: string, operator: string): string {
+    const newPub = crypto.randomBytes(32).toString('hex');
+    const { code } = issueRekeyCode(oldPub, operator);
+    completeRekey(oldPub, newPub, code, operator);
+    return newPub;
+}
 
 /** A group with an open join policy: its creator (the first lead convenor) plus the given members. */
 function groupOf(name: string, creator: string, members: string[]): string {
@@ -404,6 +416,49 @@ async function main(): Promise<void> {
     const hidden = createGroup({ name: 'Hidden Lead', joinPolicy: 'invite_only', createdBy: ra });
     assert((await dispatch(router, 'POST', `/api/groups/${hidden.id}/lead`, outsider, { targetPubkey: outsider })).status === 404,
         'the hand-over route keeps an invite-only group hidden from outsiders');
+
+    // ── 12. Re-keying carries the lead ─────────────────────────────────────────────────────────
+    console.log('\n--- 12. A lead who loses their phone ---');
+    // Marty creates the group and hands the lead to Damo. Damo loses his phone and recovers on a new key.
+    // Everything the lead is keyed by has to move with him, or the hand-over is silently reversed.
+    const rkMarty = makeMember('RekeyCreator');
+    const rkDamo = makeMember('RekeyLead');
+    const rkPat = makeMember('RekeyMember');
+    const g11 = groupOf('Lost Phone', rkMarty, [rkDamo, rkPat]);
+    handOverGroupLead(g11, rkMarty, rkDamo);
+    assert(getGroupLead(g11) === rkDamo && createdBy(g11) === rkMarty,
+        'Damo leads the group Marty created');
+
+    const rkDamoNew = rekey(rkDamo, rkMarty);
+    assert(getGroupLead(g11) === rkDamoNew, 'after re-keying, Damo is still the lead under his new key');
+    assert(storedLead(g11) === rkDamoNew, 'and the stored pointer names the new key, not the invalidated one');
+    assert(isGroupLead(g11, rkDamoNew) === true, 'isGroupLead agrees');
+    assert(isGroupLead(g11, rkDamo) === false, 'and the old key leads nothing');
+    assert(role(g11, rkDamoNew) === 'convenor', 'his convenorship came across too');
+
+    // The hand-over is not reversed: Marty is an ordinary convenor and the creator, and neither is the lead.
+    assert(isGroupLead(g11, rkMarty) === false, 'the previous lead did not get the lead back');
+    assertThrows(() => setMemberRole(g11, rkMarty, rkDamoNew, 'member'), /lead convenor cannot be demoted/,
+        'the previous lead cannot demote the re-keyed lead');
+    assertThrows(() => removeGroupMember(g11, rkMarty, rkDamoNew), /lead convenor cannot be removed/,
+        'nor remove them');
+    // And the lead's own powers came with the key.
+    assert(removeGroupMember(g11, rkDamoNew, rkPat) === true, 'the re-keyed lead still runs the group');
+
+    // The creator column decides the backfill branch, so it has to move as well.
+    const rkMartyNew = rekey(rkMarty, rkDamoNew);
+    assert(createdBy(g11) === rkMartyNew, 'a creator who re-keys is still the group creator');
+    assert(getGroupLead(g11) === rkDamoNew, 'and that did not disturb the lead');
+
+    // With no stored pointer, the backfill rule has to land on the re-keyed creator, not on somebody else.
+    const rkSolo = makeMember('RekeySolo');
+    const rkOther = makeMember('RekeyOther');
+    const g12 = groupOf('Creator Rekeys', rkSolo, [rkOther]);
+    setMemberRole(g12, rkSolo, rkOther, 'convenor');
+    db.prepare('UPDATE groups SET lead_pubkey = NULL WHERE id = ?').run(g12);
+    const rkSoloNew = rekey(rkSolo, rkOther);
+    assert(createdBy(g12) === rkSoloNew && getGroupLead(g12) === rkSoloNew,
+        'the backfill rule follows the creator to their new key');
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

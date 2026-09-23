@@ -11,6 +11,7 @@
  * 7. Resubmission of a tombstoned row restores the item (deleted_at set to NULL, fields populated).
  * 8. Preview endpoint extraction and alreadyImported detection.
  * 9. Nudges endpoint returns active channel nudge watermarks, probing only Instagram channels.
+ * 10. dismiss-nudge without a seenCount falls back to the same probe.
  *
  * No network: the Instagram post-count probe and the oEmbed metadata fetch are both injected as
  * stubs (deps.probeInstagramPostCountFn, deps.metadataFetchFn), and the metadata stub throws on any
@@ -588,6 +589,30 @@ async function main(): Promise<void> {
         'The Instagram channel nudges on the probed count against its watermark');
     assert(!!igNudge && igNudge.newPostsCount === STUBBED_IG_POST_COUNT - 15,
         'newPostsCount is the gap between the probed count and the watermark');
+
+    // ── 10. dismiss-nudge without a seenCount probes too ───────────────────────
+    console.log('\n--- 10. dismiss-nudge falls back to the probe ---');
+
+    // A dismissal that carries no seenCount reads the current count from the probe. That is a
+    // second call site of the same Instagram probe, and it must come from deps like the first:
+    // un-injected, this step would make a live request to instagram.com. A fresh channel, so the
+    // watermark assertions above are untouched.
+    const chKaylaIg2 = addChannel({
+        ownerPubkey: kayla,
+        platform: 'instagram',
+        raw: '@kayla_glaze',
+        category: 'art',
+    });
+    probeCalls.length = 0;
+    const dismissNoCount = await call('POST', `/api/member/pulse/channels/${chKaylaIg2.id}/dismiss-nudge`, {
+        actor: kayla,
+        body: {},
+        params: { id: chKaylaIg2.id },
+    });
+    assert(dismissNoCount.status === 200, 'dismiss-nudge without a seenCount returns 200');
+    assert(probeCalls.length === 1, 'dismiss-nudge without a seenCount goes through the injected probe');
+    assert(dismissNoCount.body.postCountSeen === STUBBED_IG_POST_COUNT,
+        'and the watermark is set from the probed count');
 
     console.log(`\nResults: ${passed}/${run} tests passed.`);
     process.exit(passed === run ? 0 : 1);

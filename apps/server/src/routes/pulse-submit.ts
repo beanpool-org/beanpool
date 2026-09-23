@@ -870,7 +870,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
 
         if (seenCount === null && channel.platform === 'instagram') {
             try {
-                const probed = await probeInstagramPostCount(channel.url || channel.handle);
+                const probed = await probePostCount(channel.url || channel.handle);
                 if (probed !== null && Number.isSafeInteger(probed) && probed >= 0) {
                     seenCount = Math.max(channel.post_count_seen ?? 0, probed);
                 }

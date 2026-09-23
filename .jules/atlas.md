@@ -115,3 +115,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** SubTabStrip component in `apps/manager/src/components/layout/SubTabStrip.tsx` was untested.
 **Learning:** Testing `SubTabStrip` required mocking container and active child `getBoundingClientRect`, `scrollWidth`, `clientWidth`, and `scrollLeft` properties on element instances to verify active tab auto-scrolling inside `useLayoutEffect`.
 **Action:** Continue identifying remaining untested layout or module components in `apps/manager/src/components/`.
+
+## 2026-09-13 - [manager tests] IdlePausedBanner component unit tests
+**Gap:** `IdlePausedBanner` component in `apps/manager/src/components/common/IdlePausedBanner.tsx` was untested.
+**Learning:** Testing `IdlePausedBanner` with `ActivityPauseProvider` using Vitest fake timers (`vi.useFakeTimers()`) allows advancing time past the idle threshold (`idleAfterMs`) and verifying that the banner appears and dismisses cleanly upon resume button click.
+**Action:** Continue identifying remaining untested common UI components in `apps/manager/src/components/common/`.

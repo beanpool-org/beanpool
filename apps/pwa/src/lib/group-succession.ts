@@ -230,7 +230,11 @@ export function buildSuccessionView(
         myVote: openProposal?.myVote ?? null,
         tallyLine: openProposal ? tallyLineText(openProposal) : null,
         closingLine: openProposal ? closingLineText(openProposal, now) : null,
-        outcomeLine: openProposal ? null : outcomeLineText(latestClosed),
+        // The fortnight gates the LINE as well as the section. While the lead is eligible again the section
+        // exists for that reason alone, and a year-old outcome printed undated under the amber heading would
+        // read as current and contradict it ("Marty hasn't been active for 44 days." / "Marty came back, so
+        // the vote closed.").
+        outcomeLine: openProposal || !isOutcomeRecent(latestClosed, now) ? null : outcomeLineText(latestClosed),
         outcomeOnly,
     };
 }

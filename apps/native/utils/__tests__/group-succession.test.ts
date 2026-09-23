@@ -133,6 +133,19 @@ describe('buildSuccessionView — whether the section exists at all', () => {
         expect(view.show).toBe(true);
         expect(view.outcomeOnly).toBe(false);
         expect(view.silenceLine).toBe("Marty hasn't been active for 44 days. The group can choose a new lead.");
+        // The section is here because the lead is quiet AGAIN, not because of that year-old vote. Printing its
+        // outcome undated under the warning would read as current and contradict the line above it.
+        expect(view.outcomeLine).toBeNull();
+    });
+
+    it('still gives the outcome under the warning when that vote closed within the fortnight', () => {
+        const view = buildSuccessionView(data({
+            proposals: [proposal({ status: 'cancelled', closedReason: 'convenor_returned', deadlineAt: iso(NOW - 3 * DAY) })],
+        }), ROSTER, NOW);
+        expect(view.show).toBe(true);
+        expect(view.outcomeOnly).toBe(false);
+        expect(view.silenceLine).toBe("Marty hasn't been active for 44 days. The group can choose a new lead.");
+        expect(view.outcomeLine).toBe('Marty came back, so the vote closed.');
     });
 });
 

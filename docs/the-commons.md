@@ -253,8 +253,38 @@ unreachable, ❌ missing.
 keepers; the reasoning below changed the call. A second argument arrived later and reinforced it:
 the node now has an **owner** too (§9.2), so an enterprise owner would make "owner" mean two
 different things at two levels — and "Steward" has already taught us what that costs. The final
-vocabulary is **node → owner / admin · enterprise → lead keeper / keeper · group → convenor ·
-trust tier → Steward.** Four levels, no word reused.
+vocabulary is **node → owner / admin · enterprise → lead keeper / keeper · group → lead convenor /
+convenor · trust tier → Steward.** Four levels, no word reused.
+
+**Groups took the same shape on 2026-09-23.** Damo was made a convenor of a group and found he could
+remove the group's creator; his point was that the first person to create a group must have higher
+permissions than an ordinary convenor. The answer is the one this section already argues for: not an
+owner — a **lead convenor**, exactly as an enterprise has a lead keeper. Any convenor still approves,
+invites and removes members and observers, promotes someone to convenor, removes posts and messages,
+and edits the group; only the lead can remove or demote a convenor; and nobody can remove or demote the
+lead, node admins included (they hold no power over groups, and this changed nothing about that). The
+lead moves by hand-over, by stepping down or leaving (hand over first while anyone else is active), by
+the 30-day-silence vote — which now covers a silent lead, with the group's other convenors voting, or
+its members when the lead is its only convenor — or by a community Decision. Stored as
+`groups.lead_pubkey`, backfilled to the creator while they are an active convenor and otherwise to the
+longest-serving active convenor. Both that column and `groups.created_by` move with a member's key when
+they re-key, so somebody who loses their phone and recovers on a new key comes back as the same lead —
+without that, the hand-over would quietly reverse itself.
+
+**A suspended lead is still the lead, and that is deliberate, not a bug.** Who leads a group is read from
+group membership alone — it does not consult `members.status`. So a lead whose *account* a node admin
+suspends, or who is offboarded from the node, keeps the group's lead: nobody can demote or remove them,
+and their group carries on with a lead who cannot act. This follows directly from the rule above. Node
+admins hold no power over groups, and letting a suspension move a group's lead would hand them exactly
+that power through the back door — a rogue lead has to be dealt with by the community, not by the node.
+
+What a community actually does about one today is the **30-day-silence vote**: a suspended lead stops
+being active, so 30 days after their last activity the other convenors — or the members, when the lead is
+the group's only convenor — can vote a replacement in. Until that window opens there is nothing to be
+done, because the paths that are faster all need the lead themselves: hand-over and stepping down. The
+Decisions the node has (`suspend_member`, `remove_member`) act on the *account*, not on the group, and
+none of them names a group's lead as their subject; a group-scoped Decision effect that replaces a lead
+outright does not exist yet, and is the obvious thing to add if 30 days ever proves too long to wait.
 
 Why ownership is the wrong shape for this specific object:
 
@@ -1066,7 +1096,7 @@ This section places them on their axes.
 | | What it is | How you get it | What it gives you | Taken away by |
 |---|---|---|---|---|
 | **Trust tier** — Newcomer / Resident / Steward / Elder | **earned standing**, computed | by trading | credit depth, and nothing else | nobody — it is a calculation, not a grant |
-| **Group member** (#416) | **audience scope** — who sees what | joining (open / request / invite) | see and post inside a scope | the group's convenor |
+| **Group member** (#416) | **audience scope** — who sees what | joining (open / request / invite) | see and post inside a scope | the group's lead convenor |
 | **Enterprise keeper / lead keeper** | **economic authority over one account** | appointed by the lead keeper; lead removable by Decision | spend that enterprise's money | the lead keeper, or a Decision |
 | **Node owner / admin** | **infrastructure authority** | the owner appoints | node settings, moderation, overrides | the owner |
 
@@ -1099,7 +1129,7 @@ group, it is unused anywhere in the codebase, and it reads plainly to a non-tech
 host, self-hosted nodes, `home_node_url`, the DNS registrar's whole vocabulary. It would be the
 fourth collision, not an escape from the third.)*
 
-So: **tier = Steward · enterprise = keeper / lead keeper · group = convenor · node = admin / owner.**
+So: **tier = Steward · enterprise = keeper / lead keeper · group = convenor / lead convenor · node = admin / owner.**
 Four concepts, four words, no overlap.
 
 ### 9.2 Node owner and admins

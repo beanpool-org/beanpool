@@ -1288,6 +1288,13 @@ CREATE TABLE IF NOT EXISTS groups (
     avatar_url TEXT,
     category TEXT DEFAULT 'social' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),
     created_by TEXT NOT NULL REFERENCES members(public_key),
+    -- The LEAD convenor (2026-09-23). One per group: the creator to begin with, and it moves only by hand-over,
+    -- by the lead stepping down or leaving, by the 30-day-silence vote, or by a community Decision. Only the lead
+    -- can remove or demote a convenor, and nobody can remove or demote the lead. A separate column rather than a
+    -- fourth `role` value, because adding one would mean rebuilding group_members for its CHECK constraint.
+    -- Nullable: a group with no active convenor at all has no lead, and a row from a node older than this
+    -- change arrives without one (the reader then falls back to the same rule the backfill uses).
+    lead_pubkey TEXT REFERENCES members(public_key),
     join_policy TEXT NOT NULL DEFAULT 'open' CHECK (join_policy IN ('open', 'request_to_join', 'invite_only')),
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))

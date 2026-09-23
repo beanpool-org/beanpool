@@ -3,8 +3,19 @@
 //
 // A group is an audience scope and NOTHING else:
 // - It holds no money, grants no trust, confers no node role, and is never linked to an enterprise.
-// - Separate role table: group_members (convenor | member | observer).
+// - Separate role table: group_members (convenor | member | observer), plus ONE lead convenor per group
+//   (groups.lead_pubkey, 2026-09-23).
 // - Join policies: open | request_to_join | invite_only.
+//
+// THE LEAD CONVENOR (Marty's decision, 2026-09-23; mirrors the enterprise lead keeper, docs/the-commons.md §2.3):
+//  - Any convenor can approve, invite and remove members and observers, promote someone to convenor, remove
+//    posts and messages, and edit the group and its join policy.
+//  - Only the lead can remove or demote a convenor.
+//  - NOBODY can remove or demote the lead — not another convenor, and not a node admin (admins hold no power
+//    over groups today, and this change gives them none).
+//  - The lead changes by hand-over, by stepping down or leaving (hand over first while anyone else is active),
+//    by the 30-day-silence vote (apps/server/src/engine/group-succession.ts), or by a community Decision.
+// Every route goes through this file, so there is one place the rules live.
 
 import type Database from 'better-sqlite3';
 import {
@@ -114,8 +125,8 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
 
     db.transaction(() => {
         db.prepare(`
-            INSERT INTO groups (id, name, slug, description, avatar_url, category, created_by, join_policy, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO groups (id, name, slug, description, avatar_url, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             id,
             trimmedName,
@@ -123,6 +134,9 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
             params.description?.trim() || null,
             params.avatarUrl || null,
             category,
+            params.createdBy,
+            // The creator is the first lead convenor. Nothing else is special about them — exactly the enterprise
+            // rule ("the creator is the first lead keeper", docs/the-commons.md §2.3).
             params.createdBy,
             joinPolicy,
             now,
@@ -144,16 +158,16 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
 }
 
 export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group | null {
+    // convenor_pubkey is the LEAD convenor: "the group's convenor", wherever one name is shown, is the person who
+    // leads it. Group info in both apps reads these fields, so naming the lead there needs no second query.
     const row = db.prepare(`
         SELECT g.*,
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as member_count,
-               (SELECT gm.member_pubkey FROM group_members gm WHERE gm.group_id = g.id AND gm.role = 'convenor' AND gm.status = 'active' ORDER BY gm.joined_at ASC LIMIT 1) as convenor_pubkey,
+               ${leadPubkeySql('g')} as convenor_pubkey,
                m.callsign as convenor_callsign,
                m.avatar_url as convenor_avatar_url
         FROM groups g
-        LEFT JOIN members m ON m.public_key = (
-            SELECT gm2.member_pubkey FROM group_members gm2 WHERE gm2.group_id = g.id AND gm2.role = 'convenor' AND gm2.status = 'active' ORDER BY gm2.joined_at ASC LIMIT 1
-        )
+        LEFT JOIN members m ON m.public_key = ${leadPubkeySql('g')}
         WHERE g.id = ? OR g.slug = ?
     `).get(idOrSlug, idOrSlug) as any;
 
@@ -198,6 +212,8 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
         convenorPubkey: row.convenor_pubkey || undefined,
         convenorCallsign: row.convenor_callsign || undefined,
         convenorAvatarUrl: row.convenor_avatar_url || undefined,
+        leadPubkey: row.convenor_pubkey || null,
+        leadCallsign: row.convenor_callsign || undefined,
         viewerRole,
         viewerStatus,
         viewerInvitedBy,
@@ -208,13 +224,11 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
     let query = `
         SELECT g.*,
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as member_count,
-               (SELECT gm.member_pubkey FROM group_members gm WHERE gm.group_id = g.id AND gm.role = 'convenor' AND gm.status = 'active' ORDER BY gm.joined_at ASC LIMIT 1) as convenor_pubkey,
+               ${leadPubkeySql('g')} as convenor_pubkey,
                m.callsign as convenor_callsign,
                m.avatar_url as convenor_avatar_url
         FROM groups g
-        LEFT JOIN members m ON m.public_key = (
-            SELECT gm2.member_pubkey FROM group_members gm2 WHERE gm2.group_id = g.id AND gm2.role = 'convenor' AND gm2.status = 'active' ORDER BY gm2.joined_at ASC LIMIT 1
-        )
+        LEFT JOIN members m ON m.public_key = ${leadPubkeySql('g')}
         WHERE 1=1
     `;
     const params: any[] = [];
@@ -287,6 +301,8 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
         convenorPubkey: row.convenor_pubkey || undefined,
         convenorCallsign: row.convenor_callsign || undefined,
         convenorAvatarUrl: row.convenor_avatar_url || undefined,
+        leadPubkey: row.convenor_pubkey || null,
+        leadCallsign: row.convenor_callsign || undefined,
         viewerRole: viewerMap.get(row.id)?.role,
         viewerStatus: viewerMap.get(row.id)?.status
     }));
@@ -360,6 +376,102 @@ export function getGroupMember(db: Db, groupId: string, memberPubkey: string): G
         callsign: row.callsign || undefined,
         avatarUrl: row.avatar_url || undefined
     };
+}
+
+// ===================== THE LEAD CONVENOR =====================
+
+/**
+ * The group's lead convenor, as SQL. `g` is the alias of the `groups` row in scope.
+ *
+ * The stored `lead_pubkey` wins while it still names an ACTIVE CONVENOR of the group. When it does not — the
+ * column has never been backfilled, the row arrived from a node older than this change, or the lead's membership
+ * went away with their account — the same rule the backfill uses decides: the creator while they are an active
+ * convenor, otherwise the longest-serving active convenor. So the answer never depends on whether a particular
+ * node has run the migration, and a stale pointer can never be read as a live lead.
+ *
+ * Three COALESCE branches rather than one ORDER BY that prefers the creator, because SQLite resolves a
+ * subquery's ORDER BY against that subquery's own FROM clause: `g.created_by` is not visible there.
+ */
+const leadPubkeySql = (g: string) => `COALESCE(
+    (SELECT gml.member_pubkey FROM group_members gml
+      WHERE gml.group_id = ${g}.id AND gml.member_pubkey = ${g}.lead_pubkey
+        AND gml.role = 'convenor' AND gml.status = 'active'),
+    (SELECT gmc.member_pubkey FROM group_members gmc
+      WHERE gmc.group_id = ${g}.id AND gmc.member_pubkey = ${g}.created_by
+        AND gmc.role = 'convenor' AND gmc.status = 'active'),
+    (SELECT gmf.member_pubkey FROM group_members gmf
+      WHERE gmf.group_id = ${g}.id AND gmf.role = 'convenor' AND gmf.status = 'active'
+      ORDER BY gmf.joined_at ASC, gmf.member_pubkey ASC
+      LIMIT 1)
+)`;
+
+/** Who leads this group, or null when it has no active convenor at all. */
+export function getGroupLead(db: Db, groupId: string): string | null {
+    const row = db.prepare(`SELECT ${leadPubkeySql('g')} AS lead FROM groups g WHERE g.id = ?`).get(groupId) as any;
+    return row?.lead || null;
+}
+
+export function isGroupLead(db: Db, groupId: string, memberPubkey: string): boolean {
+    if (!groupId || !memberPubkey) return false;
+    return getGroupLead(db, groupId) === memberPubkey;
+}
+
+/**
+ * Write down whoever leads the group now, so `lead_pubkey` stops pointing at someone who is no longer an active
+ * convenor. Called after any change that could move the lead — a removal, a role change, a membership that
+ * vanished with an account. Returns the lead. Writing NULL is right and deliberate: a group with no active
+ * convenor has no lead, and gains one again through the same fallback the moment it has a convenor.
+ */
+export function reconcileGroupLead(db: Db, groupId: string): string | null {
+    const lead = getGroupLead(db, groupId);
+    const stored = (db.prepare('SELECT lead_pubkey FROM groups WHERE id = ?').get(groupId) as any)?.lead_pubkey ?? null;
+    if (stored === lead) return lead;
+    db.prepare('UPDATE groups SET lead_pubkey = ?, updated_at = ? WHERE id = ?')
+        .run(lead, new Date().toISOString(), groupId);
+    return lead;
+}
+
+/** How many OTHER people are still active in the group — what decides whether a lead may just leave. */
+function otherActiveMemberCount(db: Db, groupId: string, memberPubkey: string): number {
+    return ((db.prepare(
+        "SELECT COUNT(*) AS c FROM group_members WHERE group_id = ? AND status = 'active' AND member_pubkey != ?"
+    ).get(groupId, memberPubkey) as any)?.c ?? 0) as number;
+}
+
+export const HAND_OVER_FIRST =
+    'You are this group\'s lead convenor. Hand the lead over to someone else first.';
+
+/**
+ * The lead hands the lead on: to another active convenor, or to an active member, who becomes a convenor in the
+ * same step. The outgoing lead stays a convenor — handing over is not leaving.
+ */
+export function handOverGroupLead(db: Db, groupId: string, leadPubkey: string, targetPubkey: string): GroupMember {
+    const group = db.prepare('SELECT id FROM groups WHERE id = ?').get(groupId) as any;
+    if (!group) throw new Error('Group not found');
+    if (!isGroupLead(db, groupId, leadPubkey)) {
+        throw new Error('UNAUTHORIZED: Only the lead convenor can hand the lead over');
+    }
+    if (leadPubkey === targetPubkey) throw new Error('You already lead this group');
+
+    const target = getGroupMember(db, groupId, targetPubkey);
+    if (!target || target.status !== 'active') {
+        throw new Error('The new lead convenor must be an active member of this group');
+    }
+    if (target.role === 'observer') {
+        throw new Error('An observer only watches this group. Make them a member or a convenor first.');
+    }
+
+    const now = membershipWriteAt(db, groupId, targetPubkey);
+    db.transaction(() => {
+        if (target.role !== 'convenor') {
+            db.prepare("UPDATE group_members SET role = 'convenor', updated_at = ? WHERE group_id = ? AND member_pubkey = ?")
+                .run(now, groupId, targetPubkey);
+        }
+        db.prepare('UPDATE groups SET lead_pubkey = ?, updated_at = ? WHERE id = ?')
+            .run(targetPubkey, new Date().toISOString(), groupId);
+    })();
+
+    return getGroupMember(db, groupId, targetPubkey)!;
 }
 
 export function isGroupConvenor(db: Db, groupId: string, memberPubkey: string): boolean {
@@ -474,6 +586,21 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
         throw new Error('Target is not a member of this group');
     }
 
+    // The lead convenor. Nobody demotes them — a convenor who thinks they should go has the 30-day-silence vote
+    // and the community Decision, not this route. The lead themselves hands the lead over first.
+    const lead = getGroupLead(db, groupId);
+    const isSelf = convenorPubkey === targetPubkey;
+    if (lead && targetPubkey === lead && newRole !== 'convenor') {
+        throw new Error(isSelf
+            ? `UNAUTHORIZED: ${HAND_OVER_FIRST}`
+            : "UNAUTHORIZED: The group's lead convenor cannot be demoted. The lead can hand the lead over, or the community can decide.");
+    }
+    // Only the lead may touch another convenor. A convenor may still step down from convenor themselves.
+    if (target.role === 'convenor' && target.status === 'active' && newRole !== 'convenor'
+        && !isSelf && convenorPubkey !== lead) {
+        throw new Error("UNAUTHORIZED: Only this group's lead convenor can change another convenor's role");
+    }
+
     // Safety: Cannot demote the last convenor
     if (target.role === 'convenor' && newRole !== 'convenor') {
         const activeConvenors = db.prepare(
@@ -488,6 +615,10 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
     db.prepare(
         "UPDATE group_members SET role = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
     ).run(newRole, now, groupId, targetPubkey);
+    // Pin down whoever leads the group now. It changes nothing for a group whose lead is already stored; it
+    // settles the fallback for one whose lead_pubkey has never been written, so a later promotion cannot quietly
+    // move the lead to whoever happens to have joined earliest.
+    reconcileGroupLead(db, groupId);
 
     return getGroupMember(db, groupId, targetPubkey)!;
 }
@@ -504,6 +635,21 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
     if (!target) return false;
     // Already removed: nothing to do — and "leaving" must not erase the record and reopen the door.
     if (target.status === 'removed') return false;
+
+    const lead = getGroupLead(db, groupId);
+    if (lead && targetPubkey === lead) {
+        // The lead leaves by handing over first; until then there is no route out of the group for them, and no
+        // route by which anyone else can push them out. That is the point of the lead.
+        if (!isSelf) {
+            throw new Error("UNAUTHORIZED: The group's lead convenor cannot be removed. The lead can hand the lead over and leave, or the community can decide.");
+        }
+        if (otherActiveMemberCount(db, groupId, targetPubkey) > 0) {
+            throw new Error(HAND_OVER_FIRST);
+        }
+        // Last one out: nobody is left to hand the lead to, so the lead may simply go.
+    } else if (!isSelf && target.role === 'convenor' && target.status === 'active' && actorPubkey !== lead) {
+        throw new Error("UNAUTHORIZED: Only this group's lead convenor can remove another convenor");
+    }
 
     // Safety: Cannot remove the last active convenor if other active members exist
     if (target.role === 'convenor' && target.status === 'active') {
@@ -538,6 +684,7 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
                 "INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('group_members', ?, ?)"
             ).run(`${groupId}|${targetPubkey}`, now);
         })();
+        if (deleted) reconcileGroupLead(db, groupId);
         return deleted;
     }
 
@@ -547,6 +694,7 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
     const res = db.prepare(
         "UPDATE group_members SET status = 'removed', role = 'member', updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
     ).run(now, groupId, targetPubkey);
+    if (res.changes > 0) reconcileGroupLead(db, groupId);
     return res.changes > 0;
 }
 

@@ -1,7 +1,7 @@
 ---
 slug: rules
 title: Rules and how decisions work
-summary: Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers and convenors.
+summary: Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers, and convenors and lead convenors.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
 ---
 
@@ -125,13 +125,18 @@ An enterprise is run by its keepers. One of them is the lead keeper.
 
 ## Groups and convenors
 
-A group is run by its convenors.
+A group is run by its convenors, and one of them is its **lead convenor**. Whoever creates a group is its first lead convenor.
 
 - Some groups are open to anyone. Some need a convenor to approve you. Some are by invitation only.
-- A convenor can approve and invite members, change people's roles, remove members, remove posts and edit the group.
+- **Any convenor** can approve and invite members, remove a member or an observer, change a member's or an observer's role, make someone a convenor, remove posts and messages, and edit the group and who can join it.
+- **Only the lead convenor** can remove a convenor, or take the convenor role off someone.
+- **Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin — admins have no say inside a group.
+- **Handing the lead over:** the lead can make someone else the lead. It can be another convenor, or a member, who becomes a convenor at the same time. Once it is done, the lead cannot take it back.
+- **Leaving, as the lead:** hand the lead over first. If nobody else is in the group, the lead can simply leave.
 - The last convenor cannot step down or be removed while the group still has other members.
 - Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.
-- **A quiet convenor:** if a group's only convenor has done nothing in the app for 30 days, any member can propose a new convenor. The members vote Yes or No for up to 14 days, in secret. It passes when more than half of those who answer say Yes. If the convenor comes back, the vote is cancelled. The screens for this are coming in a later update.
+- **A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, if the lead is the group's only convenor. Any of them can propose someone from that same group of voters, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. The screens for this are coming in a later update.
+- **A rogue lead convenor** can be removed by a community Decision. This is coming in a later update.
 
 ## Vouching
 

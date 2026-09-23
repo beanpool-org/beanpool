@@ -87,6 +87,6 @@ Your community has a shared pool of beans called the **Commons**. Fees go into i
 
 An **enterprise** is a shared project that trades in its own name: a community garden, a bakery, a tool library. It is run by **keepers**, led by a **lead keeper**. Keepers can pledge some of their own trust to give the enterprise a credit line.
 
-A **group** is a circle of members with its own chat and posts, run by one or more **convenors**.
+A **group** is a circle of members with its own chat and posts, run by one or more **convenors**. One of them is its **lead convenor** — whoever created the group, to begin with.
 
 You can read how keepers and convenors are chosen in "Rules and how decisions work".

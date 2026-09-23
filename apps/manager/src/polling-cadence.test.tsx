@@ -218,6 +218,27 @@ describe('Node Settings polling cadence', () => {
         expect(countOf(DATA)).toBeGreaterThanOrEqual(1);
     });
 
+    it('the fleet Refresh button refetches a node that is not the one on screen', async () => {
+        seedProfiles('https://localhost:8443', 'https://other.example.org');
+        await act(async () => {
+            render(<App isFleetMode={true} />);
+        });
+        await tick(30_000);
+        calls = [];
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Refresh Fleet Telemetry/i }));
+        });
+        await tick(2_000);
+
+        // The second node has no section on screen, so `loadNodeData` never runs for it: the only
+        // thing that can fetch its payload inside the five-minute window is the manual bypass in
+        // `diagSuccess`. Without that bypass a fleet operator could press Refresh on a node showing
+        // a stale alert and be told nothing new for another five minutes.
+        const otherData = calls.filter((c) => c.includes('other.example.org') && c.includes(DATA));
+        expect(otherData.length).toBeGreaterThanOrEqual(1);
+    });
+
     it('never has two requests of the same kind in flight for one node', async () => {
         seedProfiles('https://localhost:8443');
         stalled = [DIAGNOSTICS, DATA];

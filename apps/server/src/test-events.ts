@@ -231,8 +231,12 @@ async function main(): Promise<void> {
         'everyone else sees counts, not names');
     const keeperEvent = getPosts(db, { authorPubkey: treasury, viewerPubkey: host, types: ['event'] })[0];
 
-    // The web app hosts for an enterprise through the list route with the enterprise as author: the keeper
-    // who did it is recorded as created_by, and a member who is not a keeper is refused.
+    // The list route posts as the SIGNER and nobody else (2026-09-23). It used to accept a keeper naming
+    // their enterprise as the author and record them as created_by — and this suite asserted that, while
+    // over HTTP it could never happen: the signature middleware refuses any body field ending in
+    // `publickey` that is not the signer, so an enterprise-hosted event died with 403 "Signature validation
+    // failed" before the handler ran. Hosting for an enterprise now goes through the enterprise's own route,
+    // POST /api/treasury/:treasury/event, covered end-to-end in test-enterprise-event-http.ts.
     const treasury2 = createTreasury('Hall Committee', AVATAR, 0).publicKey;
     adminAssignTreasuryOperator(treasury2, goer, 'admin');
     const createCtx = (actor: string, author: string) => ({
@@ -240,11 +244,14 @@ async function main(): Promise<void> {
         requestBody: { type: 'event', title: 'Hall working bee', authorPublicKey: author, lat: -28.5, lng: 153.5, eventStartAt: inHours(30) },
     });
     let hostCtx: any = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(goer, treasury2));
-    const hostedRow = hostCtx.body?.post && db.prepare('SELECT author_pubkey, created_by FROM posts WHERE id = ?').get(hostCtx.body.post.id) as any;
-    assert(!!hostedRow && hostedRow.author_pubkey === treasury2 && hostedRow.created_by === goer,
-        'a keeper creating an event for their enterprise through the list route is recorded as created_by');
+    assert(hostCtx.status === 403 && /treasury/.test(hostCtx.body?.error ?? ''),
+        'a keeper naming their enterprise on the list route is refused, and told the route to use');
+    assert(!db.prepare("SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'event'").get(treasury2),
+        '...and no event was created for the enterprise');
     hostCtx = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(stranger, treasury2));
     assert(hostCtx.status === 403, 'a member who is not a keeper cannot host an event for the enterprise');
+    assert(hostCtx.body?.error === 'You are not an authorized keeper of this enterprise',
+        '...and gets the keeper refusal, not the wrong-route one');
     hostCtx = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(stranger, stranger));
     const ownRow = hostCtx.body?.post && db.prepare('SELECT created_by FROM posts WHERE id = ?').get(hostCtx.body.post.id) as any;
     assert(!!ownRow && ownRow.created_by === null, "a member's own event has no created_by");

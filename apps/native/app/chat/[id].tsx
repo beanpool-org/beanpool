@@ -27,7 +27,7 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import {
-    buildChatListItems, chatActionErrorMessage, isTombstone, messageActions, tombstoneText,
+    buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, type ChatViewer,
 } from '../../utils/chat-actions';
 import { normaliseTappedUrl } from '../../utils/chat-links';
@@ -483,7 +483,7 @@ function ChatScreen() {
     // what made ticks expensive once the history window grew. Metadata stays in
     // (it's tiny and carries reactions/reply refs/send state).
     const messagesSignature = (rows: any[]) => rows.map(m =>
-        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : ''].join('\u0001')
+        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : ''].join('\u0001')
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
@@ -518,10 +518,12 @@ function ChatScreen() {
         });
     };
 
+    // Asked before the composer empties the box, so a refused send keeps what was typed.
+    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !sendingRef.current;
+
     // The composer owns the box and hands over the text it has already cleared and put under its sweep.
     const handleSend = async (currentDraft: string) => {
-        if (!currentDraft || !identity?.publicKey || isPeerBlocked) return;
-        if (sendingRef.current) return;
+        if (!currentDraft || !canSendNow() || !identity?.publicKey) return;
 
         sendingRef.current = true;
         const wasEditing = editingMessage;
@@ -980,6 +982,8 @@ function ChatScreen() {
             if (linkPressedRef.current) { linkPressedRef.current = false; return; }
             // Failed sends get the resend/discard prompt instead of the actions menu.
             if (item.sendState === 'failed') { handleFailedMessagePress(item); return; }
+            // Nothing on offer (a tombstone, a blocked peer): no empty bar.
+            if (!hasAnyAction(actions)) return;
             const pageY = event?.nativeEvent?.pageY;
             // If the touch is within the top 230px of the viewport, position the picker below the bubble
             const isNearTop = pageY && pageY < 230;
@@ -1323,6 +1327,7 @@ function ChatScreen() {
                         ref={composerRef}
                         styles={chat}
                         onSend={handleSend}
+                        canSend={canSendNow}
                         placeholder="Message..."
                         accessibilityLabel="Message"
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

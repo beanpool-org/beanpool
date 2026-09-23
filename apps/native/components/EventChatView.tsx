@@ -33,8 +33,8 @@ import { ChatOwnerHeader } from './ChatOwnerHeader';
 import { yourGroupsStore } from './useYourGroups';
 import { decodeEventChatText, trimEventChatDraft, EVENT_CHAT_MESSAGE_MAX } from '../utils/events';
 import {
-    buildChatListItems, messageActions, normaliseThreadMessage, shouldFollowNewMessages, showsAuthorName,
-    type ChatMessage, type ChatViewer,
+    buildChatListItems, hasAnyAction, messageActions, normaliseThreadMessage, shouldFollowNewMessages,
+    showsAuthorName, type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
 import { normaliseTappedUrl } from '../utils/chat-links';
 import { makeChatStyles } from './chat/styles';
@@ -212,6 +212,8 @@ export function EventChatView({ eventId }: Props) {
                 pickerPosition="top"
                 onPressBubble={() => {
                     if (linkPressedRef.current) { linkPressedRef.current = false; return; }
+                    // Only a host has anything to do with a message here: no empty bar for anybody else.
+                    if (!hasAnyAction(actions)) return;
                     setActiveMessageActionsId(activeMessageActionsId === item.id ? null : item.id);
                 }}
                 onReply={() => { }}

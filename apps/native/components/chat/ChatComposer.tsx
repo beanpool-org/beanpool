@@ -44,12 +44,18 @@ interface Props {
     /** A spinner on the send button while the node is being waited on (node-readable chats). */
     busy?: boolean;
     disabled?: boolean;
+    /**
+     * Asked once, synchronously, BEFORE the box is emptied. A screen with a guard of its own (the DM's
+     * "an image is already going out") answers false here rather than dropping the text in onSend — the
+     * box is cleared before onSend is awaited, so a refusal after that point loses what was typed.
+     */
+    canSend?: () => boolean;
     maxLength?: number;
     bottomPadding: number;
 }
 
 export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer(
-    { styles, onSend, placeholder, accessibilityLabel, leading, notice, busy, disabled, maxLength, bottomPadding }, ref,
+    { styles, onSend, placeholder, accessibilityLabel, leading, notice, busy, disabled, maxLength, canSend: canSendNow, bottomPadding }, ref,
 ) {
     const { colors } = useTheme();
     const inputRef = useRef<TextInput>(null);
@@ -121,6 +127,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
         // silently swallow presses whenever state lagged the box (the "chat locked up" report).
         const text = draftRef.current.trim();
         if (!text || disabled || sendingRef.current) return;
+        if (canSendNow && !canSendNow()) return; // asked before the box is emptied — see the prop's note
         sendingRef.current = true;
         try {
             resetInputBox();

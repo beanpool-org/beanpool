@@ -23,7 +23,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -44,11 +44,11 @@ import {
     type YourChatMute,
 } from '../utils/your-groups';
 import {
-    buildChatListItems, chatActionErrorMessage, isTombstone, messageActions, normaliseThreadMessage,
-    shouldFollowNewMessages, showsAuthorName, tombstoneText, type ChatMessage, type ChatViewer,
+    buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions,
+    normaliseThreadMessage, shouldFollowNewMessages, showsAuthorName, tombstoneText,
+    type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
 import { normaliseTappedUrl } from '../utils/chat-links';
-import { Linking } from 'react-native';
 import { makeChatStyles } from './chat/styles';
 import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
 import { ChatMessageRow } from './chat/ChatMessageRow';
@@ -538,6 +538,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 onPressBubble={(event: any) => {
                     if (linkPressedRef.current) { linkPressedRef.current = false; return; }
                     if (item.sendState === 'failed') { handleFailedMessagePress(item); return; }
+                    // Nothing on offer (an enterprise thread, an observer, a tombstone): no empty bar.
+                    if (!hasAnyAction(actions)) return;
                     const pageY = event?.nativeEvent?.pageY;
                     setPickerPosition(pageY && pageY < 230 ? 'bottom' : 'top');
                     if (activeMessageActionsId === item.id) {

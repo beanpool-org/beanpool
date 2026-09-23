@@ -551,6 +551,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     const nData = await fetchNodeData(p.url, p.adminPassword, getTfaSessionToken(p.id));
                     setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
                     applyHealthFromData(p.id, nData);
+                    // The active node's sections read `nodeData`, and this is the same payload
+                    // they would have paid for. Without this the one fetch in five minutes would
+                    // refresh the sidebar's dot and leave the screen in front of the operator
+                    // stale — and a Refresh pressed while it was in flight would be skipped as an
+                    // overlap and deliver nothing.
+                    if (p.id === activeNode?.id) {
+                        setNodeData(nData);
+                    }
                 } catch {
                 } finally {
                     dataInFlightRef.current[p.id] = false;

@@ -12,6 +12,14 @@
  * 8. Connector manager (dial trusted peers)
  * 9. Cert renewal scheduler
  */
+// FIRST IMPORT, AND IT MUST STAY FIRST. ES modules evaluate every import below before the first statement
+// of this file runs, and those imports are the whole application — db/db.ts opens SQLite at import. A crash
+// while that graph loads (state.db unopenable, a native binding missing) is written to a Node diagnostic
+// report before any statement here can tell Node to leave the environment out of it, and a node in that
+// state crash-loops, so no boot ever reaches the scrub either. See report-privacy.ts; it imports nothing,
+// deliberately.
+import './report-privacy.js';
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { installProcessHandlers, scrubReportEnvironment } from './process-handlers.js';

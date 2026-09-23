@@ -260,10 +260,15 @@ function shouldWriteOwnReport(): boolean {
  *
  * Two separate things are needed, because they cover different files:
  *
- *   - `excludeEnv` stops the top-level section being written at all, from here on. It is a property of the
- *     running process, so setting it once at install covers our own `writeReport` below, Node's own
- *     `--report-uncaught-exception` report and the `--report-on-signal` freeze reports the watchdog asks
- *     for. None of the three needs the environment to be useful: the value of a report is the stacks.
+ *   - `excludeEnv` stops the top-level section being written at all. It is a property of the running
+ *     thread, so setting it once covers our own `writeReport` below, Node's own `--report-uncaught-exception`
+ *     report and the `--report-on-signal` freeze reports the watchdog asks for. None of the three needs the
+ *     environment to be useful: the value of a report is the stacks. It is NOT set here — by the time any
+ *     statement of the entry point runs, every module it imports has already been evaluated and could
+ *     already have crashed, and a node that crashes at import crash-loops and never reaches this function
+ *     at all. It is set in `report-privacy.ts`, the entry point's first import, which imports nothing; the
+ *     assignment below is only belt and braces. Nodes also pass `--report-exclude-env`, which is the one
+ *     thing that reaches a WORKER thread's copy of the flag — see the next paragraph.
  *
  *   - the scrub takes it out of the file. It is needed for two separate reasons. The reports ALREADY on
  *     disk are the first: every node that has ever frozen or crashed is carrying them right now, and a fix
@@ -429,8 +434,10 @@ export function installProcessHandlers(options?: { dataDir?: string }): void {
     installed = true;
     overrideDataDir = options?.dataDir;
 
-    // FIRST, before a listener below can fire and before anything else in the process can write a report:
-    // without this, every report Node writes carries the whole environment. See the block above.
+    // Belt and braces. The entry point already set this in its very first import (report-privacy.ts),
+    // because by the time any statement of the entry point runs the whole application has been imported
+    // and could already have crashed. This covers a process that reaches the handlers another way — the
+    // test children, a tool that imports this module directly — and costs nothing when it is already set.
     try {
         if (process.report) process.report.excludeEnv = true;
     } catch {

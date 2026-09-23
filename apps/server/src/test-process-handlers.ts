@@ -15,7 +15,9 @@
  *   4. a synchronous `throw` still kills the child (non-zero exit) AND leaves a diagnostic report in the
  *      data dir — wherever --report-directory points, and only one report when Node writes one itself.
  *   5. no report written after install carries the environment — not ours, not Node's own — so the node's
- *      ADMIN_PASSWORD and CF_API_TOKEN no longer land in a file owners copy and hand to a stranger;
+ *      ADMIN_PASSWORD and CF_API_TOKEN no longer land in a file owners copy and hand to a stranger; and
+ *      neither does the report Node writes when the REAL entry point crashes while it is still importing,
+ *      before a statement of it has run — the crash-loop case, where no boot ever reaches the scrub;
  *   6. the reports ALREADY in the data dir, written before this existed, are scrubbed in place at install:
  *      atomically, idempotently, owner-only, and without deleting a single one of them;
  *   7. the count, last time and last message reach the admin diagnostics response, a health flag appears,
@@ -36,6 +38,11 @@ import { fileURLToPath } from 'node:url';
 import { installProcessHandlers, getUnhandledRejectionSummary, getUnhandledRejectionLogPath } from './process-handlers.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
+/**
+ * The REAL entry point, beside this file. Case 5c runs it rather than a stand-in, because what is under
+ * test there is the order of `index.ts`'s own imports — a copy of that file would only test the copy.
+ */
+const ENTRY = SCRIPT.replace(/test-process-handlers\.(m?[tj]s)$/, 'index.$1');
 const CHILD_FLAG = '--child';
 /** A 64-char hex string is exactly what sanitizeMessage redacts, so it stands in for a key in an error. */
 const SECRET_HEX = 'deadbeef'.repeat(8);
@@ -114,6 +121,29 @@ interface ChildResult { code: number | null; stdout: string; stderr: string; dat
 function spawnChild(mode: string, dataDir: string, extraEnv: Record<string, string> = {}): Promise<ChildResult> {
     fs.mkdirSync(dataDir, { recursive: true });
     const child = spawn(process.execPath, [...process.execArgv, SCRIPT, CHILD_FLAG, mode], {
+        env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, ...extraEnv } as NodeJS.ProcessEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => { child.kill('SIGKILL'); }, 30_000);
+        child.on('exit', (code, signal) => {
+            clearTimeout(timer);
+            resolve({ code: code ?? (signal ? -1 : null), stdout, stderr, dataDir });
+        });
+    });
+}
+
+/**
+ * Spawn the real entry point the same way `spawnChild` spawns this file. Used only by case 5c, where the
+ * point is that the entry point crashes while it is still IMPORTING — before any statement of its body,
+ * including the one that installs the handlers, has had a chance to run.
+ */
+function spawnEntry(dataDir: string, extraEnv: Record<string, string> = {}): Promise<ChildResult> {
+    fs.mkdirSync(dataDir, { recursive: true });
+    const child = spawn(process.execPath, [...process.execArgv, ENTRY], {
         env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, ...extraEnv } as NodeJS.ProcessEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -367,6 +397,80 @@ async function reportPrivacyTests(root: string): Promise<void> {
     assert(JSON.stringify(fs.readdirSync(oldDir).sort()) === JSON.stringify(namesBefore), 'and still nothing was deleted');
 }
 
+/**
+ * THE CASE THAT MOTIVATES report-privacy.ts, and the one every case above misses.
+ *
+ * Every child above installs the handlers and then does something. A real node does not get that far when
+ * the failure is in the import graph itself: `index.ts` imports the whole application, `db/db.ts` opens
+ * SQLite at import, and ES modules evaluate all of that BEFORE the first statement of `index.ts` runs. So
+ * `state.db` unopenable, a native binding missing from the image, a migration throwing at import — the
+ * shape of #1075 — ends the process with `installProcessHandlers()` never called and `excludeEnv` never
+ * set. Nodes run `--report-uncaught-exception --report-directory=/data`, so Node writes its own report
+ * right then, with the whole environment in it. And a node in that state CRASH-LOOPS: every restart adds
+ * another such file and no boot ever reaches the scrub, so nothing ever cleans them.
+ *
+ * Measured on the entry point before `report-privacy.ts` existed: `environmentVariables` present, marker
+ * present. This runs the real `index.ts`, not a stand-in, because the order of its imports is the subject.
+ */
+async function importCrashTests(root: string): Promise<void> {
+    console.log('\n— 5c. a crash while the entry point is still importing carries no environment either —');
+
+    /** `new Database(path)` cannot open a DIRECTORY, so db/db.ts throws at import — no code change needed. */
+    function unopenableDataDir(name: string): string {
+        const dir = path.join(root, name);
+        fs.mkdirSync(path.join(dir, 'state.db'), { recursive: true });
+        return dir;
+    }
+    /** The marker's only legitimate hiding place is a worker thread's own section; see below. */
+    function outsideWorkers(report: any): string {
+        return JSON.stringify({ ...report, workers: undefined });
+    }
+
+    const crashDir = unopenableDataDir('import-crash');
+    const crash = await spawnEntry(crashDir, {
+        BEANPOOL_ENV_MARKER: ENV_MARKER,
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --report-uncaught-exception --report-directory=${crashDir}`.trim(),
+    });
+    assert(crash.code !== 0 && crash.code !== null, `the node dies (code ${crash.code})`);
+    assert(crash.stderr.includes('SQLITE_CANTOPEN') || crash.stderr.includes('unable to open database file'),
+        'and it died opening the database AT IMPORT, which is the failure being reproduced');
+    assert(!crash.stderr.includes('[uncaughtException]'),
+        'our own handler never ran — proof the process never reached a single statement of index.ts');
+
+    const crashNames = reportFiles(crashDir);
+    assert(crashNames.length === 1, `Node wrote its own report anyway (got ${JSON.stringify(crashNames)})`);
+    assert(!crashNames[0]?.startsWith('report-uncaught-'), 'it is Node’s, not ours: ours needs handlers that were never installed');
+    const crashRaw = fs.readFileSync(path.join(crashDir, crashNames[0] ?? 'missing.json'), 'utf8');
+    let crashReport: any = null;
+    try { crashReport = JSON.parse(crashRaw); } catch { /* asserted next */ }
+    assert(crashReport !== null, 'the report is valid JSON');
+    assert(crashReport?.environmentVariables === undefined,
+        'it has NO environmentVariables section — set by report-privacy.ts, the entry point’s first import, before db/db.ts could throw');
+    assert(!outsideWorkers(crashReport).includes(ENV_MARKER),
+        'and the marker appears nowhere in it outside a worker thread’s own section — not in the command line, not anywhere');
+    assert(crashReport?.javascriptStack !== undefined || crashReport?.nativeStack !== undefined,
+        'and it still carries the stack, which is the whole reason to keep the file');
+
+    // The one place the environment can still survive this crash, and why nodes ALSO pass the flag. A
+    // worker thread holds its own copy of `excludeEnv`, so the main thread setting it does not speak for
+    // the loader's worker (MEASURED: this suite's own runtime has one; `node dist/index.js` has none).
+    // `--report-exclude-env` is applied per thread from the command line, so it does reach them — and it
+    // is the only thing that does here, because a crash-looping node never reaches the scrub.
+    const flaggedDir = unopenableDataDir('import-crash-flagged');
+    const flagged = await spawnEntry(flaggedDir, {
+        BEANPOOL_ENV_MARKER: ENV_MARKER,
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --report-uncaught-exception --report-exclude-env --report-directory=${flaggedDir}`.trim(),
+    });
+    assert(flagged.code !== 0 && flagged.code !== null, `the node dies the same way with the flag set (code ${flagged.code})`);
+    const flaggedNames = reportFiles(flaggedDir);
+    assert(flaggedNames.length === 1, `one report again (got ${JSON.stringify(flaggedNames)})`);
+    const flaggedRaw = fs.readFileSync(path.join(flaggedDir, flaggedNames[0] ?? 'missing.json'), 'utf8');
+    assert(!flaggedRaw.includes(ENV_MARKER),
+        'with --report-exclude-env — which docker-compose.yml now sets — the marker is nowhere in the file AT ALL, worker sections included');
+    assert(JSON.parse(flaggedRaw).javascriptStack !== undefined || JSON.parse(flaggedRaw).nativeStack !== undefined,
+        'and that report still carries the stack too');
+}
+
 async function diagnosticsAndHealthTests(): Promise<void> {
     console.log('\n— 7. owners can see it: diagnostics and a health flag —');
     const { initTls } = await import('./services/tls.js');
@@ -429,6 +533,7 @@ async function main(): Promise<void> {
     try {
         await childProcessTests(root);
         await reportPrivacyTests(root);
+        await importCrashTests(root);
         await diagnosticsAndHealthTests();
     } finally {
         try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* best effort */ }

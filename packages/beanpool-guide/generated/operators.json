@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 36,
-  "hash": "13552fda6c23251785444af8c5db8e522284225993d04521153f1075489f4343",
+  "version": 37,
+  "hash": "7aa28a0ca22c724ffc6e6ede67e912a96cca05d5d25d5ad1728fd3b6f2b94bf3",
   "sections": [
     {
       "id": "setup",
@@ -2022,7 +2022,7 @@
         },
         {
           "type": "p",
-          "text": "A real crash is different. The server still stops and starts again, because carrying on half-way through a change could damage the ledger, and it leaves a report file in data named report-something.json, beside the freeze reports. That file holds no passwords and no keys, so it is safe to hand on when you ask someone for help. Reports written by older versions of the server did hold them, in full: the server cleans those up the next time it starts, and never deletes one."
+          "text": "A real crash is different. The server still stops and starts again, because carrying on half-way through a change could damage the ledger, and it leaves a report file in data named report-something.json, beside the freeze reports. That file holds no passwords and no keys, so it is safe to hand on when you ask someone for help. Reports written by older versions of the server did hold them, in full, and the server cleans those up the next time it starts, without deleting a single one. It can only do that once it has started: if the server is not starting at all, any older reports still in the folder have not been through that cleanup, so say so before you hand the folder to anyone."
         },
         {
           "type": "h2",

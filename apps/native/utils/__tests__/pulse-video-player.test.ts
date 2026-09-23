@@ -20,7 +20,7 @@ import {
     subscribeToPulseVideo,
     resetPulseVideoPlayer,
 } from '../pulse-video-player';
-import { PULSE_PLAYER_ORIGIN } from '../youtube-embed';
+import { PULSE_PLAYER_ORIGIN, YOUTUBE_IFRAME_API_URL } from '../youtube-embed';
 import type { PulseFeedItem } from '../pulse';
 
 const item = (over: Partial<PulseFeedItem> = {}): PulseFeedItem => ({
@@ -56,6 +56,9 @@ describe('nothing loads before the tap', () => {
         expect(serialised).not.toMatch(/http/i);
         expect(serialised).not.toMatch(/iframe/i);
         expect(serialised).not.toContain(PULSE_PLAYER_ORIGIN);
+        // Including the one URL the player document takes from www.youtube.com rather than the
+        // no-cookie host: it lives in the document, and the document does not exist yet.
+        expect(serialised).not.toContain(YOUTUBE_IFRAME_API_URL);
         // The whole payload is three flags. There is nothing here for a card to fetch.
         expect(Object.keys(media).sort()).toEqual(['canPlayInApp', 'isVideo', 'kind']);
     });

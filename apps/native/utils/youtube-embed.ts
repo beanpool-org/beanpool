@@ -17,7 +17,12 @@
  *   (`PULSE_PLAYER_ORIGIN`): as the `baseUrl` the HTML is loaded under, which becomes the Referer,
  *   and again as the `origin` player parameter for the platforms where a Referer cannot be set.
  *   Without it YouTube refuses with error 153.
- * - **Privacy host.** `youtube-nocookie.com`, so the player sets nothing until playback starts.
+ * - **Privacy host.** The player itself is `youtube-nocookie.com`, so it sets nothing until
+ *   playback starts. Its JS API script is the one exception: the no-cookie host does not serve
+ *   `/iframe_api` — it answers 404 — so that single file comes from `www.youtube.com`
+ *   (`YOUTUBE_IFRAME_API_URL`). It is requested by the player document, which is built only for a
+ *   card the member has already tapped, so the promise above is unchanged: nothing is fetched from
+ *   YouTube or Google before the tap, and the video itself still plays from the no-cookie host.
  * - **Viewport.** At least 200x200 CSS pixels. See `YOUTUBE_MIN_VIEWPORT_PX`; the card grows its
  *   media area to it while playing, letterboxing rather than cropping.
  *
@@ -49,6 +54,20 @@ export const YOUTUBE_MIN_VIEWPORT_PX = 200;
 
 /** The privacy-enhanced embed host. It stores nothing until the member actually plays something. */
 export const YOUTUBE_EMBED_HOST = 'https://www.youtube-nocookie.com';
+
+/**
+ * Where the IFrame Player API script comes from, and the only thing the card takes from
+ * `www.youtube.com`.
+ *
+ * It is not on the no-cookie host because YouTube does not serve it there: `/iframe_api` on
+ * `www.youtube-nocookie.com` is a 404 page, and a `<script>` that 404s fires `onerror`, which used
+ * to tear the player down on every single play. The privacy promise survives the move because this
+ * script is fetched by the player document, and that document exists only after the member's tap.
+ *
+ * The script itself then loads `www-widgetapi.js` from `/s/player/...` on the same host; see
+ * `playerNavigation`, which allows those two paths and nothing else there.
+ */
+export const YOUTUBE_IFRAME_API_URL = 'https://www.youtube.com/iframe_api';
 
 /** A reverse-DNS application id: lowercase labels, at least two of them, no scheme and no path. */
 const APP_ID_RE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/;
@@ -105,7 +124,9 @@ export function pulseYouTubeVideoId(url: string | null | undefined): string | nu
  * - `autoplay=1` starts it, because the member has already tapped play — this is that tap;
  * - `origin` is the client identity described at the top of this file;
  * - `enablejsapi=1` lets the page hear the player's own error and ended events, which is how the
- *   card can offer "Open on YouTube" instead of leaving a member staring at a black rectangle;
+ *   card can offer "Open on YouTube" instead of leaving a member staring at a black rectangle. The
+ *   script that does the listening is `YOUTUBE_IFRAME_API_URL`, on `www.youtube.com`, and the
+ *   document fetches it only once it has been built — which is to say, only after the tap;
  * - `rel=0` keeps the end-of-video suggestions to the same channel;
  * - `fs=1` keeps YouTube's own full-screen button, which is allowed.
  *
@@ -134,7 +155,11 @@ export function youtubeEmbedUrl(videoId: string): string {
  * actually loads. YouTube's IFrame Player API is then attached to the iframe already on the page,
  * which `enablejsapi=1` permits, for one reason: the API reports `onError`, so an upload whose
  * owner has disabled embedding (101/150) produces a sentence and a way out instead of a black
- * rectangle. The page reports back over `ReactNativeWebView.postMessage` as `{"type":"ready"}`,
+ * rectangle. That script is `YOUTUBE_IFRAME_API_URL` and is the one thing on this page that comes
+ * from `www.youtube.com` rather than the no-cookie host, for the reason given there; the player
+ * frame's own `src` stays on `youtube-nocookie.com`, and this whole document is only ever built for
+ * a card that has been tapped. The page reports back over
+ * `ReactNativeWebView.postMessage` as `{"type":"ready"}`,
  * `{"type":"state","state":n}` and `{"type":"error","code":n}`.
  *
  * The video id is validated before it reaches the template, so no caller-controlled text is ever
@@ -172,7 +197,7 @@ export function youtubePlayerHtml(videoId: string): string {
     }
   };
   var tag = document.createElement('script');
-  tag.src = ${JSON.stringify(`${YOUTUBE_EMBED_HOST}/iframe_api`)};
+  tag.src = ${JSON.stringify(YOUTUBE_IFRAME_API_URL)};
   tag.onerror = function () { send({ type: 'error', code: ${YOUTUBE_ERROR_SCRIPT_FAILED} }); };
   document.head.appendChild(tag);
 </script>

@@ -22,6 +22,7 @@ import {
     PULSE_PLAYER_ORIGIN,
     YOUTUBE_EMBED_HOST,
     YOUTUBE_ERROR_SCRIPT_FAILED,
+    YOUTUBE_IFRAME_API_URL,
     YOUTUBE_MIN_VIEWPORT_PX,
 } from '../youtube-embed';
 
@@ -97,7 +98,25 @@ describe('the player document', () => {
     });
 
     it('never reaches youtube.com for the player itself', () => {
-        expect(html).not.toMatch(/https:\/\/(www\.)?youtube\.com/);
+        // The privacy promise is about where the *video* comes from. The player frame's src is the
+        // no-cookie host and nothing else — asserted on the src itself rather than on the whole
+        // document, because the document also carries the JS API script, which YouTube serves only
+        // from www.youtube.com (`/iframe_api` on the no-cookie host is a 404 page).
+        const src = html.match(/<iframe id="player" src="([^"]+)"/)?.[1];
+        expect(src).toBeTruthy();
+        expect(src).not.toMatch(/https:\/\/(www\.)?youtube\.com/);
+        expect(new URL(src!).hostname).toBe('www.youtube-nocookie.com');
+    });
+
+    it('takes exactly one thing from www.youtube.com: the API script, and only after the tap', () => {
+        // Anything else appearing on www.youtube.com in this document would be a new fetch from
+        // Google that nobody reviewed, so the list is pinned exactly rather than merely checked.
+        const onYouTubeCom = html.match(/https:\/\/(?:www\.)?youtube\.com[^"'\s)]*/g) ?? [];
+        expect(onYouTubeCom).toEqual([YOUTUBE_IFRAME_API_URL]);
+        // "only after the tap" is the other half, and it is the card's side of this: a card that is
+        // not playing is handed no address at all — see pulse-video-player.test.ts, "hands the card
+        // no address of any kind until it is the one playing". This document is built there and
+        // nowhere else, so no URL in it can be fetched before the member taps play.
     });
 
     it('refuses a video id it cannot vouch for, so nothing is interpolated unchecked', () => {
@@ -166,7 +185,7 @@ describe('what the player may navigate to', () => {
         expect(playerNavigation('about:blank')).toBe('allow');
         expect(playerNavigation(PULSE_PLAYER_ORIGIN)).toBe('allow');
         expect(playerNavigation(youtubeEmbedUrl(ID))).toBe('allow');
-        expect(playerNavigation(`${YOUTUBE_EMBED_HOST}/iframe_api`)).toBe('allow');
+        expect(playerNavigation(YOUTUBE_IFRAME_API_URL)).toBe('allow');
         expect(playerNavigation('https://i.ytimg.com/vi/x/hq.jpg')).toBe('allow');
     });
 

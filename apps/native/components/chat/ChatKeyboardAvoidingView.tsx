@@ -1,58 +1,55 @@
 /**
  * The keyboard lift every chat screen uses: the DM, a group or enterprise thread, and an event's chat.
  *
- * It pads its own bottom by however far the keyboard reaches ABOVE its bottom edge, recomputed from the LIVE
- * keyboard height on every frame. utils/chat-keyboard-lift.ts carries the reasoning: why the lift has to be
- * measured against the view's own edge rather than read off the keyboard (the Android window's soft-input mode
- * is global, and about twenty of react-native-keyboard-controller's components hand it back to the manifest's
- * adjustResize from under us), and why neither of the library's own views can do it (KeyboardAvoidingView is
- * frame-relative but latches the height the keyboard had when it opened; KeyboardStickyView is live but
- * absolute).
+ * Why not react-native-keyboard-controller's own KeyboardAvoidingView (which all three used before):
+ * its "padding" behaviour measures the keyboard ONCE. `heightWhenOpened` is written in the handler's
+ * `onStart`, and only when the height rises above zero — the open transition. The live height it also
+ * tracks is never what the padding reads. So a keyboard that changes height while it STAYS open is
+ * never followed, and the padding keeps the height the keyboard had when it first appeared.
  *
- * Because the measurement is relative, this view sets no window mode and cares about none. Whatever the mode
- * is when the keyboard opens — whatever a ReviewModal or a pushed post screen last left it as — the composer
- * ends up on top of the keyboard exactly once.
+ * Gboard changes height while open all the time: the suggestion strip appearing once there is a word to
+ * suggest, the emoji and symbols panels, one-handed and floating modes, and — on a device or emulator
+ * with a hardware keyboard — the collapsed toolbar expanding into the full keyboard. When the keyboard
+ * GROWS, the stale smaller padding leaves the composer underneath it, off-screen and untappable.
+ * Measured on the API 36 emulator at 320dp + 1.3x text: the keyboard opened as Gboard's ~240px
+ * hardware-keyboard bar and grew to ~960px; the composer never moved off the bottom of the window.
+ * A composer with a three-line notice is the tallest one we have, which is why the small screen showed
+ * it first — but nothing about the failure is specific to that size.
+ *
+ * So this pads by the LIVE keyboard height, taken from every keyboard frame rather than just the first.
+ *
+ * It also owns the Android window's soft-input mode, which was previously set by the DM screen alone:
+ * ADJUST_NOTHING, so the OS never resizes or pans the window underneath us and this padding is the only
+ * compensation in play. That matters below Android 15, where `adjustResize` still resizes the window and
+ * would compensate a second time. The mode is a property of the WINDOW, not of a screen, so the default
+ * is restored only once the last chat screen has gone — a chat pushed on top of another chat must not be
+ * handed the default back when the one underneath unmounts.
  */
 
-import React, { useCallback, useEffect, useReducer } from 'react';
-import { Dimensions, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useEffect } from 'react';
+import { Platform, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import {
+    AndroidSoftInputModes,
+    KeyboardController,
     useGenericKeyboardHandler,
     useKeyboardState,
-    useWindowDimensions,
 } from 'react-native-keyboard-controller';
-import {
-    chatKeyboardLift,
-    initialChatKeyboardLift,
-    restingWindowHeight,
-} from '../../utils/chat-keyboard-lift';
+import { initialChatKeyboardLift } from '../../utils/chat-keyboard-lift';
 
-/**
- * The resting window height belongs to the WINDOW, so it outlives any one chat screen. Learning it once and
- * keeping it also covers the only case a single screen cannot learn for itself: a chat that mounts while the
- * keyboard is already up has never seen the window at rest, but the app it was opened from has.
- */
-let restingHeightCache: number | null = null;
+/** How many chat screens are mounted. The window's mode belongs to the last one to leave. */
+let chatScreensMounted = 0;
 
-function useRestingWindowHeight(): number {
-    const live = useWindowDimensions().height;
-    const [, forget] = useReducer((n: number) => n + 1, 0);
-
-    // A real size change — rotation, split screen, unfolding — is the one honest reason for the window to get
-    // shorter for good, so the learned maximum is thrown away and relearned from the next live height.
+function useAndroidAdjustNothing() {
     useEffect(() => {
-        const sub = Dimensions.addEventListener('change', () => {
-            restingHeightCache = null;
-            forget();
-        });
-        return () => sub.remove();
+        if (Platform.OS !== 'android') return;
+        chatScreensMounted += 1;
+        KeyboardController.setInputMode(AndroidSoftInputModes.SOFT_INPUT_ADJUST_NOTHING);
+        return () => {
+            chatScreensMounted -= 1;
+            if (chatScreensMounted === 0) KeyboardController.setDefaultMode();
+        };
     }, []);
-
-    // Computed in render rather than an effect so the first paint already has it. `restingWindowHeight` is a
-    // maximum, so running it twice with the same input is the same as running it once.
-    restingHeightCache = restingWindowHeight(restingHeightCache, live);
-    return restingHeightCache;
 }
 
 interface Props {
@@ -61,14 +58,7 @@ interface Props {
 }
 
 export function ChatKeyboardAvoidingView({ style, children }: Props) {
-    const windowHeight = useRestingWindowHeight();
-
-    /** This view's bottom edge, in the window's coordinates. Only layout moves it, so only layout re-reads it. */
-    const viewBottom = useSharedValue(0);
-    const onLayout = useCallback((e: LayoutChangeEvent) => {
-        const { y, height } = e.nativeEvent.layout;
-        viewBottom.value = y + height;
-    }, []);
+    useAndroidAdjustNothing();
 
     // A chat can mount with the keyboard already up — the DM opened straight from a search field's results,
     // which keep their taps and `router.replace` to the chat. There is no keyboard event in that, so the
@@ -79,21 +69,15 @@ export function ChatKeyboardAvoidingView({ style, children }: Props) {
         height: useKeyboardState(s => s.height),
         isVisible: useKeyboardState(s => s.isVisible),
     }));
-    // `useGenericKeyboardHandler` is the variant that does NOT touch the window's soft-input mode. This view
-    // wants the frames and nothing else; the mode is no longer any of its business.
+    // `useGenericKeyboardHandler` is the variant that does NOT set the window to adjustResize on mount —
+    // the plain `useKeyboardHandler` does, and would undo the ADJUST_NOTHING above.
     useGenericKeyboardHandler({
         onMove: e => { 'worklet'; keyboardHeight.value = e.height; },
         onInteractive: e => { 'worklet'; keyboardHeight.value = e.height; },
         onEnd: e => { 'worklet'; keyboardHeight.value = e.height; },
     }, []);
 
-    const lift = useAnimatedStyle(() => ({
-        paddingBottom: chatKeyboardLift({
-            viewBottom: viewBottom.value,
-            windowHeight,
-            keyboardHeight: keyboardHeight.value,
-        }),
-    }), [windowHeight]);
+    const lift = useAnimatedStyle(() => ({ paddingBottom: Math.max(keyboardHeight.value, 0) }));
 
-    return <Animated.View style={[style, lift]} onLayout={onLayout}>{children}</Animated.View>;
+    return <Animated.View style={[style, lift]}>{children}</Animated.View>;
 }

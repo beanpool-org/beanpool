@@ -17,8 +17,7 @@
  * message actually offers is decided once, in utils/chat-actions — an enterprise thread is read-and-write only,
  * this round, and its bubbles offer nothing.
  *
- * Keyboard: ChatKeyboardAvoidingView (the shared lift: the live keyboard height, measured against the view's
- * own bottom edge, so it is right whatever the window's soft-input mode is), no nested
+ * Keyboard: ChatKeyboardAvoidingView (the shared lift, live keyboard height + ADJUST_NOTHING), no nested
  * provider (memory keyboard-avoidance-pattern). At 320dp and 1.3× text the header truncates the name, the
  * composer keeps a Send that never shrinks and the notice wraps.
  */

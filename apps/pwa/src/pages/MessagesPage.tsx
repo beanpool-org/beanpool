@@ -1697,6 +1697,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 // While a picture is waiting, Enter and Escape belong to
                                 // the preview — it handles them on the window.
                                 if (pendingImage) return;
+                                // An input method is mid-word: Enter picks the characters
+                                // being composed, and must not cut the message short.
+                                if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
                                 // Enter sends; Shift+Enter inserts a newline.
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                     e.preventDefault();

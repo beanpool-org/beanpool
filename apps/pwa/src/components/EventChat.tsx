@@ -92,8 +92,9 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
         bottomRef.current?.scrollIntoView?.({ block: 'end' });
     }, [view?.messages.length]);
 
-    const send = async (e: React.FormEvent) => {
-        e.preventDefault();
+    // The one way a message goes: the Send button and the Enter key share it,
+    // so they share its guard against an empty draft and a send already in flight.
+    const submitDraft = async () => {
         const text = draft.trim();
         if (!text || posting) return;
         setPosting(true);
@@ -108,6 +109,11 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
         } finally {
             setPosting(false);
         }
+    };
+
+    const send = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await submitDraft();
     };
 
     const remove = async (m: EventThreadMessage) => {
@@ -270,6 +276,17 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                             if (!imageFromTransfer(e.clipboardData)) return;
                             e.preventDefault();
                             setImageNotice('Photos can only be sent in direct messages');
+                        }}
+                        onKeyDown={e => {
+                            // An input method is mid-word — Japanese, Chinese, Korean and
+                            // the rest. Enter is how the person picks the characters they
+                            // are composing, so it is never a send.
+                            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                            // Enter sends; Shift+Enter inserts a newline.
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                void submitDraft();
+                            }
                         }}
                         rows={1}
                         maxLength={EVENT_CHAT_MESSAGE_MAX}

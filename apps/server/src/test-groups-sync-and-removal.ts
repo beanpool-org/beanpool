@@ -22,6 +22,7 @@ import { db } from './db/db.js';
 import {
     initStateEngine, exportSyncState, importRemoteState, setNodeRole, clearReplicatedTables,
     createGroup, getGroup, listGroups, joinGroup, removeGroupMember, inviteGroupMember, approveGroupMember,
+    handOverGroupLead, getGroupLead,
     setMemberRole, isGroupMember, getMemberGroupIds, createPost, getPosts, signSyncPayload,
 } from './state-engine.js';
 import { getStateHash, getReplicaConsistency } from '@beanpool/engine';
@@ -177,10 +178,16 @@ async function main(): Promise<void> {
 
     const expected = (db.prepare('SELECT group_id, member_pubkey, role, status FROM group_members ORDER BY group_id, member_pubkey').all() as any[])
         .map(r => `${r.group_id}|${r.member_pubkey}|${r.role}|${r.status}`);
-    const expectedGroups = db.prepare('SELECT id, name, slug, description, category, created_by, join_policy FROM groups ORDER BY id').all() as any[];
+    // The guild's lead convenor is handed to Dave, so the round trip proves the STORED lead travels rather
+    // than the replica re-deriving the creator from the backfill rule (lead convenor, 2026-09-23).
+    handOverGroupLead(guild.id, alice, dave);
+    const expectedGroups = db.prepare('SELECT id, name, slug, description, category, created_by, lead_pubkey, join_policy FROM groups ORDER BY id').all() as any[];
+    assert(expectedGroups.find(g => g.id === guild.id)?.lead_pubkey === dave, 'the guild is led by Dave, not its creator');
     const primaryHash = getStateHash(db);
     const payload: any = await exportSyncState(nodeId);
     assert((payload.groups ?? []).length === expectedGroups.length, 'the snapshot carries every group');
+    assert((payload.groups ?? []).find((g: any) => g.id === guild.id)?.leadPubkey === dave,
+        'and each group\'s lead convenor');
     assert((payload.groupMembers ?? []).length === expected.length, 'and every membership row, removed and pending included');
     const exportedPost = (payload.posts ?? []).find((p: any) => p.id === guildPost.id);
     assert(exportedPost?.audienceScope === 'group' && exportedPost?.targetGroupId === guild.id,
@@ -198,8 +205,10 @@ async function main(): Promise<void> {
     await importRemoteState(payload);
     setNodeRole('primary');
 
-    const replicaGroups = db.prepare('SELECT id, name, slug, description, category, created_by, join_policy FROM groups ORDER BY id').all() as any[];
-    assert(JSON.stringify(replicaGroups) === JSON.stringify(expectedGroups), 'every group is back with its name, slug, category and join policy');
+    const replicaGroups = db.prepare('SELECT id, name, slug, description, category, created_by, lead_pubkey, join_policy FROM groups ORDER BY id').all() as any[];
+    assert(JSON.stringify(replicaGroups) === JSON.stringify(expectedGroups),
+        'every group is back with its name, slug, category, join policy and lead convenor');
+    assert(getGroupLead(guild.id) === dave, 'and the replica agrees who leads the guild');
     const replicaMembers = (db.prepare('SELECT group_id, member_pubkey, role, status FROM group_members ORDER BY group_id, member_pubkey').all() as any[])
         .map(r => `${r.group_id}|${r.member_pubkey}|${r.role}|${r.status}`);
     assert(JSON.stringify(replicaMembers) === JSON.stringify(expected), 'every membership is back with its role and status');

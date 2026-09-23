@@ -250,16 +250,19 @@ export default function WelcomeScreen() {
         return () => { cancelled = true; };
     }, [mode, pendingIdentity, enrolment]);
 
-    // Count step 3 being drawn — once per join, not once per render, and only once the state it
-    // reports is settled. Reporting before enrolment answers would record every member as 'C'.
+    // Count step 3 being drawn. The ref keeps it to once per mount; recordOnboardingEvent keeps
+    // it to once per person per node, which is what a remount or a restarted join needs.
+    //
+    // No longer waits for keeper enrolment to settle, and no longer carries a keeper-count
+    // state. It waited because the variant used to be A|B|C and reporting early recorded
+    // everyone as 'C' — but keeper recovery is gone, the PWA had been hard-coding 'C' for
+    // every signup, and the panel that displayed those states has been removed. The step is
+    // "this screen was drawn", so it is reported when the screen is drawn.
     useEffect(() => {
-        if (mode !== 'seedBackup' || protectionShownRef.current || !enrolment) return;
+        if (mode !== 'seedBackup' || protectionShownRef.current) return;
         protectionShownRef.current = true;
-        recordOnboardingEvent(
-            'protection_shown',
-            protection.state === 'covered' ? 'A' : protection.state === 'almost' ? 'B' : 'C',
-        );
-    }, [mode, enrolment, protection.state]);
+        recordOnboardingEvent('protection_shown');
+    }, [mode]);
 
     // The web trampoline copies the invite link to the clipboard before sending
     // people to the app store, but nothing can read it for them automatically —

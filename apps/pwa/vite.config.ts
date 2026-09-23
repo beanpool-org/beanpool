@@ -96,5 +96,10 @@ export default defineConfig({
             'react': path.resolve(__dirname, '../../node_modules/react'),
             'react-dom': path.resolve(__dirname, '../../node_modules/react-dom'),
         },
+        // CI only. One four-vCPU runner hosts build, lint, test and typecheck at once, and vitest
+        // otherwise sizes its pool from the machine's cores — five packages each doing that is what
+        // starved these suites into failing on a stopwatch. See scripts/test-all.sh. Uncapped locally.
+        minWorkers: process.env.CI ? 1 : undefined,
+        maxWorkers: process.env.CI ? 2 : undefined,
     }
 });

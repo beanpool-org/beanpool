@@ -2649,14 +2649,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         ) : (() => {
                             if (viewMode === 'grid') {
                                 return (
-                                    // `grid-flow-row-dense`: the poll below takes two columns from `md` up, and a
-                                    // plain auto-placed grid cannot put it in the last column of a row — it moves to
-                                    // the next row and leaves that cell empty, a hole that walks about as the feed
-                                    // and the window change. Dense lets the tiles after it back-fill the cell.
-                                    // It only ever moves a tile forward past the poll, and only into a cell that
-                                    // would otherwise be blank; with no item wider than one column there is nothing
-                                    // to back-fill, so below `md` this changes nothing.
-                                    <div className="grid grid-flow-row-dense grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                                         {filtered.map((post) => {
                                             if (post.type === 'event') {
                                                 return (
@@ -2674,14 +2667,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             }
                                             if (post.type === 'poll') {
                                                 return (
-                                                    // A poll is the tallest thing in the grid: four answers, the open-ballot
-                                                    // note and the turnout row. One column of a 3+ column grid is too narrow
-                                                    // for its answers ("It's Am…"), so from `md` up it takes two.
-                                                    <div key={post.id} className="h-full md:col-span-2">
+                                                    <div key={post.id} className="h-full">
                                                         <PollCard
                                                             post={post}
                                                             identity={identity}
-                                                            viewMode={viewMode}
                                                             onVoteSuccess={() => refresh()}
                                                             onOpenProfile={onOpenProfile}
                                                         />
@@ -2697,16 +2686,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 role={isPulse ? undefined : "button"}
                                                 tabIndex={isPulse ? undefined : 0}
                                                 aria-label={isPulse ? `Daily Pulse: ${post.title}` : `Open listing: ${post.title}${remoteOriginLabel(post)}`}
-                                                // No `h-full`: the tile keeps its own height rather than stretching to
-                                                // whatever shares its row (see MarketplaceCard's grid return).
-                                                // `self-start` is the other half of that: this div is the grid
-                                                // ITEM, and a grid with no `items-*` stretches its items to the
-                                                // row. Dropping `h-full` stops the tile filling the cell but
-                                                // leaves the cell row-tall, and the cell is what carries the
-                                                // click and the focus ring — so in the poll's row the ring drew
-                                                // around blank space below the card and a click there opened the
-                                                // listing (review on #1092).
-                                                className={`self-start rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
+                                                className={`h-full rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                             >
                                                 <MarketplaceCard
                                                     post={post as any}
@@ -2789,7 +2769,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                             <PollCard
                                                                 post={post}
                                                                 identity={identity}
-                                                                viewMode={viewMode}
                                                                 onVoteSuccess={() => refresh()}
                                                                 onOpenProfile={onOpenProfile}
                                                             />

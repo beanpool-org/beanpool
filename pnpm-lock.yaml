@@ -384,9 +384,6 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.0.1)
-      playwright:
-        specifier: 1.63.0
-        version: 1.63.0
       postcss:
         specifier: ^8.5.8
         version: 8.5.8

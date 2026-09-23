@@ -62,65 +62,9 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
         expect(interested).toHaveAttribute('aria-pressed', 'false');
         for (const b of [going, interested]) {
             expect(b.className).toContain('min-h-[48px]');
-            // They share the row by *growing* into it, never by shrinking below their own label: `min-w-0`
-            // here is what split "Intereste / d" (Marty, 2026-09-24). See the wrapping test below.
-            expect(b.className).toContain('grow');
-            expect(b.className).not.toContain('min-w-0');
+            expect(b.className).toContain('flex-1');
+            expect(b.className).toContain('min-w-0');
         }
-    });
-
-    /**
-     * Marty, 2026-09-24: on the 5-column desktop Market grid the button read "Intereste / d". jsdom does no
-     * layout, so the contract is the classes: nothing may give the label permission to break inside a word, the
-     * button may not shrink below that label, and the row wraps so a button that no longer fits beside its
-     * neighbour takes a full-width row instead of being squeezed.
-     */
-    it.each([
-        ['the card', (p: any) => <EventCard post={p} identity={identity} />],
-        ['the event page', (p: any) => <EventDetail post={p} identity={identity} />],
-    ])('never lets a button label break mid-word, and wraps the row instead — %s', (_where, ui) => {
-        renderAt320(ui(baseEvent));
-        const going = screen.getByRole('button', { name: 'Going ✓' });
-        const interested = screen.getByRole('button', { name: 'Interested' });
-
-        for (const b of [going, interested]) {
-            // No mid-word break permission of any kind.
-            expect(b.className).not.toMatch(/break-words|break-all|anywhere/);
-            // The label stays on one line, and the button is at least as wide as that label.
-            expect(b.className).toContain('whitespace-nowrap');
-            expect(b.className).toContain('min-w-fit');
-            expect(b.className).toContain('basis-auto');
-            expect(b.className).not.toContain('min-w-0');
-        }
-
-        // Too narrow for both side by side => Interested drops to its own full-width row.
-        const row = interested.parentElement!;
-        expect(row).toBe(going.parentElement);
-        expect(row.className).toMatch(/flex-wrap/);
-    });
-
-    /**
-     * The other half of sizing each button to its own label: the label has to stay in the layout while the save
-     * is in flight. A button whose only child became a spinner (or a differently-sized "Saving…") would resize
-     * on tap, and a row near its wrap threshold would re-flow under the finger and again when the save landed.
-     */
-    it('keeps a button at its label width while the RSVP is saving', async () => {
-        let settle: (res: any) => void = () => {};
-        vi.mocked(api.rsvpEvent).mockImplementationOnce(() => new Promise((resolve) => { settle = resolve; }));
-        renderAt320(<EventCard post={baseEvent} identity={identity} />);
-        const [going, interested] = within(screen.getByTestId('event-rsvp-row')).getAllByRole('button');
-        fireEvent.click(interested);
-
-        await waitFor(() => expect(interested).toHaveAttribute('aria-busy', 'true'));
-        // The label is still there, hidden, holding the width — and the busy indicator is out of the flow on
-        // top of it, so neither button moves.
-        const label = within(interested).getByText('Interested');
-        expect(label.className).toContain('invisible');
-        expect(interested.querySelector('.animate-spin')!.closest('span[aria-hidden="true"]')!.className).toContain('absolute');
-        expect(going.textContent).toBe('Going ✓');
-
-        settle({ success: true, post: { ...baseEvent, myRsvp: 'interested', goingCount: 6, interestedCount: 4 } });
-        await waitFor(() => expect(interested).toHaveAttribute('aria-busy', 'false'));
     });
 
     it('does not show the host name on the card', () => {

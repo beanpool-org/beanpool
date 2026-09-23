@@ -87,7 +87,3 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-09-22 - Add loading state for DecisionsAdminPanel
 **Learning:** `DecisionsAdminPanel.tsx` did not show a visual loading state while fetching community decisions asynchronously, leaving the container blank before data arrived.
 **Action:** Render an explicit loading indicator and spinner when `loading && decisions.length === 0`.
-
-## 2026-10-15 - Replace any assertions on EscrowDisputeItem in EscrowDisputesPanel
-**Learning:** `EscrowDisputesPanel.tsx` used `(dispute as any)` type assertions to access buyer and seller party details because `EscrowDisputeItem` in `node-client.ts` was missing the optional `parties` field.
-**Action:** Include typed optional `parties` on `EscrowDisputeItem` to eliminate `as any` type assertions in dispute components.

@@ -347,10 +347,10 @@ export function EscrowDisputesPanel({
                 {filteredDisputes.map((dispute) => {
                     const isPending = dispute.status === 'pending';
                     const isChatExpanded = Boolean(expandedChat[dispute.id]);
-                    const buyerPubkey = dispute.buyerPubkey || dispute.parties?.buyer?.pubkey || '';
-                    const sellerPubkey = dispute.sellerPubkey || dispute.parties?.seller?.pubkey || '';
-                    const buyerCallsign = dispute.buyerCallsign || dispute.parties?.buyer?.callsign;
-                    const sellerCallsign = dispute.sellerCallsign || dispute.parties?.seller?.callsign;
+                    const buyerPubkey = dispute.buyerPubkey || (dispute as any).parties?.buyer?.pubkey || '';
+                    const sellerPubkey = dispute.sellerPubkey || (dispute as any).parties?.seller?.pubkey || '';
+                    const buyerCallsign = dispute.buyerCallsign || (dispute as any).parties?.buyer?.callsign;
+                    const sellerCallsign = dispute.sellerCallsign || (dispute as any).parties?.seller?.callsign;
                     const buyerLabel = buyerCallsign || dispute.buyerName || (buyerPubkey ? `${buyerPubkey.slice(0, 8)}...` : 'Buyer');
                     const sellerLabel = sellerCallsign || dispute.sellerName || (sellerPubkey ? `${sellerPubkey.slice(0, 8)}...` : 'Seller');
                     const postTitle = dispute.post?.title || 'Marketplace Item';

@@ -81,8 +81,3 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `treasury-detail.tsx` was missing an exported `ErrorBoundary` component for Expo Router error handling, and parameter typing did not account for potential array query parameter values.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` and safely extracted scalar string values for search parameters.
 **Pattern:** Ensure Expo Router screen components export `ErrorBoundary` and handle both string and string[] parameter types gracefully.
-
-## 2026-09-18 - [Export ErrorBoundary and refine route parameters in unlock-keys]
-**Issue:** `unlock-keys.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error handling and typed search params strictly as `Record<string, string>`.
-**Learning:** Re-exported `ErrorBoundary` from `expo-router` and updated search parameter types to allow `string | string[]`.
-**Pattern:** Check Expo Router screen components for missing `ErrorBoundary` exports and overly strict search parameter type constraints.

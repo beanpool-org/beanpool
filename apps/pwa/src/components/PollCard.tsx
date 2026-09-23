@@ -21,11 +21,9 @@ interface PollCardProps {
     identity?: BeanPoolIdentity | null;
     onVoteSuccess?: () => void;
     onOpenProfile?: (pubkey: string) => void;
-    /** Where the card is drawn. In the Market grid it is given two columns, so the answers get two columns too. */
-    viewMode?: 'grid' | 'list' | 'compact';
 }
 
-export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode }: PollCardProps) {
+export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollCardProps) {
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
     const [isClosing, setIsClosing] = useState(false);
@@ -35,10 +33,6 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     useEffect(() => {
         setLivePost(post);
     }, [post]);
-
-    // The Market grid hands a poll two columns from `md` up (MarketplacePage). List and the single-post view give it
-    // the full width of a page column, where a single answer column already fits: they are left exactly as they were.
-    const isGrid = viewMode === 'grid';
 
     const isAuthor = Boolean(identity?.publicKey && livePost.authorPublicKey === identity.publicKey);
     const isClosed = livePost.status === 'completed' || (livePost.pollClosesAt ? new Date(livePost.pollClosesAt).getTime() <= Date.now() : false);
@@ -194,7 +188,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             )}
 
             {/* Options List with Live Bars */}
-            <div className={isGrid ? 'grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 mt-1' : 'space-y-2 mb-3 mt-1'}>
+            <div className="space-y-2 mb-3 mt-1">
                 {options.map((opt, idx) => {
                     const isVoted = userVotedOptionId === opt.id;
                     const isVotingThis = votingOptionId === opt.id;
@@ -242,7 +236,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                     >
                                         {isVoted ? '✓' : null}
                                     </div>
-                                    <span className={`font-bold ${isGrid ? 'break-words' : 'truncate'} ${isVoted ? 'text-purple-950 dark:text-purple-200' : 'text-nature-900 dark:text-white'}`}>
+                                    <span className={`font-bold truncate ${isVoted ? 'text-purple-950 dark:text-purple-200' : 'text-nature-900 dark:text-white'}`}>
                                         {opt.text}
                                     </span>
                                 </div>

@@ -8,9 +8,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Linking, Alert, ScrollView } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
-
-export { ErrorBoundary };
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -33,15 +31,7 @@ function day(iso: string | undefined): string {
 }
 
 export default function UnlockKeysScreen() {
-    const params = useLocalSearchParams<{
-        community?: string | string[];
-        u?: string | string[];
-        s?: string | string[];
-        k?: string | string[];
-        e?: string | string[];
-        h?: string | string[];
-        p?: string | string[];
-    }>();
+    const params = useLocalSearchParams<Record<string, string>>();
     const communityName = (typeof params.community === 'string' && params.community.trim()) || 'your community';
     const { identity, isLoading } = useIdentity();
     const { colors } = useTheme();

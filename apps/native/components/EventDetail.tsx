@@ -188,17 +188,9 @@ export function EventDetail({ post }: EventDetailProps) {
                 accessibilityLabel={selected ? `${label}, selected. Tap to clear` : label}
                 accessibilityState={{ selected, disabled: closed || !!pending, busy: pending === status }}
             >
-                {/*
-                  * The label holds the button's width while the RSVP is in flight (the card does the same): the
-                  * buttons size to their own labels, so swapping the label out for the spinner would shrink the
-                  * button under the finger and re-flow a stacked row mid-tap.
-                  */}
-                <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]} numberOfLines={1}>{selected ? `${label} ✓` : label}</Text>
-                {pending === status && (
-                    <View style={styles.rsvpSpinner} pointerEvents="none">
-                        <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
-                    </View>
-                )}
+                {pending === status
+                    ? <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
+                    : <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected]} numberOfLines={1}>{selected ? `${label} ✓` : label}</Text>}
             </Pressable>
         );
     };
@@ -390,18 +382,14 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         title: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8 },
         endedNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },
         counts: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },
-        // Sized to the label, wrapping to a second row rather than ellipsizing it — the same fix the card and the
-        // web EventCard carry. This row's text is 15sp, so it runs out of width sooner than the card's 14sp.
-        rsvpRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+        rsvpRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
         rsvpBtn: {
-            flexGrow: 1, flexBasis: 'auto', flexShrink: 0, minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT,
+            flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT,
             alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, backgroundColor: colors.surface.card,
         },
         rsvpBtnSelected: { backgroundColor: EVENT_ACCENT },
         rsvpText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
         rsvpTextSelected: { color: '#fff' },
-        rsvpTextBusy: { opacity: 0 },
-        rsvpSpinner: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
         chatBtn: {
             minHeight: 48, justifyContent: 'center', paddingHorizontal: 12, marginBottom: 14,
             borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT, backgroundColor: colors.surface.card,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HelpLink } from '../manual/Manual';
 import { SubTabStrip } from '../layout/SubTabStrip';
 import { useSectionSubTab } from '../../lib/sections';
@@ -113,19 +113,6 @@ export function EconomySection({
 
     const members: MemberItem[] = Array.isArray(nodeData?.members) ? nodeData.members : [];
 
-    // ⚡ Bolt: O(1) Map lookup for community members by lowercased pubkey instead of repeated O(M) .find() scans
-    const membersMap = useMemo(() => {
-        const map = new Map<string, MemberItem>();
-        for (const m of members) {
-            if (!m) continue;
-            const mPk = normalizeKeeperPubkey(m);
-            if (mPk) {
-                map.set(mPk.toLowerCase(), m);
-            }
-        }
-        return map;
-    }, [members]);
-
     const getMemberDisplayName = (input: unknown): string => {
         if (!input) return 'Unknown';
         let pubkey = '';
@@ -149,9 +136,13 @@ export function EconomySection({
         // Prefer the keeper entry's own callsign when present rather than depending on a second lookup
         if (directName) return directName;
 
-        if (pubkey) {
+        if (pubkey && Array.isArray(members)) {
             const lowerPubkey = pubkey.toLowerCase();
-            const found = membersMap.get(lowerPubkey);
+            const found = members.find((m) => {
+                if (!m) return false;
+                const mPk = normalizeKeeperPubkey(m);
+                return mPk && mPk.toLowerCase() === lowerPubkey;
+            });
             if (found) {
                 const foundName = (typeof found.callsign === 'string' && found.callsign.trim())
                     ? found.callsign.trim()

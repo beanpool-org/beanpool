@@ -210,7 +210,3 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-04 - Remove Unused myMarketPosts Calculation in PWA MarketplacePage
 **Learning:** In `apps/pwa/src/pages/MarketplacePage.tsx`, `myMarketPosts` executed an $O(P \times T + P \log P)$ array filter, nested `myTransactions.some(...)` scan, and date sort on every render cycle, despite `myMarketPosts` being completely unused in the component.
 **Action:** Removed the unused `myMarketPosts` computation block to eliminate redundant array allocations and unnecessary sorting on render cycles.
-
-## 2026-10-05 - O(1) Member Lookups for Keeper Resolution in EconomySection
-**Learning:** In `apps/manager/src/components/modules/EconomySection.tsx`, `getMemberDisplayName` invoked `members.find(...)` on every member and keeper item in the enterprise and keeper management modals, resulting in an $O(E \times K \times M)$ linear array scan on render cycles.
-**Action:** Pre-computed `membersMap` using `useMemo` indexed by lowercased public key to reduce member display name resolution to constant-time $O(1)$ Map lookups ($O(E \times K + M)$ overall).

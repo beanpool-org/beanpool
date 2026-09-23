@@ -1948,10 +1948,6 @@ export interface EscrowDisputeItem {
         createdAt: number;
         type?: string;
     }[];
-    parties?: {
-        buyer?: { pubkey?: string; callsign?: string };
-        seller?: { pubkey?: string; callsign?: string };
-    };
     resolution?: 'release_to_seller' | 'refund_to_buyer' | 'split' | null;
     resolvedAt?: number | null;
     resolvedBy?: string | null;

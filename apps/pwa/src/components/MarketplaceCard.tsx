@@ -250,14 +250,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     }
 
     // Grid View Return (Condensed tiles)
-    //
-    // Deliberately NOT `h-full`: a grid cell stretches to the tallest thing in its row, and a poll (four answers
-    // plus the voter list) is far taller than a tile. Stretching left a dead gap between the description and VIEW.
-    // Every fragment below is fixed height instead — clamped title, fixed media box, one clamped line of
-    // description — so tiles come out the same height as each other and their VIEW buttons line up across a row.
     return (
         <div
-            className={`bg-white dark:bg-nature-950 overflow-hidden cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl dark:shadow-2xl dark:shadow-black/40 border border-nature-100/50 dark:border-nature-800 flex flex-col rounded-xl p-3 ${elderStyleGrid}`}
+            className={`bg-white dark:bg-nature-950 overflow-hidden cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl dark:shadow-2xl dark:shadow-black/40 border border-nature-100/50 dark:border-nature-800 flex flex-col h-full rounded-xl p-3 ${elderStyleGrid}`}
         >
             {/* Top Handle: Author + Title + Rating */}
             <div className={`flex justify-between items-start mb-2`}>
@@ -358,7 +353,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     )}
                 </div>
             ) : (
-                <div className={`relative w-full rounded-xl bg-oat-50 dark:bg-nature-900 flex items-center justify-center shadow-inner h-[110px] mb-3`}>
+                <div className={`relative w-full rounded-xl bg-oat-50 dark:bg-nature-900 flex items-center justify-center shadow-inner h-[80px] mb-3`}>
                     <span className={`text-3xl opacity-20`}>{emoji}</span>
                     
                     {/* Status Overlays */}
@@ -402,9 +397,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             )}
 
             {/* Body Text */}
-            {/* `flex-1` here is what used to swallow the row's spare height. The line clamp already pins this to one
-                line; min-h keeps that line reserved even when the text is missing, so length never moves VIEW. */}
-            <p className={`text-nature-600 dark:text-nature-400 leading-relaxed px-1 text-[11px] line-clamp-1 min-h-[1.625em] mb-3`}>
+            <p className={`text-nature-600 dark:text-nature-400 leading-relaxed px-1 flex-1 text-[11px] line-clamp-1 mb-3`}>
                 {post.description || "No description provided."}
             </p>
 

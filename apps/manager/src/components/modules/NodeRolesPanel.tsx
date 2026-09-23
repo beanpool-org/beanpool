@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
+import { GATED_LOOK, gatedProps, guardGated } from '../../lib/gated-control';
 import {
     fetchNodeRoles,
     grantNodeRoleApi,
@@ -433,14 +434,21 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                             // Not in the no-owner bootstrap state: there the node lets a signed-in
                                             // admin make the FIRST owner, including a fellow admin, so don't hide it.
                                             const blockedForAdmin = !canManage && !noOwner && !!held && held !== 'moderator';
+                                            // aria-disabled, not disabled: the reason under the row is the whole point of
+                                            // offering it, and `disabled` would take the row out of the Tab order and the
+                                            // reason with it. The row stays focusable and does nothing -- lib/gated-control.
+                                            const blockedReason = blockedForAdmin
+                                                ? `Only an owner can change ${ROLE_ARTICLE[held!]}'s role.`
+                                                : null;
+                                            const reasonId = `role-blocked-${k}`;
                                             return (
                                                 <li key={k}>
                                                     <button
                                                         type="button"
-                                                        onClick={() => pick(k)}
-                                                        disabled={blockedForAdmin}
-                                                        title={blockedForAdmin ? `Only an owner can change ${ROLE_ARTICLE[held!]}'s role.` : undefined}
-                                                        className={`${btn} w-full text-left flex flex-col items-start gap-0.5 bg-nature-950 text-nature-100 border-nature-800 ${blockedForAdmin ? 'opacity-50 cursor-not-allowed' : 'hover:border-terra-500/50'}`}
+                                                        onClick={guardGated(blockedForAdmin, () => pick(k))}
+                                                        {...gatedProps(blockedForAdmin, reasonId)}
+                                                        title={blockedReason ?? undefined}
+                                                        className={`${btn} w-full text-left flex flex-col items-start gap-0.5 bg-nature-950 text-nature-100 border-nature-800 ${blockedForAdmin ? GATED_LOOK : 'hover:border-terra-500/50'}`}
                                                     >
                                                         <span className="break-words min-w-0 max-w-full">
                                                             {m.callsign || shortKey(k)}
@@ -450,9 +458,15 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                                         <span className="text-xs text-nature-400 font-normal flex flex-wrap gap-x-2">
                                                             <span className="font-mono">{shortKey(k)}</span>
                                                             {held && <span>{ROLE_ICON[held]} {ROLE_LABEL[held]}</span>}
-                                                            {blockedForAdmin && <span className="text-amber-300">Only an owner can change this</span>}
                                                         </span>
                                                     </button>
+                                                    {/* Beside the row, not inside it: as the button's own text it would be
+                                                        read out twice, once as the name and once as the description. */}
+                                                    {blockedReason && (
+                                                        <p id={reasonId} className="text-xs text-amber-300 m-0 mt-1 px-4 break-words">
+                                                            {blockedReason}
+                                                        </p>
+                                                    )}
                                                 </li>
                                             );
                                         })}

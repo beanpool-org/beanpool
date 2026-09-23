@@ -88,6 +88,8 @@ Only the **lead convenor** can remove a convenor, or take the convenor role off 
 
 **Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin.
 
+**If the lead goes quiet, the group can vote in a new one.** 30 days after the lead's last activity, the other convenors vote — or the members, if the lead is the group's only convenor. Until that point the lead has to hand it over themselves. The rules are in "Rules and how decisions work".
+
 **Handing the lead over.** The lead can pass it on: **Hand over** in **Convenor Tools**, or the shield button beside someone's name. Choose another convenor, or a member — a member becomes a convenor at the same time. An observer cannot be the lead; make them a member or a convenor first. Once it is done, you cannot take the lead back.
 
 **Leaving as the lead.** Hand the lead over first; the app offers you that when you tap **Leave Group**. If nobody else is in the group, you can simply leave.
@@ -96,5 +98,5 @@ The last convenor cannot step down or leave while anyone else is still in the gr
 
 ## Coming soon
 
-- Choosing a new lead convenor when the old one has gone quiet, and removing a rogue one by a community Decision. The rules for both are in "Rules and how decisions work".
+- Removing a rogue lead convenor by a community Decision. Coming in a later update; today the only route is the quiet-lead vote above.
 - Groups in the web app. Today the new Groups list, chats and invitations are in the phone app.

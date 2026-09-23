@@ -14,7 +14,8 @@
 //  - NOBODY can remove or demote the lead — not another convenor, and not a node admin (admins hold no power
 //    over groups today, and this change gives them none).
 //  - The lead changes by hand-over, by stepping down or leaving (hand over first while anyone else is active),
-//    by the 30-day-silence vote (apps/server/src/engine/group-succession.ts), or by a community Decision.
+//    or by the 30-day-silence vote (apps/server/src/engine/group-succession.ts). No community Decision names a
+//    group's lead as its subject, so that is not a route today.
 // Every route goes through this file, so there is one place the rules live.
 
 import type Database from 'better-sqlite3';
@@ -442,6 +443,15 @@ export const HAND_OVER_FIRST =
     'You are this group\'s lead convenor. Hand the lead over to someone else first.';
 
 /**
+ * What a convenor refused by the lead rules can actually do. It names only routes that exist today: the hand-over,
+ * and the 30-day-silence vote (apps/server/src/engine/group-succession.ts). No Decision effect names a group's
+ * lead as its subject, so the text must not send anyone looking for one — see docs/the-commons.md, "A suspended
+ * lead is still the lead".
+ */
+export const LEAD_SILENCE_VOTE =
+    "Otherwise, 30 days after the lead's last activity, the other convenors — or the members, if the lead is the group's only convenor — can vote a replacement in.";
+
+/**
  * The lead hands the lead on: to another active convenor, or to an active member, who becomes a convenor in the
  * same step. The outgoing lead stays a convenor — handing over is not leaving.
  */
@@ -586,14 +596,14 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
         throw new Error('Target is not a member of this group');
     }
 
-    // The lead convenor. Nobody demotes them — a convenor who thinks they should go has the 30-day-silence vote
-    // and the community Decision, not this route. The lead themselves hands the lead over first.
+    // The lead convenor. Nobody demotes them — a convenor who thinks they should go has the 30-day-silence vote,
+    // and nothing else: no Decision effect names a group's lead. The lead themselves hands the lead over first.
     const lead = getGroupLead(db, groupId);
     const isSelf = convenorPubkey === targetPubkey;
     if (lead && targetPubkey === lead && newRole !== 'convenor') {
         throw new Error(isSelf
             ? `UNAUTHORIZED: ${HAND_OVER_FIRST}`
-            : "UNAUTHORIZED: The group's lead convenor cannot be demoted. The lead can hand the lead over, or the community can decide.");
+            : `UNAUTHORIZED: The group's lead convenor cannot be demoted. The lead can hand the lead over. ${LEAD_SILENCE_VOTE}`);
     }
     // Only the lead may touch another convenor. A convenor may still step down from convenor themselves.
     if (target.role === 'convenor' && target.status === 'active' && newRole !== 'convenor'
@@ -641,7 +651,7 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
         // The lead leaves by handing over first; until then there is no route out of the group for them, and no
         // route by which anyone else can push them out. That is the point of the lead.
         if (!isSelf) {
-            throw new Error("UNAUTHORIZED: The group's lead convenor cannot be removed. The lead can hand the lead over and leave, or the community can decide.");
+            throw new Error(`UNAUTHORIZED: The group's lead convenor cannot be removed. The lead can hand the lead over and leave. ${LEAD_SILENCE_VOTE}`);
         }
         if (otherActiveMemberCount(db, groupId, targetPubkey) > 0) {
             throw new Error(HAND_OVER_FIRST);

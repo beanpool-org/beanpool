@@ -267,6 +267,7 @@ import {
     sendMessage as sendMessageEngine,
     toggleMessageReaction as toggleMessageReactionEngine,
     editMessage as editMessageEngine,
+    deleteOwnMessage as deleteOwnMessageEngine,
     MESSAGE_EDIT_WINDOW_MS,
     injectSystemMessage as injectSystemMessageEngine,
     markConversationRead as markConversationReadEngine,
@@ -4881,6 +4882,10 @@ export function editMessage(messageId: string, authorPubkey: string, ciphertext:
     return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce);
 }
 
+export function deleteOwnMessage(messageId: string, authorPubkey: string): Message {
+    return deleteOwnMessageEngine(getMessagingCb(), messageId, authorPubkey);
+}
+
 export { MESSAGE_EDIT_WINDOW_MS };
 
 export function injectSystemMessage(postId: string, type: SystemMessageTypeVal | string, meta: TypedMessagePayload, buyerPubkey?: string, sellerPubkey?: string): void {
@@ -7172,8 +7177,8 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
     return getGroupThreadEngine(groupId, viewerPubkey, limit, offset);
 }
 
-export function postGroupThreadMessage(groupId: string, authorPubkey: string, text: string, clientId?: string): EventThreadMessage {
-    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, text, clientId);
+export function postGroupThreadMessage(groupId: string, authorPubkey: string, text: string, clientId?: string, replyToId?: string): EventThreadMessage {
+    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, text, clientId, replyToId);
 }
 
 export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {

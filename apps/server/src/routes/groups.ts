@@ -365,13 +365,24 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             }
             clientId = body.clientId.toLowerCase();
         }
+        // A reply quotes a message in THIS chat (chat parity, 2026-09-23). Any message id, not only a UUID v4:
+        // the engine checks it is in this conversation and is not a system line, which is the real rule.
+        let replyToId: string | undefined;
+        if (body.replyToId !== undefined && body.replyToId !== null) {
+            if (typeof body.replyToId !== 'string' || !body.replyToId.trim()) {
+                ctx.status = 400;
+                ctx.body = { error: 'replyToId must be a message id' };
+                return;
+            }
+            replyToId = body.replyToId;
+        }
         if (!text.trim()) {
             ctx.status = 400;
             ctx.body = { error: 'Message text cannot be empty' };
             return;
         }
         try {
-            const message = postGroupThreadMessage(ctx.params.id, actor, text, clientId);
+            const message = postGroupThreadMessage(ctx.params.id, actor, text, clientId, replyToId);
             ctx.status = 201;
             ctx.body = { success: true, message };
         } catch (e: any) {

@@ -9,11 +9,25 @@ import { App } from '../../App';
  * (e2e/phone-width.mjs) covers that in a real browser.
  */
 
-async function back() {
+/**
+ * jsdom runs a history traversal on a later task, so `history.back()` has not happened when it returns and the
+ * popstate that moves the app has not fired yet. Waiting a fixed few milliseconds for it is what made this file flake
+ * on a loaded runner: the wait ran out before the event arrived, so the assertion read the screen you were still on,
+ * and the traversal then landed inside the next test and took that one down too. Wait for the event itself instead.
+ */
+async function awaitingPop(step: () => void) {
     await act(async () => {
-        window.history.back();
-        await new Promise(r => setTimeout(r, 30));
+        const landed = new Promise<void>(resolve => {
+            window.addEventListener('popstate', () => resolve(), { once: true });
+        });
+        step();
+        await landed;
     });
+}
+
+/** The browser's Back button. */
+function back() {
+    return awaitingPop(() => window.history.back());
 }
 
 function topBar() {
@@ -135,8 +149,8 @@ describe('Settings on a phone', () => {
         expect(topBar().textContent).toContain('Bulletin & News');
 
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Menu' })); });
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Close menu' })); });
-        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        // ✕ drops the menu's own history entry (closeMenuEntry), so this click goes Back too.
+        await awaitingPop(() => { fireEvent.click(screen.getByRole('button', { name: 'Close menu' })); });
         expect(screen.queryByRole('dialog', { name: 'Settings menu' })).not.toBeInTheDocument();
         await back();
         expect(topBar().textContent).toContain('Home');

@@ -281,6 +281,21 @@ describe('the explicit-edit screens publish only a session pick', () => {
         expect(src).not.toContain('publishableAvatar');
     });
 
+    it('both offline branches park the session pick beside the pending flag', () => {
+        // The retry cannot recover a pick it was never given, and the local members row is not
+        // a durable place to leave one — the next full-directory sync overwrites it.
+        for (const [rel, pick] of [
+            ['app/(tabs)/settings.tsx', 'avatarPickedThisSession'],
+            ['app/profile-setup.tsx', 'pendingAvatar'],
+        ] as const) {
+            const src = read(rel);
+            expect(src).toContain(`const offlinePick = explicitEditAvatar(${pick});`);
+            expect(src).toContain("if (offlinePick) await AsyncStorage.setItem('pending_profile_avatar', offlinePick);");
+            // And the online branch clears it, so a pick that DID publish is never re-sent.
+            expect(src).toContain("await AsyncStorage.removeItem('pending_profile_avatar');");
+        }
+    });
+
     it('only the marketplace photo gate claims the node has no photo', () => {
         // `nodeHasNoPhoto` overrides the local row, so it must come ONLY from the node saying
         // so. Both heal sites pass it; the pending-sync retry and the invite-redeem publish
@@ -462,6 +477,136 @@ describe('pushProfileToServer avatar choice', () => {
         expect('avatar' in body).toBe(false);
         // The rest of the profile still publishes: this path must not become a no-op.
         expect(body.bio).toBe('still has a bio');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 4b. An offline pick survives a members sync that lands before the retry
+//
+// The rule in 4 rests on the picked photo sitting portable in the local `members` row. It sits
+// there only until the first full-directory sync replaces it with the node's own URL — and on a
+// reconnect after more than an hour offline, that sync can easily run before the retry
+// succeeds. The row then says "the node has a photo", the retry publishes no `avatar` at all,
+// the node keeps the PREVIOUS picture and nothing ever resends the pick. So the pick is parked
+// in `pending_profile_avatar` by the screen that could not publish it, and read from there.
+// ---------------------------------------------------------------------------
+describe('an offline pick survives a members sync landing before the retry', () => {
+    /**
+     * A members row that the mocked SQLite actually writes to, so the sequence under test is
+     * the real one: offline save → members upsert → retry, rather than three unrelated mocks.
+     * Only the viewer's own row and only the columns this path reads.
+     */
+    let row: any;
+    let parked: string | null;
+
+    const postedBody = (): any => {
+        const call = (globalThis.fetch as any).mock.calls[0];
+        return JSON.parse(call[1].body);
+    };
+
+    beforeEach(() => {
+        row = {
+            public_key: SELF_PK, callsign: 'Damo', avatar_url: null,
+            bio: null, contact_value: null, contact_visibility: null, archetype: null,
+        };
+        parked = null;
+        h.loadIdentity.mockResolvedValue({ publicKey: SELF_PK, callsign: 'Damo', privateKey: 'k' });
+        h.getCanonicalProfile.mockResolvedValue({ avatar: OLD_PHOTO });
+        h.db.withTransactionAsync.mockImplementation(async (cb: () => Promise<void>) => { await cb(); });
+        h.db.getAllAsync.mockResolvedValue([]);
+        h.getFirstAsync.mockImplementation(async () => row);
+        h.asyncStorage.getItem.mockImplementation(async (k: string) => {
+            if (k === 'beanpool_anchor_url') return 'https://test.beanpool.org';
+            if (k === 'pending_profile_avatar') return parked;
+            return null;
+        });
+        h.asyncStorage.setItem.mockImplementation(async (k: string, v: string) => {
+            if (k === 'pending_profile_avatar') parked = v;
+        });
+        h.asyncStorage.removeItem.mockImplementation(async (k: string) => {
+            if (k === 'pending_profile_avatar') parked = null;
+        });
+        // The members upsert, applied to `row` with the same precedence the SQL has: on a
+        // COMPLETE list the incoming value wins outright, including a null.
+        h.runAsync.mockImplementation(async (sql: string, params: any[]) => {
+            if (typeof sql === 'string' && /INSERT INTO members/.test(sql) && /joined_at/.test(sql)) {
+                const [pk, cs, av] = params;
+                const clears = params[params.length - 1] === 1;
+                if (pk === row.public_key) {
+                    row.callsign = cs;
+                    row.avatar_url = clears ? av : (av ?? row.avatar_url);
+                }
+            }
+            return { changes: 1 };
+        });
+        globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ profile: { avatar: 'stored' } }) }) as any;
+    });
+
+    /** What the offline branch of settings Save / Re-run Setup does. */
+    const offlineSaveWithPick = async (pick: string) => {
+        await h.asyncStorage.setItem('pending_profile_sync', 'true');
+        await h.asyncStorage.setItem('pending_profile_avatar', pick);
+        await updateMemberProfile(SELF_PK, { callsign: 'Damo', avatar_url: pick });
+    };
+
+    /** The node's hourly full directory, which knows nothing of the unpublished pick. */
+    const membersSyncWritesNodeUrl = async () => {
+        await applyDelta({
+            members: [{ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: NODE_URL_VERSIONED }],
+            membersComplete: true,
+        });
+        expect(row.avatar_url).toBe(NODE_URL_VERSIONED); // the pick really is gone from the row
+    };
+
+    it('still sends the pick after the sync has overwritten the local row', async () => {
+        await offlineSaveWithPick(PHOTO);
+        await membersSyncWritesNodeUrl();
+
+        await pushProfileToServer();
+
+        // Without the parked copy this is `undefined`: the row says the node has a photo, so
+        // `catchUpAvatar` returns null and the member's choice is dropped for good.
+        expect(postedBody().avatar).toBe(PHOTO);
+    });
+
+    it('clears the parked pick once the node has taken it', async () => {
+        await offlineSaveWithPick(PHOTO);
+        await pushProfileToServer();
+        expect(parked).toBeNull();
+        expect(h.asyncStorage.removeItem).toHaveBeenCalledWith('pending_profile_sync');
+    });
+
+    it('KEEPS the parked pick when the publish fails, so the next retry still has it', async () => {
+        await offlineSaveWithPick(PHOTO);
+        globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) }) as any;
+
+        expect(await pushProfileToServer()).toBe(false);
+
+        expect(parked).toBe(PHOTO);
+    });
+
+    it('KEEPS the parked pick when the node 200s without storing the avatar', async () => {
+        // `avatarPersisted` false: the POST looked fine but the photo did not land.
+        await offlineSaveWithPick(PHOTO);
+        globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ profile: {} }) }) as any;
+
+        expect(await pushProfileToServer()).toBe(false);
+
+        expect(parked).toBe(PHOTO);
+    });
+
+    it('a bio-only offline edit parks nothing and still says nothing about the photo', async () => {
+        // No pick this session, so nothing is parked; by the time the retry runs the node holds
+        // a photo this phone has never seen, and the bio must not drag an older one along.
+        row.bio = 'wrote this on the train';
+        await h.asyncStorage.setItem('pending_profile_sync', 'true');
+        await membersSyncWritesNodeUrl();
+
+        await pushProfileToServer();
+
+        const body = postedBody();
+        expect('avatar' in body).toBe(false);
+        expect(body.bio).toBe('wrote this on the train');
     });
 });
 

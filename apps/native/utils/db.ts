@@ -4003,11 +4003,17 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
 // pillar-sync's offline-edit retry loop, and a proactive push right after joining
 // a new node so the picture lands before the user ever opens the composer.
 //
-// The avatar is resolved by `catchUpAvatar`: a photo picked during an offline save
-// (portable, still sitting in the local row) always goes; otherwise the canonical copy
-// goes only when the node is KNOWN to hold no photo for us. That fallback is what makes
-// the picture follow the user onto a freshly-joined second community, where the local
-// row exists (from registration) but has no avatar yet.
+// The avatar is resolved in two steps: a photo picked during an OFFLINE save, parked in
+// `pending_profile_avatar` by the screen that could not publish it, always goes — it has
+// reached nothing yet, so it is the newest copy anywhere. Otherwise `catchUpAvatar` decides,
+// and the canonical copy goes only when the node is KNOWN to hold no photo for us. That
+// fallback is what makes the picture follow the user onto a freshly-joined second community,
+// where the local row exists (from registration) but has no avatar yet.
+//
+// The parked pick exists because the local row is NOT a durable place to keep it: both
+// full-directory writers replace it with the node's own URL, and a single members sync landing
+// before this retry succeeds used to turn the pick into "the node has a photo, say nothing"
+// — the member's chosen photo then never reached the node and nothing ever resent it.
 //
 // `nodeHasNoPhoto` is the marketplace photo gate's signal — the node has just answered
 // "please set a profile photo", which is proof there is nothing there to overwrite even
@@ -4028,7 +4034,13 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
     // canonical copy is not an unconditional replacement for it: only a local pick ever writes
     // canonical, so when the node holds a photo this phone has not picked, canonical is the
     // OLDER one and posting it would overwrite the member's newest choice.
-    const avatar = catchUpAvatar(profile?.avatar_url, canonical?.avatar, opts?.nodeHasNoPhoto === true);
+    // Parked by the offline branch of settings Save / Re-run Setup, and cleared only when this
+    // function has actually published (or found there is nothing to publish) — never on a
+    // failure, so a flaky POST cannot lose it. Re-checked for portability because anything that
+    // is not a `data:`/`bundled://` value is not ours to publish.
+    const offlinePick = await AsyncStorage.getItem('pending_profile_avatar');
+    const avatar = (isPortableAvatarValue(offlinePick) ? offlinePick.trim() : null)
+        ?? catchUpAvatar(profile?.avatar_url, canonical?.avatar, opts?.nodeHasNoPhoto === true);
 
     const callsign = profile?.callsign || identity.callsign;
     const bio = profile?.bio ?? canonical?.bio ?? '';
@@ -4043,6 +4055,7 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
     // genuinely nothing anywhere to publish.
     if (!avatar && !bio && !contactValue && !archetypeRaw) {
         await AsyncStorage.removeItem('pending_profile_sync');
+        await AsyncStorage.removeItem('pending_profile_avatar');
         return false;
     }
     let publicArchetype: string | null = null;
@@ -4091,6 +4104,9 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
         if (!avatarPersisted) return false;
 
         await AsyncStorage.removeItem('pending_profile_sync');
+        // The pick is now on the node, so it stops being pending. Cleared HERE and not one
+        // line earlier: every `return false` above leaves it in place for the next retry.
+        await AsyncStorage.removeItem('pending_profile_avatar');
         // Mirror the canonical avatar into THIS node's local DB when it was
         // missing, so local reads and the marketplace pre-check see it at once.
         if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {

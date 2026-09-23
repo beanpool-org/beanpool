@@ -965,9 +965,18 @@ export default function SettingsScreen() {
 
             if (offline) {
                 await AsyncStorage.setItem('pending_profile_sync', 'true');
+                // Park the session pick NEXT TO the flag, not only in the members row. The row
+                // is the retry's only other source for it, and the first members sync to land
+                // before the retry succeeds replaces it with the node's own URL — after which
+                // the retry reads "the node has a photo" and publishes no avatar at all, so the
+                // pick never reaches the node and nothing ever resends it. A bio-only save
+                // stores nothing here and so still says nothing about the photo.
+                const offlinePick = explicitEditAvatar(avatarPickedThisSession);
+                if (offlinePick) await AsyncStorage.setItem('pending_profile_avatar', offlinePick);
                 Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
             } else {
                 await AsyncStorage.removeItem('pending_profile_sync');
+                await AsyncStorage.removeItem('pending_profile_avatar');
             }
 
             // Commit locally now that the node has accepted (or we know we are offline)

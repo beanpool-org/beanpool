@@ -9,7 +9,7 @@ import { OnboardingGuide } from '../components/OnboardingGuide';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
-import { profileSetupAvatar } from '../utils/avatar-value';
+import { profileSetupAvatar, explicitEditAvatar } from '../utils/avatar-value';
 import { buildSignedHeaders } from '../utils/crypto';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
@@ -177,8 +177,17 @@ export default function ProfileSetupScreen() {
                 avatar_url: pendingAvatar ?? undefined,
             });
 
-            if (published) await AsyncStorage.removeItem('pending_profile_sync');
-            else await AsyncStorage.setItem('pending_profile_sync', 'true');
+            if (published) {
+                await AsyncStorage.removeItem('pending_profile_sync');
+                await AsyncStorage.removeItem('pending_profile_avatar');
+            } else {
+                await AsyncStorage.setItem('pending_profile_sync', 'true');
+                // As in the settings Save: the pick is parked beside the flag so a members sync
+                // overwriting the local row with the node's URL before the retry lands cannot
+                // silently drop the photo the member chose on this phone.
+                const offlinePick = explicitEditAvatar(pendingAvatar);
+                if (offlinePick) await AsyncStorage.setItem('pending_profile_avatar', offlinePick);
+            }
 
             leaveWizard();
         } catch (err: any) {

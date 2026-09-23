@@ -64,9 +64,9 @@ export function ChatMessageList({
     // (WhatsApp-style) instead of a single delayed jump that lands before the avoid-view padding has settled.
     //
     // The GENERIC variant: the plain `useKeyboardHandler` also runs `useResizeMode()`, which sets the window to
-    // ADJUST_RESIZE on mount and back to the default on unmount. That would undo the ADJUST_NOTHING that
-    // ChatKeyboardAvoidingView owns — permanently in the DM, where this list mounts only after the first read,
-    // and on popping a chat that sat on top of another chat. This handler only scrolls; it needs no mode.
+    // ADJUST_RESIZE on mount and back to the manifest default on unmount. Nothing in the chat depends on the
+    // window's mode any more — ChatKeyboardAvoidingView measures its lift against its own bottom edge — but a
+    // list that only wants to scroll should not be reaching for the whole window either.
     useGenericKeyboardHandler({
         onMove: () => {
             'worklet';

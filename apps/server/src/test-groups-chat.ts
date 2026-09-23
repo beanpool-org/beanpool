@@ -406,6 +406,24 @@ async function main(): Promise<void> {
     await mpost('/api/messages/mark-read', bob, { conversationId: bakery });
     assert((listYourChats(bob).items.find(i => i.id === bakery)?.unreadCount ?? -1) === 0, 'and a keeper can mark the enterprise thread read');
 
+    // ── 8a. A tombstone previews the way the chat reads it (#1049 fix round 2) ─────────────
+    // A removed row stores ONE marker text, "removed by a convenor", whoever pressed the button. The app tells
+    // an author's own delete from a moderator's removal by metadata.removedBy (chat-actions.tombstoneText), so
+    // the list has to read it the same way: a member who deleted their own message was seeing the chat call it
+    // "This message was deleted" while Talk called the same message "removed by a convenor".
+    console.log('\n--- 8a. What a tombstone previews as in "Your groups" ---');
+    const ownLine = postGroupThreadMessage(cb, garden.id, alice, 'A line of my own');
+    assert((await post(`${chatPath}/remove`, alice, { messageId: ownLine.id })).body?.success === true,
+        'Alice removes a message of her own');
+    assert(listYourChats(alice).items.find(i => i.id === garden.id)?.lastMessage?.text === 'This message was deleted',
+        'her own delete previews as "This message was deleted"');
+    await new Promise(r => setTimeout(r, 5));
+    const bobsLine = postGroupThreadMessage(cb, garden.id, bob, "Bob's line");
+    assert((await post(`${chatPath}/remove`, alice, { messageId: bobsLine.id })).body?.success === true,
+        "the convenor removes Bob's message");
+    assert(listYourChats(alice).items.find(i => i.id === garden.id)?.lastMessage?.text === 'removed by a convenor',
+        'a removal of someone else\'s message still previews as "removed by a convenor"');
+
     // ── 8b. Group chat sends through the ordinary send route are rate-limited ───────────────
     // (PR #924 review, item 4) — exactly as POST /api/groups/:id/chat/message is: per signed member in the chat
     // bucket, never the per-IP auth limiter that also guards recovery (0919 follow-up). A DM is not throttled.

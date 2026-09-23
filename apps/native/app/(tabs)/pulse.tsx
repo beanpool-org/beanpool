@@ -6,7 +6,10 @@
  * - POST /api/member/pulse/items/:id/mute (signed owner mutation)
  *
  * Rules:
- * - Facade cards, NOT embeds: taps open external post on platform.
+ * - Facade cards until asked: a card fetches nothing from its platform until the member taps it.
+ *   A YouTube card then plays YouTube's own player in place (see components/PulseFeedCard); every
+ *   other platform opens its own app. This screen owns only one part of that: a video scrolled out
+ *   of sight stops, which needs the list's viewability and so cannot live in the card.
  * - Prioritizes creator attribution: "my neighbour made this".
  * - Honest empty states for newly syndicated nodes.
  * - Responsive at 320dp and 1.3x font scale with pull-to-refresh & infinite cursor scroll.
@@ -38,6 +41,7 @@ import {
     type PulseFeedItem,
 } from '../../utils/pulse';
 import { PulseFeedCard } from '../../components/PulseFeedCard';
+import { pulseVideoViewabilityChanged } from '../../utils/pulse-video-player';
 import { anchorUrl } from '../../utils/node-post';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
@@ -56,6 +60,19 @@ export default function PulseScreen() {
     const qr = useQuickReturn({ resetKey: loading });
     const listRef = useRef<FlatList>(null);
     useTabRetapScrollTop(listRef, qr.show);
+
+    // A playing video that scrolls out of sight stops. Without this it keeps talking from somewhere
+    // up the feed: virtualization only unmounts a row many screens away, far too late to be the
+    // answer. Held in a ref because FlatList reads the callback once and warns if it changes. What
+    // "out of sight" means — left the viewable set, rather than merely not being in it, which would
+    // kill a card tapped before it was 40% on screen — is `pulseVideoViewabilityChanged`, where it
+    // can be tested.
+    const handleViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ key?: string }> }) => {
+        pulseVideoViewabilityChanged(viewableItems.map((v) => v.key));
+    }).current;
+    // 40% on screen: a player letterboxed to 200px is still worth watching part-covered, but a card
+    // clinging to the edge of the screen is not what the member is looking at.
+    const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 40 }).current;
     const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -470,6 +487,8 @@ export default function PulseScreen() {
                             progressViewOffset={qr.listInset}
                         />
                     }
+                    onViewableItemsChanged={handleViewableItemsChanged}
+                    viewabilityConfig={viewabilityConfig}
                     onEndReached={handleLoadMore}
                     onEndReachedThreshold={0.3}
                     ListEmptyComponent={renderEmptyState}

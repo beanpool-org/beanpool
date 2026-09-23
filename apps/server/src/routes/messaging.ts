@@ -5,7 +5,7 @@
 
 import Router from '@koa/router';
 import {
-    createConversation, sendMessage, editMessage,
+    createConversation, sendMessage, editMessage, deleteOwnMessage,
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
     markConversationRead, getUnreadCounts,
@@ -257,6 +257,32 @@ router.post('/api/messages/edit', async (ctx) => {
     } catch (e: any) {
         // Thread and removed messages are refused outright (403) so the client can say why.
         respondToMessagingError(ctx, e, 'edit the message');
+    }
+});
+
+/**
+ * Delete for everyone (chat parity, 2026-09-23): the author takes their own message down, in a DM or a group
+ * chat, at any age. The author is the verified signer — never a client-supplied field — so nobody can delete
+ * someone else's. A convenor removing somebody ELSE's group chat message keeps its own route,
+ * POST /api/groups/:id/chat/remove; the apps tell the two apart by `metadata.removedBy`.
+ */
+router.post('/api/messages/delete', async (ctx) => {
+    const { messageId } = (ctx as any).requestBody || {};
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!messageId || typeof messageId !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'messageId is required' };
+        return;
+    }
+    try {
+        ctx.body = { success: true, message: deleteOwnMessage(messageId, actor) };
+    } catch (e: any) {
+        respondToMessagingError(ctx, e, 'delete the message');
     }
 });
 

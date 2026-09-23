@@ -15,9 +15,11 @@ import {
     type TypedMessagePayload
 } from '@beanpool/engine';
 import {
-    GROUP_THREAD_TYPE, GROUP_CHAT_EDIT_ERROR, GROUP_CHAT_REACT_ERROR, GROUP_CHAT_FORBIDDEN, GROUP_CHAT_OBSERVER,
-    GROUP_NOT_FOUND, postGroupThreadMessageFromSendRoute,
+    GROUP_THREAD_TYPE, GROUP_CHAT_FORBIDDEN, GROUP_CHAT_OBSERVER, GROUP_CHAT_SYSTEM_REACT_ERROR,
+    GROUP_NOT_FOUND, GROUP_THREAD_DELETED_TEXT, postGroupThreadMessageFromSendRoute,
+    assertCanWriteInGroupChat, groupChatEditedCiphertext, groupChatRefusal, broadcastGroupChatUpdate,
 } from './group-thread.js';
+import { writeMessageTombstone } from './message-tombstone.js';
 import { unmutedRecipients } from './chat-mutes.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
@@ -130,7 +132,7 @@ export function sendMessage(
     const directConv = db.prepare("SELECT type FROM conversations WHERE id=?").get(conversationId) as any;
     if (directConv?.type === GROUP_THREAD_TYPE) {
         try {
-            const m = postGroupThreadMessageFromSendRoute(cb, conversationId, authorPubkey, ciphertext, nonce, type, !!attachment?.data, clientId);
+            const m = postGroupThreadMessageFromSendRoute(cb, conversationId, authorPubkey, ciphertext, nonce, type, !!attachment?.data, clientId, metadata);
             return { id: m.id, conversationId: m.conversationId, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, type: m.type, metadata: m.metadata, timestamp: m.timestamp };
         } catch (e: any) {
             throw toGroupChatMessagingError(e);
@@ -261,15 +263,24 @@ export function toggleMessageReaction(
     if (convType?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_REACT_ERROR, 403);
 
     const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
-    if (!participants.some((p: any) => p.public_key === authorPubkey)) {
-        return null;
+
+    if (convType?.type === GROUP_THREAD_TYPE) {
+        // A group chat reacts exactly as a DM does (chat parity), under the group's own write rule: whoever may
+        // post there may react there. The participants mirror is never the authority — group_members is.
+        if (row.type === 'system') throw new MessagingError(GROUP_CHAT_SYSTEM_REACT_ERROR, 400);
+        try { assertCanWriteInGroupChat(row.conversation_id, authorPubkey); }
+        catch (e: any) { throw toGroupChatMessagingError(e); }
+    } else {
+        if (!participants.some((p: any) => p.public_key === authorPubkey)) {
+            return null;
+        }
+        // An event chat carries text the host can remove and nothing else, and it is read-only once the event
+        // ends — a reaction would be a write this route cannot rule on.
+        if (convType?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_REACT_ERROR, 403);
     }
 
-    // An event chat carries text the host can remove and nothing else, and it is read-only once the event
-    // ends — a reaction would be a write this route cannot rule on.
-    if (convType?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_REACT_ERROR, 403);
-    // A group chat carries text and system lines only in this slice; reactions come with the chat features.
-    if (convType?.type === GROUP_THREAD_TYPE) throw new MessagingError(GROUP_CHAT_REACT_ERROR, 403);
+    // A tombstone takes no reactions, in any chat: the message it stood for is gone.
+    if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_REACT_ERROR, 403);
 
     let metadata: any = {};
     if (row.metadata) {
@@ -314,7 +325,12 @@ export function toggleMessageReaction(
 }
 
 export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
-export const MESSAGE_REMOVED_EDIT_ERROR = 'A message removed by a keeper cannot be edited';
+export const MESSAGE_REMOVED_EDIT_ERROR = 'A removed message cannot be edited';
+export const MESSAGE_REMOVED_REACT_ERROR = 'A removed message cannot be reacted to';
+export const MESSAGE_DELETE_NOT_AUTHOR_ERROR = 'Only the author can delete a message';
+export const SYSTEM_MESSAGE_DELETE_ERROR = 'System messages cannot be deleted';
+export const THREAD_MESSAGE_DELETE_ERROR = 'Messages in an enterprise discussion thread cannot be deleted';
+export const EVENT_THREAD_DELETE_ERROR = 'Messages in an event chat cannot be deleted';
 export const THREAD_MESSAGE_EDIT_ERROR = 'Messages in an enterprise discussion thread cannot be edited';
 export const EVENT_THREAD_EDIT_ERROR = 'Messages in an event chat cannot be edited';
 export const EVENT_THREAD_SEND_ERROR = 'Post to an event chat through the event, not this route';
@@ -345,8 +361,22 @@ export function editMessage(
     // An event chat is moderated by its host and goes read-only when the event ends; this route knows
     // neither, so it refuses (docs/events-on-the-map.md §2.2).
     if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
-    // A group chat is moderated by its convenors; this route has no size bound and no membership re-check.
-    if (conv.type === GROUP_THREAD_TYPE) throw new MessagingError(GROUP_CHAT_EDIT_ERROR, 403);
+
+    // A group chat is editable under the group's own rules (chat parity, 2026-09-23 — slice 1 refused it here
+    // because this route had no size bound and no membership re-check; it has both now, from the engine the
+    // group send uses). The two things slice 1 was missing, applied before anything is written:
+    let storedCiphertext = ciphertext;
+    let storedNonce = nonce;
+    const isGroupChat = conv.type === GROUP_THREAD_TYPE;
+    if (isGroupChat) {
+        try {
+            assertCanWriteInGroupChat(row.conversation_id, authorPubkey);
+            storedCiphertext = groupChatEditedCiphertext(ciphertext, nonce);
+            storedNonce = 'plaintext-v1';
+        } catch (e: any) {
+            throw toGroupChatMessagingError(e);
+        }
+    }
 
     const sentAtMs = new Date(row.timestamp).getTime();
     if (Number.isNaN(sentAtMs) || Date.now() - sentAtMs > MESSAGE_EDIT_WINDOW_MS) {
@@ -354,20 +384,27 @@ export function editMessage(
     }
 
     const editedAt = new Date().toISOString();
-    db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(ciphertext, nonce, editedAt, messageId);
+    db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);
 
     const updated: Message = {
         id: row.id,
         conversationId: row.conversation_id,
         authorPubkey: row.author_pubkey,
-        ciphertext,
-        nonce,
+        ciphertext: storedCiphertext,
+        nonce: storedNonce,
         type: row.type,
         systemType: row.system_type,
         metadata: row.metadata,
         timestamp: row.timestamp,
         editedAt
     };
+
+    // A group chat's live update is the chat's own, the way a removal already reaches it; a DM keeps
+    // `message_edited`. Neither pushes: an edit never notifies, and an edited text raises no new @mention.
+    if (isGroupChat) {
+        broadcastGroupChatUpdate(cb, row.conversation_id, messageId, 'edited');
+        return updated;
+    }
 
     const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
     cb.broadcast({
@@ -378,6 +415,95 @@ export function editMessage(
     }, participants.map(p => p.public_key));
 
     return updated;
+}
+
+/**
+ * Delete for everyone (chat parity, 2026-09-23). The signer must be the message's AUTHOR; unlike an edit there
+ * is no window, because a message you regret is usually one you regret later. Works in a DM and in a group
+ * chat, and only while the author can still read that chat — nobody reaches into a room they have left.
+ *
+ * Enterprise and event threads are unchanged this round: their own routes own removal there.
+ *
+ * The row becomes a tombstone (engine/message-tombstone.ts), so it cannot be edited or reacted to afterwards,
+ * and deleting twice is a no-op success that keeps whoever took it down first on the record. A convenor's
+ * `POST /api/groups/:id/chat/remove` is the other way a message goes down, and stays exactly as it was; the
+ * apps tell them apart by `metadata.removedBy`.
+ */
+export function deleteOwnMessage(
+    cb: MessagingCallbacks,
+    messageId: string,
+    authorPubkey: string
+): Message {
+    assertMemberActive(authorPubkey);
+    const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
+    if (!row) throw new MessagingError('Message not found', 404);
+    // Fails closed, as the edit does: a message whose conversation row is missing cannot be shown to be
+    // outside a thread this route may not write to.
+    const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
+    if (!conv) throw new MessagingError('Conversation not found', 404);
+    if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_DELETE_ERROR, 403);
+    if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_DELETE_ERROR, 403);
+    // Before the author check: a system line's author is 'SYSTEM', so "only the author" would refuse it for the
+    // wrong reason and tell a caller nothing about why a join line will not go away.
+    if (row.type === 'system') throw new MessagingError(SYSTEM_MESSAGE_DELETE_ERROR, 400);
+    if (row.author_pubkey !== authorPubkey) throw new MessagingError(MESSAGE_DELETE_NOT_AUTHOR_ERROR, 403);
+
+    const isGroupChat = conv.type === GROUP_THREAD_TYPE;
+    if (isGroupChat) {
+        // Still able to READ the chat is the bar, not still able to post: an observer may take down the line
+        // they wrote while they were a member. An invite-only group answers 404 to someone with no live row in
+        // it, word for word as an id nobody has (the #828 rule).
+        const refusal = groupChatRefusal(row.conversation_id, authorPubkey);
+        if (refusal) throw new MessagingError(refusal.error, refusal.status);
+    } else if (!db.prepare("SELECT 1 FROM conversation_participants WHERE conversation_id=? AND public_key=?")
+        .get(row.conversation_id, authorPubkey)) {
+        throw new MessagingError('You are not a participant in this conversation', 403);
+    }
+
+    if (row.type === 'removed') {
+        // Idempotent: already a tombstone, whoever made it. Answered as a success with the message as it is.
+        return toMessage(row);
+    }
+
+    const { ciphertext, metadata } = writeMessageTombstone(messageId, row, authorPubkey, GROUP_THREAD_DELETED_TEXT);
+    const updated: Message = {
+        ...toMessage(row),
+        ciphertext,
+        nonce: 'plaintext-v1',
+        type: 'removed',
+        metadata,
+    };
+
+    // Live, never a push. A group chat hears it as a removal, exactly as a convenor's removal reaches it; a DM
+    // hears `message_edited` carrying the tombstone, which is how both phones replace the ciphertext they hold.
+    if (isGroupChat) {
+        broadcastGroupChatUpdate(cb, row.conversation_id, messageId, 'removed');
+        return updated;
+    }
+    const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
+    cb.broadcast({
+        type: 'message_edited',
+        conversationId: row.conversation_id,
+        message: updated,
+        participants: participants.map(p => p.public_key)
+    }, participants.map(p => p.public_key));
+    return updated;
+}
+
+/** One stored `messages` row as the wire shape. */
+function toMessage(row: any): Message {
+    return {
+        id: row.id,
+        conversationId: row.conversation_id,
+        authorPubkey: row.author_pubkey,
+        ciphertext: row.ciphertext,
+        nonce: row.nonce,
+        type: row.type,
+        systemType: row.system_type,
+        metadata: row.metadata,
+        timestamp: row.timestamp,
+        editedAt: row.edited_at,
+    };
 }
 
 export function injectSystemMessage(
@@ -447,7 +573,9 @@ function toGroupChatMessagingError(e: any): Error {
     if (msg === GROUP_NOT_FOUND) return new MessagingError(msg, 404);
     if (msg === GROUP_CHAT_FORBIDDEN || msg === GROUP_CHAT_OBSERVER
         || /disabled|suspended|pruned|closed|Frozen|invalidated|Member not found/.test(msg)) return new MessagingError(msg, 403);
-    if (/empty|too long|plain text|Only text/.test(msg)) return new MessagingError(msg, 400);
+    // Bad input from the caller, not a refusal of who they are: an empty or oversized edit, a nonce that is not
+    // plaintext-v1, a reply that names a message in another chat or a system line.
+    if (/empty|too long|plain text|Only text|not in this chat|system line/.test(msg)) return new MessagingError(msg, 400);
     return e;
 }
 

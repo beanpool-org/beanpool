@@ -10,7 +10,8 @@
  *     the ordinary messaging routes every store app uses: member and convenor read and post; an observer reads
  *     only; an outsider, a removed member, someone who left, a pending request, an invitee and a node admin who
  *     is not a member are refused. An invite-only group answers an outsider 404, as if it did not exist.
- *  4. The ordinary send route (old store apps) posts under the same rules; edits and reactions are refused.
+ *  4. The ordinary send route (old store apps) posts, edits and reacts under the same rules (chat parity,
+ *     2026-09-23 — slice 1 refused edits and reactions here; the full matrix is test-chat-parity).
  *  5. System lines: joined, left, removed, role changed, event and poll posted to the group. Membership lines
  *     never count as unread.
  *  6. Pushes: every other member by default, never the author, never someone removed; a mute (8h / 1w / always)
@@ -264,10 +265,26 @@ async function main(): Promise<void> {
     assert(oldImage.status === 400, 'no photos in a group chat through the old route');
     const oldLong = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ciphertext: b64('y'.repeat(GROUP_THREAD_MESSAGE_MAX + 1)), nonce: 'plaintext-v1' });
     assert(oldLong.status === 400, 'the 2000-character cap holds through the old route');
+    // Chat parity (2026-09-23): slice 1 refused an edit and a reaction on a group chat message here, because
+    // this route had no size bound and no membership re-check. It has both now, from the same engine the group
+    // send uses, so the old store apps' DM-style window works on a group chat as it always looked like it did.
+    // The two assertions this replaces were "edits are refused in a group chat" and "reactions are refused in a
+    // group chat (not in this slice)". The full rule matrix is test-chat-parity.
     const edit = await mpost('/api/messages/edit', bob, { messageId: first.body.message.id, ciphertext: b64('edited'), nonce: 'plaintext-v1' });
-    assert(edit.status === 403, 'edits are refused in a group chat');
+    assert(edit.body?.success === true && decode(edit.body.message.ciphertext) === 'edited' && !!edit.body.message.editedAt,
+        `a member edits their own group chat message through the old route (got ${edit.status} ${edit.body?.error ?? ''})`);
+    const editedRow = db.prepare('SELECT ciphertext, nonce, edited_at FROM messages WHERE id = ?').get(first.body.message.id) as any;
+    assert(decode(editedRow.ciphertext) === 'edited' && editedRow.nonce === 'plaintext-v1' && !!editedRow.edited_at,
+        'the edit is stored node-readable, with editedAt');
+    assert((await mpost('/api/messages/edit', carol, { messageId: first.body.message.id, ciphertext: b64('mine now'), nonce: 'plaintext-v1' })).status === 400,
+        'an observer editing somebody elses message is still refused (not the author)');
     const react = await mpost('/api/messages/react', bob, { messageId: first.body.message.id, emoji: '👍' });
-    assert(react.status === 403, 'reactions are refused in a group chat (not in this slice)');
+    assert(react.body?.success === true && JSON.parse(react.body.metadata).reactions[0].emoji === '👍',
+        `a member reacts to a group chat message through the old route (got ${react.status} ${react.body?.error ?? ''})`);
+    assert((await mpost('/api/messages/react', carol, { messageId: first.body.message.id, emoji: '👍' })).status === 403,
+        'an observer still cannot react — reacting is writing in the room');
+    assert((await mpost('/api/messages/react', dave, { messageId: first.body.message.id, emoji: '👍' })).status === 403,
+        'nor can a removed member');
     const markRemoved = await mpost('/api/messages/mark-read', dave, { conversationId: garden.id });
     assert(markRemoved.status === 403, 'a removed member cannot mark the chat read');
 

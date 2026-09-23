@@ -183,3 +183,54 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         expect(detail).toHaveTextContent('Bindarrabi Hall');
     });
 });
+
+// "Your events" — the row at the top of ★ For You (decision 1). It is its own read of /api/events/mine,
+// and it is deliberately outside the feed's empty state: the starred feed having nothing in it today says
+// nothing about what you have said you will be at.
+describe('MarketplacePage: "Your events" under ★ For You', () => {
+    const HOUR = 60 * 60 * 1000;
+    const mine = (postId: string, title: string, hours = 30) => ({
+        postId, title, startAt: new Date(Date.now() + hours * HOUR).toISOString(),
+        endAt: null, placeName: 'Bindarrabi Hall', rsvp: 'going' as const, photo: null, reminderOffsets: null,
+    });
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue(posts as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getMyEvents').mockResolvedValue([mine('ev-1', 'Working bee')] as any);
+    });
+
+    const openForYou = async () => {
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        await act(async () => { screen.getByRole('button', { name: '★ For You' }).click(); });
+    };
+
+    it('shows the row above the starred feed, and nowhere else', async () => {
+        await openForYou();
+        const row = await screen.findByTestId('your-events');
+        expect(row).toHaveTextContent('Working bee');
+
+        await act(async () => { screen.getByRole('button', { name: 'All' }).click(); });
+        expect(screen.queryByTestId('your-events')).toBeNull();
+    });
+
+    it('stays there when no starred listing matches, which is when it is most use', async () => {
+        await openForYou();
+        // Nothing is starred in this test, so the ★ For You feed is empty and says so.
+        expect(await screen.findByTestId('your-events')).toHaveTextContent('Working bee');
+        expect(screen.getByText('No items found')).toBeInTheDocument();
+    });
+
+    it('is not there at all on a node without the route (decision 7)', async () => {
+        const missing = Object.assign(new Error('Not Found'), { status: 404 });
+        vi.mocked(api.getMyEvents).mockRejectedValue(missing);
+        await openForYou();
+        await waitFor(() => expect(api.getMyEvents).toHaveBeenCalled());
+        expect(screen.queryByTestId('your-events')).toBeNull();
+    });
+});

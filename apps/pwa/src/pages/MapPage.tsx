@@ -263,6 +263,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         return () => { cancelled = true; };
     }, [newPostType, keeperOf, keeperNames]);
     const convenorGroups = userGroups.filter(g => g.viewerRole === 'convenor');
+    // An enterprise is hosting this event, so its audience is the whole community and nothing else (#1054).
+    const enterpriseHostsEvent = newPostType === 'event' && !eventEdit && eventHost.startsWith('ent:');
 
     // #143 step 4 — which communities a listing could be aimed at. Fetched once; failure is silent and
     // leaves the list empty, which hides the reach chooser. That is the right failure: a member should not be
@@ -700,14 +702,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         try {
             // The event as the node takes it, minus who is hosting — the two routes below differ only in
             // where the host goes.
+            // An enterprise hosts for the whole community; the form does not let the pair be chosen, and
+            // this is the second lock, so no stale state can post one the node would refuse (#1054).
+            const eventAudienceScope = hostEnterprise ? 'public' as const : audienceScope;
             const event = {
                 title: newPostTitle.trim(),
                 description: newPostDescription.trim(),
                 lat: postLat!,
                 lng: postLng!,
                 ...(newPostPhotos.length > 0 ? { photos: newPostPhotos } : {}),
-                audienceScope,
-                ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
+                audienceScope: eventAudienceScope,
+                ...(eventAudienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
                 eventStartAt: startIso!,
                 ...(endIso ? { eventEndAt: endIso } : {}),
                 ...(eventPlaceName.trim() ? { eventPlaceName: eventPlaceName.trim() } : {}),
@@ -1826,13 +1831,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             <button
                                 type="button"
                                 aria-pressed={audienceScope === 'group'}
+                                disabled={enterpriseHostsEvent}
+                                title={enterpriseHostsEvent ? 'An enterprise hosts for the whole community.' : undefined}
                                 onClick={() => {
                                     setAudienceScope('group');
                                     if (!targetGroupId && userGroups[0]) {
                                         setTargetGroupId(userGroups[0].id);
                                     }
                                 }}
-                                className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                                className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                     audienceScope === 'group'
                                         ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
                                         : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50'
@@ -1842,6 +1849,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             </button>
                         )}
                     </div>
+                    {/* Said plainly rather than left as a greyed-out button nobody can explain. */}
+                    {enterpriseHostsEvent && (
+                        <p data-testid="event-enterprise-audience-note" className="m-0 mb-2 text-xs font-semibold text-nature-600 dark:text-nature-400">
+                            {keeperNames[eventHost.slice(4)] || 'The enterprise'} hosts for the whole community, so this event is not group-only.
+                        </p>
+                    )}
 
                     {audienceScope === 'group' && userGroups.length > 0 && (
                         <div className="mb-2">
@@ -1903,6 +1916,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                         if (v.startsWith('group:')) {
                                             setAudienceScope('group');
                                             setTargetGroupId(v.slice(6));
+                                        }
+                                        // An enterprise hosts for the whole community: the node refuses an
+                                        // enterprise event aimed at a group, and it used to do so with a
+                                        // message about signatures (#1054). Clear the audience instead of
+                                        // letting the pair be chosen at all.
+                                        if (v.startsWith('ent:')) {
+                                            setAudienceScope('public');
+                                            setTargetGroupId('');
                                         }
                                     }}
                                     className="w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all border-nature-200 dark:border-nature-700 appearance-auto cursor-pointer"

@@ -13,6 +13,8 @@ import {
     type ChannelCategory,
 } from '@beanpool/core';
 import type { OwnDecisionVote } from './decision-own-vote';
+import type { MyEvent } from './event-extras';
+export type { MyEvent };
 
 export type { PublicCreatorChannel, ChannelPlatform, ChannelCategory };
 
@@ -151,9 +153,18 @@ export async function request<T>(method: string, path: string, body?: any): Prom
     const res = await fetch(`${baseUrl}${path}`, opts);
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.message || err.error || `Request failed: ${res.status}`);
+        const error = new Error(err.message || err.error || `Request failed: ${res.status}`);
+        // The status travels with the error: a node older than a route answers 404, and a screen that can
+        // hide a feature quietly needs to tell that apart from the node being down or refusing.
+        (error as Error & { status?: number }).status = res.status;
+        throw error;
     }
     return res.json();
+}
+
+/** True when a route does not exist on this node — an older node, not a failure worth showing anyone. */
+export function isRouteMissing(e: unknown): boolean {
+    return (e as { status?: number } | null)?.status === 404;
 }
 
 /** Helper to sign and send requests with a custom / ephemeral keypair. */
@@ -1072,6 +1083,23 @@ export async function votePoll(postId: string, optionId: string): Promise<{ succ
 /** RSVP to an event as the signed member: Going, Interested, or null for not going. */
 export async function rsvpEvent(postId: string, status: EventRsvpStatus | null): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/rsvp`, { status });
+}
+
+/**
+ * The signer's own upcoming RSVPs, soonest first — what "Your events" shows (the shared contract).
+ * A node older than this route answers 404; `isRouteMissing` is how the row hides itself there.
+ */
+export async function getMyEvents(): Promise<MyEvent[]> {
+    const res = await request<MyEvent[] | { events?: MyEvent[] }>('GET', '/api/events/mine');
+    return Array.isArray(res) ? res : (res?.events ?? []);
+}
+
+/**
+ * This member's reminders for ONE event: the allowed offsets, or `null` to go back to their default.
+ * Allowed only on an event they have an RSVP on — the node answers 403 otherwise.
+ */
+export async function setEventReminder(postId: string, offsets: number[] | null): Promise<{ success: boolean }> {
+    return request('PUT', `/api/events/${encodeURIComponent(postId)}/reminder`, { offsets });
 }
 
 export async function closePoll(postId: string): Promise<{ success: boolean; post: MarketplacePost }> {
@@ -2064,7 +2092,7 @@ export async function getNotificationPreferences(pubkey: string): Promise<any> {
     return request<any>('GET', `/api/members/preferences?publicKey=${encodeURIComponent(pubkey)}`);
 }
 
-export async function updateNotificationPreferences(pubkey: string, preferences: Record<string, boolean>): Promise<any> {
+export async function updateNotificationPreferences(pubkey: string, preferences: Record<string, boolean | number[] | string>): Promise<any> {
     return request<any>('POST', '/api/members/preferences', { publicKey: pubkey, preferences });
 }
 

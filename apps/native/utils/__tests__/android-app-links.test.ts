@@ -71,6 +71,13 @@ describe('Android app links: invites still open the app', () => {
         expect(claimed('https://newtown.beanpool.org/?invite=INV-ABCD-EFGH')).toBe(true);
     });
 
+    // A shared event uses the same shape as an invite for exactly this reason: Android matches on the PATH
+    // and ignores the query, so `/?post=` is claimed wherever `/?invite=` is, and the link a member sends
+    // from the event screen opens the app rather than the browser.
+    it.each(NODE_HOSTS)('%s/?post=… — a shared event opens the app, like an invite does', host => {
+        expect(claimed(`https://${host}/?post=6f1b0e2c-1111-4a2b-8c3d-000000000001`)).toBe(true);
+    });
+
     it('the OAuth return pages on beanpool.org are still claimed (unchanged, flows rely on it)', () => {
         expect(claimed('https://beanpool.org/auth/tiktok?code=x&state=y')).toBe(true);
         expect(claimed('https://beanpool.org/auth/instagram?code=x')).toBe(true);

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 23,
-  "hash": "c0661e701f1b72e6123911544a5a2e5300a9366d4c28f28b0942aa2be343214a",
+  "version": 24,
+  "hash": "0c423961564f1eb0dde197d34790f27572b1c5a649b9fa8ffd20d0f6abe4caf2",
   "sections": [
     {
       "id": "about",
@@ -3195,10 +3195,11 @@
     {
       "slug": "events",
       "title": "Events",
-      "summary": "Create an event, say you are going, and run it as the host.",
+      "summary": "Create an event, say you are going, be reminded, share it, and run it as the host.",
       "section": "commons",
       "related": [
         "event-chat",
+        "notifications",
         "pin-locations",
         "map-pins",
         "polls"
@@ -3214,6 +3215,18 @@
             "In the **Market**, tap **Events**. Choose **Today**, **This weekend** or **Next 7 days**.",
             "On the **Map**, tap **Events** to see them as purple pins."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Your events"
+        },
+        {
+          "type": "p",
+          "text": "In the **Market**, tap **★ For You**. **Your events** is the first thing on it: everything you have said you are **Going** to or **Interested** in, soonest first. Tap one to open it."
+        },
+        {
+          "type": "p",
+          "text": "It is only there when you have something coming up, and it holds only your own answers — nobody else can see it."
         },
         {
           "type": "h2",
@@ -3240,6 +3253,62 @@
         },
         {
           "type": "h2",
+          "text": "Being reminded"
+        },
+        {
+          "type": "p",
+          "text": "When you are **Going** or **Interested**, the event shows **Remind me** and how long before it starts you will be told — **1 day before (your default)** until you change it."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Change** to pick **1 week**, **1 day**, **2 hours**, **1 hour** or **30 minutes** before. You can tick more than one.",
+            "Tick nothing to get no reminder for this event.",
+            "Tap **Use my default** to hand it back to your usual choice."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "To change your usual choice for every event, see \"Notifications\"."
+        },
+        {
+          "type": "p",
+          "text": "Reminders come as alerts on your phone, with your Marketplace alerts, so they stop if you switch those off. You are never reminded about an event that was cancelled or has ended, and never about a time that had already passed when you said you were coming."
+        },
+        {
+          "type": "h2",
+          "text": "Telling someone about it"
+        },
+        {
+          "type": "p",
+          "text": "Open the event and tap **Share**. Your phone's usual share sheet opens with the event's name, when it is, where it is, and a link. On a computer, the link is copied for you to paste."
+        },
+        {
+          "type": "p",
+          "text": "Anyone who taps that link opens the event — in the app if they have it, in the web app otherwise. Someone who is not in your community lands on its join page."
+        },
+        {
+          "type": "h2",
+          "text": "Putting it in your calendar"
+        },
+        {
+          "type": "p",
+          "text": "Open the event and tap **Add to calendar**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "On the **web app**, a calendar file downloads. Open it and your calendar offers to add the event.",
+            "On an **iPhone**, the same file is handed to your phone, which offers **Add to Calendar**.",
+            "On **Android**, Google Calendar opens with the event already filled in. Check it and save."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The entry carries the name, the time, the place and the link back to the event. If the host later changes the time, your calendar does not change with it — the app will still remind you, and the event itself always shows the new time."
+        },
+        {
+          "type": "h2",
           "text": "Creating an event"
         },
         {
@@ -3252,7 +3321,7 @@
             "A **Description**, and a photo if you like.",
             "**Note for people who are going:** only they will see it. A good place for the exact address or a gate code.",
             "**Who can see it:** your whole community, or one group.",
-            "If you keep an enterprise or look after a group, **Post as** lets you post the event in its name.",
+            "If you keep an enterprise or look after a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.",
             "Tap **Create**. Your event is in the Market and on the Map."
           ]
         },
@@ -4149,12 +4218,13 @@
     {
       "slug": "notifications",
       "title": "Notifications",
-      "summary": "Choose which alerts reach your phone.",
+      "summary": "Choose which alerts reach your phone, and when events remind you.",
       "section": "settings",
       "related": [
         "mute",
         "messages",
         "my-deals",
+        "events",
         "holiday-mode",
         "the-top-bar"
       ],
@@ -4180,6 +4250,22 @@
         {
           "type": "p",
           "text": "Alerts about someone trying to recover your account always come through. You cannot turn those off."
+        },
+        {
+          "type": "h2",
+          "text": "Event reminders"
+        },
+        {
+          "type": "p",
+          "text": "Under the switches, **Event reminders** sets how long before an event you are **Going** to or **Interested** in starts you are told. Tick **1 week**, **1 day**, **2 hours**, **1 hour** or **30 minutes** before — you can tick more than one — or tick **Off** for none at all."
+        },
+        {
+          "type": "p",
+          "text": "Everyone starts on **1 day** before. This is your usual choice; any one event can be set differently on the event itself. See \"Events\"."
+        },
+        {
+          "type": "p",
+          "text": "Reminders arrive with your **Marketplace Activity** alerts, so they stop if you switch those off. You are never reminded about an event that was cancelled or has ended, or about a time that had already passed when you said you were coming. If the host moves the event, the reminder moves with it."
         },
         {
           "type": "h2",

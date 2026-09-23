@@ -598,6 +598,35 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             expect(create.mock.calls[0][0]).toMatchObject({ type: 'event', authorPublicKey: mockIdentity.publicKey });
         });
 
+        // #1054's leftover: an enterprise event aimed at a group was refused by the node, with a message
+        // about signatures. The pair can no longer be chosen at all.
+        it('an enterprise host clears a group audience, and the Group button says why', async () => {
+            vi.spyOn(api, 'getGroups').mockResolvedValue([
+                { id: 'grp-1', name: 'Garden Crew', viewerRole: 'convenor', viewerStatus: 'active' },
+            ] as any);
+            const entCreate = vi.spyOn(api, 'treasuryPostEvent').mockResolvedValue({ success: true, post: { id: 'ev-ent' } } as any);
+            const panel = await openAsKeeper();
+            await waitFor(() => expect(within(panel).getByRole('option', { name: 'Garden Crew' })).toBeInTheDocument());
+
+            // Aim it at the group first, then hand it to the enterprise.
+            fireEvent.click(within(panel).getByRole('button', { name: /Group \(/ }));
+            expect(within(panel).getByRole('button', { name: /Group \(/ })).toHaveAttribute('aria-pressed', 'true');
+
+            await waitFor(() => expect(within(panel).getByRole('option', { name: 'Bindarrabi Hall' })).toBeInTheDocument());
+            fireEvent.change(within(panel).getByLabelText('Post as'), { target: { value: `ent:${ENT}` } });
+
+            expect(within(panel).getByRole('button', { name: /Everyone \(Public\)/ })).toHaveAttribute('aria-pressed', 'true');
+            expect(within(panel).getByRole('button', { name: /Group \(/ })).toBeDisabled();
+            expect(within(panel).getByTestId('event-enterprise-audience-note').textContent)
+                .toBe('Bindarrabi Hall hosts for the whole community, so this event is not group-only.');
+
+            await fillAndCreate(panel);
+            await waitFor(() => expect(entCreate).toHaveBeenCalledTimes(1));
+            const body = entCreate.mock.calls[0][1] as any;
+            expect(body.audienceScope).toBe('public');
+            expect(body).not.toHaveProperty('targetGroupId');
+        });
+
         it('a group host still goes to the marketplace route, signing as the convenor', async () => {
             vi.spyOn(api, 'getGroups').mockResolvedValue([
                 { id: 'grp-1', name: 'Garden Crew', viewerRole: 'convenor', viewerStatus: 'active' },

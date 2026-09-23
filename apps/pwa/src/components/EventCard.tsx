@@ -23,6 +23,7 @@ import {
     CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
 } from '../lib/events';
+import { EventReminder, EventShareAndCalendar } from './EventExtras';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -144,7 +145,14 @@ function EventWhen({ post, className, testId }: { post: MarketplacePost; classNa
     );
 }
 
-function countsLine(post: MarketplacePost): string {
+/**
+ * "3 going · 1 interested", or null when the counts are not known.
+ *
+ * "Your events" is built from `/api/events/mine`, which carries no counts — and "0 going" on an event the
+ * viewer is going to is not a smaller truth, it is a wrong one. A row that does not know keeps quiet.
+ */
+function countsLine(post: MarketplacePost): string | null {
+    if (post.goingCount == null && post.interestedCount == null) return null;
     return `${post.goingCount ?? 0} going · ${post.interestedCount ?? 0} interested`;
 }
 
@@ -191,9 +199,11 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                     <span aria-hidden="true">📍 </span>{place}
                 </span>
             )}
-            <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
-                <span aria-hidden="true">👥 </span>{countsLine(p)}
-            </span>
+            {countsLine(p) && (
+                <span className="block w-full truncate text-sm font-semibold text-nature-600 dark:text-nature-300">
+                    <span aria-hidden="true">👥 </span>{countsLine(p)}
+                </span>
+            )}
         </>
     );
 
@@ -332,11 +342,18 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     {p.audienceScope === 'group' && p.targetGroupName ? <> · for {p.targetGroupName} only</> : null}
                 </p>
 
-                <p className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300">
-                    <span aria-hidden="true">👥 </span>{countsLine(p)}
-                </p>
+                {countsLine(p) && (
+                    <p className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300">
+                        <span aria-hidden="true">👥 </span>{countsLine(p)}
+                    </p>
+                )}
                 <RsvpButtons rsvp={rsvp} />
                 {rsvp.error && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>}
+
+                {/* Send it on, and put it in a diary. Neither needs the node, so neither depends on its age. */}
+                <EventShareAndCalendar post={p} />
+                {/* The host is running it and has no RSVP, so they get no reminder line (decision 2). */}
+                {!isHost && <EventReminder post={p} identity={identity} myRsvp={p.myRsvp ?? null} />}
 
                 {onOpenChat && (isHost || p.myRsvp === 'going') && (
                     <button

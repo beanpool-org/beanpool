@@ -26,6 +26,7 @@ import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
+import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
@@ -229,6 +230,13 @@ export function EventDetail({ post }: EventDetailProps) {
                         {rsvpButton('going', 'Going')}
                         {rsvpButton('interested', 'Interested')}
                     </View>
+                )}
+
+                {/* Send it on, and put it in a diary. Neither needs the node, so neither depends on its age. */}
+                <EventShareAndCalendar post={p} />
+                {/* The host is running it and has no RSVP, so they get no reminder line (decision 2). */}
+                {!isHost && (
+                    <EventReminder post={p} myRsvp={counts.mine} viewerPublicKey={identity?.publicKey} />
                 )}
 
                 {canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) && (

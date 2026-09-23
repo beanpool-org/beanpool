@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, type GroupItem } from '../../utils/db';
+import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { requestSync, isPillarSyncActive, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
@@ -27,6 +27,7 @@ import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock, ActiveFilterChip } from '../../components/QuickReturn';
 import { composeTargetFor } from '../../utils/compose-options';
 import { EVENT_TYPES_QUERY, type EventWindow } from '../../utils/events';
+import { myEventAsPost, type MyEvent } from '../../utils/event-extras';
 import { FilterChipRow, FilterChipBar } from '../../components/FilterChipRow';
 import { FilterChipButton, FilterChipPanel } from '../../components/FilterChipPicker';
 import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '../../utils/map-filters';
@@ -467,6 +468,24 @@ export default function MarketScreen() {
     const [viewMode, setViewMode] = useState<'list' | 'grid' | 'compact'>('list');
     const [favCategories, setFavCategories] = useState<string[]>([]);
     const [isCustomizerExpanded, setIsCustomizerExpanded] = useState(true);
+
+    // "Your events" under ★ For You: the signer's own upcoming RSVPs (decision 1). Its own read, only while
+    // that pill is chosen. Empty on anything that goes wrong — a node without the route answers 404, and a
+    // community that does not have the feature should show no row rather than an error about it (decision 7).
+    const [myEvents, setMyEvents] = useState<MyEvent[]>([]);
+    const loadMyEvents = useCallback(async () => {
+        if (!identity?.publicKey) return;
+        try {
+            setMyEvents(await fetchMyEvents());
+        } catch (e) {
+            setMyEvents([]);
+            if (!isRouteMissing(e)) console.warn('[Market] Could not read your events:', e);
+        }
+    }, [identity?.publicKey]);
+    useEffect(() => {
+        if (filter !== 'for-you') return;
+        loadMyEvents();
+    }, [filter, loadMyEvents]);
 
     // Fresh listings banner dismissal. The banner is the list's first row, so it scrolls away with it.
     const [dismissedFreshCount, setDismissedFreshCount] = useState<number>(0);
@@ -1231,6 +1250,12 @@ export default function MarketScreen() {
         listData = filteredPosts;
     } else {
         if (filter === 'for-you') {
+            // What you said you would be at, above what you might like: it is the one part of For You you
+            // have already committed to (decision 1). It stays even when nothing starred matched today.
+            if (myEvents.length > 0) {
+                listData.push({ isHeader: true, title: 'Your events', id: 'header-your-events' });
+                listData.push(...myEvents.map(myEventAsPost));
+            }
             if (filteredPosts.length > 0) {
                 listData.push({ isHeader: true, title: '★ For You Feed', id: 'header-for-you' });
                 listData.push(...filteredPosts);
@@ -1260,7 +1285,7 @@ export default function MarketScreen() {
                     post={item}
                     currentPubkey={identity?.publicKey}
                     myLocation={myLocation}
-                    onRsvpChanged={() => loadPosts()}
+                    onRsvpChanged={() => { loadPosts(); if (filter === 'for-you') loadMyEvents(); }}
                 />
             );
         }

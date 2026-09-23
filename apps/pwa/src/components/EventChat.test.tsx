@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, createEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, createEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventChat, decodeEventChatText } from './EventChat';
 import { EventDetail } from './EventCard';
@@ -416,5 +416,88 @@ describe('EventChat: the no-photos line does not stay pinned', () => {
         rerender(<EventChat postId="ev-2" identity={identity} refreshMs={0} />);
 
         await waitFor(() => expect(screen.queryByTestId('event-chat-image-notice')).not.toBeInTheDocument());
+    });
+});
+
+/**
+ * The poll stops while nobody is looking.
+ *
+ * An event chat left open in a background tab used to keep pulling a page of messages every twelve seconds
+ * for as long as the browser stayed open — the one poller in this app that ignored `document.hidden`. Most of
+ * our members pay for that data on an old phone.
+ */
+describe('EventChat: the refresh pauses while the tab is hidden', () => {
+    const REFRESH = 12000;
+    let hidden = false;
+
+    beforeEach(() => {
+        vi.mocked(api.getEventChat).mockReset();
+        vi.mocked(api.getEventChat).mockResolvedValue(view());
+        hidden = false;
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        delete (document as any).hidden;
+    });
+
+    /** What the browser does when the tab goes behind another, or the phone locks. */
+    const setHidden = async (next: boolean) => {
+        hidden = next;
+        await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    };
+
+    /** Advance the clock and let every load this fired settle, so React never updates outside act(). */
+    const tick = async (ms: number) => { await act(async () => { vi.advanceTimersByTime(ms); }); };
+
+    const open = async () => {
+        const rendered = render(<EventChat postId="ev-1" identity={identity} refreshMs={REFRESH} />);
+        await act(async () => { });
+        return rendered;
+    };
+
+    it('keeps refreshing while the tab is visible', async () => {
+        await open();
+        expect(api.getEventChat).toHaveBeenCalledTimes(1);
+
+        await tick(REFRESH * 2);
+        expect(api.getEventChat).toHaveBeenCalledTimes(3);
+    });
+
+    it('asks the node for nothing while the tab is hidden', async () => {
+        await open();
+        vi.mocked(api.getEventChat).mockClear();
+
+        await setHidden(true);
+        await tick(REFRESH * 10);
+        expect(api.getEventChat).not.toHaveBeenCalled();
+    });
+
+    it('loads once, straight away, when the tab comes back', async () => {
+        await open();
+        await setHidden(true);
+        await tick(REFRESH * 5);
+        vi.mocked(api.getEventChat).mockClear();
+
+        await setHidden(false);
+        expect(api.getEventChat).toHaveBeenCalledTimes(1);
+
+        // One load, not a backlog of the ticks that were skipped while it was hidden.
+        await tick(REFRESH - 1);
+        expect(api.getEventChat).toHaveBeenCalledTimes(1);
+
+        await tick(1);
+        expect(api.getEventChat).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops for good when the chat is closed', async () => {
+        const { unmount } = await open();
+        vi.mocked(api.getEventChat).mockClear();
+
+        unmount();
+        await tick(REFRESH * 10);
+        expect(api.getEventChat).not.toHaveBeenCalled();
     });
 });

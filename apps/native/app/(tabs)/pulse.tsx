@@ -41,7 +41,7 @@ import {
     type PulseFeedItem,
 } from '../../utils/pulse';
 import { PulseFeedCard } from '../../components/PulseFeedCard';
-import { playingPulseVideo, stopPulseVideo } from '../../utils/pulse-video-player';
+import { pulseVideoViewabilityChanged } from '../../utils/pulse-video-player';
 import { anchorUrl } from '../../utils/node-post';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
@@ -63,10 +63,12 @@ export default function PulseScreen() {
 
     // A playing video that scrolls out of sight stops. Without this it keeps talking from somewhere
     // up the feed: virtualization only unmounts a row many screens away, far too late to be the
-    // answer. Held in a ref because FlatList reads the callback once and warns if it changes.
+    // answer. Held in a ref because FlatList reads the callback once and warns if it changes. What
+    // "out of sight" means — left the viewable set, rather than merely not being in it, which would
+    // kill a card tapped before it was 40% on screen — is `pulseVideoViewabilityChanged`, where it
+    // can be tested.
     const handleViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ key?: string }> }) => {
-        const playing = playingPulseVideo();
-        if (playing && !viewableItems.some((v) => v.key === playing)) stopPulseVideo(playing);
+        pulseVideoViewabilityChanged(viewableItems.map((v) => v.key));
     }).current;
     // 40% on screen: a player letterboxed to 200px is still worth watching part-covered, but a card
     // clinging to the edge of the screen is not what the member is looking at.

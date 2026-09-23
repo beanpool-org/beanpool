@@ -1,7 +1,7 @@
 /**
  * Which Pulse card, if any, is playing a video — and what a card should therefore draw.
  *
- * Two rules live here, both of them decisions rather than rendering, which is why they are in
+ * Three rules live here, all of them decisions rather than rendering, which is why they are in
  * `utils/` where they can be tested without a device:
  *
  * 1. **At most one player at a time.** A feed is a column of videos; if tapping the second one left
@@ -11,6 +11,8 @@
  *    the one playing, and that poster carries no YouTube URL, no embed and no player HTML — there
  *    is nothing for a card to fetch until someone asks for it. This is the privacy property the
  *    original facade design was for, kept intact.
+ * 3. **A video stops when it leaves the screen, not when it has yet to arrive.** See
+ *    `pulseVideoViewabilityChanged`, which the Pulse screen hands every viewability event.
  *
  * The store is a module-level singleton on purpose: it is answering "which one of all the cards on
  * screen", a question no single card can hold. Cards read it with `useSyncExternalStore`.
@@ -28,6 +30,13 @@ import {
 type Listener = (playingItemId: string | null) => void;
 
 let playingItemId: string | null = null;
+/**
+ * Whether the item playing has been seen in the list's viewable set since it started.
+ *
+ * Only `pulseVideoViewabilityChanged` reads it, and only to tell "has left the screen" apart from
+ * "has not arrived on it yet". It is not rendering state, so no listener is woken for it.
+ */
+let playingWasViewable = false;
 const listeners = new Set<Listener>();
 
 function emit() {
@@ -43,6 +52,9 @@ export function playingPulseVideo(): string | null {
 export function playPulseVideo(itemId: string): void {
     if (!itemId || playingItemId === itemId) return;
     playingItemId = itemId;
+    // A card can be tapped before the list considers it viewable, so a fresh video starts out
+    // having never been seen — and must not be stopped for it.
+    playingWasViewable = false;
     emit();
 }
 
@@ -57,6 +69,7 @@ export function stopPulseVideo(itemId?: string): void {
     if (playingItemId === null) return;
     if (itemId !== undefined && itemId !== playingItemId) return;
     playingItemId = null;
+    playingWasViewable = false;
     emit();
 }
 
@@ -69,7 +82,38 @@ export function subscribeToPulseVideo(listener: Listener): () => void {
 /** Test-only: drops all state so one test cannot leak a playing video into the next. */
 export function resetPulseVideoPlayer(): void {
     playingItemId = null;
+    playingWasViewable = false;
     listeners.clear();
+}
+
+/**
+ * What a change in the list's viewable set means for the video playing: a video scrolled out of
+ * sight stops.
+ *
+ * The rule is *left* the viewable set, not *is not in* it, and the difference is a real bug. The
+ * poster fills the media area, which is the second thing in a card, so on a 320dp screen it is easy
+ * to tap play on a card whose top third is peeking up from the bottom of the list — well under the
+ * 40% the screen asks for, and the card then grows to the 200px minimum viewport, which lowers its
+ * share further. That card is not in `viewableItems`, so under the old rule the very next
+ * viewability event — the member scrolling up a few pixels to see the video they just started, or
+ * any other row crossing its threshold — stopped it. The player fell back to the poster with no
+ * message, a second after the tap.
+ *
+ * So a video is stopped only once it has been seen viewable and then is not. A video that has never
+ * arrived on screen is left alone; the member is on their way to it. The unmount and blur stops in
+ * `PulseYouTubePlayer` are unaffected — they already say "stop me" about a specific card.
+ *
+ * Lives here rather than in the screen because the bookkeeping belongs to the same singleton as
+ * "which card is playing", and because a screen cannot be mounted in this runner.
+ */
+export function pulseVideoViewabilityChanged(viewableItemIds: ReadonlyArray<string | undefined>): void {
+    if (playingItemId === null) return;
+    if (viewableItemIds.includes(playingItemId)) {
+        playingWasViewable = true;
+        return;
+    }
+    if (!playingWasViewable) return;
+    stopPulseVideo(playingItemId);
 }
 
 /**

@@ -1,8 +1,9 @@
 /**
- * Two rules the Pulse feed's video playback rests on.
+ * Three rules the Pulse feed's video playback rests on.
  *
  * 1. At most one card plays at a time.
  * 2. Nothing is loaded from YouTube before the member taps play.
+ * 3. A video stops when it leaves the screen — not when it has not reached it yet.
  *
  * Both are decisions rather than rendering, which is why they can be tested here: `pulseCardMedia`
  * is the single place a card asks "what do I show?", and `PulseFeedCard` mounts a WebView only in
@@ -19,6 +20,7 @@ import {
     stopPulseVideo,
     subscribeToPulseVideo,
     resetPulseVideoPlayer,
+    pulseVideoViewabilityChanged,
 } from '../pulse-video-player';
 import { PULSE_PLAYER_ORIGIN, YOUTUBE_IFRAME_API_URL } from '../youtube-embed';
 import type { PulseFeedItem } from '../pulse';
@@ -185,5 +187,65 @@ describe('one player at a time', () => {
 
         expect(a).not.toHaveBeenCalled();
         expect(b).toHaveBeenCalledWith('item_1');
+    });
+});
+
+describe('a video stops when it leaves the screen', () => {
+    // `app/(tabs)/pulse.tsx` hands this function the keys of `viewableItems` on every viewability
+    // event, and does nothing else with them.
+    it('stops a card that was on screen and has scrolled away', () => {
+        playPulseVideo('item_1');
+        pulseVideoViewabilityChanged(['item_1', 'item_2']);
+        expect(playingPulseVideo()).toBe('item_1');
+
+        // The member scrolls on; the card crosses back under 40% and drops out of the set.
+        pulseVideoViewabilityChanged(['item_2', 'item_3']);
+        expect(playingPulseVideo()).toBeNull();
+    });
+
+    it('keeps playing a card tapped at 30% visible when an unrelated event fires', () => {
+        // The poster covers the media area, which is the second thing in a card, so ▶ is reachable
+        // on a card barely up from the bottom of the list. At 30% it is not in `viewableItems`, and
+        // growing to the 200px minimum viewport only lowers that. The next event for any reason at
+        // all used to stop it a second after the tap, with no message.
+        playPulseVideo('item_9');
+        pulseVideoViewabilityChanged(['item_2', 'item_3']);
+        expect(playingPulseVideo()).toBe('item_9');
+
+        // Still playing however many unrelated rows cross their thresholds.
+        pulseVideoViewabilityChanged(['item_3', 'item_4']);
+        pulseVideoViewabilityChanged([]);
+        expect(playingPulseVideo()).toBe('item_9');
+
+        // And once the member scrolls it properly into view, the ordinary rule applies again.
+        pulseVideoViewabilityChanged(['item_9']);
+        pulseVideoViewabilityChanged(['item_10']);
+        expect(playingPulseVideo()).toBeNull();
+    });
+
+    it('does not carry one card\'s "it was on screen" over to the next card', () => {
+        playPulseVideo('item_1');
+        pulseVideoViewabilityChanged(['item_1']);
+
+        // item_2 is tapped while still only part-way onto the screen, which stops item_1.
+        playPulseVideo('item_2');
+        pulseVideoViewabilityChanged(['item_1']);
+        expect(playingPulseVideo()).toBe('item_2');
+    });
+
+    it('is quiet when nothing is playing', () => {
+        const listener = vi.fn();
+        subscribeToPulseVideo(listener);
+        pulseVideoViewabilityChanged([]);
+        pulseVideoViewabilityChanged(['item_1']);
+        expect(listener).not.toHaveBeenCalled();
+        expect(playingPulseVideo()).toBeNull();
+    });
+
+    it('is not fooled by the undefined keys FlatList can hand it', () => {
+        playPulseVideo('item_1');
+        pulseVideoViewabilityChanged(['item_1']);
+        pulseVideoViewabilityChanged([undefined, undefined]);
+        expect(playingPulseVideo()).toBeNull();
     });
 });

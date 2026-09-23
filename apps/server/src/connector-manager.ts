@@ -17,6 +17,7 @@ import path from 'node:path';
 import { multiaddr } from '@multiformats/multiaddr';
 import type { Libp2p } from 'libp2p';
 import { sendHandshake } from './handshake.js';
+import { errorMessage } from './error-message.js';
 import { db } from './db/db.js';
 import { logger } from './logger.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
@@ -335,8 +336,12 @@ export function initConnectorManager(node: Libp2p): void {
 
 /**
  * Send handshake to all connected peers to verify mutual trust and measure RTT.
+ *
+ * Exported for `test-connector-handshake-errors`, which drives one round against a stub libp2p node to prove
+ * a peer that rejects with a non-Error does not take the rest of the round down with it. Nothing else calls
+ * it; the node runs it from the HANDSHAKE_INTERVAL_MS timer.
  */
-async function handshakeConnectedPeers(): Promise<void> {
+export async function handshakeConnectedPeers(): Promise<void> {
     if (!p2pNode) return;
 
     try {
@@ -358,20 +363,27 @@ async function handshakeConnectedPeers(): Promise<void> {
                 status.latencyMs = result.latencyMs;
                 status.lastVerified = Date.now();
                 status.error = null;
-            } catch (e: any) {
+            } catch (e: unknown) {
+                // NORMALISE ONCE, BEFORE ANYTHING ELSE IN THIS HANDLER. A rejection is not necessarily an
+                // Error — libp2p can reject with undefined or a bare string — and `e.message` on those throws
+                // a TypeError out of this catch, past the `for` loop, into the outer catch below. The peers
+                // after this one are then skipped for the whole round, silently, every 10 seconds
+                // (test-connector-handshake-errors).
+                const reason = errorMessage(e);
+
                 status.connected = false;
                 status.mutualTrust = false;
                 status.remoteTrustLevel = null;
                 status.latencyMs = null;
-                status.error = `Handshake failed: ${e.message}`;
+                status.error = `Handshake failed: ${reason}`;
 
-                const msg = (e.message || '').toLowerCase();
+                const msg = reason.toLowerCase();
                 const isTransient = msg.includes('closed') || msg.includes('reset') || msg.includes('timeout');
 
                 if (isTransient) {
-                    logger.info('P2P', `[Connectors] Handshake failed with ${connector.callsign || connector.address}: ${e.message} (normal connection lifecycle refresh)`);
+                    logger.info('P2P', `[Connectors] Handshake failed with ${connector.callsign || connector.address}: ${reason} (normal connection lifecycle refresh)`);
                 } else {
-                    logger.warn('P2P', `[Connectors] Handshake failed with ${connector.callsign || connector.address}: ${e.message}`);
+                    logger.warn('P2P', `[Connectors] Handshake failed with ${connector.callsign || connector.address}: ${reason}`);
                 }
 
                 if (status.peerId) {
@@ -490,16 +502,22 @@ export async function connectToAddress(address: string): Promise<boolean> {
             status.remoteActive = result.remoteActive;
             status.latencyMs = result.latencyMs;
             logger.info('P2P', `[Connectors] 🤝 Handshake with ${address}: mutual=${result.mutualTrust} latency=${result.latencyMs}ms`);
-        } catch (e: any) {
+        } catch (e: unknown) {
             logger.warn('P2P', `[Connectors] ⚠️  Handshake failed with ${address} — peer may not support protocol yet`);
-            logger.warn('P2P', `    ${e.stack || e.message || e}`);
+            // Stack first when there is one, as before; `errorMessage` covers everything else, including a
+            // rejection that is not an object at all.
+            const stack = (e as { stack?: unknown } | null | undefined)?.stack;
+            logger.warn('P2P', `    ${typeof stack === 'string' && stack !== '' ? stack : errorMessage(e)}`);
             status.mutualTrust = false;
         }
 
         return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
+        // Same reason as the handshake round: without this, a dial that rejects with a non-Error turns
+        // "this peer is down" into a rejected promise from `connectToAddress`, which the retry loop reads as
+        // the whole loop failing rather than one address failing.
         status.connected = false;
-        status.error = e.message || 'Connection failed';
+        status.error = errorMessage(e, 'Connection failed');
         logger.error('P2P', `[Connectors] ❌ Failed to connect to ${address}: ${status.error}`);
         return false;
     }
@@ -549,8 +567,10 @@ export function addConnector(address: string, trustLevel: TrustLevel, callsign?:
 
         // If it was enabled and is now disabled (made passive), automatically disconnect
         if (enabled === false && existing.enabled !== false) {
-            disconnectFromAddress(address).catch(err => {
-                logger.warn('P2P', `[Connectors] Auto-disconnect failed on disable: ${err.message}`);
+            disconnectFromAddress(address).catch((err: unknown) => {
+                // Same unguarded read as the two above: a throw here has no catch at all above it, so it
+                // surfaces as an unhandled rejection rather than a warning line.
+                logger.warn('P2P', `[Connectors] Auto-disconnect failed on disable: ${errorMessage(err)}`);
             });
         }
         

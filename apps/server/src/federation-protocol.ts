@@ -335,7 +335,12 @@ export function registerFederationHandler(node: Libp2p): void {
             await writeToStream(stream, JSON.stringify(response));
 
         } catch (e: any) {
-            console.error(`[Federation] Handler error:`, e.message || e);
+            // `e?.message`, not `e.message`: this handler runs once per inbound peer stream and has no catch
+            // above it, so a rejection carrying undefined would turn a logged handler error into an unhandled
+            // rejection. Falling back to `e` itself (rather than a string) is deliberate — console.error
+            // prints a thrown object usefully, and that is what an operator needs here. Matches the
+            // `e?.message || e` the rest of federation-*.ts already uses.
+            console.error(`[Federation] Handler error:`, e?.message || e);
         }
     });
 

@@ -234,6 +234,7 @@ run_federation_suites() {
       test-mirror-sync-audit-log
       test-federation-bridge
       test-connector-credit-cap
+      test-connector-handshake-errors
       test-connector-public-url
       test-federation-link
       test-listing-reach

@@ -11,7 +11,14 @@
  *  - day separators between calendar days (built by utils/chat-actions.buildChatListItems);
  *  - the cell lift, so a reaction picker overflowing its row is not painted over by the next row;
  *  - following the keyboard frame by frame as it opens;
- *  - growing the history window when the oldest loaded message comes into view.
+ *  - growing the history window when the oldest loaded message comes into view (onEndReached).
+ *
+ * onEndReached is wired by the DM screen only. A DM reads its messages out of this phone's own database, so it
+ * grows one window; a group, enterprise or event chat reads the node, and all three of those routes cap `limit`
+ * at 100 and page with `offset` — so past 100 messages the DM's grow-the-window move stalls and those chats
+ * need offset paging (fetch the older page, merge it under the live poll's window, know when history ends).
+ * That design is not decided yet, so they still open on their most recent page and stop there, as they did
+ * before this component existed.
  */
 
 import React, { useCallback } from 'react';

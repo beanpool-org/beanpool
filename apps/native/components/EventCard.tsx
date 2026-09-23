@@ -234,13 +234,21 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: colors.text.secondary,
             marginBottom: 2,
         },
+        // The label is never cut: RN won't break inside a word, but `flex: 1` with numberOfLines={1} ellipsized
+        // it ("Intereste…") once the row was narrower than the text — at 320dp with 130% text there are only
+        // ~111dp of text space per button and "Interested ✓" wants ~120. So each button sizes to its own label
+        // and only grows to share the row, and the row wraps: Interested takes a full-width row of its own.
+        // (The web card had the same cause with a worse symptom — see EventCard.tsx in apps/pwa.)
         rsvpRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             gap: 8,
             marginTop: 10,
         },
         rsvpBtn: {
-            flex: 1,
+            flexGrow: 1,
+            flexBasis: 'auto',
+            flexShrink: 0,
             minHeight: 48,
             borderRadius: 12,
             borderWidth: 1.5,

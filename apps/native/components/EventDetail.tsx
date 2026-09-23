@@ -382,9 +382,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         title: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8 },
         endedNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },
         counts: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },
-        rsvpRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+        // Sized to the label, wrapping to a second row rather than ellipsizing it — the same fix the card and the
+        // web EventCard carry. This row's text is 15sp, so it runs out of width sooner than the card's 14sp.
+        rsvpRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
         rsvpBtn: {
-            flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT,
+            flexGrow: 1, flexBasis: 'auto', flexShrink: 0, minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT,
             alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, backgroundColor: colors.surface.card,
         },
         rsvpBtnSelected: { backgroundColor: EVENT_ACCENT },

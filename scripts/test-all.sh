@@ -321,6 +321,7 @@ run_federation_suites() {
       test-admin-genesis-pubkey
       test-admin-empty-sentinel
       test-node-roles
+      test-suspended-owner-bootstrap
       test-federation-link-binding
       test-ws-pong-watchdog
       test-ws-http-port

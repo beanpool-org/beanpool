@@ -372,6 +372,12 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_private_note TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled'))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_conversation_id TEXT`).run(); } catch { }
+    // Per-person reminders for one event (docs/events-on-the-map.md §2.1). Here with the other event
+    // columns and BEFORE the schema.sql exec, for the same reason they are: schema.sql indexes
+    // event_rsvps, and a CREATE INDEX that runs against a table the exec has already refused to re-shape
+    // is not the failure we want to discover at boot. NULL on every existing row means "my default
+    // applies", which is exactly the behaviour a node that upgrades into this should have.
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN reminder_offsets TEXT`).run(); } catch { }
 
     // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }

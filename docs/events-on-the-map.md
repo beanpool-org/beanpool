@@ -14,6 +14,12 @@ search #901. **Slice 7 (native map layer) is built too**: #888 added event pins 
 `map.tsx` itself rather than through `UnifiedMapPin`, and #900 refined them (calendar glyph, never clustered). The two
 "later" slices are not scheduled. The text below is the design as decided; where a built PR differs, the PR wins.
 
+**Reminders, "Your events", Share and Add to calendar (2026-09-23).** Damo asked for favourites, reminders,
+Share and saved events under "★ For you"; Marty chose all four, with reminders each person can set. Interested
+stays the favourite. The server half — `GET /api/events/mine`, `PUT /api/events/:postId/reminder`, the
+Settings default, the schema and the delivery sweep — is §2.1, §2.2 and §2.4 below. Share and Add to calendar
+are client-only and have no API.
+
 ---
 
 ## 1. What events are for, and what v1 is
@@ -105,6 +111,33 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
 "Not going" is a delete, not a third value. `updated_at` rather than `created_at` because an RSVP changes,
 unlike a vote, and the sync import is last-write-wins on that column.
 
+**Reminders** (2026-09-23) add one nullable column to that table and one small table beside it:
+
+```sql
+ALTER TABLE event_rsvps ADD COLUMN reminder_offsets TEXT;   -- JSON minutes-before-start, NULL = my default
+
+CREATE TABLE IF NOT EXISTS event_reminders_sent (
+    post_id       TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    offset_min    INTEGER NOT NULL,
+    sent_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (post_id, member_pubkey, offset_min)
+);
+```
+
+`reminder_offsets` lives ON THE RSVP because it is meaningless without one: it is created with the RSVP,
+withdrawn with it, and travels with it. `NULL` means "my Settings default applies" and `'[]'` means none —
+the distinction matters, and is why the column is nullable rather than defaulting to `'[]'`. The ALTER sits
+with the other event columns in `db.ts`, above the `schema.sql` exec, because `schema.sql` indexes
+`event_rsvps`.
+
+The member's own default is one row in `member_preferences` under `event_reminder_offsets`, beside
+`holiday_mode` and the `notify_*` toggles, holding the same JSON. Everyone starts at `[1440]` — the day
+before — without a row being written for them, so an upgrade needs no backfill.
+
+`event_reminders_sent` is a delivery log, not member data: see §2.2 for what it is for and §2.4 for why it
+does not replicate.
+
 **The chat.** One row in `conversations` with a new `type = 'event_thread'`, created with the post, id equal
 to the post id, mirroring `ensureEnterpriseThread` (`apps/server/src/engine/enterprise-thread.ts:41-58`,
 which uses the enterprise pubkey as the conversation id). Messages go in `messages` as the enterprise thread
@@ -188,6 +221,55 @@ app in the store has that Android channel and the `notify_marketplace` preferenc
 cancellation. A dedicated Events channel and preference is a later slice, after the release that adds it to
 the client.
 
+**Reminders** (2026-09-23; board: "all four, with reminders each person can set"). Interested stays the
+favourite, and everyone who is Going or Interested is reminded before the event. Which reminders is each
+member's own choice: a default in Settings → Notifications, and an optional per-event override.
+
+- Offsets are minutes before the start, from exactly `{10080, 1440, 120, 60, 30}` — a week, a day, two
+  hours, an hour, half an hour. A closed set, validated server-side, so there is nothing to sanitise
+  downstream. The default for everyone is `[1440]`; `[]` is off.
+- **Routes** (`routes/events.ts`), both signed, both taking the member from `ctx.state.actor` and never from
+  the body — the same rule the RSVP route keeps:
+  - `GET /api/events/mine` — "Your events": the signer's own RSVPs on upcoming, not-cancelled events,
+    soonest first, as `{ postId, title, startAt, endAt, placeName, rsvp, photo, reminderOffsets }`.
+    `reminderOffsets: null` means "my default applies"; `photo` is the same versioned URL the event card
+    resolves.
+  - `PUT /api/events/:postId/reminder` `{ offsets: number[] | null }` — allowed only on an event the signer
+    has an RSVP on (403 otherwise, because whether the event exists is not a secret); an offset outside the
+    five is a 400. `null` returns the event to the member's default.
+  - The Settings default rides on the existing member preferences (`GET`/`POST /api/members/preferences`),
+    which gain `eventReminderOffsets: number[]`. A rejected value refuses the WHOLE write rather than saving
+    the other toggles and dropping it.
+- **Delivery** is a sweep in the existing 60-second primary-only tick in `initStateEngine`, beside
+  `tickDecisions` — `engine/event-reminders.ts`. Primary only, like every other background job with a side
+  effect in the world: a backup holds the same RSVPs and the same push tokens, and would double every
+  reminder. A reminder for (event, member, offset) is due when its moment, `event_start_at - offset`, is
+  behind us AND was still ahead when that member RSVPed or chose it (`event_rsvps.updated_at`, which both
+  bump) AND is no more than **15 minutes** behind. That window is what makes a reminder timely or unsent,
+  never late: a start pulled forward drops several moments into the past at once, and "starts in a week"
+  about an event on Thursday is worse than silence. It is also the whole tolerance for a node that was
+  restarting when the minute came round.
+- **Never twice:** the sweep CLAIMS a due reminder with `INSERT OR IGNORE` into `event_reminders_sent` and
+  sends only if the insert won. Restart, overlapping tick, or a host moving the time back and forth — all
+  land on a key that is already there. The mark is written even when the dispatcher then drops the member
+  for having Marketplace notifications off, so turning them on an hour later does not release a stale
+  reminder.
+- Push goes out on the same `marketplace` category and `{ screen: 'post', postId }` payload as the change
+  and cancel notifications, titled `📅 <title>` with a body worded from the offset alone: "Starts in 1 week",
+  "Starts in 1 day", "Starts in 2 hours", "Starts in 1 hour", "Starts in 30 minutes". **No clock time, no
+  weekday, no date and no "today"/"tomorrow" in the push.** A node has no timezone — the runtime image sets
+  no `TZ`, deploy sets none, and neither node config nor the schema has a field for one — so the process
+  clock is UTC while the community is not, and any absolute time rendered on the server would be wrong by
+  that offset for every member. Relative words cannot be; tapping the push opens the event, which renders
+  `startAt` in the reader's own local time. A per-node timezone setting would only be needed if absolute
+  times ever came back into push text.
+- A cancelled event, an ended event and a withdrawn RSVP all drop out of the sweep's join, which is the
+  whole of "never for a cancelled or ended event, or a removed RSVP". The 30-day scrub deletes an event's
+  sent marks with its RSVPs.
+- **Share and Add to calendar are client-only** and have no API. Share gives the title, date, place and the
+  event's link; a non-member lands on the community's join page. Calendar is a conformant `.ics` on the web
+  and the system calendar hand-off on the phone, with no new native module.
+
 **Chat rules** reuse the enterprise-thread functions with an event flavour: post requires an RSVP of
 `going` or host, 2000-char cap and the frozen-member block as at `enterprise-thread.ts:121-140`; read requires
 the same (unlike the enterprise thread, whose read route is unauthenticated, `routes/treasury.ts:1400`); no
@@ -222,6 +304,22 @@ Registering `event_rsvps` means the same sites: export, import (last-write-wins 
 replica consistency audit. The chat rows ride on `conversations` / `messages`, which replicate already. A backup
 replica therefore holds the private note and RSVPs, as it holds every DM ciphertext today; that is the backup
 model, not a leak.
+
+`reminder_offsets` **replicates with the RSVP it sits on**, because it is part of that row and because a
+member restored from a backup should still have the reminders they set. `SyncEventRsvp` gains an OPTIONAL
+`reminderOffsets`, and the import is two statements rather than one COALESCE: an absent field (a peer older
+than reminders) leaves this replica's copy alone, while an explicit `null` (a member who cleared their
+choice back to "my default") is written. A single COALESCE would make one of those two impossible, and
+whichever one it dropped would be a silent loss. It is deliberately NOT added to `getStateHash`: the hash
+keys RSVPs on `post_id|member_pubkey|status`, and putting a personal preference in it would read a
+mixed-version pair as diverged over something that is not divergence.
+
+`event_reminders_sent` does **not** replicate, and is in no tombstone, snapshot or audit count. It is this
+node's own delivery log; only the primary sends (§2.2), so a replica has no use for it, and the worst case
+at failover is bounded by the 15-minute window — a promoted standby can only re-send a reminder whose
+moment fell inside the last quarter hour.
+
+Peer communities see none of this: the listings pull carries no RSVPs, and so carries no reminders either.
 
 **Peer communities** see listings through the periodic pull, not delta sync
 (`apps/server/src/federation-listings.ts:72-91`): active, public, `reach != 'local'` posts, filtered by

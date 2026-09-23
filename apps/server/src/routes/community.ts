@@ -1252,8 +1252,15 @@ router.post('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    const success = setMemberPreferences(activeKey, preferences);
-    ctx.body = { success };
+    // setMemberPreferences THROWS on a rejected eventReminderOffsets rather than saving the rest and
+    // dropping it, so a member never believes they set a reminder they will never get.
+    try {
+        const success = setMemberPreferences(activeKey, preferences);
+        ctx.body = { success };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to update preferences' };
+    }
 });
 
 // Holiday mode: switch on/off (signed). Turning it ON is gated on having zero open trades —

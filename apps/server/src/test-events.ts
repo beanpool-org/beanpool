@@ -427,6 +427,40 @@ async function main(): Promise<void> {
     await importRemoteState(stale as any);
     assert(!db.prepare('SELECT 1 FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(syncEvent.id, host),
         'an RSVP older than its tombstone does not come back');
+
+    // Reminders ride on the RSVP (docs/events-on-the-map.md §2.1): a member who restores from a backup
+    // still has the reminders they set. The last two checks are the pair that made the import two
+    // statements — "the peer left the field out" and "this person cleared it" must not mean the same thing.
+    const withOffsets = await signSyncPayload({
+        ...unsigned,
+        eventRsvps: [{ postId: syncEvent.id, memberPubkey: goer, status: 'going', signature: '',
+                       reminderOffsets: '[1440,60]', updatedAt: '2099-01-01T00:00:00.000Z' }],
+        tombstones: [],
+    } as any);
+    await importRemoteState(withOffsets as any);
+    const offsetsRow = () => (db.prepare('SELECT reminder_offsets AS o FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?')
+        .get(syncEvent.id, goer) as any)?.o ?? null;
+    assert(offsetsRow() === '[1440,60]', 'an imported RSVP carries the reminders that were set on it');
+
+    const fromOldNode = await signSyncPayload({
+        ...unsigned,
+        eventRsvps: [{ postId: syncEvent.id, memberPubkey: goer, status: 'going', signature: '',
+                       updatedAt: '2099-01-02T00:00:00.000Z' }],
+        tombstones: [],
+    } as any);
+    await importRemoteState(fromOldNode as any);
+    assert(offsetsRow() === '[1440,60]',
+        'a snapshot from a node that predates reminders does not erase the ones this replica holds');
+
+    const cleared = await signSyncPayload({
+        ...unsigned,
+        eventRsvps: [{ postId: syncEvent.id, memberPubkey: goer, status: 'going', signature: '',
+                       reminderOffsets: null, updatedAt: '2099-01-03T00:00:00.000Z' }],
+        tombstones: [],
+    } as any);
+    await importRemoteState(cleared as any);
+    assert(offsetsRow() === null, 'while a member who really cleared theirs back to "my default" replicates that too');
+
     setNodeRole('primary');
 
     await p2pNode.stop();

@@ -1160,6 +1160,11 @@ export function scrubEndedEvents(nowMs = Date.now()): number {
                 db.prepare('DELETE FROM event_rsvps WHERE post_id = ?').run(id);
                 for (const r of rsvps) writeTombstone('event_rsvps', `${id}|${r.member_pubkey}`);
 
+                // The reminder marks for this event go with them, and with NO tombstone: they are this
+                // node's own delivery log, never replicated, and an event 30 days gone will not remind
+                // anybody again whether the marks are here or not (docs/events-on-the-map.md §2.2).
+                try { db.prepare('DELETE FROM event_reminders_sent WHERE post_id = ?').run(id); } catch { }
+
                 // The chat's id IS the post id (§2.1). The conversation row itself stays: it is the empty
                 // shell of a chat nobody can open any more, and deleting it would cascade nothing useful
                 // while giving a replica a row key it has no tombstone handler for.

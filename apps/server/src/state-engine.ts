@@ -323,6 +323,24 @@ export {
     eventThreadReadOnlyReason, isEventThreadExpired, EVENT_THREAD_NOTICE, EVENT_THREAD_MESSAGE_MAX
 } from './engine/event-thread.js';
 import {
+    parseReminderOffsets, getMemberDefaultReminderOffsets, setMemberDefaultReminderOffsets,
+    tickEventReminders, EVENT_REMINDER_PREF_KEY, BAD_OFFSETS_MESSAGE,
+    setEventReminderOffsets as setEventReminderOffsetsEngine,
+    listMyEvents as listMyEventsEngine,
+} from './engine/event-reminders.js';
+export {
+    parseReminderOffsets, getMemberDefaultReminderOffsets, EVENT_REMINDER_OFFSETS,
+    DEFAULT_EVENT_REMINDER_OFFSETS, EVENT_REMINDER_PREF_KEY, EVENT_REMINDER_GRACE_MS,
+    BAD_OFFSETS_MESSAGE, NO_RSVP_MESSAGE, readStoredOffsets,
+    dueEventReminders, runEventReminderSweep, reminderPushTitle, reminderPushBody,
+    type MyEvent,
+} from './engine/event-reminders.js';
+
+/** "Your events" and the per-event reminder write, wired to this node's db. */
+export const listMyEvents = (memberPubkey: string, nowMs?: number) => listMyEventsEngine(memberPubkey, nowMs);
+export const setEventReminderOffsets = (postId: string, memberPubkey: string, offsets: number[] | null) =>
+    setEventReminderOffsetsEngine(postId, memberPubkey, offsets);
+import {
     getNodeRole,
     setNodeRole,
     type NodeRole,
@@ -657,6 +675,10 @@ export function initStateEngine(): void {
             try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
             // Group convenor votes past their 14-day deadline.
             try { tickGroupSuccession(); } catch (e) { console.warn('[Groups] Convenor vote tick failed:', e); }
+            // Event reminders that have come round (docs/events-on-the-map.md §2.2). Every minute, because
+            // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
+            // itself is bounded by one indexed range scan over events starting inside the next week.
+            try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
         }, 60 * 1000);
     }
 
@@ -6741,25 +6763,52 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
     return row?.pref_value ?? 'true'; // Default to 'true' (enabled)
 }
 
-export function getMemberPreferences(publicKey: string): Record<string, string> {
+/**
+ * Every preference this member has, with the defaults for the ones they have never touched.
+ *
+ * `eventReminderOffsets` is the odd one out and is spelled in camelCase, as a real array: the notification
+ * toggles are booleans-as-strings because that is all they have ever needed, while a reminder choice is a
+ * list of minutes (docs/events-on-the-map.md §2.2). Serving it here rather than as a raw `pref_value` means
+ * the client never has to know it is stored as JSON, and never has to guess the `[1440]` default.
+ */
+export function getMemberPreferences(publicKey: string): Record<string, string | number[]> {
     const rows = db.prepare(`SELECT pref_key, pref_value FROM member_preferences WHERE public_key = ?`).all(publicKey) as any[];
-    const prefs: Record<string, string> = {
+    const prefs: Record<string, string | number[]> = {
         notify_chat: 'true',
         notify_marketplace: 'true',
         notify_escrow: 'true',
         notify_recovery: 'true',
     };
-    for (const r of rows) prefs[r.pref_key] = r.pref_value;
+    for (const r of rows) {
+        if (r.pref_key === EVENT_REMINDER_PREF_KEY) continue; // served as eventReminderOffsets below
+        prefs[r.pref_key] = r.pref_value;
+    }
+    prefs.eventReminderOffsets = getMemberDefaultReminderOffsets(publicKey);
     return prefs;
 }
 
-export function setMemberPreferences(publicKey: string, preferences: Record<string, boolean>): boolean {
+/**
+ * THROWS on a rejected `eventReminderOffsets`, and still returns false for a storage failure — the route
+ * turns the throw into a 400 and the false into its existing `{ success: false }`. Silently storing four
+ * valid toggles and dropping a fifth, invalid value is how a member ends up believing they set a reminder
+ * they will never get.
+ */
+export function setMemberPreferences(publicKey: string, preferences: Record<string, boolean | number[] | null>): boolean {
+    // Validated BEFORE the transaction opens: a bad offset refuses the whole write.
+    const hasOffsets = Object.prototype.hasOwnProperty.call(preferences, 'eventReminderOffsets');
+    const offsets = hasOffsets ? parseReminderOffsets(preferences.eventReminderOffsets) : undefined;
+    if (hasOffsets && offsets === null) {
+        // There is no "my default" above a default. `[]` is how a member turns reminders off.
+        throw new Error(BAD_OFFSETS_MESSAGE);
+    }
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);
         const tx = db.transaction(() => {
             for (const [key, value] of Object.entries(preferences)) {
+                if (key === 'eventReminderOffsets') continue;
                 stmt.run(publicKey, key, String(value));
             }
+            if (offsets != null) setMemberDefaultReminderOffsets(publicKey, offsets);
         });
         tx();
         console.log(`[Prefs] Updated preferences for ${publicKey.slice(0, 8)}:`, preferences);

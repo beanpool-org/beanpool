@@ -105,6 +105,7 @@ import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
 import { createOwnerUnlockRoutes } from './routes/owner-unlock.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
+import { createEventsRoutes } from './routes/events.js';
 import { createGroupRoutes } from './routes/groups.js';
 import { createFederationPurchaseRoutes } from './routes/federation-purchase.js';
 import { createFederationCommissionRoutes } from './routes/federation-commission.js';
@@ -1182,6 +1183,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createOwnerWordsCheckRoutes(deps),
         createOwnerUnlockRoutes(deps),
         createMarketplaceRoutes(deps),
+        createEventsRoutes(deps),
         createGroupRoutes(deps),
         createFederationPurchaseRoutes(deps),
         createFederationCommissionRoutes(deps),

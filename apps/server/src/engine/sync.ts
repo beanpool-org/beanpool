@@ -1006,15 +1006,34 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             // Event RSVPs: last-write-wins on updated_at. A row older than a local tombstone for the same key
             // is a "not going" that already happened, and must not come back.
             if (remote.eventRsvps) {
+                // reminder_offsets (docs/events-on-the-map.md §2.1) rides along with the RSVP, on the same
+                // last-write-wins rule. TWO statements, because "the peer left this field out" and "this
+                // person cleared their choice back to my-default" both arrive as an absent value and must
+                // NOT mean the same thing: a snapshot from a node older than reminders would otherwise
+                // erase every stored choice on this replica, and a COALESCE that avoided that would in turn
+                // make a clear-back-to-default unreplicable. `undefined` keeps what is here; an explicit
+                // null or string is written as sent.
+                const RSVP_CONFLICT_GUARD = `
+                    WHERE excluded.updated_at IS NOT NULL
+                      AND (event_rsvps.updated_at IS NULL OR excluded.updated_at >= event_rsvps.updated_at)`;
                 const importRsvp = db.prepare(`INSERT INTO event_rsvps
+                    (post_id, member_pubkey, status, signature, reminder_offsets, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(post_id, member_pubkey) DO UPDATE SET
+                        status = excluded.status,
+                        signature = excluded.signature,
+                        reminder_offsets = excluded.reminder_offsets,
+                        updated_at = excluded.updated_at
+                    ${RSVP_CONFLICT_GUARD}`);
+                // The pre-reminders peer: same row, same watermark, reminder_offsets untouched.
+                const importRsvpNoOffsets = db.prepare(`INSERT INTO event_rsvps
                     (post_id, member_pubkey, status, signature, updated_at)
                     VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(post_id, member_pubkey) DO UPDATE SET
                         status = excluded.status,
                         signature = excluded.signature,
                         updated_at = excluded.updated_at
-                    WHERE excluded.updated_at IS NOT NULL
-                      AND (event_rsvps.updated_at IS NULL OR excluded.updated_at >= event_rsvps.updated_at)`);
+                    ${RSVP_CONFLICT_GUARD}`);
                 const tombstoneAt = db.prepare(`SELECT deleted_at FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?`);
                 for (const er of remote.eventRsvps) {
                     if (er.status !== 'going' && er.status !== 'interested') continue;
@@ -1024,7 +1043,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         conflictsSkipped++;
                         continue;
                     }
-                    importRsvp.run(er.postId, er.memberPubkey, er.status, er.signature || '', updatedAt);
+                    if (er.reminderOffsets === undefined) {
+                        importRsvpNoOffsets.run(er.postId, er.memberPubkey, er.status, er.signature || '', updatedAt);
+                    } else {
+                        importRsvp.run(er.postId, er.memberPubkey, er.status, er.signature || '',
+                            er.reminderOffsets, updatedAt);
+                    }
                 }
             }
 

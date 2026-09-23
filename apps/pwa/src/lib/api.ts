@@ -1755,6 +1755,28 @@ export async function treasuryPostOffer(treasury: string, body: { category: stri
 export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
+/**
+ * Host an event AS an enterprise ("Post as"). The enterprise is in the PATH, never the body: the node's
+ * signature middleware refuses any body field ending in `publicKey` that is not the signer, so naming the
+ * enterprise as `authorPublicKey` on /api/marketplace/posts fails with "Signature validation failed" before
+ * the route runs. The node records the enterprise as the author and the signing keeper as created_by.
+ */
+export async function treasuryPostEvent(treasury: string, body: {
+    title: string;
+    description?: string;
+    lat: number;
+    lng: number;
+    photos?: string[];
+    /** ISO UTC. The end is optional; the node sets start + 2 hours. */
+    eventStartAt: string;
+    eventEndAt?: string;
+    eventPlaceName?: string;
+    eventPrivateNote?: string;
+    audienceScope?: 'public' | 'group';
+    targetGroupId?: string;
+}): Promise<{ success: boolean; post: MarketplacePost }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/event`, body);
+}
 export async function treasuryApprove(treasury: string, transactionId: string): Promise<{ success: boolean }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/approve`, { transactionId });
 }

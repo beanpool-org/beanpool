@@ -7,7 +7,8 @@
  * 2. Authenticated callers attempting to act for another member receive 403.
  * 3. Authenticated callers attempting to act for an enterprise they do NOT keep receive 403.
  * 4. Legitimate actors acting for themselves succeed.
- * 5. Legitimate keepers acting for their enterprise succeed.
+ * 5. Nobody posts AS an enterprise here, keeper or not: that goes through the enterprise's own routes,
+ *    POST /api/treasury/:treasury/{offer,need,event}, where the enterprise is in the URL path (2026-09-23).
  * 6. Critical routes (/transactions/approve, /transactions/complete) fail closed on identity spoofing.
  * 7. A keeper suspended by a community Decision (status 'disabled', operator switch untouched) can no
  *    longer list, edit, pause or remove offers as the enterprise; an unsuspended keeper still can.
@@ -21,6 +22,7 @@ import {
     createPost, requestPost, transfer, setUserStatusRow, canOperateTreasury,
 } from './state-engine.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
+import { createTreasuryRoutes } from './routes/treasury.js';
 
 let passed = 0;
 let run = 0;
@@ -63,6 +65,10 @@ async function testMarketplaceActorAuth() {
         clampOffset: (n: any) => Number(n) || 0,
         enforceReadAuth: false,
     } as any);
+
+    // The enterprise's OWN routes, where a keeper acts for it: the enterprise rides the URL path, which is
+    // the only way past the signature middleware's spoof check (see section 4).
+    const entRouter = createTreasuryRoutes({ checkAdminAuth: async () => false } as any);
 
     const alice = makeMember('alice');
     const bob = makeMember('bob');
@@ -177,16 +183,23 @@ async function testMarketplaceActorAuth() {
         check(ctx.body?.error === 'You are not an authorized keeper of this enterprise', 'Enterprise keeper error message');
     }
 
-    // ── 4. Authorized keeper CAN act for enterprise ──
+    // ── 4. Even an authorized keeper posts for the enterprise through the ENTERPRISE's route ──
+    // This route posts as the signer and nobody else (2026-09-23). It used to accept a keeper naming their
+    // enterprise here, and this check asserted that it worked — but over HTTP it never could: the signature
+    // middleware refuses any body field ending in `publickey` that is not the signer, so the request was
+    // answered with 403 "Signature validation failed" before the handler ran, and only a router-level test
+    // like this one ever saw it succeed. The enterprise's own routes put it in the URL path instead:
+    // POST /api/treasury/:treasury/{offer,need,event}. See test-enterprise-event-http.ts, which goes over
+    // the wire.
     {
-        // Bob is keeper of CommunityFarm and posts an offer
+        // Bob is keeper of CommunityFarm and tries to post an offer in its name from here
         const ctx: any = {
             requestBody: { type: 'offer', title: 'Farm tomatoes', authorPublicKey: treasury, credits: 5 },
             state: { actor: bob }
         };
         await dispatch(router, 'POST', '/api/marketplace/posts', ctx);
-        check(ctx.body?.success === true, 'Authorized keeper Bob can create post for CommunityFarm');
-        check(ctx.body?.post?.authorPublicKey === treasury, 'Post author is the enterprise');
+        check(ctx.status === 403, 'Even a keeper cannot post for the enterprise through this route (403)');
+        check(/treasury/.test(ctx.body?.error ?? ''), 'The refusal names the enterprise route to use instead');
     }
 
     // ── 5. Legitimate author can approve transaction ──
@@ -240,11 +253,14 @@ async function testMarketplaceActorAuth() {
         transfer('genesis', carol, 100, 'seed', 'direct', true);
         adminAssignTreasuryOperator(treasury, carol, 'admin');
 
-        const beforeCtx: any = {
-            requestBody: { type: 'offer', title: 'Farm eggs', authorPublicKey: treasury, credits: 5 },
-            state: { actor: carol }
-        };
-        await dispatch(router, 'POST', '/api/marketplace/posts', beforeCtx);
+        // Listing AS the enterprise goes through the enterprise's own route (the marketplace route posts as
+        // the signer and nobody else). Everything else in this section still drives the marketplace route,
+        // because edit / pause / remove name the enterprise as the post's author, not as the actor.
+        const offerCtx = (actor: string, title: string): any => ({
+            params: { treasury }, state: { actor }, get: () => '', set: () => { },
+            requestBody: { category: 'food', title, credits: 5 },
+        });
+        const beforeCtx = await dispatch(entRouter, 'POST', `/api/treasury/${treasury}/offer`, offerCtx(carol, 'Farm eggs'));
         check(beforeCtx.body?.success === true, 'Unsuspended keeper Carol can list an offer for CommunityFarm');
         const farmOffer = beforeCtx.body.post.id as string;
 
@@ -252,11 +268,7 @@ async function testMarketplaceActorAuth() {
         const carolRow = db.prepare('SELECT status, can_operate FROM members WHERE public_key = ?').get(carol) as any;
         check(carolRow.status === 'disabled' && carolRow.can_operate === 1, 'Decision-suspended Carol is disabled with her operator switch still on');
 
-        const listCtx: any = {
-            requestBody: { type: 'offer', title: 'Suspended farm offer', authorPublicKey: treasury, credits: 5 },
-            state: { actor: carol }
-        };
-        await dispatch(router, 'POST', '/api/marketplace/posts', listCtx);
+        const listCtx = await dispatch(entRouter, 'POST', `/api/treasury/${treasury}/offer`, offerCtx(carol, 'Suspended farm offer'));
         check(listCtx.status === 403, `Decision-suspended keeper cannot list an offer for the enterprise (got ${listCtx.status})`);
 
         const editCtx: any = {
@@ -291,11 +303,7 @@ async function testMarketplaceActorAuth() {
         };
         await dispatch(router, 'POST', '/api/marketplace/posts/update', bobEditCtx);
         check(bobEditCtx.body?.success === true, `Unsuspended keeper Bob can still edit the enterprise offer (got ${bobEditCtx.status} ${bobEditCtx.body?.error})`);
-        const bobListCtx: any = {
-            requestBody: { type: 'offer', title: 'Farm honey', authorPublicKey: treasury, credits: 5 },
-            state: { actor: bob }
-        };
-        await dispatch(router, 'POST', '/api/marketplace/posts', bobListCtx);
+        const bobListCtx = await dispatch(entRouter, 'POST', `/api/treasury/${treasury}/offer`, offerCtx(bob, 'Farm honey'));
         check(bobListCtx.body?.success === true, 'Unsuspended keeper Bob can still list an offer for CommunityFarm');
 
         // Lifting the suspension restores the existing binding.

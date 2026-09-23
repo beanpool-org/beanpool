@@ -139,9 +139,15 @@ the note never leaves a stale copy.
   `created_by`) as the first participant.
 - No offer-first rule: `CONTRIBUTION_REQUIRED_ERROR` applies to needs only (`posts.ts:239`).
 
-**Host.** The route already resolves the author: `assertActorEntitled` accepts the signed actor, or a keeper
-via `canOperateTreasury` (`apps/server/src/routes/marketplace.ts:37-56`); enterprise routes pass
-`createdBy: actor` (`apps/server/src/routes/treasury.ts:691`). Group hosting is `audienceScope: 'group'` +
+**Host.** A member or a group convenor hosts through `POST /api/marketplace/posts`, which posts as the signer
+and nobody else. An enterprise hosts through its OWN route, `POST /api/treasury/:treasury/event`, beside the
+enterprise's Offer and Need: the enterprise is in the URL PATH, keepership is checked there, and the event is
+recorded with the enterprise as `author_pubkey` and the acting keeper as `created_by` (2026-09-23). Naming the
+enterprise in the body as `authorPublicKey` cannot work and never could — the signature middleware pins every
+body field ending in `pubkey`/`publickey` to the signer, so it answered "Signature validation failed" before
+the route ran, and the marketplace route now refuses it outright with a 403 that names the right route. Both
+routes build the event through one shared function (`apps/server/src/routes/event-post.ts`), so validation and
+storage cannot drift. Group hosting is `audienceScope: 'group'` +
 `targetGroupId`, as the native group-post screen sends it (`apps/native/app/group-post.tsx:224-225`), with
 the convenor-or-member check at `posts.ts:139-149`. "Host" for every host-only action below means: the author,
 any keeper of an enterprise author, or an active convenor of the target group. That is the same set

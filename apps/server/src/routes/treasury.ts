@@ -3,8 +3,8 @@
  *
  * A treasury is a real member account (the Commons' trading face for an enterprise). Three tiers:
  *   - Admin (password, /api/local/admin/*): create a treasury, grant/revoke the operator capability.
- *   - Operator (signed member holding can_operate): drive a treasury — post its Offer/Need, approve
- *     a bid, release escrow, sweep surplus to the Commons. The treasury id rides the URL path (not
+ *   - Operator (signed member holding can_operate): drive a treasury — post its Offer/Need, host its
+ *     events, approve a bid, release escrow, sweep surplus to the Commons. The treasury id rides the URL path (not
  *     the body) so it dodges the requireSignature spoof-guard, which pins body *pubkey fields to the
  *     signer; here the signer is the operator acting *on behalf of* the treasury.
  *   - Public reads: list treasuries + one treasury's detail (community transparency).
@@ -32,6 +32,7 @@ import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERAT
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
+import { createEventFromBody } from './event-post.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor } from '@beanpool/core';
 
@@ -712,6 +713,32 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
+            ctx.body = { success: true, post };
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+    });
+
+    // Host an event AS the enterprise (events §3, "Post as"). Shaped like the Offer and Need above, and for
+    // the same reason: the enterprise rides the URL path, so the requireSignature spoof-guard — which pins
+    // every body *pubkey field to the signer — has nothing to refuse, and keepership is checked here where
+    // the authority to act is decided. Naming the enterprise as `authorPublicKey` on the marketplace route
+    // instead is refused by that middleware before any handler runs, which is what "Signature validation
+    // failed" meant to the keeper who tried it.
+    //
+    // The event itself is built by the shared builder, so an enterprise's event and a member's are validated
+    // and stored by exactly the same code (routes/event-post.ts). The author is the enterprise; the keeper
+    // who did it is recorded as created_by, as the Offer and Need above do.
+    //
+    // No syncPulseMarketplaceGate() call, matching /offer and /need: the gate counts active listings with
+    // `type NOT IN ('poll', 'event')` (daily-pulse.ts), so an event can never move it.
+    router.post('/api/treasury/:treasury/event', async (ctx) => {
+        const { treasury } = ctx.params;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
+        const b = (ctx as any).requestBody || {};
+        if (!b.title) { ctx.status = 400; ctx.body = { error: 'title is required' }; return; }
+        try {
+            const post = createEventFromBody(b, treasury, actor);
+            if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
     });

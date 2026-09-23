@@ -327,6 +327,7 @@ run_federation_suites() {
       test-moderation-notifications
       test-polls
       test-events
+      test-enterprise-event-http
       test-event-chat
       test-event-notify
       test-posts-fts-same-ms

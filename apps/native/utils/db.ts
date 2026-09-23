@@ -1702,13 +1702,26 @@ export async function createPost(post: any) {
         ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
         ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {})
     };
-    const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
+    // "Post as → an enterprise" on the event form (NewEventModal). An enterprise's event goes through the
+    // enterprise's OWN route, with the enterprise in the PATH and never in the body: the node's signature
+    // middleware refuses any body field ending in `publicKey` that is not the signer, so naming it as
+    // `authorPublicKey` on /api/marketplace/posts is refused with "Signature validation failed" before the
+    // route runs. The node reads the enterprise from the path, checks the signer is one of its keepers, and
+    // records the event with the enterprise as author and the keeper as created_by.
+    const enterpriseHost = post.type === 'event' && post.author_pubkey && post.author_pubkey !== identity.publicKey
+        ? String(post.author_pubkey)
+        : null;
+    const { authorPublicKey: _authorInBody, ...bodyWithoutAuthor } = body;
+    const path = enterpriseHost
+        ? `/api/treasury/${encodeURIComponent(enterpriseHost)}/event`
+        : '/api/marketplace/posts';
+    const bodyString = JSON.stringify(enterpriseHost ? bodyWithoutAuthor : body);
+    const headers = await buildSignedHeaders('POST', path, bodyString, identity.privateKey, identity.publicKey);
 
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(`${anchorUrl}/api/marketplace/posts`, {
+        const res = await fetch(`${anchorUrl}${path}`, {
             method: 'POST',
             headers,
             body: bodyString,
@@ -1731,8 +1744,8 @@ export async function createPost(post: any) {
                 // Same signal as in `_signedRequest`: the node has told us it holds no photo.
                 const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
                 if (healed) {
-                    const retryHeaders = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
-                    const retryRes = await fetch(`${anchorUrl}/api/marketplace/posts`, {
+                    const retryHeaders = await buildSignedHeaders('POST', path, bodyString, identity.privateKey, identity.publicKey);
+                    const retryRes = await fetch(`${anchorUrl}${path}`, {
                         method: 'POST',
                         headers: retryHeaders,
                         body: bodyString,

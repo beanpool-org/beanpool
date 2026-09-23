@@ -2699,7 +2699,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 aria-label={isPulse ? `Daily Pulse: ${post.title}` : `Open listing: ${post.title}${remoteOriginLabel(post)}`}
                                                 // No `h-full`: the tile keeps its own height rather than stretching to
                                                 // whatever shares its row (see MarketplaceCard's grid return).
-                                                className={`rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
+                                                // `self-start` is the other half of that: this div is the grid
+                                                // ITEM, and a grid with no `items-*` stretches its items to the
+                                                // row. Dropping `h-full` stops the tile filling the cell but
+                                                // leaves the cell row-tall, and the cell is what carries the
+                                                // click and the focus ring — so in the poll's row the ring drew
+                                                // around blank space below the card and a click there opened the
+                                                // listing (Marty on #1092).
+                                                className={`self-start rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                             >
                                                 <MarketplaceCard
                                                     post={post as any}

@@ -13,9 +13,10 @@
  *
  * It also prints, for every width, what the pictures are meant to show, measured from the live layout rather
  * than eyeballed: the height of each listing tile, whether any VIEW button sits away from the bottom of its own
- * tile (the stretch this branch removes), whether the VIEW buttons in a row line up, how many columns the poll
- * spans, whether any poll answer is truncated, and whether any row of the grid has an empty cell in it. A
- * non-zero exit means one of those is wrong.
+ * tile (the stretch this branch removes), whether any tile's CELL — the clickable, focusable grid item around
+ * it — is taller than the tile, whether the VIEW buttons in a row line up, how many columns the poll spans,
+ * whether any poll answer is truncated, and whether any row of the grid has an empty cell in it. A non-zero
+ * exit means one of those is wrong.
  *
  * Needs Chromium for Playwright once:
  *   pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
@@ -76,6 +77,10 @@ function measure() {
             return {
                 title: (tile.querySelector('span.font-bold')?.textContent || '').slice(0, 28),
                 tileHeight: Math.round(t.height),
+                // The cell, not the tile: the cell is the grid item, and it is what carries the click and the
+                // focus ring. Without `self-start` the grid stretches it to the row while the tile keeps its
+                // own height, so the two come apart.
+                cellHeight: Math.round(cell.getBoundingClientRect().height),
                 badgeRows: tile.firstElementChild.querySelectorAll(':scope > div > div.mt-1').length,
                 // The description's own `mb-3` is the whole of this gap on a tile that is not stretched.
                 gapBelowDescription: Math.round(v.top - (d.top + lineHeight)),
@@ -122,6 +127,17 @@ function measure() {
     return { colCount, tiles, pollSpan, pollAt, pollAnswers, pollAnswerColumns, rowFill };
 }
 
+/**
+ * The tiles whose CELL is taller than the tile itself. The cell is the grid item: it carries the `onClick`, the
+ * `role="button"` and the `focus-visible` ring, so every pixel of that overhang is blank space that opens the
+ * listing when clicked and that the focus ring draws around. A grid with no `items-*` stretches its items to the
+ * row, so in the poll's row — and the poll is the tallest thing in the grid by design — this was the whole
+ * difference between a ~257px card and the poll. `self-start` on the cell is what closes it.
+ */
+const stretchedCells = (m) => m.tiles
+    .map(t => ({ title: t.title, overhang: t.cellHeight - t.tileHeight }))
+    .filter(t => t.overhang > 1);
+
 /** The rows with an empty cell in them: every row but the last that does not fill its columns. */
 const holes = (m) => m.rowFill
     .slice(0, -1)
@@ -161,6 +177,12 @@ try {
                 note(label, worst <= margin + 2,
                     `no tile stretched — largest dead space between the description's line and VIEW is ${worst}px `
                     + `(the description's own margin is ${margin}px)`);
+
+                // ...and the cell around it, which the tile's own box cannot show.
+                const stretched = stretchedCells(m);
+                note(label, stretched.length === 0,
+                    `every cell is its tile's height — no clickable overhang below a card`
+                    + `${stretched.length ? `: ${stretched.map(t => `"${t.title}" +${t.overhang}px`).join(', ')}` : ''}`);
 
                 // Same height: a tile's height no longer depends on its text or on whether it has a photo. An
                 // optional badge (👤 You, ⏸ Paused, 🔒 group, 🗞️ Daily Pulse) still adds its own row — see the PR.
@@ -216,6 +238,13 @@ try {
         const label = `${spec.width}px, poll at ${spec.columns - 1}`;
         note(label, m.colCount === spec.columns, `${m.colCount} columns (expected ${spec.columns})`);
         note(label, m.pollSpan === 2, `poll still spans ${m.pollSpan} column(s) (expected 2)`);
+
+        // This pass puts the poll in a row with listing tiles at every width, so it is the strongest case for
+        // the overhang: the poll sets the row height and the tiles beside it are half of it.
+        const stretched = stretchedCells(m);
+        note(label, stretched.length === 0,
+            `every cell is its tile's height — no clickable overhang below a card`
+            + `${stretched.length ? `: ${stretched.map(t => `"${t.title}" +${t.overhang}px`).join(', ')}` : ''}`);
 
         // Without `grid-flow-row-dense` this is where the grid leaves a hole: the poll cannot start in the last
         // column, moves to the next row, and the cell it passed over stays blank.

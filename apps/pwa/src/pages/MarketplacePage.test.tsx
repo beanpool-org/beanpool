@@ -286,6 +286,11 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
             expect(tileOf(title).className).toContain('flex flex-col');
             expect(tileOf(title).className).not.toMatch(/(^|\s)h-full(\s|$)/);
             expect(cellOf(title).className).not.toMatch(/(^|\s)h-full(\s|$)/);
+            // Dropping `h-full` is only half of it. The cell IS the grid item, and a grid with no `items-*`
+            // stretches its items to the row, so the cell stayed row-tall while the tile shrank — and the cell
+            // is what carries the click and the focus ring. `self-start` is what actually shrinks the cell.
+            // jsdom does no layout, so the height itself is measured in e2e/market-grid-shots.mjs.
+            expect(cellOf(title).className).toMatch(/(^|\s)self-start(\s|$)/);
         }
     });
 

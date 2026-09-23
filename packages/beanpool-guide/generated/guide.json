@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 22,
-  "hash": "2e538bce228bfd50a3ae6f9f9f523a6dd5489f36d2209bcde8a268df2eac584f",
+  "version": 23,
+  "hash": "c0661e701f1b72e6123911544a5a2e5300a9366d4c28f28b0942aa2be343214a",
   "sections": [
     {
       "id": "about",
@@ -2171,13 +2171,14 @@
     {
       "slug": "messages",
       "title": "Messages",
-      "summary": "Start a chat, send photos, reply and react, and what is private.",
+      "summary": "Start a chat, send photos, reply, react, edit, delete, mute, and what is private.",
       "section": "talk",
       "related": [
         "people",
         "blocking",
         "event-chat",
         "groups",
+        "mute",
         "the-top-bar"
       ],
       "blocks": [
@@ -2243,15 +2244,36 @@
         },
         {
           "type": "h2",
-          "text": "Reply, react, edit"
+          "text": "Reply, react, edit, delete"
         },
         {
           "type": "p",
-          "text": "Tap a message to **Reply**, **React** with an emoji, or **Edit**. You can edit your own messages for 15 minutes; they then show \"edited\"."
+          "text": "Tap a message. Small round buttons appear beside it:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Reply** quotes it above what you write next. Tap the quote in a sent message to jump back to what it answers.",
+            "**React** opens seven emojis. Tap one to add it, tap it again to take it back. One reaction each; tapping a different one swaps it. The reactions show as a small badge under the message.",
+            "**Edit**, on your own messages, for 15 minutes after you sent it. The message then shows **edited**. Photos cannot be edited.",
+            "**Delete**, on your own messages, at any time — there is no time limit. It asks **Delete for everyone?** once. The message then reads **This message was deleted** for both of you, and nobody can react to it or reply to it."
+          ]
         },
         {
           "type": "p",
-          "text": "Sent messages cannot be deleted. Think before you send."
+          "text": "The same buttons are in a group's chat. See \"Groups\"."
+        },
+        {
+          "type": "p",
+          "text": "Deleting takes the words off your community's server too, so a new phone signing in later never sees them."
+        },
+        {
+          "type": "h2",
+          "text": "Muting a chat"
+        },
+        {
+          "type": "p",
+          "text": "Tap **⋮** at the top right, then **Mute notifications**: **For 8 hours**, **For a week** or **Always**. Tap **⋮** and **Unmute** to undo it. See \"Muting a chat\"."
         },
         {
           "type": "h2",
@@ -2262,6 +2284,7 @@
           "items": [
             "A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. One exception: if the app cannot find the other person's key, or locking fails, it sends the message without the lock rather than not at all, and does not warn you. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too.",
             "Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.",
+            "Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.",
             "A group's chat can also be read by the group's members.",
             "An event's chat can also be read by the host and everyone going.",
             "An enterprise's chat can be read by any member of your community. It is the enterprise's public discussion, the same one its page shows, and anyone in the community can write in it too. It is not a private chat for its keepers."
@@ -2280,7 +2303,7 @@
     {
       "slug": "groups",
       "title": "Groups",
-      "summary": "Your groups and their chats, starting a group, inviting people, and joining by invitation.",
+      "summary": "Your groups and their chats, talking in them, starting a group, inviting people, and joining by invitation.",
       "section": "talk",
       "related": [
         "messages",
@@ -2366,12 +2389,51 @@
             "Tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**.",
             "The **⋮** menu has **Invite people** (convenors), **Mute notifications** and **Group info**.",
             "Joins, leaves and role changes show in the chat as small grey lines.",
-            "Write **@** and someone's name to alert them. See \"Mentions\"."
+            "Write **@** and someone's name to alert them. See \"Mentions\".",
+            "The newest message sits just above the message box, and stays there when the keyboard opens. Scroll up to read back; a new message arriving then waits for you rather than dragging you down."
           ]
         },
         {
           "type": "p",
           "text": "A group's chat is not end-to-end encrypted. Its members and the people who run your community's server can read it. The chat says so above the message box. Private things belong in a chat between two people."
+        },
+        {
+          "type": "h2",
+          "text": "Talking in a group's chat"
+        },
+        {
+          "type": "p",
+          "text": "A group's chat works exactly like a chat with one person. Tap a message and small round buttons appear beside it:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Reply** quotes it above what you write next. Tap the quote to jump back to what it answers.",
+            "**React** opens seven emojis. One each; tap it again to take it back. The reactions show as a badge under the message.",
+            "**Edit**, on your own messages, for 15 minutes. The message then shows **edited**.",
+            "**Delete**, on your own messages, at any time. It asks **Delete for everyone?** once, and the message then reads **This message was deleted** to everyone in the group.",
+            "**Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader."
+        },
+        {
+          "type": "p",
+          "text": "Photos cannot be sent in a group's chat, and a deal cannot be started in one. Both belong in a chat between two people. See \"Messages\"."
+        },
+        {
+          "type": "p",
+          "text": "An **observer** can read the chat but not write in it, react or reply."
+        },
+        {
+          "type": "p",
+          "text": "Your community's server needs to be up to date for reply, reactions, edit and delete. Only if yours is not does the app say **Not available on this community yet** — that one is worth taking to whoever looks after the server."
+        },
+        {
+          "type": "p",
+          "text": "Anything else the server turns down, it turns down in its own words, and the app shows you those words rather than that line. \"A removed message cannot be edited\" means a convenor removed it while you were typing, not that your server is behind."
         },
         {
           "type": "h2",
@@ -2580,7 +2642,7 @@
         },
         {
           "type": "p",
-          "text": "Type in **Message everyone going…** and tap **Send**. You can send up to 30 messages a minute."
+          "text": "Type in **Message everyone going…** and tap the send button. You can send up to 30 messages a minute. The newest message sits just above the message box and stays there when the keyboard opens."
         },
         {
           "type": "h2",
@@ -2589,9 +2651,9 @@
         {
           "type": "ul",
           "items": [
-            "Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so at the bottom.",
-            "The host can remove any message. It then says \"removed by the host\".",
-            "Messages cannot be edited, and there are no reactions.",
+            "Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so above the message box.",
+            "The host can remove any message. Tap it, then **Remove**. It then says \"removed by the host\".",
+            "An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret.",
             "When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away."
           ]
         }
@@ -2600,13 +2662,14 @@
     {
       "slug": "mute",
       "title": "Muting a chat",
-      "summary": "Silence one group's or enterprise's chat for 8 hours, a week, or for good.",
+      "summary": "Silence a chat — one person's, a group's or an enterprise's — for 8 hours, a week, or for good.",
       "section": "talk",
       "related": [
         "notifications",
         "blocking",
         "groups",
-        "mentions"
+        "mentions",
+        "messages"
       ],
       "blocks": [
         {
@@ -2615,7 +2678,7 @@
         },
         {
           "type": "p",
-          "text": "In a group's or an enterprise's chat:"
+          "text": "In any chat with a person, a group or an enterprise:"
         },
         {
           "type": "ul",
@@ -2635,12 +2698,12 @@
         {
           "type": "ul",
           "items": [
-            "In a group's chat, it stops that chat's alerts. Someone who @mentions you still reaches you. See \"Mentions\".",
+            "It stops that chat's alerts. In a group's chat, someone who @mentions you still reaches you. See \"Mentions\".",
             "An enterprise's chat sends no alerts, so there are none to stop. Muting it keeps it out of the numbers below.",
             "The chat still shows new messages.",
             "In **Talk**, under **Groups**, a muted chat shows a bell with a line through it. Its unread number is grey, and it is not added to the number on **Groups**.",
             "The top bar stays quiet about it too.",
-            "The mute stays when you leave the chat. When you open it again, the top says **muted**."
+            "The mute stays when you leave the chat. When you open a group's or an enterprise's chat again, the top says **muted**."
           ]
         },
         {
@@ -2649,7 +2712,7 @@
         },
         {
           "type": "p",
-          "text": "Chats between two people and event chats cannot be muted yet. You can:"
+          "text": "Event chats cannot be muted yet. You can:"
         },
         {
           "type": "ul",

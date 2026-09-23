@@ -9,34 +9,54 @@
  * A group whose convenor is still alone in it opens on "Who do you want to invite?" with a big Invite people
  * button (decision 8) — skippable; Invite people then lives in the header menu for good.
  *
+ * Chat parity (2026-09-23): the thread, the bubbles, the tap-for-actions, the emoji row, the quoted replies, the
+ * day pills and the message box are the SHARED ones in components/chat — the same code the DM screen renders
+ * through, not a second version of it. A group chat therefore gets reply, react, edit (15 minutes), delete for
+ * everyone, a convenor's remove, "edited", Resend / Discard on a failed send and an inverted list that keeps the
+ * newest message above the keyboard ("new message in group is hidden behind kb", Damo, 2026-09-23). What a
+ * message actually offers is decided once, in utils/chat-actions — an enterprise thread is read-and-write only,
+ * this round, and its bubbles offer nothing.
+ *
  * Keyboard: KeyboardAvoidingView from react-native-keyboard-controller, padding on both platforms, no nested
  * provider (memory keyboard-avoidance-pattern). At 320dp and 1.3× text the header truncates the name, the
- * composer keeps a 48dp Send that never shrinks and the notice wraps.
+ * composer keeps a Send that never shrinks and the notice wraps.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, TextInput, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
+import { useChatSoftInputMode } from './chat/useChatSoftInputMode';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import * as Crypto from 'expo-crypto';
 import {
     getGroupChat, postGroupChatMessage, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi, fetchGroupDetails,
-    markThreadReadOnNode,
+    markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
     type GroupItem,
 } from '../utils/db';
 import { decodeEventChatText } from '../utils/events';
 import {
-    isMuted, threadMessageText, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel,
+    isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel,
     ENTERPRISE_CHAT_NOTICE,
     type YourChatMute,
 } from '../utils/your-groups';
+import {
+    buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions,
+    normaliseThreadMessage, pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneText,
+    type ChatMessage, type ChatViewer,
+} from '../utils/chat-actions';
+import { normaliseTappedUrl } from '../utils/chat-links';
+import { makeChatStyles } from './chat/styles';
+import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
+import { ChatMessageRow } from './chat/ChatMessageRow';
+import { ChatComposer, type ChatComposerHandle } from './chat/ChatComposer';
+import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from './chat/ChatBanners';
 import { yourGroupsStore } from './useYourGroups';
-import { hapticTick } from '../utils/haptics';
+import { hapticTick, hapticSuccess, hapticWarning } from '../utils/haptics';
 import { ChatOwnerHeader } from './ChatOwnerHeader';
 import { InvitePeopleSheet } from './InvitePeopleSheet';
 import { GroupDetailModal } from './GroupDetailModal';
@@ -51,18 +71,30 @@ interface Props {
     initialName?: string;
 }
 
-const MUTE_CHOICES: Array<{ key: '8h' | '1w' | 'always'; label: string }> = [
-    { key: '8h', label: 'For 8 hours' },
-    { key: '1w', label: 'For a week' },
-    { key: 'always', label: 'Always' },
-];
+const GROUP_MESSAGE_MAX = 2000;
+
+/**
+ * A message this phone is still sending, or could not send. The node holds nothing for it yet, so it lives
+ * here until the chat is read again — that is what lets a group chat offer Resend / Discard the way a DM
+ * does. The client id is the same one the POST carries, so a resend is stored once, not twice.
+ */
+interface PendingMessage {
+    clientId: string;
+    text: string;
+    replyToId: string | null;
+    state: 'sending' | 'failed';
+    timestamp: string;
+}
 
 export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const insets = useSafeAreaInsets();
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
+    const chat = useStyles(makeChatStyles);
     const { identity } = useIdentity();
     const keyboardVisible = useKeyboardState(s => s.isVisible);
+    // The window's soft-input mode — the same hook the DM calls.
+    useChatSoftInputMode();
     const me = identity?.publicKey;
 
     const [view, setView] = useState<any | null>(null);
@@ -70,23 +102,34 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const [memberKeys, setMemberKeys] = useState<Set<string>>(new Set());
     const [invitedCount, setInvitedCount] = useState(0);
     const [error, setError] = useState<string | null>(null);
-    const [draft, setDraft] = useState('');
     const [sending, setSending] = useState(false);
+    const [pending, setPending] = useState<PendingMessage[]>([]);
     const [menuOpen, setMenuOpen] = useState(false);
     const [muteOpen, setMuteOpen] = useState(false);
     const [inviteOpen, setInviteOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState(false);
     const [inviteSkipped, setInviteSkipped] = useState(false);
+    const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
+    const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
+    const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);
+    const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
+    const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top');
     // Seeded from this chat's "Your groups" row, so a mute set on an earlier visit shows (and can be undone) before
     // the chat loads — and on a node too old to return the mute with an enterprise thread.
     const [mute, setMute] = useState<YourChatMute | null>(() => chatMuteFromRows(yourGroupsStore.getState().items, id));
-    const draftRef = useRef('');
     // One id per message being written, so a send retried after a dropped connection is stored once (the node
     // de-duplicates on it). A new one once the node has it.
     const clientIdRef = useRef<string>(Crypto.randomUUID());
     const listRef = useRef<FlatList>(null);
+    const composerRef = useRef<ChatComposerHandle>(null);
     const inFlight = useRef(false);
     const readUpTo = useRef<string | null>(null);
+    // Whether the newest message is on screen: a message arriving while it is follows the thread down,
+    // one arriving while someone reads history does not yank them.
+    const atBottomRef = useRef(true);
+    const messageCountRef = useRef(0);
+    // A link tap bubbles to the bubble's own onPress — swallow it so it does not open the actions bar too.
+    const linkPressedRef = useRef(false);
     // undefined until the first answer: the details are already being fetched on the way in.
     const lastSystemId = useRef<string | null | undefined>(undefined);
 
@@ -116,22 +159,30 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     }, [id, me]);
 
     // One request per poll (the chat), and never two at once on a slow connection.
-    const load = useCallback(async () => {
-        if (inFlight.current) return;
+    // Answers with the node's messages, or null when this read did not happen (it failed, or a poll already had
+    // the chat in flight) — deliver() needs to tell those apart from a read that came back without its message.
+    const load = useCallback(async (): Promise<any[] | null> => {
+        if (inFlight.current) return null;
         inFlight.current = true;
         try {
-            let chat: any;
+            let answer: any;
             if (kind === 'group') {
-                chat = await getGroupChat(id);
-                setView(chat);
-                setMute(m => chatMuteFromAnswer(chat, m));
+                answer = await getGroupChat(id);
+                setView(answer);
+                setMute(m => chatMuteFromAnswer(answer, m));
             } else {
-                chat = await getEnterpriseChat(id);
-                setView({ ...chat, canPost: !chat.readOnly, notice: ENTERPRISE_CHAT_NOTICE });
-                setMute(m => chatMuteFromAnswer(chat, m));
+                answer = await getEnterpriseChat(id);
+                setView({ ...answer, canPost: !answer.readOnly, notice: ENTERPRISE_CHAT_NOTICE });
+                setMute(m => chatMuteFromAnswer(answer, m));
             }
             setError(null);
-            const msgs: any[] = chat?.messages || [];
+            const msgs: any[] = answer?.messages || [];
+            // A message of mine that the node now holds is no longer pending here.
+            setPending(prev => pendingAfterRead(prev, msgs));
+            if (shouldFollowNewMessages({ grew: msgs.length > messageCountRef.current, isBackgroundPoll: true, atBottom: atBottomRef.current })) {
+                setTimeout(() => scrollChatToBottom(listRef, true), 100);
+            }
+            messageCountRef.current = msgs.length;
             markRead(msgs.length ? String(msgs[msgs.length - 1].id) : null);
             const system = [...msgs].reverse().find(m => m.type === 'system' || m.authorPubkey === 'SYSTEM');
             const systemId = system ? String(system.id) : null;
@@ -140,8 +191,10 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 lastSystemId.current = systemId;
                 if (!firstAnswer) loadDetails().catch(() => { });
             }
+            return msgs;
         } catch (e: any) {
             setError(e?.message || 'Could not open this chat.');
+            return null;
         } finally {
             inFlight.current = false;
         }
@@ -160,15 +213,53 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
 
     const name = view?.group?.name || group?.name || view?.conversation?.name || initialName || (kind === 'group' ? 'Group' : 'Enterprise');
     const category = view?.group?.category || group?.category || null;
-    const messages: any[] = view?.messages || [];
-    const spoken = messages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
+    const rawMessages: any[] = view?.messages || [];
     const isConvenor = !!view?.isConvenor;
+    const canPost = !!view?.canPost && !!me;
+
+    /** The node's messages in the one shape every chat's components speak, plus what this phone still owes. */
+    const messages: ChatMessage[] = useMemo(() => {
+        const fromNode = rawMessages.map(m => normaliseThreadMessage(m, decodeEventChatText, me, kind));
+        const mine: ChatMessage[] = pending.map(p => ({
+            id: p.clientId,
+            senderId: me || '',
+            text: p.text,
+            type: 'text',
+            metadata: p.replyToId ? { replyToId: p.replyToId } : undefined,
+            sendState: p.state,
+            outgoing: true,
+            rawTimestamp: p.timestamp,
+            timestamp: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }));
+        return [...fromNode, ...mine];
+    }, [rawMessages, pending, me, kind]);
+
+    const spokenCount = useMemo(
+        () => rawMessages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM').length,
+        [rawMessages],
+    );
+    const messagesById = useMemo(() => new Map(messages.map(m => [m.id, m])), [messages]);
+    const listItems = useMemo(() => buildChatListItems(messages), [messages]);
+    const showAuthorById = useMemo(() => {
+        const map = new Map<string, boolean>();
+        messages.forEach((m, i) => map.set(m.id, showsAuthorName(m, messages[i - 1], { kind, myPubkey: me })));
+        return map;
+    }, [messages, kind, me]);
+
+    const viewer: ChatViewer = useMemo(() => ({
+        kind,
+        myPubkey: me ?? null,
+        canPost,
+        // An enterprise thread's removals stay a keeper matter on its own page this round.
+        isModerator: kind === 'group' && isConvenor,
+    }), [kind, me, canPost, isConvenor]);
+
     const activeCount = group?.memberCount ?? null;
     const aloneInGroup = kind === 'group' && isConvenor && (activeCount ?? 0) <= 1;
     // The big prompt is for a convenor still alone with nobody asked yet; once invitations are out it steps aside
     // and the empty chat says who is on the way.
     const showInvitePrompt = shouldShowInvitePrompt({
-        kind, isConvenor, justCreated: !!justCreated, activeCount, invitedCount, spokenCount: spoken.length, skipped: inviteSkipped,
+        kind, isConvenor, justCreated: !!justCreated, activeCount, invitedCount, spokenCount, skipped: inviteSkipped,
     });
     const muted = isMuted(mute);
 
@@ -179,27 +270,132 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         return bits.join(' · ') || null;
     }, [kind, activeCount, muted]);
 
-    const send = async () => {
-        const text = draftRef.current.trim();
+    const openUrl = useCallback((raw: string) => {
+        linkPressedRef.current = true;
+        setTimeout(() => { linkPressedRef.current = false; }, 350);
+        const url = normaliseTappedUrl(raw);
+        if (!url) return;
+        Linking.openURL(url).catch(() => Alert.alert('Cannot open link', url));
+    }, []);
+
+    /** Deliver one message. Shared by a first send and by a Resend, so both are the same code path. */
+    const deliver = useCallback(async (p: PendingMessage) => {
+        try {
+            if (kind === 'group') await postGroupChatMessage(id, p.text, p.clientId, p.replyToId);
+            else await postEnterpriseChatMessage(id, p.text, p.clientId);
+            // A poll may be mid-flight with the chat as it was before this message; wait for it, then read again.
+            while (inFlight.current) await new Promise(r => setTimeout(r, 100));
+            const msgs = await load();
+            // Only the node's own copy retires the bubble. load() swallows its read errors, so a read that failed
+            // after this POST succeeded would otherwise take a delivered message off the sender's screen until a
+            // later poll happened to bring it back; the bubble stays, and the next poll retires it.
+            setPending(prev => pendingAfterRead(prev, msgs));
+            scrollChatToBottom(listRef, true);
+        } catch (e: any) {
+            // The bubble stays, marked "not delivered" — tapping it offers Resend or Discard, as in a DM.
+            setPending(prev => prev.map(x => (x.clientId === p.clientId ? { ...x, state: 'failed' } : x)));
+            console.warn('[GroupChat] send failed:', e?.message || e);
+        }
+    }, [kind, id, load]);
+
+    const send = async (text: string) => {
         if (!text || sending) return;
         setSending(true);
         hapticTick();
         try {
-            if (kind === 'group') await postGroupChatMessage(id, text, clientIdRef.current);
-            else await postEnterpriseChatMessage(id, text, clientIdRef.current);
+            if (editingMessage) {
+                const target = editingMessage;
+                setEditingMessage(null);
+                try {
+                    await editThreadMessage(target.id, text);
+                    await load();
+                } catch (e: any) {
+                    await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+                    Alert.alert('Not changed', chatActionErrorMessage(e));
+                }
+                return;
+            }
+            const p: PendingMessage = {
+                clientId: clientIdRef.current,
+                text,
+                replyToId: replyToMessage?.id ?? null,
+                state: 'sending',
+                timestamp: new Date().toISOString(),
+            };
             clientIdRef.current = Crypto.randomUUID();
-            draftRef.current = '';
-            setDraft('');
-            // A poll may be mid-flight with the chat as it was before this message; wait for it, then read again.
-            while (inFlight.current) await new Promise(r => setTimeout(r, 100));
-            await load();
-            listRef.current?.scrollToEnd({ animated: true });
-        } catch (e: any) {
-            await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
-            Alert.alert('Not sent', e?.message || 'Could not reach the node. Try again when you have signal.');
+            setPending(prev => [...prev, p]);
+            setReplyToMessage(null);
+            scrollChatToBottom(listRef, true);
+            await deliver(p);
         } finally {
             setSending(false);
         }
+    };
+
+    /** A failed send renders "! not delivered" — tapping the bubble lands here, exactly as in a DM. */
+    const handleFailedMessagePress = async (item: ChatMessage) => {
+        const p = pending.find(x => x.clientId === item.id);
+        if (!p) return;
+        await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+        Alert.alert('Message not delivered', 'This message could not be sent.', [
+            { text: 'Discard', style: 'destructive', onPress: () => setPending(prev => prev.filter(x => x.clientId !== p.clientId)) },
+            { text: 'Resend', onPress: () => {
+                setPending(prev => prev.map(x => (x.clientId === p.clientId ? { ...x, state: 'sending' } : x)));
+                deliver({ ...p, state: 'sending' });
+            } },
+            { text: 'Cancel', style: 'cancel' },
+        ]);
+    };
+
+    const react = async (messageId: string, emoji: string) => {
+        if (!me) return;
+        setActiveEmojiPickerId(null);
+        setActiveMessageActionsId(null);
+        try {
+            await toggleMessageReactionApi(messageId, me, emoji);
+            hapticSuccess();
+            await load();
+        } catch (e: any) {
+            hapticWarning();
+            Alert.alert('Not reacted', chatActionErrorMessage(e));
+        }
+    };
+
+    const removeMessage = async (item: ChatMessage) => {
+        setActiveMessageActionsId(null);
+        setActiveEmojiPickerId(null);
+        const author = item.authorName || (item.senderId || '').slice(0, 8) || 'this member';
+        await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+        Alert.alert('Remove this message?', 'It will read "Removed by a convenor" to everyone in the chat.', [
+            { text: 'Keep it', style: 'cancel' },
+            { text: 'Remove', style: 'destructive', onPress: async () => {
+                try {
+                    await removeGroupChatMessage(id, item.id);
+                    await load();
+                } catch (e: any) {
+                    Alert.alert('Not removed', chatActionErrorMessage(e) || `Could not remove ${author}'s message.`);
+                }
+            } },
+        ]);
+    };
+
+    const deleteMessage = async (item: ChatMessage) => {
+        setActiveMessageActionsId(null);
+        setActiveEmojiPickerId(null);
+        await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+        Alert.alert('Delete for everyone?', 'It will read "This message was deleted" to everyone in the chat.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: async () => {
+                try {
+                    await deleteMessageApi(item.id);
+                    hapticSuccess();
+                    await load();
+                } catch (e: any) {
+                    hapticWarning();
+                    Alert.alert('Not deleted', chatActionErrorMessage(e));
+                }
+            } },
+        ]);
     };
 
     const setMuteTo = async (duration: '8h' | '1w' | 'always' | 'off') => {
@@ -244,9 +440,9 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             <View style={[styles.container, { paddingTop: insets.top }]}>
                 <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {header}
-                <Text style={styles.errorText} accessibilityRole="alert">{error}</Text>
-                <Pressable style={styles.retryBtn} onPress={() => { setError(null); loadDetails().catch(() => { }); load(); }} accessibilityRole="button">
-                    <Text style={styles.retryText}>Try again</Text>
+                <Text style={chat.errorText} accessibilityRole="alert">{error}</Text>
+                <Pressable style={chat.retryBtn} onPress={() => { setError(null); loadDetails().catch(() => { }); load(); }} accessibilityRole="button">
+                    <Text style={chat.retryText}>Try again</Text>
                 </Pressable>
             </View>
         );
@@ -257,18 +453,16 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {header}
                 {/* The chat's outline while it loads: the header already names it, from the tap. */}
-                <View style={styles.listContent} accessibilityRole="progressbar" accessibilityLabel="Loading the chat">
+                <View style={chat.listContent} accessibilityRole="progressbar" accessibilityLabel="Loading the chat">
                     {[{ w: '62%', mine: false }, { w: '48%', mine: true }, { w: '70%', mine: false }].map((b, i) => (
-                        <View key={i} style={[styles.skeletonRow, b.mine && styles.bubbleRowMine]}>
-                            <View style={[styles.skeletonBubble, { width: b.w as any }]} />
+                        <View key={i} style={[chat.skeletonRow, b.mine && chat.skeletonRowMine]}>
+                            <View style={[chat.skeletonBubble, { width: b.w as any }]} />
                         </View>
                     ))}
                 </View>
             </View>
         );
     }
-
-    const canPost = !!view.canPost && !!me;
 
     const invitePrompt = (
         <View style={styles.inviteCard}>
@@ -298,11 +492,94 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         </View>
     );
 
-    const menuItems: Array<{ icon: string; label: string; onPress: () => void; hidden?: boolean }> = [
+    const menuItems: ChatMenuItem[] = [
         { icon: 'account-plus', label: 'Invite people', hidden: kind !== 'group' || !isConvenor, onPress: () => { setMenuOpen(false); setInviteOpen(true); } },
         { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muteMenuLabel(mute), onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
         { icon: 'information-outline', label: kind === 'group' ? 'Group info' : 'Enterprise page', onPress: () => { setMenuOpen(false); openOwner(); } },
     ];
+
+    const renderMessage = (item: ChatMessage) => {
+        if (item.type === 'system' || item.senderId === 'SYSTEM') return <SystemLine text={item.text} styles={styles} />;
+
+        const isMe = !!me && item.senderId === me;
+        const actions = messageActions(item, viewer);
+
+        const quote = item.metadata?.replyToId ? (() => {
+            const parent = messagesById.get(item.metadata.replyToId);
+            const parentText = !parent
+                ? 'Message not found'
+                : isTombstone(parent) ? tombstoneText(parent, kind) : parent.text;
+            const parentAuthor = !parent
+                ? 'Someone'
+                : (me && parent.senderId === me) ? 'You' : (parent.authorName || (parent.senderId || '').slice(0, 8) || 'Someone');
+            return {
+                author: parentAuthor,
+                text: parentText,
+                onPress: () => {
+                    const index = listItems.findIndex((m: any) => m.id === item.metadata.replyToId);
+                    if (index > -1) {
+                        try { listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 }); }
+                        catch (e) { console.warn(e); }
+                    }
+                },
+            };
+        })() : null;
+
+        const status = isMe ? (
+            item.sendState === 'sending' ? (
+                <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
+            ) : item.sendState === 'failed' ? (
+                <Text style={{ fontSize: 10, color: colors.feedback.danger.solid, fontWeight: '800' }}> ! not delivered</Text>
+            ) : (
+                // One tick: the node has it. A group has no single reader, so there is no second tick to earn.
+                <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ✓</Text>
+            )
+        ) : null;
+
+        return (
+            <ChatMessageRow
+                item={item}
+                kind={kind}
+                isMe={isMe}
+                styles={chat}
+                actions={actions}
+                showActions={activeMessageActionsId === item.id}
+                showEmojiPicker={activeEmojiPickerId === item.id}
+                pickerPosition={pickerPosition}
+                onPressBubble={(event: any) => {
+                    if (linkPressedRef.current) { linkPressedRef.current = false; return; }
+                    if (item.sendState === 'failed') { handleFailedMessagePress(item); return; }
+                    // Nothing on offer (an enterprise thread, an observer, a tombstone): no empty bar.
+                    if (!hasAnyAction(actions)) return;
+                    const pageY = event?.nativeEvent?.pageY;
+                    setPickerPosition(pageY && pageY < 230 ? 'bottom' : 'top');
+                    if (activeMessageActionsId === item.id) {
+                        setActiveMessageActionsId(null);
+                        setActiveEmojiPickerId(null);
+                    } else {
+                        setActiveMessageActionsId(item.id);
+                        setActiveEmojiPickerId(null);
+                    }
+                }}
+                onReply={() => { setReplyToMessage(item); setEditingMessage(null); setActiveMessageActionsId(null); }}
+                onToggleEmojiPicker={() => setActiveEmojiPickerId(activeEmojiPickerId === item.id ? null : item.id)}
+                onEdit={() => {
+                    setEditingMessage(item);
+                    setReplyToMessage(null);
+                    composerRef.current?.setText(item.text || '');
+                    setActiveMessageActionsId(null);
+                    setActiveEmojiPickerId(null);
+                }}
+                onDelete={() => deleteMessage(item)}
+                onRemove={() => removeMessage(item)}
+                onPickEmoji={emoji => react(item.id, emoji)}
+                onPressUrl={openUrl}
+                authorLabel={showAuthorById.get(item.id) ? (item.authorName || (item.senderId || '').slice(0, 8)) : null}
+                quote={quote}
+                status={status}
+            />
+        );
+    };
 
     return (
         <KeyboardAvoidingView style={[styles.container, { paddingTop: insets.top }]} behavior="padding">
@@ -313,107 +590,71 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 <Text style={styles.readOnly} numberOfLines={3}>This chat is read-only now.</Text>
             )}
 
-            {showInvitePrompt ? (
-                <FlatList
-                    data={messages}
-                    keyExtractor={(m: any) => m.id}
-                    contentContainerStyle={styles.listContent}
-                    ListHeaderComponent={invitePrompt}
-                    renderItem={({ item }) => <SystemLine item={item} styles={styles} />}
-                />
-            ) : (
-                <FlatList
-                    ref={listRef}
-                    data={messages}
-                    keyExtractor={(m: any) => m.id}
-                    contentContainerStyle={styles.listContent}
-                    onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-                    ListEmptyComponent={
-                        <Text style={styles.empty}>
+            <ChatMessageList
+                listRef={listRef}
+                items={listItems}
+                styles={chat}
+                renderMessage={renderMessage}
+                activeId={activeEmojiPickerId || activeMessageActionsId}
+                onAtBottomChange={atBottom => { atBottomRef.current = atBottom; }}
+                onScrollBeginDrag={() => { setActiveMessageActionsId(null); setActiveEmojiPickerId(null); }}
+                // Inverted: the footer is what renders at the visual TOP, above the oldest message.
+                ListFooterComponent={showInvitePrompt ? invitePrompt : null}
+                ListEmptyComponent={
+                    showInvitePrompt ? null : (
+                        <Text style={chat.empty}>
                             {invitedCount > 0 && aloneInGroup
                                 ? `${invitedCount} ${invitedCount === 1 ? 'invitation' : 'invitations'} sent. You'll see people here as they join.`
                                 : 'No messages yet. Say hello.'}
                         </Text>
-                    }
-                    renderItem={({ item, index }) => {
-                        if (item.type === 'system' || item.authorPubkey === 'SYSTEM') return <SystemLine item={item} styles={styles} />;
-                        const mine = item.authorPubkey === me;
-                        const prev = messages[index - 1];
-                        const showAuthor = !mine && (!prev || prev.authorPubkey !== item.authorPubkey || prev.type === 'system');
-                        const removed = item.type === 'removed';
-                        const time = new Date(item.timestamp);
-                        return (
-                            <View style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
-                                <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                                    {showAuthor && (
-                                        <Text style={styles.author} numberOfLines={1}>{item.authorCallsign || (item.authorPubkey || '').slice(0, 8)}</Text>
-                                    )}
-                                    <Text style={[styles.msgText, mine && styles.msgTextMine, removed && styles.msgRemoved]} selectable={!removed}>
-                                        {threadMessageText(item, decodeEventChatText)}
-                                    </Text>
-                                    <Text style={[styles.msgTime, mine && styles.msgTimeMine]}>
-                                        {isNaN(time.getTime()) ? '' : `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`}
-                                    </Text>
-                                </View>
-                            </View>
-                        );
-                    }}
+                    )
+                }
+            />
+
+            {editingMessage && (
+                <ChatEditBanner
+                    styles={chat}
+                    text={editingMessage.text}
+                    onCancel={() => { setEditingMessage(null); composerRef.current?.reset(); }}
+                />
+            )}
+
+            {replyToMessage && !editingMessage && (
+                <ChatReplyBanner
+                    styles={chat}
+                    author={me && replyToMessage.senderId === me ? 'You' : (replyToMessage.authorName || 'Someone')}
+                    text={replyToMessage.text}
+                    onCancel={() => setReplyToMessage(null)}
                 />
             )}
 
             {canPost && (
-                <View style={[styles.composer, { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 12) }]}>
-                    <Text style={styles.notice}>{view.notice}</Text>
-                    <View style={styles.composerRow}>
-                        <TextInput
-                            style={styles.input}
-                            value={draft}
-                            onChangeText={(t) => { draftRef.current = t; setDraft(t); }}
-                            // A long name wrapped the placeholder to three lines at 320dp; short ones read better named.
-                            placeholder={name.length <= 18 ? `Message ${name}…` : (kind === 'group' ? 'Message the group…' : 'Message…')}
-                            placeholderTextColor={colors.text.muted}
-                            accessibilityLabel={`Message ${name}`}
-                            multiline
-                            maxLength={2000}
-                        />
-                        <Pressable
-                            onPress={send}
-                            disabled={sending || !draft.trim()}
-                            style={[styles.sendBtn, (sending || !draft.trim()) && styles.sendBtnDisabled]}
-                            accessibilityRole="button"
-                            accessibilityLabel="Send"
-                            accessibilityState={{ disabled: sending || !draft.trim(), busy: sending }}
-                        >
-                            {sending ? <ActivityIndicator size="small" color="#fff" /> : <MaterialCommunityIcons name="send" size={22} color="#fff" />}
-                        </Pressable>
-                    </View>
-                </View>
+                <ChatComposer
+                    ref={composerRef}
+                    styles={chat}
+                    onSend={send}
+                    busy={sending}
+                    maxLength={GROUP_MESSAGE_MAX}
+                    notice={view.notice}
+                    // A long name wrapped the placeholder to three lines at 320dp; short ones read better named.
+                    placeholder={name.length <= 18 ? `Message ${name}…` : (kind === 'group' ? 'Message the group…' : 'Message…')}
+                    accessibilityLabel={`Message ${name}`}
+                    bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
+                />
             )}
 
-            {/* Header menu. A small sheet, not a popover: the rows are full-width 56dp targets at 320dp. */}
-            <Modal visible={menuOpen || muteOpen} transparent animationType="fade" onRequestClose={() => { setMenuOpen(false); setMuteOpen(false); }}>
-                <Pressable style={styles.menuBackdrop} onPress={() => { setMenuOpen(false); setMuteOpen(false); }} accessibilityLabel="Close menu">
-                    <View style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-                        <Text style={styles.menuTitle} numberOfLines={1}>{muteOpen ? 'Mute notifications' : name}</Text>
-                        {muteOpen ? (
-                            <>
-                                {MUTE_CHOICES.map(c => (
-                                    <Pressable key={c.key} style={styles.menuRow} onPress={() => setMuteTo(c.key)} accessibilityRole="button">
-                                        <Text style={styles.menuLabel}>{c.label}</Text>
-                                    </Pressable>
-                                ))}
-                                {/* Only a group's chat sends @mention pushes; an enterprise thread has none to let through. */}
-                                {kind === 'group' && <Text style={styles.menuHint}>@mentions still reach you.</Text>}
-                            </>
-                        ) : menuItems.filter(m => !m.hidden).map(m => (
-                            <Pressable key={m.label} style={styles.menuRow} onPress={m.onPress} accessibilityRole="button">
-                                <MaterialCommunityIcons name={m.icon as any} size={22} color={colors.text.body} />
-                                <Text style={styles.menuLabel} numberOfLines={1}>{m.label}</Text>
-                            </Pressable>
-                        ))}
-                    </View>
-                </Pressable>
-            </Modal>
+            <ChatMenuSheet
+                styles={chat}
+                menuOpen={menuOpen}
+                muteOpen={muteOpen}
+                title={name}
+                items={menuItems}
+                // Only a group's chat sends @mention pushes; an enterprise thread has none to let through.
+                muteHint={kind === 'group' ? '@mentions still reach you.' : null}
+                onClose={() => { setMenuOpen(false); setMuteOpen(false); }}
+                onPickMute={setMuteTo}
+                bottomInset={insets.bottom}
+            />
 
             {kind === 'group' && (
                 <InvitePeopleSheet
@@ -439,23 +680,21 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     );
 }
 
-function SystemLine({ item, styles }: { item: any; styles: ReturnType<typeof makeStyles> }) {
+function SystemLine({ text, styles }: { text: string; styles: ReturnType<typeof makeStyles> }) {
     return (
         <View style={styles.systemWrap}>
-            <Text style={styles.systemText}>{threadMessageText(item, decodeEventChatText)}</Text>
+            <Text style={styles.systemText}>{text}</Text>
         </View>
     );
 }
 
-const makeStyles = ({ colors, theme }: ThemeContextType) =>
+const makeStyles = ({ colors }: ThemeContextType) =>
     StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
         readOnly: {
             marginHorizontal: 12, marginTop: 10, padding: 10, borderRadius: 10,
             backgroundColor: colors.surface.subtle, color: colors.text.secondary, fontSize: 13, textAlign: 'center',
         },
-        listContent: { padding: 12, flexGrow: 1 },
-        empty: { fontSize: 14, color: colors.text.secondary, paddingVertical: 24, textAlign: 'center' },
         inviteCard: {
             alignItems: 'center', padding: 20, marginTop: 12, marginBottom: 16, borderRadius: 18,
             backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default,
@@ -476,42 +715,4 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             fontSize: 12, color: colors.text.secondary, textAlign: 'center', overflow: 'hidden',
             backgroundColor: colors.surface.subtle, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
         },
-        bubbleRow: { flexDirection: 'row', marginVertical: 3 },
-        bubbleRowMine: { justifyContent: 'flex-end' },
-        bubble: { maxWidth: '82%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16 },
-        bubbleMine: { backgroundColor: colors.accent.primary, borderBottomRightRadius: 4 },
-        bubbleTheirs: {
-            backgroundColor: colors.surface.card, borderBottomLeftRadius: 4,
-            borderWidth: theme === 'dark' ? 0 : 1, borderColor: colors.border.default,
-        },
-        author: { fontSize: 12, fontWeight: '800', color: colors.brand.primary, marginBottom: 2 },
-        msgText: { fontSize: 15, lineHeight: 21, color: colors.text.body },
-        msgTextMine: { color: '#fff' },
-        msgRemoved: { fontStyle: 'italic', opacity: 0.7 },
-        msgTime: { fontSize: 10, color: colors.text.muted, alignSelf: 'flex-end', marginTop: 2 },
-        msgTimeMine: { color: 'rgba(255,255,255,0.8)' },
-        composer: { paddingHorizontal: 12, paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.border.default, backgroundColor: colors.surface.app },
-        notice: { fontSize: 11, color: colors.text.muted, marginBottom: 6 },
-        composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-        input: {
-            flex: 1, minWidth: 0, minHeight: 48, maxHeight: 120, borderWidth: 1, borderColor: colors.border.default,
-            borderRadius: 24, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15,
-            color: colors.text.body, backgroundColor: colors.surface.card,
-        },
-        sendBtn: {
-            flexShrink: 0, width: 48, height: 48, borderRadius: 24,
-            alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent.primary,
-        },
-        sendBtnDisabled: { opacity: 0.5 },
-        errorText: { margin: 16, fontSize: 15, color: colors.text.body, lineHeight: 21 },
-        retryBtn: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: 16 },
-        retryText: { fontSize: 15, fontWeight: '800', color: colors.brand.primary },
-        skeletonRow: { flexDirection: 'row', marginVertical: 6 },
-        skeletonBubble: { height: 40, borderRadius: 16, backgroundColor: colors.surface.subtle },
-        menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-        menuSheet: { backgroundColor: colors.surface.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 8 },
-        menuTitle: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, paddingHorizontal: 20, paddingVertical: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
-        menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 56, paddingHorizontal: 20 },
-        menuLabel: { flex: 1, fontSize: 16, fontWeight: '600', color: colors.text.body },
-        menuHint: { fontSize: 13, color: colors.text.muted, paddingHorizontal: 20, paddingVertical: 10 },
     });

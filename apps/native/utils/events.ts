@@ -359,6 +359,29 @@ export function eventCacheColumns(p: any): [string | null, string | null, string
     ];
 }
 
+/**
+ * The photo the feed card shows: the event's first one, or nothing.
+ *
+ * A post reaches the card with `photos` already parsed and already resolved against the anchor — db.ts
+ * `getPosts` and the server-search path in the Market screen both do that for every post they hand back, so
+ * an event's photo arrives absolute exactly as an offer's does, and there is no second resolver here. What is
+ * left is the card's own decision, which is the part that can go wrong: a row may still carry the raw JSON
+ * string (an unparsed cache row), an empty list, or one of the string placeholders SQLite hands back for a
+ * missing value, and none of those is a picture.
+ */
+export function eventCoverPhoto(post: any): string | null {
+    let photos: unknown = post?.photos;
+    if (typeof photos === 'string') {
+        try { photos = JSON.parse(photos); } catch { return null; }
+    }
+    if (!Array.isArray(photos) || photos.length === 0) return null;
+    const first = photos[0];
+    if (typeof first !== 'string') return null;
+    const url = first.trim();
+    if (!url || url === 'null' || url === 'undefined') return null;
+    return url;
+}
+
 /** The message the server checks an RSVP signature against (engine/posts.ts rsvpEvent). */
 export function rsvpSignedMessage(postId: string, status: EventRsvpStatus | null): string {
     return `${postId}:${status ?? 'none'}`;

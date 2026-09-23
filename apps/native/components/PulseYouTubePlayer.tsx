@@ -25,6 +25,7 @@ import { View, Text, StyleSheet, ActivityIndicator, Linking } from 'react-native
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { useFocusEffect } from 'expo-router';
 import {
+    isPlayerDocumentUrl,
     playerNavigation,
     youtubePlayerErrorMessage,
     YOUTUBE_ERROR_SCRIPT_FAILED,
@@ -40,11 +41,16 @@ interface PulseYouTubePlayerProps {
     html: string;
     /** The origin the document is loaded under, which becomes the Referer YouTube sees. */
     baseUrl: string;
+    /**
+     * The embed frame's own URL. Used only to tell the player's own failures apart from the noise
+     * of a subresource that happened to 404 — see `isPlayerDocumentUrl`.
+     */
+    embedUrl: string;
     /** One plain line for the card to show instead of the player. */
     onError: (message: string) => void;
 }
 
-export function PulseYouTubePlayer({ itemId, html, baseUrl, onError }: PulseYouTubePlayerProps) {
+export function PulseYouTubePlayer({ itemId, html, baseUrl, embedUrl, onError }: PulseYouTubePlayerProps) {
     const [ready, setReady] = React.useState(false);
     // The error callback is read from a ref so a parent that re-creates it every render cannot
     // restart the WebView mid-video.
@@ -74,6 +80,12 @@ export function PulseYouTubePlayer({ itemId, html, baseUrl, onError }: PulseYouT
             stopPulseVideo(itemId);
         }
     }, [itemId]);
+
+    const handleLoadFailure = useCallback((event: { nativeEvent: { url?: string } }) => {
+        if (!isPlayerDocumentUrl(event.nativeEvent.url, embedUrl)) return;
+        onErrorRef.current(youtubePlayerErrorMessage(YOUTUBE_ERROR_SCRIPT_FAILED));
+        stopPulseVideo(itemId);
+    }, [itemId, embedUrl]);
 
     const handleNavigation = useCallback((request: { url: string }) => {
         const verdict = playerNavigation(request.url);
@@ -105,14 +117,11 @@ export function PulseYouTubePlayer({ itemId, html, baseUrl, onError }: PulseYouT
                 allowsBackForwardNavigationGestures={false}
                 onShouldStartLoadWithRequest={handleNavigation}
                 onMessage={handleMessage}
-                onError={() => {
-                    onErrorRef.current(youtubePlayerErrorMessage(YOUTUBE_ERROR_SCRIPT_FAILED));
-                    stopPulseVideo(itemId);
-                }}
-                onHttpError={() => {
-                    onErrorRef.current(youtubePlayerErrorMessage(YOUTUBE_ERROR_SCRIPT_FAILED));
-                    stopPulseVideo(itemId);
-                }}
+                // Both of these fire for every request the page makes, not just the player's own
+                // document, so each one asks whether the thing that failed was actually the player
+                // before tearing down a video that is playing perfectly well.
+                onError={handleLoadFailure}
+                onHttpError={handleLoadFailure}
             />
             {/* The only thing ever drawn over the WebView, and only until the player says it is
                 ready — from that moment on the player has the rectangle to itself, which is what

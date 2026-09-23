@@ -294,6 +294,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                         itemId={item.id}
                         html={media.html}
                         baseUrl={media.baseUrl}
+                        embedUrl={media.embedUrl}
                         onError={setPlayerError}
                     />
                 </View>

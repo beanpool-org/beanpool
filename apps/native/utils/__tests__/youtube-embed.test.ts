@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
     appEmbedOrigin,
+    isPlayerDocumentUrl,
     playerNavigation,
     pulseYouTubeVideoId,
     youtubeEmbedUrl,
@@ -199,5 +200,34 @@ describe('the viewport rule', () => {
         const cardWidth = 320 - 32;
         expect(Math.round((cardWidth * 9) / 16)).toBeLessThan(YOUTUBE_MIN_VIEWPORT_PX);
         expect(cardWidth).toBeGreaterThanOrEqual(YOUTUBE_MIN_VIEWPORT_PX);
+    });
+});
+
+describe('isPlayerDocumentUrl', () => {
+    const embed = youtubeEmbedUrl(ID);
+
+    it('recognises the player\'s own two documents', () => {
+        expect(isPlayerDocumentUrl(PULSE_PLAYER_ORIGIN, embed)).toBe(true);
+        expect(isPlayerDocumentUrl(`${PULSE_PLAYER_ORIGIN}/`, embed)).toBe(true);
+        expect(isPlayerDocumentUrl(embed, embed)).toBe(true);
+    });
+
+    it('still recognises the embed when YouTube has rewritten its query string', () => {
+        expect(isPlayerDocumentUrl(`${YOUTUBE_EMBED_HOST}/embed/${ID}?autoplay=1&cbrd=1`, embed)).toBe(true);
+    });
+
+    it('does not treat a subresource failure as the player failing', () => {
+        // A working video routinely produces non-2xx responses on beacons and blocked assets.
+        // Treating any of these as fatal used to tear down playback and blame the connection.
+        expect(isPlayerDocumentUrl('https://www.youtube-nocookie.com/api/stats/watchtime', embed)).toBe(false);
+        expect(isPlayerDocumentUrl('https://i.ytimg.com/vi/x/hq.jpg', embed)).toBe(false);
+        expect(isPlayerDocumentUrl(`${YOUTUBE_EMBED_HOST}/embed/OTHERVIDEO`, embed)).toBe(false);
+        expect(isPlayerDocumentUrl('https://evil.example/', embed)).toBe(false);
+    });
+
+    it('treats a missing or unparseable url as not the player', () => {
+        expect(isPlayerDocumentUrl(undefined, embed)).toBe(false);
+        expect(isPlayerDocumentUrl('', embed)).toBe(false);
+        expect(isPlayerDocumentUrl('not a url', embed)).toBe(false);
     });
 });

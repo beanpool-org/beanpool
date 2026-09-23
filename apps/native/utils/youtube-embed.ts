@@ -250,3 +250,31 @@ export function playerNavigation(url: string): 'allow' | 'external' | 'block' {
     }
     return 'allow';
 }
+
+/**
+ * Whether a failed load reported by the WebView was the player itself, and so worth showing the
+ * member an error for.
+ *
+ * The WebView's `onError`/`onHttpError` do not fire only for the frame the player lives in.
+ * Android's `onReceivedHttpError` reports a non-2xx on *any* request the page made — an analytics
+ * beacon, a blocked ad call, a stray asset — and a working video routinely produces several. Taking
+ * those at face value tore down a playing video and told the member to check their connection.
+ *
+ * So only two documents count: the page we handed the WebView (our own origin) and the embed frame
+ * itself. The embed's query string carries the player parameters and can be rewritten by YouTube's
+ * own redirects, so the comparison is origin plus path.
+ */
+export function isPlayerDocumentUrl(url: string | null | undefined, embedUrl: string): boolean {
+    if (typeof url !== 'string' || !url) return false;
+    if (url === PULSE_PLAYER_ORIGIN || url.startsWith(`${PULSE_PLAYER_ORIGIN}/`)) return true;
+
+    let failed: URL;
+    let embed: URL;
+    try {
+        failed = new URL(url);
+        embed = new URL(embedUrl);
+    } catch {
+        return false;
+    }
+    return failed.origin === embed.origin && failed.pathname === embed.pathname;
+}

@@ -68,7 +68,18 @@ async function main() {
     });
     assert(missingIdRes.status === 400, `Request without projectId returns 400 (got ${missingIdRes.status})`);
 
-    // 3. Test successful project rejection by admin
+    // 3. Test rejection for non-existent project -> 404
+    const nonExistentRes = await fetch(`${BASE}/api/local/admin/commons/reject`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-admin-password': PW,
+        },
+        body: JSON.stringify({ projectId: 'non-existent-project-id' }),
+    });
+    assert(nonExistentRes.status === 404, `Request for non-existent projectId returns 404 (got ${nonExistentRes.status})`);
+
+    // 4. Test successful project rejection by admin
     const rejectRes = await fetch(`${BASE}/api/local/admin/commons/reject`, {
         method: 'POST',
         headers: {
@@ -86,7 +97,7 @@ async function main() {
     const rejectedProj = allProjects.find(p => p.id === projectId);
     assert(rejectedProj?.status === 'rejected', 'Project status in state engine is updated to "rejected"');
 
-    // 4. Test public GET /api/commons/projects filters out rejected project
+    // 5. Test public GET /api/commons/projects filters out rejected project
     const getRes = await fetch(`${BASE}/api/commons/projects`);
     assert(getRes.status === 200, `GET /api/commons/projects returns 200 (got ${getRes.status})`);
     const getBody = await getRes.json() as any;

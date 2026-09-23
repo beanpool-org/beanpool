@@ -114,7 +114,7 @@ function cappedResponse(url: string, body: Buffer, maxBytes: number, contentType
         url,
         buffer: read,
         text: async () => (await read()).toString('utf-8'),
-        json: async () => ({}),
+        json: async <T = any>(): Promise<T> => ({} as T),
     };
 }
 
@@ -135,7 +135,7 @@ function makeFetchFn(page: Buffer, state: FetchState) {
                 return {
                     status: 403, statusText: 'Forbidden', headers: { 'content-type': 'text/plain' },
                     url, buffer: async () => Buffer.from('Forbidden'), text: async () => 'Forbidden',
-                    json: async () => ({}),
+                    json: async <T = any>(): Promise<T> => ({} as T),
                 };
             }
             return cappedResponse(url, sampleJpeg, options?.maxBytes ?? sampleJpeg.length, 'image/jpeg');
@@ -145,7 +145,7 @@ function makeFetchFn(page: Buffer, state: FetchState) {
         return {
             status: 403, statusText: 'Forbidden', headers: { 'content-type': 'text/plain' },
             url, buffer: async () => Buffer.from('Forbidden'), text: async () => 'Forbidden',
-            json: async () => ({}),
+            json: async <T = any>(): Promise<T> => ({} as T),
         };
     };
 }

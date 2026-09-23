@@ -37,6 +37,8 @@ import { logger } from './logger.js';
 import {
     PulseThumbnailService,
     PulseThumbnailBackoffStore,
+    PulseThumbnailCache,
+    DEFAULT_NEGATIVE_CACHE_TTL_MS,
     INSTAGRAM_EMBED_MAX_BYTES,
     THUMBNAIL_BACKOFF_STEPS_MS,
 } from './engine/pulse-thumbnail.js';
@@ -165,8 +167,6 @@ function errorResponse(url: string, status: number): SsrfSafeResponse {
         json: async <T = any>(): Promise<T> => ({} as T),
     };
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function freshState(over: Partial<FetchState> = {}): FetchState {
     return { fetches: [], embedMaxBytesAsked: 0, ...over };
@@ -421,9 +421,14 @@ async function main(): Promise<void> {
     // EAI_AGAIN, a resolver outage, a lookup timeout — and getThumbnail maps that to 400. A
     // thirty-second blip while a member scrolls the feed must not cost every item an hour.
     const dnsFetches: string[] = [];
+    // The negative cache is driven by a fake clock, exactly as section 4 drives the backoff store.
+    // A real-time TTL would make "served from memory" depend on two calls landing within a few
+    // milliseconds of each other — true on a quiet laptop, not promised by a loaded CI runner. The
+    // clock also lets the test cross the real five-minute TTL rather than a short stand-in.
+    let dnsNowMs = Date.parse('2026-09-23T15:11:00Z');
     const dnsService = new PulseThumbnailService({
         diskStore: null,
-        negativeTtlMs: 5,
+        cache: new PulseThumbnailCache({ now: () => dnsNowMs }),
         fetchFn: (async (url: string): Promise<SsrfSafeResponse> => {
             dnsFetches.push(url);
             throw new SsrfSecurityError('DNS resolution failed for images.example.org: getaddrinfo EAI_AGAIN images.example.org');
@@ -439,7 +444,7 @@ async function main(): Promise<void> {
     assert(dnsFetches.length === 1, 'Inside the in-memory TTL the refusal is served from memory, without a second fetch');
 
     // Past the TTL the item goes back to the network — a blip costs minutes, as on origin/main.
-    await sleep(12);
+    dnsNowMs += DEFAULT_NEGATIVE_CACHE_TTL_MS + 1;
     const afterTtl = await dnsService.getThumbnail(dnsItem);
     assert(dnsFetches.length === 2, 'Once the in-memory TTL expires the item is retried, not held for an hour');
     assert(afterTtl.status === 400, 'The retry still refuses while the resolver is down');

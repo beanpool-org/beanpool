@@ -158,15 +158,21 @@ export class PulseThumbnailCache {
     private maxTotalBytes: number;
     private maxEntryBytes: number;
     private negativeTtlMs: number;
+    /** The negative TTL is the only time-based decision this cache makes; an injected clock lets a
+     *  test cross it exactly, the way PulseThumbnailBackoffStore is already driven. Defaults to the
+     *  wall clock, so production behaviour is unchanged. */
+    private now: () => number;
 
     constructor(options: {
         maxTotalBytes?: number;
         maxEntryBytes?: number;
         negativeTtlMs?: number;
+        now?: () => number;
     } = {}) {
         this.maxTotalBytes = options.maxTotalBytes ?? DEFAULT_MAX_CACHE_TOTAL_BYTES;
         this.maxEntryBytes = options.maxEntryBytes ?? MAX_THUMBNAIL_BYTES;
         this.negativeTtlMs = options.negativeTtlMs ?? DEFAULT_NEGATIVE_CACHE_TTL_MS;
+        this.now = options.now ?? (() => Date.now());
     }
 
     get(itemId: string): ThumbnailCacheEntry | null {
@@ -181,7 +187,7 @@ export class PulseThumbnailCache {
     getNegative(itemId: string): NegativeCacheEntry | null {
         const entry = this.negativeCache.get(itemId);
         if (!entry) return null;
-        if (Date.now() - entry.failedAt > this.negativeTtlMs) {
+        if (this.now() - entry.failedAt > this.negativeTtlMs) {
             this.negativeCache.delete(itemId);
             return null;
         }
@@ -194,7 +200,7 @@ export class PulseThumbnailCache {
             if (firstKey) this.negativeCache.delete(firstKey);
         }
         this.negativeCache.set(itemId, {
-            failedAt: Date.now(),
+            failedAt: this.now(),
             status,
             error,
         });

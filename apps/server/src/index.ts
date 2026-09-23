@@ -12,8 +12,22 @@
  * 8. Connector manager (dial trusted peers)
  * 9. Cert renewal scheduler
  */
+// FIRST IMPORT, AND IT MUST STAY FIRST. ES modules evaluate every import below before the first statement
+// of this file runs, and those imports are the whole application — db/db.ts opens SQLite at import. A crash
+// while that graph loads (state.db unopenable, a native binding missing) is written to a Node diagnostic
+// report before any statement here can tell Node to leave the environment out of it, and a node in that
+// state crash-loops, so no boot ever reaches the scrub either. See report-privacy.ts; it imports nothing,
+// deliberately.
+import './report-privacy.js';
+
 import fs from 'node:fs';
 import path from 'node:path';
+import { installProcessHandlers, scrubReportEnvironment } from './process-handlers.js';
+
+// Step 0: the process-level error net, before anything else in this file runs. A stray rejected promise
+// is recorded and the node keeps serving; a true uncaught exception still crashes and Docker still
+// restarts. Both leave a record in the data dir. See process-handlers.ts for why the two differ.
+installProcessHandlers();
 
 // Force load root .env (bypass Turborepo filters)
 const envPath = path.join(process.cwd(), '../../.env');
@@ -29,6 +43,12 @@ if (fs.existsSync(envPath)) {
         }
     }
 }
+
+// Now that the .env above has been read, the data dir is certain. On a self-hoster who sets
+// BEANPOOL_DATA_DIR there rather than in the real environment, the scrub inside installProcessHandlers()
+// looked in the wrong directory — this is the one that finds their old reports. Idempotent and, on a node
+// with nothing to scrub, one readdir.
+scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
 import { initAdminPassword } from './config/local-config.js';

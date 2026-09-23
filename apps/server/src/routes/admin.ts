@@ -64,6 +64,7 @@ import {
     type OffboardOptions,
 } from '../engine/member-wizards.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
+import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
@@ -738,6 +739,10 @@ const getDiagnosticsHandler = async (ctx: any) => {
             callsign: config.callsign || 'admin',
             shutdownStatus: getShutdownStatus(),
             diskHealth: getCachedDiskHealth(),
+            // Stray rejected promises the process-level net caught and kept serving through. The error
+            // text only — no request body, no parameter, no key — and already redacted on the way in.
+            // Zeroes on a node that has had none, which is every healthy node.
+            unhandledRejections: getUnhandledRejectionSummary(),
             diagnostics: {
                 cpuLoad,
                 cpusCount,

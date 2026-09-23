@@ -19,6 +19,7 @@ import { pruneFunnel } from './engine/funnel.js';
 import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
+import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
@@ -5313,7 +5314,7 @@ export function getPostCount(filter?: {
 
 // ===================== COMMUNITY HEALTH =====================
 
-export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
+export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
 export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
 export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
 
@@ -5648,6 +5649,23 @@ export function getCommunityHealth(): CommunityHealth {
             });
         }
     } catch (e) { console.error('Health flag check (watchdog) failed:', e); }
+
+    // 8. Stray rejected promises the process-level net caught. Each one used to end the process and drop
+    // every connected member for about a minute; now the node keeps serving and this says so instead. The
+    // count resets on restart, so a figure here means it happened during THIS run. The error text is
+    // deliberately not repeated: `flags` carries member public keys and fraud findings and is admin-only,
+    // but the detail belongs on the diagnostics screen, next to the log file that holds the stack.
+    try {
+        const rejections = getUnhandledRejectionSummary();
+        if (rejections.count > 0) {
+            flags.push({
+                type: 'unhandled_rejections',
+                severity: 'warning',
+                description: `${rejections.count} background task${rejections.count > 1 ? 's' : ''} failed without being handled since this node last started${rejections.lastAt ? ` (last: ${rejections.lastAt})` : ''} — the node kept serving; see Diagnostics and data/unhandled-rejections.log`,
+                members: []
+            });
+        }
+    } catch (e) { console.error('Health flag check (unhandled rejections) failed:', e); }
 
     const config = getLocalConfig();
     const reportCount = getReportCount();

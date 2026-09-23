@@ -415,6 +415,7 @@ run_federation_suites() {
       test-decisions-tick-route-gone
       test-rip-out-legacy-voting
       test-escrow-disputes
+      test-process-handlers
       test-shutdown-recovery
       test-storage-health
       test-groups-isolation

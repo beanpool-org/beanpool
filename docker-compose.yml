@@ -71,7 +71,15 @@ services:
       # stack — to /data (persisted), so a freeze like 2026-07-18 is diagnosable
       # instead of erased by the restart. Also dumps a report on any uncaught
       # exception. No effect on normal operation. See ops/watchdog/.
-      - NODE_OPTIONS=--max-old-space-size=512 --report-on-signal --report-directory=/data --report-uncaught-exception
+      # --report-exclude-env keeps the environment OUT of every one of those
+      # reports, because /data is what an owner copies and hands to a stranger
+      # for help and the variables below include ADMIN_PASSWORD and CF_API_TOKEN.
+      # The server also sets this from code (apps/server/src/report-privacy.ts);
+      # the flag is here because it is the only form that reaches a WORKER
+      # thread's copy of the setting, and it is on from the first instruction
+      # rather than from the first import. Supported since Node 22.13; the image
+      # is node:22-alpine3.21 (22.21.1), measured.
+      - NODE_OPTIONS=--max-old-space-size=512 --report-on-signal --report-directory=/data --report-uncaught-exception --report-exclude-env
     volumes:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock

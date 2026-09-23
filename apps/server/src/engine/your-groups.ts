@@ -79,8 +79,9 @@ const DELETED_BY_AUTHOR_PREVIEW = 'This message was deleted';
  * the stored way, so a member who deleted their own message saw the chat call it "This message was deleted"
  * and Talk call it "removed by a convenor" — about the same message.
  *
- * `authorDeleteText` is null for an event thread, which has only the host's removal: a host removing their own
- * message still reads as a removal there, because an event chat has no author delete to be confused with.
+ * `authorDeleteText` is null for a thread that HAS no author delete — an event's, and an enterprise's (#1048
+ * refuses one there, and a keeper has no Remove of their own in the app either). The removal's own wording is
+ * the only reading those can carry, whoever pressed the button, including the host or keeper's own line.
  */
 function tombstonePreview(row: any, removedText: string, authorDeleteText: string | null): string {
     if (!authorDeleteText) return removedText;
@@ -153,9 +154,11 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
     // every quiet enterprise to the top).
     const finish = (base: Omit<YourChat, 'lastMessage' | 'unreadCount' | 'mute' | 'lastActivityAt'>, removedText: string, since?: string | null) => {
         const cursor = readCursor(base.kind, base.conversationId, pubkey);
-        // An event chat has only the host's removal; every other kind can also hold an author's own delete.
+        // A group chat is the only kind with an author's own delete to tell apart. An event thread holds only
+        // the host's removal and an enterprise thread only a keeper's, so there the removal's wording is the
+        // whole reading — matching tombstoneText in apps/native/utils/chat-actions.ts.
         const lastMessage = lastMessageOf(base.conversationId, removedText,
-            base.kind === 'event' ? null : DELETED_BY_AUTHOR_PREVIEW);
+            base.kind === 'group' ? DELETED_BY_AUTHOR_PREVIEW : null);
         items.push({
             ...base,
             lastMessage,

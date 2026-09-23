@@ -8,7 +8,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    MESSAGE_EDIT_WINDOW_MS, DELETED_BY_AUTHOR_TEXT, REMOVED_BY_CONVENOR_TEXT, REMOVED_BY_HOST_TEXT, NOT_AVAILABLE_YET,
+    MESSAGE_EDIT_WINDOW_MS, DELETED_BY_AUTHOR_TEXT, REMOVED_BY_CONVENOR_TEXT, REMOVED_BY_HOST_TEXT,
+    REMOVED_BY_KEEPER_TEXT, NOT_AVAILABLE_YET,
     buildChatListItems, canDeleteMessage, canEditMessage, canReactToMessage, canRemoveMessage,
     canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator,
     isSystemLine, isTombstone, messageActions, normaliseThreadMessage, pendingAfterRead, reactionSummary,
@@ -186,6 +187,21 @@ describe('what a deleted message says', () => {
         expect(tombstoneText({ senderId: 'host-key', metadata: { removed: true, removedBy: 'host-key' } }, 'event'))
             .toBe(REMOVED_BY_HOST_TEXT);
         expect(tombstoneText({ senderId: ME, metadata: { removed: true } }, 'event')).toBe(REMOVED_BY_HOST_TEXT);
+    });
+
+    it('says a keeper removed it in an enterprise thread, whoever pressed the button', () => {
+        // The node refuses an author delete in an enterprise thread (#1048) and the app offers a keeper no
+        // Remove of their own, so the keeper's removal — made from the PWA — is the only tombstone it can hold.
+        expect(tombstoneText({ senderId: THEM, metadata: { removed: true, removedBy: 'keeper-key' } }, 'enterprise'))
+            .toBe(REMOVED_BY_KEEPER_TEXT);
+        expect(tombstoneText({ senderId: 'keeper-key', metadata: { removed: true, removedBy: 'keeper-key' } }, 'enterprise'))
+            .toBe(REMOVED_BY_KEEPER_TEXT);
+        expect(tombstoneText({ senderId: ME, metadata: { removed: true } }, 'enterprise')).toBe(REMOVED_BY_KEEPER_TEXT);
+    });
+
+    it('never calls an enterprise tombstone the author\'s own delete', () => {
+        expect(REMOVED_BY_KEEPER_TEXT).toBe('removed by a keeper');
+        expect(REMOVED_BY_KEEPER_TEXT).not.toBe(DELETED_BY_AUTHOR_TEXT);
     });
 
     it('keeps the wording the event chat had before the shared components', () => {

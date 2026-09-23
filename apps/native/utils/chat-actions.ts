@@ -25,6 +25,13 @@ export const REMOVED_BY_CONVENOR_TEXT = 'Removed by a convenor';
  */
 export const REMOVED_BY_HOST_TEXT = 'removed by the host';
 
+/**
+ * An enterprise thread's one removal, whoever did it. The keeper's own words, kept identical to what the node
+ * writes into a removed row there (apps/server/src/engine/enterprise-thread.ts) and to what "Your groups"
+ * previews it as — the list and the chat are looking at one message.
+ */
+export const REMOVED_BY_KEEPER_TEXT = 'removed by a keeper';
+
 /** An older node knows none of the new verbs. The app says this rather than showing its 403/404. */
 export const NOT_AVAILABLE_YET = 'Not available on this community yet';
 
@@ -112,6 +119,9 @@ export function isTombstone(m: { type?: string; metadata?: any } | null | undefi
  *  - an event chat has exactly one, the host's removal, and it says so even when the host removed their own
  *    message (the power `canRemoveMessage` deliberately keeps). It has no author delete to be confused with,
  *    and "Removed by a convenor" would name a role an event does not have;
+ *  - an enterprise thread is the same shape: the node refuses an author delete there (#1048) and the app
+ *    offers a keeper no Remove of their own, so its only tombstone is a keeper's removal, made from the PWA —
+ *    including of the keeper's own line, which must not read as that keeper deleting it;
  *  - a group chat has both, told apart by `removedBy`;
  *  - a DM has no moderator at all, so every tombstone in one is the author's own delete.
  */
@@ -120,6 +130,7 @@ export function tombstoneText(
     kind?: ChatKind,
 ): string {
     if (kind === 'event') return REMOVED_BY_HOST_TEXT;
+    if (kind === 'enterprise') return REMOVED_BY_KEEPER_TEXT;
     if (kind === 'dm') return DELETED_BY_AUTHOR_TEXT;
     const by = m?.metadata?.removedBy;
     if (by && m?.senderId && by === m.senderId) return DELETED_BY_AUTHOR_TEXT;

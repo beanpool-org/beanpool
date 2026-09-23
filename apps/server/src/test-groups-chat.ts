@@ -38,6 +38,7 @@ import {
     GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType,
 } from './engine/group-thread.js';
 import { removeOldChatGroups } from './engine/messaging.js';
+import { removeEnterpriseThreadMessage } from './engine/enterprise-thread.js';
 import { setChatMute } from './engine/chat-mutes.js';
 import { GROUP_CATEGORIES, DEFAULT_GROUP_CATEGORY, GROUP_CATEGORY_LABELS } from '@beanpool/core';
 import { createGroupRoutes } from './routes/groups.js';
@@ -424,6 +425,20 @@ async function main(): Promise<void> {
     assert(listYourChats(alice).items.find(i => i.id === garden.id)?.lastMessage?.text === 'removed by a convenor',
         'a removal of someone else\'s message still previews as "removed by a convenor"');
 
+    // An enterprise thread has no author delete at all: #1048 refuses one on the node, and the app offers a
+    // keeper no Remove of their own either — so a keeper removing their OWN line is still a keeper's removal,
+    // and must never preview as "This message was deleted". Same rule as an event's host (fix round 1).
+    await new Promise(r => setTimeout(r, 5));
+    const keepersOwnLine = postEnterpriseLine(bakery, bob);
+    removeEnterpriseThreadMessage(cb, bakery, keepersOwnLine, bob);
+    assert(listYourChats(bob).items.find(i => i.id === bakery)?.lastMessage?.text === 'removed by a keeper',
+        'a keeper removing their own line previews as "removed by a keeper", not as a delete');
+    await new Promise(r => setTimeout(r, 5));
+    const otherLine = postEnterpriseLine(bakery, erin);
+    removeEnterpriseThreadMessage(cb, bakery, otherLine, bob);
+    assert(listYourChats(bob).items.find(i => i.id === bakery)?.lastMessage?.text === 'removed by a keeper',
+        'and so does a keeper removing somebody else\'s');
+
     // ── 8b. Group chat sends through the ordinary send route are rate-limited ───────────────
     // (PR #924 review, item 4) — exactly as POST /api/groups/:id/chat/message is: per signed member in the chat
     // bucket, never the per-IP auth limiter that also guards recovery (0919 follow-up). A DM is not throttled.
@@ -476,9 +491,11 @@ async function main(): Promise<void> {
 }
 
 /** A message in an enterprise thread from someone who is not the keeper under test. */
-function postEnterpriseLine(enterprise: string, author: string): void {
+function postEnterpriseLine(enterprise: string, author: string): string {
+    const id = crypto.randomUUID();
     db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp)
-                VALUES (?, ?, ?, ?, 'plaintext-v1', 'text', ?)`).run(crypto.randomUUID(), enterprise, author, b64('Bread is up'), new Date().toISOString());
+                VALUES (?, ?, ?, ?, 'plaintext-v1', 'text', ?)`).run(id, enterprise, author, b64('Bread is up'), new Date().toISOString());
+    return id;
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

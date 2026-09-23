@@ -509,15 +509,9 @@ async function runSuite() {
     setCommonsBalance(500);
     db.prepare(`UPDATE accounts SET balance = 500 WHERE public_key = 'COMMONS_POOL'`).run();
 
-    // Fire tick without admin auth -> fails 401
-    const unauthTickRes = await callRouter(commonsRouter, 'POST', '/api/commons/decisions/tick');
-    assert(unauthTickRes.status === 401, 'Tick without admin auth fails with 401');
-
-    // Fire tick with admin auth -> succeeds 200
-    const tickRes = await callRouter(commonsRouter, 'POST', '/api/commons/decisions/tick', {
-        headers: { authorization: 'Bearer admin-secret' },
-    });
-    assert(tickRes.status === 200, 'Tick executed successfully with admin auth');
+    // Fire the tick the way the node does: the periodic tickDecisions() in state-engine.ts. There is no
+    // route for it — test-decisions-tick-route-gone.ts holds POST /api/commons/decisions/tick unrouted.
+    tickDecisions();
 
     // Verify decision executed
     const executedDecision = db.prepare(`SELECT * FROM decisions WHERE id = ?`).get(decisionPool.id) as any;

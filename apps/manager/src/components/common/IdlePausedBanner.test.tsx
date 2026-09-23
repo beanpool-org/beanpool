@@ -1,10 +1,15 @@
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { IdlePausedBanner } from './IdlePausedBanner';
-import { ActivityPauseProvider, IDLE_AFTER_MS } from '../../lib/activity-pause';
+import { ActivityPauseProvider } from '../../lib/activity-pause';
 
 describe('IdlePausedBanner', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
     it('renders nothing when not paused', () => {
         const { container } = render(<IdlePausedBanner />);
         expect(container.firstChild).toBeNull();
@@ -38,8 +43,6 @@ describe('IdlePausedBanner', () => {
 
         // Banner should disappear after resuming
         expect(screen.queryByRole('status')).toBeNull();
-
-        vi.useRealTimers();
     });
 
     it('remains hidden when tab is hidden (reason === "hidden")', () => {
@@ -62,8 +65,5 @@ describe('IdlePausedBanner', () => {
 
         // Reason is 'hidden', so banner should stay hidden
         expect(screen.queryByRole('status')).toBeNull();
-
-        vi.restoreAllMocks();
-        vi.useRealTimers();
     });
 });

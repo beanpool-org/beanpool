@@ -8,7 +8,8 @@
  * What it may show is decided in utils/group-succession, from `silence`, `proposals` and `canPropose` and nothing
  * else — the server is the authority on who may propose and who may vote, and its refusal is what a member reads
  * when this guesses wrong. A healthy group sees nothing here at all, and neither does a group on a node too old
- * for the route.
+ * for the route. For the fortnight after a vote closed it shows one plain line saying how it ended — the warning
+ * colour is for something that is actually happening.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -66,6 +67,23 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             textTransform: 'uppercase',
             letterSpacing: 0.5,
             color: colors.feedback.warning.fg,
+        },
+        // Nothing is under way: the group screen's own quiet section, not a warning.
+        quietCard: {
+            backgroundColor: colors.surface.card,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            borderRadius: 16,
+            padding: 14,
+            marginBottom: 16,
+            gap: 8,
+        },
+        quietHeading: {
+            fontSize: 12,
+            fontWeight: '700',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            color: colors.text.muted,
         },
         body: { fontSize: 13, lineHeight: 19, color: colors.text.secondary },
         note: { fontSize: 11, lineHeight: 16, color: colors.text.muted },
@@ -176,6 +194,18 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
     };
 
     if (!view.show) return null;
+
+    // Nothing is under way: the last vote's one line, and no heading announcing a process that is over — only a
+    // result the group may not have seen yet.
+    if (view.outcomeOnly) {
+        if (!view.outcomeLine) return null;
+        return (
+            <View style={styles.quietCard}>
+                <Text style={styles.quietHeading}>Lead convenor</Text>
+                <Text style={styles.body}>{view.outcomeLine}</Text>
+            </View>
+        );
+    }
 
     const open = view.openProposal;
     const candidateName = open?.candidateCallsign || open?.candidatePubkey.slice(0, 10) || '';

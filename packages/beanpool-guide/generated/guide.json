@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "version": 25,
-  "hash": "c25b6cdf3b2bcd9693073dc159a7ebd3334dcb2c08121c031be43f9448f64dec",
+  "hash": "e8927248d7d034f57008942bdf0c3105a8731d7c5ed742d4ae324fedb9f635b1",
   "sections": [
     {
       "id": "about",
@@ -2528,7 +2528,7 @@
         },
         {
           "type": "p",
-          "text": "**When the lead goes quiet.** Nobody can take the lead off the lead, so a lead who stops using the app would leave the group stuck. After 30 days with no activity from them, the group can vote a new lead in instead. Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active."
+          "text": "**When the lead goes quiet.** Nobody can take the lead off the lead, so a lead who stops using the app would leave the group stuck. After 30 days with no activity from them, the group can vote a new lead in instead. Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active — apart from one line saying how the last vote ended, which stays for two weeks after it closes."
         },
         {
           "type": "p",

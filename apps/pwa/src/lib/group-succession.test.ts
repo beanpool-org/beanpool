@@ -20,6 +20,8 @@ const OTHER = 'pk-pia';
 
 const NOW = Date.parse('2026-09-23T00:00:00.000Z');
 const DEADLINE = '2026-10-07T00:00:00.000Z';
+const DAY = 24 * 60 * 60 * 1000;
+const iso = (ms: number) => new Date(ms).toISOString();
 
 const member = (pubkey: string, callsign: string, role: GroupMember['role'], over: Partial<GroupMember> = {}): GroupMember => ({
     groupId: 'g1', memberPubkey: pubkey, callsign, role, status: 'active',
@@ -85,6 +87,52 @@ describe('buildSuccessionView — whether the section exists at all', () => {
         expect(view.show).toBe(true);
         expect(view.silenceLine).toBeNull();
         expect(view.outcomeLine).toBe('Marty came back, so the vote closed.');
+    });
+
+    it('says how the last vote ended for a fortnight afterwards, and nothing else', () => {
+        const view = buildSuccessionView(data({
+            silence: silence({ isSilent: false, isEligible: false }),
+            canPropose: false,
+            proposals: [proposal({ status: 'cancelled', closedReason: 'rejected', deadlineAt: iso(NOW - 13 * DAY) })],
+        }), ROSTER, NOW);
+        expect(view.show).toBe(true);
+        // Nothing is under way, so the screen has no process to announce: one line, no amber heading.
+        expect(view.outcomeOnly).toBe(true);
+        expect(view.outcomeLine).toBe('The group voted no, so Marty is still the lead.');
+        expect(view.silenceLine).toBeNull();
+        expect(view.openProposal).toBeNull();
+        expect(view.canPropose).toBe(false);
+        expect(view.canVote).toBe(false);
+    });
+
+    it('hides once that fortnight is up: a lead who is active and no vote running is a healthy group', () => {
+        const view = buildSuccessionView(data({
+            silence: silence({ isSilent: false, isEligible: false }),
+            canPropose: false,
+            proposals: [proposal({ status: 'cancelled', closedReason: 'rejected', deadlineAt: iso(NOW - 15 * DAY) })],
+        }), ROSTER, NOW);
+        expect(view.show).toBe(false);
+        expect(view.outcomeLine).toBeNull();
+    });
+
+    it('dates a vote that passed by when it was executed, not by the deadline it never reached', () => {
+        // A vote passes the moment the result is settled, which can be a fortnight before its deadline. Reading
+        // the deadline here would keep a two-week-old outcome up for another two weeks.
+        const view = buildSuccessionView(data({
+            silence: silence({ isSilent: false, isEligible: false }),
+            canPropose: false,
+            proposals: [proposal({ status: 'passed', closedReason: null, executedAt: iso(NOW - 15 * DAY), deadlineAt: iso(NOW - DAY) })],
+        }), ROSTER, NOW);
+        expect(view.show).toBe(false);
+    });
+
+    it('keeps showing while the lead is still eligible, however old the last vote is', () => {
+        const view = buildSuccessionView(data({
+            proposals: [proposal({ status: 'cancelled', closedReason: 'rejected', deadlineAt: iso(NOW - 400 * DAY) })],
+        }), ROSTER, NOW);
+        expect(view.show).toBe(true);
+        expect(view.outcomeOnly).toBe(false);
+        expect(view.silenceLine).toBe("Marty hasn't been active for 44 days. The group can choose a new lead.");
     });
 });
 

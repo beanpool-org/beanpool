@@ -266,8 +266,9 @@ lead, node admins included (they hold no power over groups, and this changed not
 lead moves by hand-over, by stepping down or leaving (hand over first while anyone else is active), or by
 the 30-day-silence vote — which now covers a silent lead, with the group's other convenors voting, or
 its members when the lead is its only convenor. That vote got its screens on 2026-09-23, in both apps, on
-the group's own info screen above the roster: it is hidden entirely while the lead is active and no vote
-has been held, so a healthy group never sees it. There is no community Decision route: no Decision effect
+the group's own info screen above the roster: it is hidden entirely while the lead is active and no vote is
+running, apart from a single line saying how the last vote ended, which stays for a fortnight after it closed
+(PR #1062 review). So a healthy group never sees it. There is no community Decision route: no Decision effect
 names a group's lead as its subject (see "A suspended lead is still the lead" below), and the refusal
 text a convenor sees names only the two routes that exist — hand-over first, then the vote. Stored as
 `groups.lead_pubkey`, backfilled to the creator while they are an active convenor and otherwise to the

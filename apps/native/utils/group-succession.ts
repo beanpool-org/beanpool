@@ -24,7 +24,10 @@ export interface GroupSilence {
     lastActiveAt: string | null;
     daysInactive: number;
     isSilent: boolean;
-    /** Silent AND somebody is left who may vote. Nothing shows unless this or a proposal is true. */
+    /**
+     * Silent AND somebody is left who may vote. Nothing shows unless this is true, a vote is running, or one
+     * closed within the last fortnight.
+     */
     isEligible: boolean;
     /** Who votes: the lead's fellow convenors, or the members when the lead is the only convenor. */
     electorate: 'convenors' | 'members';
@@ -86,6 +89,12 @@ export interface GroupSuccessionView {
     closingLine: string | null;
     /** The latest closed vote in one line, when none is running. */
     outcomeLine: string | null;
+    /**
+     * Nothing is under way: the lead is active again, no vote is running, and all that is left to say is how the
+     * last one ended. The screen draws that single line plainly — no warning colour, and no heading claiming a
+     * process that is over.
+     */
+    outcomeOnly: boolean;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -117,7 +126,37 @@ export function silenceLineText(s: GroupSilence): string | null {
     return `${who} hasn't been active for ${days} ${days === 1 ? 'day' : 'days'}. The group can choose a new lead.`;
 }
 
-/** The latest finished vote, said once. No history list: decision 5. */
+/**
+ * How long a finished vote stays on the group's screen (decided on PR #1062, 2026-09-23). A result is news for a
+ * fortnight; after that a group whose lead is active again is simply a healthy group, and a healthy group sees
+ * nothing here.
+ */
+export const OUTCOME_VISIBLE_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * When a finished vote finished, in ms, or null if that cannot be said.
+ *
+ * The server writes `executed_at` only for a vote that PASSED; one that was rejected or cancelled is written with
+ * a status and a reason and no timestamp at all (apps/server/src/engine/group-succession.ts, `closeProposal`), so
+ * there is nothing else to read for those. `deadlineAt` is the honest stand-in: a vote can only close at or
+ * before its own deadline, which makes it the latest moment the vote could still have been live. It therefore
+ * never drops an outcome while it is still fresh, and at worst keeps one a little past its fortnight — by less
+ * than the 14 days a vote runs.
+ */
+export function proposalClosedAtMs(p: GroupSuccessionProposal | null | undefined): number | null {
+    if (!p || p.status === 'active') return null;
+    const when = p.executedAt || p.deadlineAt;
+    const ms = when ? Date.parse(when) : NaN;
+    return Number.isNaN(ms) ? null : ms;
+}
+
+/** Is this finished vote still recent enough to be worth a line? */
+export function isOutcomeRecent(p: GroupSuccessionProposal | null | undefined, now = Date.now()): boolean {
+    const closedAt = proposalClosedAtMs(p);
+    return closedAt !== null && now - closedAt < OUTCOME_VISIBLE_MS;
+}
+
+/** The latest finished vote, in one line for the fortnight after it closed. No history list: decision 5. */
 export function outcomeLineText(p: GroupSuccessionProposal | null | undefined): string | null {
     if (!p || p.status === 'active') return null;
     const who = p.candidateCallsign || 'The person proposed';
@@ -160,19 +199,24 @@ export function buildSuccessionView(
 ): GroupSuccessionView {
     const hidden: GroupSuccessionView = {
         show: false, openProposal: null, silenceLine: null, canPropose: false, candidates: [],
-        canVote: false, myVote: null, tallyLine: null, closingLine: null, outcomeLine: null,
+        canVote: false, myVote: null, tallyLine: null, closingLine: null, outcomeLine: null, outcomeOnly: false,
     };
     if (!data || !data.silence) return hidden;
 
     const proposals = Array.isArray(data.proposals) ? data.proposals : [];
     const openProposal = proposals.find(p => p.status === 'active') ?? null;
-    // Decision 2: nothing at all for a healthy group. A past vote still earns its outcome line, so the group can
-    // see what happened without being told to go looking.
-    if (!data.silence.isEligible && proposals.length === 0) return hidden;
-
     // Proposals come back newest first (the server orders by created_at DESC), so the latest closed one is simply
     // the first that is not the open one.
     const latestClosed = proposals.find(p => p.status !== 'active') ?? null;
+
+    // Decision 2: nothing at all for a healthy group. The section exists while the lead can be replaced, while a
+    // vote is running, and for a fortnight after one closed — long enough for the group to learn what happened,
+    // and not a day longer. A group that settled the question a year ago sees no card at all.
+    if (!data.silence.isEligible && !openProposal && !isOutcomeRecent(latestClosed, now)) return hidden;
+
+    // The whole section is one closed vote's outcome: the lead is active, nothing is running, and there is
+    // nothing to offer — the server would refuse a proposal for a lead who is not silent.
+    const outcomeOnly = !data.silence.isEligible && !openProposal;
 
     return {
         show: true,
@@ -180,13 +224,14 @@ export function buildSuccessionView(
         silenceLine: silenceLineText(data.silence),
         // Both halves of this are the server's: `canPropose` already goes false while a vote is open, and the
         // second only makes that impossible to get wrong on a stale read.
-        canPropose: !!data.canPropose && !openProposal,
+        canPropose: !!data.canPropose && !openProposal && !outcomeOnly,
         candidates: proposalCandidates(data.silence, members),
         canVote: !!openProposal?.canVote,
         myVote: openProposal?.myVote ?? null,
         tallyLine: openProposal ? tallyLineText(openProposal) : null,
         closingLine: openProposal ? closingLineText(openProposal, now) : null,
         outcomeLine: openProposal ? null : outcomeLineText(latestClosed),
+        outcomeOnly,
     };
 }
 

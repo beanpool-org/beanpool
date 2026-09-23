@@ -213,8 +213,20 @@ describe('GroupSuccessionPanel — an open vote', () => {
 });
 
 describe('GroupSuccessionPanel — a closed vote', () => {
-    const closed = (reason: string, status = 'cancelled') =>
-        ({ proposals: [proposal({ status, closedReason: reason })], silence: silence({ isSilent: false, isEligible: false }) });
+    const DAY = 24 * 60 * 60 * 1000;
+    // The panel reads the real clock — the outcome line lasts a fortnight — so a closed vote is dated from now
+    // rather than from a fixed date that would quietly age these tests out.
+    const closedAt = (daysAgo: number, reason: string | null, status = 'cancelled') => {
+        const when = new Date(Date.now() - daysAgo * DAY).toISOString();
+        return {
+            proposals: [proposal({
+                status, closedReason: reason,
+                deadlineAt: when, executedAt: status === 'passed' ? when : null,
+            })],
+            silence: silence({ isSilent: false, isEligible: false }),
+        };
+    };
+    const closed = (reason: string, status = 'cancelled') => closedAt(2, reason, status);
 
     it.each([
         ['rejected', 'The group voted no, so Marty is still the lead.'],
@@ -228,8 +240,24 @@ describe('GroupSuccessionPanel — a closed vote', () => {
     });
 
     it('says one line when the vote passed', async () => {
-        answer({ proposals: [proposal({ status: 'passed', closedReason: null })], silence: silence({ isSilent: false, isEligible: false }) });
+        answer(closedAt(2, null, 'passed'));
         panel();
         expect(await screen.findByText("Damo is now the group's lead convenor.")).toBeInTheDocument();
+    });
+
+    it('claims no process is under way: no amber card, no warning heading, just the line', async () => {
+        answer(closedAt(13, 'rejected'));
+        const { container } = panel();
+        expect(await screen.findByText('The group voted no, so Marty is still the lead.')).toBeInTheDocument();
+        expect(screen.queryByText(/Choosing a new lead convenor/)).toBeNull();
+        expect(container.textContent).not.toContain('⚠️');
+        expect(container.querySelector('[class*="amber"]')).toBeNull();
+    });
+
+    it('draws nothing at all once the vote is more than a fortnight old', async () => {
+        answer(closedAt(15, 'rejected'));
+        const { container } = panel();
+        await waitFor(() => expect(getGroupSuccession).toHaveBeenCalled());
+        expect(container).toBeEmptyDOMElement();
     });
 });

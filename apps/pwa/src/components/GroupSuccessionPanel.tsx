@@ -8,7 +8,8 @@
  * The shape follows the enterprise succession panel on TreasuryDetailPage: an amber card, the tally, the deadline,
  * Yes/No. What it may show is decided in lib/group-succession, from `silence`, `proposals` and `canPropose` and
  * nothing else — the server is the authority on who may propose and who may vote, and its refusal is what a member
- * reads when this guesses wrong. A healthy group sees nothing here at all.
+ * reads when this guesses wrong. A healthy group sees nothing here at all, and for the fortnight after a vote
+ * closed it sees one plain line saying how it ended — amber is for something that is actually happening.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -86,6 +87,20 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
     };
 
     if (!view.show) return null;
+
+    // Nothing is under way: the last vote's one line, in the group screen's own quiet style. No warning colour and
+    // no heading announcing a process, because there is none — only a result the group may not have seen yet.
+    if (view.outcomeOnly) {
+        if (!view.outcomeLine) return null;
+        return (
+            <section aria-labelledby="group-lead-vote-heading" className="border border-nature-200 dark:border-nature-800 rounded-2xl p-4 space-y-2">
+                <h3 id="group-lead-vote-heading" className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400">
+                    Lead convenor
+                </h3>
+                <p className="text-xs text-nature-700 dark:text-nature-300 leading-relaxed">{view.outcomeLine}</p>
+            </section>
+        );
+    }
 
     const open = view.openProposal;
     const candidateName = open?.candidateCallsign || open?.candidatePubkey.slice(0, 10) || '';

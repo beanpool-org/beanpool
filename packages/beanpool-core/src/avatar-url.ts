@@ -27,7 +27,13 @@
  * readers — and decision (a) is that there be exactly ONE of these, not one per package.
  */
 
-import crypto from 'node:crypto';
+// The digest comes from `@noble/hashes`, not `node:crypto`, because the barrel this module is
+// exported from is bundled by Metro for android and ios, where Expo's resolver deliberately
+// errors on Node built-ins rather than shimming them. A `node:` import here does not fail tsc
+// or vitest — both run in Node — it fails `expo export`, i.e. the phone app.
+// `barrel-is-universal.test.ts` guards that for the whole barrel.
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
 /**
  * Is this string one of THIS node's own avatar URLs, round-tripped back to us?
@@ -112,7 +118,7 @@ export function avatarVersionOf(id: string, stored: string): string {
         return cached.version;
     }
 
-    const version = crypto.createHash('sha256').update(stored).digest('hex').slice(0, 8);
+    const version = bytesToHex(sha256(utf8ToBytes(stored))).slice(0, 8);
 
     if (cached) {
         versionCacheChars -= cached.stored.length;

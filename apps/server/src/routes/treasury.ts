@@ -33,7 +33,7 @@ import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlFor } from '../engine/avatar-url.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
     const router = new Router();

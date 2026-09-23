@@ -59,7 +59,7 @@ import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { requireAdminRole, type AdminRole } from '../admin-auth.js';
-import { avatarUrlFor } from '../engine/avatar-url.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 /**
  * Who may do what on the routes below. Every admin route takes checkAdminAuth (a key-signed session of an owner or

@@ -7,7 +7,7 @@ import { db, writeTombstone } from '../db/db.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
-import { isServableAvatarValue } from './avatar-url.js';
+import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import {
     getMember,

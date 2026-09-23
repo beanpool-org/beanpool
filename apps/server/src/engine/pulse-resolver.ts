@@ -24,7 +24,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { ChannelCategory, ChannelPlatform } from './creator-channels.js';
 import { scrubEndedEvents } from './posts.js';
-import { avatarUrlFor } from './avatar-url.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 // ============================================================================
 // 1. Errors & Types

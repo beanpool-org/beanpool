@@ -65,7 +65,7 @@ import {
 import { logger } from '../logger.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlFor } from '../engine/avatar-url.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 export interface PulseSubmitRouteDeps extends RouteDeps {
     thumbnailService?: PulseThumbnailService;

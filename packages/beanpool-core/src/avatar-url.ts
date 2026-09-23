@@ -20,7 +20,11 @@
  * `GET /api/avatar/<pk>` 404d: the photo was gone. Such a row now reads as NO avatar
  * (emitted null, and no photo for the marketplace gate), so members see their initials rather
  * than a blank ring and the phone's existing self-heal republishes the canonical copy.
- * `isSelfAvatarUrl` is the write-side half: see `engine/members.ts` and `db/db.ts`.
+ * `isSelfAvatarUrl` is the write-side half: see the server's `engine/members.ts` and `db/db.ts`.
+ *
+ * It lives in @beanpool/core because the emission sites are split across two packages — the
+ * server's routes and state engine, and @beanpool/engine's posts, messaging and social
+ * readers — and decision (a) is that there be exactly ONE of these, not one per package.
  */
 
 import crypto from 'node:crypto';

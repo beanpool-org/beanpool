@@ -17,7 +17,7 @@ import {
     canReadEventThread, loadEventForThread, isEventThreadExpired, eventThreadReadOnlyReason, EVENT_THREAD_REMOVED_TEXT,
 } from './event-thread.js';
 import { getChatMutesFor, type ChatMute } from './chat-mutes.js';
-import { avatarUrlFor } from './avatar-url.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
 

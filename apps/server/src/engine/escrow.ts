@@ -5,7 +5,7 @@
 import { isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { isNodeOwner } from './node-roles.js';
-import { isServableAvatarValue } from './avatar-url.js';
+import { isServableAvatarValue } from '@beanpool/core';
 import { recordActivity } from '../db/activity-feed-db.js';
 import { adminActorName } from './admin-actor-name.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';

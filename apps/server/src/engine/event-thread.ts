@@ -23,7 +23,7 @@ import {
 } from '@beanpool/engine';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import type { MessagingCallbacks } from './messaging.js';
-import { avatarUrlFor } from './avatar-url.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 export const EVENT_THREAD_MESSAGE_MAX = 2000;
 export const EVENT_THREAD_REMOVED_TEXT = 'removed by the host';

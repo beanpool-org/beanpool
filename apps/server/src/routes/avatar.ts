@@ -19,7 +19,7 @@ export function createAvatarRoutes(deps?: AvatarRouteDeps) {
         }
 
         const size = ctx.query.size === 'thumb' ? 'thumb' : 'full';
-        // `v` (the content-derived version from engine/avatar-url.ts) is deliberately not read.
+        // `v` (the content-derived version from @beanpool/core avatar-url.ts) is deliberately not read.
         // It exists to make the URL change when the photo does, so client caches that key on the
         // URL fetch again; what gets served is always whatever the row holds NOW. Ignoring it
         // also means a stale or absent `v` — an older app build, a hand-typed URL — still gets

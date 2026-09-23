@@ -149,7 +149,7 @@ import {
     redeemInvite as redeemInviteEngine,
     redeemOfflineTicket as redeemOfflineTicketEngine
 } from './engine/invites.js';
-import { avatarUrlFor, isServableAvatarValue } from './engine/avatar-url.js';
+import { avatarUrlFor, isServableAvatarValue } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,

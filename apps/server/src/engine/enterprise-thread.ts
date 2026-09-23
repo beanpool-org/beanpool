@@ -8,7 +8,7 @@ import { db } from '../db/db.js';
 import { getMember, getConversation, type Conversation } from '@beanpool/engine';
 import { isSyntheticAccount } from '@beanpool/core';
 import type { MessagingCallbacks } from './messaging.js';
-import { avatarUrlFor } from './avatar-url.js';
+import { avatarUrlFor } from '@beanpool/core';
 
 export interface EnterpriseThreadMessage {
     id: string;

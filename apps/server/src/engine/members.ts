@@ -8,7 +8,7 @@ import { getMember, getProfile, type Member, type MemberProfile } from '@beanpoo
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptableAvatarValue } from './avatar.js';
-import { isSelfAvatarUrl } from './avatar-url.js';
+import { isSelfAvatarUrl } from '@beanpool/core';
 
 /**
  * Record activity timestamp for a member.

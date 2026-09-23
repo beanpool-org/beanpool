@@ -330,6 +330,8 @@ run_federation_suites() {
       test-enterprise-event-http
       test-event-chat
       test-event-notify
+      test-event-reminders
+      test-event-reminders-http
       test-posts-fts-same-ms
       test-event-scrub
       test-migration-projects-enterprises

@@ -219,11 +219,30 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     status TEXT NOT NULL CHECK (status IN ('going', 'interested')),
     signature TEXT NOT NULL,
+    -- This person's reminders FOR THIS EVENT (docs/events-on-the-map.md §2.1). JSON array of minutes
+    -- before the start, e.g. '[1440]'. NULL means "my Settings default applies", '[]' means none. It
+    -- lives on the RSVP because it is meaningless without one, and so it travels with the RSVP through
+    -- delta sync and dies with it when the RSVP is withdrawn.
+    reminder_offsets TEXT,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (post_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_member ON event_rsvps(member_pubkey);
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_updated_at ON event_rsvps(updated_at);
+
+-- One row per reminder this node has actually sent (docs/events-on-the-map.md §2.2). The primary key IS
+-- the de-duplication: the scheduler claims a due reminder with INSERT OR IGNORE and sends only when the
+-- insert won, so a restart mid-sweep, a second tick or a slow Expo call can never double-send.
+--
+-- Deliberately NOT replicated: it is this node's delivery log, not member data, and only the primary ever
+-- sends (§2.2). The rows are deleted with the rest of an event by the 30-day scrub.
+CREATE TABLE IF NOT EXISTS event_reminders_sent (
+    post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    offset_min INTEGER NOT NULL,
+    sent_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (post_id, member_pubkey, offset_min)
+);
 CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_end_at) WHERE type = 'event';
 
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial

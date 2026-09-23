@@ -254,6 +254,12 @@ export interface SyncEventRsvp {
     memberPubkey: string;
     status: 'going' | 'interested';
     signature: string;
+    /**
+     * This person's reminders for this event: a JSON array of minutes-before-start, or null for "my
+     * Settings default applies" (docs/events-on-the-map.md §2.1). Optional, because a snapshot from a node
+     * older than reminders carries no such field — the import COALESCEs rather than erasing what it holds.
+     */
+    reminderOffsets?: string | null;
     updatedAt: string;
 }
 
@@ -696,6 +702,9 @@ export function exportSyncState(
             memberPubkey: r.member_pubkey,
             status: r.status,
             signature: r.signature || '',
+            // Undefined rather than null on a schema without the column, so the import can tell "this node
+            // does not know about reminders" from "this person has no per-event choice".
+            reminderOffsets: r.reminder_offsets === undefined ? undefined : (r.reminder_offsets ?? null),
             updatedAt: r.updated_at,
         }));
     } catch {

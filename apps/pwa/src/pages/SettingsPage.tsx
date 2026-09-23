@@ -1270,12 +1270,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     category of alert. It travels on the Marketplace category, so it only
                                     reaches a phone with that switch on — which the line below says. */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800">
-                                    <div className="text-sm font-bold text-nature-900 dark:text-white">Event reminders</div>
-                                    <div className="text-xs text-nature-500 dark:text-nature-400 mb-3">
-                                        How long before an event you are going to, or interested in, starts. You can change it on any one event.
-                                    </div>
                                     <fieldset className="m-0 p-0 border-0 flex flex-col gap-1">
-                                        <legend className="sr-only">Event reminders</legend>
+                                        <legend className="text-sm font-bold text-nature-900 dark:text-white p-0">Event reminders</legend>
+                                        <p className="m-0 mb-3 text-xs text-nature-500 dark:text-nature-400">
+                                            How long before an event you are going to, or interested in, starts. You can change it on any one event.
+                                        </p>
                                         {REMINDER_OFFSETS.map(minutes => (
                                             <label key={minutes} className="flex items-center gap-2 min-h-[48px] text-sm font-semibold text-nature-800 dark:text-nature-200 cursor-pointer">
                                                 <input

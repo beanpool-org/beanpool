@@ -25,6 +25,21 @@ import type { NodeProfile } from './lib/profiles';
  * test harness rather than the app.
  */
 
+/**
+ * The stepping above is what makes these tests expensive: the ten-minute idle tests walk the clock
+ * a simulated second at a time, so one test drives 600-700 React flushes over a full App tree.
+ * That is ~130 ms on a developer machine and ~2.3 s on a loaded one, and it went over Vitest's
+ * 5 s default on CI, where four suites share two cores.
+ *
+ * Worth knowing about that failure: when Vitest times out a test parked inside `act(...)` with
+ * fake timers installed, it fails the test but cannot cancel the continuation. The orphan keeps
+ * stepping the clock and opening `act` scopes underneath whichever test runs next, so every
+ * remaining test in the file renders into an empty container and fails too — one slow test is
+ * reported as ten broken ones. The budget below is what stops that, and it is deliberately far
+ * larger than the slowest run measured (2.3 s) rather than trimmed to fit it.
+ */
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
+
 const DIAGNOSTICS = '/api/local/admin/diagnostics';
 const DATA = '/api/local/admin/data';
 const GATEWAY = '/api/local/admin/gateway';
@@ -121,22 +136,32 @@ function setHidden(hidden: boolean) {
     });
 }
 
+/**
+ * Everything these tests share through a global: the two storages the app reads its profiles,
+ * active tab and dismissed flags out of, the stubbed `fetch` and its recorded calls, and the
+ * `document.hidden` override that outlives the test that set it. Both describes run this, so a
+ * test cannot inherit a dismissed flag or a hidden tab from the one before it.
+ */
+function resetSharedState() {
+    localStorage.clear();
+    sessionStorage.clear();
+    dataPayload = { success: true, health: { flags: [] }, reports: [], members: [] };
+    installFetch();
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    vi.useFakeTimers();
+}
+
+function restoreSharedState() {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+}
+
 const IDLE_MS = 10 * 60 * 1000;
 
 describe('Node Settings polling cadence', () => {
-    beforeEach(() => {
-        localStorage.clear();
-        sessionStorage.clear();
-        dataPayload = { success: true, health: { flags: [] }, reports: [], members: [] };
-        installFetch();
-        Object.defineProperty(document, 'hidden', { value: false, configurable: true });
-        vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-        vi.useRealTimers();
-        vi.unstubAllGlobals();
-    });
+    beforeEach(resetSharedState);
+    afterEach(restoreSharedState);
 
     it('costs one data payload and one gateway config per node per minute, not one per tick', async () => {
         seedProfiles('https://localhost:8443');
@@ -375,17 +400,8 @@ describe('Node Settings polling cadence', () => {
 describe('Section timers obey the same pause', () => {
     const activeNode: NodeProfile = { id: 'local-node', name: 'Local', url: 'https://localhost:8443', adminPassword: 'pw' };
 
-    beforeEach(() => {
-        localStorage.clear();
-        installFetch();
-        Object.defineProperty(document, 'hidden', { value: false, configurable: true });
-        vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-        vi.useRealTimers();
-        vi.unstubAllGlobals();
-    });
+    beforeEach(resetSharedState);
+    afterEach(restoreSharedState);
 
     it("Topology's harvester poll stops when the operator is away", async () => {
         await act(async () => {

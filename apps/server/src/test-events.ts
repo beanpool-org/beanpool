@@ -123,7 +123,10 @@ async function main(): Promise<void> {
     assertThrows(base({ eventStartAt: 'next tuesday' }), /Start time must be a valid date/, 'an unparseable start is refused');
     assertThrows(base({ eventStartAt: inHours(-1) }), /must start in the future/, 'an event starting in the past is refused');
     assertThrows(base({ eventStartAt: inHours(5), eventEndAt: inHours(4) }), /must end after it starts/, 'an end before the start is refused');
-    assertThrows(base({ eventStartAt: inHours(5), eventEndAt: inHours(5) }), /must end after it starts/, 'an end equal to the start is refused');
+    // One clock read for both: two calls to inHours(5) can straddle a millisecond tick, which makes the end
+    // 1 ms after the start — a valid event, so nothing is thrown and the upcoming-event cap then cascades.
+    const sameInstant = inHours(5);
+    assertThrows(base({ eventStartAt: sameInstant, eventEndAt: sameInstant }), /must end after it starts/, 'an end equal to the start is refused');
     assertThrows(base({ eventStartAt: inHours(5) }, null), /needs a place on the map/, 'an event without a pin is refused');
     assertThrows(base({ eventStartAt: inHours(5), eventPlaceName: 'x'.repeat(81) }), /80 characters/, 'a place name over 80 characters is refused');
     assertThrows(base({ eventStartAt: inHours(5), eventPrivateNote: 'x'.repeat(1001) }), /1000 characters/, 'a private note over 1000 characters is refused');

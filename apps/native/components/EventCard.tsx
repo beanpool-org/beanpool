@@ -5,17 +5,21 @@
  * buttons with my status on the filled one. CANCELLED or UPDATED is a badge on the first line. The host is on
  * the detail screen, not here. Holds at 320dp with 1.3× text: every row truncates, the buttons share the
  * width and keep a 48dp target.
+ *
+ * An event with a photo shows it, as the offer cards beside it do — the host put it there, and a feed of
+ * pictures with one blank tile among them reads as the event being the lesser thing.
  */
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { rsvpEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import {
     formatEventWhen, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
-    formatDistance, distanceKm, isOwnEvent, type EventRsvpStatus, type RsvpCounts,
+    formatDistance, distanceKm, isOwnEvent, eventCoverPhoto, type EventRsvpStatus, type RsvpCounts,
 } from '../utils/events';
 
 export const EVENT_ACCENT = '#7c3aed';
@@ -54,6 +58,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
         ? formatDistance(distanceKm(myLocation.lat, myLocation.lng, post.lat, post.lng))
         : null;
     const placeLine = [placeName, distance].filter(Boolean).join(' · ');
+    const photo = eventCoverPhoto(post);
 
     const handleRsvp = async (tapped: EventRsvpStatus) => {
         if (pending || closed) return;
@@ -107,17 +112,37 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
             accessibilityRole="button"
             accessibilityLabel={`Event: ${post.title}, ${when}${badge ? `, ${badge.toLowerCase()}` : ''}`}
         >
-            <View style={styles.whenRow}>
-                {badge && (
-                    <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>
-                        <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]} numberOfLines={1}>{badge}</Text>
-                    </View>
+            {/*
+              * The host's photo, the same size, crop and cache policy the offer card beside it uses in the list
+              * (index.tsx list view): a 96dp square on the left, with the lines beside it. It sits inside the
+              * card's own Pressable and has no onPress of its own, so it never becomes a second tap target.
+              * Without a photo the card is exactly the stack it has always been.
+              */}
+            <View style={photo ? styles.photoRow : undefined}>
+                {photo && (
+                    <Image
+                        source={{ uri: photo }}
+                        style={styles.photo}
+                        accessibilityLabel={post.title}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={150}
+                    />
                 )}
-                <Text style={[styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
+                <View style={photo ? styles.photoRowText : undefined}>
+                    <View style={styles.whenRow}>
+                        {badge && (
+                            <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>
+                                <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]} numberOfLines={1}>{badge}</Text>
+                            </View>
+                        )}
+                        <Text style={[styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
+                    </View>
+                    <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
+                    {!!placeLine && <Text style={styles.meta} numberOfLines={1}>📍 {placeLine}</Text>}
+                    <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
+                </View>
             </View>
-            <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
-            {!!placeLine && <Text style={styles.meta} numberOfLines={1}>📍 {placeLine}</Text>}
-            <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
             {/* The host is running it: no Going / Interested on their own event (round 2, B4). */}
             {isOwnEvent(post, currentPubkey) ? (
                 <Text style={styles.hosting} numberOfLines={1}>You're hosting this event</Text>
@@ -148,6 +173,24 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             alignItems: 'center',
             gap: 6,
             marginBottom: 4,
+        },
+        // Only used when there is a photo. The RSVP row stays outside it, keeping the card's full width, so at
+        // 320dp with 1.3× text the buttons are never squeezed into the column beside the picture.
+        photoRow: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 12,
+        },
+        photoRowText: {
+            flex: 1,
+            minWidth: 0,
+        },
+        photo: {
+            width: 96,
+            height: 96,
+            borderRadius: 14,
+            flexShrink: 0,
+            backgroundColor: colors.surface.subtle,
         },
         when: {
             flex: 1,

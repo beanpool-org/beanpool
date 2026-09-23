@@ -32,9 +32,22 @@ FAILING_TESTS_LOOKAHEAD=${FAILING_TESTS_LOOKAHEAD:-20}
 #   vitest   ` FAIL  src/x.test.tsx > Suite > test name`, then its first error line (AssertionError,
 #            TestingLibraryElementError, Error:, expected …).
 #   apps/server/src/test-*.ts  script-style suites that `turbo run test` cannot see. They print their own
-#            `✗ <assertion>` / `✗ FAIL: <assertion>` per check and `❌ Test failed: …` at the end, under a
-#            `━━━ <suite> ━━━` header — so each of those lines is tagged with the suite it came from.
+#            `✗ <assertion>` / `✗ FAIL: <assertion>` per check, under a `━━━ <suite> ━━━` header — so each
+#            of those lines is tagged with the suite it came from.
 # A `✓` pass line matches neither.
+#
+# THE THREE LEVELS OF ❌, and why the count would otherwise lie. A script-style suite that fails one
+# assertion prints THREE ❌-ish lines, not one: the `✗` for the check, its own `❌ Test failed: Error: N
+# check(s) failed` catch-all, and run_federation_suites' closing `❌ <group> suites failed: <names>`.
+# Counting all three reported one broken assertion as "Failing tests (3)" and scaled with the number of
+# failing suites — the opposite of naming precisely what failed (review of PR #1069).
+# So only `✗` and `FAIL` are failing TESTS. The two ❌ summaries are kept as FALLBACKS, because each is
+# sometimes the only evidence there is:
+#   suite-level  `❌ Test failed: <err>` is all a suite prints when it throws before reaching a check,
+#                and `❌ Error: …` is the whole output of the secrets_guard check, which has no checks.
+#                Named only when its suite produced no `✗` of its own.
+#   run-level    `❌ <group> suites failed: <names>` is all that is left of a suite killed by the
+#                timeout, which prints neither. Named only when a suite it lists has nothing else.
 failing_tests_summary() {
   awk -v esc="$(printf '\033')" \
       -v cap="$FAILING_TESTS_CAP" \
@@ -66,9 +79,16 @@ failing_tests_summary() {
         next
       }
 
-      if (t ~ /^FAIL[[:space:]]/) { record(trim(substr(t, 5))); want_err = 1; look = 0; next }
-      if (t ~ /^❌/)              { record(tag(t)); want_err = 1; look = 0; next }
-      if (t ~ /^✗/)              { record(tag(t)); want_err = 0; next }
+      # A real failing test. These, and only these, are counted.
+      if (t ~ /^FAIL[[:space:]]/) { covered[suite] = 1; record(trim(substr(t, 5))); want_err = 1; look = 0; next }
+      if (t ~ /^✗/)              { covered[suite] = 1; record(tag(t)); want_err = 0; next }
+
+      # A summary. Held back, and printed at the end only if nothing better turned up — see the header.
+      if (t ~ /^❌/) {
+        if (t ~ /suites failed:/) { rollup[++nr] = t }
+        else if (!(suite in candline)) { cand[++nc] = suite; candline[suite] = tag(t) }
+        next
+      }
 
       # The first error line under a failure it belongs to.
       if (pending && want_err) {
@@ -82,7 +102,27 @@ failing_tests_summary() {
     # Which suite a script-style line came from. Skipped when the line already names it, so the
     # closing roll-up ("❌ Federation suites failed: test-x") does not repeat itself.
     function tag(t) { return (suite == "" || index(t, suite) > 0) ? t : suite ": " t }
+    # Does the run-level roll-up name a suite that nothing else accounted for? That suite left no
+    # trace but this line — a timeout kills it mid-check — so the line is worth printing.
+    function rollup_adds(t,   names, parts, i, k, name) {
+      names = t
+      sub(/^.*suites failed:[[:space:]]*/, "", names)
+      k = split(names, parts, " ")
+      if (k == 0) return 1
+      for (i = 1; i <= k; i++) {
+        name = parts[i]
+        sub(/\(.*\)$/, "", name)   # test-x(TIMEOUT) is still test-x
+        if (name != "" && !(name in covered)) return 1
+      }
+      return 0
+    }
     END {
+      # Suites that printed no ✗ of their own: their catch-all line is the only name they have.
+      for (i = 1; i <= nc; i++) {
+        if (!(cand[i] in covered)) { covered[cand[i]] = 1; record(candline[cand[i]]) }
+      }
+      for (i = 1; i <= nr; i++) if (rollup_adds(rollup[i])) record(rollup[i])
+
       if (n == 0) exit 0
       printf "── Failing tests (%d) ──\n", n
       for (i = 1; i <= n && i <= cap; i++) {

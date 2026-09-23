@@ -85,12 +85,45 @@ assert_has "names the failing assertion of a script-style suite" \
   "$FED_OUT" "1a. getVersion() returns a non-empty string"
 assert_has "tags it with the suite it came from" \
   "$FED_OUT" "test-version-resolution: ✗ 1a."
-assert_has "keeps the suite roll-up" \
-  "$FED_OUT" "Federation suites failed: test-version-resolution"
 assert_lacks "does not report a passing check as a failure" \
   "$FED_OUT" "1b. getVersion() returns a valid semver"
 assert_lacks "does not report a passing suite as a failure" \
   "$FED_OUT" "schema upgrades from v1"
+
+# One broken assertion is ONE failing test. A script-style suite says so three times — the ✗, its own
+# `❌ Test failed: …` catch-all and run_federation_suites' closing `❌ … suites failed: …` — and
+# counting all three reported this fixture as "Failing tests (3)" (review of PR #1069). The count is the
+# point of the block, so it is asserted here and not only implied by the lines.
+assert_has "counts one broken assertion as one failing test" "$FED_OUT" "Failing tests (1)"
+assert_lacks "does not count a suite's own catch-all as a second test" \
+  "$FED_OUT" "❌ Test failed:"
+assert_lacks "does not count the closing roll-up as a third test" \
+  "$FED_OUT" "Federation suites failed:"
+
+# Two suites, one broken check each: still two, not five.
+TWO=$(printf '━━━ test-a ━━━\n✗ check one\n\n❌ Test failed: Error: 1 check(s) failed\n━━━ test-b ━━━\n✗ check two\n\n❌ Test failed: Error: 1 check(s) failed\n\n❌ Federation suites failed: test-a test-b\n' | failing_tests_summary)
+assert_has "does not scale the count with the number of failing suites" "$TWO" "Failing tests (2)"
+assert_has "names both suites' checks" "$TWO" "test-b: ✗ check two"
+
+# … but each summary is the ONLY evidence in some shape of failure, so neither may just be dropped.
+
+# A suite that throws before it reaches a check prints no ✗ at all.
+THREW=$(printf '━━━ test-c ━━━\nRunning…\n❌ Test failed: Error: connect ECONNREFUSED\n\n❌ Federation suites failed: test-c\n' | failing_tests_summary)
+assert_has "falls back to the catch-all for a suite that printed no check" \
+  "$THREW" "test-c: ❌ Test failed: Error: connect ECONNREFUSED"
+assert_has "and counts that as the one failure it is" "$THREW" "Failing tests (1)"
+
+# secrets_guard has no checks and no ━━━ header: one ❌ line is its entire failing output.
+GUARD=$(printf '❌ Error: Hardcoded secret keys found in codebase\n' | failing_tests_summary)
+assert_has "still names a check whose whole output is one ❌ line" \
+  "$GUARD" "❌ Error: Hardcoded secret keys found in codebase"
+
+# The timeout kills a suite mid-check, so it prints neither ✗ nor its catch-all. The roll-up is the
+# only place its name survives, and it has to be kept even though another suite did report checks.
+KILLED=$(printf '━━━ test-a ━━━\n✗ check one\n\n❌ Test failed: Error: 1 check(s) failed\n━━━ test-d ━━━\nRunning…\n\n❌ Federation suites failed: test-a test-d(TIMEOUT)\n' | failing_tests_summary)
+assert_has "keeps the roll-up when it names a suite that left no other trace" \
+  "$KILLED" "test-d(TIMEOUT)"
+assert_has "names the check that did report too" "$KILLED" "test-a: ✗ check one"
 
 # ── quiet on anything it does not recognise, so an unfamiliar log reads exactly as before ──
 CLEAN_OUT=$(printf 'Everything is fine\n✓ one\n✓ two\n2/2 checks passed.\n' | failing_tests_summary)

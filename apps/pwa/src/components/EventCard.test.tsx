@@ -62,9 +62,41 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
         expect(interested).toHaveAttribute('aria-pressed', 'false');
         for (const b of [going, interested]) {
             expect(b.className).toContain('min-h-[48px]');
-            expect(b.className).toContain('flex-1');
-            expect(b.className).toContain('min-w-0');
+            // They share the row by *growing* into it, never by shrinking below their own label: `min-w-0`
+            // here is what split "Intereste / d" (Marty, 2026-09-24). See the wrapping test below.
+            expect(b.className).toContain('grow');
+            expect(b.className).not.toContain('min-w-0');
         }
+    });
+
+    /**
+     * Marty, 2026-09-24: on the 5-column desktop Market grid the button read "Intereste / d". jsdom does no
+     * layout, so the contract is the classes: nothing may give the label permission to break inside a word, the
+     * button may not shrink below that label, and the row wraps so a button that no longer fits beside its
+     * neighbour takes a full-width row instead of being squeezed.
+     */
+    it.each([
+        ['the card', (p: any) => <EventCard post={p} identity={identity} />],
+        ['the event page', (p: any) => <EventDetail post={p} identity={identity} />],
+    ])('never lets a button label break mid-word, and wraps the row instead — %s', (_where, ui) => {
+        renderAt320(ui(baseEvent));
+        const going = screen.getByRole('button', { name: 'Going ✓' });
+        const interested = screen.getByRole('button', { name: 'Interested' });
+
+        for (const b of [going, interested]) {
+            // No mid-word break permission of any kind.
+            expect(b.className).not.toMatch(/break-words|break-all|anywhere/);
+            // The label stays on one line, and the button is at least as wide as that label.
+            expect(b.className).toContain('whitespace-nowrap');
+            expect(b.className).toContain('min-w-fit');
+            expect(b.className).toContain('basis-auto');
+            expect(b.className).not.toContain('min-w-0');
+        }
+
+        // Too narrow for both side by side => Interested drops to its own full-width row.
+        const row = interested.parentElement!;
+        expect(row).toBe(going.parentElement);
+        expect(row.className).toMatch(/flex-wrap/);
     });
 
     it('does not show the host name on the card', () => {

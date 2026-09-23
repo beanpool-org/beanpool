@@ -118,4 +118,14 @@ describe('PollCard (PWA)', () => {
         const optionButtons = buttons.filter(b => b.textContent?.includes('North Gate') || b.textContent?.includes('South Barn'));
         expect(optionButtons.every(b => b.hasAttribute('disabled'))).toBe(true);
     });
+
+    it('wraps decorative emojis in aria-hidden="true" and provides focus ring classes on options', () => {
+        const { container } = render(<PollCard post={mockPost} identity={mockIdentity} />);
+
+        const hiddenEmojis = container.querySelectorAll('[aria-hidden="true"]');
+        expect(hiddenEmojis.length).toBeGreaterThan(0);
+
+        const optionButton = screen.getByText('North Gate').closest('button');
+        expect(optionButton).toHaveClass('focus-visible:ring-2');
+    });
 });

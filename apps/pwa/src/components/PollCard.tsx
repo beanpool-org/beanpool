@@ -123,7 +123,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
             <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-black text-[10px] tracking-wider uppercase px-2.5 py-1 rounded-lg border border-purple-300/40">
-                        🗳️ POLL
+                        <span aria-hidden="true">🗳️ </span>POLL
                     </span>
                     <span
                         className={`text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border ${
@@ -143,7 +143,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                         disabled={isClosing}
                         aria-label={isClosing ? 'Closing poll...' : 'Close poll'}
                         aria-busy={isClosing}
-                        className="text-xs font-bold text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-900/40 rounded-lg px-3 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-50"
+                        className="text-xs font-bold text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-900/40 rounded-lg px-3 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                     >
                         {isClosing ? 'Closing...' : 'Close Poll'}
                     </button>
@@ -156,7 +156,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                     type="button"
                     onClick={() => onOpenProfile?.(livePost.authorPublicKey)}
                     aria-label={`View ${authorName}'s profile`}
-                    className="flex items-center gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left focus:outline-none focus:ring-2 focus:ring-purple-400 rounded-lg"
+                    className="flex items-center gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
                 >
                     {avatarSrc ? (
                         <img
@@ -202,7 +202,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                             aria-pressed={isVoted}
                             disabled={isClosed || Boolean(votingOptionId)}
                             onClick={() => handleVote(opt.id)}
-                            className={`w-full relative overflow-hidden rounded-xl border text-left transition-all p-3 cursor-pointer group ${
+                            className={`w-full relative overflow-hidden rounded-xl border text-left transition-all p-3 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-1 ${
                                 isVoted
                                     ? 'border-purple-500 ring-2 ring-purple-400/40 bg-purple-50/30 dark:bg-purple-950/30'
                                     : 'border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 hover:border-purple-300 dark:hover:border-purple-700'
@@ -257,7 +257,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
 
             {/* Polls are an open ballot — say so before anyone votes (Decisions, by contrast, are secret). */}
             <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-open-ballot-note">
-                👁️ Your vote is visible to members
+                <span aria-hidden="true">👁️ </span>Your vote is visible to members
             </p>
 
             {/* Error Message */}
@@ -270,7 +270,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
             {/* Footer: Turnout and Voter List Toggle */}
             <div className="mt-auto pt-2 border-t border-nature-100 dark:border-nature-800 flex items-center justify-between text-xs text-nature-500 dark:text-nature-400">
                 <span className="font-semibold">
-                    📊 {totalVotes} vote{totalVotes === 1 ? '' : 's'} cast
+                    <span aria-hidden="true">📊 </span>{totalVotes} vote{totalVotes === 1 ? '' : 's'} cast
                 </span>
 
                 {votesList.length > 0 && (
@@ -279,7 +279,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                         onClick={() => setShowVoters(v => !v)}
                         aria-expanded={showVoters}
                         aria-controls="poll-voters-list"
-                        className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer py-2 px-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40 min-h-[44px] flex items-center"
+                        className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer py-2 px-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40 min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
                     >
                         {showVoters ? 'Hide Voters ▲' : `Show Voters (${votesList.length}) ▼`}
                     </button>
@@ -314,7 +314,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
 
             {/* Village Notice */}
             <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-500 text-center">
-                ℹ️ Public signed village voting · Re-voting overwrites choice
+                <span aria-hidden="true">ℹ️ </span>Public signed village voting · Re-voting overwrites choice
             </p>
         </div>
     );

@@ -101,8 +101,18 @@ export function listNodeRoles(): NodeRoleRecord[] {
  * `grantNodeRole` asks. An owner role parked in `suspended_node_roles` counts: a community that
  * suspended its owner still HAS one. The role is held aside, it comes back the moment the
  * suspension lifts, and the member is still there. Genuinely ownerless means a node that never had
- * an owner, or whose owners were all removed outright — pruned, or their role revoked. Both delete
- * the parked row as well (#1006).
+ * an owner, or whose owners were all removed outright (#1006).
+ *
+ * THE INVARIANT THIS RELIES ON: a parked row exists only while the member it names is still here and
+ * still able to come back. Every path that takes them away for good deletes it — `adminPruneUser`,
+ * `purgeMemberSelf` (which a suspended member CAN still reach: the signing middleware does not check
+ * `members.status`), and the Decision machinery that settles a suspension one way or the other
+ * (`restoreSuspendedNodeRole`, `liftEmergencySuspensionRow`, keeping the suspension). Break that and
+ * this function reports an owner a node does not have, with no way to clear it.
+ *
+ * Revoking a role is deliberately NOT one of those paths: a suspended member's role is not in
+ * `node_roles` for `revokeNodeRole` to reach, and it must not be — the community may yet lift the
+ * suspension and get it back. Revocation only ever clears an ACTIVE owner, who has no parked row.
  *
  * NOT the "is this the last owner?" question. Every guard that stops a node losing its last USABLE
  * owner — demotion and revocation below, `adminPruneUser`, `purgeMemberSelf`, `isSoleOwner` — goes

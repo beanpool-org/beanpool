@@ -30,6 +30,10 @@
  *   4. The same node, the admin PASSWORD session grants owner -> allowed (the operator's way out).
  *   5. The suspended owner reinstated -> their owner role is back, and the owners are exactly those
  *      expected.
+ *   6. A suspended owner deletes their own account -> the role held aside for them goes with them, the
+ *      node honestly reports no owner, and the bootstrap works again. `nodeHasOwner()` only tells the
+ *      truth while nothing can orphan a parked row; `purgeMemberSelf` used to leave one behind, which
+ *      would have blocked the admin-key bootstrap on a genuinely ownerless node forever.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-suspended-owner-bootstrap.ts
  */
@@ -45,7 +49,9 @@ import {
     nodeRoleOf,
     isNodeOwner,
     adminSetUserStatus,
+    purgeMemberSelf,
 } from './state-engine.js';
+import { nodeHasOwner } from './engine/node-roles.js';
 import { adminEmergencySuspend, adminLiftSuspension } from './decisions-engine.js';
 import { checkAdminAuth } from './admin-auth.js';
 import { updateLocalConfig } from './config/local-config.js';
@@ -265,6 +271,34 @@ async function main() {
             'the node has exactly the expected owners: the reinstated one and the one the operator appointed',
         );
         assert(nodeRoleOf(adam.pub) === 'admin', 'and the admin who tried to promote himself never became one');
+
+        // — 6. A suspended owner who deletes their own account leaves nothing parked behind —
+        console.log('\nTesting a suspended owner who purges their own account...');
+
+        // Back to the same state as step 2: suspend one of the two owners, then lose the other.
+        const suspendAgain = adminEmergencySuspend(olivia.pub, 'owner:password', 'A second dispute, heard while the appointed owner is still here.');
+        assert(suspendAgain.success === true, `the owner is suspended again while a co-owner remains (${suspendAgain.error || 'no error'})`);
+        adminSetUserStatus(priya.pub, 'disabled');
+        assert(activeOwners().length === 0 && parkedOwners().length === 1, 'the node is back to zero active owners with one role held aside');
+        assert(nodeHasOwner() === true, 'and it still reports an owner, because the suspended one can come back');
+
+        // The request-signing middleware does not check `members.status`, so a suspended member can
+        // still sign POST /api/member/purge for themselves; their role is parked rather than in
+        // node_roles, so the sole-owner guard does not see an owner and the purge goes ahead.
+        const purge = purgeMemberSelf(olivia.pub);
+        assert(purge.ok === true, 'a suspended owner can still delete their own account');
+        assert(parkedOwners().length === 0, 'the owner role held aside for them goes with them — no orphaned row is left');
+        assert(nodeHasOwner() === false, 'so the node reports what is now true: it has no owner at all');
+
+        // ...and the bootstrap that `nodeHasOwner()` guards works again. A node is never locked out.
+        const adamSessionAfterPurge = await openKeySession(adam);
+        const rebootstrap = await fetch(`${base}/api/local/admin/node-roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-admin-session': adamSessionAfterPurge },
+            body: JSON.stringify({ pubkey: adam.pub, role: 'owner' }),
+        });
+        assert(rebootstrap.status === 200, `an admin key session bootstraps an owner again on the now genuinely ownerless node (got ${rebootstrap.status})`);
+        assert(isNodeOwner(adam.pub) === true, 'and that admin is the node owner');
     } finally {
         server.close();
     }

@@ -99,6 +99,8 @@ const ctxFor = (actor: string | undefined, body?: any, query: Record<string, str
 });
 /** A route that answered without setting ctx.status succeeded (Koa's 200). */
 const statusOf = (ctx: any) => ctx.status ?? 200;
+/** Parse a metadata blob without throwing, so a missing field fails its assertion instead of the suite. */
+const parseMeta = (raw: unknown): any => { try { return JSON.parse(String(raw ?? '{}')); } catch { return {}; } };
 
 async function main(): Promise<void> {
     initStateEngine();
@@ -211,23 +213,23 @@ async function main(): Promise<void> {
     console.log('\n--- 2. React in a group chat ---');
     const m2 = bobLine('New handle for the shed door');
     const r1 = await react(alice, m2.id, '👍');
-    assert(r1.body?.success === true && metaOf(m2.id).reactions.length === 1
-        && metaOf(m2.id).reactions[0].emoji === '👍' && metaOf(m2.id).reactions[0].author === alice,
+    assert(r1.body?.success === true && metaOf(m2.id).reactions?.length === 1
+        && metaOf(m2.id).reactions?.[0]?.emoji === '👍' && metaOf(m2.id).reactions?.[0]?.author === alice,
         `a convenor reacts; it lands in metadata.reactions as {emoji, author} (got ${statusOf(r1)} ${r1.body?.error ?? ''})`);
-    assert((await react(bob, m2.id, '🔧')).body?.success === true && metaOf(m2.id).reactions.length === 2, 'a member reacts too');
+    assert((await react(bob, m2.id, '🔧')).body?.success === true && metaOf(m2.id).reactions?.length === 2, 'a member reacts too');
     await react(alice, m2.id, '🎉');
-    assert(metaOf(m2.id).reactions.find((x: any) => x.author === alice).emoji === '🎉' && metaOf(m2.id).reactions.length === 2,
+    assert(metaOf(m2.id).reactions?.find((x: any) => x.author === alice)?.emoji === '🎉' && metaOf(m2.id).reactions?.length === 2,
         'a different emoji from the same person replaces theirs, as in a DM');
     await react(alice, m2.id, '🎉');
-    assert(metaOf(m2.id).reactions.length === 1 && !metaOf(m2.id).reactions.some((x: any) => x.author === alice),
+    assert(metaOf(m2.id).reactions.length === 1 && !metaOf(m2.id).reactions?.some((x: any) => x.author === alice),
         'the same emoji again takes it off, as in a DM');
     const shown = getGroupThread(crew.id, bob).messages.find(x => x.id === m2.id)!;
-    assert(JSON.parse(shown.metadata || '{}').reactions.length === 1, "reactions come back on the chat's GET");
+    assert(parseMeta(shown.metadata).reactions?.length === 1, "reactions come back on the chat's GET");
     broadcasts.length = 0; pushes.length = 0;
     reactEngine(cb, m2.id, alice, '🔨');
     const liveReact = broadcasts.filter(b => b.event?.type === 'message_reaction' && b.event?.messageId === m2.id);
     assert(liveReact.length === 1 && liveReact[0].recipients!.includes(carol) && !liveReact[0].recipients!.includes(erin)
-        && JSON.parse(liveReact[0].event.metadata).reactions.some((x: any) => x.emoji === '🔨'),
+        && parseMeta(liveReact[0].event.metadata).reactions?.some((x: any) => x.emoji === '🔨'),
         'a reaction reaches the chat live, carrying the new metadata, and only to the people in it');
     assert(pushes.length === 0, 'a reaction pushes nobody');
     reactEngine(cb, m2.id, alice, '🔨');  // back off again, so the counts below are unchanged
@@ -249,7 +251,7 @@ async function main(): Promise<void> {
     // ── 3a. In a group chat ──
     const m3 = postGroupThreadMessage(cb, crew.id, bob, 'Thanks @Alice, I owe you one', undefined, m2.id);
     await react(alice, m3.id, '❤️');
-    assert(metaOf(m3.id).mentions?.includes(alice) && metaOf(m3.id).replyToId === m2.id && metaOf(m3.id).reactions.length === 1,
+    assert(metaOf(m3.id).mentions?.includes(alice) && metaOf(m3.id).replyToId === m2.id && metaOf(m3.id).reactions?.length === 1,
         'before the delete it carries a mention, a reply and a reaction');
     const d1 = await del(bob, m3.id);
     assert(d1.body?.success === true && d1.body.message.type === 'removed', `the author deletes their own group chat line (got ${statusOf(d1)} ${d1.body?.error ?? ''})`);
@@ -305,7 +307,7 @@ async function main(): Promise<void> {
     const dmMsg = await mpost('/api/messages/send', bob, { conversationId: dm.id, authorPubkey: bob, ciphertext: 'ZW5jcnlwdGVk', nonce: 'dm-nonce-1' });
     const dmId = dmMsg.body.message.id;
     await react(erin, dmId, '👀');
-    assert(metaOf(dmId).reactions.length === 1, 'a DM message with a reaction on it');
+    assert(metaOf(dmId).reactions?.length === 1, 'a DM message with a reaction on it');
     const d2 = await del(bob, dmId);
     assert(d2.body?.success === true && rowOf(dmId).type === 'removed', `the author deletes their own DM (got ${statusOf(d2)} ${d2.body?.error ?? ''})`);
     assert(decode(rowOf(dmId).ciphertext) === 'This message was deleted' && rowOf(dmId).nonce === 'plaintext-v1',
@@ -373,9 +375,9 @@ async function main(): Promise<void> {
     console.log('\n--- 6. Reply in a group chat ---');
     const parent = bobLine('Who has the 10mm?');
     const replyRes = await gpost(`${chatPath}/message`, alice, { text: 'I do', replyToId: parent.id });
-    assert(statusOf(replyRes) === 201 && JSON.parse(replyRes.body.message.metadata).replyToId === parent.id,
+    assert(statusOf(replyRes) === 201 && parseMeta(replyRes.body.message.metadata).replyToId === parent.id,
         `a reply stores metadata.replyToId (got ${statusOf(replyRes)} ${replyRes.body?.error ?? ''})`);
-    assert(JSON.parse(getGroupThread(crew.id, bob).messages.find(x => x.id === replyRes.body.message.id)!.metadata!).replyToId === parent.id,
+    assert(parseMeta(getGroupThread(crew.id, bob).messages.find(x => x.id === replyRes.body.message.id)?.metadata).replyToId === parent.id,
         "and the chat's GET carries it");
     const otherGroup = createGroup({ name: 'Other Crew', joinPolicy: 'open', createdBy: alice });
     const elsewhere = postGroupThreadMessage(cb, otherGroup.id, alice, 'a line in another chat');

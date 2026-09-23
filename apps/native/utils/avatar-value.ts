@@ -80,22 +80,31 @@ export function localRowHasNoAvatar(localRow: string | null | undefined): boolea
  * heal.
  *
  * Unlike an explicit edit there is no session pick to go on, so the canonical copy is sent only
- * when the node is KNOWN to hold no photo for us — either because the local row has no avatar
- * at all, or because the node itself just answered "please set a profile photo"
- * (`nodeHasNoPhoto`), which is stronger evidence than any local row. When the local row holds
- * the node's own URL the node has a photo, it may well be newer than canonical, and `avatar` is
- * left out.
+ * when the node is KNOWN to hold no photo for us. `nodeHasNoPhoto` is the node's own answer and
+ * has three states, because "the node did not say" and "the node said it has one" are not the
+ * same thing:
+ *
+ *   undefined — the node was not asked. Fall back to the local row: no avatar there is the
+ *               phone's evidence that there is nothing on the node to overwrite.
+ *   true      — the node just said it holds none ("please set a profile photo", or a redeem
+ *               response with no servable avatar). Stronger than any local row, so canonical
+ *               goes even over a stale URL.
+ *   false     — the node said it HOLDS one. It may be newer than canonical, and the local row
+ *               is no longer evidence of anything: an empty row on a node this device has
+ *               never synced means unsynced, not empty. Nothing is published.
  *
  * A photo picked during an OFFLINE save is sitting portable in the local row — nothing has
- * reached the node yet, so it is the newest copy anywhere and always goes.
+ * reached the node yet, so it is the newest copy anywhere and always goes, whatever the node
+ * holds.
  */
 export function catchUpAvatar(
     localRow: string | null | undefined,
     canonical: string | null | undefined,
-    nodeHasNoPhoto = false,
+    nodeHasNoPhoto?: boolean,
 ): string | null {
     if (isPortableAvatarValue(localRow)) return localRow.trim();
-    if (nodeHasNoPhoto || localRowHasNoAvatar(localRow)) {
+    if (nodeHasNoPhoto === false) return null;
+    if (nodeHasNoPhoto === true || localRowHasNoAvatar(localRow)) {
         return isPortableAvatarValue(canonical) ? canonical.trim() : null;
     }
     return null;

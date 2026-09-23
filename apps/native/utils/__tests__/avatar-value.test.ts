@@ -94,7 +94,7 @@ import {
     profileSetupAvatar,
     localRowHasNoAvatar,
 } from '../avatar-value';
-import { updateMemberProfile, pushProfileToServer, applyDelta, syncMessages } from '../db';
+import { updateMemberProfile, pushProfileToServer, applyDelta, syncMessages, redeemInvite } from '../db';
 
 const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
 const NODE_URL_RELATIVE = `/api/avatar/${SELF_PK}?size=thumb`;
@@ -214,10 +214,22 @@ describe('catchUpAvatar — pushProfileToServer', () => {
         expect(catchUpAvatar(NODE_URL_VERSIONED, OLD_PHOTO, true)).toBe(OLD_PHOTO);
     });
 
+    it('sends NOTHING when the node said it holds a photo, however empty the local row', () => {
+        // The third state, and the one the invite-redeem publish needs: an empty row on a node
+        // this device has never synced means UNSYNCED, not "the node has none". Treating the
+        // two alike put the canonical copy over the newer photo the node already held.
+        expect(catchUpAvatar(null, OLD_PHOTO, false)).toBeNull();
+        expect(catchUpAvatar('', OLD_PHOTO, false)).toBeNull();
+        expect(catchUpAvatar(NODE_URL_VERSIONED, OLD_PHOTO, false)).toBeNull();
+        // …and "not asked" still falls back to the local row, which is every other caller.
+        expect(catchUpAvatar(null, OLD_PHOTO, undefined)).toBe(OLD_PHOTO);
+    });
+
     it('always sends a photo picked during an OFFLINE save', () => {
         // It never reached the node, so it is the newest copy anywhere.
         expect(catchUpAvatar(PHOTO, OLD_PHOTO)).toBe(PHOTO);
         expect(catchUpAvatar(PHOTO, OLD_PHOTO, true)).toBe(PHOTO);
+        expect(catchUpAvatar(PHOTO, OLD_PHOTO, false)).toBe(PHOTO);
     });
 
     it('never invents an avatar out of nothing', () => {
@@ -296,20 +308,25 @@ describe('the explicit-edit screens publish only a session pick', () => {
         }
     });
 
-    it('only the marketplace photo gate claims the node has no photo', () => {
-        // `nodeHasNoPhoto` overrides the local row, so it must come ONLY from the node saying
-        // so. Both heal sites pass it; the pending-sync retry and the invite-redeem publish
-        // must not, or they are back to posting canonical over a newer photo.
+    it('only the NODE\'s own answer claims the node has no photo', () => {
+        // `nodeHasNoPhoto` overrides the local row, so it must never be an inference from
+        // local state. Two callers have the node's answer: the marketplace heal sites, where
+        // the node has just said "please set a profile photo", and the invite-redeem publish,
+        // which reads it off the redeem response. The pending-sync retry has no such answer
+        // and must pass nothing, or it is back to posting canonical over a newer photo.
         const src = read('utils/db.ts');
         const healBranches = src.match(/_isProfilePhotoError\([a-zA-Z]+\)\)\s*\{[\s\S]{0,400}?pushProfileToServer\([^)]*\)/g) ?? [];
         expect(healBranches).toHaveLength(2);
         for (const branch of healBranches) {
             expect(branch).toContain('pushProfileToServer({ nodeHasNoPhoto: true })');
         }
-        // Every other caller in the app takes no argument.
-        for (const rel of ['services/pillar-sync.ts', 'app/_layout.tsx']) {
-            expect(read(rel)).not.toContain('nodeHasNoPhoto');
-        }
+        // The redeem sites pass the node's answer and nothing else — never `true`, which
+        // would be the old unconditional publish wearing the flag's name.
+        const layout = read('app/_layout.tsx');
+        expect(layout.match(/pushProfileToServer\([^)]*\)/g))
+            .toEqual(Array(2).fill('pushProfileToServer({ nodeHasNoPhoto: !redeemRes?.nodeHasPhoto })'));
+        // And pillar-sync, which only ever has the local row, still claims nothing.
+        expect(read('services/pillar-sync.ts')).not.toContain('nodeHasNoPhoto');
     });
 
     it('Re-run Setup shows the node\'s photo through MemberAvatar', () => {
@@ -651,6 +668,76 @@ describe('applyDelta avatar clearing', () => {
         await applyDelta({ members: [{ publicKey: SELF_PK, callsign: 'Damo', avatarUrl: NODE_URL_VERSIONED }] });
         const { params } = membersUpsert();
         expect(params[2]).toBe(NODE_URL_VERSIONED);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 4c. Redeeming an invite uses the node's own answer about the photo it holds
+//
+// For a member re-entering a node this device has never synced, the local row is empty and
+// `catchUpAvatar` reads that as "the node holds nothing" — so the follow-up publish puts the
+// canonical copy over whatever newer photo the node actually has. The answer is already in the
+// redeem response: both endpoints return the existing member row.
+// ---------------------------------------------------------------------------
+describe('redeemInvite reports whether the node already holds a photo', () => {
+    const redeemAnswers = (body: any) => {
+        globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => body }) as any;
+    };
+
+    beforeEach(() => {
+        h.loadIdentity.mockResolvedValue({ publicKey: SELF_PK, callsign: 'Damo', privateKey: 'k' });
+        h.buildSignedHeaders.mockResolvedValue({});
+        h.asyncStorage.getItem.mockImplementation(async (k: string) =>
+            k === 'beanpool_anchor_url' ? 'https://test.beanpool.org' : null);
+    });
+
+    it('says the node HAS a photo when the existing member row carries a portable one', async () => {
+        redeemAnswers({ success: true, alreadyMember: true, member: { publicKey: SELF_PK, avatarUrl: PHOTO } });
+        expect(await redeemInvite('CODE', 'Damo')).toEqual(
+            { success: true, alreadyMember: true, nodeHasPhoto: true });
+    });
+
+    it('counts a self-referential URL as NO photo — the node cannot serve it', async () => {
+        redeemAnswers({ success: true, alreadyMember: true, member: { publicKey: SELF_PK, avatarUrl: NODE_URL_VERSIONED } });
+        expect((await redeemInvite('CODE', 'Damo')).nodeHasPhoto).toBe(false);
+    });
+
+    it('says no photo when the existing member row has none', async () => {
+        redeemAnswers({ success: true, alreadyMember: true, member: { publicKey: SELF_PK, avatarUrl: null } });
+        expect((await redeemInvite('CODE', 'Damo')).nodeHasPhoto).toBe(false);
+    });
+
+    it('says no photo for a brand-new join — there is no row yet', async () => {
+        redeemAnswers({ success: true, alreadyMember: false, member: { publicKey: SELF_PK, avatarUrl: null } });
+        expect((await redeemInvite('CODE', 'Damo')).nodeHasPhoto).toBe(false);
+    });
+
+    it('reads `avatar` as well as `avatarUrl`, so the profile shape answers too', async () => {
+        redeemAnswers({ success: true, alreadyMember: true, member: { publicKey: SELF_PK, avatar: 'bundled://leaf' } });
+        expect((await redeemInvite('CODE', 'Damo')).nodeHasPhoto).toBe(true);
+    });
+
+    it('says no photo when the node returns no member at all', async () => {
+        redeemAnswers({ success: true, alreadyMember: true });
+        expect((await redeemInvite('CODE', 'Damo')).nodeHasPhoto).toBe(false);
+    });
+
+    it('leaves a photo the node already holds alone when the redeem publish follows', async () => {
+        // The end of the chain: `nodeHasPhoto` true means `nodeHasNoPhoto` false at the call
+        // site, so even an empty local row does not license publishing the canonical copy.
+        h.getFirstAsync.mockResolvedValue({
+            public_key: SELF_PK, callsign: 'Damo', avatar_url: null,
+            bio: null, contact_value: null, contact_visibility: null, archetype: null,
+        });
+        h.getCanonicalProfile.mockResolvedValue({ avatar: OLD_PHOTO, bio: 'hi' });
+        redeemAnswers({ success: true, alreadyMember: true, member: { publicKey: SELF_PK, avatarUrl: PHOTO } });
+        const res = await redeemInvite('CODE', 'Damo');
+
+        globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as any;
+        await pushProfileToServer({ nodeHasNoPhoto: !res.nodeHasPhoto });
+
+        const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+        expect('avatar' in body).toBe(false);
     });
 });
 

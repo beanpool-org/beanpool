@@ -41,14 +41,18 @@ beforeEach(() => {
 });
 
 describe('redeemInvite only reports success the node confirmed', () => {
+    // `nodeHasPhoto` is the node's own answer about the picture it holds for the joiner, read
+    // off the `member` row these replies carry; with no member and no photo in them it is
+    // false. What it is FOR is pinned in avatar-value.test.ts — here it is just part of the
+    // shape, still asserted exactly rather than loosened to a partial match.
     it('resolves when the node says success', async () => {
         fetchMock.mockResolvedValueOnce(reply(200, { success: true, alreadyMember: false }));
-        await expect(redeemInvite('ABCD1234', 'Me')).resolves.toEqual({ success: true, alreadyMember: false });
+        await expect(redeemInvite('ABCD1234', 'Me')).resolves.toEqual({ success: true, alreadyMember: false, nodeHasPhoto: false });
     });
 
     it('passes alreadyMember through', async () => {
         fetchMock.mockResolvedValueOnce(reply(200, { success: true, alreadyMember: true }));
-        await expect(redeemInvite('ABCD1234', 'Me')).resolves.toEqual({ success: true, alreadyMember: true });
+        await expect(redeemInvite('ABCD1234', 'Me')).resolves.toEqual({ success: true, alreadyMember: true, nodeHasPhoto: false });
     });
 
     it("rejects a 200 carrying success:false, with the node's reason", async () => {

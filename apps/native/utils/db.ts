@@ -9,7 +9,7 @@ import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, catchUpAvatar } from './avatar-value';
 import { emitAppEvent } from './app-events';
-import { parseArchetype, TIER_LEVELS } from '@beanpool/core';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -3902,7 +3902,22 @@ export async function checkInvite(code: string, nodeUrl: string): Promise<Invite
     }
 }
 
-export async function redeemInvite(code: string, callsign: string, identityToRegister?: any): Promise<{ success: true; alreadyMember: boolean }> {
+/**
+ * Redeem an invite against the active node.
+ *
+ * `nodeHasPhoto` is the node's OWN answer about the picture it holds for us, and the only
+ * reason it is here: `/api/invite/redeem` and `redeem-offline` both return the existing member
+ * row for someone who was already registered (`engine/invites.ts`), so the answer is already in
+ * the response and the caller needs no extra request. Without it, a member re-entering a node
+ * this device has never synced has an empty local row, `catchUpAvatar` reads that as "the node
+ * holds nothing" and the follow-up publish puts the canonical copy over whatever newer photo
+ * the node actually had.
+ *
+ * A self-referential `/api/avatar/<pk>` value is the broken-row case and counts as NO photo —
+ * the node cannot serve it, so there is nothing there worth protecting. A brand-new join is
+ * likewise no photo: there is no row yet.
+ */
+export async function redeemInvite(code: string, callsign: string, identityToRegister?: any): Promise<{ success: true; alreadyMember: boolean; nodeHasPhoto: boolean }> {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || (__DEV__ ? 'https://127.0.0.1:8443' : '');
 
@@ -3959,13 +3974,17 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
             throw new Error(data?.error || 'The community node did not confirm the invite. Please try again.');
         }
         const alreadyMember = !!data.alreadyMember;
+        // `member` is the engine's Member row, whose avatar field is `avatarUrl`; `avatar` is
+        // read too so an older node (or the profile shape) answers the same question.
+        const memberAvatar = data.member?.avatarUrl ?? data.member?.avatar ?? null;
+        const nodeHasPhoto = alreadyMember && isServableAvatarValue(memberAvatar);
 
         if (alreadyMember) {
             console.log('[DB] ℹ️ User is already a registered member of this community.');
         } else {
             console.log('[DB] ✅ Invite redeemed successfully!');
         }
-        return { success: true, alreadyMember };
+        return { success: true, alreadyMember, nodeHasPhoto };
     } catch (e: any) {
         console.warn('[DB] Failed to redeem invite:', e.message);
         throw e;
@@ -3997,11 +4016,15 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
 // before this retry succeeds used to turn the pick into "the node has a photo, say nothing"
 // — the member's chosen photo then never reached the node and nothing ever resent it.
 //
-// `nodeHasNoPhoto` is the marketplace photo gate's signal — the node has just answered
-// "please set a profile photo", which is proof there is nothing there to overwrite even
-// if the local row still holds a URL. Callers WITHOUT it (the pending_profile_sync retry,
-// invite redeem for an `alreadyMember`) can reach a node that already holds a NEWER photo
-// from another device, so they must leave `avatar` out rather than post canonical over it.
+// `nodeHasNoPhoto` must always be the NODE's answer, never an inference from local state.
+// Two callers have one: the marketplace photo gate, where the node has just said "please set
+// a profile photo", and the invite-redeem publish, where the redeem response carried the
+// member row the node holds. Both outrank the local row, which a sync may have left stale.
+// The caller WITHOUT one — the pending_profile_sync retry — can reach a node that already
+// holds a NEWER photo from another device, so it leaves `avatar` out rather than posting
+// canonical over it. The flag is passed THROUGH, undefined and all: an explicit `false` is the
+// node saying it holds a photo, which withholds the canonical copy that an empty local row
+// would otherwise license — on a node this device has never synced, empty means unsynced.
 export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): Promise<boolean> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const identity = await loadIdentity();
@@ -4022,7 +4045,7 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
     // is not a `data:`/`bundled://` value is not ours to publish.
     const offlinePick = await AsyncStorage.getItem('pending_profile_avatar');
     const avatar = (isPortableAvatarValue(offlinePick) ? offlinePick.trim() : null)
-        ?? catchUpAvatar(profile?.avatar_url, canonical?.avatar, opts?.nodeHasNoPhoto === true);
+        ?? catchUpAvatar(profile?.avatar_url, canonical?.avatar, opts?.nodeHasNoPhoto);
 
     const callsign = profile?.callsign || identity.callsign;
     const bio = profile?.bio ?? canonical?.bio ?? '';

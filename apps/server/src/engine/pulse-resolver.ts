@@ -635,8 +635,12 @@ async function ssrfSafeFetchInternal(
                 // Aborting destroys the request, but a response already handed to the caller does
                 // not reliably surface that as an error on the body stream, so end it explicitly.
                 activeIncoming?.destroy(err);
-                if (!settled) { settled = true; cleanup(); reject(err); }
-                else { agent.destroy(); }
+                // cleanup() unconditionally, on both branches: it also drops the listener on a
+                // caller-supplied options.signal, which would otherwise be left attached for the
+                // life of that signal once the deadline fired after the headers. It is idempotent,
+                // so the body-read path calling it again later is harmless.
+                cleanup();
+                if (!settled) { settled = true; reject(err); }
             }, Math.max(0, msLeft()));
 
             const externalSignal = options.signal;

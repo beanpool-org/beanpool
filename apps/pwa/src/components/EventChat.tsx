@@ -81,10 +81,40 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
     // Moving to another event's chat drops the line the last one left behind.
     useEffect(() => { setImageNotice(null); }, [postId]);
 
+    // Paused while the tab is hidden, as every other poller in this app is (MessagesPage, SyncStatus,
+    // RecoveryAlertBanner). An event chat left open in a background tab used to keep pulling a page of
+    // messages every twelve seconds for as long as the browser stayed open; most of our members pay for
+    // that data. Coming back loads once, straight away, rather than waiting out an interval.
     useEffect(() => {
         if (!refreshMs) return;
-        const t = setInterval(load, refreshMs);
-        return () => clearInterval(t);
+        let timer: ReturnType<typeof setInterval> | null = null;
+
+        /** `immediate` is false only at mount, where the effect above has already done the first read. */
+        const startPolling = (immediate: boolean) => {
+            if (!timer) {
+                if (immediate) load();
+                timer = setInterval(load, refreshMs);
+            }
+        };
+
+        const stopPolling = () => {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) stopPolling();
+            else startPolling(true);
+        };
+
+        if (!document.hidden) startPolling(false);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [load, refreshMs]);
 
     useEffect(() => {

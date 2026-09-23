@@ -29,6 +29,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { useChatSoftInputMode } from './chat/useChatSoftInputMode';
+import { useChatPoll } from './chat/useChatPoll';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
@@ -201,13 +202,13 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     }, [kind, id, markRead, loadDetails]);
 
     useEffect(() => {
+        // The group's own details (name, members, invite counts) — not the thread, which the poll reads.
         loadDetails().catch(() => { });
-        load();
-    }, [load, loadDetails]);
-    useEffect(() => {
-        const t = setInterval(load, 15000);
-        return () => clearInterval(t);
-    }, [load]);
+    }, [loadDetails]);
+    // Refreshes only while this screen is focused and the app is in the foreground, with one load the moment
+    // either comes back — the DM screen's rule, shared (utils/chat-poll). The poll's first tick is immediate,
+    // so dropping load() above costs nothing on open and saves a second read of the same page.
+    useChatPoll(load, 15000);
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/chats'); };
 

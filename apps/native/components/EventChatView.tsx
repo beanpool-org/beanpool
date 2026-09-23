@@ -18,13 +18,14 @@
  * and the notice wraps rather than pushing anything off-screen.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller';
 import { useChatSoftInputMode } from './chat/useChatSoftInputMode';
+import { useChatPoll } from './chat/useChatPoll';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { getEventChat, postEventChatMessage, removeEventChatMessage, markConversationRead } from '../utils/db';
@@ -87,12 +88,10 @@ export function EventChatView({ eventId }: Props) {
         }
     }, [eventId, identity?.publicKey]);
 
-    useEffect(() => { load(); }, [load]);
-
-    useEffect(() => {
-        const t = setInterval(load, 15000);
-        return () => clearInterval(t);
-    }, [load]);
+    // Refreshes only while this screen is focused and the app is in the foreground, with one load the
+    // moment either comes back — the DM screen's rule, shared (utils/chat-poll). The first load is the
+    // poll's own immediate tick, so there is no separate mount load to fetch the same page twice.
+    useChatPoll(load, 15000);
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/chats'); };
 

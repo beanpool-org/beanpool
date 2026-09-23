@@ -1,0 +1,45 @@
+<!--
+  A trimmed Instagram post embed page, as thumbnail recovery (#813) reads it.
+
+  WHY IT LOOKS LIKE THIS
+  The real page is several hundred kilobytes of inline stylesheet and bundled script before
+  the body, and the only thing recovery wants — the EmbeddedMediaImage <img> — sits after all
+  of it. That shape is the whole point: on 2026-09-23 the embed fetch was capped at 512 KB,
+  the page had outgrown that, and every recovery died on "Response exceeded maximum size
+  limit of 524288 bytes" before ever reaching the image URL.
+
+  The bulk is NOT committed. The marker line below is expanded at test time to push the image
+  tag past 512 KB, so the fixture stays a few kilobytes in git while still reproducing the
+  failure exactly. Nothing here is fetched from Instagram; every URL is an inert placeholder.
+-->
+<!DOCTYPE html>
+<html lang="en" class="_9dls">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login &bull; Instagram</title>
+<style type="text/css">
+.EmbedIsBroken .EmbedFrame { display: none; }
+.Embed { background: #FFF; border: 1px solid #DBDBDB; }
+.EmbeddedMediaImage { width: 100%; display: block; }
+</style>
+<script type="text/javascript">
+/* PULSE_FIXTURE_FILLER — replaced at test time by the bundled-script bulk of the real page. */
+</script>
+</head>
+<body class="">
+<div class="EmbedFrame">
+  <div class="Embed" data-scrolling="false">
+    <div class="EmbedHeader">
+      <div class="Avatar"><span class="UsernameText">a_maker</span></div>
+    </div>
+    <a class="EmbeddedMediaLink" href="https://www.instagram.com/p/FIXTUREPOST/" target="_blank">
+      <img class="EmbeddedMediaImage" src="https://scontent-syd2-1.cdninstagram.com/v/t51.2885-15/fixture_thumbnail.jpg?stp=dst-jpg_e35&amp;_nc_ht=scontent-syd2-1.cdninstagram.com&amp;oh=00fixture&amp;oe=66FIXTURE" alt="Photo by a_maker">
+    </a>
+    <div class="CaptionComments">
+      <div class="Caption"><a class="CaptionUsername">a_maker</a> A trimmed fixture caption.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

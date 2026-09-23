@@ -38,6 +38,20 @@ export const DEFAULT_MAX_CACHE_TOTAL_BYTES = 20 * 1024 * 1024; // 20 MB RAM
 export const DEFAULT_MAX_DISK_CACHE_BYTES = 100 * 1024 * 1024; // 100 MB disk
 export const DEFAULT_FETCH_TIMEOUT_MS = 5000; // 5 seconds
 export const DEFAULT_NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+/** Ceiling on the Instagram embed PAGE read during thumbnail recovery (#813).
+ *
+ *  Not the image cap: this is the HTML document the fresh CDN URL is extracted from. It was
+ *  512 KB, and Instagram's embed page outgrew that, so every recovery died on
+ *  "Response exceeded maximum size limit of 524288 bytes" and no Instagram thumbnail could
+ *  ever be recovered. Matches the resolver's own DEFAULT_MAX_BYTES; the page is read once per
+ *  recovery attempt, and an attempt now costs a backoff step when it fails. */
+export const INSTAGRAM_EMBED_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+/** Escalating wait before an item that failed definitively is fetched again. Capped at a day. */
+export const THUMBNAIL_BACKOFF_STEPS_MS = [
+    60 * 60 * 1000,      // 1 hour
+    6 * 60 * 60 * 1000,  // 6 hours
+    24 * 60 * 60 * 1000, // 24 hours
+];
 /** Outbound thumbnail fetches allowed in flight at once during a batch ingest. */
 export const INGEST_CONCURRENCY = 3;
 export const MAX_NEGATIVE_CACHE_ENTRIES = 1000;
@@ -144,15 +158,21 @@ export class PulseThumbnailCache {
     private maxTotalBytes: number;
     private maxEntryBytes: number;
     private negativeTtlMs: number;
+    /** The negative TTL is the only time-based decision this cache makes; an injected clock lets a
+     *  test cross it exactly, the way PulseThumbnailBackoffStore is already driven. Defaults to the
+     *  wall clock, so production behaviour is unchanged. */
+    private now: () => number;
 
     constructor(options: {
         maxTotalBytes?: number;
         maxEntryBytes?: number;
         negativeTtlMs?: number;
+        now?: () => number;
     } = {}) {
         this.maxTotalBytes = options.maxTotalBytes ?? DEFAULT_MAX_CACHE_TOTAL_BYTES;
         this.maxEntryBytes = options.maxEntryBytes ?? MAX_THUMBNAIL_BYTES;
         this.negativeTtlMs = options.negativeTtlMs ?? DEFAULT_NEGATIVE_CACHE_TTL_MS;
+        this.now = options.now ?? (() => Date.now());
     }
 
     get(itemId: string): ThumbnailCacheEntry | null {
@@ -167,7 +187,7 @@ export class PulseThumbnailCache {
     getNegative(itemId: string): NegativeCacheEntry | null {
         const entry = this.negativeCache.get(itemId);
         if (!entry) return null;
-        if (Date.now() - entry.failedAt > this.negativeTtlMs) {
+        if (this.now() - entry.failedAt > this.negativeTtlMs) {
             this.negativeCache.delete(itemId);
             return null;
         }
@@ -180,7 +200,7 @@ export class PulseThumbnailCache {
             if (firstKey) this.negativeCache.delete(firstKey);
         }
         this.negativeCache.set(itemId, {
-            failedAt: Date.now(),
+            failedAt: this.now(),
             status,
             error,
         });
@@ -250,6 +270,158 @@ export class PulseThumbnailCache {
             maxTotalBytes: this.maxTotalBytes,
             maxEntryBytes: this.maxEntryBytes,
         };
+    }
+}
+
+/**
+ * Failures that trying again in five minutes cannot fix.
+ *
+ * A 403 from an expired CDN URL, a gone post, a body over the cap: the same request will get
+ * the same answer tomorrow. Anything that might genuinely be transient is deliberately NOT
+ * here, and keeps only the short in-memory negative cache, which a restart clears.
+ *
+ * 400 is the one that has to be argued for, because it looks definitive and is not:
+ *
+ *  - Every SsrfSecurityError becomes a 400 here, and resolveAndPinHost raises one for an
+ *    ordinary DNS failure — EAI_AGAIN, a resolver outage, a lookup timeout — exactly as it does
+ *    for a policy block. A thirty-second blip on the node's resolver would otherwise cost every
+ *    item scrolled past in that window an hour, then six, then a day, and survive the restart
+ *    that used to clear it.
+ *  - A genuine upstream HTTP 400 is transient often enough at a CDN to belong on the same side.
+ *
+ * A real policy block loses nothing by being here: it is refused before any connection is made,
+ * so repeating it costs the node no outbound request, and the five-minute cache is protection
+ * enough. The classification in pulse-resolver.ts is left exactly as it is; this is only about
+ * which outcomes are worth writing to disk.
+ */
+export function isPersistentThumbnailFailure(status: number): boolean {
+    return status === 403 || status === 404 || status === 410 || status === 413;
+}
+
+export interface ThumbnailBackoffEntry {
+    itemId: string;
+    thumbnailUrl: string | null;
+    failureCount: number;
+    status: number;
+    error: string;
+    lastFailedAtMs: number;
+    retryAfterMs: number;
+}
+
+/**
+ * The per-item backoff, kept in SQLite so a restart does not forget it.
+ *
+ * The in-memory negative cache (5 minutes) is still the first line of defence for a burst of
+ * requests. This is the second: it survives restarts and escalates, so an item whose thumbnail
+ * cannot be recovered stops costing outbound requests and log lines. The member sees the same
+ * "no thumbnail" fallback either way.
+ */
+export class PulseThumbnailBackoffStore {
+    private now: () => number;
+
+    constructor(options: { now?: () => number } = {}) {
+        this.now = options.now ?? (() => Date.now());
+    }
+
+    private read(itemId: string): ThumbnailBackoffEntry | null {
+        try {
+            const row = db.prepare(
+                `SELECT item_id, thumbnail_url, failure_count, status, error, last_failed_at, retry_after
+                   FROM pulse_thumbnail_backoff WHERE item_id = ?`
+            ).get(itemId) as {
+                item_id: string;
+                thumbnail_url: string | null;
+                failure_count: number;
+                status: number;
+                error: string;
+                last_failed_at: string;
+                retry_after: string;
+            } | undefined;
+            if (!row) return null;
+            const retryAfterMs = Date.parse(row.retry_after);
+            if (Number.isNaN(retryAfterMs)) return null;
+            return {
+                itemId: row.item_id,
+                thumbnailUrl: row.thumbnail_url,
+                failureCount: row.failure_count,
+                status: row.status,
+                error: row.error,
+                lastFailedAtMs: Date.parse(row.last_failed_at),
+                retryAfterMs,
+            };
+        } catch {
+            // A node whose schema predates this table must still serve thumbnails.
+            return null;
+        }
+    }
+
+    /** The entry that should refuse this request outright, or null to go to the network. */
+    getActive(itemId: string, thumbnailUrl: string | null): ThumbnailBackoffEntry | null {
+        const entry = this.read(itemId);
+        if (!entry) return null;
+        // A later sync writing a DIFFERENT URL is a different resource: try it now rather than
+        // hiding a working URL behind a backoff the one it replaced earned.
+        if ((entry.thumbnailUrl ?? null) !== (thumbnailUrl ?? null)) return null;
+        if (entry.retryAfterMs <= this.now()) return null;
+        return entry;
+    }
+
+    /** Escalate this item one step. Returns the entry now in force. */
+    recordFailure(itemId: string, thumbnailUrl: string | null, status: number, error: string): ThumbnailBackoffEntry {
+        const url = thumbnailUrl ?? null;
+        const existing = this.read(itemId);
+        // A new URL restarts the ladder; the count measures failures of THIS URL.
+        const carried = existing && (existing.thumbnailUrl ?? null) === url ? existing.failureCount : 0;
+        const failureCount = carried + 1;
+        const stepMs = THUMBNAIL_BACKOFF_STEPS_MS[
+            Math.min(failureCount - 1, THUMBNAIL_BACKOFF_STEPS_MS.length - 1)
+        ];
+        const nowMs = this.now();
+        const retryAfterMs = nowMs + stepMs;
+        try {
+            db.prepare(
+                `INSERT INTO pulse_thumbnail_backoff
+                     (item_id, thumbnail_url, failure_count, status, error, last_failed_at, retry_after)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(item_id) DO UPDATE SET
+                     thumbnail_url  = excluded.thumbnail_url,
+                     failure_count  = excluded.failure_count,
+                     status         = excluded.status,
+                     error          = excluded.error,
+                     last_failed_at = excluded.last_failed_at,
+                     retry_after    = excluded.retry_after`
+            ).run(
+                itemId,
+                url,
+                failureCount,
+                status,
+                error,
+                new Date(nowMs).toISOString(),
+                new Date(retryAfterMs).toISOString()
+            );
+        } catch { /* best effort: the in-memory negative cache still holds the short line */ }
+        return {
+            itemId,
+            thumbnailUrl: url,
+            failureCount,
+            status,
+            error,
+            lastFailedAtMs: nowMs,
+            retryAfterMs,
+        };
+    }
+
+    /** Forget this item: a success, or a tombstone taking the item away. */
+    clear(itemId: string): void {
+        try {
+            db.prepare(`DELETE FROM pulse_thumbnail_backoff WHERE item_id = ?`).run(itemId);
+        } catch {}
+    }
+
+    clearAll(): void {
+        try {
+            db.prepare(`DELETE FROM pulse_thumbnail_backoff`).run();
+        } catch {}
     }
 }
 
@@ -457,11 +629,14 @@ export interface PulseThumbnailOptions {
     diskDir?: string;
     timeoutMs?: number;
     negativeTtlMs?: number;
+    /** null disables the persisted backoff (a caller that wants memory-only behaviour). */
+    backoffStore?: PulseThumbnailBackoffStore | null;
 }
 
 export class PulseThumbnailService {
     public readonly cache: PulseThumbnailCache;
     public readonly diskStore: PulseThumbnailDiskStore | null;
+    public readonly backoffStore: PulseThumbnailBackoffStore | null;
     private inFlight = new Map<string, Promise<ThumbnailResult>>();
     private ingestQueue: Promise<void> = Promise.resolve();
     private fetchFn: (url: string, options?: SsrfSafeFetchOptions) => Promise<SsrfSafeResponse>;
@@ -484,6 +659,29 @@ export class PulseThumbnailService {
                 maxEntryBytes: this.maxEntryBytes,
             });
         this.fetchFn = options.fetchFn ?? ssrfSafeFetch;
+        this.backoffStore = options.backoffStore !== undefined
+            ? options.backoffStore
+            : new PulseThumbnailBackoffStore();
+    }
+
+    /**
+     * Record a refusal: the short in-memory line always, the persisted backoff only for a
+     * failure that trying again soon cannot fix.
+     *
+     * Failures that cost no outbound request (a malformed data URI, a bad scheme) stay on the
+     * in-memory cache alone — there is nothing to protect the node from.
+     */
+    private refuse(itemId: string, thumbnailUrl: string | null, status: number, error: string): ThumbnailResult {
+        this.cache.setNegative(itemId, status, error);
+        if (this.backoffStore && isPersistentThumbnailFailure(status)) {
+            this.backoffStore.recordFailure(itemId, thumbnailUrl, status, error);
+        }
+        return { status, error };
+    }
+
+    /** Bytes landed: whatever this item owed, it has paid. */
+    private clearBackoff(itemId: string): void {
+        this.backoffStore?.clear(itemId);
     }
 
     private async attemptThumbnailRecovery(
@@ -501,7 +699,7 @@ export class PulseThumbnailService {
                     const embedRes = await this.fetchFn(embedUrl, {
                         method: 'GET',
                         timeoutMs: this.timeoutMs,
-                        maxBytes: 512 * 1024,
+                        maxBytes: INSTAGRAM_EMBED_MAX_BYTES,
                         headers: {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         },
@@ -540,6 +738,7 @@ export class PulseThumbnailService {
                                         if (this.diskStore) {
                                             await this.diskStore.set(itemId, buffer, mimeType, etag);
                                         }
+                                        this.clearBackoff(itemId);
                                         if (options.ifNoneMatch && options.ifNoneMatch === etag) {
                                             return { status: 304 };
                                         }
@@ -593,6 +792,9 @@ export class PulseThumbnailService {
             return { status: 404, error: 'Item not found' };
         }
 
+        // What the backoff is keyed against: the exact URL a failure would be about.
+        const normalisedThumbnailUrl = row.thumbnail_url?.trim() ? row.thumbnail_url.trim() : null;
+
         // 2. Check in-memory LRU cache
         const cached = this.cache.get(itemId);
         if (cached) {
@@ -630,6 +832,15 @@ export class PulseThumbnailService {
             return { status: neg.status, error: neg.error };
         }
 
+        // 4b. Check the persisted backoff, which outlives both the 5-minute negative cache and
+        // a restart. It sits BELOW both cache tiers on purpose: an item that already has bytes
+        // keeps serving them. Returning here is also what makes the failure log lines appear
+        // once per backoff step instead of once per request — neither fetch below is reached.
+        const backedOff = this.backoffStore?.getActive(itemId, normalisedThumbnailUrl) ?? null;
+        if (backedOff) {
+            return { status: backedOff.status, error: backedOff.error };
+        }
+
         if (!row.thumbnail_url || !row.thumbnail_url.trim()) {
             const pending = this.inFlight.get(itemId);
             if (pending) return await pending;
@@ -641,12 +852,10 @@ export class PulseThumbnailService {
                 } catch (recoveryErr: any) {
                     if (recoveryErr instanceof SsrfSecurityError) {
                         logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${recoveryErr.message}`);
-                        this.cache.setNegative(itemId, 400, recoveryErr.message);
-                        return { status: 400, error: recoveryErr.message };
+                        return this.refuse(itemId, null, 400, recoveryErr.message);
                     }
                 }
-                this.cache.setNegative(itemId, 404, 'Item has no thumbnail');
-                return { status: 404, error: 'Item has no thumbnail' };
+                return this.refuse(itemId, null, 404, 'Item has no thumbnail');
             })();
 
             this.inFlight.set(itemId, recoveryPromise);
@@ -678,6 +887,7 @@ export class PulseThumbnailService {
                 if (this.diskStore) {
                     await this.diskStore.set(itemId, buf, mimeType, etag);
                 }
+                this.clearBackoff(itemId);
                 if (options.ifNoneMatch && options.ifNoneMatch === etag) {
                     return { status: 304 };
                 }
@@ -724,19 +934,15 @@ export class PulseThumbnailService {
                             if (recovered) return recovered;
                         } catch (recoveryErr: any) {
                             if (recoveryErr instanceof SsrfSecurityError) {
-                                const status = 400;
-                                const error = recoveryErr.message;
                                 logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${recoveryErr.message}`);
-                                this.cache.setNegative(itemId, status, error);
-                                return { status, error };
+                                return this.refuse(itemId, rawUrl, 400, recoveryErr.message);
                             }
                         }
                     }
                     const status = (res.status >= 400 && res.status < 500) ? res.status : 502;
                     const error = `Upstream refused: HTTP ${res.status}`;
                     logger.warn('SYS', `[PulseThumbnail] Upstream refused for item ${itemId}: HTTP ${res.status}`);
-                    this.cache.setNegative(itemId, status, error);
-                    return { status, error };
+                    return this.refuse(itemId, rawUrl, status, error);
                 }
 
                 const rawContentType = res.headers['content-type'] || '';
@@ -744,15 +950,13 @@ export class PulseThumbnailService {
                 if (!mimeType || !ALLOWED_IMAGE_CONTENT_TYPES.includes(mimeType)) {
                     const error = `Upstream returned a non-image: ${mimeType || 'none'}`;
                     logger.warn('SYS', `[PulseThumbnail] Upstream returned a non-image for item ${itemId}: ${mimeType || 'none'}`);
-                    this.cache.setNegative(itemId, 502, error);
-                    return { status: 502, error };
+                    return this.refuse(itemId, rawUrl, 502, error);
                 }
 
                 const buffer = await res.buffer();
                 if (buffer.length > this.maxEntryBytes) {
                     const error = `Thumbnail body ${buffer.length} bytes exceeds maximum limit of ${this.maxEntryBytes} bytes`;
-                    this.cache.setNegative(itemId, 413, error);
-                    return { status: 413, error };
+                    return this.refuse(itemId, rawUrl, 413, error);
                 }
 
                 const entry = this.cache.set(itemId, buffer, mimeType);
@@ -760,6 +964,7 @@ export class PulseThumbnailService {
                 if (this.diskStore) {
                     await this.diskStore.set(itemId, buffer, mimeType, etag);
                 }
+                this.clearBackoff(itemId);
 
                 if (options.ifNoneMatch && options.ifNoneMatch === etag) {
                     return { status: 304 };
@@ -785,11 +990,8 @@ export class PulseThumbnailService {
                         if (recovered) return recovered;
                     } catch (recoveryErr: any) {
                         if (recoveryErr instanceof SsrfSecurityError) {
-                            status = 400;
-                            error = recoveryErr.message;
                             logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${recoveryErr.message}`);
-                            this.cache.setNegative(itemId, status, error);
-                            return { status, error };
+                            return this.refuse(itemId, rawUrl, 400, recoveryErr.message);
                         }
                     }
 
@@ -810,8 +1012,7 @@ export class PulseThumbnailService {
                     }
                 }
 
-                this.cache.setNegative(itemId, status, error);
-                return { status, error };
+                return this.refuse(itemId, rawUrl, status, error);
             } finally {
                 this.inFlight.delete(itemId);
             }
@@ -873,6 +1074,7 @@ export class PulseThumbnailService {
                 if (this.diskStore) {
                     await this.diskStore.set(itemId, buf, mimeType, etag);
                 }
+                this.clearBackoff(itemId);
                 return { status: 200, buffer: buf, contentType: mimeType, etag };
             } catch {
                 return { status: 400, error: 'Malformed base64 data URI' };
@@ -940,6 +1142,9 @@ export class PulseThumbnailService {
             if (this.diskStore) {
                 await this.diskStore.set(itemId, buffer, mimeType, etag);
             }
+            // Bytes exist for this item again: a backoff row left from an earlier failure would
+            // otherwise refuse the read path once the memory and disk copies age out.
+            this.clearBackoff(itemId);
 
             return { status: 200, buffer, contentType: mimeType, etag };
         } catch (err: any) {
@@ -972,11 +1177,13 @@ export class PulseThumbnailService {
     /** Synchronous for callers on a request path; the disk unlink settles on its own. */
     delete(itemId: string): void {
         this.cache.delete(itemId);
+        this.clearBackoff(itemId);
         void this.diskStore?.delete(itemId).catch(() => {});
     }
 
     clear(): void {
         this.cache.clear();
+        this.backoffStore?.clearAll();
         void this.diskStore?.clear().catch(() => {});
     }
 

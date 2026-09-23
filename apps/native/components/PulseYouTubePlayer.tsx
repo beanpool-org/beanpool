@@ -9,10 +9,19 @@
  * What this file adds on top of those pure modules is the WebView's own configuration, which is
  * where the privacy promise is actually kept or broken:
  *
- * - `incognito` — a non-persistent data store on iOS, and a cleared one on Android. YouTube's
- *   cookies do not outlive the card.
- * - `thirdPartyCookiesEnabled={false}` and `cacheEnabled={false}` — nothing about what a member
- *   watched is left on the device.
+ * - `incognito` — which is not the same promise on the two platforms, so it is worth saying
+ *   plainly rather than claiming the stronger one twice. On iOS the WebView is given
+ *   `WKWebsiteDataStore.nonPersistentDataStore`: cookies and storage belong to this WebView, live
+ *   in memory, and go when it goes. Android has no such store, so react-native-webview approximates
+ *   it at *mount* — `CookieManager.removeAllCookies`, `clearCache(true)`, `clearHistory`, no form
+ *   data, no saved passwords — and then leaves the WebView alone. It does not stop YouTube writing
+ *   cookies during playback, and those sit in the app's WebView cookie jar on disk until something
+ *   clears it. So: on iOS YouTube's cookies do not outlive the card; on Android they do not outlive
+ *   the *next* card, and in between they are the only thing in that jar, because this is the only
+ *   WebView in the app. Note that the mount-time wipe is process-wide for the same reason — if a
+ *   second WebView is ever added here, it will lose its cookies every time a member plays a video.
+ * - `thirdPartyCookiesEnabled={false}` and `cacheEnabled={false}` — what is written in the meantime
+ *   is as little as it can be, and not where another site could read it.
  * - `onShouldStartLoadWithRequest` — the player may load itself and YouTube's assets. A tap that
  *   would navigate somewhere else (the video title, a share link) leaves for the member's browser
  *   or YouTube app instead of turning this small rectangle into an unmarked browser.
@@ -109,7 +118,8 @@ export function PulseYouTubePlayer({ itemId, html, baseUrl, embedUrl, onError }:
                 allowsInlineMediaPlayback
                 allowsFullscreenVideo
                 javaScriptEnabled
-                // Nothing about what was watched outlives the card.
+                // As close to "nothing about what was watched outlives the card" as each platform
+                // allows; the two are not the same, and the difference is at the top of this file.
                 incognito
                 thirdPartyCookiesEnabled={false}
                 cacheEnabled={false}

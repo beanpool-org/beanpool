@@ -1,6 +1,7 @@
 // Beanpool node-address registrar — Cloudflare Worker.
 //   fetch:     claim / status / offline (signed by node key) + admin approve/revoke + switchboard
-//   scheduled: attestation sweep — every live name must keep proving it's the registered node, else revoke.
+//   scheduled: attestation sweep — revokes a live name only on proof that ANOTHER node key answers at it,
+//              never on anything the registrar merely can't verify, and never when the sweep as a whole looks wrong.
 // Design: docs/node-dns-registrar.md. CF calls validated live 2026-07-27 (scratchpad/cf-phase0.sh).
 
 import * as cf from './cf.js';
@@ -97,7 +98,9 @@ async function handleClaim(request, env, bodyText) {
 async function handleStatus(request, env) {
     const pubkey = await verifySignedRequest(request, '');
     if (!pubkey) return json({ error: 'bad signature' }, 401);
-    const a = await db.getAllocationByPubkey(env, pubkey);
+    // Any state, including 'revoked': answering 'none' for a revoked name is what made nodes wipe their saved
+    // address (2026-09-24 incident).
+    const a = await db.getOwnAllocation(env, pubkey);
     if (!a) return json({ status: 'none' });
     const out = { status: a.status, name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact };
     if (a.status === 'live' && a.mode === 'tunnel' && a.tunnel_id) {
@@ -242,57 +245,115 @@ h1{font-size:1.5rem;color:#dc2626}</style></head><body>
 }
 
 // --- Attestation ---
-// Three outcomes, because "offline" and "swapped to other content" must be treated very differently
-// (a solar/off-grid node that sleeps overnight must NOT lose its address):
-//   'ok'         — valid signed attest from the registered node.
-//   'mismatch'   — the origin answered (2xx) but it isn't our node (wrong key / not JSON / stale) →
-//                  someone swapped the origin → ABUSE → revoke fast.
-//   'unverified' — unreachable / non-2xx / CF has no connector → node is just DOWN → benign, never revoke.
-export async function attestOne(env, a) {
+// Three verdicts, and only one of them is evidence against a node. On 2026-09-24 a Worker that could not verify
+// the nodes' signing format called every node a 'mismatch' and revoked two names; so now (design:
+// scratch/registrar/DESIGN-2026-09-24-fable.md §2.3):
+//   'ok'           — the registered key signed our nonce, recently.
+//   'impostor'     — a fresh attest for our nonce whose signature VERIFIES under a key that is not the registered
+//                    one: proof that another node answers at this hostname. The only verdict that counts.
+//   'unverifiable' — everything else: unreachable, timeout, non-2xx, not JSON, not an attest for our nonce, stale,
+//                    or a signature that verifies under no key we can check (an unknown signing format). That is
+//                    what a sleeping solar node, a format drift, or a bug on OUR side looks like — never evidence.
+// Content that isn't an attest at all (a swapped origin) is unverifiable here too; what to do about it is a
+// separate, slower decision (design D2).
+const ATTEST_TIMEOUT_MS = 15_000;
+
+async function classify(env, a) {
     const nonce = crypto.randomUUID();
     let res;
     try {
         res = await fetch(`https://${a.hostname}/api/attest?nonce=${encodeURIComponent(nonce)}`, {
             cf: { cacheTtl: 0 }, headers: { 'user-agent': 'beanpool-registrar-attest' },
+            signal: AbortSignal.timeout(ATTEST_TIMEOUT_MS),
         });
-    } catch { return 'unverified'; }                 // connection error → offline
-    if (!res.ok) return 'unverified';                // 5xx / 404 / CF "no connector" → offline or ambiguous
-    try {                                            // got a 2xx: must be a valid attest, else non-beanpool content
-        const j = await res.json();
-        const ts = parseInt(j.timestamp, 10);
-        if ((j.pubkey || '').toLowerCase() === a.node_pubkey && j.nonce === nonce &&
-            ts && Math.abs(nowS() - ts) <= 120 &&
-            await verifyEd25519(a.node_pubkey, `${ATTEST_DOMAIN}\n${nonce}\n${j.timestamp}`, j.signature || '')) {
-            return 'ok';
-        }
-    } catch { /* not JSON → serving something else */ }
-    return 'mismatch';
+    } catch { return { verdict: 'unverifiable', why: 'unreachable' }; }
+    if (!res.ok) return { verdict: 'unverifiable', why: `http ${res.status}` };
+    let j;
+    try { j = await res.json(); } catch { return { verdict: 'unverifiable', why: 'not json' }; }
+    const signer = typeof j?.pubkey === 'string' ? j.pubkey.toLowerCase() : '';
+    if (!/^[0-9a-f]{64}$/.test(signer) || j.nonce !== nonce || typeof j.signature !== 'string')
+        return { verdict: 'unverifiable', why: 'not an attest for this nonce' };
+    const ts = parseInt(j.timestamp, 10);
+    if (!ts || Math.abs(nowS() - ts) > 120) return { verdict: 'unverifiable', why: 'stale timestamp' };
+    if (!(await verifyEd25519(signer, `${ATTEST_DOMAIN}\n${nonce}\n${j.timestamp}`, j.signature)))
+        return { verdict: 'unverifiable', why: 'signature does not verify' };
+    if (signer === String(a.node_pubkey).toLowerCase()) return { verdict: 'ok' };
+    return { verdict: 'impostor', why: `valid signature by ${signer.slice(0, 16)}…` };
 }
 
-async function handleAttest(env, a, limit) {
-    const r = await attestOne(env, a);
-    if (r === 'ok') {
-        await db.updateAllocation(env, a.name, { attest_fails: 0, last_attest_at: nowS() });
-    } else if (r === 'mismatch') {
-        const fails = (a.attest_fails || 0) + 1;
-        if (fails >= limit) {
-            await deprovision(env, a);
-            await db.updateAllocation(env, a.name, { status: 'revoked', attest_fails: fails });
-        } else {
-            await db.updateAllocation(env, a.name, { attest_fails: fails });
-        }
+export async function attestOne(env, a) {
+    return (await classify(env, a)).verdict;
+}
+
+// Is this sweep's picture of the world believable? (design §2.4) If not, the registrar assumes it is the one at
+// fault and acts on no row.
+//   - the canary (CANARY_NAME, one of our own nodes) must be live and 'ok'. Unset = no canary check.
+//   - impostors must not exceed max(2, 10% of live): real ones are rare and independent; many at once is us.
+//     Nor may every live name be one: max(2, …) can't be exceeded while live <= 2, and a small fleet (the live
+//     set after 09-24) is where a key-comparison bug would otherwise revoke every name in two sweeps.
+//   - unverifiable must not exceed half of live: a registrar that can't see most of the world shouldn't trust
+//     what it thinks it sees in the rest.
+function judgeSweep(env, results) {
+    const count = (v) => results.filter((r) => r.verdict === v).length;
+    const s = { live: results.length, ok: count('ok'), unverifiable: count('unverifiable'), impostor: count('impostor') };
+    const canary = env.CANARY_NAME ? results.find((r) => r.a.name === env.CANARY_NAME) : null;
+    if (env.CANARY_NAME && canary?.verdict !== 'ok') s.action = 'suspended:canary';
+    else if (s.impostor > Math.max(2, s.live * 0.1) || (s.live > 0 && s.impostor === s.live)) s.action = 'suspended:mass';
+    else if (s.unverifiable > s.live / 2) s.action = 'suspended:unverifiable';
+    else s.action = 'applied';
+    return s;
+}
+
+// Phase 2 for one row. Re-reads it first, so a verdict is only ever applied to the allocation that was attested,
+// not one the owner re-claimed or released while the sweep ran.
+// 'unverifiable' is never evidence: it never counts and never revokes. It does end a run of impostor verdicts
+// (attest_fails counts CONSECUTIVE ones), so a sighting can't pair with another one days of silence later.
+async function applyVerdict(env, a, verdict, why, limit) {
+    if (verdict === 'unverifiable' && !a.attest_fails) return;   // no run to end: no read, no write
+    const cur = await db.getAllocation(env, a.name);
+    if (!cur || cur.status !== 'live' || cur.node_pubkey !== a.node_pubkey || cur.requested_at !== a.requested_at) return;
+    if (verdict === 'unverifiable') {
+        if (cur.attest_fails) await db.updateAllocation(env, a.name, { attest_fails: 0 });
+        return;
     }
-    // 'unverified' (offline/ambiguous): do nothing — never auto-revoke a node just for being down.
-    // last_attest_at stays old, which the admin console surfaces as "unverified since …" for review.
+    if (verdict === 'ok') {
+        await db.updateAllocation(env, a.name, { attest_fails: 0, last_attest_at: nowS() });
+        return;
+    }
+    // 'impostor': today's kill switch, kept until ownership states land (design PR 1 turns it into a pause).
+    const fails = (cur.attest_fails || 0) + 1;
+    if (fails >= limit) {
+        console.warn(`[ATTEST_REVOKE] ${a.name}: impostor ${fails}× (${why})`);
+        await deprovision(env, cur);
+        await db.updateAllocation(env, a.name, { status: 'revoked', attest_fails: fails });
+    } else {
+        await db.updateAllocation(env, a.name, { attest_fails: fails });
+    }
 }
 
+// Two phases: classify every live name while writing nothing, judge the sweep as a whole, and only then act.
+// A suspended sweep resets nothing and increments nothing. Returns the judgement (also logged).
 export async function attestSweep(env) {
-    const limit = parseInt(env.ATTEST_FAIL_LIMIT || '2', 10);   // consecutive MISMATCHES before revoke
+    const limit = parseInt(env.ATTEST_FAIL_LIMIT || '2', 10);   // consecutive IMPOSTOR verdicts before revoke
     const live = await db.listByStatus(env, 'live');
     const BATCH = 10;                                           // bounded concurrency — don't hit the cron's wall-clock/subrequest limits at scale
+    const results = [];
     for (let i = 0; i < live.length; i += BATCH) {
-        await Promise.all(live.slice(i, i + BATCH).map((a) => handleAttest(env, a, limit)));
+        results.push(...await Promise.all(live.slice(i, i + BATCH).map(async (a) => ({ a, ...(await classify(env, a)) }))));
     }
+
+    const s = judgeSweep(env, results);
+    const line = `[ATTEST_SWEEP] ${s.action} live=${s.live} ok=${s.ok} unverifiable=${s.unverifiable} impostor=${s.impostor}`;
+    if (s.action !== 'applied') {
+        const seen = results.filter((r) => r.verdict !== 'ok').slice(0, 50).map((r) => `${r.a.name}:${r.verdict}(${r.why})`);
+        console.error(`${line} — acting on NO row; the registrar assumes it is at fault. ${seen.join(' ')}`);
+        return s;
+    }
+    console.log(line);
+    for (let i = 0; i < results.length; i += BATCH) {
+        await Promise.all(results.slice(i, i + BATCH).map((r) => applyVerdict(env, r.a, r.verdict, r.why, limit)));
+    }
+    return s;
 }
 
 export default {

@@ -23,6 +23,8 @@
  *   8b. a member re-keyed onto a new device keeps their sign-in account: deleting the new identity frees it, a
  *      community removal keeps it used (403, not 409); the replaced key is refused at the door (403, never a
  *      500), and a failure inside the join is an answer, not a 500 that names tables
+ *   8c. deleting an account does not give its sign-up back to the address: join → delete → join again with the
+ *      same sign-in is refused (429) past the hourly limit, and the sweep still clears those addresses
  *   9. the door is read per request: back to local, the routes 404 again
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-join.ts
@@ -416,7 +418,9 @@ async function main(): Promise<void> {
     console.log('\n── 8. deleting your account frees the sign-in; a removal does not ──');
     const purged = await call(ada, '/api/member/purge', {});
     assert(purged.status === 200 && memberRow(ada.pk)?.status === 'pruned', `Ada deletes her own account (got ${purged.status})`);
-    assert(!joinRow(ada.pk), 'her open_joins row goes with it');
+    const adaReleased = joinRow(ada.pk);
+    assert(/^released:[0-9A-F]{32}$/.test(String(adaReleased?.join_hash)) && adaReleased.join_hash !== adaJoin.join_hash,
+        `her open_joins row stays on record as a join, its hash overwritten with a random tombstone (got ${JSON.stringify(adaReleased?.join_hash)})`);
     const gus = newId();
     const gusNonce = await joinNonce(gus);
     const gusJoin = await join(gus, { callsign: 'Gus', provider: 'google', idToken: mint('google', { sub: GOOGLE_SUB, nonce: gusNonce }), nonce: gusNonce });
@@ -521,6 +525,39 @@ async function main(): Promise<void> {
     assert(oliJoin.status === 503 && oliJoin.body?.code === 'join_failed' && !/open_joins|forced|sqlite|constraint/i.test(JSON.stringify(oliJoin.body)),
         `a join that throws inside registerOpenJoin → 503 join_failed, with nothing internal in the answer (got ${oliJoin.status} ${JSON.stringify(oliJoin.body)})`);
     assert(!memberRow(oli.pk) && !joinRow(oli.pk), '...and nothing of it was kept: the member row rolled back with the rest');
+
+    // ── 8c. deleting an account keeps its sign-up counted ───────────────────────────────────────
+    console.log('\n── 8c. deleting an account does not give its sign-up back to the address ──');
+    freshAddress();
+    assert(recentFromHere() === 0, 'setup: a fresh day for this address');
+    const PAT_SUB = 'pat-google-sub';
+    const patHash = openJoinHash('google', PAT_SUB);
+    const cycles: string[] = [];
+    for (let i = 0; i < OPEN_JOIN_LIMITS.perHour; i++) {
+        const pat = newId();
+        const patNonce = await joinNonce(pat);
+        const joined = await join(pat, { callsign: `Pat ${i}`, provider: 'google', idToken: mint('google', { sub: PAT_SUB, nonce: patNonce }), nonce: patNonce });
+        const countBefore = recentFromHere();
+        const purge = await call(pat, '/api/member/purge', {});
+        const row = joinRow(pat.pk);
+        cycles.push(`${joined.status}/${purge.status}: count ${countBefore}→${recentFromHere()}, hash ${row?.join_hash === patHash ? 'kept' : String(row?.join_hash).split(':')[0]}`);
+    }
+    assert(cycles.every(c => c.startsWith('200/200')),
+        `the same Google account joins, deletes, and joins again while the address is under its limit (${cycles.join('; ')})`);
+    assert(cycles.every((c, i) => c.includes(`count ${i + 1}→${i + 1}`)), `a deleted account's join still counts for its address (${cycles.join('; ')})`);
+    assert(cycles.every(c => c.endsWith('hash released')), `each deletion frees the account by overwriting its hash, not by deleting its row (${cycles.join('; ')})`);
+    const patOver = newId();
+    const patOverNonce = await joinNonce(patOver);
+    const patOverToken = mint('google', { sub: PAT_SUB, nonce: patOverNonce });
+    const overLimit = await join(patOver, { callsign: 'Pat', provider: 'google', idToken: patOverToken, nonce: patOverNonce });
+    assert(overLimit.status === 429 && overLimit.body?.code === 'rate_limited' && /last hour/.test(String(overLimit.body?.error)),
+        `one more join from that address in the hour → 429, deletions or not (got ${overLimit.status} ${JSON.stringify(overLimit.body)})`);
+    assert(!memberRow(patOver.pk), '...and did not join');
+    db.prepare('UPDATE open_joins SET joined_at = ? WHERE ip_hash = ?').run(new Date(Date.now() - 25 * 3600_000).toISOString(), ipHash);
+    const nextDay = await join(patOver, { callsign: 'Pat', provider: 'google', idToken: patOverToken, nonce: patOverNonce });
+    assert(nextDay.status === 200, `a day later the same account joins with the nonce it kept (got ${nextDay.status})`);
+    const releasedWithAddress = (db.prepare("SELECT COUNT(*) AS n FROM open_joins WHERE join_hash LIKE 'released:%' AND ip_hash IS NOT NULL").get() as any).n;
+    assert(releasedWithAddress === 0, 'and the sweep cleared the deleted accounts\' address hashes like any other day-old join');
 
     // ── 9. the door follows the profile ──────────────────────────────────────────────────────────
     console.log('\n── 9. the door follows the profile, per request ──');

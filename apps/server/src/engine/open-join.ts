@@ -103,7 +103,7 @@ export function openJoinLimitReached(ipHash: string, now = Date.now()): 'hour' |
 /**
  * Whether this sign-in account has already joined. `removed` when the member it joined as is gone (pruned) and
  * the row was kept on purpose: removed by the community, or deleted while suspended. That account cannot simply
- * join again. (A member in good standing who deletes their account takes the row with them: releaseOpenJoin.)
+ * join again. (A member in good standing who deletes their account frees it: releaseOpenJoin overwrites the hash.)
  */
 export function openJoinTaken(joinHash: string): 'joined' | 'removed' | null {
     const row = db.prepare(`
@@ -178,7 +178,12 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
     })();
 }
 
-/** A member in good standing deleting their own account frees the sign-in account they joined with (purgeMemberSelf). */
+/**
+ * A member in good standing deleting their own account frees the sign-in account they joined with (purgeMemberSelf).
+ * The join stays on record: only its hash is overwritten, with a random tombstone that `openJoinTaken` never matches
+ * (a real hash is base64url, with no ':'). `joined_at` and `ip_hash` still count against the address's limits until
+ * the sweep clears the address. Deleting the row gave the sign-up back, so join, delete, join again never reached them.
+ */
 export function releaseOpenJoin(publicKey: string): void {
-    db.prepare('DELETE FROM open_joins WHERE member_pubkey = ?').run(publicKey);
+    db.prepare("UPDATE open_joins SET join_hash = 'released:' || hex(randomblob(16)) WHERE member_pubkey = ?").run(publicKey);
 }

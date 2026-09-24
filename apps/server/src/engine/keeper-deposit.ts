@@ -1,5 +1,5 @@
 import {
-    verifyIdToken,
+    verifySignIn,
     getConfiguredAudiences,
     isSsoProvider,
     ssoLookupHash,
@@ -64,9 +64,11 @@ export interface SsoKeeperDeposit {
     ownerPubkey: string;
     /** The COMPLETE new generation. Exactly one fragment must be the sign-in one. */
     shares: KeeperShareInput[];
-    /** The provider's `id_token` from the client. */
-    idToken: string;
-    /** The nonce this node issued to THIS member (see issueNonce). */
+    /** The provider's `id_token` from the client. Refused for GitHub (see verifySignIn). */
+    idToken?: string;
+    /** GitHub only: the device-flow session this node ran for THIS member (engine/github-device.ts). */
+    sessionId?: string;
+    /** The nonce this node issued to THIS member (see issueNonce). Not used for GitHub. */
     nonce: string;
 }
 
@@ -99,16 +101,16 @@ export function maskEmail(email: string | undefined): string | undefined {
 export async function depositSsoKeeperGeneration(
     deposit: SsoKeeperDeposit,
 ): Promise<SsoKeeperResult> {
-    const { provider, ownerPubkey, shares, idToken, nonce } = deposit;
+    const { provider, ownerPubkey, shares, idToken, sessionId, nonce } = deposit;
     checkSsoKeeperShares(provider, ownerPubkey, shares);
 
     // Order matters: verify BEFORE touching storage. A failed sign-in must leave the existing
     // generation exactly as it was — the member's current keepers are what they fall back on.
     let identity;
     try {
-        identity = await verifyIdToken(
+        identity = await verifySignIn(
             provider,
-            idToken,
+            { idToken, sessionId },
             getConfiguredAudiences(provider),
             nonce,
             ownerPubkey,
@@ -247,7 +249,7 @@ function planCarryForward(
 /**
  * Store a generation whose sign-in fragment is filed under `identity`.
  *
- * `identity` MUST be what `verifyIdToken` returned inside the SAME request, for this owner. That is
+ * `identity` MUST be what `verifySignIn` returned inside the SAME request, for this owner. That is
  * the whole of this file's one property (above): the lookup hash comes from a `sub` this node
  * verified, never from the client. Two callers: `depositSsoKeeperGeneration` just above, and the
  * open door (`POST /api/join`), which enrols the sign-in that joined as the new member's recovery

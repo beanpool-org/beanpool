@@ -29,6 +29,10 @@
  *
  * So the alert fires when the collection OPENS, not when the hub is asked for. That is the
  * earliest possible moment and gives the owner the whole 72-hour window rather than the last 24.
+ *
+ * A sign-in releases its fragment seconds after the session opens, with no window at all, so a second
+ * alert goes when one actually does (notifySeedReleased): the owner learns it worked, not only that
+ * somebody tried.
  */
 
 import Router from '@koa/router';
@@ -50,11 +54,16 @@ import {
 } from '../engine/recovery-release.js';
 import {
     issueNonce,
-    verifyIdToken,
+    verifySignIn,
+    signInCredentialFrom,
     getConfiguredAudiences,
     isSsoProvider,
+    ssoProviderLabel,
     SsoVerificationError,
+    type SsoProvider,
 } from '../sso.js';
+import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
+import { githubFlowFailure } from './keepers.js';
 import type { RouteDeps } from './types.js';
 
 /** Callsign resolution, matching idx_members_callsign_unique's predicate exactly (see keepers.ts). */
@@ -67,6 +76,30 @@ function resolveCallsign(callsign: string): { pubkey?: string; ambiguous: boolea
     return { pubkey: rows[0]?.public_key, ambiguous: false };
 }
 
+
+/**
+ * The second alert: a sign-in has just RELEASED this member's sign-in fragment. For a single-blob keeper
+ * that fragment is the whole seed; for a two-layer one it makes the hub's piece available at once. The
+ * alert when the session opened says somebody is trying, and the seed follows seconds later, so this one
+ * says it worked: an owner who did not do it learns their key is out and needs moving, which stopping the
+ * session no longer fixes. Plain words, and nothing of the fragment in it.
+ */
+function notifySeedReleased(collection: Collection, provider: SsoProvider): void {
+    try {
+        const label = ssoProviderLabel(provider);
+        dispatchPushNotification(
+            [collection.ownerPubkey],
+            'SYSTEM',
+            '🔑 Your account was just restored',
+            `Your account was just restored with ${label} on another device. If that wasn't you, contact `
+            + `your community's admin now to move your account to a new key, and secure your ${label} account.`,
+            { screen: 'settings', collectionId: collection.id, kind: 'recovery_released' },
+            'recovery',
+        );
+    } catch (e) {
+        console.error('[recovery] could not notify about a released fragment:', (e as Error).message);
+    }
+}
 
 function fail(ctx: any, e: unknown): void {
     if (e instanceof RecoveryReleaseError || e instanceof SsoVerificationError) {
@@ -242,7 +275,40 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         if (!collection) return notMySession(ctx);
         if (!rateLimit(ctx)) return;
         ctx.status = 200;
-        ctx.body = { nonce: issueNonce(collection.requesterEphemeralPubkey), expiresInSeconds: 600 };
+        ctx.body = {
+            nonce: issueNonce(collection.requesterEphemeralPubkey),
+            expiresInSeconds: 600,
+            githubFlow: GITHUB_FLOW,
+        };
+    });
+
+    /**
+     * GitHub for the RECOVERING device, run by this node (engine/github-device.ts) and bound to the
+     * ephemeral key, like the nonce above. `start { collectionId }`, then `poll { collectionId, sessionId }`
+     * until ok, whose `sub` opens the blob; `/api/recovery/collect/sso` then carries
+     * `proof: { sessionId }`. Rate-limited as keepers.ts's pair is.
+     */
+    router.post('/api/recovery/collect/github/start', async (ctx) => {
+        const collection = sessionFor(ctx);
+        if (!collection) return notMySession(ctx);
+        if (!rateLimit(ctx)) return;
+        try {
+            const started = await startGithubSession(collection.requesterEphemeralPubkey);
+            ctx.status = 200;
+            ctx.body = started;
+        } catch (e) { return githubFlowFailure(ctx, e); }
+    });
+
+    router.post('/api/recovery/collect/github/poll', async (ctx) => {
+        const collection = sessionFor(ctx);
+        if (!collection) return notMySession(ctx);
+        if (!rateLimit(ctx)) return;
+        const sessionId = (ctx as any).requestBody?.sessionId;
+        try {
+            const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', collection.requesterEphemeralPubkey);
+            ctx.status = 200;
+            ctx.body = polled;
+        } catch (e) { return githubFlowFailure(ctx, e); }
     });
 
     /** K3 — released on a verified fresh sign-in with the provider account that is the keeper. */
@@ -258,15 +324,19 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             return;
         }
         try {
-            const identity = await verifyIdToken(
+            const identity = await verifySignIn(
                 body.provider,
-                typeof body.idToken === 'string' ? body.idToken : '',
+                // `idToken` for Google, Apple and Facebook; `proof: { sessionId }` for GitHub.
+                signInCredentialFrom(body),
                 getConfiguredAudiences(body.provider),
                 typeof body.nonce === 'string' ? body.nonce : '',
-                // The nonce was issued to the ephemeral key, so it must be consumed against it.
+                // The nonce (or GitHub session) was issued to the ephemeral key, so it must be spent against it.
                 collection.requesterEphemeralPubkey,
             );
-            await releaseSsoFragmentForIdentity(collection.id, identity.provider, identity.sub);
+            const alreadyReleased = new Set(listReleases(collection.id).map(r => r.shareId));
+            const released = await releaseSsoFragmentForIdentity(collection.id, identity.provider, identity.sub);
+            // Once per fragment released: a retry of a request that already released it tells nobody twice.
+            if (!alreadyReleased.has(released.shareId)) notifySeedReleased(collection, identity.provider);
             ctx.status = 200;
             ctx.body = collectionProgress(collection.id);
         } catch (e) { return fail(ctx, e); }

@@ -1,16 +1,23 @@
 /**
  * The open door (global profile, design §2.2): join with a one-time sign-in instead of an invite.
  *
- *   POST /api/join/sso-nonce   → { nonce, expiresInSeconds, providers }   (the same shape as /api/recovery/sso-nonce)
- *   POST /api/join             { callsign, provider, idToken, nonce, recovery?: { shares } }
+ *   POST /api/join/sso-nonce     → { nonce, expiresInSeconds, providers, githubFlow }   (the same shape as /api/recovery/sso-nonce)
+ *   POST /api/join/github/start  → { sessionId, userCode, verificationUri, expiresInSeconds, intervalSeconds }
+ *   POST /api/join/github/poll   { sessionId } → { status: pending | ok | denied | expired, … }
+ *   POST /api/join               { callsign, provider, idToken, nonce, recovery?: { shares } }
+ *                                GitHub: { callsign, provider: 'github', proof: { sessionId }, recovery? }
  *
- * Both answer 404 "This community is invite-only." unless the profile switch `openJoin` is on (config/node-
+ * All four answer 404 "This community is invite-only." unless the profile switch `openJoin` is on (config/node-
  * profile.ts): off on every local node, on by default on the global one. Read per request, so an operator's
  * override takes effect without a restart.
  *
+ * GitHub is run by this node (engine/github-device.ts): a GitHub token handed in proves nothing, so the joiner
+ * types a code at GitHub, the node collects the answer, and the join carries the session id. The session is bound
+ * to `open-join:<key>` exactly as a join nonce is, with the same consequences below.
+ *
  * ## Signed by the joiner's new key, both of them
  *
- * Neither route is on the signature bypass list. The real `requireSignature` middleware proves the caller holds
+ * None of these routes is on the signature bypass list. The real `requireSignature` middleware proves the caller holds
  * the key they are joining with, and the new member is `ctx.state.actor`, never a body field: the opposite of
  * `/api/invite/redeem`, which is bypassed and takes `publicKey` from the body. The middleware's spoof guard also
  * refuses a body `publicKey` that names anyone but the signer. A signed request does not need a member, so a key
@@ -49,7 +56,8 @@ import { broadcast, getMember } from '../state-engine.js';
 import { clientLimiterKey } from '../client-ip.js';
 import {
     issueNonce,
-    verifyIdToken,
+    verifySignIn,
+    signInCredentialFrom,
     getConfiguredAudiences,
     isSsoProvider,
     ssoProviderLabel,
@@ -59,6 +67,7 @@ import {
     type SsoIdentity,
     type SsoProvider,
 } from '../sso.js';
+import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
 import { recordFunnelEvent } from '../engine/funnel.js';
 import {
     forgetOldJoinAddresses,
@@ -147,27 +156,70 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { rateLimit } = deps;
 
-    router.post('/api/join/sso-nonce', async (ctx) => {
-        if (!doorOpen()) return inviteOnly(ctx);
+    /**
+     * The key asking to start a sign-in at the door, or null once the refusal is written: the door shut,
+     * unsigned, over the auth limiter, already a member, or a key a re-key replaced.
+     */
+    function joiningKey(ctx: any): string | null {
+        if (!doorOpen()) { inviteOnly(ctx); return null; }
         const actor = ctx.state?.actor as string | undefined;
-        if (!actor) return unsigned(ctx);
-        if (!rateLimit(ctx)) return;
+        if (!actor) { unsigned(ctx); return null; }
+        if (!rateLimit(ctx)) return null;
         if (getMember(actor)) {
             ctx.status = 409;
             ctx.body = { error: 'This key is already a member of this community.', code: 'already_member' };
-            return;
+            return null;
         }
         if (openJoinKeyInvalidated(actor)) {
             ctx.status = 403;
             ctx.body = { error: KEY_INVALIDATED, code: 'key_invalidated' };
+            return null;
+        }
+        return actor;
+    }
+
+    /** A GitHub start or poll at the door that did not work, in the door's own answer shape. */
+    function githubFailure(ctx: any, e: unknown): void {
+        if (e instanceof SsoProviderUnavailableError) {
+            ctx.status = 503;
+            ctx.body = { error: e.message, code: 'sign_in_unavailable' };
             return;
         }
+        if (e instanceof SsoVerificationError) return badRequest(ctx, e.message, 'sign_in');
+        throw e;
+    }
+
+    router.post('/api/join/sso-nonce', async (ctx) => {
+        const actor = joiningKey(ctx);
+        if (!actor) return;
         ctx.status = 200;
         ctx.body = {
             nonce: issueNonce(joinNonceSubject(actor)),
             expiresInSeconds: 600,
             providers: SSO_PROVIDERS,
+            githubFlow: GITHUB_FLOW,
         };
+    });
+
+    router.post('/api/join/github/start', async (ctx) => {
+        const actor = joiningKey(ctx);
+        if (!actor) return;
+        try {
+            const started = await startGithubSession(joinNonceSubject(actor));
+            ctx.status = 200;
+            ctx.body = started;
+        } catch (e) { return githubFailure(ctx, e); }
+    });
+
+    router.post('/api/join/github/poll', async (ctx) => {
+        const actor = joiningKey(ctx);
+        if (!actor) return;
+        const sessionId = (ctx as any).requestBody?.sessionId;
+        try {
+            const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', joinNonceSubject(actor));
+            ctx.status = 200;
+            ctx.body = polled;
+        } catch (e) { return githubFailure(ctx, e); }
     });
 
     router.post('/api/join', async (ctx) => {
@@ -181,8 +233,15 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
         if (!isSsoProvider(provider)) {
             return badRequest(ctx, `'provider' must be one of: ${SSO_PROVIDERS.join(', ')}.`);
         }
-        if (typeof body.idToken !== 'string' || !body.idToken) return badRequest(ctx, "'idToken' is required.");
-        if (typeof body.nonce !== 'string' || !body.nonce) return badRequest(ctx, "'nonce' is required.");
+        const credential = signInCredentialFrom(body);
+        const nonce = typeof body.nonce === 'string' ? body.nonce : '';
+        if (provider === 'github') {
+            // The session this node ran; a GitHub token, if that is what came, is refused by verifySignIn.
+            if (!credential.sessionId && !credential.idToken) return badRequest(ctx, "'proof.sessionId' is required for GitHub.");
+        } else {
+            if (!credential.idToken) return badRequest(ctx, "'idToken' is required.");
+            if (!nonce) return badRequest(ctx, "'nonce' is required.");
+        }
         const callsign = typeof body.callsign === 'string' ? body.callsign.trim().slice(0, MAX_JOIN_CALLSIGN).trim() : '';
         if (callsign.length < 2) return badRequest(ctx, 'Please choose a name of at least 2 characters.');
 
@@ -212,11 +271,11 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
 
         let identity: SsoIdentity;
         try {
-            identity = await verifyIdToken(
+            identity = await verifySignIn(
                 provider,
-                body.idToken,
+                credential,
                 getConfiguredAudiences(provider),
-                body.nonce,
+                nonce,
                 joinNonceSubject(actor),
             );
         } catch (e) {

@@ -453,11 +453,16 @@ async function main(): Promise<void> {
         && !isSsoProvider('constructor'),
         'and twitter, empty and Object.prototype keys are not');
 
-    // GitHub unverified pseudo-JWT verification attempt must fail
+    // GitHub has no token this node can check: the node runs the sign-in itself (engine/github-device.ts,
+    // test-github-device.ts). Anything handed in as a GitHub token is refused before any request.
     nonce = issueNonce(SUBJECT);
     const unverifiedGithubJwt = GITHUB.mint({ nonce });
+    fetchCalls = [];
     await rejects(() => verifyIdToken('github', unverifiedGithubJwt, [GITHUB.aud], nonce, SUBJECT),
         'an unverified pseudo-JWT for GitHub is refused');
+    await rejects(() => verifyIdToken('github', 'ghp_' + 'x'.repeat(36), [GITHUB.aud], nonce, SUBJECT),
+        'and so is a personal access token');
+    assert(fetchCalls.length === 0, `...without a request to GitHub or anywhere else (${fetchCalls.length} request(s))`);
 
     // The exported list must BE the table, not a copy of it that drifts (CR). Checked against
     // isSsoProvider in both directions so neither can gain an entry the other lacks.

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { consumeGithubSession } from './engine/github-device.js';
 
 /**
  * OIDC `id_token` verification for the sign-in keyholder. Zero dependencies, same as totp.ts.
@@ -81,7 +82,8 @@ export class SsoProviderUnavailableError extends SsoVerificationError {
 // Everything provider-specific is here. If a third provider is ever un-paused, it is an entry in
 // this table plus its audiences, and nothing below changes.
 
-interface ProviderConfig {
+interface OidcProviderConfig {
+    kind: 'oidc';
     /** Human name, used in error messages the member may end up reading. */
     label: string;
     /** Hardcoded rather than discovered: a discovery fetch would be one more failure mode at
@@ -105,8 +107,21 @@ interface ProviderConfig {
     nonceMayBeHashed: boolean;
 }
 
+/**
+ * A provider with no token a node could check. GitHub: not OIDC, and the only endpoint that says which
+ * app a token belongs to needs the client secret. So the node runs the device flow itself
+ * (engine/github-device.ts) and the client hands in the session id, never a token.
+ */
+interface NodeRunProviderConfig {
+    kind: 'node-run';
+    label: string;
+}
+
+type ProviderConfig = OidcProviderConfig | NodeRunProviderConfig;
+
 const PROVIDERS: Record<SsoProvider, ProviderConfig> = {
     google: {
+        kind: 'oidc',
         label: 'Google',
         jwksUri: 'https://www.googleapis.com/oauth2/v3/certs',
         // Both spellings appear in real Google tokens.
@@ -114,22 +129,22 @@ const PROVIDERS: Record<SsoProvider, ProviderConfig> = {
         nonceMayBeHashed: false,
     },
     apple: {
+        kind: 'oidc',
         label: 'Apple',
         jwksUri: 'https://appleid.apple.com/auth/keys',
         issuers: ['https://appleid.apple.com'],
         nonceMayBeHashed: true,
     },
     facebook: {
+        kind: 'oidc',
         label: 'Facebook',
         jwksUri: 'https://www.facebook.com/.well-known/oauth/openid/jwks/',
         issuers: ['https://www.facebook.com', 'https://facebook.com', 'https://limited.facebook.com'],
         nonceMayBeHashed: false,
     },
     github: {
+        kind: 'node-run',
         label: 'GitHub',
-        jwksUri: '',
-        issuers: ['https://github.com'],
-        nonceMayBeHashed: false,
     },
 };
 
@@ -177,12 +192,28 @@ function providerConfig(provider: SsoProvider): ProviderConfig {
     return config;
 }
 
+/**
+ * What an app that hands this node a GitHub token is told. Only an app from before the node ran the
+ * GitHub sign-in itself does that, so the next step is an update; the 12 words work either way.
+ */
+export const GITHUB_TOKEN_REFUSED =
+    'Update BeanPool to connect GitHub. This community\'s node now runs the GitHub sign-in itself, so it no '
+    + 'longer accepts a GitHub token from the app. Your 12 words still work.';
+
+/** The rules for a provider whose `id_token` this node checks. GitHub has none, and is refused by name. */
+function oidcConfig(provider: SsoProvider): OidcProviderConfig {
+    const config = providerConfig(provider);
+    if (config.kind !== 'oidc') throw new SsoVerificationError(GITHUB_TOKEN_REFUSED);
+    return config;
+}
+
 /** Tolerance for exp/iat. Nodes run on cheap VMs whose clocks drift; 2 minutes is enough to
  *  survive that without meaningfully extending the life of a stolen token. */
 const CLOCK_SKEW_SECONDS = 120;
 
-/** Nonces expire fast. The window only has to cover one sign-in round trip. */
-const NONCE_TTL_MS = 10 * 60 * 1000;
+/** Nonces expire fast. The window only has to cover one sign-in round trip. A finished GitHub sign-in
+ *  that has not been spent expires after the same window (engine/github-device.ts). */
+export const NONCE_TTL_MS = 10 * 60 * 1000;
 
 export interface SsoIdentity {
     provider: SsoProvider;
@@ -249,7 +280,7 @@ async function fetchJwks(provider: SsoProvider): Promise<Jwk[]> {
     const pending = inFlight.get(provider);
     if (pending) return pending;
 
-    const config = providerConfig(provider);
+    const config = oidcConfig(provider);
     const request = (async () => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -440,7 +471,8 @@ export async function verifyIdToken(
     expectedNonce: string,
     subject: string,
 ): Promise<SsoIdentity> {
-    const config = providerConfig(provider);
+    // First, before any check or request: a GitHub token proves nothing (see NodeRunProviderConfig).
+    const config = oidcConfig(provider);
     if (!subject) {
         throw new SsoVerificationError(
             `A ${config.label} sign-in must be verified against a known member.`,
@@ -461,46 +493,6 @@ export async function verifyIdToken(
     // point of the check.
     if (typeof idToken === 'string' && Buffer.byteLength(idToken, 'utf-8') > MAX_ID_TOKEN_BYTES) {
         throw new SsoVerificationError(`${config.label} token is implausibly large.`);
-    }
-
-    if (provider === 'github') {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
-            const res = await fetch('https://api.github.com/user', {
-                headers: {
-                    Authorization: `Bearer ${idToken}`,
-                    'User-Agent': 'BeanPool-Node',
-                    Accept: 'application/vnd.github.v3+json',
-                },
-                signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
-            if (!res.ok) {
-                const Refusal = res.status >= 500 ? SsoProviderUnavailableError : SsoVerificationError;
-                throw new Refusal(`GitHub authentication failed (status ${res.status}).`);
-            }
-            const data = await res.json() as { id: number | string; email?: string; login?: string };
-            if (!data.id) {
-                throw new SsoVerificationError('GitHub user profile did not return a user id.');
-            }
-            if (!consumeNonce(expectedNonce, subject)) {
-                throw new SsoVerificationError('GitHub sign-in could not be matched to this request.');
-            }
-            return {
-                provider: 'github',
-                sub: String(data.id),
-                email: data.email ? String(data.email) : undefined,
-                emailVerified: true,
-                audience: allowedAudiences[0] || 'github',
-                issuedAt: Math.floor(Date.now() / 1000),
-                expiresAt: Math.floor(Date.now() / 1000) + 3600,
-            };
-        } catch (err: any) {
-            if (err instanceof SsoVerificationError) throw err;
-            // Unreachable, timed out, or an answer that was not a profile: GitHub failed, not the token.
-            throw new SsoProviderUnavailableError(`Failed to verify GitHub token: ${err.message}`);
-        }
     }
 
     // Facebook has no special case: its OIDC id_token takes the path below, the same as Google's
@@ -600,6 +592,56 @@ export async function verifyIdToken(
         issuedAt: Number(claims.iat ?? 0),
         expiresAt: Number(claims.exp),
     };
+}
+
+/**
+ * The proof a sign-in arrives with. An OIDC provider's is its `id_token`; GitHub's is the id of the
+ * device-flow session this node ran (engine/github-device.ts), sent as `proof: { sessionId }`.
+ */
+export interface SignInCredential {
+    idToken?: string;
+    sessionId?: string;
+}
+
+/** The credential in a deposit, collect or join body: `idToken`, or `proof: { sessionId }`. */
+export function signInCredentialFrom(body: unknown): SignInCredential {
+    const b = (body && typeof body === 'object' ? body : {}) as Record<string, any>;
+    const proof = b.proof && typeof b.proof === 'object' ? b.proof as Record<string, unknown> : {};
+    return {
+        idToken: typeof b.idToken === 'string' && b.idToken ? b.idToken : undefined,
+        sessionId: typeof proof.sessionId === 'string' && proof.sessionId ? proof.sessionId : undefined,
+    };
+}
+
+/**
+ * Verify a sign-in, whichever provider it is. The one entry point every route uses.
+ *
+ * OIDC providers go to verifyIdToken. GitHub spends the node's own finished device-flow session, bound
+ * to `subject` and single use; it needs no nonce, because the session id is already a single-use,
+ * subject-bound challenge. A GitHub `idToken` is refused before anything else runs, network included:
+ * accepting a handed-in token is the hole this path exists to close, and a new app never sends one.
+ */
+export async function verifySignIn(
+    provider: SsoProvider,
+    credential: SignInCredential,
+    allowedAudiences: string[],
+    expectedNonce: string,
+    subject: string,
+): Promise<SsoIdentity> {
+    const config = providerConfig(provider);
+    if (config.kind === 'oidc') {
+        return verifyIdToken(provider, credential.idToken ?? '', allowedAudiences, expectedNonce, subject);
+    }
+    if (credential.idToken) throw new SsoVerificationError(GITHUB_TOKEN_REFUSED);
+    if (!credential.sessionId) throw new SsoVerificationError(`${config.label} sign-in is missing its session.`);
+    if (!subject) throw new SsoVerificationError(`A ${config.label} sign-in must be verified against a known member.`);
+    const identity = consumeGithubSession(credential.sessionId, subject);
+    // The session names the client id it ran under. One this node no longer accepts (an operator
+    // changed GITHUB_CLIENT_IDS mid-sign-in) is refused like a token issued to another app.
+    if (!allowedAudiences?.includes(identity.audience)) {
+        throw new SsoVerificationError(`${config.label} sign-in was run for a different application.`);
+    }
+    return identity;
 }
 
 // ─── keeper lookup ────────────────────────────────────────────────────────────────────────────

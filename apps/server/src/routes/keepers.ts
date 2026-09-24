@@ -53,8 +53,11 @@ import {
     type KeeperType,
 } from '../engine/recovery-shares.js';
 import { depositSsoKeeperGeneration, KeeperDepositError, type SsoKeeperResult } from '../engine/keeper-deposit.js';
+import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
 import {
     issueNonce,
+    signInCredentialFrom,
+    SsoProviderUnavailableError,
     SsoVerificationError,
     SSO_PROVIDERS,
     isSsoProvider,
@@ -227,6 +230,24 @@ function unauthenticated(ctx: any): void {
     ctx.body = { error: 'This request must be signed by an active member of this node.' };
 }
 
+/**
+ * A GitHub start or poll that did not work: 503 when GitHub could not be asked (try again), 400 when the
+ * sign-in itself did not check out. Anything else is a bug and is left to the error handler.
+ */
+export function githubFlowFailure(ctx: any, e: unknown): void {
+    if (e instanceof SsoProviderUnavailableError) {
+        ctx.status = 503;
+        ctx.body = { error: e.message };
+        return;
+    }
+    if (e instanceof SsoVerificationError) {
+        ctx.status = 400;
+        ctx.body = { error: e.message };
+        return;
+    }
+    throw e;
+}
+
 export function createKeeperRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { rateLimit } = deps;
@@ -254,7 +275,39 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             // enforce anything — expiry is checked here.
             expiresInSeconds: 600,
             providers: SSO_PROVIDERS,
+            githubFlow: GITHUB_FLOW,
         };
+    });
+
+    /**
+     * GitHub, run by this node for the signed member (engine/github-device.ts). `start` answers the
+     * code the member types at GitHub; `poll { sessionId }` answers pending, ok with the `sub` the
+     * client seals to, denied or expired. The deposit then carries `proof: { sessionId }`.
+     *
+     * Both are on the auth limiter. A device polling at GitHub's interval (5 seconds, or longer after a
+     * slow_down) stays inside it; one polling faster is answered 429 and should wait `intervalSeconds`.
+     */
+    router.post('/api/recovery/sso/github/start', async (ctx) => {
+        const owner = activeSigner(ctx);
+        if (!owner) return unauthenticated(ctx);
+        if (!rateLimit(ctx)) return;
+        try {
+            const started = await startGithubSession(owner);
+            ctx.status = 200;
+            ctx.body = started;
+        } catch (e) { return githubFlowFailure(ctx, e); }
+    });
+
+    router.post('/api/recovery/sso/github/poll', async (ctx) => {
+        const owner = activeSigner(ctx);
+        if (!owner) return unauthenticated(ctx);
+        if (!rateLimit(ctx)) return;
+        const sessionId = (ctx as any).requestBody?.sessionId;
+        try {
+            const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', owner);
+            ctx.status = 200;
+            ctx.body = polled;
+        } catch (e) { return githubFlowFailure(ctx, e); }
     });
 
     /**
@@ -322,7 +375,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 provider: body.provider,
                 ownerPubkey: owner,
                 shares,
-                idToken: typeof body.idToken === 'string' ? body.idToken : '',
+                // `idToken` for Google, Apple and Facebook; `proof: { sessionId }` for GitHub.
+                ...signInCredentialFrom(body),
                 nonce: typeof body.nonce === 'string' ? body.nonce : '',
             });
             ctx.status = 200;

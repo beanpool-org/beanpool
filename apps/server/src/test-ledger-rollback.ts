@@ -19,6 +19,9 @@
  *     at each boundary must now leave NOTHING persisted, in memory or in the rows, both when transfer() is
  *     the outermost transaction (the member-to-member send route's shape) and when it is a savepoint inside
  *     a caller's conservingTransaction (every escrow / settlement path).
+ * (e) conservingTransaction's PRE-FLUSH is atomic too (Part 8, "pre-flush torn write"). It ran
+ *     persistDecayEvents() on its own before BEGIN, which autocommitted the decay debits while the matching
+ *     Commons credit was still only written inside the block — the same beans-destroying shape one level up.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-ledger-rollback.ts
  */
@@ -34,6 +37,7 @@ import { startHttpsServer } from './https-server.js';
 import {
     initStateEngine,
     moveToCommons,
+    getBalance,
     getCommonsBalanceExact,
     conservingTransaction,
     createTreasury,
@@ -131,18 +135,39 @@ function giveEarnedCredit(seller: string, buyer: string, credits: number): void 
 }
 
 /**
- * Arm a trigger that ABORTs the next write to one account row, and return its disarm function.
+ * Arm a trigger that ABORTs a write to one account row, and return its disarm function.
  *
  * This is how a crash mid-`transfer()` is simulated without a crash: SQLite refuses the statement, which
  * throws exactly where a torn write would have stopped. The EVENT matters and is not interchangeable —
  * member rows are written with `INSERT … ON CONFLICT DO UPDATE` (so an existing row fires UPDATE), while
  * `persistCommonsBalance` uses `INSERT OR REPLACE` (a delete+insert, which fires INSERT and never UPDATE).
  * An earlier draft armed UPDATE on COMMONS_POOL and silently never fired, so the test passed vacuously.
+ *
+ * `skipFirst` lets the first N matching writes THROUGH and aborts the one after. Needed on COMMONS_POOL
+ * because `conservingTransaction` now writes that row twice per send: once in its pre-flush (which is a
+ * commit of its own when transfer() is outermost) and once as the last statement inside the block. Without
+ * it, every COMMONS_POOL probe lands on the pre-flush and the inner write is never reached — which is
+ * exactly how this suite would stop testing the step it was written for.
+ *
+ * The counter lives in a TEMP table because a trigger program's own writes are backed out with the
+ * statement when RAISE(ABORT) fires, so `seen` counts only the writes that were actually allowed through.
  */
-function armAbort(name: string, event: 'INSERT' | 'UPDATE', publicKey: string): () => void {
+function armAbort(name: string, event: 'INSERT' | 'UPDATE', publicKey: string, skipFirst = 0): () => void {
+    db.exec(`CREATE TEMP TABLE IF NOT EXISTS abort_skips (name TEXT PRIMARY KEY, seen INTEGER NOT NULL)`);
+    db.prepare(`INSERT OR REPLACE INTO abort_skips (name, seen) VALUES (?, 0)`).run(name);
     db.exec(`CREATE TEMP TRIGGER ${name} BEFORE ${event} ON accounts WHEN NEW.public_key = '${publicKey}'
-             BEGIN SELECT RAISE(ABORT, '${name} forced failure'); END;`);
+             BEGIN
+                 UPDATE abort_skips SET seen = seen + 1 WHERE name = '${name}';
+                 SELECT RAISE(ABORT, '${name} forced failure')
+                 WHERE (SELECT seen FROM abort_skips WHERE name = '${name}') > ${skipFirst};
+             END;`);
     return () => db.exec(`DROP TRIGGER ${name}`);
+}
+
+/** How many writes an armed trigger actually let through — used to prove a probe hit the step it names. */
+function abortSkipsSeen(name: string): number {
+    const row = db.prepare('SELECT seen FROM abort_skips WHERE name = ?').get(name) as any;
+    return row ? row.seen : 0;
 }
 
 /**
@@ -610,7 +635,10 @@ async function main() {
             const memo = 'atomic probe: abort on commons row';
             const before = snapshotRows([dave, bob]);
             // INSERT, not UPDATE: persistCommonsBalance is an INSERT OR REPLACE.
-            const disarm = armAbort('abort_on_commons', 'INSERT', 'COMMONS_POOL');
+            // skipFirst = 1: let conservingTransaction's PRE-flush write the row, and abort on transfer()'s
+            // own last statement — the step this case exists to cover. The pre-flush's torn-write case is
+            // (b cont. 2) below, and the two must not collapse into each other.
+            const disarm = armAbort('abort_on_commons', 'INSERT', 'COMMONS_POOL', 1);
             let threw = '';
             try {
                 transfer(dave, bob, 25, memo, 'direct', true);
@@ -620,6 +648,8 @@ async function main() {
                 disarm();
             }
             assert(/abort_on_commons forced failure/.test(threw), `Forced failure on the commons row propagated (got "${threw}")`);
+            assert(abortSkipsSeen('abort_on_commons') === 1,
+                `and it fired on transfer()'s OWN commons write, not the pre-flush (let ${abortSkipsSeen('abort_on_commons')} through)`);
             assertNothingPersisted('abort-on-commons', before, memo, [dave, bob]);
             assert(db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(dave) === undefined,
                 '[abort-on-commons] No demurrage row survived the rollback either');
@@ -635,6 +665,78 @@ async function main() {
             assertMemoryMatchesDb(dave);
             assertMemoryMatchesDb(bob);
             assertConservation('Post-successful-send');
+        }
+
+        // (b cont. 2) The PRE-FLUSH's own torn write — deciding-pass finding, the same shape one level up.
+        //
+        // conservingTransaction flushes queued decay BEFORE it snapshots, so the snapshot is a consistent
+        // pair. But `persistDecayEvents()` opens its OWN db.transaction, so when transfer() is the outermost
+        // caller — the member-to-member send route — that flush AUTOCOMMITTED the account debits and the
+        // "Circulation fee" history rows, while the matching Commons credit was only written by
+        // `persistCommonsBalance()` as the LAST statement inside the transfer's transaction. Consistent, but
+        // not durable: a crash between the two commits left the debit on disk with its credit gone, and boot
+        // restores the pot from the stale COMMONS_POOL row — beans destroyed.
+        //
+        // The queue is not exotic. Any getBalance() settles demurrage in memory and flushes nothing, so a
+        // member who opens their balance and then sends is exactly this. Measured before the fix on the
+        // shape below: 208.5825 Beans missing from the rows.
+        //
+        // Memory came out FINE before the fix (the catch restores the global), which is why the cases above
+        // do not see it — so this one reads the ROWS, which are what a restart rebuilds from.
+        {
+            const ivy = makeMember('AtomicIvy', 5000);
+            const jack = makeMember('AtomicJack', 10);
+            giveEarnedCredit(ivy, carol, 50);
+            persistDecayEvents();
+            persistCommonsBalance();
+            db.prepare('UPDATE accounts SET last_demurrage_epoch = ? WHERE public_key = ?')
+                .run(Math.floor(Date.now() / 86400000) - 60, ivy);
+            reconcileLedgerFromDb();
+
+            // Queue the decay with an ordinary READ, BEFORE transfer() is ever called.
+            const read = getBalance(ivy);
+            assert(read.balance < 5000, `A plain balance read settled demurrage in memory (${read.balance})`);
+            assert(!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(ivy),
+                '…and wrote no row for it: the debit is queued in memory only');
+            const queued = r4(5000 - memBalanceRaw(ivy));
+            assert(queued > 0, `Decay of ${queued} Beans is sitting unflushed before the send`);
+
+            const memo = 'atomic probe: pre-flush torn write';
+            const before = snapshotRows([ivy, jack]);
+            const disarm = armAbort('abort_preflush', 'INSERT', 'COMMONS_POOL');
+            let threw = '';
+            try {
+                transfer(ivy, jack, 25, memo, 'direct', true);
+            } catch (e: any) {
+                threw = e?.message || String(e);
+            } finally {
+                disarm();
+            }
+            assert(/abort_preflush forced failure/.test(threw), `Forced failure on the commons row propagated (got "${threw}")`);
+            assert(abortSkipsSeen('abort_preflush') === 0,
+                'and it fired on the PRE-FLUSH — the very first commons write, before BEGIN');
+            // The finding in one assertion: the debit must not be durable without its credit.
+            const after = snapshotRows([ivy, jack]);
+            assert(Math.abs(after.total - before.total) < 0.0001,
+                `[pre-flush] Nothing destroyed ON DISK — rows still total the same (${before.total} → ${after.total})`);
+            assert(!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(ivy),
+                '[pre-flush] No Circulation fee row was committed on its own');
+            assertNothingPersisted('pre-flush torn write', before, memo, [ivy, jack]);
+            assertCommonsMatchesDb();
+            assertConservation('Post-pre-flush-abort');
+
+            // Disarmed, the same send goes through and the decay lands with its credit, in one commit.
+            const ivyBefore = memBalanceRaw(ivy);
+            const jackBefore = memBalanceRaw(jack);
+            const ok = transfer(ivy, jack, 25, 'atomic probe: pre-flush path succeeds', 'direct', true);
+            assert(!!ok, 'The same send succeeds once the forced failure is disarmed');
+            assert(memBalanceRaw(ivy) < ivyBefore - 25, 'Sender paid the 25 Beans AND the demurrage it owed');
+            assert(Math.abs(memBalanceRaw(jack) - (jackBefore + 25)) < 0.0001, 'Recipient credited exactly 25 Beans');
+            assert(!!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(ivy),
+                'and the Circulation fee row is on disk this time');
+            assertMemoryMatchesDb(ivy);
+            assertMemoryMatchesDb(jack);
+            assertConservation('Post-pre-flush-success');
         }
 
         // (c) The savepoint path: transfer() inside a caller's own conservingTransaction. The inner failure

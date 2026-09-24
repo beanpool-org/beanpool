@@ -130,6 +130,7 @@ import {
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
     persistDecayEvents as persistDecayEventsEngine,
+    persistDecayAndCommons as persistDecayAndCommonsEngine,
     runLedgerAudit as runLedgerAuditEngine,
     promotionSanityCheck as promotionSanityCheckEngine,
     type ReplicaConsistency
@@ -580,9 +581,13 @@ export function initStateEngine(): void {
     // there — it is the sixth instance of this feature shipping code that nothing ever executed.
 
     // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes)
+    //
+    // ONE commit, not two (review finding). These used to be separate autocommits under separate catches,
+    // so a crash — or just the first one succeeding and the second throwing — left the decay debits durable
+    // with their matching Commons credit missing, which boot then rebuilds from as the truth. The pair is
+    // the unit; half of it is worse than none of it.
     setInterval(() => {
-        try { persistDecayEvents(); } catch (e) { console.warn('[Ledger] Failed to persist decay events:', e); }
-        try { persistCommonsBalance(); } catch (e) { console.warn('[Ledger] Failed to persist commons balance:', e); }
+        try { persistDecayAndCommons(); } catch (e) { console.warn('[Ledger] Failed to persist the demurrage flush:', e); }
     }, 5 * 60 * 1000);
 
     // #129: Run the ledger conservation audit IMMEDIATELY at startup so drift
@@ -1797,6 +1802,22 @@ export function settleDemurrage(publicKeys: string[]): void {
  * the next flush mints it. Flushing first makes memory and rows agree before there is anything to restore,
  * which is the only version of this wrapper that is safe to use.
  *
+ * AND THE PRE-FLUSH IS ITSELF ONE COMMIT (deciding-pass finding). `persistDecayEvents()` opens its own
+ * `db.transaction`, so when this is the OUTERMOST caller — a bare `transfer()` from the member-to-member
+ * send route — flushing it alone AUTOCOMMITTED the account debits and the `Circulation fee` rows, while the
+ * matching Commons credit was only written by `persistCommonsBalance()` inside the block. Consistent, but
+ * not durable: a crash in that gap left the debit on disk with its credit gone, and boot restores the pot
+ * from the stale `COMMONS_POOL` row. Measured at 208.5825 Beans destroyed on one 5,000-bean account 60 days
+ * stale, with the decay queued by nothing more exotic than a `getBalance()` before the send. Both halves now
+ * go in one transaction, so the snapshot pair is durable as well as consistent.
+ *
+ * If THAT flush fails, memory has to be resynced before rethrowing: `drainDecayEvents()` has already emptied
+ * the queue, so a rolled-back flush would leave memory holding decay that no row records — the account debit
+ * reverted, its Commons credit still in the global, which is the minting direction. The restore point is the
+ * ROWS, both halves: accounts pre-decay, and the pot from the `COMMONS_POOL` row. A snapshot of the global
+ * taken on entry is no use here and was measured wrong — the decay credit is already in it, because the
+ * `getBalance()` that queued the decay ran before this function was ever called.
+ *
  * NESTING. `transfer()` now wraps its own writes in this, so every caller that already held a
  * `conservingTransaction` (escrow, settlement, the wizards, admin deletes) nests one inside it, and the
  * inner call becomes a SAVEPOINT. That is safe, but ONLY because the pre-flush above is unconditional.
@@ -1810,43 +1831,78 @@ export function settleDemurrage(publicKeys: string[]): void {
  * and `setCommonsBalance(commonsBefore)` restores a Commons credit with no debit anywhere. A probe against
  * a 5,000-bean account 60 days stale minted **208.58 beans** on one failed send.
  *
- * Flushing unconditionally makes the pair consistent at every level. When nested, the flush lands in the
- * OUTER transaction, before the savepoint opens — so an inner rollback keeps it, and `reconcileLedgerFromDb`
- * reads rows that already carry the debit. If the outer later rolls back too, the outer's own catch restores
- * its own (earlier) snapshot over the top, which is consistent as well; the only cost is that the decay is
- * recomputed on the next read, which is exactly what `loadState`'s docblock says happens anyway.
+ * Flushing unconditionally makes the pair consistent at every level. When nested, the flush is a savepoint
+ * inside the OUTER transaction, opened and released before this call's own savepoint — so an inner rollback
+ * keeps it, and `reconcileLedgerFromDb` reads rows that already carry the debit. If the outer later rolls
+ * back too, both halves of the flush go with it and the outer's own catch restores its own (earlier)
+ * snapshot over the top, which is consistent as well; the only cost is that the decay is recomputed on the
+ * next read, which is exactly what `loadState`'s docblock says happens anyway.
  *
  * Lives here rather than beside a caller because the hazard belongs to the primitives, not to any one
  * feature: #104's settlement writes, `adminPruneUser` and the treasury sweep hit it identically, and
  * anything else that composes several ledger moves under one transaction will too.
  */
 export function conservingTransaction<T>(fn: () => T): T {
-    // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair.
+    // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair — and a
+    // DURABLE one: the decay debits and the Commons credit land in the same commit, or neither does.
     // Unconditional, including when nested — see NESTING above; skipping it here minted beans.
-    persistDecayEvents();
+    try {
+        persistDecayAndCommons();
+    } catch (e) {
+        // The flush rolled back, but the queue it drained is gone from memory, so memory now holds decay no
+        // row records. Restore BOTH halves from the rows — `null` means "take the pot from its row too",
+        // which is the whole point here and not what the failure path below wants. See the docblock.
+        resyncMemoryToRows(null, e);
+        throw e;
+    }
     const commonsBefore = getCommonsBalanceExact();
     try {
         return db.transaction(fn)();
     } catch (e) {
         // The DB has rolled back; resync memory to it rather than leaving the two disagreeing.
-        try {
-            reconcileLedgerFromDb();
-            setCommonsBalance(commonsBefore);
-        } catch (resyncError: any) {
-            // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
-            // read would be served from the wrong number — a mutual-credit ledger silently minting is worse
-            // than an outage. Halting is also self-healing here: the fleet runs under a restart policy, and
-            // boot rebuilds the ledger from the rows, which are the truth after a rollback.
-            //
-            // Genuinely pathological rather than transient. This is a plain SELECT, the database is in WAL
-            // mode, and WAL readers do not block on writers — so a failure here means SQLite itself is
-            // failing, not that something held a lock.
-            console.error('[Ledger] FATAL: resync after a failed write FAILED. Halting to protect ledger '
-                + 'consistency — restart rebuilds from the rows.', resyncError?.message || resyncError);
-            console.error('[Ledger] The write that triggered it:', (e as any)?.message || e);
-            process.exit(1);
-        }
+        resyncMemoryToRows(commonsBefore, e);
         throw e;
+    }
+}
+
+/**
+ * Put the in-memory ledger back to what the rows say, or halt.
+ *
+ * Shared by both of `conservingTransaction`'s failure paths because they need almost the same thing:
+ * accounts rebuilt from the rows, and the Commons global — which `reconcileLedgerFromDb` deliberately does
+ * not touch — put back alongside them.
+ *
+ * They differ only in WHERE the pot comes from, which is why it is a parameter rather than assumed. After
+ * the block fails, the snapshot taken once the pre-flush had made rows and memory agree is the restore
+ * point. After the PRE-FLUSH itself fails there is no such snapshot — the global already carries the decay
+ * credit whose debit just rolled back — so `null` says to read the `COMMONS_POOL` row, which is the pot as
+ * a restart would load it and the only half that matches the accounts being reloaded.
+ *
+ * The row read is inside the try on purpose: if SQLite is failing badly enough to break it, that is the
+ * halt case below, not an exception thrown out of a catch block.
+ */
+function resyncMemoryToRows(commonsSnapshot: number | null, cause: unknown): void {
+    try {
+        reconcileLedgerFromDb();
+        if (commonsSnapshot !== null) {
+            setCommonsBalance(commonsSnapshot);
+        } else {
+            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
+            if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
+        }
+    } catch (resyncError: any) {
+        // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
+        // read would be served from the wrong number — a mutual-credit ledger silently minting is worse
+        // than an outage. Halting is also self-healing here: the fleet runs under a restart policy, and
+        // boot rebuilds the ledger from the rows, which are the truth after a rollback.
+        //
+        // Genuinely pathological rather than transient. This is a plain SELECT, the database is in WAL
+        // mode, and WAL readers do not block on writers — so a failure here means SQLite itself is
+        // failing, not that something held a lock.
+        console.error('[Ledger] FATAL: resync after a failed write FAILED. Halting to protect ledger '
+            + 'consistency — restart rebuilds from the rows.', resyncError?.message || resyncError);
+        console.error('[Ledger] The write that triggered it:', (cause as any)?.message || cause);
+        process.exit(1);
     }
 }
 
@@ -1975,8 +2031,19 @@ export function payFromCommons(
     // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this
     // they are stranded and the transactions table drifts from account balances — `moveToCommons` persists
     // them and this must too (review finding).
-    persistDecayEvents();
-    persistCommonsBalance();
+    //
+    // ONE commit for the PAIR: the decay debits and the Commons credit that matches them are never allowed
+    // to land separately, or a crash between them destroys beans on disk.
+    //
+    // NOT THE WHOLE FUNCTION, and the gap that leaves is real rather than theoretical. The history row and
+    // the recipient's account row above are still separate autocommits, so a crash after the recipient is
+    // credited but before `persistCommonsBalance` writes the drawn-down pot leaves the credit durable with
+    // the pot's debit missing — beans MINTED, the opposite direction to the pair's failure and the one this
+    // function is exposed to. Every caller but one already runs inside a `conservingTransaction`
+    // (`adminPruneUser`, the settlement reversals via `settlementTransaction`), which closes it for them;
+    // `fundCommission` (federation-commission.ts) does not. Wrapping this function changes rollback
+    // semantics for all of them, so it is a deliberate follow-up rather than something to smuggle in here.
+    persistDecayAndCommons();
 
     afterTransactionCommit(() => {
         const toMember = getMember(to);
@@ -6661,6 +6728,14 @@ export function persistCommonsBalance(): void {
  */
 export function persistDecayEvents(): void {
     persistDecayEventsEngine();
+}
+
+/**
+ * Persist the demurrage PAIR — the decay debits and the matching Commons credit — in ONE commit.
+ * Use this anywhere the two would otherwise be flushed as separate autocommits; see engine/audit.ts.
+ */
+export function persistDecayAndCommons(): void {
+    persistDecayAndCommonsEngine();
 }
 
 /**

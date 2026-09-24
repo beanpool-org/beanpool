@@ -571,6 +571,26 @@ test('ensure: moving tunnel ↔ direct replaces the record (its type can\'t be P
     } finally { w.restore(); }
 });
 
+test('two keys racing for a freed name: exactly one wins; a lock that cannot count rows never reports a win', async () => {
+    const w = await world();
+    try {
+        const [owner, a, b] = await Promise.all([makeKey(), makeKey(), makeKey()]);
+        await liveName(w, 'crossroads', owner);
+        await w.admin('crossroads', 'release');                          // free at once, to anyone
+        const [ra, rb] = await Promise.all([w.claim(a, { name: 'crossroads' }), w.claim(b, { name: 'crossroads' })]);
+        assert.deepEqual([ra.status, rb.status].sort(), [200, 409], JSON.stringify([ra.body, rb.body]));
+        const winner = ra.status === 200 ? a : b;
+        const row = await w.row('crossroads');
+        assert.equal(row.node_pubkey, winner.pubHex);
+        assert.equal(row.status, 'live');
+        assert.equal([...w.cf.tunnels.values()].filter((t) => !t.deleted_at && t.name === 'bp-crossroads').length, 1);
+
+        // A driver whose run() doesn't report meta.changes: can't tell, so not a win.
+        const blind = { DB: { prepare: () => ({ bind() { return this; }, async run() { return { success: true }; } }) } };
+        assert.equal(await db.replaceAllocation(blind, 'crossroads', row, { status: 'pending' }), false);
+    } finally { w.restore(); }
+});
+
 test('status: the owner\'s row in any state, with reason and since; signed contact is recorded', async () => {
     const w = await world();
     try {

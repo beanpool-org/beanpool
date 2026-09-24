@@ -53,14 +53,15 @@ export const updateAllocation = async (env, name, fields) => {
 };
 
 // Overwrite `expected` — a row as it was just read — with a new tenure, only if nobody changed it meanwhile:
-// two keys racing for a freed name must not both think they won. False = someone else got there first.
+// two keys racing for a freed name must not both think they won. False = someone else got there first — or the
+// driver didn't say how many rows changed: a lock that can't tell must not report a win.
 export const replaceAllocation = async (env, name, expected, fields) => {
     const keys = Object.keys(fields);
     const set = keys.map((k) => `${k}=?`).join(', ');
     const r = await env.DB.prepare(
         `UPDATE name_allocations SET ${set} WHERE name=? AND node_pubkey=? AND status=? AND requested_at=?`
     ).bind(...keys.map((k) => fields[k]), name, expected.node_pubkey, expected.status, expected.requested_at).run();
-    return (r?.meta?.changes ?? 1) > 0;
+    return (r?.meta?.changes ?? 0) > 0;
 };
 
 // A valid signed request from `pubkey`: the abandonment clock restarts and any warning clears, on every name

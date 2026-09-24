@@ -271,9 +271,37 @@ function readHeaderOf(file: string): SealedEnvelopeHeader {
     }
 }
 
+/** What the node said its backup carried, from the response headers (storage design §7). */
+export interface BackupContents {
+    /** 'database+images' or 'database-only'; null from a node too old to say. */
+    contents: string | null;
+    /** `<staged>/<referenced>` image objects, as the node counted them; null when it did not say. */
+    images: string | null;
+}
+
 export type PullResult =
-    | { kind: 'sealed'; dbSize: number; file: string; header: SealedEnvelopeHeader }
-    | { kind: 'plain'; dbSize: number; message: string };
+    | { kind: 'sealed'; dbSize: number; file: string; header: SealedEnvelopeHeader; carried: BackupContents }
+    | { kind: 'plain'; dbSize: number; message: string; carried: BackupContents };
+
+/**
+ * What the file holds, as the node labelled it. Worth a line in the log of every pull: a node that answers
+ * `database-only` is sending backups with no photos in them, which is a thing to find out now rather than
+ * at a restore. A node that would have sent a SHORT backup does not get this far — it answers 500 and the
+ * pull is recorded as a failure.
+ */
+function backupContents(res: Response): BackupContents {
+    return {
+        contents: res.headers.get('x-backup-contents'),
+        images: res.headers.get('x-backup-images'),
+    };
+}
+
+/** For the log line: 'database + 412/412 image object(s)', or what an older node left unsaid. */
+function describeContents(c: BackupContents): string {
+    if (!c.contents) return 'contents not stated (an older node)';
+    if (c.contents === 'database-only') return 'DATABASE ONLY — no photos or attachments in this file';
+    return c.images ? `database + ${c.images} image object(s)` : 'database + images';
+}
 
 /** The node's own words when it sends a readable backup, or ours for a node too old to say. */
 function notLockedMessage(res: Response): string {
@@ -376,11 +404,15 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
         const start = Buffer.alloc(2);
         const fd = fs.openSync(incoming, 'r');
         try { fs.readSync(fd, start, 0, 2, 0); } finally { fs.closeSync(fd); }
+        const carried = backupContents(res);
+        if (carried.contents === 'database-only') {
+            console.warn(`[Harvester] ${node.name}: this backup carries NO images — ${describeContents(carried)}.`);
+        }
         if (start[0] === 0x1f && start[1] === 0x8b) {
             const message = notLockedMessage(res);
             const dbSize = keepPlainBackup(node, incoming);
-            console.warn(`[Harvester] ${node.name}: kept a readable backup. ${message}`);
-            return { kind: 'plain', dbSize, message };
+            console.warn(`[Harvester] ${node.name}: kept a readable backup (${describeContents(carried)}). ${message}`);
+            return { kind: 'plain', dbSize, message, carried };
         }
         let header: SealedEnvelopeHeader;
         try {
@@ -396,7 +428,8 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
         const dest = path.join(sealedDir, `beanpool-${stamp}${SEALED_EXT}`);
         fs.renameSync(incoming, dest);
         pruneSealed(node);
-        return { kind: 'sealed', dbSize: fs.statSync(dest).size, file: path.basename(dest), header };
+        console.log(`[Harvester] ${node.name}: kept a locked backup ${path.basename(dest)} (${describeContents(carried)}).`);
+        return { kind: 'sealed', dbSize: fs.statSync(dest).size, file: path.basename(dest), header, carried };
     } finally {
         try { fs.rmSync(incoming, { force: true }); } catch { /* ignore */ }
     }

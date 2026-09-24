@@ -372,6 +372,19 @@ const REVOKE_DELAY_MS = 60_000;
 /** Above this, ask before buffering. Set far above any real node database. */
 const HUGE_DOWNLOAD_BYTES = 500 * 1024 * 1024;
 
+/**
+ * The filename from `Content-Disposition`, when the response carries a usable one. Never a path: the value
+ * comes from the node, and a `../` in it would be a download written outside the browser's download folder.
+ */
+function serverFilename(res: Response): string | null {
+    const header = res.headers.get('content-disposition');
+    if (!header) return null;
+    const match = /filename="?([^";]+)"?/i.exec(header);
+    const name = match?.[1]?.trim();
+    if (!name || name.includes('/') || name.includes('\\') || name.includes('..')) return null;
+    return name;
+}
+
 export async function downloadAdminFile(
     endpointPath: string,
     params: Record<string, string>,
@@ -423,7 +436,10 @@ export async function downloadAdminFile(
     try {
         const a = document.createElement('a');
         a.href = objectUrl;
-        a.download = filename;
+        // The server's name wins where it gives one: a snapshot download asks for `snapshot-….db` and comes
+        // back as a `.tar.gz` (the database AND its images) or a `.bpsealed`, and saving that under the `.db`
+        // name hands the operator a file whose extension lies about what is inside it.
+        a.download = serverFilename(res) || filename;
         document.body.appendChild(a);
         a.click();
         a.remove();

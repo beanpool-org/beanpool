@@ -257,3 +257,39 @@ export function deleteStoredObjects(keys: Iterable<string>, store?: ImageStore):
     }
     return removed;
 }
+
+// ── Which objects a database says it holds ─────────────────────────────────────────────────────
+
+/**
+ * Every table that points a row at a store object. One place, so a third one is a one-line change and
+ * nothing that walks the store silently forgets about it.
+ */
+export const STORAGE_KEY_TABLES = ['post_photos', 'message_attachments'] as const;
+
+/** The little of better-sqlite3 this needs, so the storage layer does not take a dependency on it. */
+export interface ReadableDb {
+    prepare(sql: string): { all(...params: unknown[]): unknown[] };
+}
+
+/**
+ * Every `storage_key` the database references, de-duplicated.
+ *
+ * This is the manifest a complete backup or snapshot has to satisfy: the keys in THIS database file, not in
+ * whatever the live node holds now. A table the file does not have holds no keys — checked against
+ * `sqlite_master` rather than by swallowing the error, so a read that fails for any OTHER reason throws and
+ * the caller fails loudly instead of quietly deciding the node references nothing.
+ */
+export function referencedStorageKeys(handle: ReadableDb): string[] {
+    const present = new Set(
+        (handle.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[])
+            .map((r) => r.name),
+    );
+    const keys = new Set<string>();
+    for (const table of STORAGE_KEY_TABLES) {
+        if (!present.has(table)) continue;
+        for (const row of handle.prepare(`SELECT storage_key FROM ${table} WHERE storage_key IS NOT NULL`).all() as { storage_key: string }[]) {
+            if (typeof row.storage_key === 'string' && row.storage_key) keys.add(row.storage_key);
+        }
+    }
+    return [...keys];
+}

@@ -18,12 +18,32 @@
  * IMPORTANT: snapshots live UNDER data/ but the manual backup tar deliberately
  * excludes data/snapshots/ (it snapshots state.db via VACUUM INTO a temp dir and
  * tars only that), so backups never recursively swallow prior snapshots.
+ *
+ * ## A snapshot carries its own images (storage design §7)
+ *
+ * Once the image evacuation has run, a row holds a `storage_key` and no bytes, so `VACUUM INTO` alone no
+ * longer describes a node: the snapshot would resolve its keys against whatever the LIVE store happened to
+ * hold on the day somebody downloaded it. A photo replaced at 05:00 unlinks the object a 02:00 snapshot
+ * needs, and the recovery point quietly stops being one.
+ *
+ * So every snapshot captures the objects its own database references, into `<snapshot>.images/`, in the same
+ * breath as the VACUUM. Store objects are content-addressed and written temp-then-rename, so a file is never
+ * rewritten in place and a **hard link** is a true point-in-time copy of it: near-zero disk until the live
+ * copy is unlinked, and nothing the live node does afterwards can reach it. Where a link cannot be made (a
+ * different filesystem) the bytes are copied instead; if neither works the snapshot fails rather than
+ * pretending. A snapshot's image directory is deleted with the snapshot, by pruning and by the delete route.
+ *
+ * The directory is a SIBLING of the `.db` file, named `<snapshot>.images`, so it never ends in `.db`:
+ * {@link listSnapshots} and {@link resolveSnapshotPath} keep seeing snapshots and nothing else.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
+import { assertSafeKey, imagesDir } from '../storage/image-store.js';
+import { referencedStorageKeys } from '../storage/image-columns.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 export const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
@@ -100,11 +120,99 @@ export interface SnapshotInfo {
     name: string;
     sizeBytes: number;
     createdAt: number; // epoch ms (file mtime)
+    /** Whether this snapshot carries its own copy of the image store. False for one taken before that landed. */
+    hasImages: boolean;
+}
+
+/** What a snapshot's image capture did, for the log and for the caller that has to decide it was enough. */
+export interface SnapshotImages {
+    /** Objects the snapshot's own database references. */
+    referenced: number;
+    /** Objects now in `<snapshot>.images/`. */
+    captured: number;
+    /** Of those, how many were hard links rather than copies — the cheap case. */
+    linked: number;
+    bytes: number;
+    /** Referenced keys the LIVE store no longer held: data already lost before this snapshot was taken. */
+    missing: string[];
 }
 
 function ensureDir(): void {
     if (!fs.existsSync(SNAPSHOTS_DIR)) {
         fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true });
+    }
+}
+
+/** Where a snapshot keeps the objects its own database references. A sibling of the `.db`, never inside it. */
+export function snapshotImagesDir(snapshotPath: string): string {
+    return `${snapshotPath}.images`;
+}
+
+/**
+ * Capture, beside `snapshotDbPath`, every store object that snapshot's database references.
+ *
+ * Hard link first: an object is content-addressed and written temp-then-rename, so its inode is never
+ * rewritten and a second name for it is a true point-in-time copy for no disk at all. `EXDEV` (a store on a
+ * different filesystem), `EPERM` (a filesystem that will not link) and `EMLINK` (out of link slots) fall back
+ * to copying the bytes. Anything else — EACCES, ENOSPC, a store root that cannot be read — throws, and the
+ * caller destroys the half-made snapshot rather than keeping one that is quietly short.
+ *
+ * A referenced key the live store does NOT hold is reported in `missing` and does not throw. Those bytes were
+ * already gone before this snapshot started; refusing to take it would remove the ledger, the members and the
+ * posts from the operator's reach as well, over a photo no snapshot can bring back.
+ */
+export function captureSnapshotImages(snapshotDbPath: string, storeRoot = imagesDir(DATA_DIR)): SnapshotImages {
+    const out: SnapshotImages = { referenced: 0, captured: 0, linked: 0, bytes: 0, missing: [] };
+    const snapDb = new Database(snapshotDbPath, { readonly: true });
+    let keys: string[];
+    try {
+        keys = referencedStorageKeys(snapDb);
+    } finally {
+        try { snapDb.close(); } catch { /* the read is done */ }
+    }
+    out.referenced = keys.length;
+    if (keys.length === 0) return out;
+
+    const dest = snapshotImagesDir(snapshotDbPath);
+    fs.mkdirSync(dest, { recursive: true, mode: 0o700 });
+    for (const key of keys) {
+        // A storage_key comes out of a row, and rows arrive from federation peers and restored backups, so
+        // it is checked before it is ever turned into a path — the same rule the store itself applies.
+        try { assertSafeKey(key); } catch { out.missing.push(key); continue; }
+        const from = path.join(storeRoot, key);
+        const to = path.join(dest, key);
+        fs.mkdirSync(path.dirname(to), { recursive: true, mode: 0o700 });
+        let linked = true;
+        try {
+            fs.linkSync(from, to);
+        } catch (e: any) {
+            if (e?.code === 'ENOENT') { out.missing.push(key); continue; }
+            if (e?.code === 'EEXIST') { /* a re-run over the same snapshot: already captured */ }
+            else if (e?.code === 'EXDEV' || e?.code === 'EPERM' || e?.code === 'EMLINK' || e?.code === 'ENOSYS') {
+                linked = false;
+                try {
+                    fs.copyFileSync(from, to);
+                } catch (copyErr: any) {
+                    if (copyErr?.code === 'ENOENT') { out.missing.push(key); continue; }
+                    throw copyErr;
+                }
+            } else {
+                throw e;
+            }
+        }
+        out.captured++;
+        if (linked) out.linked++;
+        try { out.bytes += fs.statSync(to).size; } catch { /* the count is the part that matters */ }
+    }
+    return out;
+}
+
+/** Remove a snapshot's captured images. Best effort: a snapshot with no image directory is the old shape. */
+function removeSnapshotImages(snapshotPath: string): void {
+    try {
+        fs.rmSync(snapshotImagesDir(snapshotPath), { recursive: true, force: true });
+    } catch (e) {
+        logger.warn('SYS', `[Snapshots] Could not remove the images beside ${path.basename(snapshotPath)}: ${(e as any)?.message || e}`);
     }
 }
 
@@ -131,8 +239,9 @@ export function listSnapshots(): SnapshotInfo[] {
         return fs.readdirSync(SNAPSHOTS_DIR)
             .filter(f => f.startsWith(SNAPSHOT_PREFIX) && f.endsWith(SNAPSHOT_EXT))
             .map(name => {
-                const st = fs.statSync(path.join(SNAPSHOTS_DIR, name));
-                return { name, sizeBytes: st.size, createdAt: st.mtimeMs };
+                const full = path.join(SNAPSHOTS_DIR, name);
+                const st = fs.statSync(full);
+                return { name, sizeBytes: st.size, createdAt: st.mtimeMs, hasImages: fs.existsSync(snapshotImagesDir(full)) };
             })
             .sort((a, b) => b.createdAt - a.createdAt); // newest first
     } catch (e) {
@@ -147,7 +256,11 @@ function prune(keep: number): void {
     const stale = all.slice(keep);
     for (const s of stale) {
         try {
-            fs.unlinkSync(path.join(SNAPSHOTS_DIR, s.name));
+            const full = path.join(SNAPSHOTS_DIR, s.name);
+            // The images first: a directory left behind by a failed unlink would be swept up by nothing,
+            // and `listSnapshots` would no longer name the snapshot it belonged to.
+            removeSnapshotImages(full);
+            fs.unlinkSync(full);
             logger.info('SYS', `[Snapshots] Pruned old snapshot ${s.name}`);
         } catch (e) {
             logger.warn('SYS', `[Snapshots] Failed to prune ${s.name}: ${(e as any)?.message || e}`);
@@ -168,10 +281,25 @@ export function createSnapshot(): SnapshotInfo {
         const name = `${SNAPSHOT_PREFIX}${timestamp}${SNAPSHOT_EXT}`;
         const dest = path.join(SNAPSHOTS_DIR, name);
         writeDbSnapshot(dest);
+        // Immediately, and inside the same `creating` guard: the snapshot is a recovery point only if the
+        // objects its rows name are captured before anything can unlink them (see the note at the top).
+        let images: SnapshotImages;
+        try {
+            images = captureSnapshotImages(dest);
+        } catch (e) {
+            removeSnapshotImages(dest);
+            try { fs.unlinkSync(dest); } catch { /* it may already be gone */ }
+            throw new Error(`Snapshot failed: the image store could not be captured, so this would not be a recovery point (${(e as any)?.message || e})`);
+        }
         const st = fs.statSync(dest);
         prune(getAutoSnapshotConfig().keep);
-        logger.info('SYS', `[Snapshots] Created snapshot ${name} (${st.size} bytes)`);
-        return { name, sizeBytes: st.size, createdAt: st.mtimeMs };
+        logger.info('SYS', `[Snapshots] Created snapshot ${name} (${st.size} bytes) with ${images.captured}/${images.referenced} image object(s), ${images.linked} hard-linked`);
+        if (images.missing.length > 0) {
+            // Loud: these bytes were gone before the snapshot started, so every earlier backup is short too.
+            logger.warn('SYS', `[Snapshots] ${name} references ${images.missing.length} object(s) the store no longer holds — `
+                + `those photos or attachments are already lost. First: ${images.missing.slice(0, 3).join(', ')}`);
+        }
+        return { name, sizeBytes: st.size, createdAt: st.mtimeMs, hasImages: images.referenced > 0 };
     } finally {
         creating = false;
     }

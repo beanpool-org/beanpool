@@ -146,10 +146,15 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
         if (fs.existsSync(walFile)) walSizeBytes = fs.statSync(walFile).size;
         if (fs.existsSync(shmFile)) shmSizeBytes = fs.statSync(shmFile).size;
         if (fs.existsSync(snapshotsDir)) {
+            // The `.db` files only. A snapshot's `<name>.db.images/` beside them is a tree of hard links to
+            // objects already counted under `imageStoreBytes`, so walking it would report the same bytes
+            // twice — and once the live copy is unlinked they are the store's bytes still, just held by the
+            // snapshot rather than by a row.
             for (const f of fs.readdirSync(snapshotsDir)) {
                 try {
                     const snapPath = path.join(snapshotsDir, f);
-                    snapshotsSizeBytes += fs.statSync(snapPath).size;
+                    const st = fs.statSync(snapPath);
+                    if (st.isFile()) snapshotsSizeBytes += st.size;
                 } catch {}
             }
         }
@@ -272,6 +277,15 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
  * The grace period is what makes the sweep safe to run at any moment: a photo being written RIGHT NOW has no
  * row yet either, and deleting it would break the post being created. An hour is far longer than any write
  * path holds an object rowless, and an orphan is in no hurry.
+ *
+ * ## Snapshots are out of reach, by construction
+ *
+ * The sweep judges orphans against the LIVE database, so it must never be able to see a snapshot's captured
+ * objects: those answer to the snapshot's database, and a row deleted yesterday is exactly what a recovery
+ * point is for. It cannot. It walks one directory — `<data>/images`, the live store — while a snapshot keeps
+ * its objects under `<data>/snapshots/<name>.db.images`, which is not below it. The same holds for the
+ * deletes: `deleteStoredObjects` is handed the live store and can only unlink inside it, and unlinking a live
+ * object leaves a snapshot's hard link to the same inode holding the bytes.
  */
 const ORPHAN_OBJECT_GRACE_MS = 60 * 60 * 1000;
 

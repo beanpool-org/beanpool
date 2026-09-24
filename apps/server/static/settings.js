@@ -3370,7 +3370,13 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = name;
+                // A snapshot download is no longer the bare `.db`: it is a tar.gz carrying the database AND
+                // the images that database references, or a sealed envelope. Save it under the name the
+                // server gave it, so the extension says what the file actually is.
+                const disposition = res.headers.get('content-disposition') || '';
+                const match = /filename="?([^";]+)"?/i.exec(disposition);
+                const served = match && match[1] ? match[1].trim() : '';
+                a.download = (served && !served.includes('/') && !served.includes('\\') && !served.includes('..')) ? served : name;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);

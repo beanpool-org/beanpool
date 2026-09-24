@@ -23,7 +23,7 @@ import { getHeldEnvelopesStatus } from '../services/standby-envelopes.js';
 import { getEnvelopeHolders } from '../services/takeover-envelope.js';
 import { startRestoreUnlock, unlockServerUrl } from '../services/owner-unlock.js';
 import {
-    createSnapshot, listSnapshots, resolveSnapshotPath,
+    createSnapshot, listSnapshots, resolveSnapshotPath, snapshotImagesDir,
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
@@ -37,7 +37,8 @@ import {
 import {
     createSealedBackup, createPlainBackup, backupLockState, describeSealedHeader, isGzip, readFileStart,
     readSealedFileHeader, signerCheck, openSealedFileTo, readBundleFrom, applyBundle, checkBackupArchive,
-    type BackupLock,
+    IncompleteBackupError,
+    type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
 
 /** After a restore the node restarts to load what was written. Tests replace it. */
@@ -217,31 +218,49 @@ function markLock(ctx: any, lock: BackupLock): void {
     if (!lock.locked) ctx.set('X-Backup-Not-Locked', lock.message);
 }
 
-async function sendBackup(ctx: any, opts: { dbFile?: string; filenamePrefix?: string; plainFile?: { path: string; name: string } } = {}): Promise<void> {
+/**
+ * Say what the file actually holds, so a short backup is visible on the wire and not only at restore time
+ * (storage design §7). The harvester copies these into its log for every node it pulls.
+ *
+ * `X-Backup-Contents` is `database+images` or `database-only`; `X-Backup-Images` is `<staged>/<referenced>`,
+ * which for a whole backup are equal — a backup that would have been short is an error, never a response.
+ */
+function markContents(ctx: any, what: { images: StagedImages | null; databaseOnly: boolean }): void {
+    ctx.set('X-Backup-Contents', what.databaseOnly ? 'database-only' : 'database+images');
+    if (what.images) {
+        ctx.set('X-Backup-Images', `${what.images.staged}/${what.images.referenced}`);
+        ctx.set('X-Backup-Image-Bytes', String(what.images.bytes));
+    }
+}
+
+/**
+ * Send a backup: locked when there is a recovery code, readable when there is not, and in both cases the
+ * WHOLE node — the database and the image objects that database references.
+ *
+ * The readable branch is a tar.gz whatever the source. It used to stream a snapshot's bare `.db`, which since
+ * the evacuation is a database whose every photo and attachment is a `storage_key` pointing at bytes the file
+ * does not carry: a download that looks like a backup and restores an empty gallery.
+ */
+async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
     const lock = backupLockState();
     try {
         if (!lock.locked) {
-            console.warn(`[Backup] ${lock.message} Sent an unlocked backup (${opts.plainFile ? 'snapshot ' + opts.plainFile.name : 'database'}).`);
+            console.warn(`[Backup] ${lock.message} Sent an unlocked backup (${opts.dbFile ? 'snapshot ' + path.basename(opts.dbFile) : 'database'}).`);
+            const plain = await createPlainBackup(opts);
             markLock(ctx, lock);
+            markContents(ctx, plain);
             ctx.set('Cache-Control', 'no-store');
-            if (opts.plainFile) {
-                // The snapshot file itself, as this route always sent it.
-                ctx.set('Content-Type', 'application/octet-stream');
-                // eslint-disable-next-line no-control-regex
-                ctx.set('Content-Disposition', `attachment; filename="${opts.plainFile.name.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);
-                ctx.body = fs.createReadStream(opts.plainFile.path);
-                return;
-            }
-            const plain = await createPlainBackup();
             ctx.set('Content-Type', 'application/gzip');
             ctx.set('Content-Disposition', `attachment; filename="${plain.filename}"`);
             ctx.res.on('close', () => plain.cleanup());
             ctx.body = plain.body;
+            console.log(`[Backup] ${plain.filename}: ${plain.databaseOnly ? 'database only (asked for)' : `database + ${plain.images?.staged ?? 0} image object(s)`}`);
             return;
         }
         const backup = await createSealedBackup(opts);
         const who = describeSealedHeader(backup.header);
         markLock(ctx, lock);
+        markContents(ctx, backup);
         ctx.set('Cache-Control', 'no-store');
         ctx.set('Content-Type', 'application/octet-stream');
         ctx.set('Content-Disposition', `attachment; filename="${backup.filename}"`);
@@ -249,18 +268,35 @@ async function sendBackup(ctx: any, opts: { dbFile?: string; filenamePrefix?: st
         ctx.set('X-Sealed-To', who.opensWith.replace(/[^\x20-\x7E]/g, '?'));
         ctx.res.on('close', () => backup.cleanup());
         ctx.body = backup.body;
+        console.log(`[Backup] ${backup.filename}: ${backup.databaseOnly ? 'database only (asked for)' : `database + ${backup.images?.staged ?? 0} image object(s)`}`);
     } catch (e: any) {
         console.error('Backup failed:', e);
         ctx.status = 500;
+        if (e instanceof IncompleteBackupError) {
+            // A distinct code, because this one is not a transient failure: a photo is gone and the operator
+            // has to decide. Repeating the counts in the body keeps them where the fleet manager reads them.
+            ctx.set('X-Backup-Error', 'incomplete-images');
+            ctx.body = {
+                error: 'Backup failed: ' + e.message,
+                images: { referenced: e.images.referenced, staged: e.images.staged, missing: e.images.missing.length },
+            };
+            return;
+        }
         ctx.body = { error: 'Backup failed: ' + (e?.message || 'unknown error') };
     }
+}
+
+/** `databaseOnly` as a caller may send it: a query parameter on a GET, a body field on a POST. */
+function askedForDatabaseOnly(ctx: any): boolean {
+    const raw = ctx.query?.databaseOnly ?? (ctx as any).requestBody?.databaseOnly;
+    return raw === true || raw === '1' || raw === 'true' || raw === 'yes';
 }
 
 router.post('/api/local/admin/backup', async (ctx) => {
     const token = ctx.request.header['x-replication-token'];
     const isTokenValid = token && (await verifyReplicationToken(String(token)));
     if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
-    await sendBackup(ctx);
+    await sendBackup(ctx, { databaseOnly: askedForDatabaseOnly(ctx) });
 });
 
 // The plain-text identity bundle (`/api/local/admin/identity-bundle`) is gone (§6.1): the node keys now travel
@@ -472,6 +508,9 @@ router.post('/api/local/admin/snapshots/delete', async (ctx) => {
         return;
     }
     try {
+        // The captured objects go with it, as they do when pruning: a snapshot's images are part of the
+        // snapshot, and a directory left behind belongs to nothing and is swept by nothing.
+        fs.rmSync(snapshotImagesDir(target), { recursive: true, force: true });
         if (fs.existsSync(target)) fs.unlinkSync(target);
         ctx.body = { success: true };
     } catch (e: any) {
@@ -495,9 +534,17 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
     }
     // Locked on the way out, like /backup (§6.1): the snapshot becomes the backup's state.db. The file in
     // data/snapshots/ stays as it is — it sits beside the live plaintext database, so sealing it protects nothing.
-    // Without a code: the snapshot file itself, as before, marked not locked.
+    // Without a code: a readable tar.gz of the same contents, marked not locked.
+    //
+    // `imagesDir` is the snapshot's OWN captured objects, never the live store: that is what makes the file
+    // the point-in-time recovery point it claims to be, whatever has been replaced or deleted since.
     const base = path.basename(target, '.db').replace(/[^A-Za-z0-9_-]/g, '_');
-    await sendBackup(ctx, { dbFile: target, filenamePrefix: `beanpool-${base}`, plainFile: { path: target, name: path.basename(target) } });
+    await sendBackup(ctx, {
+        dbFile: target,
+        imagesDir: snapshotImagesDir(target),
+        filenamePrefix: `beanpool-${base}`,
+        databaseOnly: askedForDatabaseOnly(ctx),
+    });
 });
 
 // Get (no body) or set (with {enabled,intervalHours,keep}) the auto-snapshot config.

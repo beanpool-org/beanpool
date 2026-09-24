@@ -3,6 +3,7 @@
  *
  * Test cases:
  * 1. New-format single-blob round trip (1 share, no hub row, threshold 1, no hub fetch, seed matches).
+ * 1b. Enrolments sealed by earlier code (frozen fixtures) still open, and their lookup hashes still match.
  * 2. Old-format round trip still working (hub + sso, threshold 2, hub release, seed matches).
  * 3. Wrong sub failing LOUDLY on both formats (Poly1305 tag fails via KeeperCryptoError) + corrupted hub failing with TwoLayerCombineError.
  * 4. Multi-provider enrol and disconnect (Google + Apple enrolled without hub, each independently reconstructs seed; disconnect Google leaves Apple intact and recoverable; disconnect Apple clears all).
@@ -30,7 +31,7 @@ import { initStateEngine } from './state-engine.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { collectionProgress, listReleases } from './engine/recovery-release.js';
-import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
+import { _resetJwksCacheForTests, _clearNoncesForTests, ssoLookupHash } from './sso.js';
 import {
     getCurrentShares,
     getCurrentGeneration,
@@ -285,6 +286,52 @@ async function main() {
         assert.deepStrictEqual(recoveredSeed1, new Uint8Array(m1.seed));
         assert.strictEqual(derivePubHex(recoveredSeed1), m1.pubHex);
     });
+
+    // =========================================================================
+    // 1b. Enrolments sealed by earlier code still open
+    // =========================================================================
+    // The sign-in hardening (S1 onwards) changes how the node convinces itself of `sub`, never `sub`
+    // itself, the seal key or the lookup hash — that is what keeps every existing enrolment
+    // recoverable. These blobs and hashes were produced by origin/main's sealSeedToSso and
+    // ssoLookupHash at 7f92bd8e (2026-09-24), before S1, and are frozen here: a later change to
+    // either derivation that would strand them fails this instead.
+    console.log('\n--- 1b. Enrolments Sealed by Earlier Code Still Open ---');
+    const OLD_SEED_HEX = 'cdb6f28510570568bd01d9b982312020b785e3847664cbfb6ee753425085de9e';
+    const OLD_LOOKUP_SALT = 'S1-old-enrolment-lookup-salt';
+    const OLD_ENROLMENTS = [
+        {
+            provider: 'google',
+            sub: '104729384756102938475',
+            lookupHash: '-YIm_AtQgZa5zOM4Eh_-j80Ae5R5287GVhyPxMQSpY8',
+            sealed: {
+                encryptedShare: 'YRS1xq1OhCe0aLFLR06B9MRqj33l+c8QiyE9g7f5SyE=',
+                shareIv: 'x8qPfZ/8xacJuwXBtdtOwJC/wUGx3lr0',
+                shareTag: 'UJJwcoVHxrysQnywAsoAqg==',
+                kdfParams: '{"alg":"scrypt-xc20p-single-v1","salt":"lCAsfDPf6FmyKHL7tGQT+wPYIrUMUZiDSZQYYHsU7dc=","N":16384,"r":8,"p":1}',
+            },
+        },
+        {
+            provider: 'facebook',
+            sub: '2718281828459045',
+            lookupHash: 'W2ArgJjZyHbXaMlPtZ6HvQe9LEZ13_fbNMJcL4yiXyc',
+            sealed: {
+                encryptedShare: '1kGt6XHXTzy5EeRlKA3aFysAbX/B8xNinFHcSVaaFDE=',
+                shareIv: 'gm0Zee4o8UYUrVSOTbPg2E0hqnWcjfzM',
+                shareTag: 'AkyT9x4sncyx30vs2vLCtg==',
+                kdfParams: '{"alg":"scrypt-xc20p-single-v1","salt":"OomrCz8p0MKmpuIHvp2M4Rl/VAeLqqECQCRJe9oXQB4=","N":16384,"r":8,"p":1}',
+            },
+        },
+    ] as const;
+    for (const old of OLD_ENROLMENTS) {
+        await test(`1b.1 ${old.provider}: a single blob sealed by earlier code opens to the same seed`, async () => {
+            assert(isSingleBlobSso(old.sealed.kdfParams));
+            const opened = await openShareFromSso(old.sealed, old.provider, old.sub);
+            assert.strictEqual(Buffer.from(opened).toString('hex'), OLD_SEED_HEX);
+        });
+        await test(`1b.2 ${old.provider}: the lookup hash for that sub and salt is unchanged`, async () => {
+            assert.strictEqual(await ssoLookupHash(old.provider, old.sub, OLD_LOOKUP_SALT), old.lookupHash);
+        });
+    }
 
     // =========================================================================
     // 2. Old-format round trip still working

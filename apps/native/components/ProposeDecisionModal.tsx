@@ -590,6 +590,9 @@ export function ProposeDecisionModal({
                         {/* Submit Button */}
                         <Pressable
                             accessibilityRole="button"
+                            accessibilityLabel={submitting ? "Proposing decision" : "Submit Community Decision"}
+                            accessibilityHint="Posts your community decision for a 7-day vote"
+                            accessibilityState={{ disabled: submitting, busy: submitting }}
                             style={styles.submitBtn}
                             onPress={handleSubmit}
                             disabled={submitting}

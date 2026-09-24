@@ -264,9 +264,43 @@ test('Attestation sweep logic: impostor revokes; unverifiable preserves', async 
 
     const alloc = await db.getAllocation(env, 'testnode');
 
+    // A valid attest for the nonce in `url`, signed by `key`.
+    const signedAttest = async (key, url) => {
+        const nonce = new URL(url).searchParams.get('nonce');
+        const timestamp = Math.floor(Date.now() / 1000);
+        const msg = `beanpool-node-attest/v1\n${nonce}\n${timestamp}`;
+        const sig = new Uint8Array(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey, new TextEncoder().encode(msg)));
+        const signature = Array.from(sig).map(b => b.toString(16).padStart(2, '0')).join('');
+        return new Response(JSON.stringify({ pubkey: key.pubHex, nonce, timestamp, signature }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+        });
+    };
+
+    // Two healthy neighbours answer under their own keys, so every sweep is sound and what is tested is
+    // testnode's verdict, not the circuit breaker: a fleet whose every live name is an impostor (a lone
+    // testnode in part 3) is the registrar at fault and suspended, not revoked.
+    const neighbours = new Map();
+    for (const name of ['alpha', 'bravo']) {
+        const key = await generateKeypair();
+        neighbours.set(`${name}.beanpool.org`, key);
+        await db.insertAllocation(env, {
+            name,
+            node_pubkey: key.pubHex,
+            hostname: `${name}.beanpool.org`,
+            mode: 'tunnel',
+            status: 'live',
+            requested_at: Math.floor(Date.now() / 1000)
+        });
+    }
+    const withNeighbours = (testnodeReply) => async (url, init) => {
+        const key = neighbours.get(new URL(url).hostname);
+        return key ? signedAttest(key, url) : testnodeReply(url, init);
+    };
+
     // 1. Mock fetch returns unverifiable (network error / 503)
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => new Response('Service Unavailable', { status: 503 });
+    globalThis.fetch = withNeighbours(async () => new Response('Service Unavailable', { status: 503 }));
 
     try {
         const resultUnverified = await attestOne(env, alloc);
@@ -279,10 +313,10 @@ test('Attestation sweep logic: impostor revokes; unverifiable preserves', async 
         assert.equal(checkUnverified.attest_fails, 0);
 
         // 2. Mock fetch returns 200 OK but a reply nobody signed (wrong JSON/signature) → unverifiable, not evidence
-        globalThis.fetch = async () => new Response(JSON.stringify({ pubkey: 'wrong', nonce: 'bad' }), {
+        globalThis.fetch = withNeighbours(async () => new Response(JSON.stringify({ pubkey: 'wrong', nonce: 'bad' }), {
             status: 200,
             headers: { 'content-type': 'application/json' }
-        });
+        }));
 
         const resultUnsigned = await attestOne(env, alloc);
         assert.equal(resultUnsigned, 'unverifiable');
@@ -296,17 +330,7 @@ test('Attestation sweep logic: impostor revokes; unverifiable preserves', async 
 
         // 3. Mock fetch returns a valid attest for our nonce signed by ANOTHER key → impostor
         const other = await generateKeypair();
-        globalThis.fetch = async (url) => {
-            const nonce = new URL(url).searchParams.get('nonce');
-            const timestamp = Math.floor(Date.now() / 1000);
-            const msg = `beanpool-node-attest/v1\n${nonce}\n${timestamp}`;
-            const sig = new Uint8Array(await crypto.subtle.sign('Ed25519', other.keyPair.privateKey, new TextEncoder().encode(msg)));
-            const signature = Array.from(sig).map(b => b.toString(16).padStart(2, '0')).join('');
-            return new Response(JSON.stringify({ pubkey: other.pubHex, nonce, timestamp, signature }), {
-                status: 200,
-                headers: { 'content-type': 'application/json' }
-            });
-        };
+        globalThis.fetch = withNeighbours((url) => signedAttest(other, url));
 
         const resultImpostor = await attestOne(env, alloc);
         assert.equal(resultImpostor, 'impostor');

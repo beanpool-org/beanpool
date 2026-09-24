@@ -176,6 +176,37 @@ test('incident (2b): many impostors at once is the registrar at fault — suspen
     } finally { net.restore(); }
 });
 
+test('incident (2c): a small fleet where EVERY live name is an impostor is the registrar at fault too', async () => {
+    // max(2, 10% of live) can never be exceeded while live <= 2, so on its own it leaves a small fleet (the
+    // live set after 09-24) with no breaker: a key-comparison bug would revoke every name in two sweeps.
+    for (const names of [['alpha', 'bravo'], ['alpha']]) {
+        const { env, rows } = makeEnv();
+        const onFile = await Promise.all(names.map(() => makeKey()));
+        const answering = await Promise.all(names.map(() => makeKey()));
+        for (let i = 0; i < names.length; i++) await seedLive(env, names[i], onFile[i]);
+        const before = rows();
+        const nodes = Object.fromEntries(names.map((n, i) => [`${n}.beanpool.org`, attestsAs(answering[i])]));
+        const net = network(nodes);
+        try {
+            for (let sweep = 1; sweep <= 3; sweep++) {
+                const summary = await attestSweep(env);
+                assert.deepEqual(rows(), before, `live=${names.length} sweep ${sweep}: no row changed`);
+                assert.equal(summary.action, 'suspended:mass', `live=${names.length} sweep ${sweep}`);
+                assert.equal(summary.impostor, names.length);
+            }
+            assert.deepEqual(net.cfCalls, []);
+
+            // Control: once one name answers under its own key, the sweep is believable and acts.
+            if (names.length > 1) {
+                nodes['alpha.beanpool.org'] = attestsAs(onFile[0]);
+                const summary = await attestSweep(env);
+                assert.equal(summary.action, 'applied');
+                assert.equal(row(rows, 'bravo').attest_fails, 1);
+            }
+        } finally { net.restore(); }
+    }
+});
+
 test('incident (3): an attest validly signed by ANOTHER key is an impostor; twice → revoked (the kill switch survives)', async () => {
     const { env, rows } = makeEnv();
     const [owner, intruder, n1, n2] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);

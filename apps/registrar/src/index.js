@@ -289,6 +289,8 @@ export async function attestOne(env, a) {
 // fault and acts on no row.
 //   - the canary (CANARY_NAME, one of our own nodes) must be live and 'ok'. Unset = no canary check.
 //   - impostors must not exceed max(2, 10% of live): real ones are rare and independent; many at once is us.
+//     Nor may every live name be one: max(2, …) can't be exceeded while live <= 2, and a small fleet (the live
+//     set after 09-24) is where a key-comparison bug would otherwise revoke every name in two sweeps.
 //   - unverifiable must not exceed half of live: a registrar that can't see most of the world shouldn't trust
 //     what it thinks it sees in the rest.
 function judgeSweep(env, results) {
@@ -296,7 +298,7 @@ function judgeSweep(env, results) {
     const s = { live: results.length, ok: count('ok'), unverifiable: count('unverifiable'), impostor: count('impostor') };
     const canary = env.CANARY_NAME ? results.find((r) => r.a.name === env.CANARY_NAME) : null;
     if (env.CANARY_NAME && canary?.verdict !== 'ok') s.action = 'suspended:canary';
-    else if (s.impostor > Math.max(2, s.live * 0.1)) s.action = 'suspended:mass';
+    else if (s.impostor > Math.max(2, s.live * 0.1) || (s.live > 0 && s.impostor === s.live)) s.action = 'suspended:mass';
     else if (s.unverifiable > s.live / 2) s.action = 'suspended:unverifiable';
     else s.action = 'applied';
     return s;

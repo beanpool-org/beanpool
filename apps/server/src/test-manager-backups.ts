@@ -14,7 +14,9 @@ delete process.env.CF_RECORD_NAME;
 process.env.ADMIN_PASSWORD = 'TestManagerAdmin123!';
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -145,11 +147,40 @@ async function main(): Promise<void> {
     fs.utimesSync(path.join(sealedDir, 'beanpool-2026-09-19T01-02-03.bpsealed'), past, past);
     fs.writeFileSync(path.join(sealedDir, 'beanpool-identity-2026-09-01-legacy.bpsealed'), fakeSealed);
     fs.utimesSync(path.join(sealedDir, 'beanpool-identity-2026-09-01-legacy.bpsealed'), past, past);
+    // CHANGED in round 3, because what these three asserted is the defect the round found: a readable
+    // download used to be the bare `.db`, which since the image store is a database whose every photo and
+    // attachment is a `storage_key` pointing at bytes the file does not carry — and which the restore
+    // wizard could not take anyway, since it extracts a tar. The database's bytes are still checked, to
+    // the byte; they are now checked inside the archive that carries the images with them.
+    fs.mkdirSync(path.join(nodeDir, 'state.db.images', 'posts', 'p1'), { recursive: true });
+    const heldObject = Buffer.from('the bytes of a photo the database references');
+    fs.writeFileSync(path.join(nodeDir, 'state.db.images', 'posts', 'p1', '0-abcdef01.jpg'), heldObject);
+    const openTar = (bytes: Buffer): Record<string, Buffer> => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mgr-dl-'));
+        fs.writeFileSync(path.join(dir, 'x.tar.gz'), bytes);
+        execFileSync('tar', ['-xzf', path.join(dir, 'x.tar.gz'), '-C', dir]);
+        fs.rmSync(path.join(dir, 'x.tar.gz'));
+        const out: Record<string, Buffer> = {};
+        const walk = (d: string) => {
+            for (const f of fs.readdirSync(d)) {
+                const full = path.join(d, f);
+                if (fs.lstatSync(full).isDirectory()) walk(full);
+                else out[path.relative(dir, full).split(path.sep).join('/')] = fs.readFileSync(full);
+            }
+        };
+        walk(dir);
+        fs.rmSync(dir, { recursive: true, force: true });
+        return out;
+    };
     const plainRes = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
     const plainBody = Buffer.from(await plainRes.arrayBuffer());
-    assert(plainRes.status === 200 && plainBody.equals(sqlite) && plainRes.headers.get('x-backup-locked') === 'no'
-        && /beanpool-backup-mullum\.db"/.test(plainRes.headers.get('content-disposition') || ''),
-        `download-db serves the readable state.db when it is newer than any locked file, marked not locked (got ${plainRes.status})`);
+    const plainMembers = openTar(plainBody);
+    assert(plainRes.status === 200 && plainMembers['state.db']?.equals(sqlite) === true
+        && plainRes.headers.get('x-backup-locked') === 'no'
+        && /beanpool-backup-mullum\.tar\.gz"/.test(plainRes.headers.get('content-disposition') || ''),
+        `download-db serves the readable backup as a restorable archive when it is newer than any locked file, marked not locked (got ${plainRes.status}, ${Object.keys(plainMembers).join(', ')})`);
+    assert(plainMembers['images/posts/p1/0-abcdef01.jpg']?.equals(heldObject) === true,
+        '…and the images beside that database come with it, byte for byte, so a restore from it is whole');
     const hist2 = (await (await fetch(`${BASE}/api/manager/backups/history?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } })).json() as any).history;
     const names = hist2.map((h: any) => `${h.filename}:${h.sealed}:${h.identity}`).sort();
     assert(JSON.stringify(names) === JSON.stringify([
@@ -158,11 +189,15 @@ async function main(): Promise<void> {
         'beanpool-identity-2026-09-01-legacy.bpsealed:true:true',
     ]), `history lists readable daily copies, locked backups and the locked key file (${names.join(', ')})`);
     const dayRes = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-2026-09-18.db`, { headers: { 'X-Admin-Password': ADMIN_PW } });
-    assert(dayRes.status === 200 && Buffer.from(await dayRes.arrayBuffer()).equals(sqlite) && dayRes.headers.get('x-backup-locked') === 'no',
-        `download-history serves a readable daily copy, marked not locked (got ${dayRes.status})`);
+    const dayMembers = openTar(Buffer.from(await dayRes.arrayBuffer()));
+    assert(dayRes.status === 200 && dayMembers['state.db']?.equals(sqlite) === true && dayRes.headers.get('x-backup-locked') === 'no',
+        `download-history serves a readable daily copy as a restorable archive, marked not locked (got ${dayRes.status})`);
     const keyRes = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-identity-2026-09-01-legacy.bpsealed`, { headers: { 'X-Admin-Password': ADMIN_PW } });
     assert(keyRes.status === 200 && Buffer.from(await keyRes.arrayBuffer()).equals(fakeSealed), `the locked legacy key file downloads (got ${keyRes.status})`);
-    assert(![dbBody, oneBody, idBody, plainBody].some(isGz), 'no manager download starts with gzip magic');
+    // Narrowed in round 3, and for the same reason: a LOCKED file and the 410 must never be a plain archive
+    // (that is what this was protecting), while the readable download now must be one.
+    assert(![dbBody, oneBody, idBody].some(isGz), 'no locked download starts with gzip magic: a sealed file is served as it is');
+    assert(isGz(plainBody), 'while a readable backup IS a gzip archive now — the database and its images together');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS name_allocations (
     origin         TEXT,                       -- tunnel ingress origin, e.g. http://node:3000
     public_ip      TEXT,                       -- A-record target (direct mode)
     contact        TEXT,                       -- optional operator contact email / handle
-    attest_fails   INTEGER NOT NULL DEFAULT 0, -- consecutive *mismatches* (wrong identity) — NOT offline misses
+    attest_fails   INTEGER NOT NULL DEFAULT 0, -- consecutive *impostor* verdicts (another key signed) — never offline/unverifiable
     last_attest_at INTEGER,                    -- unix seconds of last successful attest (old = unverified/offline)
     requested_at   INTEGER NOT NULL,
     decided_at     INTEGER,

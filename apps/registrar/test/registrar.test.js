@@ -243,7 +243,12 @@ test('R2: /i/:code Invite resolution and deep-linking response', async () => {
     assert.ok(htmlBad.includes('Invite code not found'));
 });
 
-test('Attestation sweep logic: mismatch revokes vs unverified preserves', async () => {
+// Until 2026-09-24 part 2 below asserted that this reply — JSON, but no valid signature — was a 'mismatch' and
+// revoked the name after two sweeps. That is the behaviour behind the 09-24 incident (a Worker that couldn't
+// verify the nodes' signing format revoked `test` and `yarravalley`), so it now asserts the reply is
+// 'unverifiable' and changes nothing. The revoke assertions moved to part 3, where the reply PROVES another key
+// answers at the hostname.
+test('Attestation sweep logic: impostor revokes; unverifiable preserves', async () => {
     const d1 = createMockD1();
     const env = mockEnv(d1);
 
@@ -259,13 +264,47 @@ test('Attestation sweep logic: mismatch revokes vs unverified preserves', async 
 
     const alloc = await db.getAllocation(env, 'testnode');
 
-    // 1. Mock fetch returns unverified (network error / 503)
+    // A valid attest for the nonce in `url`, signed by `key`.
+    const signedAttest = async (key, url) => {
+        const nonce = new URL(url).searchParams.get('nonce');
+        const timestamp = Math.floor(Date.now() / 1000);
+        const msg = `beanpool-node-attest/v1\n${nonce}\n${timestamp}`;
+        const sig = new Uint8Array(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey, new TextEncoder().encode(msg)));
+        const signature = Array.from(sig).map(b => b.toString(16).padStart(2, '0')).join('');
+        return new Response(JSON.stringify({ pubkey: key.pubHex, nonce, timestamp, signature }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+        });
+    };
+
+    // Two healthy neighbours answer under their own keys, so every sweep is sound and what is tested is
+    // testnode's verdict, not the circuit breaker: a fleet whose every live name is an impostor (a lone
+    // testnode in part 3) is the registrar at fault and suspended, not revoked.
+    const neighbours = new Map();
+    for (const name of ['alpha', 'bravo']) {
+        const key = await generateKeypair();
+        neighbours.set(`${name}.beanpool.org`, key);
+        await db.insertAllocation(env, {
+            name,
+            node_pubkey: key.pubHex,
+            hostname: `${name}.beanpool.org`,
+            mode: 'tunnel',
+            status: 'live',
+            requested_at: Math.floor(Date.now() / 1000)
+        });
+    }
+    const withNeighbours = (testnodeReply) => async (url, init) => {
+        const key = neighbours.get(new URL(url).hostname);
+        return key ? signedAttest(key, url) : testnodeReply(url, init);
+    };
+
+    // 1. Mock fetch returns unverifiable (network error / 503)
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => new Response('Service Unavailable', { status: 503 });
+    globalThis.fetch = withNeighbours(async () => new Response('Service Unavailable', { status: 503 }));
 
     try {
         const resultUnverified = await attestOne(env, alloc);
-        assert.equal(resultUnverified, 'unverified');
+        assert.equal(resultUnverified, 'unverifiable');
 
         // Run sweep — should preserve status as 'live' and not increment attest_fails
         await attestSweep(env);
@@ -273,26 +312,40 @@ test('Attestation sweep logic: mismatch revokes vs unverified preserves', async 
         assert.equal(checkUnverified.status, 'live');
         assert.equal(checkUnverified.attest_fails, 0);
 
-        // 2. Mock fetch returns mismatch (200 OK but wrong JSON/signature)
-        globalThis.fetch = async () => new Response(JSON.stringify({ pubkey: 'wrong', nonce: 'bad' }), {
+        // 2. Mock fetch returns 200 OK but a reply nobody signed (wrong JSON/signature) → unverifiable, not evidence
+        globalThis.fetch = withNeighbours(async () => new Response(JSON.stringify({ pubkey: 'wrong', nonce: 'bad' }), {
             status: 200,
             headers: { 'content-type': 'application/json' }
-        });
+        }));
 
-        const resultMismatch = await attestOne(env, alloc);
-        assert.equal(resultMismatch, 'mismatch');
+        const resultUnsigned = await attestOne(env, alloc);
+        assert.equal(resultUnsigned, 'unverifiable');
+
+        for (let i = 0; i < 3; i++) {
+            await attestSweep(env);
+            const checkUnsigned = await db.getAllocation(env, 'testnode');
+            assert.equal(checkUnsigned.status, 'live');
+            assert.equal(checkUnsigned.attest_fails, 0);
+        }
+
+        // 3. Mock fetch returns a valid attest for our nonce signed by ANOTHER key → impostor
+        const other = await generateKeypair();
+        globalThis.fetch = withNeighbours((url) => signedAttest(other, url));
+
+        const resultImpostor = await attestOne(env, alloc);
+        assert.equal(resultImpostor, 'impostor');
 
         // First sweep: attest_fails becomes 1
         await attestSweep(env);
-        const checkMismatch1 = await db.getAllocation(env, 'testnode');
-        assert.equal(checkMismatch1.status, 'live');
-        assert.equal(checkMismatch1.attest_fails, 1);
+        const checkImpostor1 = await db.getAllocation(env, 'testnode');
+        assert.equal(checkImpostor1.status, 'live');
+        assert.equal(checkImpostor1.attest_fails, 1);
 
         // Second sweep: attest_fails reaches limit (2) -> auto-revoked
         await attestSweep(env);
-        const checkMismatch2 = await db.getAllocation(env, 'testnode');
-        assert.equal(checkMismatch2.status, 'revoked');
-        assert.equal(checkMismatch2.attest_fails, 2);
+        const checkImpostor2 = await db.getAllocation(env, 'testnode');
+        assert.equal(checkImpostor2.status, 'revoked');
+        assert.equal(checkImpostor2.attest_fails, 2);
 
     } finally {
         globalThis.fetch = originalFetch;

@@ -37,6 +37,7 @@ import {
     reconcileLedgerFromDb,
     countOpenTrades,
 } from '../state-engine.js';
+import { ledger } from './ledger.js';
 import { logger } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
@@ -653,12 +654,25 @@ export function executeOffboard(
             return;
         }
 
-        // Read balance INSIDE conservingTransaction so that any concurrent mutations are captured
-        const balanceInfo = getBalance(cleanPub);
-        const balance = balanceInfo.balance;
+        // Read balance INSIDE conservingTransaction so that any concurrent mutations are captured.
+        //
+        // TWO FIGURES, on purpose. What MOVES is the exact ledger balance. `getBalance()` rounds to 2dp for
+        // display, and settling that figure fails whenever the two differ, which is routine: the 1.5% fee on
+        // a 7-Bean sale leaves the seller 6.895, shown as 6.90, and debiting 6.90 from 6.895 breaks the
+        // floor of 0, so the donation below was refused and the whole offboarding aborted; the gift was
+        // refused the same way. Where the exact figure is the larger one, the rounded amount went through
+        // and the prune confiscated the remainder, short-changing a gift's recipient.
+        //
+        // The ROUNDED figure still decides which resolution this member needs, because it is the one the
+        // wizard showed the operator and picked the resolution from: a balance shown as 0.00 is sent as
+        // prune_zero_balance. The two can only disagree about the sign when the shown figure is 0.00, i.e.
+        // under half a cent either way, and that dust is left to `adminPruneUser`, which settles the exact
+        // balance itself.
+        const shownBalance = getBalance(cleanPub).balance;
+        const balance = ledger.getAccount(cleanPub).balance;
         balanceSettled = balance;
 
-        if (balance > 0) {
+        if (shownBalance > 0) {
             if (resolution === 'donate_to_commons') {
                 // Refusal must abort the offboarding, not be ignored: the member is marked 'pruned' below,
                 // so a swallowed null leaves their balance stranded on an account nobody can sign for and
@@ -715,7 +729,7 @@ export function executeOffboard(
             } else {
                 throw new Error('Positive balance requires either donating to Commons or gifting to a member');
             }
-        } else if (balance < 0) {
+        } else if (shownBalance < 0) {
             if (resolution !== 'write_off_commons') {
                 throw new Error('Negative balance must be formally written off against Commons');
             }

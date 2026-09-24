@@ -365,8 +365,9 @@ export class LedgerManager {
      * transferred into the account is written and then immediately overwritten, and disappears from the
      * node's books on the next flush. Anything crediting the Commons must go through the global.
      *
-     * @param floorOverride the sender's credit floor. Pass `-Infinity` for synthetic senders (escrow_*,
-     *                      bridge_*) which are not bounded by a member floor.
+     * @param floorOverride the sender's credit floor. Pass `-Infinity` for a synthetic sender that is not
+     *                      bounded by a member floor (bridge_*). An escrow_* sender is clamped to
+     *                      `ESCROW_FLOOR` whatever is passed here, so it can only pay out what it holds.
      */
     moveToCommons(fromId: string, amount: number, floorOverride?: number): boolean {
         if (amount < 0) return false;

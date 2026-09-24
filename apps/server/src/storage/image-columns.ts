@@ -26,7 +26,8 @@
  * That is why the evacuation job can null a column and know it has lost nothing.
  */
 
-import { getImageStore, sha256Hex, type ImageStore, type StoredObject } from './image-store.js';
+import type { Readable } from 'node:stream';
+import { getImageStore, openObject, readObject, sha256Hex, type ImageStore, type StoredObject } from './image-store.js';
 
 /**
  * The route's own parse, deliberately duplicated rather than imported: `^data:([^;]+);base64,(.*)$` with no
@@ -164,6 +165,49 @@ export function attachmentDataOf(row: AttachmentRow, store: ImageStore): string 
     const bytes = store.get(row.storage_key);
     if (!bytes) throw new MissingObjectError(row.storage_key);
     return bytes.toString('base64');
+}
+
+// ── The same, for callers that are already async ──────────────────────────────────────────────
+//
+// Identical results to the functions above — the same strings, the same bytes, the same MissingObjectError —
+// but through the store's non-blocking methods (image-store.ts `readObject`/`openObject`), so on S3 the
+// serving routes and the sync export never hold the event loop for a round trip.
+
+/** {@link photoDataOf}, without blocking. */
+export async function photoDataOfAsync(row: PostPhotoRow, store: ImageStore): Promise<string | null> {
+    if (typeof row.photo_data === 'string' && row.photo_data.length > 0) return row.photo_data;
+    if (!row.storage_key) return null;
+    const bytes = await readObject(store, row.storage_key);
+    if (!bytes) throw new MissingObjectError(row.storage_key);
+    return encodeDataUrl(row.mime || 'image/jpeg', bytes);
+}
+
+/** {@link attachmentDataOf}, without blocking. */
+export async function attachmentDataOfAsync(row: AttachmentRow, store: ImageStore): Promise<string | null> {
+    if (typeof row.data === 'string' && row.data.length > 0) return row.data;
+    if (!row.storage_key) return null;
+    const bytes = await readObject(store, row.storage_key);
+    if (!bytes) throw new MissingObjectError(row.storage_key);
+    return bytes.toString('base64');
+}
+
+/**
+ * What the photo route serves for this row: a Buffer for an inline row (exactly {@link photoBytesOf}), or a
+ * stream straight from the store for an evacuated one, so a photo is never held whole in memory on its way
+ * from a bucket to a phone. Null when the row holds no image; throws {@link MissingObjectError} when the row
+ * names an object the store does not have.
+ */
+export async function openPhotoOf(row: PostPhotoRow, store: ImageStore):
+    Promise<{ body: Buffer | Readable; contentType: string; bytes: number | null } | null> {
+    if ((typeof row.photo_data === 'string' && row.photo_data.length > 0) || !store.openRead) {
+        // Inline, or a store whose read is a local syscall: exactly what the route always sent.
+        const served = photoBytesOf(row, store);
+        return served ? { body: served.buffer, contentType: served.contentType, bytes: served.buffer.length } : null;
+    }
+    if (!row.storage_key) return null;
+    const opened = await openObject(store, row.storage_key);
+    if (!opened) throw new MissingObjectError(row.storage_key);
+    return { body: opened.stream, contentType: row.mime || 'image/jpeg', bytes: opened.bytes };
 }
 
 // ── Writing a new one ──────────────────────────────────────────────────────────────────────────

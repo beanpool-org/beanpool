@@ -5,7 +5,7 @@
 import { db, afterTransactionCommit } from '../db/db.js';
 import crypto from 'node:crypto';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
-import { deleteStoredObjects, photoDataOf, storePhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
+import { deleteStoredObjects, photoDataOfAsync, storePhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { getLocalConfig } from '../config/local-config.js';
 import {
     exportSyncState as exportSyncStateEngine,
@@ -224,25 +224,45 @@ function storeImportedPhotos(photos: any[]): Map<string, PhotoColumns> {
     return out;
 }
 
-function restoreInlinePhotos(payload: SyncPayload): SyncPayload {
+/**
+ * How many photos an export reads from the store at once. On disk each read is a local syscall and this changes
+ * nothing; on S3 it is a round trip, and a full export names every photo on the node — one at a time that is
+ * minutes, all at once it is thousands of sockets on a 1 GB host.
+ */
+const EXPORT_READ_CONCURRENCY = 8;
+
+async function restoreInlinePhotos(payload: SyncPayload): Promise<SyncPayload> {
     const photos = (payload as any).photos as any[] | undefined;
     if (!Array.isArray(photos) || photos.length === 0) return payload;
     const store = getImageStore();
-    const omitted: string[] = [];
-    (payload as any).photos = photos.flatMap(row => {
-        let photoData: string | null;
-        try {
-            photoData = photoDataOf(row, store);
-        } catch (e) {
-            omitted.push(`${row.post_id}|${row.order_num}`);
-            console.error('[Sync] Could not read a photo out of the image store; omitting the row from this export so a replica keeps its own copy:', e);
-            return [];
+    // Filled by index, so the payload keeps exactly the order the engine exported — the reads finish in any order.
+    const results: ({ row: any } | { omitted: string })[] = new Array(photos.length);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+        while (next < photos.length) {
+            const i = next++;
+            const row = photos[i];
+            let photoData: string | null;
+            try {
+                // Non-blocking: on an S3 node this is a bucket round trip, and the node keeps serving meanwhile.
+                photoData = await photoDataOfAsync(row, store);
+            } catch (e) {
+                results[i] = { omitted: `${row.post_id}|${row.order_num}` };
+                console.error('[Sync] Could not read a photo out of the image store; omitting the row from this export so a replica keeps its own copy:', e);
+                continue;
+            }
+            // `photoDataOf` returns null only for a row that genuinely holds no image and names no object.
+            // Such a row exported whatever its column held before this change, so it still does.
+            const out: any = { post_id: row.post_id, photo_data: photoData ?? row.photo_data ?? null, order_num: row.order_num };
+            if (row.updated_at !== undefined) out.updated_at = row.updated_at;
+            results[i] = { row: out };
         }
-        // `photoDataOf` returns null only for a row that genuinely holds no image and names no object.
-        // Such a row exported whatever its column held before this change, so it still does.
-        const out: any = { post_id: row.post_id, photo_data: photoData ?? row.photo_data ?? null, order_num: row.order_num };
-        if (row.updated_at !== undefined) out.updated_at = row.updated_at;
-        return [out];
+    };
+    await Promise.all(Array.from({ length: Math.min(EXPORT_READ_CONCURRENCY, photos.length) }, worker));
+    const omitted: string[] = [];
+    (payload as any).photos = results.flatMap((r) => {
+        if ('omitted' in r) { omitted.push(r.omitted); return []; }
+        return [r.row];
     });
     if (omitted.length > 0) {
         // Named in the payload so a resync can keep the replica's copies. Additive: a peer that does not know
@@ -264,7 +284,7 @@ export async function exportSyncState(
     since?: string | null,
     commonsBalance = 0
 ): Promise<SyncPayload> {
-    const payload = restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance));
+    const payload = await restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance));
     return signSyncPayload(cb, payload);
 }
 

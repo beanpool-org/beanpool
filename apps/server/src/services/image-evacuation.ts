@@ -43,6 +43,12 @@ import { prepareStorablePhoto, prepareStorableCiphertext } from '../storage/imag
 /** Rows per pass. Small enough that a pass is a few hundred milliseconds on the slowest node we run. */
 export const EVACUATION_BATCH = 50;
 
+/**
+ * Rows per pass on an S3 store. Each row is a PUT and a read-back GET, both blocking round trips to the
+ * bucket (storage/blocking-fetch.ts), so fifty would hold the node for seconds; five keeps a pass near one.
+ */
+export const EVACUATION_BATCH_S3 = 5;
+
 /** Gap between passes, so the job is a background hum rather than a boot-time stall. */
 const EVACUATION_INTERVAL_MS = 2_000;
 
@@ -346,7 +352,7 @@ export function startImageEvacuation(): void {
             if (running) { schedule(EVACUATION_INTERVAL_MS); return; }
             running = true;
             try {
-                const pass = evacuateImagesOnce();
+                const pass = evacuateImagesOnce(getImageStore().kind === 's3' ? EVACUATION_BATCH_S3 : EVACUATION_BATCH);
                 total = addCounts(total, pass);
                 // "Nothing moved and nothing skipped" is the end, not "nothing pending": the rows the store
                 // cannot reproduce exactly stay pending for good, and waiting for that count to reach zero

@@ -14,8 +14,9 @@
  *
  * ## The shape of it
  *
- * Deliberately narrow — put/get/head/delete/list over an opaque string key — so an S3/R2 backend (the global
- * node, a later phase) can slot in behind {@link ImageStore} without a single caller changing. Keys are
+ * Deliberately narrow — put/get/head/delete/list over an opaque string key — so the S3/R2 backend
+ * (s3-image-store.ts, `IMAGE_STORE=s3`, the global node) slots in behind {@link ImageStore} without a single
+ * caller changing. Keys are
  * content-addressed inside namespaces (`posts/…`, `attachments/…`, `projects/…`), so the same bytes written
  * twice land on the same object and a re-run of the evacuation job is a no-op rather than a duplicate.
  *
@@ -23,7 +24,11 @@
  *
  * `put` is called from inside `db.transaction(() => …)` bodies, which better-sqlite3 runs synchronously — an
  * `await` in there commits the transaction at the first suspension point. Until the async port lands (the
- * storage design §2) the store is sync too. Every method is a handful of syscalls on a local file.
+ * storage design §2) the store is sync too. On disk every method is a handful of syscalls on a local file; on
+ * S3 the sync methods block for a round trip (s3-image-store.ts says how that is bounded), so the backends that
+ * talk to a network ALSO implement the optional async methods below, and every caller that is already async —
+ * serving, the sync export, backups, restore — reaches the store through {@link readObject},
+ * {@link openObject} and {@link scanObjectsAsync}, which use them when they are there.
  *
  * ## What it refuses
  *
@@ -38,6 +43,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { Readable } from 'node:stream';
+import { S3ImageStore, s3ConfigFromEnv } from './s3-image-store.js';
 
 /** The ceiling on any single object, matching the largest body a route will accept (https-server.ts). */
 export const MAX_OBJECT_BYTES = 2 * 1024 * 1024;
@@ -59,13 +66,22 @@ export interface PutOptions {
     sha256?: string;
 }
 
+/** An object as a listing or a head reports it. */
+export interface ObjectInfo {
+    key: string;
+    bytes: number;
+    mtimeMs: number;
+}
+
 /**
- * A place image bytes live. Implemented by {@link DiskImageStore}; an S3/R2 implementation slots in here.
+ * A place image bytes live. Implemented by {@link DiskImageStore} and, for `IMAGE_STORE=s3`, by S3ImageStore.
  *
- * Every method is synchronous — see the note at the top of this file.
+ * The required methods are synchronous — see the note at the top of this file. The optional ones are what a
+ * network-backed store adds so that async callers never block on it; use them through {@link readObject},
+ * {@link openObject}, {@link scanObjects} and {@link scanObjectsAsync} rather than directly.
  */
 export interface ImageStore {
-    /** The backend's name, for logs and the storage-health report. */
+    /** The backend's name, for logs and the storage-health report: `disk` or `s3`. */
     readonly kind: string;
     /** Write (or re-write) an object. Idempotent for the same key and bytes. */
     put(key: string, bytes: Buffer, options: PutOptions): StoredObject;
@@ -86,6 +102,18 @@ export interface ImageStore {
     listTemporary?(): { key: string; bytes: number; mtimeMs: number }[];
     /** Total bytes held, for the disk-usage report. */
     totalBytes(): number;
+    /** Every object under `prefix` with its size and time, when the backend can say so without a head per key. */
+    scan?(prefix: string): ObjectInfo[];
+    /** Non-blocking {@link get}. */
+    getAsync?(key: string): Promise<Buffer | null>;
+    /** Non-blocking {@link head}. */
+    headAsync?(key: string): Promise<ObjectInfo | null>;
+    /** The object as a stream, for serving without buffering it. Null when it is not there. */
+    openRead?(key: string): Promise<{ stream: Readable; bytes: number | null } | null>;
+    /** Non-blocking {@link scan}. */
+    scanAsync?(prefix: string): Promise<ObjectInfo[]>;
+    /** Where the objects are, in words an operator can act on. Never a credential. */
+    describe?(): string;
 }
 
 export class ImageStoreError extends Error {
@@ -126,7 +154,7 @@ export function assertSafeKey(key: string): string[] {
 }
 
 /** A prefix is a key that may end at a directory: the same rules, minus the "must name a file" part. */
-function assertSafePrefix(prefix: string): string[] {
+export function assertSafePrefix(prefix: string): string[] {
     if (prefix === '') return [];
     const trimmed = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
     return assertSafeKey(trimmed);
@@ -147,6 +175,12 @@ export function extensionForMime(mime: string | null | undefined): string {
         default: return 'bin';
     }
 }
+
+/**
+ * The top-level namespaces this node writes. Anything else in a store — above all in a bucket, which an
+ * operator may share with other things — is not ours, and the orphan sweep never lists or deletes it.
+ */
+export const STORE_NAMESPACES = ['posts', 'attachments', 'projects'] as const;
 
 // ── Key builders ───────────────────────────────────────────────────────────────────────────────
 //
@@ -391,24 +425,137 @@ export function imagesDir(dataDir?: string): string {
 
 let cached: ImageStore | null = null;
 
+/** Which backend `IMAGE_STORE` asks for. Throws on a value this version has no backend for. */
+export function configuredImageStoreKind(env: NodeJS.ProcessEnv = process.env): 'disk' | 's3' {
+    const kind = (env.IMAGE_STORE || 'disk').toLowerCase().trim();
+    if (kind === 'disk' || kind === 's3') return kind;
+    throw new ImageStoreError(`IMAGE_STORE=${kind} is not a backend this version has. It is "disk" (the default) or "s3".`);
+}
+
 /**
  * The node's image store, built once from `IMAGE_STORE` (default `disk`).
  *
- * An unrecognised value is a hard error rather than a silent fall back to disk: a node configured
- * `IMAGE_STORE=s3` before the S3 backend ships must not quietly write everything to a local disk its operator
- * believes is empty.
+ * An unrecognised value, or `s3` with settings missing, is a hard error rather than a silent fall back to
+ * disk: a node configured for a bucket must not quietly write everything to a local disk its operator
+ * believes is empty. Boot refuses first ({@link checkImageStoreAtBoot}); this is the same rule for anything
+ * that asks before then.
  */
 export function getImageStore(): ImageStore {
     if (cached) return cached;
-    const kind = (process.env.IMAGE_STORE || 'disk').toLowerCase().trim();
-    if (kind !== 'disk') {
-        throw new ImageStoreError(`IMAGE_STORE=${kind} is not a backend this version has. The only one is "disk".`);
-    }
-    cached = new DiskImageStore(imagesDir());
+    const kind = configuredImageStoreKind();
+    cached = kind === 's3' ? new S3ImageStore(s3ConfigFromEnv()) : new DiskImageStore(imagesDir());
     return cached;
 }
 
 /** Test seam: drop the memoised store so a suite can point BEANPOOL_DATA_DIR somewhere else. */
 export function resetImageStoreForTests(store?: ImageStore | null): void {
     cached = store ?? null;
+}
+
+/** Whether objects live in a bucket rather than beside the database, and where, for the backup labels. */
+export function bucketOf(store: ImageStore): { bucket: string; endpoint: string; where: string } | null {
+    if (store.kind !== 's3') return null;
+    const s3 = store as S3ImageStore;
+    return { bucket: s3.bucket, endpoint: s3.endpoint, where: s3.describe() };
+}
+
+/**
+ * Every object on THIS node's disk store, whatever `IMAGE_STORE` says. Used to refuse an s3 boot on a node
+ * whose photos are still on its disk.
+ */
+function countLocalObjects(dataDir?: string): number {
+    const local = new DiskImageStore(imagesDir(dataDir));
+    let n = 0;
+    for (const ns of STORE_NAMESPACES) n += local.list(ns).length;
+    return n;
+}
+
+/**
+ * Run once at boot, before anything serves: refuse loudly rather than start a node that would lose photos.
+ *
+ * On `disk` there is nothing to check. On `s3`, the node does not start when:
+ *
+ *   - a setting is missing or unusable (named, never printed);
+ *   - this node is a standby. A standby keeps its copy by importing the main server's sync payload, and
+ *     sweeps and deletes whatever its own database does not name. Pointed at the main server's bucket — the
+ *     natural thing to do with a copy of its .env — that sweep would delete every attachment (they are never
+ *     replicated) and every photo a force-resync had just cleared. A standby keeps its photos on its own disk;
+ *   - this node's own disk still holds objects. Those are photos and attachments the database points at, and
+ *     an s3 node would look for them in the bucket, find nothing, and answer 503 for every one. Moving a node
+ *     from disk to a bucket is the migration tool's job, which this version does not have;
+ *   - the bucket cannot be reached with these credentials (a HEAD on the bucket).
+ *
+ * Returns a line for the boot log.
+ */
+export async function checkImageStoreAtBoot(opts: { role?: string; dataDir?: string } = {}): Promise<string> {
+    const kind = configuredImageStoreKind();
+    if (kind === 'disk') return `disk (${imagesDir(opts.dataDir)})`;
+    const store = getImageStore() as S3ImageStore;
+    if (opts.role === 'backup') {
+        throw new ImageStoreError(
+            'IMAGE_STORE=s3 is not supported on a standby (a node with the backup role) in this version. A standby '
+            + 'sweeps objects its own database does not name, so sharing the main server\'s bucket would delete the '
+            + 'main server\'s photos and attachments. Unset IMAGE_STORE on the standby: it keeps its copy of the photos '
+            + 'on its own disk.',
+        );
+    }
+    const local = countLocalObjects(opts.dataDir);
+    if (local > 0) {
+        throw new ImageStoreError(
+            `IMAGE_STORE=s3 is set, but this node keeps ${local} photo(s) and attachment(s) on its own disk `
+            + `(${imagesDir(opts.dataDir)}). With s3 they would not be found and every one would fail to load. Moving `
+            + 'a node from disk to a bucket needs the migration tool, which this version does not have: unset '
+            + 'IMAGE_STORE to keep running on disk.',
+        );
+    }
+    await store.checkBucket();
+    return store.describe();
+}
+
+// ── Reaching a store from async code ──────────────────────────────────────────────────────────
+//
+// On disk these are the sync methods (a local syscall). On S3 they are the async ones, so a caller that is
+// already async never holds the event loop for a round trip.
+
+/** The object's bytes, or null when it is not there. */
+export async function readObject(store: ImageStore, key: string): Promise<Buffer | null> {
+    return store.getAsync ? store.getAsync(key) : store.get(key);
+}
+
+/** The object's size and time, or null when it is not there. */
+export async function headObject(store: ImageStore, key: string): Promise<ObjectInfo | null> {
+    return store.headAsync ? store.headAsync(key) : store.head(key);
+}
+
+/** The object as a stream with its size when known, or null when it is not there. */
+export async function openObject(store: ImageStore, key: string): Promise<{ stream: Readable; bytes: number | null } | null> {
+    if (store.openRead) return store.openRead(key);
+    const bytes = store.get(key);
+    return bytes ? { stream: Readable.from([bytes]), bytes: bytes.length } : null;
+}
+
+/** Every object under `prefix` with size and time: from the listing when the store can, else a head per key. */
+export function scanObjects(store: ImageStore, prefix: string): ObjectInfo[] {
+    if (store.scan) return store.scan(prefix);
+    const out: ObjectInfo[] = [];
+    for (const key of store.list(prefix)) {
+        const h = store.head(key);
+        if (h) out.push(h);
+    }
+    return out;
+}
+
+export async function scanObjectsAsync(store: ImageStore, prefix: string): Promise<ObjectInfo[]> {
+    return store.scanAsync ? store.scanAsync(prefix) : scanObjects(store, prefix);
+}
+
+/** Every object of ours in the store: the {@link STORE_NAMESPACES}, never anything else in a shared bucket. */
+export function scanOurObjects(store: ImageStore): ObjectInfo[] {
+    return STORE_NAMESPACES.flatMap((ns) => scanObjects(store, ns));
+}
+
+export async function scanOurObjectsAsync(store: ImageStore): Promise<ObjectInfo[]> {
+    const out: ObjectInfo[] = [];
+    for (const ns of STORE_NAMESPACES) out.push(...await scanObjectsAsync(store, ns));
+    return out;
 }

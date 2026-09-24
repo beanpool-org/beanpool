@@ -74,6 +74,7 @@ import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 import { startImageEvacuation } from './services/image-evacuation.js';
+import { checkImageStoreAtBoot } from './storage/image-store.js';
 import { startOrphanObjectSweep } from './engine/storage-health.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
 import { initShutdownRecovery } from './engine/shutdown-recovery.js';
@@ -119,6 +120,11 @@ async function main() {
     // NODE_ROLE in .env), and run the ledger conservation audit once if a take-over left it pending. Never blocks
     // the boot; a failure is in data/takeover-journal.json and Settings.
     resumeTakeoverAtBoot();
+
+    // Step 2.7: The image store (storage design §7). IMAGE_STORE=s3 with a setting missing, a bucket these
+    // credentials cannot reach, photos still on this node's disk, or a standby role: the node does NOT start,
+    // and says which. Never a silent fall back to disk. After the role is settled (2.6), before anything serves.
+    console.log(`🖼️  Image store: ${await checkImageStoreAtBoot({ role: getNodeRole() })}`);
 
     // Step 3: TLS certificates (LE or self-signed)
     await initTls();

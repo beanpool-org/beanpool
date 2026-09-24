@@ -2675,6 +2675,15 @@
          * response, and this tab is the only place the operator can learn of it.
          */
         function backupShortfall(res) {
+            // A node that keeps its photos in an S3 bucket sends none in the file, by design; what can be short
+            // is the bucket, and the node counted that itself.
+            if (res.headers.get('X-Backup-Images') === 'in-bucket') {
+                const inBucketMissing = Number(res.headers.get('X-Backup-Missing-Images'));
+                if (!(Number.isFinite(inBucketMissing) && inBucketMissing > 0)) return '';
+                const ref = Number(res.headers.get('X-Backup-Images-Referenced'));
+                return inBucketMissing + (Number.isFinite(ref) && ref > 0 ? ' of the ' + ref : '') + ' photo(s) or attachment(s) '
+                    + 'this backup\'s database references were not in the bucket when it was taken; the archive lists which ones.';
+            }
             const counts = (res.headers.get('X-Backup-Images') || '').split('/').map(Number);
             const staged = counts[0], referenced = counts[1];
             const stated = Number(res.headers.get('X-Backup-Missing-Images'));
@@ -2685,6 +2694,19 @@
             const of = Number.isFinite(referenced) && referenced > 0 ? ' of ' + referenced : '';
             return 'This backup is missing ' + missing + of + ' photo(s) or attachment(s): this node no longer '
                 + 'holds those objects, and the archive lists which ones. Everything else is in the file.';
+        }
+
+        /**
+         * What an s3 node's download needs to say even when nothing is short: the photos are NOT in this file.
+         * '' for a node that keeps them on disk, whose backup carries them.
+         */
+        function backupInBucketNote(res) {
+            if (res.headers.get('X-Backup-Images') !== 'in-bucket') return '';
+            const bucket = res.headers.get('X-Backup-Images-Bucket') || '';
+            const checked = res.headers.get('X-Backup-Images-Checked') !== 'no';
+            return 'This file holds the database only: this node keeps its photos and attachments in its S3 bucket'
+                + (bucket ? ' "' + bucket + '"' : '') + ', and they are not inside the backup.'
+                + (checked ? '' : ' The bucket could not be checked when the backup was taken.');
         }
 
         async function downloadBackup() {
@@ -2716,9 +2738,13 @@
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 const short = backupShortfall(res);
+                const inBucket = backupInBucketNote(res);
                 if (short) {
-                    statusEl.textContent = '⚠️ Backup downloaded, but not complete. ' + short;
+                    statusEl.textContent = '⚠️ Backup downloaded, but not complete. ' + short + (inBucket ? ' ' + inBucket : '');
                     statusEl.style.color = '#f59e0b';
+                } else if (inBucket) {
+                    statusEl.textContent = '✅ Backup downloaded. ' + inBucket;
+                    statusEl.style.color = '#10b981';
                 } else {
                     statusEl.textContent = '✅ Backup downloaded';
                     statusEl.style.color = '#10b981';
@@ -3424,7 +3450,9 @@
                 // A snapshot's objects were captured when it was taken, so this is rare — but if one of them
                 // has since been lost from disk the file is short, and only this line says so.
                 const short = backupShortfall(res);
-                if (short) alert('Snapshot downloaded, but it is not complete.\n\n' + short);
+                const inBucket = backupInBucketNote(res);
+                if (short) alert('Snapshot downloaded, but it is not complete.\n\n' + short + (inBucket ? '\n\n' + inBucket : ''));
+                else if (inBucket) alert('Snapshot downloaded.\n\n' + inBucket);
             } catch (e) {
                 alert('Download failed: ' + e.message);
             }

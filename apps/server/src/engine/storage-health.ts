@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { db as defaultDb } from '../db/db.js';
-import { DiskImageStore, imagesDir, type ImageStore } from '../storage/image-store.js';
+import { DiskImageStore, getImageStore, imagesDir, scanOurObjects, type ImageStore } from '../storage/image-store.js';
 import { deleteStoredObjects } from '../storage/image-columns.js';
 
 export interface DiskBreakdownItem {
@@ -174,6 +174,11 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
     // The image store: post photos and message attachments, once the evacuation job has moved them out of
     // the database. They are exactly the same media as `postPhotosBytes` above, counted where they now live,
     // so the two together are the node's media whatever stage of the migration it is at.
+    //
+    // THIS disk's store, whatever IMAGE_STORE says. This report is about the disk the node runs on — the 80%
+    // warning exists to stop an SD card filling — and objects in an S3 bucket take none of it. Nor does this
+    // list a bucket: it is refreshed every minute by an open admin page, and a bucket listing on the blocking
+    // path would hold the node for a round trip per thousand objects to report bytes that are not here.
     let imageStoreBytes = 0;
     let imageStoreCount = 0;
     try {
@@ -298,12 +303,27 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
  */
 const ORPHAN_OBJECT_GRACE_MS = 60 * 60 * 1000;
 
-function findOrphanedImageObjects(db: any, dataDir: string, nowMs = Date.now()):
+/**
+ * The store the sweep judges and deletes from: the node's own (`IMAGE_STORE`: disk, or the S3 bucket) — or, for
+ * a caller that names a data directory (the suites, which point at their own fixture), that directory's disk
+ * store, as before.
+ *
+ * On S3 the sweep lists the bucket once per thousand objects, with each object's size and upload time in the
+ * listing itself, rather than a HEAD per object; and only this node's namespaces (`posts/`, `attachments/`,
+ * `projects/`), so anything else an operator keeps in the same bucket is never listed, let alone deleted.
+ */
+function sweepStore(options?: { dataDir?: string; store?: ImageStore }): ImageStore {
+    if (options?.store) return options.store;
+    if (options?.dataDir) return new DiskImageStore(imagesDir(options.dataDir));
+    return getImageStore();
+}
+
+function findOrphanedImageObjects(db: any, options: { dataDir?: string; store?: ImageStore } | undefined, nowMs = Date.now()):
     { keys: string[]; totalBytes: number } {
     const out = { keys: [] as string[], totalBytes: 0 };
-    let store: DiskImageStore;
+    let store: ImageStore;
     try {
-        store = new DiskImageStore(imagesDir(dataDir));
+        store = sweepStore(options);
     } catch {
         return out;
     }
@@ -321,20 +341,19 @@ function findOrphanedImageObjects(db: any, dataDir: string, nowMs = Date.now()):
             return out;
         }
     }
-    let keys: string[];
-    try { keys = store.list(''); } catch { return out; }
-    for (const key of keys) {
-        if (referenced.has(key)) continue;
-        const h = store.head(key);
-        if (!h) continue;
-        if (nowMs - h.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
-        out.keys.push(key);
-        out.totalBytes += h.bytes;
+    let objects: { key: string; bytes: number; mtimeMs: number }[];
+    try { objects = scanOurObjects(store); } catch { return out; }
+    for (const o of objects) {
+        if (referenced.has(o.key)) continue;
+        if (nowMs - o.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
+        out.keys.push(o.key);
+        out.totalBytes += o.bytes;
     }
     // Leftovers of a crashed write, which `list` above will never return. No row can reference one, so
-    // there is nothing to check them against — only their age.
+    // there is nothing to check them against — only their age. A store whose write is one atomic request
+    // (S3) has none, and does not implement this.
     try {
-        for (const t of store.listTemporary()) {
+        for (const t of store.listTemporary?.() ?? []) {
             if (nowMs - t.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
             out.keys.push(t.key);
             out.totalBytes += t.bytes;
@@ -348,7 +367,7 @@ function findOrphanedImageObjects(db: any, dataDir: string, nowMs = Date.now()):
 /**
  * Previews what orphaned media and compressible logs will be removed before actually cleaning.
  */
-export function getStorageCleanPreview(options?: { db?: any; dataDir?: string }): StorageCleanPreview {
+export function getStorageCleanPreview(options?: { db?: any; dataDir?: string; store?: ImageStore }): StorageCleanPreview {
     const db = options?.db || defaultDb;
     const dataDir = options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
@@ -366,7 +385,7 @@ export function getStorageCleanPreview(options?: { db?: any; dataDir?: string })
     } catch {}
 
     // 1b. Orphaned image-store objects (no row points at them).
-    const orphanedObjects = findOrphanedImageObjects(db, dataDir);
+    const orphanedObjects = findOrphanedImageObjects(db, options);
 
     // 2. Orphaned Pulse Thumbnails (cached thumbnails whose item no longer exists in pulse_items)
     let orphanedThumbnailsCount = 0;
@@ -458,11 +477,11 @@ export function getStorageCleanPreview(options?: { db?: any; dataDir?: string })
 /**
  * Executes cleanup of orphaned media and compresses/prunes old logs.
  */
-export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: string }): StorageCleanResult {
+export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: string; store?: ImageStore }): StorageCleanResult {
     const db = options?.db || defaultDb;
     const dataDir = options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
-    const preview = getStorageCleanPreview({ db, dataDir });
+    const preview = getStorageCleanPreview({ db, dataDir: options?.dataDir, store: options?.store });
 
     // 1. Delete orphaned post photos — the rows, and then the objects they pointed at.
     //
@@ -492,7 +511,7 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
         // After the transaction has RETURNED, which is after it committed. Deliberately not
         // `afterTransactionCommit`: this function accepts a caller-supplied `db` handle, and that hook is
         // wired to the process-wide one — it would fire at the wrong moment for any other handle.
-        if (doomed.length > 0) deleteStoredObjects(doomed, new DiskImageStore(imagesDir(dataDir)));
+        if (doomed.length > 0) deleteStoredObjects(doomed, sweepStore(options));
     } catch {}
 
     // 1b. Delete store objects nothing points at (see findOrphanedImageObjects). No rows are involved, so
@@ -501,9 +520,9 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
     let removedImageObjectsCount = 0;
     let removedImageObjectsBytes = 0;
     try {
-        const orphans = findOrphanedImageObjects(db, dataDir);
+        const orphans = findOrphanedImageObjects(db, options);
         if (orphans.keys.length > 0) {
-            removedImageObjectsCount = deleteStoredObjects(orphans.keys, new DiskImageStore(imagesDir(dataDir)));
+            removedImageObjectsCount = deleteStoredObjects(orphans.keys, sweepStore(options));
             removedImageObjectsBytes = orphans.totalBytes;
         }
     } catch (e) {
@@ -655,14 +674,13 @@ let orphanSweepTimer: NodeJS.Timeout | null = null;
  * One pass. Never throws: a sweep that cannot read the store is a warning and a retry tomorrow, not a
  * process that falls over. Returns what it removed so a caller (and the test) can see it.
  */
-export function sweepOrphanedImageObjects(options?: { db?: any; dataDir?: string; nowMs?: number }):
+export function sweepOrphanedImageObjects(options?: { db?: any; dataDir?: string; store?: ImageStore; nowMs?: number }):
     { removed: number; bytes: number } {
     const db = options?.db || defaultDb;
-    const dataDir = options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
     try {
-        const orphans = findOrphanedImageObjects(db, dataDir, options?.nowMs ?? Date.now());
+        const orphans = findOrphanedImageObjects(db, options, options?.nowMs ?? Date.now());
         if (orphans.keys.length === 0) return { removed: 0, bytes: 0 };
-        const removed = deleteStoredObjects(orphans.keys, new DiskImageStore(imagesDir(dataDir)));
+        const removed = deleteStoredObjects(orphans.keys, sweepStore(options));
         console.log(
             `🧹 [StorageHealth] Daily sweep: removed ${removed} orphaned image object(s) `
             + `(${(orphans.totalBytes / 1024).toFixed(1)} KB) that no row points at. `
@@ -682,13 +700,13 @@ export function sweepOrphanedImageObjects(options?: { db?: any; dataDir?: string
  * fires rather than only that the function works, and `db`/`dataDir` so it fires against the suite's own
  * fixture, the same pair every other entry point in this module takes.
  */
-export function startOrphanObjectSweep(opts?: { intervalMs?: number; firstDelayMs?: number; db?: any; dataDir?: string }): void {
+export function startOrphanObjectSweep(opts?: { intervalMs?: number; firstDelayMs?: number; db?: any; dataDir?: string; store?: ImageStore }): void {
     if (orphanSweepTimer) return;
     const interval = opts?.intervalMs ?? ORPHAN_SWEEP_INTERVAL_MS;
     const first = opts?.firstDelayMs ?? ORPHAN_SWEEP_FIRST_DELAY_MS;
     const tick = (delay: number): void => {
         orphanSweepTimer = setTimeout(() => {
-            sweepOrphanedImageObjects({ db: opts?.db, dataDir: opts?.dataDir });
+            sweepOrphanedImageObjects({ db: opts?.db, dataDir: opts?.dataDir, store: opts?.store });
             tick(interval);
         }, delay);
         // Never a reason to hold the process open: a sweep missed at shutdown runs at the next boot.

@@ -88,6 +88,37 @@ describe('downloadShortfall', () => {
         expect(downloadShortfall(headers({ 'X-Backup-Images': 'lots' }))).toBe('');
         expect(downloadShortfall(headers({ 'X-Backup-Images': '412/412', 'X-Backup-Missing-Images': '0' }))).toBe('');
     });
+
+    // IMAGE_STORE=s3: the photos are in the node's bucket, never in the file. Saying nothing would let the
+    // operator believe the photos are inside it; "missing 412 of 412" would read as a node that lost them all.
+    it('says an s3 node\'s backup holds the database only, and names the bucket, even when nothing is missing', () => {
+        const said = downloadShortfall(headers({
+            'X-Backup-Contents': 'database+images-in-bucket',
+            'X-Backup-Images': 'in-bucket',
+            'X-Backup-Images-Bucket': 'global-photos',
+            'X-Backup-Images-Referenced': '412',
+            'X-Backup-Images-Checked': 'yes',
+        }));
+        expect(said).toMatch(/database only/);
+        expect(said).toMatch(/"global-photos"/);
+        expect(said).toMatch(/not inside the backup/);
+        expect(said).not.toMatch(/missing \d+ of/);
+    });
+
+    it('counts what an s3 node\'s bucket did not hold, as the node measured it', () => {
+        const said = downloadShortfall(headers({
+            'X-Backup-Images': 'in-bucket',
+            'X-Backup-Images-Referenced': '412',
+            'X-Backup-Missing-Images': '3',
+        }));
+        expect(said).toMatch(/3 of the 412 photo\(s\) or attachment\(s\)/);
+        expect(said).toMatch(/not in the bucket when it was taken/);
+    });
+
+    it('says so when an s3 node could not check its bucket', () => {
+        const said = downloadShortfall(headers({ 'X-Backup-Images': 'in-bucket', 'X-Backup-Images-Checked': 'no' }));
+        expect(said).toMatch(/could not be checked/);
+    });
 });
 
 describe('restoreShortfall', () => {

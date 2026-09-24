@@ -35,6 +35,7 @@
 export function downloadShortfall(res: {
     headers: { get(name: string): string | null };
 }): string {
+    if (res.headers.get('X-Backup-Images') === 'in-bucket') return inBucketSentence(res);
     const counts = res.headers.get('X-Backup-Images') || '';
     const [staged, referenced] = counts.split('/').map(Number);
     const measured = Number.isFinite(staged) && Number.isFinite(referenced);
@@ -55,6 +56,27 @@ export function downloadShortfall(res: {
         + (unchecked
             ? 'The rest of its photos and attachments could not be checked against its database, so more may be missing.'
             : 'Everything else is in the file.');
+}
+
+/**
+ * A backup from a node that keeps its photos in an S3 bucket (`IMAGE_STORE=s3`): the file is the database, and
+ * the photos are in the bucket, by design. Never '' — whoever downloads it must not think the photos are
+ * inside it — and never "missing N of N", which would read as a node that lost every photo. What CAN be short
+ * is the bucket, which the node counted when it took the backup and sends as `X-Backup-Missing-Images`.
+ */
+function inBucketSentence(res: { headers: { get(name: string): string | null } }): string {
+    const bucket = res.headers.get('X-Backup-Images-Bucket') || '';
+    const missing = Number(res.headers.get('X-Backup-Missing-Images'));
+    const referenced = Number(res.headers.get('X-Backup-Images-Referenced'));
+    let text = 'This file holds the database only: the node keeps its photos and attachments in its S3 bucket'
+        + `${bucket ? ` "${bucket}"` : ''}, not inside the backup.`;
+    if (Number.isFinite(missing) && missing > 0) {
+        const of = Number.isFinite(referenced) && referenced > 0 ? ` of the ${referenced}` : '';
+        text += ` ${missing}${of} photo(s) or attachment(s) its database references were not in the bucket when it was taken.`;
+    } else if (res.headers.get('X-Backup-Images-Checked') === 'no') {
+        text += ' The bucket could not be checked when the backup was taken.';
+    }
+    return text;
 }
 
 /**

@@ -11,9 +11,9 @@ import { promisify } from 'node:util';
 import Database from 'better-sqlite3';
 import {
     loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, listSealedBackups, listPlainHistory,
-    imagesDirFor, missingManifestFor, type FleetNodeConfig,
+    imagesDirFor, missingManifestFor, inBucketLabelFor, type FleetNodeConfig,
 } from '../services/harvester.js';
-import { MISSING_MEMBER } from '../services/sealed-backup.js';
+import { IN_BUCKET_MEMBER, MISSING_MEMBER } from '../services/sealed-backup.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import { assertSafeKey } from '../storage/image-store.js';
 import type { RouteDeps } from './types.js';
@@ -252,6 +252,31 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             if (fs.existsSync(manifest)) {
                 fs.copyFileSync(manifest, path.join(stage, MISSING_MEMBER));
                 labelled = labelledMissing(dbPath);
+            }
+            // A copy of an s3 node: its objects are in that node's bucket and were never in the backup. There is
+            // nothing here to measure them against, so the label goes out as the node wrote it — `in-bucket` —
+            // with the node's own count of what the bucket did not hold, and never as "short by every photo".
+            const inBucketLabel = inBucketLabelFor(dbPath);
+            if (fs.existsSync(inBucketLabel)) {
+                fs.copyFileSync(inBucketLabel, path.join(stage, IN_BUCKET_MEMBER));
+                const tarPath = path.join(work, 'backup.tar.gz');
+                await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
+                ctx.set('Cache-Control', 'no-store');
+                ctx.set('Content-Type', 'application/gzip');
+                ctx.set('X-Backup-Locked', 'no');
+                ctx.set('X-Backup-Contents', 'database+images-in-bucket');
+                ctx.set('X-Backup-Images', 'in-bucket');
+                ctx.set('X-Backup-Image-Bytes', '0');
+                if (labelled && labelled.length > 0) ctx.set('X-Backup-Missing-Images', String(labelled.length));
+                // eslint-disable-next-line no-control-regex
+                ctx.set('Content-Disposition', `attachment; filename="${`${base}.tar.gz`.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);
+                const body = fs.createReadStream(tarPath);
+                const clean = () => { try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore */ } };
+                body.on('close', clean);
+                body.on('error', clean);
+                ctx.res.on('close', clean);
+                ctx.body = body;
+                return;
             }
             const measured = measureShortfall(work, path.join(stage, 'state.db'), staged, labelled ?? []);
             if (measured && measured.missing.length > (labelled?.length ?? 0)) {

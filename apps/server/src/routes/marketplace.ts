@@ -18,7 +18,9 @@ import {
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
-import { attachmentDataOf, photoBytesOf, type AttachmentRow, type PostPhotoRow } from '../storage/image-columns.js';
+import {
+    MissingObjectError, attachmentDataOfAsync, openPhotoOf, type AttachmentRow, type PostPhotoRow,
+} from '../storage/image-columns.js';
 import { getPeerOrigins } from '../connector-manager.js';
 import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
@@ -82,12 +84,26 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // one is served from the store. The two produce identical bytes and an identical content type — that is
     // the whole contract of storage/image-columns.ts, and what lets a photo be evacuated under a client's
     // immutable cache entry without invalidating it.
-    let served: { buffer: Buffer; contentType: string } | null;
+    //
+    // From the store it is STREAMED, through the store's non-blocking read: on an S3 node the bytes come from
+    // the bucket, and neither the node's event loop nor its memory is held for the whole photo on the way.
+    let served: Awaited<ReturnType<typeof openPhotoOf>>;
     try {
-        served = photoBytesOf(photo, getImageStore());
+        served = await openPhotoOf(photo, getImageStore());
     } catch (e) {
-        // The row says the bytes are in the store and they are not: a lost or unmounted images directory.
-        // 404 would tell the member their photo never existed and tell the operator nothing.
+        // The read is async, so the row can have been deleted while it was in flight — and the delete paths
+        // remove the object right after the row. That is a photo that no longer exists, not an outage.
+        if (e instanceof MissingObjectError) {
+            const still = db.prepare(`SELECT 1 FROM post_photos WHERE post_id = ? AND order_num = ?`).get(id, Number(orderNum));
+            if (!still) {
+                ctx.status = 404;
+                ctx.body = { error: 'Photo not found' };
+                return;
+            }
+        }
+        // The row says the bytes are in the store and they are not — a lost or unmounted images directory —
+        // or the bucket did not answer. 404 would tell the member their photo never existed and tell the
+        // operator nothing.
         console.error(`[Photos] ${id}/${orderNum}:`, e);
         ctx.status = 503;
         ctx.body = { error: 'This photo is temporarily unavailable' };
@@ -104,7 +120,8 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // the bytes forever — killing the cold-start re-download of every photo — with no staleness.
     ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
     ctx.type = served.contentType;
-    ctx.body = served.buffer;
+    ctx.body = served.body;
+    if (served.bytes !== null) ctx.length = served.bytes;
 });
 
 // Lazy-load an encrypted message attachment (image). Returns ciphertext only —
@@ -122,7 +139,8 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
     // left the row: the recipient's decryption cannot tell the two apart, which it must not be able to.
     let data: string | null;
     try {
-        data = attachmentDataOf(row, getImageStore());
+        // Non-blocking: on an S3 node this is a round trip to the bucket, and the event loop is not held for it.
+        data = await attachmentDataOfAsync(row, getImageStore());
     } catch (e) {
         console.error(`[Attachments] ${id}:`, e);
         ctx.status = 503;

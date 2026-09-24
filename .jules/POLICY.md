@@ -488,3 +488,10 @@ intentional; do not open PRs or issues attempting to alter them:
   <member>". The proposed label ("View deal details for <title>") REPLACES all of that and drops the amount, the status
   and the other member. Never put an `accessibilityLabel` on a Pressable that wraps a whole card of text. If it needs
   anything, it's an `accessibilityHint` saying what a tap does.
+
+### 2026-09-25 — Palette: focus-visible ring on the NodeAdminLink anchor (#1127) — CLOSED (EMPTY PR / DEFECT UNPATCHED)
+- **Category:** REJECTED BAD PR (DEFECT STILL WANTED — NOT A SUPPRESSION)
+- **Claim:** add `focus-visible:` ring classes to the admin-management anchor in `apps/pwa/src/components/NodeAdminLink.tsx`.
+- **Why not to re-file as-is:** #1127's diff against `main` was empty (0 files changed) although its body described a
+  change: rule 11 (no-op). **The defect is real and still open:** the `<a>` in `NodeAdminLink.tsx` has no focus-visible
+  styling on `main`. Re-file it ONCE, with an actual diff and a test that checks the class reaches the rendered anchor.

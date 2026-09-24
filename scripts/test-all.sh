@@ -254,6 +254,7 @@ run_federation_suites() {
       test-schema-upgrade
       test-creator-channels
       test-pulse-resolver
+      test-ssrf-fetch-timeout
       test-pulse-submit
       test-pulse-oauth
       test-oauth-ingest-bounds

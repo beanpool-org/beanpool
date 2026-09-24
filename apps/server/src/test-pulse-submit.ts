@@ -10,7 +10,13 @@
  * 6. Deletion via scrubPulseItems properly tombstones the pulse item (deleted_at set, url, title, thumbnail_url NULLed).
  * 7. Resubmission of a tombstoned row restores the item (deleted_at set to NULL, fields populated).
  * 8. Preview endpoint extraction and alreadyImported detection.
- * 9. Nudges endpoint returns active channel nudge watermarks.
+ * 9. Nudges endpoint returns active channel nudge watermarks, probing only Instagram channels.
+ * 10. dismiss-nudge without a seenCount falls back to the same probe.
+ *
+ * No network: the Instagram post-count probe and the oEmbed metadata fetch are both injected as
+ * stubs (deps.probeInstagramPostCountFn, deps.metadataFetchFn), and the metadata stub throws on any
+ * host it was not given an answer for. Nothing here contacts instagram.com, youtube.com,
+ * tiktok.com, soundcloud.com or any other external host.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-pulse-submit.ts
  */
@@ -21,7 +27,8 @@ import { db } from './db/db.js';
 import { initStateEngine } from './state-engine.js';
 import { addChannel } from './engine/creator-channels.js';
 import { createPulseSubmitRoutes, identifyPlatformAndExternalId } from './routes/pulse-submit.js';
-import type { RouteDeps } from './routes/types.js';
+import type { PulseSubmitRouteDeps } from './routes/pulse-submit.js';
+import { PulseThumbnailService } from './engine/pulse-thumbnail.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -34,7 +41,79 @@ function assert(cond: boolean, msg: string): void {
     }
 }
 
-const deps: RouteDeps = {
+// Every Instagram post-count probe this suite makes, and the stub that answers them. The real
+// probe is a live https request to www.instagram.com: CI has no way out to it, and on run
+// 35927145011 the request stalled until the whole federation suite hit TIMEOUT at 15m33s. Nothing
+// in this file may touch the network.
+const probeCalls: string[] = [];
+const STUBBED_IG_POST_COUNT = 18;
+
+// Every oEmbed / metadata fetch the routes make, and the stub that answers them. The preview and
+// submit paths resolve titles and thumbnails through ssrfSafeFetch against youtube.com,
+// tiktok.com and soundcloud.com; those are live requests that CI cannot make, and a stalled one
+// is the same 15-minute hang. Canned answers, so nothing leaves the box.
+const metadataFetches: string[] = [];
+
+const OEMBED_STUBS: Record<string, Record<string, unknown>> = {
+    'www.youtube.com': {
+        title: 'Kayla throws a bowl',
+        thumbnail_url: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+        author_name: 'kayla_crafts',
+    },
+    'www.tiktok.com': {
+        title: 'Marty cooks',
+        thumbnail_url: 'https://p16.tiktokcdn.com/stub.jpg',
+        author_unique_id: 'marty_food',
+        embed_product_id: '9876543210',
+    },
+    'soundcloud.com': {
+        title: 'A track',
+        thumbnail_url: 'https://i1.sndcdn.com/stub.jpg',
+        author_url: 'https://soundcloud.com/djcool',
+    },
+};
+
+const stubMetadataFetch = (async (rawUrl: string) => {
+    metadataFetches.push(rawUrl);
+    const host = new URL(rawUrl).hostname;
+    const payload = OEMBED_STUBS[host];
+    if (!payload) {
+        // Anything this suite did not plan for must fail loudly rather than reach the internet.
+        throw new Error(`test stub: unexpected outbound fetch to ${host} (${rawUrl})`);
+    }
+    const body = JSON.stringify(payload);
+    return {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+        url: rawUrl,
+        buffer: async () => Buffer.from(body),
+        text: async () => body,
+        json: async () => JSON.parse(body),
+    };
+}) as PulseSubmitRouteDeps['metadataFetchFn'];
+
+// Submitting an item queues a thumbnail ingest, which fetches the CDN image (i.ytimg.com,
+// i1.sndcdn.com, ...). Give the service a stub fetch and no disk store so that is in-process too.
+const thumbnailFetches: string[] = [];
+const stubThumbnailService = new PulseThumbnailService({
+    diskStore: null,
+    fetchFn: (async (rawUrl: string) => {
+        thumbnailFetches.push(rawUrl);
+        const body = Buffer.from('\xff\xd8\xff\xdb stub jpeg', 'binary');
+        return {
+            status: 200,
+            statusText: 'OK',
+            headers: { 'content-type': 'image/jpeg', 'content-length': String(body.length) },
+            url: rawUrl,
+            buffer: async () => body,
+            text: async () => body.toString('binary'),
+            json: async () => ({}),
+        };
+    }) as any,
+});
+
+const deps: PulseSubmitRouteDeps = {
     checkAdminAuth: async () => false,
     rateLimit: () => true,
     clampLimit: (_v: unknown, def = 20) => def,
@@ -42,6 +121,12 @@ const deps: RouteDeps = {
     activeConnections: new Map(),
     calculateAnalytics: () => ({}),
     enforceReadAuth: false,
+    probeInstagramPostCountFn: async (urlOrHandle: string) => {
+        probeCalls.push(urlOrHandle);
+        return STUBBED_IG_POST_COUNT;
+    },
+    metadataFetchFn: stubMetadataFetch,
+    thumbnailService: stubThumbnailService,
 };
 
 let router: any;
@@ -244,6 +329,9 @@ async function main(): Promise<void> {
     assert(previewRes.body.preview.channelId === chKaylaYt.id, 'Mapped to Kayla YouTube channel');
     assert(previewRes.body.preview.alreadyImported === false, 'alreadyImported is false before submit');
     assert(typeof previewRes.body.preview.thumbnailUrl === 'string', 'Thumbnail URL extracted');
+    assert(previewRes.body.preview.title === 'Kayla throws a bowl', 'Title comes from the oEmbed payload');
+    assert(metadataFetches.some((u) => u.startsWith('https://www.youtube.com/oembed?')),
+        'Preview resolved metadata through the stubbed oEmbed fetch, not a live request');
 
     // ── 4. Submission & Deduplication ──────────────────────────────────────────
     console.log('\n--- 4. Submission & Deduplication ---');
@@ -482,11 +570,49 @@ async function main(): Promise<void> {
     // ── 9. Nudges Endpoint ─────────────────────────────────────────────────────
     console.log('\n--- 9. Nudges Endpoint ---');
 
+    probeCalls.length = 0;
     const nudgesRes = await call('POST', '/api/member/pulse/nudges', {
         actor: kayla,
     });
     assert(nudgesRes.status === 200, 'Nudges endpoint returns 200');
     assert(Array.isArray(nudgesRes.body.nudges), 'Nudges response contains nudges array');
+
+    // Kayla's YouTube and SoundCloud channels are not probed at all; only the Instagram one is,
+    // and it is answered by the stub above, so this step makes no outbound request.
+    assert(probeCalls.length === 1, 'Only the Instagram channel is probed (YouTube and SoundCloud are not)');
+    assert(probeCalls[0] === chKaylaIg.url || probeCalls[0] === chKaylaIg.handle,
+        'The probe is handed the Instagram channel url or handle');
+
+    // post_count_seen was left at 15 by step 4, and the stub reports 18.
+    const igNudge = nudgesRes.body.nudges.find((n: any) => n.channelId === chKaylaIg.id);
+    assert(!!igNudge && igNudge.currentCount === STUBBED_IG_POST_COUNT && igNudge.postCountSeen === 15,
+        'The Instagram channel nudges on the probed count against its watermark');
+    assert(!!igNudge && igNudge.newPostsCount === STUBBED_IG_POST_COUNT - 15,
+        'newPostsCount is the gap between the probed count and the watermark');
+
+    // ── 10. dismiss-nudge without a seenCount probes too ───────────────────────
+    console.log('\n--- 10. dismiss-nudge falls back to the probe ---');
+
+    // A dismissal that carries no seenCount reads the current count from the probe. That is a
+    // second call site of the same Instagram probe, and it must come from deps like the first:
+    // un-injected, this step would make a live request to instagram.com. A fresh channel, so the
+    // watermark assertions above are untouched.
+    const chKaylaIg2 = addChannel({
+        ownerPubkey: kayla,
+        platform: 'instagram',
+        raw: '@kayla_glaze',
+        category: 'art',
+    });
+    probeCalls.length = 0;
+    const dismissNoCount = await call('POST', `/api/member/pulse/channels/${chKaylaIg2.id}/dismiss-nudge`, {
+        actor: kayla,
+        body: {},
+        params: { id: chKaylaIg2.id },
+    });
+    assert(dismissNoCount.status === 200, 'dismiss-nudge without a seenCount returns 200');
+    assert(probeCalls.length === 1, 'dismiss-nudge without a seenCount goes through the injected probe');
+    assert(dismissNoCount.body.postCountSeen === STUBBED_IG_POST_COUNT,
+        'and the watermark is set from the probed count');
 
     console.log(`\nResults: ${passed}/${run} tests passed.`);
     process.exit(passed === run ? 0 : 1);

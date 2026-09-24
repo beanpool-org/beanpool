@@ -69,6 +69,16 @@ import { avatarUrlFor } from '@beanpool/core';
 
 export interface PulseSubmitRouteDeps extends RouteDeps {
     thumbnailService?: PulseThumbnailService;
+    /**
+     * Probe used by POST /api/member/pulse/nudges to read a channel's current post count.
+     * Defaults to the real Instagram probe; tests pass a stub so the suite never leaves the box.
+     */
+    probeInstagramPostCountFn?: (urlOrHandle: string) => Promise<number | null>;
+    /**
+     * SSRF-safe fetch used to resolve oEmbed metadata on preview and submit. Defaults to the real
+     * one; tests pass a stub so no request reaches youtube.com, tiktok.com or soundcloud.com.
+     */
+    metadataFetchFn?: MetadataFetchFn;
 }
 
 export interface ResolvedPulsePreview {
@@ -233,13 +243,17 @@ export function identifyPlatformAndExternalId(rawUrl: string): {
     return { platform, externalId, canonicalUrl, accountHandle };
 }
 
+/** The SSRF-safe fetch resolveMetadata uses. Tests substitute a stub so no oEmbed call leaves the box. */
+export type MetadataFetchFn = typeof ssrfSafeFetch;
+
 /**
  * Fetch and extract rich metadata (title, thumbnail, publishedAt) using SSRF-safe fetch.
  */
 export async function resolveMetadata(
     url: string,
     platform: ChannelPlatform,
-    externalId: string | null
+    externalId: string | null,
+    fetchFn: MetadataFetchFn = ssrfSafeFetch
 ): Promise<{
     title: string;
     thumbnailUrl: string | null;
@@ -258,7 +272,7 @@ export async function resolveMetadata(
         title = 'YouTube Video';
         try {
             const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${externalId}`)}&format=json`;
-            const res = await ssrfSafeFetch(oembedUrl, { timeoutMs: 5000, maxBytes: 512 * 1024 });
+            const res = await fetchFn(oembedUrl, { timeoutMs: 5000, maxBytes: 512 * 1024 });
             if (res.status === 200) {
                 const data = await res.json();
                 if (data.title) title = cleanXmlText(data.title);
@@ -272,7 +286,7 @@ export async function resolveMetadata(
         title = 'TikTok Video';
         try {
             const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
-            const res = await ssrfSafeFetch(oembedUrl, { timeoutMs: 5000, maxBytes: 512 * 1024 });
+            const res = await fetchFn(oembedUrl, { timeoutMs: 5000, maxBytes: 512 * 1024 });
             if (res.status === 200) {
                 const data = await res.json();
                 if (data.title) title = cleanXmlText(data.title);
@@ -289,7 +303,7 @@ export async function resolveMetadata(
         title = 'SoundCloud Track';
         try {
             const oembedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-            const res = await ssrfSafeFetch(oembedUrl, { timeoutMs: 5000, maxBytes: 512 * 1024 });
+            const res = await fetchFn(oembedUrl, { timeoutMs: 5000, maxBytes: 512 * 1024 });
             if (res.status === 200) {
                 const data = await res.json();
                 if (data.title) title = cleanXmlText(data.title);
@@ -309,7 +323,7 @@ export async function resolveMetadata(
 
         if (!thumbnailUrl || title === 'SoundCloud Track') {
             try {
-                const res = await ssrfSafeFetch(url, {
+                const res = await fetchFn(url, {
                     timeoutMs: 5000,
                     maxBytes: 1024 * 1024,
                     headers: {
@@ -334,7 +348,7 @@ export async function resolveMetadata(
         try {
             const embedUrl = extractInstagramEmbedUrl(url, externalId);
             const targetUrl = embedUrl || url;
-            const res = await ssrfSafeFetch(targetUrl, {
+            const res = await fetchFn(targetUrl, {
                 timeoutMs: 5000,
                 maxBytes: 1024 * 1024,
                 headers: {
@@ -355,7 +369,7 @@ export async function resolveMetadata(
         // Generic blog / website / RSS
         title = 'Web Article';
         try {
-            const res = await ssrfSafeFetch(url, { timeoutMs: 5000, maxBytes: 1024 * 1024 });
+            const res = await fetchFn(url, { timeoutMs: 5000, maxBytes: 1024 * 1024 });
             if (res.status === 200) {
                 const html = await res.text();
                 const ogTitle = extractMetaProperty(html, 'og:title') || extractMetaProperty(html, 'twitter:title') || extractTagText(html, 'title');
@@ -501,6 +515,8 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
 export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps): Router {
     const router = new Router();
     const thumbnailService = (deps as PulseSubmitRouteDeps)?.thumbnailService ?? getPulseThumbnailService();
+    const probePostCount = (deps as PulseSubmitRouteDeps)?.probeInstagramPostCountFn ?? probeInstagramPostCount;
+    const metadataFetch = (deps as PulseSubmitRouteDeps)?.metadataFetchFn ?? ssrfSafeFetch;
 
     // Prepare statements outside request and transaction loops (Contract A Rule 4)
     const stmtFindActiveByExternalId = db.prepare(
@@ -626,7 +642,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         try {
             const { platform, externalId, canonicalUrl, accountHandle } = identifyPlatformAndExternalId(rawUrl);
             const channel = matchOwnedChannel(actor, platform, canonicalUrl, accountHandle, requestedChannelId);
-            const meta = await resolveMetadata(canonicalUrl, platform, externalId);
+            const meta = await resolveMetadata(canonicalUrl, platform, externalId, metadataFetch);
 
             // Check if already imported using the partial index directly
             const existing = (meta.externalId
@@ -727,7 +743,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         try {
             const { platform, externalId, canonicalUrl, accountHandle } = identifyPlatformAndExternalId(rawUrl);
             const channel = matchOwnedChannel(actor, platform, canonicalUrl, accountHandle, requestedChannelId);
-            const meta = await resolveMetadata(canonicalUrl, platform, externalId);
+            const meta = await resolveMetadata(canonicalUrl, platform, externalId, metadataFetch);
 
             const finalTitle = customTitle || meta.title || 'Untitled Post';
             const finalThumbnailUrl = customThumbnailUrl || meta.thumbnailUrl || null;
@@ -854,7 +870,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
 
         if (seenCount === null && channel.platform === 'instagram') {
             try {
-                const probed = await probeInstagramPostCount(channel.url || channel.handle);
+                const probed = await probePostCount(channel.url || channel.handle);
                 if (probed !== null && Number.isSafeInteger(probed) && probed >= 0) {
                     seenCount = Math.max(channel.post_count_seen ?? 0, probed);
                 }
@@ -926,7 +942,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             let currentCount: number | null = null;
             if (ch.platform === 'instagram') {
                 try {
-                    currentCount = await probeInstagramPostCount(ch.url || ch.handle);
+                    currentCount = await probePostCount(ch.url || ch.handle);
                 } catch {
                     currentCount = null;
                 }

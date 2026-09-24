@@ -166,25 +166,38 @@ export async function signSyncPayload(cb: SyncCallbacks, payload: SyncPayload): 
  * `photoDataOf` reproduces the original string character for character (see storage/image-columns.ts), so a
  * peer's import is byte-identical to what it would have received before the photo was evacuated. Photos by
  * reference is a later phase; until then the saving is on disk here, not on the wire.
+ *
+ * ## A photo this node can no longer read is OMITTED, never exported empty
+ *
+ * If the images directory has been lost or unmounted, `photoDataOf` throws. That must not fail the whole
+ * export — a replica pulling a delta needs the ledger rows in it far more than it needs one photo. But it
+ * must not export the row either. The importer (`INSERT OR REPLACE INTO post_photos`, below) treats every
+ * row it receives as authoritative, and an empty `photo_data` is not storable, so the replica would write
+ * `photo_data = ''`: a row the evacuation job skips (`photo_data != ''`) and the photo route reads as
+ * nothing. The replica's intact copy would be gone for good, because the row's `updated_at` never changed
+ * and no later delta pull would ever send it again.
+ *
+ * So the row is dropped from the payload. The importer only upserts what it is given, so what it does not
+ * receive it keeps. This is the one case where the backup copy is the only good one left, and the export's
+ * job is to not destroy it.
  */
 function restoreInlinePhotos(payload: SyncPayload): SyncPayload {
     const photos = (payload as any).photos as any[] | undefined;
     if (!Array.isArray(photos) || photos.length === 0) return payload;
     const store = getImageStore();
-    (payload as any).photos = photos.map(row => {
+    (payload as any).photos = photos.flatMap(row => {
         let photoData: string | null;
         try {
             photoData = photoDataOf(row, store);
         } catch (e) {
-            // One unreadable object must not fail the whole export — a replica pulling a delta needs the
-            // ledger rows in it far more than it needs this photo, and it will pick the photo up on a later
-            // pull once the operator has restored the images directory.
-            console.error('[Sync] Could not read a photo out of the image store; exporting the row without it:', e);
-            photoData = null;
+            console.error('[Sync] Could not read a photo out of the image store; omitting the row from this export so a replica keeps its own copy:', e);
+            return [];
         }
-        const out: any = { post_id: row.post_id, photo_data: photoData ?? '', order_num: row.order_num };
+        // `photoDataOf` returns null only for a row that genuinely holds no image and names no object.
+        // Such a row exported whatever its column held before this change, so it still does.
+        const out: any = { post_id: row.post_id, photo_data: photoData ?? row.photo_data ?? null, order_num: row.order_num };
         if (row.updated_at !== undefined) out.updated_at = row.updated_at;
-        return out;
+        return [out];
     });
     return payload;
 }
@@ -631,6 +644,14 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                      VALUES (?, ?, ?, ?, ?, ?, ?)`
                 );
                 for (const ph of remote.photos) {
+                    // The other half of the rule `restoreInlinePhotos` keeps on the way out, enforced here
+                    // on the way in — because the peer sending this payload may be a node that has not been
+                    // upgraded yet, and during a rolling upgrade it usually is. A photo row with no bytes
+                    // carries no information, and applying one can only destroy: INSERT OR REPLACE would
+                    // overwrite an intact local photo with a row the evacuation job skips and the photo
+                    // route serves as a 404, and the peer's unchanged `updated_at` means no later delta
+                    // pull ever corrects it. Nothing to apply, so apply nothing.
+                    if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
                     const cols = storePhotoColumns(
                         store,
                         sb => postPhotoKey(ph.post_id, ph.order_num, sb.sha256, sb.mime),

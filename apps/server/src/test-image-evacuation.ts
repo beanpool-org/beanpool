@@ -13,7 +13,9 @@
  *      cache headers, on the same URL.
  *   4. The evacuation job nulls a column only after a verified put, is idempotent, and is resumable —
  *      including from the exact state a kill between "put" and "update the row" leaves behind.
- *   5. A sync export is byte-identical for an evacuated photo: the federation payload does not change.
+ *   5. A sync export is byte-identical for an evacuated photo: the federation payload does not change —
+ *      and a photo this node can no longer read is omitted from the payload rather than exported empty,
+ *      so a replica holding the only good copy keeps it.
  *   6. The serving route consults the ROW, never the store: a photo whose row has gone 404s while its file
  *      is still on disk, and an object with no row is never served.
  *   7. An attachment's ciphertext and nonce come back unchanged through the store.
@@ -310,6 +312,56 @@ async function main(): Promise<void> {
     // change nothing can see.
     assert(JSON.stringify(db.prepare('SELECT post_id, order_num, updated_at FROM post_photos ORDER BY post_id, order_num').all()) === watermarksBefore,
         'not one photo row had its updated_at watermark disturbed by the evacuation');
+
+    // ── 5c. an object this node cannot read is OMITTED from the export, never exported empty ───
+    // The case where the replica's copy is the only good one: this node's images directory has lost an
+    // object. If the export shipped the row with an empty photo_data, the replica's INSERT OR REPLACE
+    // would overwrite its intact photo with nothing — and the row's updated_at never changed, so no later
+    // delta pull would ever put it back. Omitting the row is what lets the replica keep what it has.
+    {
+        const victim = fixture.photos[1];
+        const victimRow = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = ?')
+            .get(victim.postId, victim.order) as any;
+        assert(typeof victimRow.storage_key === 'string', 'setup: the photo under test was evacuated to the store');
+        const victimBytes = store.get(victimRow.storage_key)!;
+
+        // A replica that already holds the good copy, inline, exactly as a peer of any version would.
+        const replicaFile = path.join(DATA_DIR, 'replica-export-test.db');
+        fs.rmSync(replicaFile, { force: true });
+        const replica = new Database(replicaFile);
+        replica.exec(`CREATE TABLE post_photos (
+            post_id TEXT NOT NULL, photo_data TEXT, order_num INTEGER NOT NULL,
+            storage_key TEXT, sha256 TEXT, bytes INTEGER, mime TEXT,
+            PRIMARY KEY (post_id, order_num))`);
+        replica.prepare('INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)')
+            .run(victim.postId, victim.value, victim.order);
+
+        store.delete(victimRow.storage_key);
+        const exportDegraded = await exportSyncState('test-node');
+        const degradedPhotos = (exportDegraded as any).photos as any[];
+        assert(Array.isArray(degradedPhotos) && degradedPhotos.length > 0,
+            'one unreadable object does not fail the export — the rest of the payload still ships');
+        const victimInPayload = degradedPhotos.find(p => p.post_id === victim.postId && p.order_num === victim.order);
+        assert(victimInPayload === undefined,
+            'the row whose object has vanished is OMITTED from the payload, not exported with an empty photo_data');
+        assert(!degradedPhotos.some(p => typeof p.photo_data !== 'string' || p.photo_data.length === 0),
+            'and no row in the payload carries an empty photo_data');
+
+        // What a peer does with the payload: upsert every row it was given. It was not given this one.
+        const upsert = replica.prepare(
+            `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
+        for (const p of degradedPhotos) upsert.run(p.post_id, p.photo_data, p.order_num);
+        const replicaRow = replica.prepare('SELECT photo_data FROM post_photos WHERE post_id = ? AND order_num = ?')
+            .get(victim.postId, victim.order) as any;
+        assert(replicaRow?.photo_data === victim.value,
+            'so the replica still holds the photo, character for character — the export did not destroy the only good copy');
+        replica.close();
+        fs.rmSync(replicaFile, { force: true });
+
+        // Put the object back: every section after this one expects a node whose store is whole.
+        store.put(victimRow.storage_key, victimBytes, { mime: 'image/jpeg' });
+        assert(store.get(victimRow.storage_key)!.equals(victimBytes), 'setup: the object was restored for the rest of the suite');
+    }
 
     // ── 7b. the attachment, after evacuation ───────────────────────────────────────────────────
     const attachAfter = await (await fetch(attachUrl)).json() as any;

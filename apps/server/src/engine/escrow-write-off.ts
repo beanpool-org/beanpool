@@ -228,14 +228,16 @@ export function writeOffStrandedEscrow(
     // The in-memory ledger is what `payFromCommons` moves, so its figure is the one that must reach exactly 0.
     // Read after the row check: `getAccount` would otherwise create an account for an id nobody holds.
     const balance = ledger.getAccount(escrowId).balance;
-    const shape = balanceRefusal(balance, trade?.status ?? null);
-    if (shape) return refuse(409, shape.code, shape.error);
 
     // Memory and row must agree, or paying |memory| lands the row somewhere other than 0 and the audit drifts.
+    // Before the shape check, so a disagreement is never reported as something else.
     if (Math.abs(Number(row.balance) - balance) > DUST_THRESHOLD) {
         return refuse(409, 'ledger_mismatch',
             `This escrow reads ${balance} in memory but ${row.balance} on disk. Restart the node so it reloads the ledger, then try again`);
     }
+
+    const shape = balanceRefusal(balance, trade?.status ?? null);
+    if (shape) return refuse(409, shape.code, shape.error);
 
     const amount = -balance;
     const commonsBefore = getCommonsBalanceExact();

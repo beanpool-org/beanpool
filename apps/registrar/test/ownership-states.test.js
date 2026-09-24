@@ -1144,6 +1144,99 @@ test('race: an approval whose claim was withdrawn meanwhile, and the name queued
     } finally { w.restore(); }
 });
 
+// ── Admin resume: heal's rule ─────────────────────────────────────────────────────────────────────────────────
+test('admin resume after an impostor pause on a kept tunnel re-attests: the intruder is not routed, the owner\'s node is', async () => {
+    const w = await world();
+    try {
+        const { owner, row: before } = await impostorPaused(w, 'keptone', { keptTunnel: true });
+        // The intruder still answers through the kept tunnel, and Cloudflare still refuses to delete it.
+        w.cf.fail.deleteTunnel = true;
+        const refused = await w.admin('keptone', 'resume');
+        assert.equal(refused.status, 200, JSON.stringify(refused.body));
+        assert.equal(refused.body.status, 'paused');
+        assert.equal(refused.body.reason, 'impostor');
+        assert.equal(refused.body.attest, 'impostor');
+        let row = await w.row('keptone');
+        assert.equal(row.status, 'paused');
+        assert.equal(row.pause_reason, 'impostor');
+        assert.equal(row.tunnel_id, before.tunnel_id);
+        assert.equal(routing(w, 'keptone').dns, null, 'the intruder is not routed');
+        assert.ok(w.events('keptone').some((e) => e.event === 'resume-refused'));
+
+        // The owner's own node on the kept tunnel: the same resume goes live on it, once the re-attest passes.
+        w.nodes['keptone.beanpool.org'] = attestsAs(owner);
+        const ok = await w.admin('keptone', 'resume');
+        assert.equal(ok.status, 200, JSON.stringify(ok.body));
+        assert.equal(ok.body.status, 'live');
+        assert.equal(ok.body.attest, 'ok');
+        row = await w.row('keptone');
+        assert.equal(row.status, 'live');
+        assert.equal(row.tunnel_id, before.tunnel_id, 'the kept tunnel, reused');
+        assert.equal(row.pause_reason, null);
+        assert.ok(row.last_ok_at >= nowS() - 5);
+        assert.equal(routing(w, 'keptone').dns, `${before.tunnel_id}.cfargotunnel.com`);
+    } finally { w.restore(); }
+});
+
+test('admin resume after an impostor pause deletes a kept tunnel first when Cloudflare lets it: live at once on a fresh one', async () => {
+    const w = await world();
+    try {
+        const { owner, row: before } = await impostorPaused(w, 'keptfresh', { keptTunnel: true });
+        const r = await w.admin('keptfresh', 'resume');
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'live');
+        const row = await w.row('keptfresh');
+        assert.notEqual(row.tunnel_id, before.tunnel_id);
+        assert.equal(w.cf.liveTunnel(before.tunnel_id), null, 'whatever rode the old tunnel is cut off');
+        assert.deepEqual(routing(w, 'keptfresh'), { dns: `${row.tunnel_id}.cfargotunnel.com`, tunnels: [row.tunnel_id] });
+        // The owner's node hears the fresh tunnel's token from /status, as after any impostor pause.
+        assert.equal((await w.status(owner)).body.tunnelToken, `token-${row.tunnel_id}`);
+    } finally { w.restore(); }
+});
+
+test('admin resume of its own pause re-attests the kept tunnel: with the node away it lifts the pause, and the node\'s heal routes it', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'awaynode', owner);
+        const before = await w.row('awaynode');
+        await w.admin('awaynode', 'pause');
+        delete w.nodes['awaynode.beanpool.org'];                // the node is away: nothing answers the re-attest
+        const r = await w.admin('awaynode', 'resume');
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'paused');
+        assert.equal(r.body.reason, 'unverified');
+        assert.equal(r.body.attest, 'unverifiable');
+        assert.equal(routing(w, 'awaynode').dns, null, 'not routed while nothing proves the owner answers');
+        assert.equal((await w.row('awaynode')).pause_reason, 'unverified', 'the admin\'s hold is lifted');
+
+        // Back, on the kept tunnel: its own heal re-attests and routes it.
+        w.nodes['awaynode.beanpool.org'] = attestsAs(owner);
+        const healed = await w.heal(owner);
+        assert.equal(healed.body.status, 'live');
+        assert.equal(healed.body.attest, 'ok');
+        assert.equal(routing(w, 'awaynode').dns, `${before.tunnel_id}.cfargotunnel.com`);
+    } finally { w.restore(); }
+});
+
+test('race: an admin block landing during a resume\'s edge re-attest stands; the resume changes nothing', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'resumeblock', owner);
+        await w.admin('resumeblock', 'pause');
+        let blocked;
+        w.nodes['resumeblock.beanpool.org'] = async (nonce) => { blocked = await w.admin('resumeblock', 'block'); return attestsAs(owner)(nonce); };
+        const r = await w.admin('resumeblock', 'resume');
+        assert.equal(blocked?.body.status, 'blocked', 'the block landed during the re-attest');
+        assert.equal(r.status, 409, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'blocked');
+        assert.equal((await w.row('resumeblock')).status, 'blocked');
+        assert.deepEqual(routing(w, 'resumeblock'), { dns: null, tunnels: [] });
+        await stillAdministrable(w, 'resumeblock', 'block');
+    } finally { w.restore(); }
+});
+
 // ── Migration 0002 ────────────────────────────────────────────────────────────────────────────────────────────
 const CUTOFF = 1790233200;          // 2026-09-24 17:00 AEST
 const WINDOW = 1788134400;          // 2026-08-31

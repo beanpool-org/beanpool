@@ -544,6 +544,35 @@ async function adminMissed(env, name, ids) {
     return json({ error: 'the name changed meanwhile; nothing was done', status: now?.status ?? null }, 409);
 }
 
+// The admin lifting a pause (any reason) or a block, routed by heal's rule (routeIfOnlyOwner): at once on a fresh
+// tunnel, a kept one (or a direct address) only on an edge re-attest the owner's key signed. The tunnel kept by a
+// block, or by a pause the admin didn't make (the sweep's, a take-back's, the incident's), is deleted first, as a
+// take-back's is, so resume is on a fresh one whose token only the owner's signed /status gets; one Cloudflare
+// still won't delete is re-attested. The admin's own pause keeps its tunnel: its node is still on it. Not routed:
+// the admin's hold is lifted all the same, and the name stays paused for its key until its heal passes the
+// re-attest.
+async function adminResume(env, a, was, now) {
+    const r = { ...a };
+    if (a.tunnel_id && !(a.status === 'paused' && a.pause_reason === 'admin'))
+        r.tunnel_id = (await deprovision(env, { tunnel_id: a.tunnel_id })).tunnel_id;
+    let ids;
+    try { ids = await ensure(env, r); } catch (e) { return provisionFailed(e); }
+    const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+    if (!(await db.updateIfUnchanged(env, a.name, a, made))) return adminMissed(env, a.name, ids);
+    const g = await routeIfOnlyOwner(env, a, { ...r, ...made }, ids, now);
+    if (g.missed) return adminMissed(env, a.name, ids);
+    if (g.live) {
+        await logEvent(env, a.name, 'resumed', `resumed by the admin (was ${was})${g.attest ? ': edge re-attest ok' : ': on a fresh tunnel'}`);
+        return json({ status: 'live', name: a.name, changed: ids.changed, ...(g.attest ? { attest: g.attest } : {}) });
+    }
+    const reason = g.verdict === 'impostor' ? 'impostor' : 'unverified';
+    const held = { status: 'paused', pause_reason: reason, paused_at: a.status === 'paused' ? a.paused_at : now, dns_record_id: g.dns_record_id };
+    if (!(await db.updateIfUnchanged(env, a.name, a, held))) return adminMissed(env, a.name, ids);
+    await logEvent(env, a.name, 'resume-refused', `resumed by the admin (was ${was}), but not routed: edge re-attest ${g.verdict} (${g.why}); paused/${reason} for ${key16(a.node_pubkey)}, whose heal re-attests`);
+    return json({ status: 'paused', name: a.name, reason, attest: g.verdict, why: g.why });
+}
+
+// Approve: a pending claim goes live at once, as any new claim does (its tunnel is made now).
 async function adminGoLive(env, a, event, detail, extra = {}) {
     let ids;
     try { ids = await ensure(env, a); } catch (e) { return provisionFailed(e); }
@@ -576,7 +605,7 @@ async function adminAction(env, a, action, now) {
         }
         case 'resume':
             if (a.status !== 'paused' && a.status !== 'blocked') return json({ error: `cannot resume a ${a.status} name` }, 400);
-            return adminGoLive(env, a, 'resumed', `resumed by the admin (was ${was})`);
+            return adminResume(env, a, was, now);
         case 'block':
         case 'revoke': {
             // The kill switch. Routing and tunnel go; the name is held, never free — an impostor must not inherit a

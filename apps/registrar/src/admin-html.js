@@ -197,7 +197,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const CONFIRM = {
             approve: function(n) { return 'Approve ' + n + '.beanpool.org?'; },
             pause: function(n) { return 'Pause ' + n + '.beanpool.org?\\n\\nRouting stops (DNS removed); the name and tunnel stay with its owner. Only Resume lifts it — the node cannot.'; },
-            resume: function(n) { return 'Resume ' + n + '.beanpool.org?\\n\\nRouting comes back (tunnel and DNS re-made if needed).'; },
+            resume: function(n) { return 'Resume ' + n + '.beanpool.org?\\n\\nRouting comes back only when nobody but its owner can be answering: at once on a fresh tunnel, otherwise after an edge re-attest signed by its key. A tunnel kept by a block, or by a pause you did not make, is deleted first. If the re-attest fails, your hold is lifted and the name stays paused until its node heals it.'; },
             block: function(n) { return '⚠️ BLOCK ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name stays held by this key and is NEVER free; its node cannot heal or release it. Undo with Resume, or free it with Release.'; },
             release: function(n) { return '⚠️ RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted and the name is FREE AT ONCE, to any key.'; },
         };
@@ -337,7 +337,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    alert(name + '.beanpool.org is now ' + data.status + '.');
+                    alert(name + '.beanpool.org is now ' + data.status + (data.reason ? ' (' + data.reason + (data.why ? ': ' + data.why : '') + ')' : '') + '.');
                     loadRegistrarData();
                 } else {
                     alert(action + ' failed: ' + (data.error || '') + (data.detail ? ' — ' + data.detail : ''));

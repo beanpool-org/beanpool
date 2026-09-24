@@ -6,10 +6,13 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
-import { getNodeProfile, getNodeFeatures, mirrorNodeProfileAtBoot, type NodeProfile, type NodeFeatures } from './config/node-profile.js';
+import {
+    getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, assertBeansOn, forgetLedgerHistory,
+    BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
+} from './config/node-profile.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -512,8 +515,12 @@ export function initStateEngine(): void {
     initSchema();
     clearEnterpriseFloorCache();
     migrateLegacyState();
-    // NODE_PROFILE decides at every boot; node_config.nodeProfile is only its mirror (config/node-profile.ts).
-    mirrorNodeProfileAtBoot();
+    // NODE_PROFILE decides what the node runs as; node_config.nodeProfile records it, and a main server recorded as
+    // global refuses to start under another profile (config/node-profile.ts). Before the ledger is loaded: a node
+    // that must not open never reads it.
+    mirrorNodeProfileAtBoot(getNodeRole());
+    // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
+    setMoneyGuardHook(() => assertBeansOn());
     seedPulseCurated();
     
     // Seed SYSTEM user securely
@@ -1565,6 +1572,9 @@ export function reconcileLedgerFromDb(): void {
 
 
 export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean }): Transaction | null {
+    // Before every other guard: on a node whose `beans` switch is off nothing moves, whoever asks (a member's send,
+    // an escrow, a settlement, a wizard's gift). Thrown, not null, so an enclosing transaction rolls back.
+    assertBeansOn();
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
     if (!isSyntheticAccount(to) && to !== 'genesis' && to !== 'COMMONS_POOL') {
         const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
@@ -1968,6 +1978,7 @@ export function moveToCommons(
         throw new Error(`moveToCommons is for synthetic accounts and treasuries only, got ${from}`);
     }
     if (amount <= 0) return null;
+    assertBeansOn();
 
     return conservingTransaction(() => {
         // A bridge must be able to go negative (that negative IS the credit extended to a peer), so the
@@ -2025,6 +2036,7 @@ export function payFromCommons(
     opts?: { allowDeficit?: boolean; authSigner?: string },
 ): Transaction | null {
     if (amount <= 0) return null;
+    assertBeansOn();
     if (!ledger.deductFromCommons(amount)) {
         if (!opts?.allowDeficit) return null;
         setCommonsBalance(getCommonsBalanceExact() - amount);
@@ -3909,6 +3921,7 @@ export function createPost(
         eventPrivateNote?: unknown;
     }
 ): MarketplacePost | null {
+    credits = beansOffPrice(credits);
     const post = createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
     // An event or a poll posted to a group shows up in the group's chat as a card line (decision 12). The
     // acting member is named — the keeper or convenor, not an enterprise's own key.
@@ -3935,7 +3948,19 @@ export function removePost(id: string, authorPublicKey: string): boolean {
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
+    if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
+}
+
+/**
+ * A post's Beans price, on a node whose `beans` switch is off: none. Refused rather than quietly dropped, so an
+ * author never believes they posted a price nobody will see; anything that isn't a price is stored as 0. Every
+ * route that makes or edits a post comes through createPost/updatePost (marketplace, treasury, events).
+ */
+function beansOffPrice(credits: unknown): number {
+    if (getProfileSwitches().beans) return credits as number;
+    if (Number(credits) > 0) throw new BeansOffError(BEANS_OFF_PRICE_MESSAGE);
+    return 0;
 }
 
 /**
@@ -5148,7 +5173,8 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
 }
 
 export function importRemoteState(remote: SyncPayload): Promise<ImportResult> {
-    return importRemoteStateEngine(getSyncCb(), remote);
+    // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
+    return importRemoteStateEngine(getSyncCb(), remote).finally(forgetLedgerHistory);
 }
 // ===================== RATINGS =====================
 

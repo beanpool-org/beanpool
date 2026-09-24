@@ -96,6 +96,13 @@ export function setDemurrageSettleHook(fn: ((publicKeys: string[]) => void) | nu
     onSettleDemurrage = fn;
 }
 
+// The node profile's Beans switch (config/node-profile.ts), for the raw-SQL pledge below: on a node with Beans off
+// it throws before a row is written. state-engine registers it; inverted for the same module-cycle reason.
+let assertMoneyMayMove: (() => void) | null = null;
+export function setMoneyGuardHook(fn: (() => void) | null): void {
+    assertMoneyMayMove = fn;
+}
+
 // Enable WAL mode for better concurrency and performance
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
@@ -1525,6 +1532,7 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // layer. A negative amount would otherwise debit-as-credit the backer before the
     // transactions CHECK(amount > 0) aborts the surrounding transaction.
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Pledge amount must be positive");
+    assertMoneyMayMove?.();
 
     let project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) {

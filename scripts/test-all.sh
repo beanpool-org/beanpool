@@ -342,6 +342,7 @@ run_federation_suites() {
       test-takeover-crash-resume
       test-takeover-by-phone
       test-takeover-split-brain
+      test-profile-takeover
       test-unlock-cancel
       test-cash-also-needed
       test-posts-ignore-archetypes
@@ -383,6 +384,7 @@ run_federation_suites() {
       test-social-ratings
       test-app-store-versions
       test-node-profile
+      test-global-no-beans
       test-funnel-event
       test-handshake
       test-post-pause-resume

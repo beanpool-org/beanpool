@@ -6,19 +6,43 @@
  * changes is a switch below with a tested default per profile, and a stranger running their own open node can tune
  * each one without a fork.
  *
- * - `NODE_PROFILE` (env) is the source of truth at EVERY boot. Unset, empty or anything unrecognised is `local`; an
- *   unrecognised value says so once in the log. Case and surrounding spaces are forgiven (`GLOBAL`, ` global `),
- *   because the intent is unambiguous; anything else (`glob`, `global-node`, `open`) is not a profile, and guessing
- *   would open a node's door by accident.
- * - At boot the profile is mirrored into `node_config` under `nodeProfile`, so Settings, backups and take-over see
- *   which profile the database was last run as. The mirror is informational and never read back as the profile: a
- *   backup restored from a global node onto a local one must not flip it (the next boot rewrites the mirror).
- * - Each switch can be overridden by its own `node_config` row, `nodeProfile.<switch>` = `true` | `false`. Overrides
- *   live in the database, so they DO travel with a backup: they are the operator's tuning of the community.
+ * ## Where the profile comes from
+ *
+ * - `NODE_PROFILE` (env) is what a server RUNS as, read every time it is asked. Unset, empty or anything
+ *   unrecognised is `local`; an unrecognised value says so once in the log. Case and surrounding spaces are forgiven
+ *   (`GLOBAL`, ` global `), because the intent is unambiguous; anything else (`glob`, `global-node`, `open`) is not a
+ *   profile, and guessing would open a node's door by accident.
+ * - `node_config.nodeProfile` is the database's RECORD of the profile it runs as. A main server writes it at every
+ *   boot. It is never read as the profile, but a main server whose record says `global` REFUSES TO START while
+ *   `NODE_PROFILE` says anything else (`NodeProfileMismatchError`): run as local, a global node would switch Beans
+ *   on for strangers who joined an open door. To convert one on purpose, start it once with
+ *   `NODE_PROFILE_ALLOW_CHANGE_FROM=global`. A record of `local` under `NODE_PROFILE=global` starts, and says so:
+ *   that direction switches money off, and the ledger lock below keeps it on wherever Beans have ever moved.
+ * - Each switch can be overridden by its own `node_config` row, `nodeProfile.<switch>` = `true` | `false`: the
+ *   operator's tuning of the community.
+ *
+ * ## What travels where (the record and the overrides together, `readProfileRecord`)
+ *
+ * - A file or sealed backup is the whole database, so both are in it, and a restore brings them back: restored on a
+ *   server whose `NODE_PROFILE` doesn't match a global record, it refuses to start as above.
+ * - The take-over bundle (services/takeover-envelope.ts) carries both, signed and sealed. A take-over is refused
+ *   before anything is written when this server's `NODE_PROFILE` doesn't match the community's, and its `profile`
+ *   step writes the record and the overrides into the promoted server's database (services/takeover.ts).
+ * - Every replication payload to a standby carries both, signed (`SyncPayload.nodeProfile`), and the standby keeps
+ *   them as the main server's (services/backup-puller.ts). A standby never writes its own profile over that record
+ *   and never refuses to start (it only copies), but says when its own `NODE_PROFILE` differs, so a standby
+ *   promoted by hand, without a take-over, meets the same refusal at its first boot as a main server.
+ *
+ * ## What a switch really does
  *
  * A switch is only as real as the code behind it. Until the PR that builds a switch lands, the switch is pinned to
  * what the code does today (NOT_BUILT_YET), whatever the profile or an override says, and /api/community/info
  * reports the pinned value: a node never advertises what it can't do.
+ *
+ * The money switches (`beans`, `escrow`, `enterprises`, `treasuries`, `crowdfund`) can only be OFF on a node whose
+ * ledger has never moved (`ledgerHistory`). Off on a live community they would freeze what its members hold, so
+ * there the switch stays on, whatever the profile or an override says, and the log says why. Escrow, enterprises,
+ * treasuries and crowdfunds hold Beans, so with Beans off they are off too.
  */
 import { db } from '../db/db.js';
 
@@ -104,11 +128,6 @@ const NOT_BUILT_YET: Readonly<Partial<ProfileSwitches>> = {
     // G2 built the door with a sign-in (routes/open-join.ts). A door WITHOUT one (D1 b: no provider, a stricter
     // probation) is not built, so an override asking for it is reported at boot and changes nothing.
     ssoRequiredForJoin: true,
-    beans: true, // G1
-    escrow: true, // G1
-    enterprises: true, // G1
-    treasuries: true, // G1
-    crowdfund: true, // G1
     knocks: false, // G6
     distanceSortDefault: false, // G4
     directoryMirror: false, // G5
@@ -117,6 +136,9 @@ const NOT_BUILT_YET: Readonly<Partial<ProfileSwitches>> = {
     autoHideReports: false, // G3
     autoMute: false, // G3
 };
+
+/** The switches that hold or move Beans. None of them can be off on a node whose ledger has ever moved. */
+const MONEY_SWITCHES = ['beans', 'escrow', 'enterprises', 'treasuries', 'crowdfund'] as const satisfies readonly ProfileSwitch[];
 
 /** What the apps read from `GET /api/community/info`: what this node really does, never what it will do one day. */
 export interface NodeFeatures {
@@ -132,6 +154,8 @@ export interface NodeFeatures {
 export const NODE_PROFILE_KEY = 'nodeProfile';
 const OVERRIDE_PREFIX = `${NODE_PROFILE_KEY}.`;
 const SWITCH_NAMES = Object.keys(DEFAULTS.local) as ProfileSwitch[];
+/** Set for one boot to convert a database recorded as global into the profile NODE_PROFILE now names. */
+export const ALLOW_CHANGE_ENV = 'NODE_PROFILE_ALLOW_CHANGE_FROM';
 
 // getNodeProfile runs on every /api/community/info, so each distinct complaint is logged once, not per request.
 const warned = new Set<string>();
@@ -164,10 +188,8 @@ export function profileDefaults(profile: NodeProfile): ProfileSwitches {
 
 /** The operator's overrides from `node_config`, valid ones only. An unknown switch or a value other than true/false is logged and ignored. */
 export function readProfileOverrides(): Partial<ProfileSwitches> {
-    const rows = db.prepare('SELECT key, value FROM node_config WHERE substr(key, 1, ?) = ?')
-        .all(OVERRIDE_PREFIX.length, OVERRIDE_PREFIX) as { key: string; value: string }[];
     const overrides: Partial<ProfileSwitches> = {};
-    for (const { key, value } of rows) {
+    for (const { key, value } of overrideRows()) {
         const name = key.slice(OVERRIDE_PREFIX.length) as ProfileSwitch;
         if (!SWITCH_NAMES.includes(name)) {
             warnOnce(`⚠️  node_config ${key} is not a profile switch, so it is ignored. The switches: ${SWITCH_NAMES.join(', ')}.`);
@@ -183,14 +205,19 @@ export function readProfileOverrides(): Partial<ProfileSwitches> {
     return overrides;
 }
 
+function overrideRows(): { key: string; value: string }[] {
+    return db.prepare('SELECT key, value FROM node_config WHERE substr(key, 1, ?) = ? ORDER BY key')
+        .all(OVERRIDE_PREFIX.length, OVERRIDE_PREFIX) as { key: string; value: string }[];
+}
+
 /** The profile's defaults with the operator's overrides on top: what the node is SET to do. */
 export function getConfiguredSwitches(profile: NodeProfile = getNodeProfile()): ProfileSwitches {
     return { ...DEFAULTS[profile], ...readProfileOverrides() };
 }
 
-/** What the node actually does: the configured switches, with every switch this build can't honour yet pinned. */
+/** What the node actually does: the configured switches, with every switch this build can't honour yet pinned, and money kept on wherever it has moved. */
 export function getProfileSwitches(profile: NodeProfile = getNodeProfile()): ProfileSwitches {
-    return { ...getConfiguredSwitches(profile), ...NOT_BUILT_YET };
+    return lockMoneySwitches({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET });
 }
 
 export function getNodeFeatures(): NodeFeatures {
@@ -198,7 +225,8 @@ export function getNodeFeatures(): NodeFeatures {
     return {
         beans: s.beans,
         escrow: s.escrow,
-        enterprises: s.enterprises,
+        // One construct under two names in this build: the treasury routes serve both, so it is here only with both on.
+        enterprises: s.enterprises && s.treasuries,
         openJoin: s.openJoin,
         knocks: s.knocks,
         // A capability of the build, not a profile switch: once built, a local node answers distance queries too.
@@ -206,27 +234,256 @@ export function getNodeFeatures(): NodeFeatures {
     };
 }
 
+// ── Money is never frozen ─────────────────────────────────────────────────────────────────
+
 /**
- * At boot: resolve the profile (logging a bad NODE_PROFILE), write the informational mirror, and say what the node
- * is running as. Returns the profile and what the mirror held before, which differs after a restore from a node
- * that ran as the other profile.
+ * What shows this node's ledger has moved, or null when it never has: a transaction, an escrow, a non-zero
+ * balance (the Commons pool included), a backing pledge, a cross-node settlement. Cheapest first.
  */
-export function mirrorNodeProfileAtBoot(): { profile: NodeProfile; previous: string | null } {
+export function ledgerHistory(): string | null {
+    const any = (sql: string) => !!db.prepare(sql).get();
+    if (any('SELECT 1 FROM transactions LIMIT 1')) return 'it has recorded transactions';
+    if (any('SELECT 1 FROM marketplace_transactions LIMIT 1')) return 'it has opened escrows';
+    if (any('SELECT 1 FROM accounts WHERE balance != 0 LIMIT 1')) return 'an account holds a balance';
+    if (any('SELECT 1 FROM enterprise_pledges LIMIT 1')) return 'members have pledged backing';
+    if (any('SELECT 1 FROM settlements LIMIT 1')) return 'it has settled with another community';
+    return null;
+}
+
+// A ledger that has moved has moved for good, so what was found is kept for the life of the process. "Never moved"
+// is kept only while Beans are configured off, because only then can nothing here move it: every read of the
+// switches with Beans on drops it, and every money path reads them before it writes. An import or a restore writes
+// the ledger from outside, so it forgets (forgetLedgerHistory).
+let historyFound: string | null = null;
+let quietWhileBeansOff = false;
+
+/** Something wrote the ledger without the guards (a standby's import): look again next time. */
+export function forgetLedgerHistory(): void {
+    quietWhileBeansOff = false;
+}
+
+function cachedLedgerHistory(beansConfigured: boolean): string | null {
+    if (historyFound) return historyFound;
+    if (quietWhileBeansOff) return null;
+    historyFound = ledgerHistory();
+    quietWhileBeansOff = historyFound === null && !beansConfigured;
+    return historyFound;
+}
+
+function lockMoneySwitches(s: ProfileSwitches): ProfileSwitches {
+    // Whether or not any money switch is off: Beans switched back on with every switch on would otherwise keep
+    // "never moved" through the sends that follow, and switched off again the ledger would freeze.
+    if (s.beans) quietWhileBeansOff = false;
+    const off = MONEY_SWITCHES.filter((k) => !s[k]);
+    if (off.length > 0) {
+        const history = cachedLedgerHistory(s.beans);
+        if (history) {
+            for (const k of off) s[k] = true;
+            warnOnce(moneyLockMessage(off, history));
+        }
+    }
+    if (!s.beans) {
+        s.escrow = false;
+        s.enterprises = false;
+        s.treasuries = false;
+        s.crowdfund = false;
+    }
+    return s;
+}
+
+function moneyLockMessage(off: readonly ProfileSwitch[], history: string): string {
+    return `⚠️  ${off.join(', ')} ${off.length === 1 ? 'stays' : 'stay'} ON: this node's ledger has moved (${history}), and switching `
+        + `${off.length === 1 ? 'it' : 'them'} off would freeze what its members hold. Only a node whose ledger has never moved `
+        + 'can run with Beans off.';
+}
+
+/** The refusal a member sees when Beans are off: a send, a Beans price on a post, a pledge, a grant. */
+export const PROFILE_NO_BEANS = 'profile_no_beans';
+export const BEANS_OFF_MESSAGE = "Beans are switched off on this node, so nothing here can send, hold or price Beans. They live in your local community's own node.";
+export const BEANS_OFF_PRICE_MESSAGE = 'Beans are switched off on this node, so a post can’t carry a Beans price. Post it without one: say in the description what you’d like in return, or that it’s free.';
+
+export class BeansOffError extends Error {
+    readonly code = PROFILE_NO_BEANS;
+    readonly status = 403;
+    constructor(message: string = BEANS_OFF_MESSAGE) {
+        super(message);
+        this.name = 'BeansOffError';
+    }
+}
+
+/** For every path that moves Beans or prices something in them: throws BeansOffError when this node's `beans` switch is off. */
+export function assertBeansOn(message?: string): void {
+    if (!getProfileSwitches().beans) throw new BeansOffError(message);
+}
+
+/** A feature a switch has turned off. Routes answer 404 `feature_off` (routes/profile-feature-gate.ts). */
+export const FEATURE_OFF = 'feature_off';
+
+export class FeatureOffError extends Error {
+    readonly code = FEATURE_OFF;
+    readonly status = 404;
+    constructor(readonly feature: ProfileSwitch) {
+        super(featureOffMessage(feature));
+        this.name = 'FeatureOffError';
+    }
+}
+
+const FEATURE_OFF_MESSAGES: Partial<Record<ProfileSwitch, string>> = {
+    beans: 'Beans are switched off on this node.',
+    escrow: 'Escrow trades are switched off on this node, so nothing here is bought or sold for Beans.',
+    enterprises: 'Enterprises are switched off on this node.',
+    treasuries: 'Treasuries are switched off on this node.',
+    crowdfund: 'Crowdfunding is switched off on this node.',
+};
+
+export function featureOffMessage(feature: ProfileSwitch): string {
+    return FEATURE_OFF_MESSAGES[feature] ?? `${feature} is switched off on this node.`;
+}
+
+/** Throws FeatureOffError when `feature` is off here. */
+export function assertFeatureOn(feature: ProfileSwitch): void {
+    if (!getProfileSwitches()[feature]) throw new FeatureOffError(feature);
+}
+
+// ── The record that travels ───────────────────────────────────────────────────────────────
+
+/** The profile this database runs as and the operator's overrides, raw: what a take-over and a standby carry. */
+export interface ProfileRecord {
+    profile: NodeProfile | null;
+    overrides: Record<string, string>;
+}
+
+function recordedProfile(): NodeProfile | null {
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(NODE_PROFILE_KEY) as { value?: string } | undefined;
+    if (row?.value == null) return null;
+    const { profile, unrecognised } = parseNodeProfile(row.value);
+    return unrecognised === null ? profile : null;
+}
+
+export function readProfileRecord(): ProfileRecord {
+    const overrides: Record<string, string> = {};
+    for (const { key, value } of overrideRows()) overrides[key.slice(OVERRIDE_PREFIX.length)] = String(value);
+    return { profile: recordedProfile(), overrides };
+}
+
+/**
+ * Keep a record that came from the main server (a take-over bundle, a replication payload): the profile, and the
+ * overrides in place of this database's own. Only `nodeProfile` and `nodeProfile.<a known switch>` rows are ever
+ * written, whatever the record holds. Returns false, writing nothing, for something that isn't a record.
+ */
+export function writeProfileRecord(record: unknown): boolean {
+    const r = record as Partial<ProfileRecord> | null;
+    if (!r || typeof r !== 'object' || (r.profile !== 'local' && r.profile !== 'global' && r.profile !== null)) return false;
+    if (!r.overrides || typeof r.overrides !== 'object' || Array.isArray(r.overrides)) return false;
+    const rows = Object.entries(r.overrides)
+        .filter(([name, value]) => SWITCH_NAMES.includes(name as ProfileSwitch) && typeof value === 'string' && value.length <= 16);
+    // A standby is sent the same record every pull: write only what changed.
+    const now = readProfileRecord();
+    const sameOverrides = JSON.stringify(Object.fromEntries([...rows].sort(([a], [b]) => a.localeCompare(b))))
+        === JSON.stringify(Object.fromEntries(Object.entries(now.overrides).sort(([a], [b]) => a.localeCompare(b))));
+    if (sameOverrides && (r.profile === null || r.profile === now.profile)) return true;
+    const upsert = db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
+    db.transaction(() => {
+        if (r.profile) upsert.run(NODE_PROFILE_KEY, r.profile);
+        db.prepare('DELETE FROM node_config WHERE substr(key, 1, ?) = ?').run(OVERRIDE_PREFIX.length, OVERRIDE_PREFIX);
+        for (const [name, value] of rows) upsert.run(OVERRIDE_PREFIX + name, value);
+    })();
+    return true;
+}
+
+/**
+ * Why this server must not take over a community recorded as `community`, or null when it may. A take-over keeps
+ * a community as it was, so the profile must match in both directions.
+ */
+export function takeoverProfileRefusal(community: NodeProfile | null | undefined): string | null {
+    if (community !== 'local' && community !== 'global') return null;
+    const here = getNodeProfile();
+    if (community === here) return null;
+    return community === 'global'
+        ? 'This community is a global node, but this server runs with NODE_PROFILE unset (local). Taken over as it '
+            + 'stands, it would switch Beans on for members who joined a node without them. Set NODE_PROFILE=global in '
+            + 'this server\'s .env, restart it, and take over again. Nothing has been changed.'
+        : 'This community is a local node, but this server runs with NODE_PROFILE=global, which is a different kind of '
+            + 'node. Remove NODE_PROFILE from this server\'s .env, restart it, and take over again. Nothing has been changed.';
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────────────────
+
+/** A main server whose database is recorded as global, started under another NODE_PROFILE. */
+export class NodeProfileMismatchError extends Error {
+    constructor(readonly recorded: NodeProfile, readonly running: NodeProfile) {
+        super(`This database is a ${recorded} node, but NODE_PROFILE here is ${running === 'local' ? 'unset (local)' : running}. `
+            + `Started as ${running}, it would switch Beans on for members who joined a node without them, so it will not start. `
+            + `Set NODE_PROFILE=${recorded} in this server's .env. To make it a ${running} node on purpose, start it once with `
+            + `${ALLOW_CHANGE_ENV}=${recorded}.`);
+        this.name = 'NodeProfileMismatchError';
+    }
+}
+
+function pinnedLine(profile: NodeProfile): string {
+    const wanted = DEFAULTS[profile];
+    const parts = (Object.keys(NOT_BUILT_YET) as ProfileSwitch[]).map((k) =>
+        wanted[k] !== NOT_BUILT_YET[k] ? `${k}=${NOT_BUILT_YET[k]} (${profile} wants ${wanted[k]})` : `${k}=${NOT_BUILT_YET[k]}`);
+    return `🧭 Not built yet, so these run as on any node today, whatever the ${profile} profile says: ${parts.join(', ')}.`;
+}
+
+/**
+ * At boot: resolve the profile (logging a bad NODE_PROFILE), refuse a main server whose database is a global node
+ * under another profile, write the record, and say what the node runs as: its overrides, the switches still
+ * pinned, and money kept on where it has moved. Returns the profile and what the record held before.
+ *
+ * A standby (`role` backup) keeps the main server's record as copied, never writes its own over it, and never
+ * refuses: it says when its NODE_PROFILE differs.
+ */
+export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'): { profile: NodeProfile; previous: string | null } {
     const profile = getNodeProfile();
     const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(NODE_PROFILE_KEY) as { value?: string } | undefined;
     const previous = row?.value ?? null;
-    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
-        .run(NODE_PROFILE_KEY, profile);
+    const recorded = recordedProfile();
+    historyFound = null;
+    quietWhileBeansOff = false;
+
+    if (role === 'backup') {
+        console.log(`🧭 Node profile: ${profile} (a standby: it keeps the main server's record, ${recorded ?? 'not copied yet'})`);
+        if (recorded && recorded !== profile) {
+            console.warn(`⚠️  The main server this standby copies runs as ${recorded}, but NODE_PROFILE here is ${profile}. `
+                + `A take-over from here is refused until NODE_PROFILE=${recorded === 'local' ? '(unset)' : recorded} is set.`);
+        }
+    } else {
+        if (recorded === 'global' && profile !== 'global') {
+            const allow = (process.env[ALLOW_CHANGE_ENV] ?? '').trim().toLowerCase();
+            if (allow !== 'global') throw new NodeProfileMismatchError('global', profile);
+            console.warn(`⚠️  ${ALLOW_CHANGE_ENV}=global: this database ran a global node and now runs as ${profile}, on purpose.`);
+        }
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
+            .run(NODE_PROFILE_KEY, profile);
+        const overrides = readProfileOverrides();
+        const set = (Object.keys(overrides) as ProfileSwitch[]).map((k) => `${k}=${overrides[k]}`);
+        console.log(`🧭 Node profile: ${profile}${set.length ? ` (overrides: ${set.join(', ')})` : ''}`);
+        if (previous !== null && previous !== profile) {
+            console.log(`🧭 This database last ran as ${JSON.stringify(previous)}. NODE_PROFILE decides, so it now runs as ${profile}.`);
+        }
+    }
 
     const overrides = readProfileOverrides();
-    const set = (Object.keys(overrides) as ProfileSwitch[]).map((k) => `${k}=${overrides[k]}`);
-    console.log(`🧭 Node profile: ${profile}${set.length ? ` (overrides: ${set.join(', ')})` : ''}`);
-    if (previous !== null && previous !== profile) {
-        console.log(`🧭 This database last ran as ${JSON.stringify(previous)}. NODE_PROFILE decides, so it now runs as ${profile}.`);
-    }
     const pinned = (Object.keys(overrides) as ProfileSwitch[]).filter((k) => k in NOT_BUILT_YET && overrides[k] !== NOT_BUILT_YET[k]);
     if (pinned.length) {
         console.log(`🧭 Not built yet, so these overrides do nothing for now: ${pinned.map((k) => `${k}=${overrides[k]}`).join(', ')}.`);
+    }
+    if (profile === 'global') console.log(pinnedLine(profile));
+
+    const configured = { ...getConfiguredSwitches(profile), ...NOT_BUILT_YET };
+    const off = MONEY_SWITCHES.filter((k) => !configured[k]);
+    if (off.length > 0) {
+        const history = ledgerHistory();
+        if (history) {
+            historyFound = history;
+            const message = moneyLockMessage(off, history);
+            warned.add(message);
+            console.warn(message);
+        } else if (!configured.beans) {
+            console.log('🧭 Beans are off: sends, escrow, enterprises, treasuries and crowdfunds are refused here, and posts carry no Beans price.');
+        }
     }
     return { profile, previous };
 }

@@ -14,8 +14,8 @@
  * 2. `confirmTakeover(sessionId)`: the session is single use and lives 10 minutes, in memory only. It starts the
  *    promotion, each step written to data/takeover-journal.json before the next begins:
  *
- *      opened → undo-copy → identity-files → admin-settings → roles → public-address → role → pull-config
- *      → restart → audit → announcement → reseal → tunnel → done
+ *      opened → undo-copy → identity-files → admin-settings → roles → public-address → profile → role
+ *      → pull-config → restart → audit → announcement → reseal → tunnel → done
  *
  *    Every step is safe to run again, so a crash at any point resumes at the first step not recorded: at boot
  *    (`resumeTakeoverAtBoot`, before the node key is loaded and before anything reads the role) and after boot
@@ -69,6 +69,9 @@ import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus } from './backup-puller.js';
 import { restartSidecar } from './public-address-agent.js';
 import { getReplacedInfo, type ReplacedInfo } from './identity-epoch.js';
+import {
+    getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, type NodeProfile,
+} from '../config/node-profile.js';
 
 export const TAKEOVER_JOURNAL_FILE = 'takeover-journal.json';
 export const TAKEOVER_BUNDLE_FILE = 'takeover-bundle.json';
@@ -118,6 +121,7 @@ export const TAKEOVER_STEPS = [
     ['admin-settings', "Installed the community's admin password and two-factor sign-in"],
     ['roles', "Brought back the community's owners and admins"],
     ['public-address', "Brought back the community's web address"],
+    ['profile', "Kept the community's node profile and its switches"],
     ['role', 'Made this server the main server'],
     ['pull-config', 'Stopped copying from the old main server'],
     ['restart', 'Restarted as the main server'],
@@ -128,7 +132,7 @@ export const TAKEOVER_STEPS = [
     ['done', 'Finished'],
 ] as const;
 export type TakeoverStep = (typeof TAKEOVER_STEPS)[number][0];
-const PRE_RESTART: TakeoverStep[] = ['undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'role', 'pull-config'];
+const PRE_RESTART: TakeoverStep[] = ['undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'role', 'pull-config'];
 const AFTER_BOOT: TakeoverStep[] = ['announcement', 'reseal', 'tunnel', 'done'];
 
 /**
@@ -483,6 +487,8 @@ export interface TakeoverPreview {
     admins: number;
     connectors: number;
     publicAddress: string | null;
+    /** The community's node profile and this server's NODE_PROFILE: equal, or the session would not have opened. */
+    profile: { community: NodeProfile | null; thisServer: NodeProfile };
     tunnel: TunnelOutcome;
     mainServer: { url: string | null; answers: boolean | null; lastCopyAt: number | null; warning: string | null };
     missing: readonly string[];
@@ -519,6 +525,15 @@ async function startSession(
     candidate: Candidate & { newerSkipped: number }, bundle: TakeoverBundle, publicAddress: unknown, tunnel: TunnelOutcome,
     authorisedBy: TakeoverAuthority,
 ): Promise<TakeoverPreview> {
+    // The community's node profile (config/node-profile.ts): the bundle's, or for keys sealed before it travelled,
+    // the record this standby copied from the main server. A take-over keeps the community the kind of node it
+    // was, so a server whose NODE_PROFILE differs is refused here, before anything is written or the code spent.
+    const community = bundle.nodeProfile?.profile ?? readProfileRecord().profile;
+    const refusal = takeoverProfileRefusal(community);
+    if (refusal) {
+        logger.warn('SYS', `[Takeover] Refused: ${refusal}`);
+        throw new TakeoverError(409, refusal, { profileMismatch: true, communityProfile: community, thisServerProfile: getNodeProfile() });
+    }
     const id = crypto.randomBytes(32).toString('hex');
     session = { id, expiresAt: Date.now() + SESSION_TTL_MS, candidate, bundle, publicAddress, tunnel, authorisedBy };
 
@@ -541,6 +556,7 @@ async function startSession(
         admins: bundle.nodeRoles.filter((r) => r.role === 'admin').length,
         connectors: connectors ? connectors.length : 0,
         publicAddress: pa ? (pa.hostname || pa.name || null) : null,
+        profile: { community, thisServer: getNodeProfile() },
         tunnel,
         mainServer: {
             url: main.url,
@@ -663,6 +679,18 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             j.result.publicAddress = pa ? (pa.hostname || pa.name || null) : null;
             j.result.tunnel = plan.tunnel;
             return pa ? `${pa.hostname || pa.name}; ${plan.tunnel.message}` : 'no web address from the registrar';
+        }
+        case 'profile': {
+            // The community's profile and switch overrides, into this database (config/node-profile.ts), so the
+            // promoted server is the same kind of node and its first boot as the main server checks NODE_PROFILE
+            // against the community's, not this standby's. The session was refused before this if they differ.
+            const record = bundle.nodeProfile;
+            if (!writeProfileRecord(record)) {
+                const kept = readProfileRecord().profile;
+                return `the keys were sealed before the profile travelled with them; kept the copied record (${kept ?? 'none'})`;
+            }
+            const n = Object.keys(record!.overrides).length;
+            return `${record!.profile ?? 'no profile recorded'}${n ? `; ${n} switch override(s)` : ''}`;
         }
         case 'role': {
             // The split-brain guard (identity-epoch.ts): one more take-over than the keys were sealed at. Computed

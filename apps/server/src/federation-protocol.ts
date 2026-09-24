@@ -12,6 +12,7 @@ import { listingsForPeer } from './federation-listings.js';
 import { logger } from './logger.js';
 import { getMember, getBalance, createConversation, sendMessage, registerVisitor } from './state-engine.js';
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
+import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from './config/node-profile.js';
 import { getNodeRole } from './state-engine.js';
 import {
     handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus, runOutboundSettlement,
@@ -129,7 +130,14 @@ export function settlementGateRefusal(
     // truth — but passing it explicitly lets the trust-level and peer-id branches be asserted now, rather
     // than shipping untested until the day the flag flips.
     enabled: boolean = FEDERATION_SETTLEMENT_ENABLED,
+    // The node profile's Beans switch (config/node-profile.ts). Off, this node settles nothing at all: every
+    // settlement action moves Beans on this ledger, and the ledger lock means Beans can only be off where none has
+    // ever moved, so no receipt is owed and nothing in flight can be stranded by refusing.
+    beans: boolean = getProfileSwitches().beans,
 ): { error: string; code?: string } | null {
+    if (!beans) {
+        return { error: BEANS_OFF_MESSAGE, code: PROFILE_NO_BEANS };
+    }
     // The FLAG gates only OPENING a new purchase. It must NOT gate receipt delivery or a status query
     // (review finding): those finish trades that are already in flight, and refusing them would leave a
     // seller unable to accept a receipt we already issued, and the buyer's recovery reading every answer as

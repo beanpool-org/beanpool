@@ -7,9 +7,19 @@
  * - A LOCKED backup (the node has a recovery code; sealed-keys.md §6.3) is stored as it arrives in
  *   ./backups/<nodeId>/sealed/beanpool-<ts>.bpsealed, the newest file and one a day for 30 days. The harvester cannot
  *   open it and does not need to: the code opens it, and it carries the node keys inside, locked.
- * - A READABLE backup (a node with no recovery code, or one older than locked backups) is kept exactly as before:
+ * - A READABLE backup (a node with no recovery code, or one older than locked backups) is kept WHOLE:
  *   ./backups/<nodeId>/state.db plus ./backups/<nodeId>/history/beanpool-YYYY-MM-DD.db (30 days), and the status
  *   says the node's backups are not locked yet.
+ *
+ *   Whole means the images too. A backup used to BE state.db, so keeping the database was keeping the node. Since
+ *   the image store (storage design §7) most of a node's bytes arrive beside it in the archive's `images/`, and a
+ *   state.db on its own is a database whose every photo and attachment is a `storage_key` pointing at bytes
+ *   nobody has. So each kept database has its objects beside it under `<db>.images/` — the same `<file>.images`
+ *   convention a snapshot uses, and for the same reason: it does not end in `.db`, so everything that lists the
+ *   backups held keeps seeing databases and nothing else. A SHORT backup's `missing-images.json` is kept as
+ *   `<db>.missing-images.json`, because the manifest's presence is the label that outlives the response headers.
+ *   The daily copy hard-links the objects rather than copying them, and the seal-old pass puts all three into
+ *   the envelope.
  *
  * A failed pull backs off (5 minutes, doubling to 6 hours) instead of asking again every minute.
  *
@@ -27,7 +37,7 @@ import { pipeline } from 'node:stream/promises';
 import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import { peerIdFromPrivateKey, peerIdFromString } from '@libp2p/peer-id';
 import { readSealedHeader, verifySealedHeader, type CodeStanza, type SealedEnvelopeHeader } from '@beanpool/core';
-import { sealFileVerified, checkBackupArchive } from './sealed-backup.js';
+import { sealFileVerified, checkBackupArchive, MISSING_MEMBER } from './sealed-backup.js';
 import { peerIdOfKeyFile } from './takeover-envelope.js';
 
 export interface FleetNodeConfig {
@@ -346,8 +356,104 @@ function notLockedMessage(res: Response): string {
     return 'This node runs a BeanPool older than locked backups, so its backups are readable. Update it, then make a recovery code to lock them.';
 }
 
-/** Keep a readable backup exactly as before locked backups: state.db, and one copy a day in history/. */
-function keepPlainBackup(node: FleetNodeConfig, tarPath: string): number {
+/**
+ * The objects a kept database references, beside it — `<db>.images/`, the shape a snapshot uses.
+ *
+ * A sibling rather than a subdirectory of one `images/` per node, because there is one of these per kept
+ * database (the latest and each of the thirty dailies) and they must be able to hold different objects: a photo
+ * replaced on the node last Tuesday is in Monday's archive and not in today's, which is the entire point of
+ * keeping thirty days. It never ends in `.db`, so {@link listPlainHistory} and the seal-old pass keep seeing
+ * databases and nothing else.
+ */
+export function imagesDirFor(dbPath: string): string {
+    return `${dbPath}.images`;
+}
+
+/** A short backup's manifest, beside the database it belongs to. */
+export function missingManifestFor(dbPath: string): string {
+    return `${dbPath}.${MISSING_MEMBER}`;
+}
+
+/**
+ * Replace `to` with a copy of the tree at `from`, and say what landed.
+ *
+ * `link` hard-links each file instead of copying its bytes. Safe for exactly the reason
+ * `captureSnapshotImages` relies on: a store object is written temp-then-rename and afterwards only ever
+ * unlinked, so a second name for it is a true point-in-time copy, and unlinking one name leaves every other
+ * holding the bytes. That is what lets thirty days of daily archives cost an inode a day instead of thirty
+ * full copies of a node's images. The pull itself copies, because its source is a tar extraction this
+ * function's caller deletes a moment later.
+ *
+ * `to` is removed first, never merged into: `attachments/<messageId>.bin` is keyed by the message id alone,
+ * so the same key in two pulls is two different ciphertexts and a merge would keep the older one for ever.
+ *
+ * Symlinks are skipped. `checkBackupArchive` has already refused the whole archive if any member was a link,
+ * so for the pull path this is belt and braces; for the daily copy the source is a tree this file wrote.
+ */
+function replaceTree(from: string, to: string, link: boolean): { files: number; bytes: number } {
+    fs.rmSync(to, { recursive: true, force: true });
+    const out = { files: 0, bytes: 0 };
+    let st: fs.Stats;
+    try { st = fs.lstatSync(from); } catch { return out; }
+    if (!st.isDirectory()) return out;
+    const walk = (src: string, dest: string): void => {
+        fs.mkdirSync(dest, { recursive: true, mode: 0o700 });
+        for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+            const a = path.join(src, entry.name);
+            const b = path.join(dest, entry.name);
+            if (entry.isSymbolicLink()) continue;
+            if (entry.isDirectory()) { walk(a, b); continue; }
+            if (!entry.isFile()) continue;
+            if (link) {
+                // EXDEV across a mount, EPERM on a filesystem that will not link, EMLINK out of slots.
+                try { fs.linkSync(a, b); } catch { fs.copyFileSync(a, b); }
+            } else {
+                fs.copyFileSync(a, b);
+            }
+            out.files++;
+            try { out.bytes += fs.statSync(b).size; } catch { /* counted for the log only */ }
+        }
+    };
+    walk(from, to);
+    return out;
+}
+
+/**
+ * Carry a short backup's manifest across, or clear a stale one.
+ *
+ * The manifest IS the label: `sealed-backup.ts` writes it only for a backup that came up short, so its
+ * presence beside the kept database is what tells an operator, a year from now, that this copy is missing
+ * photos — when the `X-Backup-Missing-Images` header that said so went out with the response and is gone.
+ * A copy that is no longer short must not inherit the last one's, hence the unconditional remove first.
+ */
+function keepMissingManifest(from: string, destDb: string): { short: boolean; missing: number | null } {
+    const dest = missingManifestFor(destDb);
+    fs.rmSync(dest, { force: true });
+    let st: fs.Stats;
+    try { st = fs.lstatSync(from); } catch { return { short: false, missing: null }; }
+    if (!st.isFile()) return { short: false, missing: null };
+    fs.copyFileSync(from, dest);
+    try {
+        const parsed = JSON.parse(fs.readFileSync(dest, 'utf8'));
+        return { short: true, missing: Array.isArray(parsed?.missing) ? parsed.missing.length : null };
+    } catch {
+        // Unreadable, but present — and present is the label. Short with an unknown count beats "complete".
+        return { short: true, missing: null };
+    }
+}
+
+/** What the harvester ended up holding for a node, which is the only thing its log line may claim. */
+interface KeptBackup {
+    dbSize: number;
+    /** Image objects now beside the kept database. */
+    images: number;
+    /** True when the archive carried a {@link MISSING_MEMBER} manifest, with its count when it could be read. */
+    short: boolean;
+    missing: number | null;
+}
+
+/** Keep a readable backup WHOLE: state.db, its images and any manifest, and one copy a day in history/. */
+function keepPlainBackup(node: FleetNodeConfig, tarPath: string): KeptBackup {
     const nodeDir = nodeDirOf(node);
     const extract = path.join(nodeDir, '.tmp-extract');
     fs.rmSync(extract, { recursive: true, force: true });
@@ -359,14 +465,32 @@ function keepPlainBackup(node: FleetNodeConfig, tarPath: string): number {
         if (!fs.existsSync(extractedDb) || !fs.lstatSync(extractedDb).isFile()) throw new Error('Downloaded backup did not contain state.db');
         const destDb = path.join(nodeDir, 'state.db');
         fs.copyFileSync(extractedDb, destDb);
+        // The objects that database's rows name, and the manifest naming the ones the node could not send.
+        // Without them this is the harvester's only copy of a node with no photos and no attachments in it —
+        // and nothing would say so, because the headers that did are gone the moment the response ends.
+        const images = replaceTree(path.join(extract, 'images'), imagesDirFor(destDb), false);
+        const short = keepMissingManifest(path.join(extract, MISSING_MEMBER), destDb);
         createDailyArchive(node);
-        return fs.statSync(destDb).size;
+        return { dbSize: fs.statSync(destDb).size, images: images.files, ...short };
     } finally {
         fs.rmSync(extract, { recursive: true, force: true });
     }
 }
 
-/** One copy a day of the readable state.db in history/, pruned after 30 days, as before locked backups. */
+/** What the harvester HOLDS, for the log line — never what the node said it sent. */
+function describeKept(kept: KeptBackup): string {
+    const shortly = kept.short
+        ? ` — SHORT by ${kept.missing ?? 'an unreadable number of'} object(s), listed in ${MISSING_MEMBER} beside it`
+        : '';
+    return `database + ${kept.images} image object(s)${shortly}`;
+}
+
+/**
+ * One copy a day of the readable backup in history/, pruned after 30 days.
+ *
+ * The database AND its images, or thirty days of history would be thirty databases full of `storage_key`s
+ * pointing at whatever the latest pull happens to hold — which is the opposite of what a history is for.
+ */
 function createDailyArchive(node: FleetNodeConfig): void {
     const nodeDir = nodeDirOf(node);
     const dbPath = path.join(nodeDir, 'state.db');
@@ -377,7 +501,13 @@ function createDailyArchive(node: FleetNodeConfig): void {
     const archivePath = path.join(historyDir, `beanpool-${todayStr}.db`);
     if (!fs.existsSync(archivePath)) {
         fs.copyFileSync(dbPath, archivePath);
-        console.log(`[Harvester] Created daily archive for ${nodeSlug(node)}: beanpool-${todayStr}.db`);
+        const images = replaceTree(imagesDirFor(dbPath), imagesDirFor(archivePath), true);
+        const manifest = missingManifestFor(dbPath);
+        if (fs.existsSync(manifest)) fs.copyFileSync(manifest, missingManifestFor(archivePath));
+        console.log(
+            `[Harvester] Created daily archive for ${nodeSlug(node)}: beanpool-${todayStr}.db `
+            + `with ${images.files} image object(s)${fs.existsSync(manifest) ? ' (SHORT: see its ' + MISSING_MEMBER + ')' : ''}`,
+        );
     }
     const now = Date.now();
     for (const file of fs.readdirSync(historyDir).filter(f => f.startsWith('beanpool-') && f.endsWith('.db'))) {
@@ -385,6 +515,10 @@ function createDailyArchive(node: FleetNodeConfig): void {
         try {
             if (now - fs.statSync(filePath).mtimeMs > MAX_AGE_MS) {
                 fs.unlinkSync(filePath);
+                // Its images and its manifest go with it. Left behind, a pruned day's objects would be
+                // reachable by nothing and reclaimed by nothing: the harvester has no orphan sweep.
+                fs.rmSync(imagesDirFor(filePath), { recursive: true, force: true });
+                fs.rmSync(missingManifestFor(filePath), { force: true });
                 console.log(`[Harvester] Pruned old snapshot archive for ${nodeSlug(node)}: ${file}`);
             }
         } catch { /* ignore */ }
@@ -462,9 +596,18 @@ export async function pullBackupForNode(node: FleetNodeConfig, opts: { allowMiss
         }
         if (start[0] === 0x1f && start[1] === 0x8b) {
             const message = notLockedMessage(res);
-            const dbSize = keepPlainBackup(node, incoming);
-            console.warn(`[Harvester] ${node.name}: kept a readable backup (${describeContents(carried)}). ${message}`);
-            return { kind: 'plain', dbSize, message, carried };
+            const kept = keepPlainBackup(node, incoming);
+            // What was KEPT, not what the node said it sent: this log line used to read `database + N image
+            // object(s)` off the response headers while the code beside it threw the images away.
+            console.warn(`[Harvester] ${node.name}: kept a readable backup (${describeKept(kept)}). ${message}`);
+            const claimed = Number(carried.images?.split('/')[0]);
+            if (Number.isFinite(claimed) && claimed !== kept.images) {
+                console.warn(
+                    `[Harvester] ${node.name}: the node said it sent ${claimed} image object(s) and the archive `
+                    + `held ${kept.images}. The kept copy has ${kept.images}; that is what a restore from it gets.`,
+                );
+            }
+            return { kind: 'plain', dbSize: kept.dbSize, message, carried };
         }
         let header: SealedEnvelopeHeader;
         try {
@@ -567,6 +710,11 @@ function tarInto(tarPath: string, stageDir: string): void {
  * of its newest locked backup, which the caller has checked against the pinned node key), read each back from
  * disk and open it (sealFileVerified), and only then delete the plaintext. Refuses without a recovery-code stanza. Each database becomes a restorable backup (a tar holding state.db); the old key files
  * become one sealed file. Deleting does not scrub an SSD, and copies elsewhere are the operator's to find.
+ *
+ * Each database goes in with its `<db>.images/` and its `<db>.missing-images.json`, as `images/` and
+ * `missing-images.json` inside the envelope — the shape a node's own backup has, and the shape a restore
+ * expects. Sealing them separately, or not at all, would make this the last place in the chain that turns a
+ * whole node back into a bare database, after the pull and the daily copy have both carried it whole.
  */
 export async function sealOldBackups(node: FleetNodeConfig, header: SealedEnvelopeHeader): Promise<{ sealed: string[]; left: string[]; error: string | null }> {
     const leftovers = plaintextLeftovers(node);
@@ -597,16 +745,37 @@ export async function sealOldBackups(node: FleetNodeConfig, header: SealedEnvelo
         const stage = path.join(work, 'stage');
         fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
         for (const src of sources) fs.copyFileSync(src, path.join(stage, asDb ? 'state.db' : path.basename(src)));
+        // Everything this envelope replaces, so the plaintext that goes INTO it is the plaintext that gets
+        // deleted after it — no more (the images would be lost) and no less (they would stay in the clear).
+        const consumed = [...sources];
+        let staged = 0;
+        if (asDb) {
+            for (const src of sources) {
+                const imgs = imagesDirFor(src);
+                if (fs.existsSync(imgs)) {
+                    staged += replaceTree(imgs, path.join(stage, 'images'), false).files;
+                    consumed.push(imgs);
+                }
+                const manifest = missingManifestFor(src);
+                if (fs.existsSync(manifest)) {
+                    fs.copyFileSync(manifest, path.join(stage, MISSING_MEMBER));
+                    consumed.push(manifest);
+                }
+            }
+        }
         const tarPath = path.join(work, 'plain.tar.gz');
         tarInto(tarPath, stage);
         const out = path.join(sealedDir, outName);
         // Resolves only once the file on disk has been read back, opened, and passed the restore's archive checks.
         await sealFileVerified(tarPath, out, { ...sealOpts, requireStateDb: asDb });
         fs.utimesSync(out, mtime, mtime);
-        for (const src of sources) fs.rmSync(src, { force: true });
+        for (const src of consumed) fs.rmSync(src, { recursive: true, force: true });
         fs.rmSync(work, { recursive: true, force: true });
         sealed.push(outName);
-        console.log(`[Harvester] Sealed old plaintext backup for ${nodeSlug(node)}: ${sources.map(s => path.relative(dir, s)).join(', ')} → sealed/${outName}`);
+        console.log(
+            `[Harvester] Sealed old plaintext backup for ${nodeSlug(node)}: `
+            + `${sources.map(s => path.relative(dir, s)).join(', ')}${asDb ? ` + ${staged} image object(s)` : ''} → sealed/${outName}`,
+        );
     };
 
     try {
@@ -634,6 +803,20 @@ export async function sealOldBackups(node: FleetNodeConfig, header: SealedEnvelo
         for (const p of plaintextLeftovers(node)) {
             const rel = path.relative(dir, p);
             if (rel.split(path.sep).some(seg => seg.startsWith('.tmp-') || seg.startsWith('.identity-export-'))) fs.rmSync(p, { force: true });
+        }
+        // An images directory whose database is gone — sealed just now, or never there — is plaintext nothing
+        // points at. Removed whole, directories and all, so `plaintextLeftovers` (files only) cannot report
+        // "nothing left" over a tree of empty folders.
+        for (const parent of [dir, path.join(dir, 'history')]) {
+            if (!fs.existsSync(parent)) continue;
+            for (const name of fs.readdirSync(parent)) {
+                if (!name.endsWith('.images')) continue;
+                const full = path.join(parent, name);
+                if (!fs.lstatSync(full).isDirectory()) continue;
+                if (!fs.existsSync(path.join(parent, name.slice(0, -'.images'.length)))) {
+                    fs.rmSync(full, { recursive: true, force: true });
+                }
+            }
         }
         for (const sub of ['history', 'identity', '.tmp-extract', path.join('identity', '.tmp-extract')]) {
             const d = path.join(dir, sub);

@@ -14,6 +14,10 @@
  *   every readable file, deleting each only after its locked copy was read back and opened (sealFileVerified
  *   refuses a tar without state.db, and anything without a code stanza);
  * - a failing node is backed off, not pulled every minute; an old node's readable archive is kept, pulled once.
+ * - a readable backup is kept WHOLE at every hop (round 3): the `images/` the archive carries survives the pull,
+ *   the daily copy (hard-linked), the seal-old envelope and the fleet manager's two downloads, and what comes
+ *   back out is byte-identical to what the node sent. A SHORT backup's `missing-images.json` rides along with
+ *   it, because the manifest's presence is the label that outlives the response headers.
  * - a node refusing every backup because an object it references is gone from its image store: refused three
  *   times running, then pulled with allowMissing, so the node ends up with a labelled short backup instead of
  *   none at all — and a node that answers normally never gets the opt-in.
@@ -35,13 +39,16 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { openEnvelope, readSealedHeader, verifySealedHeader, sealEnvelope } from '@beanpool/core';
 import {
     nodeSlug, getNodes, saveNodes, loadHarvestState, harvestNode, listSealedBackups, sealOldBackups, backoffDelayMs,
-    ALLOW_MISSING_AFTER_FAILURES,
+    ALLOW_MISSING_AFTER_FAILURES, listPlainHistory, imagesDirFor, missingManifestFor,
     type FleetNodeConfig,
 } from './services/harvester.js';
-import { sealFileVerified } from './services/sealed-backup.js';
+import { sealFileVerified, MISSING_MEMBER } from './services/sealed-backup.js';
+import { createManagerBackupsRoutes } from './routes/manager-backups.js';
+import { attachmentKey, getImageStore, postPhotoKey, sha256Hex } from './storage/image-store.js';
 import { ensureGenesis } from './genesis.js';
 import { makeRecoveryCode } from './services/takeover-envelope.js';
-import { initStateEngine, seedGenesisMember } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createPost } from './state-engine.js';
+import { db } from './db/db.js';
 import { createBackupRoutes } from './routes/backup.js';
 import { hashPassword, updateLocalConfig, setReplicationToken, getLocalConfig } from './config/local-config.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
@@ -82,10 +89,48 @@ function tarOf(files: Record<string, Buffer>): string {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'harvest-tar-'));
     const stage = path.join(d, 'stage');
     fs.mkdirSync(stage);
-    for (const [name, bytes] of Object.entries(files)) fs.writeFileSync(path.join(stage, name), bytes);
+    for (const [name, bytes] of Object.entries(files)) {
+        // Nested members, because a backup's `images/` is a tree: `images/posts/<id>/<n>-<sha8>.jpg`.
+        const full = path.join(stage, name);
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, bytes);
+    }
     const out = path.join(d, 'x.tar.gz');
     execFileSync('tar', ['-czf', out, '-C', stage, '.']);
     return out;
+}
+
+/** Every file under a directory, relative path → bytes. For comparing an image tree hop by hop. */
+function treeOf(dir: string): Record<string, Buffer> {
+    const out: Record<string, Buffer> = {};
+    const walk = (d: string) => {
+        if (!fs.existsSync(d)) return;
+        for (const f of fs.readdirSync(d)) {
+            const p = path.join(d, f);
+            if (fs.lstatSync(p).isDirectory()) walk(p);
+            else out[path.relative(dir, p).split(path.sep).join('/')] = fs.readFileSync(p);
+        }
+    };
+    walk(dir);
+    return out;
+}
+
+/** Two image trees hold the same keys and the same bytes under each. */
+function sameTree(a: Record<string, Buffer>, b: Record<string, Buffer>): boolean {
+    const ka = Object.keys(a).sort();
+    const kb = Object.keys(b).sort();
+    if (ka.length === 0 || ka.join('|') !== kb.join('|')) return false;
+    return ka.every(k => a[k].equals(b[k]));
+}
+
+/** Extract a backup tar into a fresh directory and hand back its path. */
+function openArchive(bytes: Buffer, tag: string): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), `harvest-${tag}-`));
+    const file = path.join(dir, 'x.tar.gz');
+    fs.writeFileSync(file, bytes);
+    execFileSync('tar', ['-xzf', file, '-C', dir]);
+    fs.rmSync(file);
+    return dir;
 }
 
 /** Harvest a node served in-process over local HTTP, the way the harvester reaches a real one. */
@@ -98,6 +143,23 @@ async function harvestLocalNode(): Promise<void> {
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
     setReplicationToken(TOKEN);
     await ensureGenesis();
+
+    // Give the real node images, so every readable backup this suite pulls from it is an archive with a real
+    // `images/` member — which is what the seal-old pass has to carry into its envelope. Rows straight in:
+    // `referencedStorageKeys` reads exactly these two tables, and it is the keys that drive the staging.
+    const store = getImageStore();
+    const localPostId = 'post-' + crypto.randomBytes(6).toString('hex');
+    const localMsgId = 'msg-' + crypto.randomBytes(6).toString('hex');
+    const localPhoto = crypto.randomBytes(3500);
+    const localCipher = crypto.randomBytes(1200);
+    const photoStored = store.put(postPhotoKey(localPostId, 0, sha256Hex(localPhoto), 'image/jpeg'), localPhoto, { mime: 'image/jpeg' });
+    const cipherStored = store.put(attachmentKey(localMsgId), localCipher, { mime: 'application/octet-stream' });
+    db.prepare('INSERT INTO post_photos (post_id, order_num, photo_data, storage_key, sha256, bytes, mime) VALUES (?, 0, NULL, ?, ?, ?, ?)')
+        .run(localPostId, photoStored.key, photoStored.sha256, photoStored.bytes, photoStored.mime);
+    db.prepare('INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, NULL, ?, ?, ?)')
+        .run(localMsgId, crypto.randomBytes(24).toString('base64'), 'image/jpeg', cipherStored.key);
+    const localImages: Record<string, Buffer> = { [photoStored.key]: localPhoto, [cipherStored.key]: localCipher };
+
     const nodeKeyBytes = privateKeyToProtobuf(await generateKeyPair('Ed25519'));
     fs.writeFileSync(path.join(dataDir, 'libp2p_key'), nodeKeyBytes);
 
@@ -114,11 +176,36 @@ async function harvestLocalNode(): Promise<void> {
     // no X-Backup-Locked header) and a node whose /backup fails. Each counts its /backup hits; both report counts.
     const hits = { old: 0, down: 0, short: 0, shortWithAllowMissing: 0 };
     const oldStateDb = crypto.randomBytes(4000);
-    const oldTar = fs.readFileSync(tarOf({ 'state.db': oldStateDb, 'node_config.json': Buffer.from('{}') }));
+    // The archive a node of this version sends: the database AND the objects its rows name. Before round 3 the
+    // harvester extracted this, kept state.db and deleted the rest.
+    const standInImages: Record<string, Buffer> = {
+        'images/posts/post-a/0-1a2b3c4d.jpg': crypto.randomBytes(2048),
+        'images/posts/post-a/1-5e6f7a8b.jpg': crypto.randomBytes(1500),
+        'images/attachments/msg-a.bin': crypto.randomBytes(900),
+    };
+    const oldTar = fs.readFileSync(tarOf({
+        'state.db': oldStateDb, 'node_config.json': Buffer.from('{}'), ...standInImages,
+    }));
+    // The same node when one object is gone for good: everything it still holds, plus the manifest naming what
+    // it could not send. The manifest's presence is the label — a complete backup does not carry one.
+    const shortManifest = Buffer.from(JSON.stringify({
+        note: 'This backup is SHORT.', takenAt: new Date().toISOString(),
+        referenced: 3, staged: 2, missing: ['posts/post-a/1-5e6f7a8b.jpg'],
+    }, null, 2));
+    const shortImages: Record<string, Buffer> = {
+        'images/posts/post-a/0-1a2b3c4d.jpg': standInImages['images/posts/post-a/0-1a2b3c4d.jpg'],
+        'images/attachments/msg-a.bin': standInImages['images/attachments/msg-a.bin'],
+    };
+    const shortTar = fs.readFileSync(tarOf({
+        'state.db': oldStateDb, 'node_config.json': Buffer.from('{}'),
+        [MISSING_MEMBER]: shortManifest, ...shortImages,
+    }));
     const app = new Koa();
     app.use(async (ctx, next) => {
         if (ctx.path === '/old-node/api/local/admin/backup') {
             hits.old++;
+            ctx.set('X-Backup-Contents', 'database+images');
+            ctx.set('X-Backup-Images', '3/3');
             ctx.set('Content-Type', 'application/gzip');
             ctx.body = oldTar;
             return;
@@ -143,10 +230,10 @@ async function harvestLocalNode(): Promise<void> {
             }
             hits.shortWithAllowMissing++;
             ctx.set('X-Backup-Contents', 'database+images-partial');
-            ctx.set('X-Backup-Images', '411/412');
+            ctx.set('X-Backup-Images', '2/3');
             ctx.set('X-Backup-Missing-Images', '1');
             ctx.set('Content-Type', 'application/gzip');
-            ctx.body = oldTar;
+            ctx.body = shortTar;
             return;
         }
         if (ctx.path === '/short-node/api/community/info') {
@@ -161,6 +248,9 @@ async function harvestLocalNode(): Promise<void> {
         await next();
     });
     app.use(createBackupRoutes(deps).routes());
+    // The fleet manager's own routes, so `download-db` and `download-history` are exercised as the dashboard
+    // calls them rather than by reading the files off the disk the harvester just wrote.
+    app.use(createManagerBackupsRoutes(deps).routes());
     const server = http.createServer(app.callback());
     await new Promise<void>(r => server.listen(0, '127.0.0.1', () => r()));
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -318,9 +408,18 @@ async function harvestLocalNode(): Promise<void> {
         const d1 = await openTar(latestFile);
         const d1Hash = crypto.createHash('sha256').update(fs.readFileSync(path.join(d1, 'state.db'))).digest('hex');
         assert(d1Hash === b7['state.db'], 'seal-old: the readable latest state.db re-opens byte for byte, as a restorable backup (state.db)');
+        assert(sameTree(treeOf(path.join(d1, 'images')), localImages),
+            `seal-old: …and its images are inside the envelope, byte for byte (${Object.keys(treeOf(path.join(d1, 'images'))).length}/${Object.keys(localImages).length})`);
+        const todayDailyFile = legacy.find(f => f.startsWith(`beanpool-${today}`))!;
+        const dToday = await openTar(todayDailyFile);
+        assert(sameTree(treeOf(path.join(dToday, 'images')), localImages),
+            'seal-old: today\'s daily archive seals whole too, not as a bare database');
+        fs.rmSync(dToday, { recursive: true, force: true });
         const dailyFile = legacy.find(f => f.startsWith('beanpool-2026-09-10'))!;
         const d2 = await openTar(dailyFile);
         assert(fs.readFileSync(path.join(d2, 'state.db')).equals(oldDaily), 'seal-old: the old daily archive re-opens byte for byte');
+        assert(!fs.existsSync(path.join(d2, 'images')),
+            'seal-old: a file written before this version has no images beside it, and gets an envelope with no images/ member — not an empty one');
         assert(Math.abs(fs.statSync(path.join(sealedDir, dailyFile)).mtimeMs - tenDaysAgo.getTime()) < 2000, 'seal-old: the file keeps its date, so the 30-day rule still applies');
         const idFile = legacy.find(f => f.startsWith('beanpool-identity-'))!;
         assert(!!idFile && listSealedBackups(tokenOnly).some(f => f.file === idFile && f.identity), `the locked key file is named beanpool-identity-…, so it is listed (${idFile})`);
@@ -375,6 +474,72 @@ async function harvestLocalNode(): Promise<void> {
             `an old node: the status says why it is not locked ("${o3.sealedBackup?.message}")`);
         assert(/not locked yet/.test(o3.sealOld?.error || '') && fs.existsSync(path.join(oldDir, 'state.db')), 'an old node: seal-old deletes nothing');
 
+        // ── A readable backup is kept WHOLE: every hop carries the images, byte for byte ──
+        //
+        // Before round 3 `keepPlainBackup` extracted the archive, copied state.db out and deleted the
+        // extraction directory with `images/` inside it. Every copy downstream — the latest, the daily
+        // history, the sealed old archive, the manager's download — was then a database whose every
+        // `storage_key` pointed at bytes nobody had, and the pull log still said "database + N image
+        // object(s)". These assertions are what that bug could not pass.
+        const sent: Record<string, Buffer> = {};
+        for (const [name, bytes] of Object.entries(standInImages)) sent[name.replace(/^images\//, '')] = bytes;
+
+        // 1. keepPlainBackup
+        const keptImages = treeOf(imagesDirFor(path.join(oldDir, 'state.db')));
+        assert(sameTree(keptImages, sent),
+            `kept whole: the latest backup holds all ${Object.keys(sent).length} object(s) the node sent, byte for byte `
+            + `(holds ${Object.keys(keptImages).length})`);
+        assert(!fs.existsSync(missingManifestFor(path.join(oldDir, 'state.db'))),
+            'kept whole: a complete backup carries NO missing-images.json — its absence is the label');
+
+        // 2. createDailyArchive — and hard-linked, so thirty days is not thirty copies of the images
+        const dailyDb = path.join(oldDir, 'history', `beanpool-${today}.db`);
+        const dailyImages = treeOf(imagesDirFor(dailyDb));
+        assert(sameTree(dailyImages, sent), `kept whole: today's daily copy holds them too (${Object.keys(dailyImages).length})`);
+        const oneKey = Object.keys(sent)[0];
+        const inodeOf = (p: string): number | null => { try { return fs.statSync(p).ino; } catch { return null; } };
+        const dailyIno = inodeOf(path.join(imagesDirFor(dailyDb), oneKey));
+        assert(dailyIno !== null && dailyIno === inodeOf(path.join(imagesDirFor(path.join(oldDir, 'state.db')), oneKey)),
+            'kept whole: the daily copy hard-links the objects rather than copying their bytes');
+
+        // 3. listPlainHistory still sees databases and nothing else
+        const hist = listPlainHistory(oldNode);
+        assert(hist.length === 1 && hist[0].file === `beanpool-${today}.db`,
+            `kept whole: the images directory is not mistaken for a backup (${hist.map(h => h.file).join(', ')})`);
+
+        // 4. the fleet manager's two downloads, over HTTP, as the dashboard calls them
+        const managerGet = async (route: string, query: Record<string, string>) => {
+            const qs = new URLSearchParams(query).toString();
+            const r = await fetch(`${url}/api/manager/backups/${route}?${qs}`, { headers: { 'X-Admin-Password': PW } });
+            return { res: r, bytes: Buffer.from(await r.arrayBuffer()) };
+        };
+        resetAdminAuthTarpit();
+        const dl = await managerGet('download-db', { nodeId: oldNode.id });
+        assert(dl.res.ok && /filename="[^"]+\.tar\.gz"/.test(dl.res.headers.get('content-disposition') || ''),
+            `manager download-db: a restorable archive, named .tar.gz (${dl.res.status}, ${dl.res.headers.get('content-disposition')})`);
+        const dlDir = openArchive(dl.bytes, 'dl');
+        assert(fs.readFileSync(path.join(dlDir, 'state.db')).equals(oldStateDb)
+            && sameTree(treeOf(path.join(dlDir, 'images')), sent),
+            'manager download-db: the operator gets state.db AND every image object, byte for byte');
+        fs.rmSync(dlDir, { recursive: true, force: true });
+
+        resetAdminAuthTarpit();
+        const dlHist = await managerGet('download-history', { nodeId: oldNode.id, filename: `beanpool-${today}.db` });
+        assert(dlHist.res.ok, `manager download-history: served (${dlHist.res.status})`);
+        const histDir = openArchive(dlHist.bytes, 'dlhist');
+        assert(fs.readFileSync(path.join(histDir, 'state.db')).equals(oldStateDb)
+            && sameTree(treeOf(path.join(histDir, 'images')), sent),
+            'manager download-history: a day out of the history is whole too');
+        fs.rmSync(histDir, { recursive: true, force: true });
+
+        // 5. a pull that comes back complete clears a manifest an earlier short pull left beside the database
+        const staleManifest = missingManifestFor(path.join(oldDir, 'state.db'));
+        fs.writeFileSync(staleManifest, '{"missing":["posts/gone/0-dead.jpg"]}');
+        hits.old = 0;
+        await harvestNode(oldNode, true);
+        assert(!fs.existsSync(staleManifest),
+            'kept whole: a complete pull clears the last one\'s short-backup manifest, so the label cannot go stale');
+
         // ── A node missing an object for good: refused N times, then a labelled SHORT backup ──
         //
         // Refusing is right and stays the default. But the bytes are gone, so the refusal never lifts by
@@ -406,6 +571,34 @@ async function harvestLocalNode(): Promise<void> {
         assert(s4.incompleteImages?.allowingMissing === true && /short by 1/.test(s4.incompleteImages?.lastError || ''),
             `…still flagged short, so the dashboard keeps saying so ("${s4.incompleteImages?.lastError}")`);
         assert(!s4.pullBackoff, '…and the back-off is cleared, because the pull worked');
+
+        // ── A SHORT backup stays labelled short at every hop ──
+        //
+        // Inside the archive rather than in a header, because that is the copy that outlives the HTTP
+        // response: a year from now the operator restoring this file has the headers nowhere.
+        const shortSent: Record<string, Buffer> = {};
+        for (const [name, bytes] of Object.entries(shortImages)) shortSent[name.replace(/^images\//, '')] = bytes;
+        const shortDb = path.join(shortDir, 'state.db');
+        assert(sameTree(treeOf(imagesDirFor(shortDb)), shortSent),
+            'short: the two objects the node COULD send are kept, not thrown away with the third');
+        const keptManifest = missingManifestFor(shortDb);
+        assert(fs.existsSync(keptManifest)
+            && JSON.parse(fs.readFileSync(keptManifest, 'utf8')).missing[0] === 'posts/post-a/1-5e6f7a8b.jpg',
+            'short: the manifest is kept beside the database, naming the object that is gone');
+        const shortDaily = path.join(shortDir, 'history', `beanpool-${today}.db`);
+        assert(fs.existsSync(missingManifestFor(shortDaily))
+            && sameTree(treeOf(imagesDirFor(shortDaily)), shortSent),
+            'short: the daily copy is labelled short too, and holds the same two objects');
+        resetAdminAuthTarpit();
+        const shortDl = await fetch(`${url}/api/manager/backups/download-db?nodeId=${shortNode.id}`,
+            { headers: { 'X-Admin-Password': PW } });
+        assert(shortDl.headers.get('x-backup-contents') === 'database+images-partial',
+            `short: the manager's download says so on the wire (${shortDl.headers.get('x-backup-contents')})`);
+        const shortDir2 = openArchive(Buffer.from(await shortDl.arrayBuffer()), 'short');
+        assert(fs.existsSync(path.join(shortDir2, MISSING_MEMBER))
+            && sameTree(treeOf(path.join(shortDir2, 'images')), shortSent),
+            'short: …and the downloaded archive carries the manifest, so a restore from it can say so');
+        fs.rmSync(shortDir2, { recursive: true, force: true });
 
         // A node that answers normally never gets the opt-in.
         assert(!(await harvestNode(oldNodeForCheck, true)).incompleteImages,

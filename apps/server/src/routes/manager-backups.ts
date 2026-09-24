@@ -4,10 +4,14 @@
 
 import Router from '@koa/router';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
-    loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, listSealedBackups, listPlainHistory, type FleetNodeConfig
+    loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, listSealedBackups, listPlainHistory,
+    imagesDirFor, missingManifestFor, type FleetNodeConfig,
 } from '../services/harvester.js';
+import { MISSING_MEMBER } from '../services/sealed-backup.js';
 import type { RouteDeps } from './types.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -124,19 +128,76 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         ctx.body = fs.createReadStream(filePath);
     }
 
-    /** A readable database copy, as these routes served it before locked backups. */
-    function sendPlainDb(ctx: any, filePath: string, filename: string): void {
-        ctx.set('Cache-Control', 'no-store');
-        ctx.set('Content-Type', 'application/x-sqlite3');
-        ctx.set('X-Backup-Locked', 'no');
-        // eslint-disable-next-line no-control-regex
-        ctx.set('Content-Disposition', `attachment; filename="${filename.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);
-        ctx.body = fs.createReadStream(filePath);
+    /**
+     * A readable backup the harvester holds, served WHOLE: a `.tar.gz` of `state.db`, the `images/` beside it and
+     * the short-backup manifest when there is one.
+     *
+     * This used to stream the bare `.db`. Since the image store, that is a database whose every photo and
+     * attachment is a `storage_key` pointing at bytes the file does not carry — and it was not restorable
+     * anyway: the restore wizard extracts a tar. The archive here is exactly the shape the node's own
+     * `/api/local/admin/backup` sends, so what the operator downloads restores like any other backup.
+     *
+     * The staging hard-links rather than copies, so a download does not write a second copy of a node's images
+     * onto the manager's disk. `Content-Disposition` names it `.tar.gz`, and both clients honour that name.
+     */
+    function sendReadableBackup(ctx: any, dbPath: string, filename: string): void {
+        const base = filename.replace(/\.db$/i, '');
+        const work = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-backup-dl-'));
+        const stage = path.join(work, 'stage');
+        let images = 0;
+        let short = false;
+        try {
+            fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
+            const place = (from: string, to: string): void => {
+                try { fs.linkSync(from, to); } catch { fs.copyFileSync(from, to); }
+            };
+            place(dbPath, path.join(stage, 'state.db'));
+            const src = imagesDirFor(dbPath);
+            if (fs.existsSync(src)) {
+                const walk = (from: string, to: string): void => {
+                    fs.mkdirSync(to, { recursive: true, mode: 0o700 });
+                    for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+                        const a = path.join(from, entry.name);
+                        const b = path.join(to, entry.name);
+                        if (entry.isSymbolicLink()) continue;
+                        if (entry.isDirectory()) { walk(a, b); continue; }
+                        if (!entry.isFile()) continue;
+                        place(a, b);
+                        images++;
+                    }
+                };
+                walk(src, path.join(stage, 'images'));
+            }
+            const manifest = missingManifestFor(dbPath);
+            if (fs.existsSync(manifest)) {
+                fs.copyFileSync(manifest, path.join(stage, MISSING_MEMBER));
+                short = true;
+            }
+            const tarPath = path.join(work, 'backup.tar.gz');
+            execFileSync('tar', ['-czf', tarPath, '-C', stage, '.']);
+            ctx.set('Cache-Control', 'no-store');
+            ctx.set('Content-Type', 'application/gzip');
+            ctx.set('X-Backup-Locked', 'no');
+            ctx.set('X-Backup-Contents', short ? 'database+images-partial' : 'database+images');
+            ctx.set('X-Backup-Images', String(images));
+            // eslint-disable-next-line no-control-regex
+            ctx.set('Content-Disposition', `attachment; filename="${`${base}.tar.gz`.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);
+            const body = fs.createReadStream(tarPath);
+            // The temp tree outlives this handler and dies with the response, as createPlainBackup's stage does.
+            const clean = () => { try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore */ } };
+            body.on('close', clean);
+            body.on('error', clean);
+            ctx.res.on('close', clean);
+            ctx.body = body;
+        } catch (e) {
+            try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore */ }
+            throw e;
+        }
     }
 
     // Download the newest harvested backup for a node: the newest locked `.bpsealed` file as the node sent it, or —
-    // for a node whose backups are not locked yet (no recovery code, or an older BeanPool) — the readable state.db,
-    // as before locked backups. Whichever is newer.
+    // for a node whose backups are not locked yet (no recovery code, or an older BeanPool) — the readable copy as
+    // a restorable tar.gz of state.db AND the images it references. Whichever is newer.
     router.get('/api/manager/backups/download-db', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         const slug = resolveNodeSlug(ctx);
@@ -145,7 +206,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         const plainPath = path.join(BACKUPS_DIR, slug, 'state.db');
         const plain = fs.existsSync(plainPath) ? fs.statSync(plainPath) : null;
         if (plain && (!newest || plain.mtimeMs > newest.mtimeMs)) {
-            sendPlainDb(ctx, plainPath, `beanpool-backup-${slug}.db`);
+            sendReadableBackup(ctx, plainPath, `beanpool-backup-${slug}.db`);
             return;
         }
         if (!newest) {
@@ -216,7 +277,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
         if (isSealed) sendSealedFile(ctx, filePath, filename);
-        else sendPlainDb(ctx, filePath, filename);
+        else sendReadableBackup(ctx, filePath, filename);
     });
 
     // The plain-text identity bundle is gone (sealed-keys.md §6.1): the node keys travel only inside the sealed

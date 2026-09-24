@@ -224,8 +224,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     : '/api/manager/backups/download-identity',
                 { nodeId: slug },
                 node?.adminPassword,
+                // Only a fallback: the server names the file, and `downloadAdminFile` prefers that name.
+                // A readable backup comes back as a tar.gz of the database AND its images, a locked one as
+                // a .bpsealed; `.db` was the name of the thing this used to serve and no longer does.
                 kind === 'db'
-                    ? `beanpool-backup-${slug}.db`
+                    ? `beanpool-backup-${slug}.tar.gz`
                     : `identity-bundle-${slug}.tar.gz`,
                 node ? getTfaSessionToken(node.id) : undefined,
             );

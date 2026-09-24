@@ -42,17 +42,22 @@ function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql']) {
 
 // Cloudflare as far as the registrar uses it. A duplicate live tunnel name and a second record at a hostname are
 // refused, as Cloudflare refuses them — so a POST-collision or a second tunnel shows up as a failure here.
+// `during(re, run)`: once, just before Cloudflare answers the first call matching `re` (`${method} ${path}`),
+// `run` runs to completion — an admin action landing between two of a request's Cloudflare calls.
 function fakeCloudflare() {
     const calls = [];
     const tunnels = new Map();   // id → { id, name, deleted_at, ingress }
     const dns = new Map();       // id → { id, type, name (fqdn), content, proxied }
     const fail = { deleteTunnel: false, ingress: false };
+    const hooks = [];
     let seq = 0;
     const ok = (result) => Response.json({ success: true, result });
     const err = (status, code, message) => Response.json({ success: false, errors: [{ code, message }] }, { status });
     async function handle(method, url, body) {
         const p = url.pathname.replace('/client/v4', '');
         calls.push(`${method} ${p}`);
+        const h = hooks.findIndex((x) => x.re.test(`${method} ${p}`));
+        if (h >= 0) await hooks.splice(h, 1)[0].run();
         let m;
         if (method === 'POST' && p === '/accounts/acct/cfd_tunnel') {
             if ([...tunnels.values()].some((t) => !t.deleted_at && t.name === body.name)) return err(409, 1013, 'tunnel name already in use');
@@ -105,7 +110,8 @@ function fakeCloudflare() {
     }
     const recordAt = (fqdn) => [...dns.values()].find((r) => r.name === fqdn) || null;
     const liveTunnel = (id) => { const t = tunnels.get(id); return t && !t.deleted_at ? t : null; };
-    return { calls, tunnels, dns, fail, handle, recordAt, liveTunnel };
+    const during = (re, run) => hooks.push({ re, run });
+    return { calls, tunnels, dns, fail, hooks, during, handle, recordAt, liveTunnel };
 }
 
 async function makeKey() {
@@ -895,6 +901,246 @@ test('/admin: the served script parses, and the admin endpoints need the secret'
             headers: { 'x-admin-secret': 'test-admin-secret' },
         }), w.env);
         assert.deepEqual((await ev.json()).events.map((e) => e.event), ['claimed']);
+    } finally { w.restore(); }
+});
+
+// ── Races: a decision landing while a request is at Cloudflare ────────────────────────────────────────────────
+// A heal or claim reads the row, works at Cloudflare (ensure; on a kept tunnel, an edge re-attest of up to 15 s),
+// then writes. Whatever the admin decides in between must stand, and routing must end as that decision says.
+// `w.cf.during` runs the admin action between two of the request's Cloudflare calls.
+
+// What routes a name, as far as Cloudflare goes: the record at its hostname, and its tunnels still alive.
+const routing = (w, name) => ({
+    dns: w.cf.recordAt(`${name}.beanpool.org`)?.content ?? null,
+    tunnels: [...w.cf.tunnels.values()].filter((t) => !t.deleted_at && t.name === `bp-${name}`).map((t) => t.id),
+});
+
+// A live name the sweep paused for an impostor: tunnel and DNS removed — or the tunnel kept, when Cloudflare
+// refused its delete. Two neighbours keep the sweep believable.
+async function impostorPaused(w, name, { keptTunnel = false } = {}) {
+    const [owner, intruder, n1, n2] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);
+    await liveName(w, name, owner);
+    await liveName(w, `${name}-a`, n1); await liveName(w, `${name}-b`, n2);
+    w.nodes[`${name}.beanpool.org`] = attestsAs(intruder);
+    w.cf.fail.deleteTunnel = keptTunnel;
+    await attestSweep(w.env); await attestSweep(w.env);
+    w.cf.fail.deleteTunnel = false;
+    const row = await w.row(name);
+    assert.equal(row.status, 'paused');
+    assert.equal(row.pause_reason, 'impostor');
+    assert.equal(!!w.cf.liveTunnel(row.tunnel_id), keptTunnel);
+    return { owner, intruder, row };
+}
+
+// After a race: the same decision again, then the admin's release, still do what they say.
+async function stillAdministrable(w, name, action) {
+    const again = await w.admin(name, action);
+    assert.equal(again.status, 200, JSON.stringify(again.body));
+    assert.equal(again.body.status, action === 'pause' ? 'paused' : 'blocked');
+    assert.equal((await w.admin(name, 'release')).body.status, 'released');
+    assert.deepEqual(routing(w, name), { dns: null, tunnels: [] }, 'released: nothing left at Cloudflare');
+    assert.equal((await w.available(name)).body.available, true);
+}
+
+test('race: an admin pause landing while the owner\'s claim heals an impostor pause stands — not routed, no token', async () => {
+    const w = await world();
+    try {
+        const { owner } = await impostorPaused(w, 'midpause');
+        w.nodes['midpause.beanpool.org'] = attestsAs(owner);
+        // The heal has made a fresh tunnel and set its ingress; the pause lands before it puts the record up.
+        let paused;
+        w.cf.during(/^POST \/zones\/zone\/dns_records$/, async () => { paused = await w.admin('midpause', 'pause'); });
+        const r = await w.claim(owner, { name: 'midpause' });
+        assert.equal(w.cf.hooks.length, 0, 'the pause landed mid-request');
+        assert.equal(paused.body.status, 'paused');
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'paused');
+        assert.equal(r.body.reason, 'admin');
+        assert.equal(r.body.tunnelToken, undefined, 'the owner got no token');
+        const row = await w.row('midpause');
+        assert.equal(row.status, 'paused');
+        assert.equal(row.pause_reason, 'admin');
+        assert.deepEqual(routing(w, 'midpause'), { dns: null, tunnels: [] }, 'not routed; the tunnel the heal made is gone');
+        assert.equal((await w.status(owner)).body.reason, 'admin');
+        await stillAdministrable(w, 'midpause', 'pause');
+    } finally { w.restore(); }
+});
+
+test('race: an admin pause landing during the heal\'s edge re-attest stands; the node\'s next heals leave it off', async () => {
+    const w = await world();
+    try {
+        const { owner, row: before } = await impostorPaused(w, 'midattest', { keptTunnel: true });
+        // The owner's node, back on the kept tunnel, answers the heal's re-attest — while the admin pauses.
+        let paused;
+        w.nodes['midattest.beanpool.org'] = async (nonce) => { paused = await w.admin('midattest', 'pause'); return attestsAs(owner)(nonce); };
+        const r = await w.heal(owner);
+        assert.equal(paused.body.status, 'paused');
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'paused');
+        assert.equal(r.body.reason, 'admin');
+        const row = await w.row('midattest');
+        assert.equal(row.status, 'paused');
+        assert.equal(row.pause_reason, 'admin');
+        assert.equal(row.tunnel_id, before.tunnel_id, 'an admin pause keeps the tunnel');
+        assert.equal(routing(w, 'midattest').dns, null, 'not routed');
+
+        // The node's routine heals leave it alone; only the admin's resume brings it back.
+        w.nodes['midattest.beanpool.org'] = attestsAs(owner);
+        for (let i = 0; i < 2; i++) assert.equal((await w.heal(owner)).body.reason, 'admin');
+        assert.equal(routing(w, 'midattest').dns, null);
+        assert.equal((await w.admin('midattest', 'resume')).body.status, 'live');
+        assert.equal(routing(w, 'midattest').dns, `${before.tunnel_id}.cfargotunnel.com`);
+    } finally { w.restore(); }
+});
+
+test('race: an admin pause landing mid-repair of a live name stands, and the record the repair re-made goes', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'midrepair', owner);
+        // The pause lands just before the heal looks the record up: the heal finds none and makes one.
+        let paused;
+        w.cf.during(/^GET \/zones\/zone\/dns_records$/, async () => { paused = await w.admin('midrepair', 'pause'); });
+        const r = await w.heal(owner);
+        assert.equal(paused.body.status, 'paused');
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'paused');
+        assert.equal(r.body.reason, 'admin');
+        const row = await w.row('midrepair');
+        assert.equal(row.status, 'paused');
+        assert.equal(row.pause_reason, 'admin');
+        assert.equal(row.dns_record_id, null);
+        assert.equal(routing(w, 'midrepair').dns, null, 'the record the heal made is gone');
+        assert.equal((await w.heal(owner)).body.reason, 'admin');
+        assert.equal(routing(w, 'midrepair').dns, null);
+        await stillAdministrable(w, 'midrepair', 'pause');
+    } finally { w.restore(); }
+});
+
+test('race: an admin block landing while the owner heals an impostor pause stands — blocked, not routed, no token', async () => {
+    const w = await world();
+    try {
+        const { owner } = await impostorPaused(w, 'midblock');
+        w.nodes['midblock.beanpool.org'] = attestsAs(owner);
+        // The heal has made a fresh tunnel; the block lands before it sets the ingress.
+        let blocked;
+        w.cf.during(/^PUT \/accounts\/acct\/cfd_tunnel\/[^/]+\/configurations$/, async () => { blocked = await w.admin('midblock', 'block'); });
+        const r = await w.claim(owner, { name: 'midblock' });
+        assert.equal(blocked.body.status, 'blocked');
+        assert.equal(r.status, 403, JSON.stringify(r.body));
+        assert.deepEqual(r.body, { error: 'name blocked' });
+        const row = await w.row('midblock');
+        assert.equal(row.status, 'blocked');
+        assert.deepEqual([row.tunnel_id, row.dns_record_id], [null, null]);
+        assert.deepEqual(routing(w, 'midblock'), { dns: null, tunnels: [] });
+        await stillAdministrable(w, 'midblock', 'block');
+    } finally { w.restore(); }
+});
+
+test('race: an admin block landing as the owner\'s heal of its live name starts stands, and what the heal re-made goes', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'earlyblock', owner);
+        const before = await w.row('earlyblock');
+        // The block lands before the heal checks its tunnel: the heal finds it gone and makes a new one.
+        let blocked;
+        w.cf.during(/^GET \/accounts\/acct\/cfd_tunnel\/[^/]+$/, async () => { blocked = await w.admin('earlyblock', 'block'); });
+        const r = await w.claim(owner, { name: 'earlyblock' });   // today's nodes heal with a claim
+        assert.equal(blocked.body.status, 'blocked');
+        assert.equal(r.status, 403, JSON.stringify(r.body));
+        assert.equal(r.body.tunnelToken, undefined);
+        const row = await w.row('earlyblock');
+        assert.equal(row.status, 'blocked');
+        assert.deepEqual([row.tunnel_id, row.dns_record_id], [null, null]);
+        assert.equal(w.cf.liveTunnel(before.tunnel_id), null);
+        assert.deepEqual(routing(w, 'earlyblock'), { dns: null, tunnels: [] }, 'the tunnel and record the heal made are gone');
+        await stillAdministrable(w, 'earlyblock', 'block');
+    } finally { w.restore(); }
+});
+
+test('race: the owner\'s heal landing while the admin\'s block is at Cloudflare is refused; nothing is left routed', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'lateheal', owner);
+        // The heal arrives between the block's record delete and its tunnel delete.
+        let healed;
+        w.cf.during(/^DELETE \/accounts\/acct\/cfd_tunnel\//, async () => { healed = await w.heal(owner); });
+        const b = await w.admin('lateheal', 'block');
+        assert.equal(b.body.status, 'blocked');
+        assert.equal(healed.status, 403, JSON.stringify(healed.body));
+        const row = await w.row('lateheal');
+        assert.equal(row.status, 'blocked');
+        assert.deepEqual([row.tunnel_id, row.dns_record_id], [null, null]);
+        assert.deepEqual(routing(w, 'lateheal'), { dns: null, tunnels: [] });
+        await stillAdministrable(w, 'lateheal', 'block');
+    } finally { w.restore(); }
+});
+
+test('race: an admin block landing while the owner takes its release back stands — blocked, not routed, no token', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'takeblock', owner);
+        await w.release(owner);
+        let blocked;
+        w.cf.during(/^POST \/zones\/zone\/dns_records$/, async () => { blocked = await w.admin('takeblock', 'block'); });
+        const r = await w.claim(owner, { name: 'takeblock' });
+        assert.equal(blocked.body.status, 'blocked');
+        assert.equal(r.status, 403, JSON.stringify(r.body));
+        assert.deepEqual(r.body, { error: 'name blocked' });
+        const row = await w.row('takeblock');
+        assert.equal(row.status, 'blocked');
+        assert.equal(row.node_pubkey, owner.pubHex);
+        assert.deepEqual(routing(w, 'takeblock'), { dns: null, tunnels: [] });
+        await stillAdministrable(w, 'takeblock', 'block');
+    } finally { w.restore(); }
+});
+
+test('race: an admin block landing on a new claim mid-provisioning stands', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        let blocked;
+        w.cf.during(/^PUT \/accounts\/acct\/cfd_tunnel\/[^/]+\/configurations$/, async () => { blocked = await w.admin('newblock', 'block'); });
+        const r = await w.claim(owner, { name: 'newblock' });
+        assert.equal(blocked.body.status, 'blocked');
+        assert.equal(r.status, 403, JSON.stringify(r.body));
+        const row = await w.row('newblock');
+        assert.equal(row.status, 'blocked');
+        assert.equal(row.node_pubkey, owner.pubHex);
+        assert.deepEqual(routing(w, 'newblock'), { dns: null, tunnels: [] });
+        await stillAdministrable(w, 'newblock', 'block');
+    } finally { w.restore(); }
+});
+
+test('race: an approval whose claim was withdrawn meanwhile, and the name queued for by another key, does not go live', async () => {
+    const w = await world();
+    try {
+        const [first, second] = await Promise.all([makeKey(), makeKey()]);
+        assert.equal((await w.claim(first, { name: 'sydney' })).body.status, 'pending');   // gated in the 0001 seed
+        // While the approval makes its tunnel, the first key withdraws and a second key queues for the name.
+        let withdrawn, queued;
+        w.cf.during(/^POST \/accounts\/acct\/cfd_tunnel$/, async () => {
+            withdrawn = await w.release(first);
+            queued = await w.claim(second, { name: 'sydney' });
+        });
+        const ap = await w.admin('sydney', 'approve');
+        assert.equal(withdrawn.body.status, 'released');
+        assert.equal(queued.body.status, 'pending');
+        assert.equal(ap.status, 409, JSON.stringify(ap.body));
+        let row = await w.row('sydney');
+        assert.equal(row.node_pubkey, second.pubHex);
+        assert.equal(row.status, 'pending', 'the second key\'s claim still waits for the admin');
+        assert.equal(row.decided_at, null);
+        assert.deepEqual(routing(w, 'sydney'), { dns: null, tunnels: [] }, 'what the approval made is gone');
+
+        // Approving the claim that is there now works as ever.
+        assert.equal((await w.admin('sydney', 'approve')).body.status, 'live');
+        row = await w.row('sydney');
+        assert.equal(row.node_pubkey, second.pubHex);
+        assert.equal(routing(w, 'sydney').dns, `${row.tunnel_id}.cfargotunnel.com`);
     } finally { w.restore(); }
 });
 

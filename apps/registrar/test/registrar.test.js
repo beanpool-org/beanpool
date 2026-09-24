@@ -63,18 +63,18 @@ function createMockD1() {
                         });
                         return { success: true };
                     }
-                    if (sql.startsWith('UPDATE name_allocations SET')) {
-                        const name = boundArgs[boundArgs.length - 1];
-                        const alloc = allocations.get(name);
-                        if (!alloc) return { success: false };
-                        const setMatch = sql.match(/SET (.*?) WHERE/);
-                        if (setMatch) {
-                            const setParts = setMatch[1].split(',').map(s => s.trim().split('=')[0].trim());
-                            setParts.forEach((col, idx) => {
-                                alloc[col] = boundArgs[idx];
-                            });
-                        }
-                        return { success: true };
+                    // `SET a=?, … WHERE name=? [AND col IS ? …]` (updateAllocation, updateIfUnchanged), reporting
+                    // meta.changes as D1 does. Anything else (touchContact's WHERE node_pubkey=…) is a no-op here.
+                    if (sql.startsWith('UPDATE name_allocations SET') && /WHERE name=\?/.test(sql)) {
+                        const [, setSql, whereSql] = sql.match(/SET (.*?) WHERE (.*)$/s);
+                        const setCols = setSql.split(',').map(s => s.trim()).filter(s => s.endsWith('?')).map(s => s.split('=')[0].trim());
+                        const whereCols = whereSql.split(' AND ').map(s => s.trim().split(/\s*(?:=|\bIS\b)\s*\?/)[0].trim());
+                        const whereArgs = boundArgs.slice(setCols.length);
+                        const alloc = allocations.get(whereArgs[0]);
+                        if (!alloc || !whereCols.every((col, idx) => (alloc[col] ?? null) === (whereArgs[idx] ?? null)))
+                            return { success: true, meta: { changes: 0 } };
+                        setCols.forEach((col, idx) => { alloc[col] = boundArgs[idx]; });
+                        return { success: true, meta: { changes: 1 } };
                     }
                     if (sql.startsWith('DELETE FROM name_allocations')) {
                         allocations.delete(boundArgs[0]);

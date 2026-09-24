@@ -52,17 +52,27 @@ export const updateAllocation = async (env, name, fields) => {
         .bind(...keys.map((k) => fields[k]), name).run();
 };
 
-// Overwrite `expected` — a row as it was just read — with a new tenure, only if nobody changed it meanwhile:
-// two keys racing for a freed name must not both think they won. False = someone else got there first — or the
-// driver didn't say how many rows changed: a lock that can't tell must not report a win.
-export const replaceAllocation = async (env, name, expected, fields) => {
+// A row's tenure (key, claim time) and state (status, pause reason): what a request that read it acted on.
+const STATE = ['node_pubkey', 'requested_at', 'status', 'pause_reason'];
+const IDS = ['tunnel_id', 'dns_record_id'];
+
+// Write `fields` over `expected` — the row as this request read it, or last wrote it — only if its tenure and
+// state are unchanged (and, `withIds`, the tunnel and DNS ids it recorded): a request that worked at Cloudflare
+// meanwhile must not overwrite an admin's pause or block, the sweep's pause, a release or another claim. False =
+// the row changed — or the driver didn't say how many rows changed: a lock that can't tell must not report a win.
+export const updateIfUnchanged = async (env, name, expected, fields, { withIds = false } = {}) => {
     const keys = Object.keys(fields);
-    const set = keys.map((k) => `${k}=?`).join(', ');
+    const cols = withIds ? [...STATE, ...IDS] : STATE;
+    const set = keys.length ? keys.map((k) => `${k}=?`).join(', ') : 'name=name';
     const r = await env.DB.prepare(
-        `UPDATE name_allocations SET ${set} WHERE name=? AND node_pubkey=? AND status=? AND requested_at=?`
-    ).bind(...keys.map((k) => fields[k]), name, expected.node_pubkey, expected.status, expected.requested_at).run();
+        `UPDATE name_allocations SET ${set} WHERE name=? AND ${cols.map((c) => `${c} IS ?`).join(' AND ')}`
+    ).bind(...keys.map((k) => fields[k]), name, ...cols.map((c) => expected[c] ?? null)).run();
     return (r?.meta?.changes ?? 0) > 0;
 };
+
+// Overwrite `expected` — a row as it was just read — with a new tenure, only if nobody changed it meanwhile: two
+// keys racing for a freed name must not both think they won, and a take-back must not undo the admin's release.
+export const replaceAllocation = (env, name, expected, fields) => updateIfUnchanged(env, name, expected, fields);
 
 // A valid signed request from `pubkey`: the abandonment clock restarts and any warning clears, on every name
 // the key holds. At most one write an hour per key (nodes ask every 5 min), unless a warning must clear.

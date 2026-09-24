@@ -18,7 +18,7 @@ import * as db from '../src/db.js';
 const nowS = () => Math.floor(Date.now() / 1000);
 const toHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 
-// D1's prepare/bind/first/all/run over node:sqlite.
+// D1's prepare/bind/first/all/run over node:sqlite (run() reports meta.changes, as D1 does).
 function sqliteD1() {
     const sqlite = new DatabaseSync(':memory:');
     for (const m of ['0001_init.sql', '0002_states.sql'])
@@ -31,7 +31,7 @@ function sqliteD1() {
                 bind(...a) { args = a; return this; },
                 async first() { const r = stmt.get(...args); return r ? { ...r } : null; },
                 async all() { return { results: stmt.all(...args).map((r) => ({ ...r })) }; },
-                async run() { stmt.run(...args); return { success: true }; },
+                async run() { const r = stmt.run(...args); return { success: true, meta: { changes: Number(r.changes) } }; },
             };
         },
     };

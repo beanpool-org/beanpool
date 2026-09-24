@@ -7,7 +7,7 @@
  * - Persistent header with SyncStatus
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
 import { connectToAnchor, onSystemAnnouncement, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
@@ -165,8 +165,9 @@ export function App() {
     const [myTransactions, setMyTransactions] = useState<MarketplaceTransaction[]>([]);
     // A listing the viewer has an open deal on is not applied from the live feed: its change can reject or cancel
     // the deal without a trade event of its own, so it rings the doorbell and this poll runs (lib/live-posts).
+    // Set in the commit, not in a later effect, so a push landing in between is tested against these deals.
     const myTransactionsRef = useRef<MarketplaceTransaction[]>([]);
-    useEffect(() => { myTransactionsRef.current = myTransactions; }, [myTransactions]);
+    useLayoutEffect(() => { myTransactionsRef.current = myTransactions; }, [myTransactions]);
     useEffect(() => registerLivePostTie(openDealTie(() => myTransactionsRef.current)), []);
     const [marketClickCount, setMarketClickCount] = useState(0);
     // null until the node has answered the membership check. The Market, Commons and Map pages wait for it

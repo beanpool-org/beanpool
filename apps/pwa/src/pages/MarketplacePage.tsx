@@ -6,7 +6,7 @@
  * Tapping a post opens a full detail view.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
@@ -557,9 +557,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // A public offer or need the node pushed over the live feed lands in the feed directly, with no fetch, if
     // the current pills' list read would include it (lib/live-posts). Removing something this feed holds as an
-    // event, a poll or the viewer's own still rings the doorbell, so it takes the refresh above.
+    // event, a poll or the viewer's own still rings the doorbell, so it takes the refresh above. The ref is set in
+    // the commit, not in a later effect: a push landing in between would be tested against the old list.
     const postsRef = useRef<MarketplacePost[]>(posts);
-    useEffect(() => { postsRef.current = posts; }, [posts]);
+    useLayoutEffect(() => { postsRef.current = posts; }, [posts]);
     useEffect(() => {
         const filter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
         const fits = (p: MarketplacePost) => postFitsList(p, filter);

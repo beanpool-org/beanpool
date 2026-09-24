@@ -9,7 +9,7 @@
  *  - User location marker (pulsing purple dot)
  */
 
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -619,9 +619,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
     // A public offer or need the node pushed over the live feed lands on the map directly, with no fetch
     // (lib/live-posts). Removing something this map holds as an event, a poll or the viewer's own still rings
-    // the doorbell, so it takes the refresh above.
+    // the doorbell, so it takes the refresh above. The ref is set in the commit, not in a later effect: a push
+    // landing in between would be tested against the old list.
     const postsRef = useRef<MarketplacePost[]>(posts);
-    useEffect(() => { postsRef.current = posts; }, [posts]);
+    useLayoutEffect(() => { postsRef.current = posts; }, [posts]);
     useEffect(() => {
         const offView = onLivePostChange(change => setPosts(prev => applyLivePostChange(prev, change, fitsMapList)));
         const offTie = registerLivePostTie(heldPostTie(() => postsRef.current, identity?.publicKey));

@@ -281,6 +281,7 @@ run_federation_suites() {
       test-recovery-collect
       test-sso-recovery-roundtrip
       test-keeper-http
+      test-open-join
       test-commons-conservation
       test-ledger-rollback
       test-treasury-keepership
@@ -431,6 +432,8 @@ run_federation_suites() {
       test-shutdown-recovery
       test-storage-health
       test-image-store
+      test-image-store-s3
+      test-image-store-s3-http
       test-image-evacuation
       test-snapshot-completeness
       test-groups-isolation

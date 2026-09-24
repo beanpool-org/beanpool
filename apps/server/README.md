@@ -285,6 +285,23 @@ Let's Encrypt allows **5 duplicate certificates per domain per week**. If you hi
 #### Backups
 All persistent data is in `./data/`. Copy this folder to natively backup all SQLite databases.
 
+#### Where photos are kept (`IMAGE_STORE`)
+By default a node keeps post photos and message attachments on its own disk, in `./data/images/`, and every backup
+carries them. Leave `IMAGE_STORE` unset for that; there is nothing to sign up for.
+
+`IMAGE_STORE=s3` keeps them in an S3-compatible bucket instead (Cloudflare R2 first; this is for the global node). Set
+all five of `IMAGE_S3_ENDPOINT` (e.g. `https://<account-id>.r2.cloudflarestorage.com`, no path), `IMAGE_S3_BUCKET`,
+`IMAGE_S3_REGION` (`auto` for R2), `IMAGE_S3_ACCESS_KEY_ID` and `IMAGE_S3_SECRET_ACCESS_KEY` in the node's `.env`:
+they are read from the environment only, never stored in the database, and never put in a backup. Photos are still
+served through the node on the same URLs. The node refuses to start, and says why, if a setting is missing, the
+bucket cannot be reached with those credentials, the node is a standby, or it still has photos on its own disk
+(moving an existing node from disk to a bucket needs a migration tool this version does not have).
+
+On an s3 node a backup is the database only: the photos stay in the bucket, and the backup says so
+(`images-in-bucket.json` inside it, and the Backup tab). Keep the bucket's own protection (R2 bucket settings, a
+copy to a second bucket) as part of backing that node up: a photo deleted from the bucket does not come back from
+a backup.
+
 #### Software Updates
 Your node automatically checks GitHub for new releases every 6 hours. When an update is available:
 - A pulsing badge appears in the admin header next to the version number

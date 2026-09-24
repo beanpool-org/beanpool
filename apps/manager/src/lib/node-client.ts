@@ -2,7 +2,7 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
-import { downloadShortfall } from './backup-shortfall';
+import { downloadNotice, type DownloadNotice } from './backup-shortfall';
 
 export interface ShutdownStatus {
     uncleanShutdown: boolean;
@@ -60,6 +60,11 @@ export interface StorageCleanPreview {
         count: number;
         totalBytes: number;
     };
+    /** Objects in the node's image store (its disk, or its bucket) that no row points at. Absent from older nodes. */
+    orphanedImageObjects?: {
+        count: number;
+        totalBytes: number;
+    };
     orphanedThumbnails: {
         count: number;
         totalBytes: number;
@@ -77,6 +82,16 @@ export interface StorageCleanResult {
     success: boolean;
     removedPhotosCount: number;
     removedPhotosBytes: number;
+    /** Absent from older nodes. */
+    removedImageObjectsCount?: number;
+    removedImageObjectsBytes?: number;
+    /**
+     * Orphaned image-store objects the Clean found and did not get to: it answers within a few seconds rather
+     * than wait on thousands of them, and the node keeps removing the rest in the background. Absent from older
+     * nodes; above zero means "more remain", not "done".
+     */
+    remainingImageObjectsCount?: number;
+    remainingImageObjectsBytes?: number;
     removedThumbnailsCount: number;
     removedThumbnailsBytes: number;
     compressedLogsCount: number;
@@ -388,11 +403,13 @@ function serverFilename(res: Response): string | null {
 }
 
 /**
- * Fetch an admin file and save it, and return what the response said the file is SHORT of.
+ * Fetch an admin file and save it, and return what the response said about it ({@link downloadNotice}).
  *
  * A short backup is a 200 now (confirmation round 4): the node ships every object it holds and says in the
  * headers how many it could not. That sentence is the only place the operator can learn of it, so this hands
- * it back rather than dropping it — '' when the file is whole, or when the download was declined.
+ * it back rather than dropping it — with `short` saying whether anything is actually missing, because an s3
+ * node's whole backup has a sentence too (its photos are in the bucket). Empty text when there is nothing to
+ * say, or when the download was declined.
  */
 export async function downloadAdminFile(
     endpointPath: string,
@@ -400,7 +417,7 @@ export async function downloadAdminFile(
     adminPassword: string | undefined,
     filename: string,
     tfaToken?: string,
-): Promise<string> {
+): Promise<DownloadNotice> {
     const headers = buildAdminHeaders(adminPassword, tfaToken);
     const url = new URL(endpointPath, window.location.origin);
     for (const [k, v] of Object.entries(params)) {
@@ -437,7 +454,7 @@ export async function downloadAdminFile(
             `${filename} is about ${gb} GB. It has to be held in memory before it can be saved, `
             + `which may make this tab run out of memory. Download anyway?`
         );
-        if (!proceed) return '';
+        if (!proceed) return { text: '', short: false };
     }
 
     const blob = await res.blob();
@@ -464,7 +481,7 @@ export async function downloadAdminFile(
         // instantly.
         setTimeout(() => URL.revokeObjectURL(objectUrl), REVOKE_DELAY_MS);
     }
-    return downloadShortfall(res);
+    return downloadNotice(res);
 }
 
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {

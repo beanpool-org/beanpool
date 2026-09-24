@@ -34,6 +34,9 @@
  *      store DID hold.
  *  11. A restore never writes THROUGH a store object's inode: restoring an older `attachments/<id>.bin` over
  *      one a snapshot hard-links leaves the snapshot's bytes exactly as captured.
+ *  12. The open door's record travels too: `open_joins` and the node key its hashes are made with
+ *      (node_config `openJoinSalt`). Without both, a restored global node would let every sign-in account
+ *      join a second time.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -194,6 +197,7 @@ async function main(): Promise<void> {
     const { writeMessageTombstone } = await import('./engine/message-tombstone.js');
     const { restoreImages } = await import('./routes/backup.js');
     const { cleanStorageAndCompressLogs, getStorageCleanPreview } = await import('./engine/storage-health.js');
+    const { openJoinHash, OPEN_JOIN_KEY_ROW } = await import('./engine/open-join.js');
 
     await initTls();
     initStateEngine();
@@ -235,6 +239,14 @@ async function main(): Promise<void> {
     const keptKey = keyOf(kept!.id);
     const doomedKey = keyOf(replaced!.id);
     assert(!!keptKey && !!doomedKey, 'setup: both photos went straight to the store');
+
+    // A member who came in through the open door, as engine/open-join.ts records one.
+    const openJoiner = crypto.randomBytes(32).toString('hex');
+    const openJoinHashAtT = openJoinHash('google', 'snapshot-completeness-sub');
+    db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash) VALUES (?, ?, ?, ?, ?)')
+        .run(openJoiner, 'google', openJoinHashAtT, new Date().toISOString(), null);
+    const openJoinKeyAtT = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as any)?.value as string;
+    assert(!!openJoinKeyAtT, 'setup: an open join, and the node key its hash was made with');
 
     /** What every referenced object held at T. The whole suite is about reproducing this map. */
     const atT = new Map<string, Buffer>([
@@ -306,6 +318,17 @@ async function main(): Promise<void> {
         'and the attachment that was deleted after it');
     assert(!resolveAll(path.join(plainDir, 'state.db'), path.join(plainDir, 'images')).has(keyOf(replaced!.id)),
         'while the replacement photo, which did not exist at T, is not in the snapshot');
+    {
+        const archived = new Database(path.join(plainDir, 'state.db'), { readonly: true });
+        try {
+            const row = archived.prepare('SELECT join_hash FROM open_joins WHERE member_pubkey = ?').get(openJoiner) as any;
+            const key = (archived.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as any)?.value;
+            assert(row?.join_hash === openJoinHashAtT, 'the archive carries open_joins, so a restored node still knows who joined');
+            assert(key === openJoinKeyAtT, 'and the node key those hashes were made with, so the same account still matches');
+        } finally {
+            archived.close();
+        }
+    }
 
     // ── 4. Locked: the same snapshot, sealed, carries the same images ──────────────────────────
     const recovery = await makeRecoveryCode();
@@ -433,8 +456,8 @@ async function main(): Promise<void> {
     db.prepare('DELETE FROM posts WHERE id = ?').run(kept!.id);
     const aged = (Date.now() - 3 * 60 * 60 * 1000) / 1000;
     fs.utimesSync(path.join(imagesDir(), guardedKey), aged, aged);
-    assert(getStorageCleanPreview().orphanedImageObjects.count >= 1, 'the sweep sees the live copy as reclaimable');
-    const swept = cleanStorageAndCompressLogs();
+    assert((await getStorageCleanPreview()).orphanedImageObjects.count >= 1, 'the sweep sees the live copy as reclaimable');
+    const swept = await cleanStorageAndCompressLogs();
     assert(swept.removedImageObjectsCount >= 1, 'and reclaims it');
     assert(store.get(guardedKey) === null, 'the live object is gone');
     assert(fs.existsSync(guardedImages), 'the snapshot\'s directory is untouched');

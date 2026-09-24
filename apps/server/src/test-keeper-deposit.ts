@@ -376,6 +376,13 @@ async function main(): Promise<void> {
     assert(getCurrentShares(both).find(s => s.holderType === 'hub')!.encryptedShare
             === Buffer.from('share-2').toString('base64'),
         '...and the refusal leaves the stored generation exactly as it was');
+    // Refused before the sign-in was checked, so it cost no nonce: the same one stores a split that keeps the hub.
+    const keptHub = await depositSsoKeeperGeneration({
+        provider: 'google', ownerPubkey: both, shares: generation(),
+        idToken: GOOGLE.mint(GOOGLE.sub, nonce), nonce,
+    }).catch((e: Error) => e);
+    assert(!(keptHub instanceof Error) && keptHub.generation === 3,
+        `...and it was refused before the sign-in was checked: the same nonce still works (got ${keptHub instanceof Error ? keptHub.message : keptHub.generation})`);
 
     // The first split has nothing to stay consistent with, so a fresh A there is correct.
     prime();
@@ -390,6 +397,25 @@ async function main(): Promise<void> {
         idToken: GOOGLE.mint(GOOGLE.sub, nonce), nonce,
     });
     assert(fresh.generation === 1, 'a first deposit may mint any hub fragment — there is nothing to strand');
+
+    // A two-layer split with no hub fragment could never be stored. It is refused before the sign-in
+    // is checked, like the shape checks, so the nonce is not spent on it.
+    prime();
+    const noHubOwner = memberKey();
+    nonce = issueNonce(noHubOwner);
+    const noHub = await depositSsoKeeperGeneration({
+        provider: 'google', ownerPubkey: noHubOwner, shares: generation().filter(s => s.holderType !== 'hub'),
+        idToken: GOOGLE.mint(GOOGLE.sub, nonce), nonce,
+    }).catch((e: Error) => e);
+    assert(noHub instanceof KeeperDepositError && /needs a hub fragment/.test(noHub.message),
+        `a two-layer split with no hub fragment is refused (got ${noHub instanceof Error ? noHub.message : 'stored'})`);
+    assert(getCurrentShares(noHubOwner).length === 0, '...and nothing is stored');
+    const wholeSplit = await depositSsoKeeperGeneration({
+        provider: 'google', ownerPubkey: noHubOwner, shares: generation(),
+        idToken: GOOGLE.mint(GOOGLE.sub, nonce), nonce,
+    }).catch((e: Error) => e);
+    assert(!(wholeSplit instanceof Error) && wholeSplit.generation === 1,
+        `...before the sign-in was checked: the same nonce then stores the whole split (got ${wholeSplit instanceof Error ? wholeSplit.message : wholeSplit.generation})`);
 
     // Two different people, one on each provider, must not collide.
     assert(google.ssoRow.ssoLookupHash !== apple.ssoRow.ssoLookupHash,

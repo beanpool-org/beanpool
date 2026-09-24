@@ -5,7 +5,7 @@
 import { db, afterTransactionCommit } from '../db/db.js';
 import crypto from 'node:crypto';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
-import { deleteStoredObjects, photoDataOf, storePhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
+import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import {
@@ -203,11 +203,32 @@ export async function signSyncPayload(cb: SyncCallbacks, payload: SyncPayload): 
  *
  * Runs before the import transaction opens, so the write lock is never held across an fsync. See the call
  * site for why that matters on a small node.
+ *
+ * Through the store's NON-blocking write, a few at a time: on an S3 node each photo is a PUT to the bucket,
+ * and a first full snapshot carries every photo a peer holds — one blocking round trip each would hold the
+ * node for minutes, and the host watchdog restarts a node that stops answering for one.
  */
-function storeImportedPhotos(photos: any[]): Map<string, PhotoColumns> {
+async function storeImportedPhotos(photos: any[]): Promise<Map<string, PhotoColumns>> {
     const store = getImageStore();
+    // Written a few at a time; results kept by index so "last one wins" below still means the payload's order.
+    const written: (PhotoColumns | null)[] = new Array(photos.length).fill(null);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+        while (next < photos.length) {
+            const i = next++;
+            const ph = photos[i];
+            if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
+            written[i] = await storePhotoColumnsAsync(
+                store,
+                sb => postPhotoKey(ph.post_id, ph.order_num, sb.sha256, sb.mime),
+                ph.photo_data,
+            );
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(EXPORT_READ_CONCURRENCY, photos.length) }, worker));
     const out = new Map<string, PhotoColumns>();
-    for (const ph of photos) {
+    for (let i = 0; i < photos.length; i++) {
+        const ph = photos[i];
         // The other half of the rule `restoreInlinePhotos` keeps on the way out, enforced here on the way
         // in — because the peer sending this payload may be a node that has not been upgraded yet, and
         // during a rolling upgrade it usually is. A photo row with no bytes carries no information, and
@@ -216,34 +237,50 @@ function storeImportedPhotos(photos: any[]): Map<string, PhotoColumns> {
         // `updated_at` means no later delta pull ever corrects it. Nothing to apply, so apply nothing.
         if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
         // Last one wins, exactly as the INSERT OR REPLACE loop did when a payload named the same slot twice.
-        out.set(`${ph.post_id}|${ph.order_num}`, storePhotoColumns(
-            store,
-            sb => postPhotoKey(ph.post_id, ph.order_num, sb.sha256, sb.mime),
-            ph.photo_data,
-        ));
+        out.set(`${ph.post_id}|${ph.order_num}`, written[i]!);
     }
     return out;
 }
 
-function restoreInlinePhotos(payload: SyncPayload): SyncPayload {
+/**
+ * How many photos an export reads from the store at once. On disk each read is a local syscall and this changes
+ * nothing; on S3 it is a round trip, and a full export names every photo on the node — one at a time that is
+ * minutes, all at once it is thousands of sockets on a 1 GB host.
+ */
+const EXPORT_READ_CONCURRENCY = 8;
+
+async function restoreInlinePhotos(payload: SyncPayload): Promise<SyncPayload> {
     const photos = (payload as any).photos as any[] | undefined;
     if (!Array.isArray(photos) || photos.length === 0) return payload;
     const store = getImageStore();
-    const omitted: string[] = [];
-    (payload as any).photos = photos.flatMap(row => {
-        let photoData: string | null;
-        try {
-            photoData = photoDataOf(row, store);
-        } catch (e) {
-            omitted.push(`${row.post_id}|${row.order_num}`);
-            console.error('[Sync] Could not read a photo out of the image store; omitting the row from this export so a replica keeps its own copy:', e);
-            return [];
+    // Filled by index, so the payload keeps exactly the order the engine exported — the reads finish in any order.
+    const results: ({ row: any } | { omitted: string })[] = new Array(photos.length);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+        while (next < photos.length) {
+            const i = next++;
+            const row = photos[i];
+            let photoData: string | null;
+            try {
+                // Non-blocking: on an S3 node this is a bucket round trip, and the node keeps serving meanwhile.
+                photoData = await photoDataOfAsync(row, store);
+            } catch (e) {
+                results[i] = { omitted: `${row.post_id}|${row.order_num}` };
+                console.error('[Sync] Could not read a photo out of the image store; omitting the row from this export so a replica keeps its own copy:', e);
+                continue;
+            }
+            // `photoDataOf` returns null only for a row that genuinely holds no image and names no object.
+            // Such a row exported whatever its column held before this change, so it still does.
+            const out: any = { post_id: row.post_id, photo_data: photoData ?? row.photo_data ?? null, order_num: row.order_num };
+            if (row.updated_at !== undefined) out.updated_at = row.updated_at;
+            results[i] = { row: out };
         }
-        // `photoDataOf` returns null only for a row that genuinely holds no image and names no object.
-        // Such a row exported whatever its column held before this change, so it still does.
-        const out: any = { post_id: row.post_id, photo_data: photoData ?? row.photo_data ?? null, order_num: row.order_num };
-        if (row.updated_at !== undefined) out.updated_at = row.updated_at;
-        return [out];
+    };
+    await Promise.all(Array.from({ length: Math.min(EXPORT_READ_CONCURRENCY, photos.length) }, worker));
+    const omitted: string[] = [];
+    (payload as any).photos = results.flatMap((r) => {
+        if ('omitted' in r) { omitted.push(r.omitted); return []; }
+        return [r.row];
     });
     if (omitted.length > 0) {
         // Named in the payload so a resync can keep the replica's copies. Additive: a peer that does not know
@@ -265,7 +302,7 @@ export async function exportSyncState(
     since?: string | null,
     commonsBalance = 0
 ): Promise<SyncPayload> {
-    const payload = restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance));
+    const payload = await restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance));
     // What kind of node this is, so a standby keeps it and a take-over or a hand promotion from there can't run
     // the community as another kind (config/node-profile.ts). node_config itself is not replicated. Before the
     // signature, so it is signed with the rest.
@@ -528,7 +565,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     // It also keeps a failed import honest. If the transaction rolls back after the puts, the objects it
     // wrote are orphans, but they are content-addressed: the retry re-derives the same keys and re-uses
     // them, and the storage-health sweep reclaims whatever is genuinely left over.
-    const importedPhotoColumns = remote.photos ? storeImportedPhotos(remote.photos) : null;
+    const importedPhotoColumns = remote.photos ? await storeImportedPhotos(remote.photos) : null;
 
     currentImportOrigin = remote.nodeId;
     db.pragma('foreign_keys = OFF');

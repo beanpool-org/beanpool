@@ -1599,16 +1599,27 @@ export function ApplianceSection({
                             <div className="p-4 rounded-xl bg-emerald-950/60 border border-emerald-500/50 text-emerald-200 text-xs space-y-2">
                                 <div className="font-bold text-sm flex items-center gap-1.5 text-emerald-300">
                                     <span>✓</span>
-                                    <span>Cleanup Complete!</span>
+                                    {/* Never "complete" while the node says orphans remain: it stops after a few seconds. */}
+                                    <span>{(cleanResult.remainingImageObjectsCount ?? 0) > 0 ? 'Cleanup started: more to remove' : 'Cleanup Complete!'}</span>
                                 </div>
                                 <p className="m-0">
                                     Successfully reclaimed <strong>{formatBytes(cleanResult.totalReclaimedBytes)}</strong> of disk space:
                                 </p>
                                 <ul className="list-disc list-inside space-y-1 text-emerald-300">
                                     <li>Removed {cleanResult.removedPhotosCount} orphaned post photos ({formatBytes(cleanResult.removedPhotosBytes)})</li>
+                                    {cleanResult.removedImageObjectsCount !== undefined && (
+                                        <li>Removed {cleanResult.removedImageObjectsCount} unreferenced stored photos and attachments ({formatBytes(cleanResult.removedImageObjectsBytes ?? 0)})</li>
+                                    )}
                                     <li>Removed {cleanResult.removedThumbnailsCount} orphaned cached thumbnails ({formatBytes(cleanResult.removedThumbnailsBytes)})</li>
                                     <li>Compressed and pruned {cleanResult.compressedLogsCount} old log events ({formatBytes(cleanResult.compressedLogsBytes)})</li>
                                 </ul>
+                                {(cleanResult.remainingImageObjectsCount ?? 0) > 0 && (
+                                    <p className="m-0">
+                                        <strong>{cleanResult.remainingImageObjectsCount} more</strong> unreferenced stored photos and attachments
+                                        remain ({formatBytes(cleanResult.remainingImageObjectsBytes ?? 0)}). The node keeps removing them in the
+                                        background, a batch at a time.
+                                    </p>
+                                )}
                             </div>
                         )}
 
@@ -1629,6 +1640,19 @@ export function ApplianceSection({
                                             <span className="text-[11px] text-nature-400 block font-mono">{formatBytes(cleanPreview.orphanedPostPhotos.totalBytes)}</span>
                                         </div>
                                     </div>
+
+                                    {cleanPreview.orphanedImageObjects && (
+                                        <div className="flex items-center justify-between pb-2 border-b border-nature-800/80">
+                                            <div>
+                                                <span className="font-bold text-white block">Unreferenced Stored Images</span>
+                                                <span className="text-[11px] text-nature-400">Photos and attachments in the image store that nothing points at</span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="font-bold text-white font-mono">{cleanPreview.orphanedImageObjects.count} objects</span>
+                                                <span className="text-[11px] text-nature-400 block font-mono">{formatBytes(cleanPreview.orphanedImageObjects.totalBytes)}</span>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="flex items-center justify-between pb-2 border-b border-nature-800/80">
                                         <div>

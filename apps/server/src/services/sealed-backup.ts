@@ -53,6 +53,19 @@
  * - A restore takes a file signed by someone else when this server knows who should have signed it (966
  *   follow-up #2). A removed owner who kept a data key can forge an envelope that the remaining owners open
  *   cleanly; only the header signature against a pinned key tells the two apart. See {@link signerCheck}.
+ *
+ * ## On an S3 node the photos are not in the file (IMAGE_STORE=s3)
+ *
+ * The objects live in the bucket, and copying a bucket into every backup tar would put the global node's
+ * whole photo library through a 1 GB server's disk once per backup. So an s3 node's backup is the database
+ * (which carries every `storage_key` and hash, as always) and NO `images/` — labelled so nobody can take it for
+ * a whole node: {@link IN_BUCKET_MEMBER} inside the archive names the bucket, and the response says
+ * `X-Backup-Images: in-bucket`. The shortfall rule still holds: the database's keys are checked against the
+ * bucket's listing (one request per thousand objects, never blocking the node), and a key the bucket does not
+ * hold goes into {@link MISSING_MEMBER} exactly as a lost file does on disk. A listing that fails does not
+ * fail the backup — the database is the payload — but the label says the bucket was not checked.
+ *
+ * Never in any backup: the bucket's credentials. They are environment only.
  */
 
 import fs from 'node:fs';
@@ -70,7 +83,9 @@ import {
 import Database from 'better-sqlite3';
 import { getLocalConfig, redactLocalConfig } from '../config/local-config.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
-import { assertSafeKey, copyObjectReplacing, imagesDir } from '../storage/image-store.js';
+import {
+    assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, scanOurObjectsAsync, type ImageStore,
+} from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import {
     readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS,
@@ -176,6 +191,68 @@ export interface StagedImages {
      * usable as a path (`assertSafeKey`) counts here too — no object can be shipped for it either.
      */
     missing: string[];
+    /**
+     * Set when the objects are NOT in the archive because this node keeps them in an S3 bucket. `staged` is
+     * then 0 by design, and `missing` lists the referenced keys the bucket did not hold — when `checked`.
+     */
+    inBucket?: InBucket | null;
+}
+
+/** Where an s3 node's objects are, as a backup records it. Never a credential. */
+export interface InBucket {
+    bucket: string;
+    endpoint: string;
+    /** `s3 bucket "…" at <host>`, for the log and the screens. */
+    where: string;
+    /** Whether the bucket's listing was read to find `missing`. False when the listing failed. */
+    checked: boolean;
+}
+
+/**
+ * The member an s3 node's backup carries in place of `images/`: the objects are in this bucket, not here.
+ *
+ * Inside the archive for the same reason {@link MISSING_MEMBER} is: the headers are gone a minute after the
+ * download, and the operator restoring this file next year has only what is in it.
+ */
+export const IN_BUCKET_MEMBER = 'images-in-bucket.json';
+
+/**
+ * The {@link IN_BUCKET_MEMBER} of an extracted archive, or null when it has none (a disk node's backup).
+ *
+ * `checked` is true only when the label says the bucket WAS listed; a label that does not say, or cannot be
+ * read, is not a check anybody made. `missingFromBucket` is the node's own count, null unless it gave one.
+ */
+export function readInBucketMember(dir: string, name: string = IN_BUCKET_MEMBER): {
+    bucket: string; endpoint: string; referenced: number | null; checked: boolean; missingFromBucket: number | null;
+} | null {
+    const file = path.join(dir, name);
+    try {
+        if (!fs.lstatSync(file).isFile()) return null;
+    } catch {
+        return null;
+    }
+    try {
+        // An archive is untrusted input, and these two end up in a sentence on an operator's screen: a bucket is
+        // kept only if it IS a bucket name, and an endpoint only if it parses as an http(s) URL.
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const bucket = typeof parsed?.bucket === 'string' && /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(parsed.bucket) ? parsed.bucket : '';
+        let endpoint = '';
+        try {
+            const u = new URL(String(parsed?.endpoint ?? ''));
+            if (u.protocol === 'https:' || u.protocol === 'http:') endpoint = u.origin;
+        } catch { /* not a URL: left out */ }
+        const count = (v: unknown): number | null => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : null);
+        return {
+            bucket,
+            endpoint,
+            referenced: Number.isFinite(parsed?.referenced) ? Number(parsed.referenced) : null,
+            checked: parsed?.checked === true,
+            missingFromBucket: count(parsed?.missingFromBucket),
+        };
+    } catch {
+        // Present but unreadable: still the label that says the photos are elsewhere.
+        return { bucket: '', endpoint: '', referenced: null, checked: false, missingFromBucket: null };
+    }
 }
 
 /**
@@ -293,15 +370,22 @@ function stageImages(stage: string, sourceRoot: string, dbInStage: string): Stag
  * later is complete. That is the cheap end of this trade now: a labelled short file the operator can see and
  * retry, instead of a refusal they can do nothing about.
  */
-function stageImagesForBackup(
+async function stageImagesForBackup(
     stage: string, dbInStage: string,
     opts: { imagesDir?: string; dbFile?: string },
-): StagedImages {
+): Promise<StagedImages> {
     // A caller sealing a database that is not the live one (a snapshot) MUST say where that database's
     // objects are. Falling back to the live store here is precisely the bug this replaced: the snapshot's
     // keys would be resolved against whatever the node happens to hold today.
     if (opts.dbFile && !opts.imagesDir) {
         throw new Error('Backup refused: a backup of a database other than the live one must say where its image store is.');
+    }
+    // An s3 node: the objects stay in the bucket. Unless this is a snapshot that captured its own objects on
+    // disk — then those ARE its objects, and they go in the file like on any disk node.
+    const store = getImageStore();
+    const bucket = bucketOf(store);
+    if (bucket && !(opts.imagesDir && hasAnyFile(opts.imagesDir))) {
+        return stageInBucket(stage, dbInStage, store, bucket);
     }
     const sourceRoot = opts.imagesDir ?? imagesDir(dataDir());
     const staged = stageImages(stage, sourceRoot, dbInStage);
@@ -318,12 +402,87 @@ function stageImagesForBackup(
     return staged;
 }
 
+/** A directory with at least one file somewhere under it. */
+function hasAnyFile(dir: string): boolean {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+    for (const e of entries) {
+        if (e.isFile()) return true;
+        if (e.isDirectory() && hasAnyFile(path.join(dir, e.name))) return true;
+    }
+    return false;
+}
+
+/**
+ * An s3 node's backup: no `images/`, the {@link IN_BUCKET_MEMBER} label, and the shortfall measured against
+ * the bucket. Async throughout — the listing is a round trip per thousand objects, and a backup must not hold
+ * the node for it.
+ */
+async function stageInBucket(
+    stage: string, dbInStage: string, store: ImageStore, bucket: { bucket: string; endpoint: string; where: string },
+): Promise<StagedImages> {
+    const handle = new Database(dbInStage, { readonly: true });
+    let keys: string[];
+    try {
+        keys = referencedStorageKeys(handle);
+    } finally {
+        try { handle.close(); } catch { /* the read is done */ }
+    }
+    const out: StagedImages = {
+        referenced: keys.length, staged: 0, linked: 0, bytes: 0, missing: [],
+        inBucket: { ...bucket, checked: false },
+    };
+    if (keys.length > 0) {
+        try {
+            const present = new Set((await scanOurObjectsAsync(store)).map((o) => o.key));
+            for (const key of keys) {
+                try { assertSafeKey(key); } catch { out.missing.push(key); continue; }
+                if (!present.has(key)) out.missing.push(key);
+            }
+            out.inBucket!.checked = true;
+        } catch (e: any) {
+            // The database is the payload here and it is intact; a bucket that did not answer a listing is a
+            // label on the file ("not checked"), not a reason to leave the node without a backup.
+            console.warn(`[Backup] Could not list ${bucket.where} to check this backup's photos; the backup says it was not checked: ${e?.message || e}`);
+        }
+    } else {
+        out.inBucket!.checked = true;
+    }
+    fs.writeFileSync(path.join(stage, IN_BUCKET_MEMBER), JSON.stringify({
+        note: 'The photos and attachments this database references are NOT in this file. This node keeps them in '
+            + 'the S3/R2 bucket named below, and this backup holds the database that names them (every key and '
+            + 'its SHA-256). Restoring this file brings back the database; the photos load only on a node that '
+            + 'reads that bucket. An object deleted from the bucket after this backup was taken does not come '
+            + 'back from this file.',
+        takenAt: new Date().toISOString(),
+        store: 's3',
+        endpoint: bucket.endpoint,
+        bucket: bucket.bucket,
+        referenced: out.referenced,
+        checked: out.inBucket!.checked,
+        missingFromBucket: out.inBucket!.checked ? out.missing.length : null,
+    }, null, 2), { mode: 0o600 });
+    if (out.missing.length > 0) {
+        writeMissingManifest(stage, out);
+        console.warn(
+            `[Backup] ⚠️  SHORT BACKUP: ${out.missing.length} of the ${out.referenced} image object(s) this database `
+            + `references are not in ${bucket.where}; they are listed in ${MISSING_MEMBER} inside the archive. `
+            + `First missing: ${out.missing.slice(0, 3).join(', ')}`,
+        );
+    }
+    return out;
+}
+
 /** The manifest a short backup carries: what is NOT in it, and in plain words why that matters. */
 function writeMissingManifest(stage: string, staged: StagedImages): void {
     fs.writeFileSync(path.join(stage, MISSING_MEMBER), JSON.stringify({
-        note: 'This backup is SHORT. The image store did not hold the objects listed below when it was taken, '
-            + 'so restoring this file will leave those photos or attachments missing. Everything else — the '
-            + 'database, and every other image object — is complete.',
+        note: staged.inBucket
+            ? `This backup is SHORT. The bucket (${staged.inBucket.where}) did not hold the objects listed below `
+              + 'when it was taken, so those photos or attachments are missing and this file cannot bring them '
+              + 'back. Everything else the database references was in the bucket.'
+            : 'This backup is SHORT. The image store did not hold the objects listed below when it was taken, '
+              + 'so restoring this file will leave those photos or attachments missing. Everything else — the '
+              + 'database, and every other image object — is complete.',
         takenAt: new Date().toISOString(),
         referenced: staged.referenced,
         staged: staged.staged,
@@ -376,7 +535,7 @@ export async function createSealedBackup(opts: BackupSource = {}): Promise<Seale
         }
         fs.writeFileSync(path.join(stage, BUNDLE_MEMBER), JSON.stringify(inputs.bundle), { mode: 0o600 });
         // From the staged database, not the live one: what the archive carries is what the archive needs.
-        const images = stageImagesForBackup(stage, dbPath, opts);
+        const images = await stageImagesForBackup(stage, dbPath, opts);
         // Async: gzip of a large database must not hold the event loop.
         await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
         fs.rmSync(stage, { recursive: true, force: true });
@@ -443,7 +602,7 @@ export async function createPlainBackup(opts: BackupSource = {}): Promise<PlainB
         } else {
             fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
         }
-        const images = stageImagesForBackup(stage, dbPath, opts);
+        const images = await stageImagesForBackup(stage, dbPath, opts);
         await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
         fs.rmSync(stage, { recursive: true, force: true });
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

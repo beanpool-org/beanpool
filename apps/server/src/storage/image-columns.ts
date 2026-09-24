@@ -26,7 +26,10 @@
  * That is why the evacuation job can null a column and know it has lost nothing.
  */
 
-import { getImageStore, sha256Hex, type ImageStore, type StoredObject } from './image-store.js';
+import type { Readable } from 'node:stream';
+import {
+    getImageStore, openObject, readObject, sha256Hex, writeObject, type ImageStore, type StoredObject,
+} from './image-store.js';
 
 /**
  * The route's own parse, deliberately duplicated rather than imported: `^data:([^;]+);base64,(.*)$` with no
@@ -166,6 +169,49 @@ export function attachmentDataOf(row: AttachmentRow, store: ImageStore): string 
     return bytes.toString('base64');
 }
 
+// ── The same, for callers that are already async ──────────────────────────────────────────────
+//
+// Identical results to the functions above — the same strings, the same bytes, the same MissingObjectError —
+// but through the store's non-blocking methods (image-store.ts `readObject`/`openObject`), so on S3 the
+// serving routes and the sync export never hold the event loop for a round trip.
+
+/** {@link photoDataOf}, without blocking. */
+export async function photoDataOfAsync(row: PostPhotoRow, store: ImageStore): Promise<string | null> {
+    if (typeof row.photo_data === 'string' && row.photo_data.length > 0) return row.photo_data;
+    if (!row.storage_key) return null;
+    const bytes = await readObject(store, row.storage_key);
+    if (!bytes) throw new MissingObjectError(row.storage_key);
+    return encodeDataUrl(row.mime || 'image/jpeg', bytes);
+}
+
+/** {@link attachmentDataOf}, without blocking. */
+export async function attachmentDataOfAsync(row: AttachmentRow, store: ImageStore): Promise<string | null> {
+    if (typeof row.data === 'string' && row.data.length > 0) return row.data;
+    if (!row.storage_key) return null;
+    const bytes = await readObject(store, row.storage_key);
+    if (!bytes) throw new MissingObjectError(row.storage_key);
+    return bytes.toString('base64');
+}
+
+/**
+ * What the photo route serves for this row: a Buffer for an inline row (exactly {@link photoBytesOf}), or a
+ * stream straight from the store for an evacuated one, so a photo is never held whole in memory on its way
+ * from a bucket to a phone. Null when the row holds no image; throws {@link MissingObjectError} when the row
+ * names an object the store does not have.
+ */
+export async function openPhotoOf(row: PostPhotoRow, store: ImageStore):
+    Promise<{ body: Buffer | Readable; contentType: string; bytes: number | null } | null> {
+    if ((typeof row.photo_data === 'string' && row.photo_data.length > 0) || !store.openRead) {
+        // Inline, or a store whose read is a local syscall: exactly what the route always sent.
+        const served = photoBytesOf(row, store);
+        return served ? { body: served.buffer, contentType: served.contentType, bytes: served.buffer.length } : null;
+    }
+    if (!row.storage_key) return null;
+    const opened = await openObject(store, row.storage_key);
+    if (!opened) throw new MissingObjectError(row.storage_key);
+    return { body: opened.stream, contentType: row.mime || 'image/jpeg', bytes: opened.bytes };
+}
+
 // ── Writing a new one ──────────────────────────────────────────────────────────────────────────
 
 /** What a writer puts in the row: either the store columns, or the inline column as before. */
@@ -194,6 +240,27 @@ export function storePhotoColumns(
     let put: StoredObject;
     try {
         put = store.put(key(storable), storable.bytes, { mime: storable.mime, sha256: storable.sha256 });
+    } catch (e) {
+        console.warn('[ImageStore] Could not store a photo; keeping it in the row for now:', e);
+        return inlinePhotoColumns(photoData);
+    }
+    return { photo_data: null, storage_key: put.key, sha256: put.sha256, bytes: put.bytes, mime: put.mime };
+}
+
+/**
+ * {@link storePhotoColumns} without blocking: the same round-trip check, the same fall back to the row on any
+ * store failure, the same columns — through the store's non-blocking write, for a caller that is already async.
+ */
+export async function storePhotoColumnsAsync(
+    store: ImageStore,
+    key: (s: StorableBytes) => string,
+    photoData: string,
+): Promise<PhotoColumns> {
+    const storable = prepareStorablePhoto(photoData);
+    if (!storable) return inlinePhotoColumns(photoData);
+    let put: StoredObject;
+    try {
+        put = await writeObject(store, key(storable), storable.bytes, { mime: storable.mime, sha256: storable.sha256 });
     } catch (e) {
         console.warn('[ImageStore] Could not store a photo; keeping it in the row for now:', e);
         return inlinePhotoColumns(photoData);

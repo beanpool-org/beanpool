@@ -50,7 +50,8 @@ export type NodeProfile = 'local' | 'global';
 
 /** The profile-driven switches (design §4.2). Every code path that differs by profile reads one of these. */
 export interface ProfileSwitches {
-    /** Anyone may join through `POST /api/join` with a verified sign-in instead of an invite. Off: that route is 404. */
+    /** Anyone may join through `POST /api/join` with a verified sign-in instead of an invite. Off: that route and
+     *  `POST /api/join/sso-nonce` are 404 (routes/open-join.ts). */
     openJoin: boolean;
     /** The open door needs an SSO sign-in (D1 = a, Marty 2026-09-24). Means nothing while `openJoin` is off. */
     ssoRequiredForJoin: boolean;
@@ -124,8 +125,9 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
  * profile nor an override changes it. The PR that builds a switch deletes its line here, with its tests.
  */
 const NOT_BUILT_YET: Readonly<Partial<ProfileSwitches>> = {
-    openJoin: false, // G2
-    ssoRequiredForJoin: true, // G2 (there is no open door yet for it to guard)
+    // G2 built the door with a sign-in (routes/open-join.ts). A door WITHOUT one (D1 b: no provider, a stricter
+    // probation) is not built, so an override asking for it is reported at boot and changes nothing.
+    ssoRequiredForJoin: true,
     knocks: false, // G6
     distanceSortDefault: false, // G4
     directoryMirror: false, // G5

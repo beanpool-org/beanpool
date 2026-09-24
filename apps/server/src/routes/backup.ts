@@ -28,7 +28,9 @@ import {
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
-import { assertSafeKey, copyObjectReplacing, imagesDir } from '../storage/image-store.js';
+import {
+    assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, scanOurObjectsAsync, type ImageStore,
+} from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
@@ -40,7 +42,7 @@ import {
 import {
     createSealedBackup, createPlainBackup, backupLockState, describeSealedHeader, isGzip, readFileStart,
     readSealedFileHeader, signerCheck, openSealedFileTo, readBundleFrom, applyBundle, checkBackupArchive,
-    MISSING_MEMBER,
+    MISSING_MEMBER, readInBucketMember,
     type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
 
@@ -143,6 +145,22 @@ export function restoreImages(tmpDir: string, dataDir: string): { restored: numb
     return { restored: copied, error: null };
 }
 
+/** A directory with at least one file somewhere under it (an archive's `images/` that actually carries objects). */
+function hasAnyFile(dir: string): boolean {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+    for (const e of entries) {
+        if (e.isFile()) return true;
+        if (e.isDirectory() && hasAnyFile(path.join(dir, e.name))) return true;
+    }
+    return false;
+}
+
+/** The host of an endpoint an archive named, for a sentence — never the whole string it carried. */
+function safeHost(endpoint: string): string {
+    try { return new URL(endpoint).host; } catch { return 'an unreadable endpoint'; }
+}
+
 /**
  * The short-backup manifest inside the archive, when it carries one.
  *
@@ -192,7 +210,7 @@ function readMissingManifest(tmpDir: string): { missing: string[]; referenced: n
  * become an error because the count could not be taken — but `complete` must not be claimed either, so an
  * unreadable database comes back as `null` and the caller says it does not know.
  */
-function missingAfterRestore(dataDir: string): { referenced: number; missing: string[] } | null {
+async function missingAfterRestore(dataDir: string, store: ImageStore): Promise<{ referenced: number; missing: string[] } | null> {
     let keys: string[];
     try {
         const handle = new Database(path.join(dataDir, 'state.db'), { readonly: true });
@@ -204,6 +222,25 @@ function missingAfterRestore(dataDir: string): { referenced: number; missing: st
     } catch (e) {
         console.error('[Restore] Could not read the restored database to check its image objects:', e);
         return null;
+    }
+    // An s3 node: the objects are wherever the bucket says, so the bucket's listing is the measurement —
+    // async, one request per thousand objects. A listing that fails is "could not check", never "complete".
+    const bucket = bucketOf(store);
+    if (bucket) {
+        if (keys.length === 0) return { referenced: 0, missing: [] };
+        let present: Set<string>;
+        try {
+            present = new Set((await scanOurObjectsAsync(store)).map((o) => o.key));
+        } catch (e) {
+            console.error(`[Restore] Could not list ${bucket.where} to check the restored database's photos:`, e);
+            return null;
+        }
+        const missing: string[] = [];
+        for (const key of keys) {
+            try { assertSafeKey(key); } catch { missing.push(key); continue; }
+            if (!present.has(key)) missing.push(key);
+        }
+        return { referenced: keys.length, missing };
     }
     const root = imagesDir(dataDir);
     const missing: string[] = [];
@@ -257,13 +294,34 @@ async function restoreFromTar(
         console.warn(`[Restore] Ignored the keys inside a backup signed by ${sealedHeader.nodePeerId}, accepted by name: database only.`);
     }
 
+    // Where this node keeps its photos, and where the backup's are. Decided BEFORE anything is replaced.
+    const store = getImageStore();
+    const nodeBucket = bucketOf(store);
+    const archiveBucket = readInBucketMember(tmpDir);
+    if (nodeBucket && hasAnyFile(path.join(tmpDir, 'images'))) {
+        // An archive with its photos inside it, onto a node that keeps photos in a bucket. Laying them on this
+        // node's disk would put them where an s3 node never looks (and its next boot refuses a disk that holds
+        // objects); uploading them is moving a node from disk to a bucket, which is the migration tool's job
+        // and not in this version. So nothing is touched, and the operator is told where this file CAN go.
+        const err: any = new Error(
+            'This backup carries its photos and attachments inside it: it was taken on a node that keeps them on disk. '
+            + `This node keeps them in ${nodeBucket.where} (IMAGE_STORE=s3), and moving photos from a backup into a `
+            + 'bucket needs the migration tool, which this version does not have. Nothing was changed. Restore this '
+            + 'file on a node without IMAGE_STORE set (photos on disk).',
+        );
+        err.httpStatus = 409;
+        throw err;
+    }
+
     // Close current DB connection safely before overwriting
     const { db } = await import('../db/db.js');
     try { db.close(); } catch (e) { console.error('Error closing DB:', e); }
 
     // Replace files
     fs.copyFileSync(path.join(tmpDir, 'state.db'), path.join(DATA_DIR, 'state.db'));
-    const images = restoreImages(tmpDir, DATA_DIR);
+    // On an s3 node nothing goes to the local disk: the archive has no objects (refused above if it had), and
+    // the database's keys resolve against the bucket.
+    const images = nodeBucket ? { restored: 0, error: null } : restoreImages(tmpDir, DATA_DIR);
     // Read BEFORE cleanupRestoreTemp deletes tmpDir. A short backup says so inside the archive precisely so
     // that it can be said here, to the person doing the restore, instead of being discovered at the first 503.
     const short = readMissingManifest(tmpDir);
@@ -283,7 +341,7 @@ async function restoreFromTar(
 
     // What this node is REALLY missing, counted off the restored database and the store now beside it —
     // not read off the archive's label. This is the number that decides `complete`.
-    const shortfall = missingAfterRestore(DATA_DIR);
+    const shortfall = await missingAfterRestore(DATA_DIR, store);
     if (shortfall && shortfall.missing.length > 0) {
         console.warn(
             `[Restore] ⚠️  ${shortfall.missing.length} of the ${shortfall.referenced} image object(s) this `
@@ -310,10 +368,31 @@ async function restoreFromTar(
     // the backup was taken, rather than never in the archive at all, which is what a `databaseOnly` or
     // images-stripped file looks like and what used to restore as "complete".
     const lacking = shortfall ? shortfall.missing.length : 0;
+    // A backup from an s3 node carries no objects: they are in the bucket its label names. Said plainly, and
+    // differently for where it has landed — on a disk node nothing will load until the photos come back from
+    // that bucket; on an s3 node they load from the bucket, and a different bucket is worth naming.
+    const archiveWhere = archiveBucket
+        ? `the S3 bucket "${archiveBucket.bucket || 'unnamed'}"${archiveBucket.endpoint ? ` at ${safeHost(archiveBucket.endpoint)}` : ''}`
+        : null;
+    const otherBucket = !!(archiveBucket && nodeBucket && archiveBucket.bucket && archiveBucket.bucket !== nodeBucket.bucket);
+    const inBucketWarning = archiveBucket && !nodeBucket
+        ? `The database was restored, but its photos and attachments were not in this file: they stay in ${archiveWhere}, `
+          + 'where the node this backup came from keeps them. This node keeps photos on its own disk, so '
+          + (shortfall ? `${lacking} of the ${shortfall.referenced} photo(s) or attachment(s) the database references ` : 'its photos ')
+          + 'will not load here until they are brought back from that bucket.'
+        : archiveBucket && nodeBucket && (lacking > 0 || !shortfall)
+            ? (shortfall
+                ? `The database was restored. Its photos and attachments stay in the bucket, and ${lacking} of the `
+                  + `${shortfall.referenced} it references are not in ${nodeBucket.where}`
+                : `The database was restored. Its photos and attachments stay in the bucket, but ${nodeBucket.where} `
+                  + 'could not be listed to check they are all there')
+              + (otherBucket ? ` — the backup was taken from ${archiveWhere}, a different bucket.` : '.')
+              + (short ? ' The backup itself was labelled short, which explains some of it.' : '')
+            : null;
     // Three different things to say, and the operator needs to be able to tell them apart: the store could
     // not be written; the backup itself was already short when it was taken (the manifest says so); or the
     // archive simply did not carry the objects this database names, which is what a stripped one looks like.
-    const warning = images.error
+    const warning = inBucketWarning ?? (images.error
         ? `The database was restored, but the image store was not put back in full: ${images.error}. `
           + `${images.restored} object(s) went back`
           + (lacking ? `, and ${lacking} of the ${shortfall!.referenced} the database references are still missing` : '')
@@ -329,7 +408,7 @@ async function restoreFromTar(
             : !shortfall
                 ? 'The database was restored, but this node could not check whether its photos and '
                   + 'attachments came with it.'
-                : null;
+                : null);
     return {
         success: true,
         complete: !images.error && !!shortfall && lacking === 0,
@@ -342,6 +421,10 @@ async function restoreFromTar(
             missingKeys: shortfall ? shortfall.missing.slice(0, 5) : [],
             // The label the archive carried, when it carried one: the explanation, never the count.
             labelledShort: !!short,
+            // Where this backup's objects are when it came from an s3 node: not in the file.
+            inBucket: archiveBucket ? { bucket: archiveBucket.bucket, endpointHost: safeHost(archiveBucket.endpoint) } : null,
+            // Where THIS node keeps them now.
+            store: nodeBucket ? { kind: 's3', bucket: nodeBucket.bucket } : { kind: 'disk' },
         },
         ...(warning ? { warning } : {}),
         sealed: !!sealedHeader,
@@ -396,6 +479,19 @@ function markLock(ctx: any, lock: BackupLock): void {
  */
 function markContents(ctx: any, what: { images: StagedImages }): void {
     const short = what.images.missing.length > 0;
+    if (what.images.inBucket) {
+        // An s3 node: the objects are in the bucket, not in the file. `in-bucket` rather than `0/N`, so no
+        // reader can take this for a backup that lost every photo — or for one that carries them.
+        const b = what.images.inBucket;
+        ctx.set('X-Backup-Contents', 'database+images-in-bucket');
+        ctx.set('X-Backup-Images', 'in-bucket');
+        ctx.set('X-Backup-Image-Bytes', '0');
+        ctx.set('X-Backup-Images-Bucket', b.bucket.replace(/[^\x20-\x7E]/g, '?'));
+        ctx.set('X-Backup-Images-Referenced', String(what.images.referenced));
+        ctx.set('X-Backup-Images-Checked', b.checked ? 'yes' : 'no');
+        if (short) ctx.set('X-Backup-Missing-Images', String(what.images.missing.length));
+        return;
+    }
     ctx.set('X-Backup-Contents', short ? 'database+images-partial' : 'database+images');
     ctx.set('X-Backup-Images', `${what.images.staged}/${what.images.referenced}`);
     ctx.set('X-Backup-Image-Bytes', String(what.images.bytes));
@@ -405,6 +501,13 @@ function markContents(ctx: any, what: { images: StagedImages }): void {
 /** For the log: 'database + 412 image object(s)', or the short version spelled out. */
 function describeBackup(what: { images: StagedImages }): string {
     const images = what.images;
+    if (images.inBucket) {
+        const where = images.inBucket.where;
+        if (!images.inBucket.checked) return `database only — its ${images.referenced} image object(s) stay in ${where} (NOT checked: the bucket could not be listed)`;
+        if (images.missing.length === 0) return `database only — its ${images.referenced} image object(s) stay in ${where}, all present`;
+        return `database only — its ${images.referenced} image object(s) stay in ${where}; SHORT by ${images.missing.length} the bucket does not hold, `
+            + `listed in ${MISSING_MEMBER} inside the archive`;
+    }
     if (images.missing.length === 0) return `database + ${images.staged} image object(s)`;
     return `database + ${images.staged}/${images.referenced} image object(s) — SHORT by ${images.missing.length}; `
         + `the missing keys are listed in ${MISSING_MEMBER} inside the archive`;
@@ -429,6 +532,15 @@ async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
      */
     const shout = (what: { images: StagedImages }, filename: string): void => {
         if (what.images.missing.length === 0) return;
+        if (what.images.inBucket) {
+            console.warn(
+                `[Backup] ⚠️  ${filename} is SHORT: ${what.images.missing.length} of the ${what.images.referenced} image `
+                + `object(s) its database references are not in ${what.images.inBucket.where}, and are listed in `
+                + `${MISSING_MEMBER} inside the archive: ${what.images.missing.slice(0, 5).join(', ')}`
+                + `${what.images.missing.length > 5 ? ', …' : ''}. Those photos or attachments are gone from the bucket.`,
+            );
+            return;
+        }
         console.warn(
             `[Backup] ⚠️  ${filename} is SHORT: ${what.images.staged} of ${what.images.referenced} referenced `
             + `image object(s) went in. ${what.images.missing.length} are not in this node's store and are `

@@ -6,7 +6,7 @@
  *  - Chat: shows messages in a conversation with send input
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi,
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi, getMembers,
@@ -150,8 +150,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [conversations, setConversations] = useState<Conversation[]>([]);
     // A listing the viewer has a conversation about is not applied from the live feed: this list shows its title
     // and status, and only the refresh re-reads them, so the change rings the doorbell (lib/live-posts).
+    // Set in the commit, not in a later effect, so a push landing in between is tested against this list.
     const conversationsRef = useRef<Conversation[]>([]);
-    useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+    useLayoutEffect(() => { conversationsRef.current = conversations; }, [conversations]);
     useEffect(() => registerLivePostTie(conversationTie(() => conversationsRef.current)), []);
     const [userTransactions, setUserTransactions] = useState<MarketplaceTransaction[]>([]);
     const [activeTab, setActiveTab] = useState<'all' | 'transactions' | 'direct'>('all');

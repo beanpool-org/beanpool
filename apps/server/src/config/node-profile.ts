@@ -43,6 +43,12 @@
  * ledger has never moved (`ledgerHistory`). Off on a live community they would freeze what its members hold, so
  * there the switch stays on, whatever the profile or an override says, and the log says why. Escrow, enterprises,
  * treasuries and crowdfunds hold Beans, so with Beans off they are off too.
+ *
+ * The open door (`openJoin`) is the other way round: it can only be ON on a node whose ledger has never moved. The
+ * door is built for a node where Beans are off (design §1, D6), and a live community switched to the global profile
+ * keeps its money on (above), so open sign-up would meet a live credit system. There the door stays shut, whatever
+ * the profile or an override says: /api/community/info reports `openJoin: false`, every door route answers 404, and
+ * the boot log says why. Both locks only ever keep money on and the door shut, never the reverse.
  */
 import { db } from '../db/db.js';
 
@@ -51,7 +57,7 @@ export type NodeProfile = 'local' | 'global';
 /** The profile-driven switches (design §4.2). Every code path that differs by profile reads one of these. */
 export interface ProfileSwitches {
     /** Anyone may join through `POST /api/join` with a verified sign-in instead of an invite. Off: that route and
-     *  `POST /api/join/sso-nonce` are 404 (routes/open-join.ts). */
+     *  every other door route are 404 (routes/open-join.ts). Never on where the ledger has moved. */
     openJoin: boolean;
     /** The open door needs an SSO sign-in (D1 = a, Marty 2026-09-24). Means nothing while `openJoin` is off. */
     ssoRequiredForJoin: boolean;
@@ -215,9 +221,12 @@ export function getConfiguredSwitches(profile: NodeProfile = getNodeProfile()): 
     return { ...DEFAULTS[profile], ...readProfileOverrides() };
 }
 
-/** What the node actually does: the configured switches, with every switch this build can't honour yet pinned, and money kept on wherever it has moved. */
+/**
+ * What the node actually does: the configured switches, with every switch this build can't honour yet pinned, and
+ * money kept on and the open door shut wherever the ledger has moved.
+ */
 export function getProfileSwitches(profile: NodeProfile = getNodeProfile()): ProfileSwitches {
-    return lockMoneySwitches({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET });
+    return lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET });
 }
 
 export function getNodeFeatures(): NodeFeatures {
@@ -234,7 +243,7 @@ export function getNodeFeatures(): NodeFeatures {
     };
 }
 
-// ── Money is never frozen ─────────────────────────────────────────────────────────────────
+// ── Money is never frozen, and the door never opens onto it ──────────────────────────────
 
 /**
  * What shows this node's ledger has moved, or null when it never has: a transaction, an escrow, a non-zero
@@ -270,17 +279,21 @@ function cachedLedgerHistory(beansConfigured: boolean): string | null {
     return historyFound;
 }
 
-function lockMoneySwitches(s: ProfileSwitches): ProfileSwitches {
+function lockToLedger(s: ProfileSwitches): ProfileSwitches {
     // Whether or not any money switch is off: Beans switched back on with every switch on would otherwise keep
     // "never moved" through the sends that follow, and switched off again the ledger would freeze.
     if (s.beans) quietWhileBeansOff = false;
     const off = MONEY_SWITCHES.filter((k) => !s[k]);
-    if (off.length > 0) {
-        const history = cachedLedgerHistory(s.beans);
-        if (history) {
-            for (const k of off) s[k] = true;
-            warnOnce(moneyLockMessage(off, history));
-        }
+    // The ledger is looked at only when a switch depends on it. With Beans configured on and the door open it is
+    // looked at on every read, so the first Bean that moves shuts the door.
+    const history = off.length > 0 || s.openJoin ? cachedLedgerHistory(s.beans) : null;
+    if (history && off.length > 0) {
+        for (const k of off) s[k] = true;
+        warnOnce(moneyLockMessage(off, history));
+    }
+    if (history && s.openJoin) {
+        s.openJoin = false;
+        warnOnce(doorShutMessage(history));
     }
     if (!s.beans) {
         s.escrow = false;
@@ -295,6 +308,13 @@ function moneyLockMessage(off: readonly ProfileSwitch[], history: string): strin
     return `⚠️  ${off.join(', ')} ${off.length === 1 ? 'stays' : 'stay'} ON: this node's ledger has moved (${history}), and switching `
         + `${off.length === 1 ? 'it' : 'them'} off would freeze what its members hold. Only a node whose ledger has never moved `
         + 'can run with Beans off.';
+}
+
+function doorShutMessage(history: string): string {
+    return `⚠️  The open door stays SHUT: this node's ledger has moved (${history}), and open sign-up must never meet a `
+        + 'live credit system. openJoin is off here whatever the profile or an override says: /api/join and its sign-in '
+        + 'routes answer 404, and /api/community/info reports openJoin false. Only a node whose ledger has never moved '
+        + 'can open the door.';
 }
 
 /** The refusal a member sees when Beans are off: a send, a Beans price on a post, a pledge, a grant. */
@@ -474,16 +494,21 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
 
     const configured = { ...getConfiguredSwitches(profile), ...NOT_BUILT_YET };
     const off = MONEY_SWITCHES.filter((k) => !configured[k]);
+    const history = off.length > 0 || configured.openJoin ? ledgerHistory() : null;
+    if (history) historyFound = history;
+    const loudly = (message: string) => {
+        warned.add(message);
+        console.warn(message);
+    };
     if (off.length > 0) {
-        const history = ledgerHistory();
-        if (history) {
-            historyFound = history;
-            const message = moneyLockMessage(off, history);
-            warned.add(message);
-            console.warn(message);
-        } else if (!configured.beans) {
+        if (history) loudly(moneyLockMessage(off, history));
+        else if (!configured.beans) {
             console.log('🧭 Beans are off: sends, escrow, enterprises, treasuries and crowdfunds are refused here, and posts carry no Beans price.');
         }
+    }
+    if (configured.openJoin) {
+        if (history) loudly(doorShutMessage(history));
+        else console.log('🚪 The open door is open: anyone may join here with a sign-in instead of an invite. It shuts for good if Beans ever move here.');
     }
     return { profile, previous };
 }

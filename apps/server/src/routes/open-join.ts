@@ -8,8 +8,9 @@
  *                                GitHub: { callsign, provider: 'github', proof: { sessionId }, recovery? }
  *
  * All four answer 404 "This community is invite-only." unless the profile switch `openJoin` is on (config/node-
- * profile.ts): off on every local node, on by default on the global one. Read per request, so an operator's
- * override takes effect without a restart.
+ * profile.ts): off on every local node, on by default on the global one, and never on a node whose ledger has moved,
+ * whatever the profile or an override says, so open sign-up never meets a live credit system. Read per request, so an
+ * operator's override takes effect without a restart, and the first Bean that moves shuts the door.
  *
  * GitHub is run by this node (engine/github-device.ts): a GitHub token handed in proves nothing, so the joiner
  * types a code at GitHub, the node collects the answer, and the join carries the session id. The session is bound

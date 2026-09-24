@@ -6,6 +6,8 @@
  * 2. GET /api/manager/backups/download-db returns 400 when missing nodeId, 404 when backup DB missing.
  * 3. GET /api/manager/backups/history returns 400 when missing nodeId, history array when missing history dir.
  * 4. GET /api/manager/backups/download-history returns 400 for path-traversal or missing parameters.
+ * 8. A SHORT harvested backup says how short on the wire, and the gzip that builds the archive does NOT hold
+ *    the fleet manager's event loop (round 4: this route compresses more bytes than either backup path).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-manager-backups.ts
  */
@@ -16,6 +18,7 @@ process.env.ADMIN_PASSWORD = 'TestManagerAdmin123!';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
@@ -25,6 +28,15 @@ import { initAdminPassword } from './config/local-config.js';
 const PORT = 8563;
 const BASE = `https://localhost:${PORT}`;
 const ADMIN_PW = 'TestManagerAdmin123!';
+
+/**
+ * How long the fleet manager's event loop may be held in one go while a download's archive is built.
+ *
+ * Gzipping 24 MB of incompressible objects takes a few hundred ms on this machine and far longer on the
+ * 1 vCPU manager node, so a synchronous `tar` shows up as one stall of that order. Async `execFile` leaves
+ * only the ordinary jitter of streaming the response.
+ */
+const STALL_BUDGET_MS = 120;
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -198,6 +210,65 @@ async function main(): Promise<void> {
     // (that is what this was protecting), while the readable download now must be one.
     assert(![dbBody, oneBody, idBody].some(isGz), 'no locked download starts with gzip magic: a sealed file is served as it is');
     assert(isGz(plainBody), 'while a readable backup IS a gzip archive now — the database and its images together');
+
+    // 8a. The shortfall on the wire. The harvester keeps the node's `missing-images.json` beside the database,
+    //     so the manager's own download can say how short the file is in the same headers a node's backup
+    //     route sets — one reader per UI covers both, and nothing has to open the archive to find out.
+    fs.writeFileSync(path.join(nodeDir, 'state.db.missing-images.json'), JSON.stringify({
+        note: 'This backup is SHORT.', takenAt: '2026-09-24T02:03:04.000Z',
+        referenced: 3, staged: 1, missing: ['posts/p2/0-deadbeef.jpg', 'attachments/m9.bin'],
+    }));
+    const shortRes = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    const shortMembers = openTar(Buffer.from(await shortRes.arrayBuffer()));
+    assert(shortRes.status === 200 && shortRes.headers.get('x-backup-contents') === 'database+images-partial',
+        `download-db says the harvested backup is partial (got ${shortRes.headers.get('x-backup-contents')})`);
+    assert(shortRes.headers.get('x-backup-missing-images') === '2',
+        `…with the count a UI can show (${shortRes.headers.get('x-backup-missing-images')})`);
+    assert(shortRes.headers.get('x-backup-images') === '1/3',
+        `…as <staged>/<referenced>, spelled exactly as a node's own backup route spells it (${shortRes.headers.get('x-backup-images')})`);
+    assert(!!shortMembers['missing-images.json'],
+        '…and the manifest rides inside the archive, so a restore from it reports the shortfall too');
+    fs.rmSync(path.join(nodeDir, 'state.db.missing-images.json'));
+
+    // 8b. The gzip must not hold the event loop.
+    //
+    // `createPlainBackup` and `createSealedBackup` went async for exactly this reason, and this route
+    // compresses MORE bytes than either: the harvester's kept database plus every object beside it, per
+    // download. On the 1 vCPU manager node a synchronous `tar` stalls every other request for the duration,
+    // including the harvester's own pulls. Measured rather than asserted about the source: a timer ticking
+    // every 2 ms cannot fire at all while the loop is blocked in `execFileSync`.
+    const bulkDir = path.join(nodeDir, 'state.db.images', 'posts', 'bulk');
+    fs.mkdirSync(bulkDir, { recursive: true });
+    // Incompressible, so gzip has to do real work rather than run away with a run of zeroes.
+    for (let i = 0; i < 12; i++) {
+        fs.writeFileSync(path.join(bulkDir, `${i}-bulk.jpg`), crypto.randomBytes(2 * 1024 * 1024));
+    }
+    //
+    // The measurement is the LONGEST SINGLE STALL, not the number of ticks: a synchronous `tar` blocks only
+    // for the compression, and the rest of the request — TLS, the 24 MB response — leaves plenty of room for
+    // a tick either way. Counting ticks therefore passes on the blocking version too (measured: 39 of them).
+    // One gap the length of the gzip is the thing that actually distinguishes them.
+    let ticks = 0;
+    let worstStallMs = 0;
+    let lastTickAt = Date.now();
+    const ticker = setInterval(() => {
+        const now = Date.now();
+        worstStallMs = Math.max(worstStallMs, now - lastTickAt);
+        lastTickAt = now;
+        ticks++;
+    }, 2);
+    const startedAt = Date.now();
+    const bulkRes = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    const bulkBytes = Buffer.from(await bulkRes.arrayBuffer());
+    const elapsed = Date.now() - startedAt;
+    clearInterval(ticker);
+    assert(bulkRes.status === 200 && isGz(bulkBytes),
+        `download-db still serves the archive with 24 MB of objects in it (got ${bulkRes.status}, ${bulkBytes.length} bytes)`);
+    console.log(`   …the download took ${elapsed} ms: ${ticks} timer tick(s), worst single stall ${worstStallMs} ms.`);
+    assert(worstStallMs < STALL_BUDGET_MS,
+        `the event loop is never held for the length of a gzip — async execFile, not execFileSync `
+        + `(worst stall ${worstStallMs} ms of ${elapsed} ms, budget ${STALL_BUDGET_MS} ms)`);
+    fs.rmSync(bulkDir, { recursive: true, force: true });
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

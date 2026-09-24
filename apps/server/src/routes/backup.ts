@@ -310,17 +310,22 @@ async function restoreFromTar(
     // the backup was taken, rather than never in the archive at all, which is what a `databaseOnly` or
     // images-stripped file looks like and what used to restore as "complete".
     const lacking = shortfall ? shortfall.missing.length : 0;
-    const reason = short
-        ? ' They were already gone from the node when this backup was taken.'
-        : ' This archive did not carry them.';
+    // Three different things to say, and the operator needs to be able to tell them apart: the store could
+    // not be written; the backup itself was already short when it was taken (the manifest says so); or the
+    // archive simply did not carry the objects this database names, which is what a stripped one looks like.
     const warning = images.error
         ? `The database was restored, but the image store was not put back in full: ${images.error}. `
           + `${images.restored} object(s) went back`
           + (lacking ? `, and ${lacking} of the ${shortfall!.referenced} the database references are still missing` : '')
           + '; some photos or attachments will be missing.'
         : lacking > 0
-            ? `The database was restored, but ${lacking} of the ${shortfall!.referenced} photo(s) or `
-              + `attachment(s) it references are not on this node.${reason} Everything else came back.`
+            ? short
+                ? `The backup was SHORT: ${lacking} of the ${shortfall!.referenced} photo(s) or attachment(s) this `
+                  + 'database references were already gone from the node when the backup was taken, and are not '
+                  + 'coming back. Everything else came back.'
+                : `The database was restored, but ${lacking} of the ${shortfall!.referenced} photo(s) or `
+                  + 'attachment(s) it references are not on this node: this archive did not carry them. '
+                  + 'Everything else came back.'
             : !shortfall
                 ? 'The database was restored, but this node could not check whether its photos and '
                   + 'attachments came with it.'

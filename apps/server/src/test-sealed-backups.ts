@@ -320,6 +320,24 @@ async function main(): Promise<void> {
         'posts/p-restore/0-11223344.jpg': sha(photoObject),
         'attachments/m-restore.bin': sha(cipherObject),
     };
+    // The database in the archive REFERENCES both objects, because that is the only kind of archive whose
+    // shortfall means anything: a restore now counts what it lacks off the restored `storage_key`s rather
+    // than trusting the archive's label (routes/backup.ts `missingAfterRestore`). A fixture whose rows name
+    // nothing is complete however many objects are stripped out of it, and would prove nothing below.
+    {
+        const Database = (await import('better-sqlite3')).default;
+        const seed = new Database(snapPath);
+        // As the node itself runs (db.ts: `foreign_keys = OFF`, an accepted risk documented there), so these
+        // two rows do not need a `posts` and a `messages` row invented for them.
+        seed.pragma('foreign_keys = OFF');
+        seed.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime)
+                      VALUES (?, NULL, 0, ?, ?, ?, 'image/jpeg')`)
+            .run('p-restore', 'posts/p-restore/0-11223344.jpg', sha(photoObject), photoObject.length);
+        seed.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key)
+                      VALUES (?, NULL, 'nonce-v1', 'image/jpeg', ?)`)
+            .run('m-restore', 'attachments/m-restore.bin');
+        seed.close();
+    }
     const legacyTar = makeTarGz([
         { name: './state.db', content: fs.readFileSync(snapPath) },
         { name: './node_config.json', content: Buffer.from('{}') },
@@ -343,6 +361,8 @@ async function main(): Promise<void> {
         `2. …and its image objects are back on the disk, byte for byte (${Object.keys(lg.after.images || {}).join(', ')})`);
     assert(lg.body.complete === true && lg.body.images?.restored === 2 && lg.body.images?.missing === 0 && !lg.body.warning,
         `2. …and the answer says the restore came back whole (${JSON.stringify(lg.body.images)})`);
+    assert(lg.body.images?.referenced === 2,
+        `2. …having actually counted the objects the restored database references (${lg.body.images?.referenced})`);
 
     // ── 2b. A SHORT backup says so in the answer, not at the first 503 ──
     //
@@ -376,6 +396,63 @@ async function main(): Promise<void> {
         && sh.after.images['posts/p-restore/0-11223344.jpg'] === objectShas['posts/p-restore/0-11223344.jpg']
         && !sh.after.images['attachments/m-restore.bin'],
         '2b. …and the object it DID carry went back byte for byte, while the missing one is simply absent');
+    assert(sh.body.images?.labelledShort === true && sh.body.images?.referenced === 2,
+        `2b. …with the manifest recorded as the EXPLANATION beside the measured counts (${JSON.stringify(sh.body.images)})`);
+
+    // ── 2c. An archive with no images/ at all reports its real shortfall, label or no label ──
+    //
+    // The hole the round-3 review found: `complete` trusted the manifest, so an archive with no `images/`
+    // member and no `missing-images.json` — a `databaseOnly` backup, or one whose `images/` was stripped in
+    // transit — was indistinguishable from a pre-version backup. It answered `complete: true, missing: 0`
+    // over a database whose every `storage_key` pointed at nothing, and the operator found out at the first
+    // 503. The count now comes from the restored data: `referencedStorageKeys` on the state.db that is on
+    // disk, against the store beside it.
+    console.log('\n— 2c. an archive whose images/ never arrived —');
+    const strippedTar = makeTarGz([
+        { name: './state.db', content: fs.readFileSync(snapPath) },
+        { name: './node_config.json', content: Buffer.from('{}') },
+    ]);
+    const strippedFile = path.join(work, 'stripped.tar.gz');
+    fs.writeFileSync(strippedFile, strippedTar);
+    const st = runChild('legacy', strippedFile);
+    assert(st.status === 200 && st.body.success === true,
+        `2c. the database still restores, and the node still restarts (${st.status})`);
+    assert(st.body.complete === false,
+        `2c. …but the answer is NOT complete, though the archive carried no label at all (${JSON.stringify(st.body.images)})`);
+    assert(st.body.images?.missing === 2 && st.body.images?.referenced === 2 && st.body.images?.labelledShort === false,
+        `2c. …and the shortfall is MEASURED off the restored database, not read off a manifest (${JSON.stringify(st.body.images)})`);
+    assert(Array.isArray(st.body.images?.missingKeys)
+        && st.body.images.missingKeys.includes('attachments/m-restore.bin')
+        && st.body.images.missingKeys.includes('posts/p-restore/0-11223344.jpg'),
+        `2c. …naming the keys that will 503 (${JSON.stringify(st.body.images?.missingKeys)})`);
+    assert(typeof st.body.warning === 'string' && /did not carry/i.test(st.body.warning),
+        `2c. …in words that say the archive never had them, rather than blaming the node ("${st.body.warning}")`);
+
+    // A pre-version backup is the case that MUST still read as complete: its photos are inline in the rows
+    // it brought, so it references no storage_key and lacks nothing. Measuring, not labelling, is what tells
+    // it apart from the stripped archive above — the two are byte-identical in shape.
+    console.log('\n— 2d. a pre-version backup is complete, and measures as complete —');
+    const inlineDb = path.join(work, 'inline-state.db');
+    fs.copyFileSync(snapPath, inlineDb);
+    {
+        const Database = (await import('better-sqlite3')).default;
+        const legacyShape = new Database(inlineDb);
+        legacyShape.pragma('foreign_keys = OFF');
+        legacyShape.prepare('UPDATE post_photos SET storage_key = NULL, photo_data = ?')
+            .run(`data:image/jpeg;base64,${photoObject.toString('base64')}`);
+        legacyShape.prepare('UPDATE message_attachments SET storage_key = NULL, data = ?')
+            .run(cipherObject.toString('base64'));
+        legacyShape.close();
+    }
+    const inlineFile = path.join(work, 'inline.tar.gz');
+    fs.writeFileSync(inlineFile, makeTarGz([
+        { name: './state.db', content: fs.readFileSync(inlineDb) },
+        { name: './node_config.json', content: Buffer.from('{}') },
+    ]));
+    const inl = runChild('legacy', inlineFile);
+    assert(inl.status === 200 && inl.body.complete === true && inl.body.images?.missing === 0
+        && inl.body.images?.referenced === 0 && !inl.body.warning,
+        `2d. a backup from before the image store restores COMPLETE — it references no objects (${JSON.stringify(inl.body.images)})`);
 
     // ── This process as the restoring server, for the refusals (nothing below reaches the database swap) ──
     const { server, base } = await serveBackupRoutes();

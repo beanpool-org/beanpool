@@ -25,6 +25,9 @@
  *  10. The database is measurably smaller afterwards.
  *  11. An import writes a peer's photos to disk BEFORE it opens its write transaction, so a big resync
  *      never holds the write lock across one fsync per photo.
+ *  12. A FORCE-RESYNC does not destroy the replica's only good copy. The export omits a row whose object the
+ *      primary cannot read, and names it in the payload; `clearReplicatedTables` keeps exactly those rows, so
+ *      the row and its object survive the wipe that used to delete both. LAST, because it empties the tables.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-evacuation.ts
  */
@@ -572,6 +575,62 @@ async function main(): Promise<void> {
         `${(sizeAfter / 1024 / 1024).toFixed(2)} MB after, with ${(storeBytes / 1024 / 1024).toFixed(2)} MB now in the image store.\n`
     );
     assert(sizeAfter < sizeBeforeUpgrade / 2, 'the database is less than half the size it was');
+
+    // ── 12. a force-resync keeps the rows the primary could not send ───────────────────────────
+    //
+    // This is LAST because it empties the replicated tables, and nothing may run after it.
+    //
+    // "What the importer does not receive it keeps" is true of a delta or a full pull, and FALSE of a
+    // force-resync: `pullOnce('resync')` calls `clearReplicatedTables()` — which lists `post_photos` — before
+    // importing. So the one case the export's omission exists for (§5: the replica holds the only readable
+    // copy) was the case a resync destroyed: the row went, its object became an orphan, and the daily sweep
+    // reclaimed the bytes after the grace period. And a resync is the natural thing an operator does when a
+    // replica "looks wrong".
+    //
+    // Here the LOCAL node plays both parts — it exports as the primary would, then clears as the replica
+    // does — because `clearReplicatedTables` works on this process's one database handle.
+    const { clearReplicatedTables } = await import('./state-engine.js');
+    const { referencedStorageKeys } = await import('./storage/image-columns.js');
+
+    const kept = db.prepare('SELECT post_id, order_num, storage_key FROM post_photos WHERE storage_key IS NOT NULL LIMIT 1')
+        .get() as { post_id: string; order_num: number; storage_key: string } | undefined;
+    assert(!!kept, 'setup: there is an evacuated photo row to lose');
+    const keptRowKey = `${kept!.post_id}|${kept!.order_num}`;
+    const keptBytes = store.get(kept!.storage_key)!;
+    const rowsBefore = (db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c as number;
+    assert(rowsBefore > 1, `setup: and other photo rows a resync SHOULD clear (${rowsBefore} in all)`);
+
+    // The primary cannot read that one object, so the export leaves the row out — and says which.
+    store.delete(kept!.storage_key);
+    const omitExport = await exportSyncState('test-node');
+    assert(Array.isArray(omitExport.photosOmitted) && omitExport.photosOmitted.length === 1
+        && omitExport.photosOmitted[0] === keptRowKey,
+        `the payload NAMES the row it left out, additively (${JSON.stringify(omitExport.photosOmitted)})`);
+    assert(!((omitExport as any).photos as any[]).some(ph => ph.post_id === kept!.post_id && ph.order_num === kept!.order_num),
+        'and does not carry it, as §5 requires');
+
+    // The replica's copy is the good one. It has the bytes; the primary does not.
+    store.put(kept!.storage_key, keptBytes, { mime: 'image/jpeg' });
+
+    clearReplicatedTables(omitExport.photosOmitted);
+    const survivor = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = ?')
+        .get(kept!.post_id, kept!.order_num) as any;
+    assert(survivor?.storage_key === kept!.storage_key,
+        'a force-resync KEEPS the row the incoming payload could not carry — the only copy of it left');
+    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === 1,
+        'while every other photo row is cleared, as a resync must, so the import rebuilds them 1:1');
+    assert((db.prepare('SELECT COUNT(*) AS c FROM members').get() as any).c === 0,
+        'and the rest of the replicated tables are cleared exactly as before');
+    assert(store.get(kept!.storage_key)?.equals(keptBytes) === true,
+        'the object is still on disk, byte for byte');
+    assert(referencedStorageKeys(db).includes(kept!.storage_key),
+        'and still REFERENCED, so the daily orphan sweep leaves it alone rather than reclaiming it');
+
+    // Nothing named: the wipe is total, exactly as it was. This is the behaviour a resync needs when the
+    // primary CAN read everything, and the line above is the one exception to it.
+    clearReplicatedTables();
+    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === 0,
+        'with nothing named, a resync clears post_photos outright — the exception is only for omitted rows');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

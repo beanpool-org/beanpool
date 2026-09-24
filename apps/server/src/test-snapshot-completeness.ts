@@ -1,5 +1,5 @@
 /**
- * Test Suite: a snapshot is a point in time, and a backup is the whole node or an error.
+ * Test Suite: a snapshot is a point in time, and a backup carries the whole node or says what it lacks.
  *
  * Once the image evacuation has run, a row holds a `storage_key` and no bytes. So neither a `VACUUM INTO`
  * snapshot nor a tar of state.db describes a node any more, and both had a way of looking like they did:
@@ -18,18 +18,20 @@
  *      needs — and the snapshot's download still resolves every row to the bytes that were there at T.
  *   3. The unlocked download is a complete archive (database AND images), not a bare `.db`.
  *   4. The locked download of the same snapshot carries the same images, opened with the recovery code.
- *   5. A missing object, and an unreadable one (EACCES), make a backup FAIL rather than come up short —
- *      through the service and through the route, which answers 500 and says so in the headers.
- *   6. `databaseOnly` is the one way to get a short backup, and it is labelled everywhere it appears.
+ *   5. A missing object makes the backup SHORT, never an error — through the service and through the route,
+ *      which answers 200 and says how short in the headers. An UNREADABLE object (EACCES) still fails it:
+ *      that is an archive of unknown contents, not a known shortfall.
+ *   6. The removed opt-ins are inert: no query parameter can get a database-only or otherwise short-by-
+ *      request archive out of this node any more.
  *   7. Pruning a snapshot, and deleting one, take its images with it.
  *   8. The storage-health orphan sweep never touches a snapshot's directory, and unlinking the live copy
  *      leaves the snapshot's bytes intact.
  *   9. A snapshot taken BEFORE this version — a separate database file nothing migrates, whose `post_photos`
  *      still has the pre-PR DDL and no `storage_key` column — still downloads, complete, as `0/0` images.
  *      Every photo in it is inline, so zero referenced objects is the truthful count.
- *  10. `allowMissing` is the second way past a lost object: it ships what the store does hold, labels the
- *      result short on the wire AND inside the archive, and lists the keys that are gone. Without it the
- *      refusal stands.
+ *  10. A short backup is labelled at every layer: short on the wire, short inside the archive
+ *      (`missing-images.json`), and naming exactly the keys that are gone — while carrying every object the
+ *      store DID hold.
  *  11. A restore never writes THROUGH a store object's inode: restoring an older `attachments/<id>.bin` over
  *      one a snapshot hard-links leaves the snapshot's bytes exactly as captured.
  *
@@ -53,6 +55,14 @@ let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); }
+}
+/** Read a backup's body to the end: the stream owns its staging directory's cleanup. */
+async function drain(body: NodeJS.ReadableStream): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+        body.on('data', () => { /* to the bit bucket */ });
+        body.on('end', () => resolve());
+        body.on('error', reject);
+    });
 }
 async function rejects(fn: () => Promise<unknown>, name: string, msg: string): Promise<void> {
     let caught: any = null;
@@ -185,7 +195,7 @@ async function main(): Promise<void> {
         createSnapshot, listSnapshots, snapshotImagesDir, updateAutoSnapshotConfig, SNAPSHOTS_DIR,
     } = await import('./services/snapshot-scheduler.js');
     const {
-        createPlainBackup, createSealedBackup, openSealedFileTo, IncompleteBackupError, MISSING_MEMBER,
+        createPlainBackup, createSealedBackup, openSealedFileTo, MISSING_MEMBER,
     } = await import('./services/sealed-backup.js');
     const { getImageStore, imagesDir, attachmentKey } = await import('./storage/image-store.js');
     const { writeMessageTombstone } = await import('./engine/message-tombstone.js');
@@ -322,31 +332,56 @@ async function main(): Promise<void> {
     }
     assert(sealedIdentical === atT.size, `the locked file resolves every row to its T bytes too (${sealedIdentical}/${atT.size})`);
 
-    // ── 5. A short backup is an error, not a file ──────────────────────────────────────────────
+    // ── 5. A lost object makes the backup SHORT, and an unreadable one makes it FAIL ───────────
+    //
+    // This asserted the opposite until confirmation round 4: a single missing object refused the whole
+    // backup, with `allowMissing=1` as the way past it. Nothing that ships could send that parameter —
+    // neither the Backup tab nor the fleet manager nor any snapshot download — so one object lost for good
+    // made the node un-backupable from every screen, permanently, with nothing the operator could click. The
+    // refusal is gone. What it was protecting (a short file can never pass for a whole one) is what stayed,
+    // and the I/O case below is the one that still fails, because that archive's contents are unknown.
+    //
     // A live backup now: the live database references the replacement photo and the kept one.
     const liveKeys = [keptKey, keyOf(replaced!.id)];
     const hostage = path.join(imagesDir(), liveKeys[0]);
     const hostageBytes = fs.readFileSync(hostage);
     fs.unlinkSync(hostage);
-    await rejects(() => createPlainBackup(), 'IncompleteBackupError',
-        'a referenced object the store does not hold makes a readable backup throw');
-    await rejects(() => createSealedBackup(), 'IncompleteBackupError',
-        'and a locked one');
-    const refused = await fetch(`${BASE}/api/local/admin/backup`, {
+
+    const shortPlain = await createPlainBackup();
+    await drain(shortPlain.body);
+    assert(shortPlain.images.missing.length === 1 && shortPlain.images.missing[0] === liveKeys[0],
+        `a referenced object the store does not hold makes a readable backup SHORT, by exactly that key (${JSON.stringify(shortPlain.images.missing)})`);
+    assert(shortPlain.images.staged === liveKeys.length - 1 && shortPlain.images.referenced === liveKeys.length,
+        `with counts that cannot pass for whole (${shortPlain.images.staged}/${shortPlain.images.referenced})`);
+    const shortSealed = await createSealedBackup();
+    await drain(shortSealed.body);
+    assert(shortSealed.images.missing.length === 1 && shortSealed.images.missing[0] === liveKeys[0],
+        'and a locked one, the same way');
+
+    const anyway = await fetch(`${BASE}/api/local/admin/backup`, {
         method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
     });
-    const refusedBody: any = await refused.json().catch(() => ({}));
-    assert(refused.status === 500, 'the route answers with an error rather than a two-thirds backup');
-    assert(refused.headers.get('x-backup-error') === 'incomplete-images', 'and names the reason in a header');
-    assert(refusedBody?.images?.missing === 1 && refusedBody?.images?.referenced === liveKeys.length,
-        'with the counts, so a fleet manager can show which node is short');
+    const anywayBytes = Buffer.from(await anyway.arrayBuffer());
+    assert(anyway.status === 200, `the route answers with the backup rather than an error (got ${anyway.status})`);
+    assert(anyway.headers.get('x-backup-error') === null,
+        'and sets no error header: a node short by one photo is a node with a backup, not a failure');
+    assert(anywayBytes.length > 0, 'and there is a file on the wire');
+    assert(anyway.headers.get('x-backup-contents') === 'database+images-partial',
+        `with the shortfall on the wire (${anyway.headers.get('x-backup-contents')})`);
+    assert(anyway.headers.get('x-backup-images') === `${liveKeys.length - 1}/${liveKeys.length}`,
+        `as counts a UI can show (${anyway.headers.get('x-backup-images')})`);
+    assert(anyway.headers.get('x-backup-missing-images') === '1',
+        `and the number missing, so a fleet manager can say which node is short (${anyway.headers.get('x-backup-missing-images')})`);
 
-    // 6. databaseOnly is the one way past it, and it is labelled.
+    // 6. The removed opt-ins are inert: no parameter gets a short-by-request archive out of this node.
     const dbOnlyFile = path.join(work, 'database-only.tar.gz');
-    const dbOnly = await download(`${BASE}/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}&databaseOnly=1`, dbOnlyFile);
-    assert(dbOnly.status === 200, 'a caller may ask for the database alone');
-    assert(dbOnly.headers.get('x-backup-contents') === 'database-only', 'and the answer says so');
-    assert(dbOnly.headers.get('x-backup-images') === null, 'with no image count to mistake for a complete one');
+    const dbOnly = await download(
+        `${BASE}/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}&databaseOnly=1&allowMissing=1`, dbOnlyFile);
+    assert(dbOnly.status === 200, 'the parameters that used to shape a backup are simply ignored');
+    assert(dbOnly.headers.get('x-backup-contents') === 'database+images',
+        `and the snapshot still comes back whole, with its images (${dbOnly.headers.get('x-backup-contents')})`);
+    assert(dbOnly.headers.get('x-backup-images') === `${atT.size}/${atT.size}`,
+        `— there is no longer any way to ask a node for a database-only archive (${dbOnly.headers.get('x-backup-images')})`);
 
     // An unreadable object is a caught error, not a quiet shortfall. (Skipped as root, which chmod cannot stop.)
     fs.writeFileSync(hostage, hostageBytes);
@@ -360,19 +395,18 @@ async function main(): Promise<void> {
         let threw: any = null;
         try { await createPlainBackup(); } catch (e) { threw = e; }
         fs.chmodSync(hostageDir, mode);
+        // The one case that still fails. A missing object is a KNOWN shortfall the archive can state; a read
+        // error on an object that IS there means nobody knows what the archive holds, and a file of unknown
+        // contents must never be handed over as a backup.
         assert(!!threw, 'an unreadable object (EACCES) makes the backup throw instead of shipping without it');
-        assert(!(threw instanceof IncompleteBackupError),
-            'and it surfaces as the I/O error it is, not as a silently missing object');
+        assert(!/missing-images|SHORT/i.test(String(threw?.message || '')),
+            `and it surfaces as the I/O error it is, not as a known shortfall ("${String(threw?.message || '').slice(0, 90)}")`);
     }
     const whole = await createPlainBackup();
-    // Read it to the end rather than abandoning it: the stream owns the staging directory's cleanup.
-    await new Promise<void>((resolve, reject) => {
-        whole.body.on('data', () => { /* to the bit bucket */ });
-        whole.body.on('end', () => resolve());
-        whole.body.on('error', reject);
-    });
-    assert(whole.images?.staged === whole.images?.referenced && (whole.images?.referenced ?? 0) === liveKeys.length,
+    await drain(whole.body);
+    assert(whole.images.staged === whole.images.referenced && whole.images.referenced === liveKeys.length,
         'with the object back, a live backup is complete again');
+    assert(whole.images.missing.length === 0, 'and carries no missing keys at all');
 
     // ── 7. Pruning and deleting take the images with the snapshot ──────────────────────────────
     updateAutoSnapshotConfig({ keep: 1 });
@@ -462,11 +496,12 @@ async function main(): Promise<void> {
     assert(legacyRow?.photo_data === dataUrl(legacyPhoto),
         'and the archive is COMPLETE: the photo is inline in the row, exactly as that node held it');
 
-    // ── 10. allowMissing: a labelled short backup beats no backup at all ──────────────────────
+    // ── 10. A labelled short backup, at every layer ───────────────────────────────────────────
     //
-    // Refusing stays the default. But an object can be gone for good, and then the refusal never lifts: on
-    // an unattended node that is not "a loud error", it is zero backups from tonight until a human edits the
-    // referencing post. databaseOnly is worse for that operator — it drops EVERY image, not the lost one.
+    // A labelled short backup beats no backup at all, and since round 4 it is what a node produces by
+    // default: an object can be gone for good, and a refusal that never lifts means zero backups from
+    // tonight until a human edits the referencing post — which for a member's DM attachment is nobody.
+    // Everything below is what makes that safe: the file cannot pass for a whole one at any layer.
     const shortPhoto = makePhoto('the-object-that-is-really-gone');
     const shortPost = createPost('offer', 'food', 'A loaf whose photo the disk lost', 'gone', 1, 'fixed', author,
         undefined, undefined, [dataUrl(shortPhoto)]);
@@ -475,21 +510,12 @@ async function main(): Promise<void> {
     assert(store.get(lostKey) === null, 'setup: an object the live database references is gone from the store');
     const stillHeld = keyOf(legacyPost!.id);
 
-    // The default has not moved.
-    await rejects(() => createSealedBackup(), 'IncompleteBackupError',
-        'with no opt-in, a lost object still refuses the backup outright');
-    const refusedAgain = await fetch(`${BASE}/api/local/admin/backup`, {
-        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
-    });
-    assert(refusedAgain.status === 500 && refusedAgain.headers.get('x-backup-error') === 'incomplete-images',
-        'and the route still answers 500 with the reason');
-
-    // The opt-in, through the route the harvester uses.
-    const shortRes = await fetch(`${BASE}/api/local/admin/backup?allowMissing=1`, {
+    // The route the harvester and both UIs use. No parameter, no opt-in, no retry.
+    const shortRes = await fetch(`${BASE}/api/local/admin/backup`, {
         method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
     });
     const shortBody = Buffer.from(await shortRes.arrayBuffer());
-    assert(shortRes.status === 200, `allowMissing=1 produces a backup (got ${shortRes.status})`);
+    assert(shortRes.status === 200, `a node with a lost object still produces a backup (got ${shortRes.status})`);
     assert(shortRes.headers.get('x-backup-contents') === 'database+images-partial',
         `and the answer says it is partial (got ${shortRes.headers.get('x-backup-contents')})`);
     const [staged, referenced] = (shortRes.headers.get('x-backup-images') || '0/0').split('/').map(Number);
@@ -517,14 +543,17 @@ async function main(): Promise<void> {
 
     // A complete backup carries no manifest at all, so its presence is the label.
     fs.writeFileSync(path.join(imagesDir(), lostKey), shortPhoto);
-    const wholeAgain = await createSealedBackup({ allowMissing: true });
-    await new Promise<void>((resolve, reject) => {
-        wholeAgain.body.on('data', () => { /* to the bit bucket */ });
-        wholeAgain.body.on('end', () => resolve());
-        wholeAgain.body.on('error', reject);
+    const wholeAgain = await createSealedBackup();
+    await drain(wholeAgain.body);
+    assert(wholeAgain.images.missing.length === 0 && wholeAgain.images.staged === wholeAgain.images.referenced,
+        'with the object back, the very same call takes an ordinary complete backup and labels nothing');
+    const wholeRes = await fetch(`${BASE}/api/local/admin/backup`, {
+        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
     });
-    assert(wholeAgain.images?.missing.length === 0 && wholeAgain.images?.staged === wholeAgain.images?.referenced,
-        'with the object back, allowMissing takes an ordinary complete backup and labels nothing');
+    await wholeRes.arrayBuffer();
+    assert(wholeRes.headers.get('x-backup-contents') === 'database+images'
+        && wholeRes.headers.get('x-backup-missing-images') === null,
+        `…and the route stops saying partial, so the label tracks the node rather than sticking (${wholeRes.headers.get('x-backup-contents')})`);
 
     // ── 11. A restore lays objects over the store; it never writes through one ────────────────
     //

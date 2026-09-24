@@ -128,6 +128,50 @@ export class BackupNotLockableError extends Error {
 }
 
 /**
+ * Copy the image store into the backup stage as `images/` (storage design §7).
+ *
+ * A backup used to be the whole node because the whole node was in state.db. Now most of a node's bytes sit
+ * beside it, so a tar of state.db alone would restore a database full of `storage_key`s pointing at nothing:
+ * every photo and every attachment gone, silently, and only discovered when somebody opened a post.
+ *
+ * Best effort by design. A node with no images directory yet — a fresh install, or one whose evacuation has
+ * not run — contributes no `images/` member, and the restore handles its absence. A backup must never fail
+ * because the photos could not be read; a backup without them is still the ledger, the members and the posts.
+ */
+function stageImages(stage: string): { count: number; bytes: number } {
+    const src = path.join(dataDir(), 'images');
+    const out = { count: 0, bytes: 0 };
+    if (!fs.existsSync(src)) return out;
+    const dest = path.join(stage, 'images');
+    const walk = (from: string, to: string): void => {
+        for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+            const fromPath = path.join(from, entry.name);
+            const toPath = path.join(to, entry.name);
+            // Never follow a link out of the store, and never carry one into the tar: checkBackupArchive
+            // refuses link members on the way back in, so one here would make the whole backup unrestorable.
+            if (entry.isSymbolicLink()) continue;
+            if (entry.isDirectory()) {
+                fs.mkdirSync(toPath, { recursive: true, mode: 0o700 });
+                walk(fromPath, toPath);
+            } else if (entry.isFile()) {
+                if (entry.name.includes('.tmp-')) continue; // a write in flight
+                fs.mkdirSync(path.dirname(toPath), { recursive: true, mode: 0o700 });
+                fs.copyFileSync(fromPath, toPath);
+                out.count++;
+                try { out.bytes += fs.statSync(toPath).size; } catch { /* the count is enough */ }
+            }
+        }
+    };
+    try {
+        fs.mkdirSync(dest, { recursive: true, mode: 0o700 });
+        walk(src, dest);
+    } catch (e) {
+        console.warn('[Backup] Could not stage the image store; the backup carries the database only:', e);
+    }
+    return out;
+}
+
+/**
  * Build and seal a backup. `dbFile` seals that SQLite file as the database (a snapshot being downloaded);
  * without it, a consistent copy of the live database is taken. Refuses ({@link BackupNotLockableError}) unless
  * there is a recovery code to lock it to; anything else that fails throws before a byte is produced, so a caller
@@ -147,7 +191,8 @@ export async function createSealedBackup(opts: { dbFile?: string; filenamePrefix
     };
     try {
         fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
-        // Only these three names go in the tar, so it never swallows data/snapshots/ or anything else in data/.
+        // Only these names go in the tar — the database, the config, the take-over bundle and the image
+        // store — so it never swallows data/snapshots/ or anything else in data/.
         const dbPath = path.join(stage, 'state.db');
         if (opts.dbFile) fs.copyFileSync(opts.dbFile, dbPath);
         else writeDbSnapshot(dbPath);
@@ -159,6 +204,7 @@ export async function createSealedBackup(opts: { dbFile?: string; filenamePrefix
             fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
         }
         fs.writeFileSync(path.join(stage, BUNDLE_MEMBER), JSON.stringify(inputs.bundle), { mode: 0o600 });
+        stageImages(stage);
         // Async: gzip of a large database must not hold the event loop.
         await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
         fs.rmSync(stage, { recursive: true, force: true });
@@ -217,6 +263,7 @@ export async function createPlainBackup(): Promise<PlainBackup> {
         } else {
             fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
         }
+        stageImages(stage);
         await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
         fs.rmSync(stage, { recursive: true, force: true });
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

@@ -2,8 +2,10 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { db } from '../db/db.js';
+import { db, afterTransactionCommit } from '../db/db.js';
 import crypto from 'node:crypto';
+import { getImageStore, postPhotoKey } from '../storage/image-store.js';
+import { deleteStoredObjects, photoDataOf, storePhotoColumns } from '../storage/image-columns.js';
 import { getLocalConfig } from '../config/local-config.js';
 import {
     exportSyncState as exportSyncStateEngine,
@@ -152,13 +154,48 @@ export async function signSyncPayload(cb: SyncCallbacks, payload: SyncPayload): 
     return payload;
 }
 
+/**
+ * Put the photo bytes back into the sync payload (storage design §7: the payload does NOT change this phase).
+ *
+ * `exportSyncStateEngine` does `SELECT * FROM post_photos`, so once a row has been evacuated its `photo_data`
+ * is null and four new columns have appeared. Both would be a wire change, and a wire change here is a
+ * compatibility break with every peer and every replica that has not been upgraded yet — including the delta
+ * backup replica, which reconstructs a whole node from this payload. So the rows are put back exactly as they
+ * were: `photo_data` rebuilt from the store, and the store's own columns stripped.
+ *
+ * `photoDataOf` reproduces the original string character for character (see storage/image-columns.ts), so a
+ * peer's import is byte-identical to what it would have received before the photo was evacuated. Photos by
+ * reference is a later phase; until then the saving is on disk here, not on the wire.
+ */
+function restoreInlinePhotos(payload: SyncPayload): SyncPayload {
+    const photos = (payload as any).photos as any[] | undefined;
+    if (!Array.isArray(photos) || photos.length === 0) return payload;
+    const store = getImageStore();
+    (payload as any).photos = photos.map(row => {
+        let photoData: string | null;
+        try {
+            photoData = photoDataOf(row, store);
+        } catch (e) {
+            // One unreadable object must not fail the whole export — a replica pulling a delta needs the
+            // ledger rows in it far more than it needs this photo, and it will pick the photo up on a later
+            // pull once the operator has restored the images directory.
+            console.error('[Sync] Could not read a photo out of the image store; exporting the row without it:', e);
+            photoData = null;
+        }
+        const out: any = { post_id: row.post_id, photo_data: photoData ?? '', order_num: row.order_num };
+        if (row.updated_at !== undefined) out.updated_at = row.updated_at;
+        return out;
+    });
+    return payload;
+}
+
 export async function exportSyncState(
     cb: SyncCallbacks,
     nodeId: string,
     since?: string | null,
     commonsBalance = 0
 ): Promise<SyncPayload> {
-    const payload = exportSyncStateEngine(db, nodeId, since, commonsBalance);
+    const payload = restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance));
     return signSyncPayload(cb, payload);
 }
 
@@ -177,7 +214,11 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
         case 'post_photos': {
             const [postId, orderNum] = rowKey.split('|');
             if (!postId || orderNum === undefined) return false;
+            // Row now, object after the commit (storage design §7).
+            const key = (db.prepare(`SELECT storage_key FROM post_photos WHERE post_id=? AND order_num=?`)
+                .get(postId, Number(orderNum)) as any)?.storage_key as string | undefined;
             const r = db.prepare(`DELETE FROM post_photos WHERE post_id=? AND order_num=?`).run(postId, Number(orderNum));
+            if (r.changes > 0 && key) afterTransactionCommit(() => deleteStoredObjects([key]));
             return r.changes > 0;
         }
         case 'event_rsvps': {
@@ -204,7 +245,11 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
         // A whole conversation deleted on the primary: the old chat groups (removed 2026-09-19, groups decision 2)
         // and the per-post threads chat consolidation collapsed. Its messages and membership go with it.
         case 'conversations': {
+            const doomedObjects = (db.prepare(
+                `SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT id FROM messages WHERE conversation_id=?)`
+            ).all(rowKey) as any[]).map(r => r.storage_key as string);
             db.prepare(`DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id=?)`).run(rowKey);
+            if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomedObjects));
             db.prepare(`DELETE FROM messages WHERE conversation_id=?`).run(rowKey);
             db.prepare(`DELETE FROM conversation_participants WHERE conversation_id=?`).run(rowKey);
             const r = db.prepare(`DELETE FROM conversations WHERE id=?`).run(rowKey);
@@ -570,13 +615,22 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             }
 
             if (remote.photos) {
+                // A peer still sends bytes inline (the payload is frozen this phase), and they go straight
+                // through the store on the way in — so an importing node's database does not re-grow by
+                // everything its peers hold. A value the store cannot reproduce exactly stays in the row,
+                // as it would have before.
+                const store = getImageStore();
+                const insertPhoto = db.prepare(
+                    `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`
+                );
                 for (const ph of remote.photos) {
-                    db.prepare(`INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num) 
-                                VALUES (?, ?, ?)`).run(
-                        ph.post_id,
+                    const cols = storePhotoColumns(
+                        store,
+                        sb => postPhotoKey(ph.post_id, ph.order_num, sb.sha256, sb.mime),
                         ph.photo_data,
-                        ph.order_num
                     );
+                    insertPhoto.run(ph.post_id, cols.photo_data, ph.order_num, cols.storage_key, cols.sha256, cols.bytes, cols.mime);
                 }
             }
 

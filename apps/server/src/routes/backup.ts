@@ -67,6 +67,56 @@ function cleanupRestoreTemp(): void {
 }
 
 /**
+ * Put the image store back beside the restored database (storage design §7).
+ *
+ * Three cases, and all three have to work:
+ *
+ *   - a backup taken by THIS version, `images/` present: the store is replaced by the archive's copy, so the
+ *     `storage_key`s in the restored database resolve;
+ *   - a backup taken BEFORE this version, no `images/` member: nothing is copied and nothing is removed. The
+ *     restored database still carries every photo inline, exactly as it did when the backup was written, and
+ *     the evacuation job moves them out afterwards like it does for any upgrading node;
+ *   - a backup from this version restored onto a node that already has an images directory: the archive's
+ *     objects are laid over the existing ones. Keys are content-addressed, so a key present in both holds
+ *     the same bytes in both; what is NOT in the archive is left alone rather than deleted, because deleting
+ *     it is irreversible and the orphan sweep in storage-health will reclaim it safely later.
+ *
+ * `checkBackupArchive` has already refused the whole archive if any member could escape the extraction
+ * directory or was a link, so the tree being copied here is known to be plain files under `tmpDir`.
+ */
+function restoreImages(tmpDir: string, dataDir: string): number {
+    const src = path.join(tmpDir, 'images');
+    if (!fs.existsSync(src) || !fs.lstatSync(src).isDirectory()) return 0;
+    const dest = path.join(dataDir, 'images');
+    let copied = 0;
+    const walk = (from: string, to: string): void => {
+        for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+            const fromPath = path.join(from, entry.name);
+            const toPath = path.join(to, entry.name);
+            if (entry.isSymbolicLink()) continue;
+            if (entry.isDirectory()) {
+                fs.mkdirSync(toPath, { recursive: true, mode: 0o700 });
+                walk(fromPath, toPath);
+            } else if (entry.isFile()) {
+                fs.mkdirSync(path.dirname(toPath), { recursive: true, mode: 0o700 });
+                fs.copyFileSync(fromPath, toPath);
+                copied++;
+            }
+        }
+    };
+    try {
+        fs.mkdirSync(dest, { recursive: true, mode: 0o700 });
+        walk(src, dest);
+        console.log(`[Restore] Restored ${copied} image object(s) from the backup.`);
+    } catch (e) {
+        // Loud, and NOT fatal: the database is already in place and a half-restored store is still better
+        // than none. The operator needs to know some photos may be missing.
+        console.error('[Restore] ⚠️  Could not restore the image store; some photos may be missing:', e);
+    }
+    return copied;
+}
+
+/**
  * The restore from an opened (or legacy plain) tar on: the hostile-archive checks, state.db, node_config.json, the
  * take-over bundle when a sealed file carries one, then a restart. Shared by restore-by-code and restore by an
  * owner's phone. Returns the answer body; throws on a bad archive (the caller cleans up).
@@ -109,6 +159,7 @@ async function restoreFromTar(
 
     // Replace files
     fs.copyFileSync(path.join(tmpDir, 'state.db'), path.join(DATA_DIR, 'state.db'));
+    restoreImages(tmpDir, DATA_DIR);
     const nodeConfig = path.join(tmpDir, 'node_config.json');
     if (fs.existsSync(nodeConfig) && fs.lstatSync(nodeConfig).isFile()) {
         fs.copyFileSync(nodeConfig, path.join(DATA_DIR, 'node_config.json'));

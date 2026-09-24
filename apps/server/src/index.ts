@@ -73,6 +73,7 @@ import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeov
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
+import { startImageEvacuation } from './services/image-evacuation.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
 import { initShutdownRecovery } from './engine/shutdown-recovery.js';
 
@@ -235,6 +236,11 @@ async function main() {
 
     // Step 8.6: Automated Fleet Harvester (drift-triggered backups + 30-day archiving)
     initHarvester();
+
+    // Step 8.65: Move the images this node already holds out of state.db and into the image store
+    // (storage design §7). Idempotent, batched, safe to interrupt, and a no-op once it has finished —
+    // which on a node installed at this version or later is its first and only check.
+    startImageEvacuation();
 
     // Step 8.7: Daily Pulse scheduler (auto-rotates daily 0-Bean inspirational offer at 5 AM)
     scheduleDailyPulse();

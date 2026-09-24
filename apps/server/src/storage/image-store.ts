@@ -104,6 +104,8 @@ export interface ImageStore {
     totalBytes(): number;
     /** Every object under `prefix` with its size and time, when the backend can say so without a head per key. */
     scan?(prefix: string): ObjectInfo[];
+    /** Non-blocking {@link put}. */
+    putAsync?(key: string, bytes: Buffer, options: PutOptions): Promise<StoredObject>;
     /** Non-blocking {@link get}. */
     getAsync?(key: string): Promise<Buffer | null>;
     /** Non-blocking {@link head}. */
@@ -516,6 +518,11 @@ export async function checkImageStoreAtBoot(opts: { role?: string; dataDir?: str
 //
 // On disk these are the sync methods (a local syscall). On S3 they are the async ones, so a caller that is
 // already async never holds the event loop for a round trip.
+
+/** Write an object. The same checks and the same result as {@link ImageStore.put}. */
+export async function writeObject(store: ImageStore, key: string, bytes: Buffer, options: PutOptions): Promise<StoredObject> {
+    return store.putAsync ? store.putAsync(key, bytes, options) : store.put(key, bytes, options);
+}
 
 /** The object's bytes, or null when it is not there. */
 export async function readObject(store: ImageStore, key: string): Promise<Buffer | null> {

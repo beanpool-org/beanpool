@@ -27,7 +27,9 @@
  */
 
 import type { Readable } from 'node:stream';
-import { getImageStore, openObject, readObject, sha256Hex, type ImageStore, type StoredObject } from './image-store.js';
+import {
+    getImageStore, openObject, readObject, sha256Hex, writeObject, type ImageStore, type StoredObject,
+} from './image-store.js';
 
 /**
  * The route's own parse, deliberately duplicated rather than imported: `^data:([^;]+);base64,(.*)$` with no
@@ -238,6 +240,27 @@ export function storePhotoColumns(
     let put: StoredObject;
     try {
         put = store.put(key(storable), storable.bytes, { mime: storable.mime, sha256: storable.sha256 });
+    } catch (e) {
+        console.warn('[ImageStore] Could not store a photo; keeping it in the row for now:', e);
+        return inlinePhotoColumns(photoData);
+    }
+    return { photo_data: null, storage_key: put.key, sha256: put.sha256, bytes: put.bytes, mime: put.mime };
+}
+
+/**
+ * {@link storePhotoColumns} without blocking: the same round-trip check, the same fall back to the row on any
+ * store failure, the same columns — through the store's non-blocking write, for a caller that is already async.
+ */
+export async function storePhotoColumnsAsync(
+    store: ImageStore,
+    key: (s: StorableBytes) => string,
+    photoData: string,
+): Promise<PhotoColumns> {
+    const storable = prepareStorablePhoto(photoData);
+    if (!storable) return inlinePhotoColumns(photoData);
+    let put: StoredObject;
+    try {
+        put = await writeObject(store, key(storable), storable.bytes, { mime: storable.mime, sha256: storable.sha256 });
     } catch (e) {
         console.warn('[ImageStore] Could not store a photo; keeping it in the row for now:', e);
         return inlinePhotoColumns(photoData);

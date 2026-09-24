@@ -39,7 +39,7 @@ import { S3ImageStore, s3ConfigFromEnv, S3_ENV } from './storage/s3-image-store.
 import { EMPTY_PAYLOAD_SHA256, signRequest } from './storage/s3-sigv4.js';
 import {
     MissingObjectError, attachmentDataOf, attachmentDataOfAsync, deleteStoredObjects, encodeDataUrl, openPhotoOf,
-    photoDataOf, photoDataOfAsync, storeAttachmentColumns, storePhotoColumns,
+    photoDataOf, photoDataOfAsync, storeAttachmentColumns, storePhotoColumns, storePhotoColumnsAsync,
 } from './storage/image-columns.js';
 import { startFakeS3, type FakeS3 } from './fake-s3-test-harness.js';
 
@@ -167,6 +167,10 @@ async function contract(name: string, store: ImageStore): Promise<void> {
         `${name}: storePhotoColumns moves the photo out of the row`);
     assert(photoDataOf(cols, store) === dataUrl, `${name}: photoDataOf rebuilds the exact data URL`);
     assert((await photoDataOfAsync(cols, store)) === dataUrl, `${name}: photoDataOfAsync rebuilds the exact data URL`);
+    const colsAsync = await storePhotoColumnsAsync(store, (s) => postPhotoKey('post-cols-async', 0, s.sha256, s.mime), dataUrl);
+    assert(colsAsync.photo_data === null && colsAsync.storage_key === postPhotoKey('post-cols-async', 0, sha256Hex(JPEG), 'image/jpeg')
+        && store.get(colsAsync.storage_key!)!.equals(JPEG),
+        `${name}: storePhotoColumnsAsync (the federation importer's write) gives the same columns and the same object`);
     const served = await openPhotoOf(cols, store);
     const servedBytes = served!.body instanceof Readable ? await streamBytes(served!.body) : served!.body as Buffer;
     assert(servedBytes.equals(JPEG) && served!.contentType === 'image/jpeg', `${name}: openPhotoOf serves the bytes and the type`);
@@ -357,6 +361,19 @@ async function main(): Promise<void> {
         const pages = (await paged.log()).filter((e) => e.method === 'GET' && e.query.includes('list-type=2') && e.query.includes('prefix=posts%2Fpg%2F'));
         assert(pages.length >= 6, `the listings really were paged (${pages.length} page requests for two listings)`);
         await paged.stop();
+
+        // The async paths never start the blocking worker: a fresh store used only through them has none.
+        const asyncOnly = track(new S3ImageStore(fake.config()));
+        const viaAsync = await storePhotoColumnsAsync(asyncOnly, (s) => postPhotoKey('post-async', 0, s.sha256, s.mime), encodeDataUrl('image/jpeg', JPEG));
+        assert(!!viaAsync.storage_key && (await fake.objects()).get(viaAsync.storage_key!)?.bytes.equals(JPEG) === true,
+            'a non-blocking write lands the photo in the bucket');
+        await asyncOnly.getAsync(viaAsync.storage_key!);
+        await asyncOnly.headAsync(viaAsync.storage_key!);
+        await asyncOnly.scanAsync('posts');
+        const o = await asyncOnly.openRead(viaAsync.storage_key!);
+        if (o) await streamBytes(o.stream);
+        assert((asyncOnly as any).fetcher.worker === null,
+            'and put/get/head/list/stream on the async path never started the blocking worker — the event loop was never held');
 
         // What an operator can print about a store.
         const shown = [util.inspect(s3), JSON.stringify(s3), String(s3.describe()), util.inspect({ nested: { s3 } }, { depth: 5 })].join('\n');

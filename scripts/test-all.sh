@@ -428,6 +428,7 @@ run_federation_suites() {
       test-storage-health
       test-image-store
       test-image-store-s3
+      test-image-store-s3-http
       test-image-evacuation
       test-snapshot-completeness
       test-groups-isolation

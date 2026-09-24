@@ -332,7 +332,8 @@ export class S3ImageStore implements ImageStore {
         throw new ImageStoreError(`S3 ${what} answered HTTP ${res.status}${code ? ` (${code})` : ''}`);
     }
 
-    put(key: string, bytes: Buffer, options: PutOptions): StoredObject {
+    /** The checks every write makes before a byte leaves the node, shared by {@link put} and {@link putAsync}. */
+    private preparePut(key: string, bytes: Buffer, options: PutOptions): () => BuiltRequest {
         if (!Buffer.isBuffer(bytes)) throw new ImageStoreError('Image store put needs a Buffer');
         if (bytes.length === 0) throw new ImageStoreError('Refusing to store an empty object');
         if (bytes.length > MAX_OBJECT_BYTES) {
@@ -345,13 +346,27 @@ export class S3ImageStore implements ImageStore {
         const url = this.objectUrl(key);
         // The payload hash is signed (x-amz-content-sha256), so the bucket itself refuses a body that was
         // altered on the way: what lands is exactly these bytes or nothing.
-        const res = this.syncCall(`PUT ${key}`, () => this.build('PUT', url, {
+        return () => this.build('PUT', url, {
             body: bytes,
             bodySha256: digest,
             headers: { 'content-type': options.mime || 'application/octet-stream', 'x-amz-meta-sha256': digest },
-        }), 64 * 1024);
+        });
+    }
+
+    put(key: string, bytes: Buffer, options: PutOptions): StoredObject {
+        const make = this.preparePut(key, bytes, options);
+        const res = this.syncCall(`PUT ${key}`, make, 64 * 1024);
         if (res.status !== 200) this.fail(`PUT ${key}`, res);
-        return { key, bytes: bytes.length, sha256: digest, mime: options.mime };
+        return { key, bytes: bytes.length, sha256: sha256Hex(bytes), mime: options.mime };
+    }
+
+    /** Non-blocking {@link put}: the federation importer writes a peer's photos through this. */
+    async putAsync(key: string, bytes: Buffer, options: PutOptions): Promise<StoredObject> {
+        const make = this.preparePut(key, bytes, options);
+        const res = await this.asyncCall(`PUT ${key}`, make);
+        if (res.status !== 200) return this.failAsync(`PUT ${key}`, res);
+        await res.body?.cancel().catch(() => {});
+        return { key, bytes: bytes.length, sha256: sha256Hex(bytes), mime: options.mime };
     }
 
     get(key: string): Buffer | null {

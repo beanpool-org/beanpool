@@ -272,7 +272,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             const whole = measured !== null && missing === 0 && labelled === null;
             ctx.set('X-Backup-Contents', whole ? 'database+images' : 'database+images-partial');
             // `<staged>/<referenced>`, exactly as a node's own backup route spells it, so one reader in each UI
-            // covers both — and like the node's, `staged` counts the referenced objects the archive carries.
+            // covers both — and like the node's, `staged` counts the referenced objects the archive carries. Left
+            // unset when nothing was measured: the manager UI reads a partial label with no count as unchecked.
             if (measured) ctx.set('X-Backup-Images', `${measured.referenced - missing}/${measured.referenced}`);
             // Counts only. A shortfall measured here and not reported by the node has no `missing-images.json`
             // in this archive, so the UI sentence built from this header claims neither a list nor a cause.

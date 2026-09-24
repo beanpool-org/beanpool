@@ -26,20 +26,35 @@
  * the image store kept only `state.db` — with no manifest in the archive at all. "The node no longer holds
  * them, and the archive lists which ones" is false for that second kind, so it is not said for either; a
  * restore says why, off the manifest when the archive carries one.
+ *
+ * A file labelled `database+images-partial` with no counts that parse was never measured. The fleet manager
+ * sends one when it cannot read a copy's database: it serves the copy and claims no count it did not take. The
+ * label alone still has to reach the operator, so that case gets a sentence of its own. It says nothing about
+ * how much is missing, and does not call the rest of the file whole.
  */
 export function downloadShortfall(res: {
     headers: { get(name: string): string | null };
 }): string {
     const counts = res.headers.get('X-Backup-Images') || '';
     const [staged, referenced] = counts.split('/').map(Number);
+    const measured = Number.isFinite(staged) && Number.isFinite(referenced);
+    const unchecked = !measured && res.headers.get('X-Backup-Contents') === 'database+images-partial';
     const stated = Number(res.headers.get('X-Backup-Missing-Images'));
     const missing = Number.isFinite(stated) && stated > 0
         ? stated
-        : (Number.isFinite(staged) && Number.isFinite(referenced) && referenced > staged ? referenced - staged : 0);
-    if (missing <= 0) return '';
+        : (measured && referenced > staged ? referenced - staged : 0);
+    if (missing <= 0) {
+        return unchecked
+            ? 'This backup is marked incomplete, but its photos and attachments could not be checked against its '
+                + 'database, so how many are missing is not known.'
+            : '';
+    }
     const of = Number.isFinite(referenced) && referenced > 0 ? ` of ${referenced}` : '';
     return `This backup is missing ${missing}${of} photo(s) or attachment(s) its database references: the file `
-        + 'does not carry those objects. Everything else is in the file.';
+        + 'does not carry those objects. '
+        + (unchecked
+            ? 'The rest of its photos and attachments could not be checked against its database, so more may be missing.'
+            : 'Everything else is in the file.');
 }
 
 /**

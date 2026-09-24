@@ -47,6 +47,39 @@ describe('downloadShortfall', () => {
         expect(said).not.toMatch(/node no longer holds/);
     });
 
+    // A copy the fleet manager holds whose database it could not read: served byte for byte, labelled partial,
+    // and — because nothing was measured — no `X-Backup-Images` and, with no manifest, no missing count either.
+    // The label says partial; saying nothing here is the silent shortfall again.
+    it('speaks for a file labelled partial whose counts were never taken', () => {
+        const said = downloadShortfall(headers({ 'X-Backup-Contents': 'database+images-partial' }));
+        expect(said).toMatch(/could not be checked against its database/);
+        expect(said).not.toMatch(/missing \d/);
+        expect(said).not.toMatch(/Everything else is in the file/);
+    });
+
+    it('speaks for a file labelled partial whose counts do not parse', () => {
+        expect(downloadShortfall(headers({ 'X-Backup-Images': 'lots', 'X-Backup-Contents': 'database+images-partial' })))
+            .toMatch(/could not be checked against its database/);
+    });
+
+    // The same unread database with the node's manifest beside it: the manifest's count is real, but nothing
+    // checked the rest of the file, so "everything else is in the file" is not established.
+    it('does not call the rest of the file whole when only the manifest was counted', () => {
+        const said = downloadShortfall(headers({
+            'X-Backup-Missing-Images': '2',
+            'X-Backup-Contents': 'database+images-partial',
+        }));
+        expect(said).toMatch(/missing 2 photo/);
+        expect(said).toMatch(/could not be checked against its database/);
+        expect(said).not.toMatch(/Everything else is in the file/);
+    });
+
+    // Measured whole against its database, labelled partial only because an empty manifest came with it.
+    it('says nothing about a partial label whose counts show nothing missing', () => {
+        expect(downloadShortfall(headers({ 'X-Backup-Images': '3/3', 'X-Backup-Contents': 'database+images-partial' })))
+            .toBe('');
+    });
+
     it('derives the shortfall from the counts alone when the count header is absent', () => {
         expect(downloadShortfall(headers({ 'X-Backup-Images': '400/412' }))).toMatch(/missing 12 of 412/);
     });

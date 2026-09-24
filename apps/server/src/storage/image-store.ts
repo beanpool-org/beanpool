@@ -563,6 +563,11 @@ export function scanOurObjects(store: ImageStore): ObjectInfo[] {
 
 export async function scanOurObjectsAsync(store: ImageStore): Promise<ObjectInfo[]> {
     const out: ObjectInfo[] = [];
-    for (const ns of STORE_NAMESPACES) out.push(...await scanObjectsAsync(store, ns));
+    // One push per object, never `push(...namespace)`: spreading passes every object as an argument, and past
+    // ~125k of them (a large node's photos) V8 throws "Maximum call stack size exceeded" — failing the backup,
+    // the restore check and the shortfall count that call this.
+    for (const ns of STORE_NAMESPACES) {
+        for (const o of await scanObjectsAsync(store, ns)) out.push(o);
+    }
     return out;
 }

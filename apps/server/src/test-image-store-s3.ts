@@ -32,8 +32,8 @@ import { Readable } from 'node:stream';
 import {
     DiskImageStore, MAX_OBJECT_BYTES, STORE_NAMESPACES,
     checkImageStoreAtBoot, configuredImageStoreKind, getImageStore, headObject, openObject, postPhotoKey,
-    attachmentKey, readObject, resetImageStoreForTests, scanObjects, scanObjectsAsync, scanOurObjects, sha256Hex,
-    type ImageStore,
+    attachmentKey, readObject, resetImageStoreForTests, scanObjects, scanObjectsAsync, scanOurObjects,
+    scanOurObjectsAsync, sha256Hex, type ImageStore, type ObjectInfo,
 } from './storage/image-store.js';
 import { S3ImageStore, s3ConfigFromEnv, S3_ENV } from './storage/s3-image-store.js';
 import { EMPTY_PAYLOAD_SHA256, signRequest } from './storage/s3-sigv4.js';
@@ -371,6 +371,17 @@ async function main(): Promise<void> {
         const pages = (await paged.log()).filter((e) => e.method === 'GET' && e.query.includes('list-type=2') && e.query.includes('prefix=posts%2Fpg%2F'));
         assert(pages.length >= 6, `the listings really were paged (${pages.length} page requests for two listings)`);
         await paged.stop();
+
+        // A large node: more objects in one namespace than V8 accepts as the arguments of one call. The backup,
+        // the restore check and the shortfall count all go through scanOurObjectsAsync, so a spread here would
+        // make a big node un-backupable with "Maximum call stack size exceeded".
+        const many: ObjectInfo[] = Array.from({ length: 300_000 }, (_, i) => ({ key: `posts/big/${i}-00000000.jpg`, bytes: 1, mtimeMs: 0 }));
+        const bigStore = { scanAsync: async (prefix: string) => (prefix === 'posts' ? many : []) } as unknown as ImageStore;
+        let big: ObjectInfo[] | null = null;
+        let bigError = '';
+        try { big = await scanOurObjectsAsync(bigStore); } catch (e: any) { bigError = String(e?.message || e); }
+        assert(big !== null && big.length === many.length,
+            `scanOurObjectsAsync returns all ${many.length} objects of a large namespace${bigError ? ` (threw: ${bigError})` : ''}`);
 
         // The async paths never start the blocking worker: a fresh store used only through them has none.
         const asyncOnly = track(new S3ImageStore(fake.config()));

@@ -1611,56 +1611,80 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // peer "send credits" gifts are fee-free — gifting a friend beans you hold shouldn't be taxed.
     // System moves (escrow holds, refunds, admin) stay exempt via the caller's isFeeExempt.
     const feeExempt = isFeeExempt || !isEscrow;
-    const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
-    if (!success) return null;
 
-    if (!isSyntheticAccount(from) && from !== 'genesis') {
-        recordActivity(from);
-    }
+    // ATOMICITY (money). Everything from the in-memory `ledger.transfer` through the last persisted row is
+    // ONE unit. It used to be five autocommitted statements, and every gap between them was a way to destroy
+    // beans on disk: a crash after the sender's row was written but before the recipient's left the debit
+    // durable with no matching credit, and boot rebuilds memory from those rows (`initStateEngine`). The
+    // other gaps are the same shape — history written with no balance moved, or balances moved with the
+    // decay rows that justify them missing. `runLedgerAudit` only WARNS on the resulting drift, and
+    // `reconcileLedgerFromDb` faithfully reloads whichever torn state the crash left.
+    //
+    // It must be `conservingTransaction`, NOT a bare `db.transaction`: the in-memory mutation is inside the
+    // block, and a bare transaction rolls back only the rows — leaving memory ahead of the DB, which is the
+    // hazard that wrapper's docblock describes at length.
+    //
+    // Every other caller already runs transfer() inside a conservingTransaction of its own (escrow,
+    // settlement, wizards, admin deletes), so for them this is a SAVEPOINT nested in their transaction and
+    // the outer commit is still what makes anything durable. The two callers that did NOT wrap — the
+    // member-to-member send route and `migrateEscrowWalletKeys` — are the ones this closes.
+    const txn = conservingTransaction<Transaction | null>(() => {
+        const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
+        if (!success) return null;
 
-    const taxFee = feeExempt ? 0 : amount * TRANSACTION_FEE_RATE;
+        if (!isSyntheticAccount(from) && from !== 'genesis') {
+            recordActivity(from);
+        }
 
-    const txn: Transaction = {
-        id: crypto.randomUUID(),
-        from, to, amount,
-        taxFee,
-        memo: memo || '',
-        timestamp: new Date().toISOString(),
-    };
-    if (amount > 0) {
-        // SRV-20: persist the caller's request signature (if supplied) so this
-        // transaction's authorship is re-verifiable on import. NULL for
-        // system/internal transfers (those become node-signed in a later step).
-        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            txn.id, txn.from, txn.to, txn.amount, txn.taxFee, txn.memo, txn.timestamp,
-            auth?.signer ?? null, auth?.signature ?? null, auth?.payload ?? null,
-        );
-    }
+        const taxFee = feeExempt ? 0 : amount * TRANSACTION_FEE_RATE;
 
-    // Sync ledger account balances to DB
-    const fromAcc = ledger.getAccount(from);
-    const toAcc = ledger.getAccount(to);
-    // UPSERT, not UPDATE. ledger.getAccount() auto-creates an account in memory on first touch, but a
-    // bare `UPDATE ... WHERE public_key=?` matches 0 rows when SQLite has never seen it — silently, so
-    // the in-memory balance and the DB diverge permanently and every later read returns 0. Synthetic
-    // accounts are the exposed case, since transfer() skips registerVisitor() for them: escrow_* happens
-    // to be safe only because escrow.ts INSERT OR IGNOREs first. This closes the class rather than one
-    // instance of it.
-    const persistAccount = db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
-            last_demurrage_epoch = excluded.last_demurrage_epoch,
-            last_updated_at = excluded.last_updated_at
-    `);
-    const nowIso = new Date().toISOString();
-    persistAccount.run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, nowIso);
-    persistAccount.run(to, toAcc.balance, toAcc.lastDemurrageEpoch, nowIso);
+        const built: Transaction = {
+            id: crypto.randomUUID(),
+            from, to, amount,
+            taxFee,
+            memo: memo || '',
+            timestamp: new Date().toISOString(),
+        };
+        if (amount > 0) {
+            // SRV-20: persist the caller's request signature (if supplied) so this
+            // transaction's authorship is re-verifiable on import. NULL for
+            // system/internal transfers (those become node-signed in a later step).
+            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                built.id, built.from, built.to, built.amount, built.taxFee, built.memo, built.timestamp,
+                auth?.signer ?? null, auth?.signature ?? null, auth?.payload ?? null,
+            );
+        }
 
-    // Persist demurrage decay rows + commons balance (transfers trigger decay on both accounts)
-    persistDecayEvents();
-    persistCommonsBalance();
+        // Sync ledger account balances to DB
+        const fromAcc = ledger.getAccount(from);
+        const toAcc = ledger.getAccount(to);
+        // UPSERT, not UPDATE. ledger.getAccount() auto-creates an account in memory on first touch, but a
+        // bare `UPDATE ... WHERE public_key=?` matches 0 rows when SQLite has never seen it — silently, so
+        // the in-memory balance and the DB diverge permanently and every later read returns 0. Synthetic
+        // accounts are the exposed case, since transfer() skips registerVisitor() for them: escrow_* happens
+        // to be safe only because escrow.ts INSERT OR IGNOREs first. This closes the class rather than one
+        // instance of it.
+        const persistAccount = db.prepare(`
+            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(public_key) DO UPDATE SET
+                balance = excluded.balance,
+                last_demurrage_epoch = excluded.last_demurrage_epoch,
+                last_updated_at = excluded.last_updated_at
+        `);
+        const nowIso = new Date().toISOString();
+        persistAccount.run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, nowIso);
+        persistAccount.run(to, toAcc.balance, toAcc.lastDemurrageEpoch, nowIso);
+
+        // Persist demurrage decay rows + commons balance (transfers trigger decay on both accounts)
+        persistDecayEvents();
+        persistCommonsBalance();
+
+        return built;
+    });
+    // A refused transfer (over the sender's floor) is not a failure to roll back — nothing was written, so
+    // the empty transaction commits and we return null exactly as before.
+    if (!txn) return null;
 
     afterTransactionCommit(() => {
         const toMember = getMember(to);
@@ -1773,8 +1797,24 @@ export function settleDemurrage(publicKeys: string[]): void {
  * the next flush mints it. Flushing first makes memory and rows agree before there is anything to restore,
  * which is the only version of this wrapper that is safe to use.
  *
- * Assumes it is the OUTERMOST transaction: the pre-flush commits, so nesting this inside another
- * `db.transaction` would put that commit at risk of the outer rollback. No caller nests it today.
+ * NESTING. `transfer()` now wraps its own writes in this, so every caller that already held a
+ * `conservingTransaction` (escrow, settlement, the wizards, admin deletes) nests one inside it, and the
+ * inner call becomes a SAVEPOINT. That is safe, but ONLY because the pre-flush above is unconditional.
+ *
+ * It used to be skipped when nested (`if (!db.inTransaction)`), on the reasoning that the pre-flush
+ * commits and nesting would put that commit at risk of the outer rollback. Measured, that reasoning cost
+ * beans. Lazy demurrage applied between the outer BEGIN and the inner call sits queued and unflushed: the
+ * account's debit is in memory only, the Commons credit is in the global, and `commonsBefore` snapshots the
+ * credit. The inner block's own `persistDecayEvents()` then drains the queue and writes the debit INSIDE
+ * the savepoint, so a later throw rolls the debit back, leaves the queue empty for `loadState` to unwind,
+ * and `setCommonsBalance(commonsBefore)` restores a Commons credit with no debit anywhere. A probe against
+ * a 5,000-bean account 60 days stale minted **208.58 beans** on one failed send.
+ *
+ * Flushing unconditionally makes the pair consistent at every level. When nested, the flush lands in the
+ * OUTER transaction, before the savepoint opens — so an inner rollback keeps it, and `reconcileLedgerFromDb`
+ * reads rows that already carry the debit. If the outer later rolls back too, the outer's own catch restores
+ * its own (earlier) snapshot over the top, which is consistent as well; the only cost is that the decay is
+ * recomputed on the next read, which is exactly what `loadState`'s docblock says happens anyway.
  *
  * Lives here rather than beside a caller because the hazard belongs to the primitives, not to any one
  * feature: #104's settlement writes, `adminPruneUser` and the treasury sweep hit it identically, and
@@ -1782,9 +1822,8 @@ export function settleDemurrage(publicKeys: string[]): void {
  */
 export function conservingTransaction<T>(fn: () => T): T {
     // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair.
-    if (!(db as any).inTransaction) {
-        persistDecayEvents();
-    }
+    // Unconditional, including when nested — see NESTING above; skipping it here minted beans.
+    persistDecayEvents();
     const commonsBefore = getCommonsBalanceExact();
     try {
         return db.transaction(fn)();

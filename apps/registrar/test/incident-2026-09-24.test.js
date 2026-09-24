@@ -209,6 +209,51 @@ test('incident (3): an attest validly signed by ANOTHER key is an impostor; twic
     } finally { net.restore(); }
 });
 
+test('incident (3b): an unverifiable verdict ends a run of impostor verdicts — sightings apart never revoke', async () => {
+    // attest_fails counts CONSECUTIVE impostor verdicts. A name that goes quiet between two sightings (asleep,
+    // down, or answering in a format this verifier can't check) must not carry the first sighting over to one
+    // days or weeks later: that is the drift-then-revoke path again, only slower.
+    const { env, rows } = makeEnv();
+    const [owner, intruder, n1, n2] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);
+    await seedLive(env, 'swapped', owner);
+    await seedLive(env, 'alpha', n1); await seedLive(env, 'bravo', n2);
+    const nodes = {
+        'swapped.beanpool.org': attestsAs(intruder),
+        'alpha.beanpool.org': attestsAs(n1), 'bravo.beanpool.org': attestsAs(n2),
+    };
+    const net = network(nodes);
+    try {
+        let summary = await attestSweep(env);
+        assert.equal(summary.action, 'applied');
+        assert.equal(row(rows, 'swapped').attest_fails, 1);
+
+        for (const [label, quiet] of [['down', down()], ['unknown tag', attestsUnderUnknownTag(owner)]]) {
+            nodes['swapped.beanpool.org'] = quiet;
+            for (let sweep = 1; sweep <= 3; sweep++) {
+                summary = await attestSweep(env);
+                assert.equal(summary.action, 'applied', `${label} sweep ${sweep}: the sweep was sound and acted`);
+                assert.equal(summary.unverifiable, 1);
+                assert.equal(row(rows, 'swapped').status, 'live');
+                assert.equal(row(rows, 'swapped').attest_fails, 0, `${label} sweep ${sweep}: the run of impostor verdicts is over`);
+                assert.equal(row(rows, 'swapped').last_attest_at, null, `${label} sweep ${sweep}: unverifiable is not an ok either`);
+            }
+
+            nodes['swapped.beanpool.org'] = attestsAs(intruder);
+            summary = await attestSweep(env);
+            assert.equal(summary.action, 'applied');
+            assert.equal(row(rows, 'swapped').status, 'live', `${label}: one sighting after a quiet spell must not revoke`);
+            assert.equal(row(rows, 'swapped').attest_fails, 1, `${label}: it starts a new run`);
+        }
+        assert.deepEqual(net.cfCalls, [], 'no Cloudflare resource was touched');
+
+        // Control: the next sweep is a second CONSECUTIVE sighting, and that still revokes.
+        summary = await attestSweep(env);
+        assert.equal(summary.action, 'applied');
+        assert.equal(row(rows, 'swapped').status, 'revoked');
+        assert.equal(row(rows, 'swapped').attest_fails, 2);
+    } finally { net.restore(); }
+});
+
 test('incident (4): a failed canary means nothing is acted on — not even a real impostor', async () => {
     const { env, rows } = makeEnv({ CANARY_NAME: 'test' });
     const [canary, owner, intruder, honest] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);

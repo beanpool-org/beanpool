@@ -13,7 +13,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   *different* node key) or `unverifiable` (down, 5xx, not an attest, or a signature we can't verify —
   never evidence). Phase 2 runs only if the sweep is believable: a configured `CANARY_NAME` attested
   `ok`, impostors ≤ max(2, 10% of live), unverifiable ≤ half of live. Otherwise it acts on no row and
-  logs `[ATTEST_SWEEP] suspended:…`. `ATTEST_FAIL_LIMIT` consecutive impostor verdicts revoke the name.
+  logs `[ATTEST_SWEEP] suspended:…`. `ATTEST_FAIL_LIMIT` consecutive impostor verdicts revoke the name;
+  an `ok` or `unverifiable` verdict in an applied sweep ends the run (a suspended sweep changes nothing).
 
 ## Signed request scheme (node → registrar)
 

@@ -304,10 +304,16 @@ function judgeSweep(env, results) {
 
 // Phase 2 for one row. Re-reads it first, so a verdict is only ever applied to the allocation that was attested,
 // not one the owner re-claimed or released while the sweep ran.
+// 'unverifiable' is never evidence: it never counts and never revokes. It does end a run of impostor verdicts
+// (attest_fails counts CONSECUTIVE ones), so a sighting can't pair with another one days of silence later.
 async function applyVerdict(env, a, verdict, why, limit) {
-    if (verdict === 'unverifiable') return;          // never evidence: no counter, no revoke
+    if (verdict === 'unverifiable' && !a.attest_fails) return;   // no run to end: no read, no write
     const cur = await db.getAllocation(env, a.name);
     if (!cur || cur.status !== 'live' || cur.node_pubkey !== a.node_pubkey || cur.requested_at !== a.requested_at) return;
+    if (verdict === 'unverifiable') {
+        if (cur.attest_fails) await db.updateAllocation(env, a.name, { attest_fails: 0 });
+        return;
+    }
     if (verdict === 'ok') {
         await db.updateAllocation(env, a.name, { attest_fails: 0, last_attest_at: nowS() });
         return;

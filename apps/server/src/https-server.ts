@@ -669,8 +669,7 @@ function isSignatureBypassed(p: string): boolean {
         p.startsWith('/api/pricing-guide/admin/') ||
         p.startsWith('/api/pricing-guide/reports') ||
         p === '/api/invite/redeem' ||
-        p === '/api/invite/redeem-offline' ||
-        p === '/api/recovery/sso/github-exchange';
+        p === '/api/invite/redeem-offline';
 }
 
 // Module-level reference so the HTTP server can reuse the same Koa app for

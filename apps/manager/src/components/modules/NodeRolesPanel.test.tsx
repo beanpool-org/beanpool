@@ -61,6 +61,16 @@ describe('NodeRolesPanel', () => {
         revoke.mockResolvedValue({ success: true });
     });
 
+    it('displays loading state indicator while initial role fetch is in flight', async () => {
+        let resolveFetch: (val: any) => void = () => {};
+        fetchRoles.mockImplementationOnce(() => new Promise((resolve) => { resolveFetch = resolve; }));
+        render(<NodeRolesPanel activeNode={node} members={members} viewer={{ kind: 'password' }} />);
+        expect(screen.getByTestId('roles-loading')).toBeInTheDocument();
+        expect(screen.getByText('Loading current roles…')).toBeInTheDocument();
+        await act(async () => { resolveFetch([aliceOwner]); });
+        expect(screen.queryByTestId('roles-loading')).not.toBeInTheDocument();
+    });
+
     it('lists each role holder with callsign, short key, role and who added them when', async () => {
         await renderPanel();
         expect(fetchRoles).toHaveBeenCalledWith('https://node.test', 'pw', undefined);

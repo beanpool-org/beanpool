@@ -321,6 +321,12 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                 {loadError && (
                     <p role="alert" className="text-sm text-red-300 m-0">Couldn't load the list. The node said: <strong>{loadError}</strong></p>
                 )}
+                {loading && roles === null && !loadError && (
+                    <p className="text-sm text-nature-400 m-0 flex items-center gap-2" data-testid="roles-loading">
+                        <span className="animate-spin text-terra-400">⏳</span>
+                        <span>Loading current roles…</span>
+                    </p>
+                )}
                 {roles && roles.length === 0 && !loadError && (
                     <p className="text-sm text-nature-400 m-0">Nobody holds a role yet.</p>
                 )}

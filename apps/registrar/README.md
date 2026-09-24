@@ -33,7 +33,7 @@ it, or — a later PR — after a long, warned abandonment. States (`name_alloca
 |---|---|---|---|
 | `pending` | no | no | a gated claim · admin approve (→ live), or a release: its key's frees it at once (nobody approved it; `pause_reason` `withdrawn`) |
 | `live` | yes | no | claim / approve / heal / resume |
-| `paused` | no | no | sweep impostor (`pause_reason` `impostor`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`) · the owner's heal, except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
+| `paused` | no | no | sweep impostor (`pause_reason` `impostor`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`), a take-back not yet re-attested (`unverified`, or `impostor` if another key answered) · the owner's heal, except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
 | `released` | no | after the 30-day hold (owner's release) or at once (admin's, or a withdrawn claim) | release · the same key re-claims any time; others once free |
 | `blocked` | no | never | admin block (the kill switch) · admin resume or release; the owner can't heal or release it |
 | `abandoned` | no | yes | a later PR |
@@ -42,8 +42,11 @@ A heal (`claim` of your own name, or `heal`) never deprovisions first: `ensure` 
 Cloudflare still has it, re-PUTs the ingress, and finds the DNS record by name — keeps it, PATCHes it if it
 points elsewhere, POSTs only when none exists. A paused name resumes on its owner's heal only when nobody
 else can be answering: on a tunnel made in that heal (its token goes only to the signed request), or after
-an edge re-attest (`/api/attest` through the hostname) signed by the owner's key. `status` reports the
-owner's row in any state with `reason` and `since` (and `held_until` for a release).
+an edge re-attest (`/api/attest` through the hostname) signed by the owner's key. The owner taking back its
+own release is routed by the same rule: the take-back first deletes a tunnel its release could not, so it
+normally comes back on a fresh one; a tunnel Cloudflare still won't delete, or a direct address, routes only
+after the re-attest, and otherwise the name stays paused for its key, which its next heal re-attests. `status`
+reports the owner's row in any state with `reason` and `since` (and `held_until` for a release).
 
 ## Schema and migrations
 

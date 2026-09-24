@@ -129,7 +129,7 @@ async function deprovision(env, a) {
     return { dns_record_id: dnsGone ? null : a.dns_record_id, tunnel_id: tunnelGone ? null : a.tunnel_id };
 }
 
-// Routing off, tunnel kept: an admin pause, or a heal whose edge re-attest failed.
+// Routing off, tunnel kept: an admin pause, or a heal or take-back whose edge re-attest failed.
 async function dnsOff(env, a) {
     if (!a.dns_record_id) return null;
     try { await cf.deleteDnsRecord(env, a.dns_record_id); return null; }
@@ -168,14 +168,33 @@ function bodyFields(b) {
     return f;
 }
 
+const LIVE = { status: 'live', pause_reason: null, paused_at: null, attest_fails: 0 };
+
+// Routing back on for the owner's name that is not live — a pause its heal lifts, or its own release taken back —
+// only when nobody but the owner can be answering: at once on a tunnel made in this request (only this signed
+// request gets its token); otherwise (a tunnel that outlived a pause or a release, or a direct address) only on an
+// edge re-attest the owner's key signed. `res` is the row as ensure() left it. Writes the row live and returns
+// { live: true, attest? }; else takes routing back off and returns { live: false, verdict, why, dns_record_id }
+// for the caller to record.
+async function routeIfOnlyOwner(env, res, ids, now) {
+    if (res.mode === 'tunnel' && ids.changed.includes('tunnel')) {
+        await db.updateAllocation(env, res.name, LIVE);
+        return { live: true };
+    }
+    const r = await classify(env, res);
+    if (r.verdict === 'ok') {
+        await db.updateAllocation(env, res.name, { ...LIVE, last_attest_at: now, last_ok_at: now });
+        return { live: true, attest: 'ok' };
+    }
+    return { live: false, ...r, dns_record_id: await dnsOff(env, res) };
+}
+
 // The owner's own held name (live, paused or pending): bring it back to what it should be. Never deprovisions
 // first; ensure() reuses whatever Cloudflare still has. Returns { status, …, changed, newTunnel } or a Response.
 //   live    → repair (re-assert tunnel, ingress, DNS).
 //   pending → an auto name whose provisioning failed is retried; a gated one keeps waiting for the admin.
-//   paused  → the admin's pause only the admin lifts. Any other pause resumes when nobody but the owner can be
-//             answering: a tunnel made just now (only this signed request gets its token), or an edge re-attest
-//             that the owner's key signed. Otherwise routing goes back off and the name stays paused — and the
-//             owner's.
+//   paused  → the admin's pause only the admin lifts. Any other pause resumes under routeIfOnlyOwner; otherwise
+//             routing goes back off and the name stays paused — and the owner's.
 async function heal(env, cur, b, now) {
     const fields = bodyFields(b);
     const a = { ...cur, ...fields };
@@ -201,44 +220,44 @@ async function heal(env, cur, b, now) {
         return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id });
     }
 
-    const live = { status: 'live', pause_reason: null, paused_at: null, attest_fails: 0 };
     if (cur.status === 'pending') {
         // An auto name whose first provisioning failed: this is that claim, finished.
-        await db.updateAllocation(env, cur.name, { ...live, decided_at: now, decided_by: 'auto' });
+        await db.updateAllocation(env, cur.name, { ...LIVE, decided_at: now, decided_by: 'auto' });
         await logEvent(env, cur.name, 'healed', `pending (provisioning had failed) → live: ${ids.changed.join(', ') || 'nothing'} made`);
         return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id });
     }
     const was = `paused (${cur.pause_reason || 'no reason'})`;
-    if (res.mode === 'tunnel' && newTunnel) {
-        await db.updateAllocation(env, cur.name, live);
-        await logEvent(env, cur.name, 'resumed', `${was} → live: healed by its owner on a fresh tunnel`);
-        return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id });
+    const g = await routeIfOnlyOwner(env, res, ids, now);
+    if (g.live) {
+        await logEvent(env, cur.name, 'resumed', `${was} → live: healed by its owner${g.attest ? ', edge re-attest ok' : ' on a fresh tunnel'}`);
+        return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id, ...(g.attest ? { attest: g.attest } : {}) });
     }
-    const r = await classify(env, res);
-    if (r.verdict === 'ok') {
-        await db.updateAllocation(env, cur.name, { ...live, last_attest_at: now, last_ok_at: now });
-        await logEvent(env, cur.name, 'resumed', `${was} → live: healed by its owner, edge re-attest ok`);
-        return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id, attest: 'ok' });
-    }
-    await db.updateAllocation(env, cur.name, { dns_record_id: await dnsOff(env, res) });
-    await logEvent(env, cur.name, 'heal-refused', `stays ${was}: edge re-attest ${r.verdict} (${r.why})`);
-    return reply({ status: cur.status, reason: reasonOf(cur), since: sinceOf(cur), changed: ids.changed, attest: r.verdict, why: r.why });
+    await db.updateAllocation(env, cur.name, { dns_record_id: g.dns_record_id });
+    await logEvent(env, cur.name, 'heal-refused', `stays ${was}: edge re-attest ${g.verdict} (${g.why})`);
+    return reply({ status: cur.status, reason: reasonOf(cur), since: sinceOf(cur), changed: ids.changed, attest: g.verdict, why: g.why });
 }
 
 // A name nobody else holds, or the claimant's own released one taken back: a new tenure. A gated name waits for
 // the admin — unless it is the same key taking back a name the admin (or policy) already let it have. A name the
 // admin released, or an abandoned one, is not the old key's any more (isOwnRow): that key waits like anyone.
+// A take-back is routed as a heal from a pause is (routeIfOnlyOwner): until then its row is paused for its key
+// ('unverified'), so one whose provisioning fails is finished by its next claim — a heal — never unchecked.
 async function takeName(env, existing, pubkey, b, now) {
     const name = String(b.name).toLowerCase();
     const mode = b.mode === 'direct' ? 'direct' : 'tunnel';
     const tier = await db.policyTier(env, name);
     const sameKey = isOwnRow(existing, pubkey);
+    const approved = tier === 'auto' || (sameKey && !!existing.decided_at);
+    const takeBack = sameKey && approved;
+    const decided = { decided_at: now, decided_by: tier === 'auto' ? 'auto' : (existing?.decided_by || 'admin') };
     const fields = {
-        node_pubkey: pubkey, hostname: `${name}.${env.BASE_DOMAIN}`, mode, status: 'pending',
+        node_pubkey: pubkey, hostname: `${name}.${env.BASE_DOMAIN}`, mode, status: takeBack ? 'paused' : 'pending',
         community_name: b.community_name || b.communityName || null,
         origin: b.origin || null, public_ip: b.public_ip || null, contact: b.contact || null,
-        attest_fails: 0, requested_at: now, decided_at: null, decided_by: null,
-        pause_reason: null, paused_at: null, released_at: null, warned_at: null, last_contact_at: now,
+        attest_fails: 0, requested_at: now,
+        decided_at: takeBack ? decided.decided_at : null, decided_by: takeBack ? decided.decided_by : null,
+        pause_reason: takeBack ? 'unverified' : null, paused_at: takeBack ? now : null,
+        released_at: null, warned_at: null, last_contact_at: now,
         // The same key's own tunnel may be reused (ensure checks it); another key's never is.
         tunnel_id: sameKey ? existing.tunnel_id : null, dns_record_id: sameKey ? existing.dns_record_id : null,
     };
@@ -248,30 +267,40 @@ async function takeName(env, existing, pubkey, b, now) {
         await db.updateAllocation(env, name, { last_contact_at: now });
         await logEvent(env, name, 'claimed', `claimed by key ${key16(pubkey)} (${mode}, tier ${tier})`);
     } else {
-        // Another key taking a freed name: whatever the old holder left at Cloudflare goes first.
+        // Another key taking a freed name: whatever the old holder left at Cloudflare goes first. Its own key taking
+        // back its release: a tunnel the release could not delete goes now, so the take-back is on a fresh one; one
+        // Cloudflare still won't delete is kept, and routes only after a re-attest.
         if (!sameKey) await deprovision(env, existing);
+        else if (existing.tunnel_id) fields.tunnel_id = (await deprovision(env, { tunnel_id: existing.tunnel_id })).tunnel_id;
         if (!(await db.replaceAllocation(env, name, existing, fields))) return json({ error: 'name taken' }, 409); // raced
         await logEvent(env, name, 'claimed', sameKey
             ? `taken back by its own key ${key16(pubkey)} (was ${existing.status})`
             : `claimed by key ${key16(pubkey)}; it was ${existing.status}, last held by ${key16(existing.node_pubkey)}`);
     }
 
-    const approved = tier === 'auto' || (sameKey && !!existing.decided_at);
     if (!approved) return json({ status: 'pending', hostname: fields.hostname, note: 'awaiting approval' });
     const a = { name, ...fields };
-    try {
-        const ids = await ensure(env, a);
-        await db.updateAllocation(env, name, {
-            tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id, status: 'live',
-            decided_at: now, decided_by: tier === 'auto' ? 'auto' : (existing?.decided_by || 'admin'),
-        });
-        const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
-        const token = await tunnelTokenOrNothing(env, { ...a, tunnel_id: ids.tunnel_id });
-        if (token !== undefined) out.tunnelToken = token;
-        return json(out);
-    } catch (e) {
-        return provisionFailed(e); // the row stays 'pending' and held by this key; its next claim retries
+    let ids;
+    // A failure leaves the row held by this key ('pending', or a take-back's 'paused'); its next claim retries.
+    try { ids = await ensure(env, a); } catch (e) { return provisionFailed(e); }
+    const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+    const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
+    if (takeBack) {
+        await db.updateAllocation(env, name, made);
+        const g = await routeIfOnlyOwner(env, { ...a, ...made }, ids, now);
+        if (!g.live) {
+            const reason = g.verdict === 'impostor' ? 'impostor' : 'unverified';
+            await db.updateAllocation(env, name, { pause_reason: reason, dns_record_id: g.dns_record_id });
+            await logEvent(env, name, 'paused', `taken back, but not routed: edge re-attest ${g.verdict} (${g.why}); name kept for ${key16(pubkey)}, whose heal re-attests`);
+            return json({ ...out, status: 'paused', reason, since: now, attest: g.verdict, why: g.why });
+        }
+        if (g.attest) out.attest = g.attest;
+    } else {
+        await db.updateAllocation(env, name, { ...made, status: 'live', ...decided });
     }
+    const token = await tunnelTokenOrNothing(env, { ...a, ...made });
+    if (token !== undefined) out.tunnelToken = token;
+    return json(out);
 }
 
 async function handleClaim(request, env, bodyText) {

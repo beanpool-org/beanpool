@@ -8,6 +8,8 @@
 --                 'impostor'            another node key answered at the hostname (sweep)
 --                 'admin'               paused by the admin — only the admin resumes it
 --                 'incident-2026-09-24' revoked by the registrar's own verifier bug; its node heals it
+--                 'unverified'          its owner's take-back of its own release, not yet re-attested; its
+--                                       node's next claim (a heal) re-attests it
 --   'released'  let go (owner `release`/`offline`, or admin `release`). Owner release: held RELEASE_COOLOFF_S
 --               (30 d) for the same key, then free. Admin release (pause_reason 'admin'): free at once. A gated
 --               claim the admin never approved, released by its key (pause_reason 'withdrawn'): free at once.

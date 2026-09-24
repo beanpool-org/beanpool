@@ -294,6 +294,173 @@ test('the owner\'s heal when the old path is still there: live only after an edg
     } finally { w.restore(); }
 });
 
+test('a take-back on a tunnel its release could not delete: routed only after an edge re-attest under the owner\'s key', async () => {
+    const w = await world();
+    try {
+        const [owner, intruder, n1, n2] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);
+        await liveName(w, 'swapped', owner);
+        await liveName(w, 'alpha', n1); await liveName(w, 'bravo', n2);
+        const tunnel = (await w.row('swapped')).tunnel_id;
+
+        // Paused for an impostor on a tunnel Cloudflare will not delete; the owner's heal re-attests and is refused.
+        w.nodes['swapped.beanpool.org'] = attestsAs(intruder);
+        w.cf.fail.deleteTunnel = true;
+        await attestSweep(w.env); await attestSweep(w.env);
+        assert.equal((await w.heal(owner)).body.attest, 'impostor');
+
+        // Release, then claim: a take-back on that same tunnel (Cloudflare still refuses to delete it). It re-attests
+        // as the heal did, sees the impostor, and is not routed.
+        assert.equal((await w.release(owner)).body.status, 'released');
+        assert.equal((await w.row('swapped')).tunnel_id, tunnel);
+        const back = await w.claim(owner, { name: 'swapped' });
+        assert.equal(back.status, 200, JSON.stringify(back.body));
+        assert.equal(back.body.status, 'paused');
+        assert.equal(back.body.reason, 'impostor');
+        assert.equal(back.body.attest, 'impostor');
+        assert.equal(back.body.tunnelToken, undefined);
+        assert.equal(w.cf.recordAt('swapped.beanpool.org'), null, 'routing is off again');
+        let row = await w.row('swapped');
+        assert.equal(row.status, 'paused');
+        assert.equal(row.pause_reason, 'impostor');
+        assert.equal(row.node_pubkey, owner.pubHex, 'still the owner\'s');
+        assert.equal(row.tunnel_id, tunnel);
+        assert.equal((await w.status(owner)).body.reason, 'impostor');
+
+        // The owner's own node answering through it: the same take-back goes live, on the tunnel it kept.
+        await w.release(owner);
+        w.nodes['swapped.beanpool.org'] = attestsAs(owner);
+        const ok = await w.claim(owner, { name: 'swapped' });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body));
+        assert.equal(ok.body.status, 'live');
+        assert.equal(ok.body.attest, 'ok');
+        assert.equal(ok.body.tunnelToken, `token-${tunnel}`);
+        row = await w.row('swapped');
+        assert.equal(row.tunnel_id, tunnel, 'reused, not duplicated');
+        assert.equal(row.pause_reason, null);
+        assert.ok(row.last_ok_at >= nowS() - 5);
+        assert.equal(w.cf.recordAt('swapped.beanpool.org').content, `${tunnel}.cfargotunnel.com`);
+        assert.deepEqual(w.events('swapped').map((e) => e.event).slice(-5), ['released', 'claimed', 'paused', 'released', 'claimed']);
+    } finally { w.restore(); }
+});
+
+test('a take-back deletes a tunnel its release left behind, and goes live on a fresh one', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'lakeview', owner);
+        const old = (await w.row('lakeview')).tunnel_id;
+        w.cf.fail.deleteTunnel = true;                    // Cloudflare refuses the release's delete…
+        await w.release(owner);
+        assert.equal((await w.row('lakeview')).tunnel_id, old);
+        assert.ok(w.cf.liveTunnel(old));
+        w.cf.fail.deleteTunnel = false;                   // … and accepts the take-back's
+        delete w.nodes['lakeview.beanpool.org'];          // the node dropped its token on release: nothing answers
+
+        const back = await w.claim(owner, { name: 'lakeview' });
+        assert.equal(back.status, 200, JSON.stringify(back.body));
+        assert.equal(back.body.status, 'live');
+        assert.equal(back.body.attest, undefined, 'a fresh tunnel needs no re-attest');
+        const row = await w.row('lakeview');
+        assert.notEqual(row.tunnel_id, old);
+        assert.equal(w.cf.liveTunnel(old), null, 'whatever was connected to the old tunnel is cut off');
+        assert.equal(back.body.tunnelToken, `token-${row.tunnel_id}`);
+        assert.equal([...w.cf.tunnels.values()].filter((t) => !t.deleted_at && t.name === 'bp-lakeview').length, 1);
+        assert.equal(w.cf.recordAt('lakeview.beanpool.org').content, `${row.tunnel_id}.cfargotunnel.com`);
+    } finally { w.restore(); }
+});
+
+test('a take-back whose provisioning fails stays paused for its key, approval kept; its next claim heals it', async () => {
+    const w = await world();
+    try {
+        const [owner, other] = await Promise.all([makeKey(), makeKey()]);
+        assert.equal((await w.claim(owner, { name: 'perth' })).body.status, 'pending');   // gated in the 0001 seed
+        assert.equal((await w.admin('perth', 'approve')).body.status, 'live');
+        await w.release(owner);
+
+        w.cf.fail.ingress = true;
+        assert.equal((await w.claim(owner, { name: 'perth' })).status, 502);
+        const row = await w.row('perth');
+        assert.equal(row.status, 'paused', 'not pending: the admin already let this key have it');
+        assert.equal(row.pause_reason, 'unverified');
+        assert.equal(row.node_pubkey, owner.pubHex);
+        assert.equal(row.decided_by, 'admin');
+        assert.equal((await w.status(owner)).body.status, 'paused');
+        assert.equal((await w.claim(other, { name: 'perth' })).status, 409);
+
+        w.cf.fail.ingress = false;
+        const healed = await w.claim(owner, { name: 'perth' });
+        assert.equal(healed.status, 200, JSON.stringify(healed.body));
+        assert.equal(healed.body.status, 'live', 'no second approval needed');
+        const now = await w.row('perth');
+        assert.equal(healed.body.tunnelToken, `token-${now.tunnel_id}`);
+        assert.equal(now.decided_by, 'admin');
+        assert.ok(w.cf.recordAt('perth.beanpool.org'));
+    } finally { w.restore(); }
+});
+
+test('a take-back that fails on a kept tunnel is retried as a heal, and still re-attests', async () => {
+    const w = await world();
+    try {
+        const [owner, intruder, n1, n2] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);
+        await liveName(w, 'swapped', owner);
+        await liveName(w, 'alpha', n1); await liveName(w, 'bravo', n2);
+        const tunnel = (await w.row('swapped')).tunnel_id;
+        w.nodes['swapped.beanpool.org'] = attestsAs(intruder);
+        w.cf.fail.deleteTunnel = true;                    // for the whole test
+        await attestSweep(w.env); await attestSweep(w.env);
+        await w.release(owner);
+
+        w.cf.fail.ingress = true;
+        assert.equal((await w.claim(owner, { name: 'swapped' })).status, 502);
+        assert.equal((await w.row('swapped')).status, 'paused', 'held for its key, and not live');
+        w.cf.fail.ingress = false;
+        const retry = await w.claim(owner, { name: 'swapped' });
+        assert.equal(retry.status, 200, JSON.stringify(retry.body));
+        assert.equal(retry.body.status, 'paused');
+        assert.equal(retry.body.attest, 'impostor');
+        assert.equal(retry.body.tunnelToken, undefined);
+        assert.equal(w.cf.recordAt('swapped.beanpool.org'), null);
+        assert.equal((await w.row('swapped')).tunnel_id, tunnel);
+    } finally { w.restore(); }
+});
+
+test('a direct take-back is routed only after an edge re-attest under its key, as a heal from a pause is', async () => {
+    const w = await world();
+    try {
+        const [owner, other] = await Promise.all([makeKey(), makeKey()]);
+        const direct = { name: 'openfield', mode: 'direct', public_ip: '203.0.113.7' };
+        assert.equal((await w.claim(owner, direct)).body.status, 'live');
+        await w.release(owner);
+
+        // Another key answers at the address: not routed, and still the owner's.
+        w.nodes['openfield.beanpool.org'] = attestsAs(other);
+        const imp = await w.claim(owner, direct);
+        assert.equal(imp.status, 200, JSON.stringify(imp.body));
+        assert.equal(imp.body.status, 'paused');
+        assert.equal(imp.body.reason, 'impostor');
+        assert.equal(w.cf.recordAt('openfield.beanpool.org'), null);
+        assert.equal((await w.row('openfield')).node_pubkey, owner.pubHex);
+
+        // Released again, and nothing answers yet: not routed, and not called an impostor.
+        await w.release(owner);
+        delete w.nodes['openfield.beanpool.org'];
+        const quiet = await w.claim(owner, direct);
+        assert.equal(quiet.body.status, 'paused');
+        assert.equal(quiet.body.reason, 'unverified');
+        assert.equal(quiet.body.attest, 'unverifiable');
+        assert.equal(w.cf.recordAt('openfield.beanpool.org'), null);
+
+        // Its own node answering: the next claim (a heal) routes it.
+        w.nodes['openfield.beanpool.org'] = attestsAs(owner);
+        const ok = await w.claim(owner, direct);
+        assert.equal(ok.body.status, 'live');
+        assert.equal(ok.body.attest, 'ok');
+        const rec = w.cf.recordAt('openfield.beanpool.org');
+        assert.deepEqual([rec.type, rec.content], ['A', '203.0.113.7']);
+        assert.equal((await w.row('openfield')).status, 'live');
+    } finally { w.restore(); }
+});
+
 test('an admin pause is lifted only by the admin; the owner\'s heal leaves it alone', async () => {
     const w = await world();
     try {

@@ -89,6 +89,17 @@ function seedLegacyDatabase(): { photos: { postId: string; order: number; value:
             mime TEXT,
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
+        CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at);
+        -- A live node has this trigger and this index already, created by an earlier boot's schema.sql.
+        -- The rebuild DROPs the table, which takes its trigger and index with it, and schema.sql puts them
+        -- back afterwards. Without them here the fixture would rebuild an easier table than the real one.
+        CREATE TRIGGER IF NOT EXISTS post_photos_touch_updated_at
+        AFTER UPDATE ON post_photos
+        FOR EACH ROW
+        WHEN NEW.updated_at IS OLD.updated_at
+        BEGIN
+            UPDATE post_photos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+        END;
     `);
     const photos: { postId: string; order: number; value: string }[] = [];
     const insertPhoto = legacy.prepare(
@@ -171,6 +182,20 @@ async function main(): Promise<void> {
         'every attachment row survived the rebuild');
     assert(!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_post_photos_updated_at'").get(),
         'the updated_at index was rebuilt with the table');
+    // DROP TABLE takes the table's triggers with it. schema.sql runs after the rebuild and puts this one
+    // back; if it did not, `updated_at` would stop being maintained on every edit and the `?v=` in every
+    // photo URL would freeze — a photo change nobody would ever see.
+    assert(!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='post_photos_touch_updated_at'").get(),
+        'the touch-updated_at trigger came back after the rebuild');
+    {
+        // And it still works: an edit that does not name updated_at gets it stamped.
+        const probe = fixture.photos[0];
+        const was = (db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ?').get(probe.postId) as any).updated_at;
+        db.prepare("UPDATE post_photos SET mime = 'image/jpeg' WHERE post_id = ?").run(probe.postId);
+        const now = (db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ?').get(probe.postId) as any).updated_at;
+        assert(now !== was, 'and it fires on an edit, exactly as it did before the rebuild');
+        db.prepare('UPDATE post_photos SET updated_at = ?, mime = NULL WHERE post_id = ?').run(was, probe.postId);
+    }
 
     // ── 2. a new photo goes straight to the store ──────────────────────────────────────────────
     const author = crypto.randomBytes(32).toString('hex');

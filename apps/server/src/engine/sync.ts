@@ -619,6 +619,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 // through the store on the way in — so an importing node's database does not re-grow by
                 // everything its peers hold. A value the store cannot reproduce exactly stays in the row,
                 // as it would have before.
+                //
+                // INSERT OR REPLACE over a row that already named an object leaves that object with
+                // nothing pointing at it. Deliberately not deleted here: the import is a hot loop over a
+                // whole payload, an unlink per row is a syscall per row, and the object is harmless where
+                // it is. The storage-health orphan sweep reclaims it. Re-importing the SAME photo costs
+                // nothing at all — the key is content-addressed, so it is the same key.
                 const store = getImageStore();
                 const insertPhoto = db.prepare(
                     `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime)

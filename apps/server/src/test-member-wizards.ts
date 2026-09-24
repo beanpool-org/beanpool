@@ -25,6 +25,8 @@
  *    - Two-Person Rule: actor attempting to gift departing balance to self rejected with 403 / TWO_PERSON_RULE
  *    - Negative balance -> write_off_commons: formal debt write-off against Commons pool, member pruned, zero-sum conserved
  *    - Zero balance -> prune_zero_balance: member pruned, zero-sum conserved
+ *    - Balances that are not whole cents (a real 7-Bean sale leaves 6.895, shown as 6.90): donate and gift
+ *      settle the EXACT balance, and dust that shows as 0.00 still offboards with prune_zero_balance
  * 4. HTTP API Endpoints:
  *    - GET /api/local/admin/members/:pubkey/rekey/status (401 unauth, 200 auth)
  *    - POST /api/local/admin/members/:pubkey/rekey/issue-code (401 unauth, 200 auth)
@@ -66,6 +68,7 @@ import {
     executeOffboard,
 } from './engine/member-wizards.js';
 import { runLedgerAudit } from './engine/audit.js';
+import { ledger } from './engine/ledger.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';
 
@@ -661,6 +664,105 @@ async function main() {
     assert(nodeTotal() === 0, 'Zero-sum ledger conservation holds after live balance settlement');
     const auditConcurrent = runLedgerAudit();
     assert(auditConcurrent.ok === true && Math.abs(auditConcurrent.drift) < 0.0001, 'runLedgerAudit passes with 0 drift after concurrent settlement');
+
+    // Members 8-11: balances that are NOT whole cents, which is what an ordinary sale leaves. The 1.5% fee on a
+    // completed 7-Bean sale leaves the seller 6.895, which getBalance() shows as 6.90. The wizard used to settle
+    // that ROUNDED figure: debiting 6.90 from 6.895 breaks the floor of 0, so the donation was refused and the
+    // whole offboarding aborted (#1099 made the refusal throw), and a gift was refused the same way. Every
+    // balance offboarded above is a whole number, which is how it went unseen.
+    const exact = (pk: string) => ledger.getAccount(pk).balance;
+    const rowSum = () => (db.prepare('SELECT SUM(balance) AS total FROM accounts').get() as any).total as number;
+    const offboardError = (fn: () => unknown): string => {
+        try { fn(); return ''; } catch (e: any) { return e.message || String(e); }
+    };
+    // A real sale, not a seeded balance: the seller ends up with price minus the 1.5% fee.
+    const sellerAfterSale = (label: string, price: number): string => {
+        const seller = makeMember(`${label}_seller`);
+        const buyer = makeMember(`${label}_buyer`);
+        transfer('genesis', buyer, 20, `seed ${label} buyer`, 'direct', true);
+        createPost('offer', 'produce', `${label} buyer listing`, 'Satisfies the contribution rule', 5, 'fixed', buyer);
+        const offer = createPost('offer', 'produce', `${label} jam`, 'A jar of jam', price, 'fixed', seller);
+        const deal = acceptPost(offer!.id, buyer);
+        completePostTransaction(deal.id, buyer);
+        return seller;
+    };
+
+    // Member 8: half-cent balance -> donate_to_commons
+    const jamDonorKey = sellerAfterSale('jam_donor', 7);
+    const jamDonorExact = exact(jamDonorKey);
+    assert(Math.abs(jamDonorExact - 6.895) < 1e-9, `the 7-Bean sale left the seller 6.895 exactly (got ${jamDonorExact})`);
+    assert(getOffboardPreview(jamDonorKey).balance === 6.9, 'the wizard preview still shows the rounded 6.90');
+    const commonsBeforeJamDonor = getCommonsBalanceExact();
+    const rowSumBeforeJamDonor = rowSum();
+    let jamDonorRes: ReturnType<typeof executeOffboard> | null = null;
+    const jamDonorErr = offboardError(() => {
+        jamDonorRes = executeOffboard(jamDonorKey, { resolution: 'donate_to_commons' }, operatorPubkey);
+    });
+    assert(jamDonorErr === '', `a half-cent balance offboards with donate_to_commons (error: "${jamDonorErr}")`);
+    assert(jamDonorRes!.balanceSettled === jamDonorExact, `balanceSettled is the exact 6.895 (got ${jamDonorRes!.balanceSettled})`);
+    assert(getMember(jamDonorKey)?.status === 'pruned', 'the half-cent donor is pruned');
+    assert(exact(jamDonorKey) === 0, `the half-cent donor holds exactly 0 afterwards (got ${exact(jamDonorKey)})`);
+    const jamDonorRow = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(jamDonorKey) as any;
+    assert(jamDonorRow?.balance === 0, `and so does their account row (got ${jamDonorRow?.balance})`);
+    assert(Math.abs(getCommonsBalanceExact() - commonsBeforeJamDonor - jamDonorExact) < 1e-9,
+        `the Commons rose by exactly 6.895 (rose by ${getCommonsBalanceExact() - commonsBeforeJamDonor})`);
+    const jamDonorMoves = db.prepare("SELECT amount, memo FROM transactions WHERE from_pubkey = ? AND to_pubkey = 'COMMONS_POOL'").all(jamDonorKey) as any[];
+    assert(jamDonorMoves.length === 1 && jamDonorMoves[0].amount === jamDonorExact && /^Donation to Commons/.test(jamDonorMoves[0].memo),
+        `the whole 6.895 went as ONE donation, not a donation plus a confiscated remainder (got ${JSON.stringify(jamDonorMoves)})`);
+    assert(Math.abs(rowSum() - rowSumBeforeJamDonor) < 1e-9, 'SUM(balances) is unchanged by the half-cent donation');
+    assert(nodeTotal() === 0, 'Zero-sum conserved after the half-cent donation');
+    const auditJamDonor = runLedgerAudit();
+    assert(auditJamDonor.ok === true && Math.abs(auditJamDonor.drift) < 0.0001, `runLedgerAudit passes with 0 drift after the half-cent donation (drift ${auditJamDonor.drift})`);
+
+    // Member 9: half-cent balance -> gift_to_member, under the key-based auth the gift branch requires
+    const jamGifterKey = sellerAfterSale('jam_gifter', 7);
+    const jamGifterExact = exact(jamGifterKey);
+    assert(Math.abs(jamGifterExact - 6.895) < 1e-9, `the second 7-Bean sale also left 6.895 (got ${jamGifterExact})`);
+    const jamRecipientKey = makeMember('jam_recipient');
+    const commonsBeforeJamGift = getCommonsBalanceExact();
+    const rowSumBeforeJamGift = rowSum();
+    let jamGiftRes: ReturnType<typeof executeOffboard> | null = null;
+    const jamGiftErr = offboardError(() => {
+        jamGiftRes = executeOffboard(jamGifterKey, { resolution: 'gift_to_member', giftRecipientPubkey: jamRecipientKey }, operatorPubkey);
+    });
+    assert(jamGiftErr === '', `a half-cent balance offboards with gift_to_member (error: "${jamGiftErr}")`);
+    assert(jamGiftRes!.balanceSettled === jamGifterExact, `the gift reports the exact 6.895 settled (got ${jamGiftRes!.balanceSettled})`);
+    assert(exact(jamRecipientKey) === jamGifterExact, `the recipient received exactly 6.895 (got ${exact(jamRecipientKey)})`);
+    assert(Math.abs(getCommonsBalanceExact() - commonsBeforeJamGift) < 1e-9, 'the Commons is untouched by a fee-free gift of the whole balance');
+    assert(getMember(jamGifterKey)?.status === 'pruned' && exact(jamGifterKey) === 0, 'the half-cent gifter is pruned holding exactly 0');
+    assert(Math.abs(rowSum() - rowSumBeforeJamGift) < 1e-9, 'SUM(balances) is unchanged by the half-cent gift');
+    assert(nodeTotal() === 0, 'Zero-sum conserved after the half-cent gift');
+    const auditJamGift = runLedgerAudit();
+    assert(auditJamGift.ok === true && Math.abs(auditJamGift.drift) < 0.0001, `runLedgerAudit passes with 0 drift after the half-cent gift (drift ${auditJamGift.drift})`);
+
+    // Member 10: the other direction, exact ABOVE the rounded figure. A 7.33 sale leaves 7.22005, shown as 7.22.
+    // Settling 7.22 succeeded, and the prune then confiscated the 0.00005 left behind, so the recipient was
+    // quietly short-changed. They must receive the whole balance.
+    const plumGifterKey = sellerAfterSale('plum_gifter', 7.33);
+    const plumGifterExact = exact(plumGifterKey);
+    assert(plumGifterExact > getBalance(plumGifterKey).balance, `the 7.33 sale leaves more than the rounded figure (${plumGifterExact} vs ${getBalance(plumGifterKey).balance})`);
+    const plumRecipientKey = makeMember('plum_recipient');
+    const plumGiftErr = offboardError(() =>
+        executeOffboard(plumGifterKey, { resolution: 'gift_to_member', giftRecipientPubkey: plumRecipientKey }, operatorPubkey));
+    assert(plumGiftErr === '', `the 7.22005 balance offboards with gift_to_member (error: "${plumGiftErr}")`);
+    assert(exact(plumRecipientKey) === plumGifterExact, `the recipient received the whole ${plumGifterExact}, not the rounded 7.22 (got ${exact(plumRecipientKey)})`);
+    assert(nodeTotal() === 0, 'Zero-sum conserved after the above-rounding gift');
+
+    // Member 11: dust that SHOWS as 0.00. The wizard picks its resolution from the figure it shows, so it sends
+    // prune_zero_balance here, and that has to keep working: the prune settles the dust itself.
+    const dustKey = makeMember('dust');
+    transfer('genesis', dustKey, 0.004, 'seed dust', 'direct', true);
+    assert(getOffboardPreview(dustKey).balance === 0, 'a 0.004 balance shows as 0.00 in the wizard preview');
+    const commonsBeforeDust = getCommonsBalanceExact();
+    let dustRes: ReturnType<typeof executeOffboard> | null = null;
+    const dustErr = offboardError(() => {
+        dustRes = executeOffboard(dustKey, { resolution: 'prune_zero_balance' }, operatorPubkey);
+    });
+    assert(dustErr === '', `a balance that shows as 0.00 still offboards with prune_zero_balance (error: "${dustErr}")`);
+    assert(getMember(dustKey)?.status === 'pruned' && exact(dustKey) === 0, 'the dust member is pruned holding exactly 0');
+    assert(Math.abs(getCommonsBalanceExact() - commonsBeforeDust - 0.004) < 1e-9, 'the 0.004 of dust went to the Commons');
+    assert(dustRes!.balanceSettled === 0.004, `and balanceSettled reports it (got ${dustRes!.balanceSettled})`);
+    assert(nodeTotal() === 0, 'Zero-sum conserved after the dust prune');
 
     // =========================================================================
     // PART 3: HTTP API ENDPOINTS (ADMIN & COMMUNITY)

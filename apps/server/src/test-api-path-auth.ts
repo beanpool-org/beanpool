@@ -203,6 +203,17 @@ async function main() {
         assert(changed.length === 0, `${r.method} ${r.path} unsigned changes nothing${changed.length ? ` (changed: ${changed.join(', ')})` : ''}`);
     }
 
+    // ── 3b. The dead GitHub exchange path is no longer exempt from the signature check ───────────────────
+    // It sat on the bypass list with no handler anywhere (left from the web-flow attempt the device flow
+    // replaced), so an unsigned write sailed past authentication and fell through to a 404. Off the list,
+    // anything ever mounted there starts out behind the signature check instead of in front of it.
+    {
+        const before = snapshot();
+        const res = await send('POST', '/api/recovery/sso/github-exchange', { code: 'x', state: 'y' });
+        assert(res.status === 401, `POST /api/recovery/sso/github-exchange unsigned → 401 (got ${res.status} ${res.error ?? ''})`);
+        assert(diffTables(before, snapshot()).length === 0, 'POST /api/recovery/sso/github-exchange unsigned changes nothing');
+    }
+
     // ── 4. Signed, but by someone else naming the victim as sender: refused, no beans move ───────────────
     {
         const before = snapshot();

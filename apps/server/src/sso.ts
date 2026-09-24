@@ -503,69 +503,9 @@ export async function verifyIdToken(
         }
     }
 
-    if (provider === 'facebook') {
-        const parts = idToken?.split('.');
-        if (parts && parts.length === 3) {
-            try {
-                const [headerB64, payloadB64, signatureB64] = parts;
-                const header = decodeSegment(headerB64, config.label);
-                if (header.alg === 'RS256' && header.kid) {
-                    const jwk = await getSigningKey(provider, header.kid);
-                    const publicKey = crypto.createPublicKey({ key: jwk as any, format: 'jwk' });
-                    const signed = Buffer.from(`${headerB64}.${payloadB64}`, 'utf-8');
-                    const signature = Buffer.from(signatureB64, 'base64url');
-                    if (crypto.verify('RSA-SHA256', signed, publicKey, signature)) {
-                        const claims = decodeSegment(payloadB64, config.label);
-                        if (claims.sub && consumeNonce(expectedNonce, subject)) {
-                            return {
-                                provider: 'facebook',
-                                sub: String(claims.sub),
-                                email: claims.email ? String(claims.email) : undefined,
-                                emailVerified: coerceBoolean(claims.email_verified),
-                                audience: String(claims.aud || allowedAudiences[0] || 'facebook'),
-                                issuedAt: Number(claims.iat ?? Math.floor(Date.now() / 1000)),
-                                expiresAt: Number(claims.exp ?? Math.floor(Date.now() / 1000) + 3600),
-                            };
-                        }
-                    }
-                }
-            } catch {}
-        }
-
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
-            const res = await fetch(`https://graph.facebook.com/v20.0/me?fields=id,email&access_token=${encodeURIComponent(idToken)}`, {
-                signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
-            if (!res.ok) {
-                const Refusal = res.status >= 500 ? SsoProviderUnavailableError : SsoVerificationError;
-                throw new Refusal(`Facebook authentication failed (status ${res.status}).`);
-            }
-            const data = await res.json() as { id?: string | number; email?: string };
-            if (!data.id) {
-                throw new SsoVerificationError('Facebook user profile did not return a user id.');
-            }
-            if (!consumeNonce(expectedNonce, subject)) {
-                throw new SsoVerificationError('Facebook sign-in could not be matched to this request.');
-            }
-            return {
-                provider: 'facebook',
-                sub: String(data.id),
-                email: data.email ? String(data.email) : undefined,
-                emailVerified: true,
-                audience: allowedAudiences[0] || 'facebook',
-                issuedAt: Math.floor(Date.now() / 1000),
-                expiresAt: Math.floor(Date.now() / 1000) + 3600,
-            };
-        } catch (err: any) {
-            if (err instanceof SsoVerificationError) throw err;
-            // Unreachable, timed out, or an answer that was not a profile: Facebook failed, not the token.
-            throw new SsoProviderUnavailableError(`Failed to verify Facebook token: ${err.message}`);
-        }
-    }
-
+    // Facebook has no special case: its OIDC id_token takes the path below, the same as Google's
+    // and Apple's. An access token is refused as malformed, never sent to Graph — Graph answers for
+    // a token from ANY app, and only the app secret can ask which one issued it (D5).
     const parts = idToken?.split('.');
     if (!parts || parts.length !== 3) {
         throw new SsoVerificationError(`${config.label} token is malformed.`);
@@ -639,12 +579,9 @@ export async function verifyIdToken(
             crypto.createHash('sha256').update(expectedNonce, 'utf-8').digest('hex'),
         );
     }
-    // Google id_tokens do not embed client-side nonces in the free GoogleSignin.signIn() API.
-    // When claims.nonce is omitted by Google, we match if the server-issued expectedNonce
-    // is validly consumed for this subject (enforcing single-use anti-replay).
-    if (!nonceMatches && provider === 'google' && !claims.nonce) {
-        nonceMatches = true;
-    }
+    // No exception for a token that carries no nonce, Google's included. Consuming the caller's
+    // nonce proves nothing about a token that does not name it: it is bound to no request, so a
+    // node it was once shown to could replay it anywhere, under a nonce of its own.
     if (!nonceMatches || !consumeNonce(expectedNonce, subject)) {
         throw new SsoVerificationError(
             `${config.label} sign-in could not be matched to this request.`,

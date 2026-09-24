@@ -58,8 +58,10 @@ wrong status", run the suite that covers it and paste the assertion.
 `/api/` as mutating and returns **401 before the handler runs** when `X-Public-Key` or
 `X-Signature` is absent. So on any such route, a `!pubkey` guard inside the handler can never
 fire, and the "undefined bound into SQLite" crash is not reachable over HTTP. Bypassed paths
-are only `/api/local/*`, `/api/invite/redeem`, `/api/invite/redeem-offline` and
-`/api/recovery/sso/github-exchange`.
+are exactly those `isSignatureBypassed` (same file) lists: `/api/local/*`, `/api/admin/*`,
+`/api/manager/*`, `/api/pair/*`, the pricing-guide admin and reports paths, `/api/invite/redeem`
+and `/api/invite/redeem-offline`. (`/api/recovery/sso/github-exchange` was on it with no handler
+behind it; removed 2026-09-24.)
 
 The underlying pattern — a header passed into a DB call without a presence check — is real
 and worth watching, but **only re-file it against a route that is a GET, or on that bypass

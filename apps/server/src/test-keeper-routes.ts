@@ -22,6 +22,11 @@ import { _resetJwksCacheForTests, _clearNoncesForTests, ssoLookupHash } from './
 
 initStateEngine();
 
+// No provider is contacted from this suite. The Facebook case below names a provider whose key set
+// is never primed, so the verifier refetches it; that request is answered here, as an outage.
+globalThis.fetch = (async () =>
+    new Response('stubbed: test-keeper-routes contacts no provider', { status: 503 })) as typeof fetch;
+
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;

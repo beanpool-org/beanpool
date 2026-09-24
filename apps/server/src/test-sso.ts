@@ -1,5 +1,6 @@
 /**
- * OIDC id_token verification for Google and Apple — proven against real RSA signatures, not mocks.
+ * OIDC id_token verification for Google, Apple and Facebook — proven against real RSA signatures,
+ * not mocks.
  *
  * The suite mints its own keypair PER PROVIDER and issues tokens with it, then substitutes those
  * keys into the JWKS caches. So every "valid token" here carries a genuine RS256 signature over
@@ -10,16 +11,18 @@
  * accepts `alg: none`, or a token minted for someone else's client ID, is worse than no verifier —
  * it looks like security while granting a stranger a fragment of somebody's account.
  *
- * The whole battery runs against BOTH providers rather than Google with an Apple postscript,
- * because a check that exists for one and not the other is the failure this generalisation was
- * meant to prevent. Both fixtures deliberately share a `kid` so the cross-provider tests are
- * meaningful: a shared JWKS cache would resolve one provider's kid to the other's key.
+ * The whole battery runs against EVERY OIDC provider rather than Google with postscripts, because
+ * a check that exists for one and not another is the failure this generalisation was meant to
+ * prevent — and Facebook was exactly that until S1: signature only, then any token Graph would
+ * answer for. All fixtures deliberately share a `kid` so the cross-provider tests are meaningful:
+ * a shared JWKS cache would resolve one provider's kid to another's key.
  *
- * NETWORK: none. Every cache is primed before use. The two "unknown key id" cases are the
- * exception — they exercise the refetch-once path, which reaches for the real JWKS and must fail
- * closed whether or not it gets there, so they pass offline and online alike. The JWKS URLs
- * themselves were checked by hand against both providers on 2026-08-07; a test cannot distinguish
- * "wrong URL" from "no network", so it does not pretend to.
+ * NETWORK: none, enforced. `fetch` is stubbed for the whole run (see below) and every cache is
+ * primed before use. The "unknown key id" cases exercise the refetch-once path, meet a provider
+ * that answers 503, and must fail closed after exactly one request. Until S1 those cases, GitHub's,
+ * and Facebook's Graph fallback reached the real providers. The JWKS URLs themselves were checked by
+ * hand against Google and Apple on 2026-08-07; a test cannot tell "wrong URL" from "no network", so
+ * it does not pretend to.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sso.ts
  */
@@ -36,6 +39,7 @@ import {
     _resetJwksCacheForTests,
     _clearNoncesForTests,
     type SsoProvider,
+    type SsoIdentity,
 } from './sso.js';
 
 let run = 0, passed = 0;
@@ -53,6 +57,33 @@ async function rejects(fn: () => Promise<unknown>, msg: string): Promise<void> {
         else console.error(`✗ ${msg} — threw the wrong error type: ${(e as Error).message}`);
     }
 }
+/** The mirror of rejects(): a sign-in that must verify as `sub`. A refusal is a failed check, not a crash. */
+async function verifies(fn: () => Promise<SsoIdentity>, sub: string, msg: string): Promise<void> {
+    run++;
+    try {
+        const identity = await fn();
+        if (identity.sub === sub) { passed++; console.log(`✓ ${msg}`); }
+        else console.error(`✗ ${msg} — verified, but as sub ${identity.sub}`);
+    } catch (e) {
+        console.error(`✗ ${msg} — refused: ${(e as Error).message}`);
+    }
+}
+
+// ─── no network ───────────────────────────────────────────────────────────────────────────────
+//
+// Every request the verifier makes lands here and is recorded. By default the "provider" is down
+// (503), which is what a JWKS refetch meets; a test that needs a different answer swaps `fetchStub`
+// and puts PROVIDER_DOWN back.
+type FetchStub = (url: string) => Promise<Response>;
+const PROVIDER_DOWN: FetchStub = async () =>
+    new Response('stubbed: test-sso contacts no provider', { status: 503 });
+let fetchStub: FetchStub = PROVIDER_DOWN;
+let fetchCalls: string[] = [];
+globalThis.fetch = (async (input: any) => {
+    const url = typeof input === 'string' ? input : input?.url ?? String(input);
+    fetchCalls.push(url);
+    return fetchStub(url);
+}) as typeof fetch;
 
 /** Every nonce is bound to a member; these tests act as one. */
 const SUBJECT = 'a'.repeat(64);
@@ -85,7 +116,7 @@ function makeFixture(
     const jwk = { ...publicKey.export({ format: 'jwk' }), kid: KID, alg: 'RS256', use: 'sig' } as any;
     const f: Fixture = {
         provider,
-        label: provider === 'google' ? 'Google' : 'Apple',
+        label: { google: 'Google', apple: 'Apple', facebook: 'Facebook', github: 'GitHub' }[provider],
         iss: opts.iss,
         aud: opts.aud,
         otherAud: opts.otherAud,
@@ -148,9 +179,9 @@ const GITHUB = makeFixture('github', {
     extraClaims: { email: 'developer@github.com', email_verified: true },
 });
 
-const FIXTURES = [GOOGLE, APPLE];
+const FIXTURES = [GOOGLE, APPLE, FACEBOOK];
 
-/** Reset both providers' caches, then prime just this one. */
+/** Reset every provider's cache, then prime just this one. */
 function only(f: Fixture): void {
     _resetJwksCacheForTests();
     f.prime();
@@ -277,18 +308,12 @@ async function battery(f: Fixture): Promise<void> {
     await rejects(() => verifyIdToken(provider, mint({ nonce: 'not-the-one-we-issued' }), [aud], nonce, SUBJECT),
         "a token carrying someone else's nonce is refused");
 
+    // Google included. Until S1 this asserted the opposite for Google — a nonce-less token verified,
+    // "tolerated for the free API" — and that tolerance was the replay hole: see Google specifics.
     only(f);
     nonce = issueNonce(SUBJECT);
-    if (provider === 'google') {
-        // Google's free GoogleSignin.signIn() API never embeds a nonce claim (see the
-        // dedicated comment in sso.ts) — a missing claim is the EXPECTED shape for this
-        // provider, tolerated only when expectedNonce itself is validly issued+consumed.
-        const identity = await verifyIdToken(provider, mint({}), [aud], nonce, SUBJECT);
-        assert(identity.sub === f.sub, 'a Google token with NO nonce still verifies (tolerated for the free API)');
-    } else {
-        await rejects(() => verifyIdToken(provider, mint({}), [aud], nonce, SUBJECT),
-            'a token with NO nonce is refused');
-    }
+    await rejects(() => verifyIdToken(provider, mint({}), [aud], nonce, SUBJECT),
+        'a token with NO nonce is refused');
 
     only(f);
     nonce = issueNonce(SUBJECT);
@@ -362,47 +387,61 @@ async function battery(f: Fixture): Promise<void> {
 
     // ── unknown kid ───────────────────────────────────────────────────────────────────────────
     // Cache holds a key, token names a different one. The verifier refetches once and then gives up
-    // rather than trusting a key it does not have. The refetch reaches the real JWKS if there is a
-    // network and fails if there is not; either way this must fail CLOSED.
+    // rather than trusting a key it does not have. The refetch meets the stubbed provider (503), and
+    // this must fail CLOSED after that one request — a second would be a fallback to somewhere else.
     only(f);
     nonce = issueNonce(SUBJECT);
+    fetchCalls = [];
     await rejects(() => verifyIdToken(provider, mint({ nonce }, { kid: 'rotated-away' }), [aud], nonce, SUBJECT),
         'a token signed by an unknown key id fails CLOSED');
+    assert(fetchCalls.length === 1,
+        `...after refetching the key set exactly once (${fetchCalls.length} request(s))`);
 }
 
 async function main(): Promise<void> {
-    console.log('\nOIDC id_token verification — Google and Apple\n');
+    console.log('\nOIDC id_token verification — Google, Apple and Facebook\n');
 
-    for (const f of FIXTURES) await battery(f);
+    // One provider's battery aborting (an unexpected throw) is counted and the next still runs, so a
+    // single break cannot hide what the others would have shown.
+    for (const f of FIXTURES) {
+        try {
+            await battery(f);
+        } catch (e) {
+            run++;
+            console.error(`✗ the ${f.label} battery aborted: ${(e as Error).message}`);
+        }
+    }
 
     // ── cross-provider ────────────────────────────────────────────────────────────────────────
     //
-    // The reason both fixtures share a `kid`. With a single shared JWKS cache — the obvious way to
+    // The reason the fixtures share a `kid`. With a single shared JWKS cache — the obvious way to
     // generalise #218's module-level variable — whichever provider was primed last would answer
-    // for both, so one of these two verifications would fail on the signature and the providers
-    // would evict each other on every request. Priming both and verifying both is the proof that
-    // the caches are separate.
+    // for all, so the others would fail on the signature and the providers would evict each other
+    // on every request. Priming all and verifying all is the proof that the caches are separate.
     console.log('\n── cross-provider ───────────────────────────────────────');
     _resetJwksCacheForTests();
-    GOOGLE.prime();
-    APPLE.prime();
+    for (const f of FIXTURES) f.prime();
     _clearNoncesForTests();
 
-    let nonce = issueNonce(SUBJECT);
-    const g = await verifyIdToken('google', GOOGLE.mint({ nonce }), [GOOGLE.aud], nonce, SUBJECT);
-    nonce = issueNonce(SUBJECT);
-    const a = await verifyIdToken('apple', APPLE.mint({ nonce }), [APPLE.aud], nonce, SUBJECT);
-    assert(g.provider === 'google' && a.provider === 'apple',
-        'both providers verify with the same kid in play — the JWKS caches are per provider');
+    let nonce: string;
+    for (const f of FIXTURES) {
+        nonce = issueNonce(SUBJECT);
+        await verifies(() => verifyIdToken(f.provider, f.mint({ nonce }), [f.aud], nonce, SUBJECT), f.sub,
+            `${f.label} verifies with the same kid primed for every provider — the JWKS caches are per provider`);
+    }
 
-    // A Google token offered as an Apple one must not resolve. It fails at the signature, because
-    // the shared kid selects Apple's key — which is precisely the confusion a shared cache invites.
-    nonce = issueNonce(SUBJECT);
-    await rejects(() => verifyIdToken('apple', GOOGLE.mint({ nonce }), [GOOGLE.aud, APPLE.aud], nonce, SUBJECT),
-        'a Google token presented as an Apple one is refused');
-    nonce = issueNonce(SUBJECT);
-    await rejects(() => verifyIdToken('google', APPLE.mint({ nonce }), [GOOGLE.aud, APPLE.aud], nonce, SUBJECT),
-        'and an Apple token presented as a Google one is refused');
+    // One provider's token offered as another's must not resolve. It fails at the signature, because
+    // the shared kid selects the named provider's key — precisely the confusion a shared cache invites.
+    for (const f of FIXTURES) {
+        for (const other of FIXTURES) {
+            if (other === f) continue;
+            nonce = issueNonce(SUBJECT);
+            await rejects(
+                () => verifyIdToken(other.provider, f.mint({ nonce }), [f.aud, other.aud], nonce, SUBJECT),
+                `${f.label}'s token presented as ${other.label}'s is refused`,
+            );
+        }
+    }
 
     // A provider name that is not recognized must not fall through to a default.
     nonce = issueNonce(SUBJECT);
@@ -489,6 +528,70 @@ async function main(): Promise<void> {
     await rejects(() => verifyIdToken('google', GOOGLE.mint({ nonce: gHashed }), [GOOGLE.aud], nonce, SUBJECT),
         'Google stays strict — a hashed nonce is refused there');
 
+    // ── Google: our nonce, or no sign-in (S1) ─────────────────────────────────────────────────
+    console.log('\n── Google specifics ─────────────────────────────────────');
+
+    // The shape today's app sends: the free google-signin API cannot put a nonce in the token. The
+    // verifier used to accept that and consume whichever nonce the CALLER had been issued, which
+    // bound the token to nothing. An SSO proof releases the whole sealed seed, so any node the
+    // member had once shown such a token could present it elsewhere, under a nonce of its own, and
+    // rebuild their key within the hour.
+    only(GOOGLE);
+    const seenAtEnrolment = GOOGLE.mint({});
+    const attackersNonce = issueNonce(OTHER_SUBJECT);
+    await rejects(() => verifyIdToken('google', seenAtEnrolment, [GOOGLE.aud], attackersNonce, OTHER_SUBJECT),
+        'a nonce-less Google token replayed by someone else, under a nonce of their own, is refused');
+    const ownNonce = issueNonce(SUBJECT);
+    await rejects(() => verifyIdToken('google', seenAtEnrolment, [GOOGLE.aud], ownNonce, SUBJECT),
+        '...and so it is from the member it belongs to — no nonce, no Google sign-in');
+    await rejects(
+        () => verifyIdToken('google', GOOGLE.mint({ nonce: issueNonce(SUBJECT) }), [GOOGLE.aud], ownNonce, SUBJECT),
+        'a Google token naming a different nonce than the one presented is refused');
+    const withOwnNonce = GOOGLE.mint({ nonce: ownNonce });
+    await verifies(() => verifyIdToken('google', withOwnNonce, [GOOGLE.aud], ownNonce, SUBJECT), GOOGLE.sub,
+        'a Google token carrying our nonce verifies — and the refusals above did not burn that nonce');
+    await rejects(() => verifyIdToken('google', withOwnNonce, [GOOGLE.aud], ownNonce, SUBJECT),
+        '...once: presenting the same token again is refused');
+
+    // ── Facebook: the id_token, the standard way, or nothing (S1) ─────────────────────────────
+    console.log('\n── Facebook specifics ───────────────────────────────────');
+
+    // Facebook used to have its own path: signature only (no issuer, audience, expiry or nonce),
+    // every failure swallowed, then a fallback that accepted any token Graph would answer for —
+    // from any app. The battery above is the proof the first half is gone; this is the second. An
+    // access token cannot be tied to our app without the app secret, so it is refused on shape.
+    const FB_ACCESS_TOKEN = `EAAL${'x'.repeat(180)}`; // what a Facebook user access token looks like
+    only(FACEBOOK);
+    nonce = issueNonce(SUBJECT);
+    fetchStub = async (url) => { throw new Error(`test-sso tried to contact ${url}`); };
+    fetchCalls = [];
+    await rejects(() => verifyIdToken('facebook', FB_ACCESS_TOKEN, [FACEBOOK.aud], nonce, SUBJECT),
+        'a Facebook access token (not a JWT) is refused');
+    assert(fetchCalls.length === 0,
+        `...without a request to Graph or anywhere else (${fetchCalls.length} request(s))`);
+
+    // Where Graph WOULD vouch for it — which it does for any live token, whichever app it was for.
+    fetchStub = async () => new Response(JSON.stringify({ id: FACEBOOK.sub, email: 'someone@example.com' }),
+        { status: 200, headers: { 'content-type': 'application/json' } });
+    fetchCalls = [];
+    await rejects(() => verifyIdToken('facebook', FB_ACCESS_TOKEN, [FACEBOOK.aud], nonce, SUBJECT),
+        'and it stays refused even where Graph would vouch for it');
+    assert(fetchCalls.length === 0, `...still without a single request (${fetchCalls.length} request(s))`);
+    fetchStub = PROVIDER_DOWN;
+
+    await verifies(() => verifyIdToken('facebook', FACEBOOK.mint({ nonce }), [FACEBOOK.aud], nonce, SUBJECT),
+        FACEBOOK.sub, 'the refused access tokens did not burn the pending nonce — the id_token still verifies');
+
+    // The old path never read `aud`, so nothing checked that the baked-in App ID is the one a
+    // default node accepts. Now everything depends on it.
+    only(FACEBOOK);
+    nonce = issueNonce(SUBJECT);
+    delete process.env.FACEBOOK_CLIENT_IDS;
+    await verifies(
+        () => verifyIdToken('facebook', FACEBOOK.mint({ nonce, aud: '818892721251369' }),
+            getConfiguredAudiences('facebook'), nonce, SUBJECT),
+        FACEBOOK.sub, "a token for BeanPool's own Facebook App ID verifies on a node with no Facebook config");
+
     // ── lookup hash ───────────────────────────────────────────────────────────────────────────
     console.log('\n── lookup hash ──────────────────────────────────────────');
     const salt1 = newSsoLookupSalt();
@@ -555,7 +658,7 @@ async function main(): Promise<void> {
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ SSO verification checks PASSED (Google + Apple).');
+    console.log('⭐️ SSO verification checks PASSED (Google + Apple + Facebook).');
 }
 
 main().then(() => {

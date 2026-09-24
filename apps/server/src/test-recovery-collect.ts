@@ -25,6 +25,14 @@ import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 
 initStateEngine();
 
+// No provider is contacted from this suite. Every request is recorded and answered as an outage, so
+// a test can also assert that a refusal was made without asking anyone.
+const providerRequests: string[] = [];
+globalThis.fetch = (async (input: any) => {
+    providerRequests.push(typeof input === 'string' ? input : input?.url ?? String(input));
+    return new Response('stubbed: test-recovery-collect contacts no provider', { status: 503 });
+}) as typeof fetch;
+
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -177,9 +185,13 @@ async function main(): Promise<void> {
     assert((await call('/api/recovery/collect/sso-nonce', thief, { collectionId: ssoId })).status === 404,
         '...and nobody else can get one for that session');
 
+    const requestsBefore = providerRequests.length;
     const badProvider = await call('/api/recovery/collect/sso', ssoDevice,
         { collectionId: ssoId, provider: 'facebook', idToken: 'x', nonce: nonceRes.body.nonce });
     assert(badProvider.status === 400, 'a paused provider is refused (D11)');
+    // Until S1 a non-JWT Facebook "token" went to Graph, which vouches for any app's access token.
+    assert(providerRequests.length === requestsBefore,
+        '...and a Facebook token that is not an id_token is refused without asking Graph');
     const garbage = await call('/api/recovery/collect/sso', ssoDevice,
         { collectionId: ssoId, provider: 'google', idToken: 'not-a-token', nonce: nonceRes.body.nonce });
     assert(garbage.status === 400, 'and a token that does not verify releases nothing');

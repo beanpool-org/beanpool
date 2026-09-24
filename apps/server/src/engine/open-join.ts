@@ -239,9 +239,9 @@ export function readOpenJoinSalt(): string | null {
 
 /** The key and the newest `limit` rows (all of them when unset), for the take-over bundle. */
 export function readOpenJoinRecord(limit?: number): OpenJoinRecord {
+    // On the index: the take-over envelope's consistency check reads this every 30 seconds.
     const rows = db.prepare(`SELECT member_pubkey, provider, join_hash, joined_at, updated_at FROM open_joins
-                             ORDER BY COALESCE(updated_at, joined_at) DESC, member_pubkey
-                             ${limit === undefined ? '' : 'LIMIT ?'}`)
+                             ORDER BY updated_at DESC ${limit === undefined ? '' : 'LIMIT ?'}`)
         .all(...(limit === undefined ? [] : [limit])) as any[];
     const total = (db.prepare('SELECT COUNT(*) AS n FROM open_joins').get() as { n: number }).n;
     return {

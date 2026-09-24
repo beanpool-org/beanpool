@@ -117,6 +117,8 @@ import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createKeeperRoutes } from './routes/keepers.js';
+import { createOpenJoinRoutes } from './routes/open-join.js';
+import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
@@ -926,6 +928,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         }
     }, 60 * 1000);
     if (rateLimitCleaner.unref) rateLimitCleaner.unref();
+    // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once
+    // a day old on this timer too, not only when somebody joins (engine/open-join.ts).
+    startForgettingJoinAddresses();
 
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.
@@ -1201,6 +1206,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createPublicAddressRoutes(deps),
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
+        createOpenJoinRoutes(deps),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
         createSettingsSigninRoutes(deps),

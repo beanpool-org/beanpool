@@ -264,6 +264,10 @@ async function main() {
         VALUES (?, ?, ?, 5, 'coffee', datetime('now'), ?, 'sig_bytes', 'payload_bytes')
     `).run(txSignedId, oldAliceKey, bobKey, oldAliceKey);
 
+    // 16. Alice came in through the open door: her sign-in account's record (engine/open-join.ts)
+    db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash) VALUES (?, 'google', 'alice-join-hash', ?, NULL)")
+        .run(oldAliceKey, new Date().toISOString());
+
     // Step A: Issue re-key code (tested with uppercase key to verify case normalization)
     const rekeyIssue = issueRekeyCode(oldAliceKey.toUpperCase(), operatorPubkey);
     assert(Boolean(rekeyIssue.code), `Re-enrolment code generated: ${rekeyIssue.code}`);
@@ -406,6 +410,12 @@ async function main() {
     const txRow = db.prepare('SELECT from_pubkey, auth_signer FROM transactions WHERE id = ?').get(txSignedId) as any;
     assert(txRow?.from_pubkey === newAliceKey, 'Transaction from_pubkey updated to newAliceKey');
     assert(txRow?.auth_signer === oldAliceKey, 'Transaction auth_signer left untouched for cryptographic signature verification');
+
+    // Open door: the sign-in account she joined with follows her to the new key. Left on the old one, deleting
+    // her account would not free it and a community removal would read as "still joined".
+    const openJoinNew = db.prepare('SELECT join_hash FROM open_joins WHERE member_pubkey = ?').get(newAliceKey) as any;
+    const openJoinOld = db.prepare('SELECT 1 FROM open_joins WHERE member_pubkey = ?').get(oldAliceKey);
+    assert(openJoinNew?.join_hash === 'alice-join-hash' && !openJoinOld, 'open_joins row moved to newAliceKey');
 
     // Case-insensitive assertMemberActive check
     throws(() => assertMemberActive(oldAliceKey.toUpperCase()), new RegExp(newAliceKey), 'assertMemberActive on uppercase old key reports rekeyed_to new key');

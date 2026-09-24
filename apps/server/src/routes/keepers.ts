@@ -52,7 +52,7 @@ import {
     type KeeperShareInput,
     type KeeperType,
 } from '../engine/recovery-shares.js';
-import { depositSsoKeeperGeneration, KeeperDepositError } from '../engine/keeper-deposit.js';
+import { depositSsoKeeperGeneration, KeeperDepositError, type SsoKeeperResult } from '../engine/keeper-deposit.js';
 import {
     issueNonce,
     SsoVerificationError,
@@ -98,7 +98,7 @@ const MAX_FIELD_CHARS = 4096;
 /** holder_ref is a member pubkey (64 hex), a provider name, or 'self'. */
 const MAX_HOLDER_REF_CHARS = 128;
 
-class BadRequest extends Error {}
+export class BadRequest extends Error {}
 
 function requireString(value: unknown, field: string, max: number): string {
     if (typeof value !== 'string' || !value.length) {
@@ -122,7 +122,7 @@ function optionalString(value: unknown, field: string, max: number): string | nu
  * decrypt any of this and must not pretend to. What it can check is that the set is structurally
  * capable of being recombined later, which is what the engine's own checks then finish.
  */
-function parseShares(raw: unknown): KeeperShareInput[] {
+export function parseShares(raw: unknown): KeeperShareInput[] {
     if (!Array.isArray(raw)) throw new BadRequest("'shares' must be an array of fragments.");
     if (raw.length === 0) throw new BadRequest('No recovery fragments were supplied.');
     if (raw.length > MAX_KEEPERS) {
@@ -162,6 +162,24 @@ function parseShares(raw: unknown): KeeperShareInput[] {
             kdfParams: optionalString(s.kdfParams, `shares[${i}].kdfParams`, MAX_FIELD_CHARS),
         };
     });
+}
+
+/**
+ * What a client is told after a sign-in keeper is stored: by `POST /api/recovery/shares/sso`, and by
+ * `POST /api/join` when the joiner enrols the same sign-in in the same request.
+ */
+export function ssoDepositBody(owner: string, result: SsoKeeperResult) {
+    const currentShares = getCurrentShares(owner);
+    const isSingle = currentShares.some(s => s.holderType === 'sso' && isSingleBlobSso(s.kdfParams));
+    return {
+        generation: result.generation,
+        provider: result.provider,
+        email: result.email,
+        shareCount: result.shareCount,
+        threshold: isSingle ? 1 : TWO_LAYER_THRESHOLD,
+        keepers: listKeeperTypes(owner),
+        enrolledSso: currentShares.filter(s => s.holderType === 'sso').map(s => s.holderRef),
+    };
 }
 
 /**
@@ -307,18 +325,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 idToken: typeof body.idToken === 'string' ? body.idToken : '',
                 nonce: typeof body.nonce === 'string' ? body.nonce : '',
             });
-            const currentShares = getCurrentShares(owner);
-            const isSingle = currentShares.some(s => s.holderType === 'sso' && isSingleBlobSso(s.kdfParams));
             ctx.status = 200;
-            ctx.body = {
-                generation: result.generation,
-                provider: result.provider,
-                email: result.email,
-                shareCount: result.shareCount,
-                threshold: isSingle ? 1 : TWO_LAYER_THRESHOLD,
-                keepers: listKeeperTypes(owner),
-                enrolledSso: currentShares.filter(s => s.holderType === 'sso').map(s => s.holderRef),
-            };
+            ctx.body = ssoDepositBody(owner, result);
         } catch (e) {
             // 400 rather than 401/403 throughout: none of these mean "you are not signed in" — the
             // caller is a verified member — they mean the sign-in they attached did not check out.

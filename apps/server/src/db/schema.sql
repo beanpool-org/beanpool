@@ -621,6 +621,28 @@ CREATE TABLE IF NOT EXISTS recovery_releases (
 CREATE INDEX IF NOT EXISTS idx_recovery_releases_collection ON recovery_releases(collection_id);
 CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases(updated_at);
 
+-- 14c. The open door (global profile, design §2.2): who joined with a sign-in instead of an invite.
+--
+-- Created on EVERY node whatever its profile, and empty where the door is shut, so every node has one schema
+-- (snapshots, restores and a later Postgres move see the same tables). Not in the live replication payload
+-- (engine/sync.ts), like node_config which holds its key. `join_hash` UNIQUE is the rule "one sign-in
+-- account, one identity here". It is HMAC-SHA-256 over the provider and the provider's subject, keyed by a
+-- secret per node (node_config `openJoinSalt`): the raw subject and the email are never stored, and two nodes'
+-- hashes for the same person do not match. `ip_hash` (same key, its own domain) feeds the sign-up limit, 5 an
+-- hour and 20 a day per address, and is cleared once it is a day old, when the limiter no longer needs it.
+-- A member in good standing who deletes their own account frees their sign-in account: the row stays, still
+-- counting for its address's limit, with `join_hash` overwritten by a random 'released:' tombstone. A member
+-- the community removes, or one who deletes their account while suspended, keeps it used, so that account cannot
+-- come straight back in.
+CREATE TABLE IF NOT EXISTS open_joins (
+    member_pubkey TEXT PRIMARY KEY REFERENCES members(public_key),
+    provider TEXT NOT NULL,
+    join_hash TEXT NOT NULL UNIQUE,
+    joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    ip_hash TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_open_joins_ip ON open_joins(ip_hash, joined_at) WHERE ip_hash IS NOT NULL;
+
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

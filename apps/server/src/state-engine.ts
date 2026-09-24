@@ -18,6 +18,7 @@ import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
+import { releaseOpenJoin } from './engine/open-join.js';
 import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
@@ -6369,6 +6370,12 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             db.prepare("DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)").run(publicKey);
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
+        // A member who deletes their own account frees the sign-in account they joined with through the open door,
+        // so it can join again; the join itself stays on record and still counts for its address. Not while
+        // suspended or disabled (the signature middleware lets them sign this route), or deleting the account
+        // would be a way out of the sanction with the same sign-in; and never on adminPruneUser, so a member the
+        // community removed cannot walk straight back in (engine/open-join.ts).
+        if (member.status !== 'suspended' && member.status !== 'disabled') releaseOpenJoin(publicKey);
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {
@@ -6506,6 +6513,30 @@ export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     return next;
 }
 
+export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): string | null {
+    let host: string | null = null;
+    const pa: any = config.publicAddress;
+    if (pa) {
+        if (typeof pa === 'string' && pa.trim()) {
+            host = pa.trim();
+        } else if (typeof pa === 'object') {
+            if (typeof pa.hostname === 'string' && pa.hostname.trim()) {
+                host = pa.hostname.trim();
+            } else if (typeof pa.name === 'string' && pa.name.trim()) {
+                const n = pa.name.trim();
+                host = n.includes('.') ? n : `${n}.beanpool.org`;
+            }
+        }
+    }
+    if (!host && process.env.CF_RECORD_NAME && process.env.CF_RECORD_NAME.trim()) {
+        const cf = process.env.CF_RECORD_NAME.trim();
+        host = cf.includes('.') ? cf : `${cf}.beanpool.org`;
+    }
+    if (!host) return null;
+    const clean = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    return clean ? `https://${clean}` : null;
+}
+
 export function getDirectoryInfo(): any {
     const config = getNodeConfig();
     if (!config.publishLocation && !config.publishMembers && !config.publishContacts && !config.publishHealth) {
@@ -6514,7 +6545,8 @@ export function getDirectoryInfo(): any {
     
     const localConfig = getLocalConfig();
     const info: any = {
-        name: localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node'
+        name: localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
+        publicUrl: resolvePublicNodeUrl(config),
     };
 
     if (config.publishLocation) {
@@ -6531,18 +6563,23 @@ export function getDirectoryInfo(): any {
 
     if (config.publishContacts) {
         if (localConfig.communityName) info.name = localConfig.communityName;
+        info.communityName = localConfig.communityName || null;
         if (localConfig.contactEmail) info.contactEmail = localConfig.contactEmail;
         if (localConfig.contactPhone) info.contactPhone = localConfig.contactPhone;
     } else {
+        info.communityName = null;
         info.contactEmail = null;
         info.contactPhone = null;
     }
 
     if (config.publishHealth) {
-        info.version = '1.0.33';
+        const realVersion = getVersion();
+        info.version = realVersion;
+        info.nodeVersion = realVersion;
         info.status = 'online';
     } else {
         info.version = null;
+        info.nodeVersion = null;
         info.status = null;
     }
 

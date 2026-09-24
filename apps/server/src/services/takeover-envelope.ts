@@ -43,6 +43,7 @@ import {
 import { db } from '../db/db.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { readProfileRecord, type ProfileRecord } from '../config/node-profile.js';
+import { readOpenJoinRecord, OPEN_JOINS_IN_BUNDLE, type OpenJoinRecord } from '../engine/open-join.js';
 import { logger } from '../logger.js';
 import { setTakeoverChangeHandler } from './takeover-signal.js';
 
@@ -95,6 +96,11 @@ export interface TakeoverBundle {
      *  match, and writes these into its database otherwise (the `profile` step). Absent in a bundle sealed before
      *  this field existed: the record the standby copied with the replication payload decides. */
     nodeProfile?: ProfileRecord;
+    /** The open door's record (engine/open-join.ts): the key its hashes are made with and the newest
+     *  OPEN_JOINS_IN_BUNDLE rows, never the address hashes. The take-over's `open-door` step merges them, so the
+     *  promoted server refuses a sign-in account that already joined, even one its last copy missed. Absent in a
+     *  bundle sealed before this field existed: what the standby copied with the replication payloads stands. */
+    openJoins?: OpenJoinRecord;
 }
 
 export interface NodeIdentity {
@@ -162,6 +168,7 @@ function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
         recoveryCode: config.recoveryCode ?? null,
         identityEpoch: Number.isSafeInteger(config.identityEpoch) && config.identityEpoch > 0 ? config.identityEpoch : 0,
         nodeProfile: readProfileRecord(),
+        openJoins: readOpenJoinRecord(OPEN_JOINS_IN_BUNDLE),
     };
 }
 

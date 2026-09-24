@@ -274,6 +274,9 @@ export function initSchema() {
     // or trigger naming it compiles on already-live DBs.
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN target_pulse_item_id TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // The open door's replication watermark (engine/open-join.ts). Before schema.sql, which indexes it; a node that has
+    // no open_joins table yet gets the column from schema.sql itself. Backfilled from joined_at after the exec.
+    try { db.prepare(`ALTER TABLE open_joins ADD COLUMN updated_at TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE pulse_items ADD COLUMN curated INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
 
     // #104 step 3b: the settlement exchange needs four more columns on `settlements`.
@@ -807,6 +810,7 @@ export function initSchema() {
     // didn't previously track row-level mutation timestamps. Backfill from the
     // most recent existing timestamp so cursor scans don't miss pre-migration rows.
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at)`).run(); } catch { }
+    try { db.prepare(`UPDATE open_joins SET updated_at = joined_at WHERE updated_at IS NULL`).run(); } catch { }
 
     // Per-node callsign uniqueness: case-insensitive, excluding 'migrated' and 'pruned'
     // members (they left — their name is reclaimable). Guarded on purpose: if a node

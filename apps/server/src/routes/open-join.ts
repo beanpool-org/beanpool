@@ -8,8 +8,9 @@
  *                                GitHub: { callsign, provider: 'github', proof: { sessionId }, recovery? }
  *
  * All four answer 404 "This community is invite-only." unless the profile switch `openJoin` is on (config/node-
- * profile.ts): off on every local node, on by default on the global one. Read per request, so an operator's
- * override takes effect without a restart.
+ * profile.ts): off on every local node, on by default on the global one, and never on a node whose ledger has moved,
+ * whatever the profile or an override says, so open sign-up never meets a live credit system. Read per request, so an
+ * operator's override takes effect without a restart, and the first Bean that moves shuts the door.
  *
  * GitHub is run by this node (engine/github-device.ts): a GitHub token handed in proves nothing, so the joiner
  * types a code at GitHub, the node collects the answer, and the join carries the session id. The session is bound
@@ -18,10 +19,11 @@
  * ## Signed by the joiner's new key, both of them
  *
  * None of these routes is on the signature bypass list. The real `requireSignature` middleware proves the caller holds
- * the key they are joining with, and the new member is `ctx.state.actor`, never a body field: the opposite of
- * `/api/invite/redeem`, which is bypassed and takes `publicKey` from the body. The middleware's spoof guard also
- * refuses a body `publicKey` that names anyone but the signer. A signed request does not need a member, so a key
- * nobody has seen before can ask; it is what makes the key the thing the sign-in is bound to.
+ * the key they are joining with, and the new member is the signer (`ctx.state.actor`, in the spelling below), never
+ * a body field: the opposite of `/api/invite/redeem`, which is bypassed and takes `publicKey` from the body. The
+ * middleware's spoof guard also refuses a body `publicKey` that names anyone but the signer. A signed request does
+ * not need a member, so a key nobody has seen before can ask; it is what makes the key the thing the sign-in is
+ * bound to.
  *
  * ## The nonce is bound to that key, for this door only
  *
@@ -33,6 +35,16 @@
  *
  * A key a re-key replaced is refused on both (403 `key_invalidated`): it is no member any more, but every write it
  * signs is refused, so it would join as a member nobody can use (engine/open-join.ts).
+ *
+ * ## One key, one spelling
+ *
+ * The middleware verifies `X-Public-Key` by decoding its hex, which forgives case, so one keypair signs as `ab12…`
+ * and as `AB12…`. Taken as sent, those were two keys here: one keypair joined twice, with two sign-in accounts.
+ * So every door route takes the signer's key in the one spelling the member table keeps, 64 lower-case hex
+ * characters (`canonicalKey`), before any check or write: the nonce and the GitHub session are bound to it, the
+ * member and the `open_joins` row are written under it, and an upper-case spelling of a member's key is that
+ * member (409 `already_member`). A spelling with anything else in it, which the decoder would skip, is refused
+ * (400 `bad_key`).
  *
  * ## One sign-in, two jobs (design §2.3)
  *
@@ -104,6 +116,17 @@ function inviteOnly(ctx: any): void {
     ctx.body = { error: 'This community is invite-only.', code: 'invite_only' };
 }
 
+/** The signer's key as the member table keeps it (lower-case hex), or null when it has no such spelling. */
+function canonicalKey(signer: string): string | null {
+    const key = signer.toLowerCase();
+    return /^[0-9a-f]{64}$/.test(key) ? key : null;
+}
+
+function badKey(ctx: any): void {
+    ctx.status = 400;
+    ctx.body = { error: 'The key that signed this request is not a member key: it must be 64 hexadecimal characters.', code: 'bad_key' };
+}
+
 function unsigned(ctx: any): void {
     // The middleware refuses an unsigned POST before this runs; kept so the handler never trusts that alone.
     ctx.status = 401;
@@ -160,15 +183,18 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
     const { rateLimit } = deps;
 
     /**
-     * The key asking to start a sign-in at the door, or null once the refusal is written: the door shut,
-     * unsigned, over `limit`, already a member, or a key a re-key replaced. `limit` is the auth limiter, except
+     * The key asking to start a sign-in at the door, in the member table's spelling (`canonicalKey`), or null once
+     * the refusal is written: the door shut, unsigned, not a key's spelling, over `limit`, already a member, or a key
+     * a re-key replaced. `limit` is the auth limiter, except
      * for the GitHub poll, which is on its own per-address bucket (github-poll-rate-limit.ts): a phone polls there
      * for up to 15 minutes, and must not spend the auth limiter its neighbours on the same address sign up with.
      */
     function joiningKey(ctx: any, limit: (ctx: any) => boolean = rateLimit): string | null {
         if (!doorOpen()) { inviteOnly(ctx); return null; }
-        const actor = ctx.state?.actor as string | undefined;
-        if (!actor) { unsigned(ctx); return null; }
+        const signer = ctx.state?.actor as string | undefined;
+        if (!signer) { unsigned(ctx); return null; }
+        const actor = canonicalKey(signer);
+        if (!actor) { badKey(ctx); return null; }
         if (!limit(ctx)) return null;
         if (getMember(actor)) {
             ctx.status = 409;
@@ -229,8 +255,11 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
 
     router.post('/api/join', async (ctx) => {
         if (!doorOpen()) return inviteOnly(ctx);
-        const actor = ctx.state?.actor as string | undefined;
-        if (!actor) return unsigned(ctx);
+        const signer = ctx.state?.actor as string | undefined;
+        if (!signer) return unsigned(ctx);
+        // Every check and write below is on the member table's spelling of the key, never the one that was sent.
+        const actor = canonicalKey(signer);
+        if (!actor) return badKey(ctx);
         if (!rateLimit(ctx)) return;
 
         const body = (ctx as any).requestBody || {};

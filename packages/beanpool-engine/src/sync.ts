@@ -301,6 +301,21 @@ export interface SyncGroupMember {
     updatedAt: string;
 }
 
+/**
+ * One sign-in account that joined through the open door (apps/server engine/open-join.ts): the row that makes one
+ * provider account one identity on this node. Replicated so a promoted standby still refuses an account that already
+ * joined. `joinHash` is keyed by the node's own secret (`openJoinSalt`, which travels beside the rows, in
+ * `SyncPayload.openJoinSalt`); the raw provider subject and the email were never stored. The address hash the sign-up
+ * limiter keeps for a day is NOT here: it is only the limiter's, and a standby has no use for it.
+ */
+export interface SyncOpenJoin {
+    memberPubkey: string;
+    provider: string;
+    joinHash: string;
+    joinedAt: string;
+    updatedAt: string;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -329,6 +344,8 @@ export interface SyncPayload {
     eventRsvps?: SyncEventRsvp[];
     groups?: SyncGroup[];
     groupMembers?: SyncGroupMember[];
+    /** Watermarked on `updated_at`, which a join, a release and a re-key all stamp. */
+    openJoins?: SyncOpenJoin[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     /**
      * `post_id|order_num` for every photo row the exporter left OUT because it could not read the object the
@@ -347,6 +364,12 @@ export interface SyncPayload {
      * Additive and optional like `photosOmitted`: a peer that does not know it ignores it. Signed with the rest.
      */
     nodeProfile?: { profile: 'local' | 'global' | null; overrides: Record<string, string> };
+    /**
+     * The main server's key for the open door's hashes (its node_config `openJoinSalt`), or null when it has none
+     * yet. Without it the `openJoins` rows match nothing: a promoted standby would hash a returning account with a
+     * key of its own and let it join again. Secret like the recovery shares beside it; signed with the rest.
+     */
+    openJoinSalt?: string | null;
     nodeId: string;
     generatedAt?: string;
     signature?: string;
@@ -757,6 +780,22 @@ export function exportSyncState(
         // Tables absent on older schema/fixtures
     }
 
+    let openJoins: SyncOpenJoin[] = [];
+    try {
+        openJoins = (delta
+            ? db.prepare('SELECT member_pubkey, provider, join_hash, joined_at, updated_at FROM open_joins WHERE updated_at >= ?').all(since)
+            : db.prepare('SELECT member_pubkey, provider, join_hash, joined_at, updated_at FROM open_joins').all()
+        ).map((r: any) => ({
+            memberPubkey: r.member_pubkey,
+            provider: r.provider,
+            joinHash: r.join_hash,
+            joinedAt: r.joined_at,
+            updatedAt: r.updated_at || r.joined_at,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
@@ -794,6 +833,7 @@ export function exportSyncState(
         eventRsvps,
         groups,
         groupMembers,
+        openJoins,
         tombstones,
     };
 }

@@ -6990,7 +6990,7 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
         'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'tombstones',
+        'open_joins', 'tombstones',
     ];
     // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
     // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.

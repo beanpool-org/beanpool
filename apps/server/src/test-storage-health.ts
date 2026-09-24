@@ -12,14 +12,24 @@
  *    grace period is reclaimed by the scheduled job, one inside it is left alone, and a referenced one is
  *    never touched — and a `.tmp-` file a crashed write left behind is reclaimed too, because `list` hides
  *    it from everything else in the node and this sweep is the only thing that can ever find it.
+ * 8. On an S3 bucket holding thousands of orphans (an older backup restored), the sweep never holds the event
+ *    loop: one pass removes at most the per-pass cap, the longest the loop is held is measured, repeated passes
+ *    converge, and the timer carries on in short passes until nothing is left. The admin Clean answers within
+ *    its budget and says how many it removed and how many remain. A write racing the sweep's delete of the
+ *    same key is never lost, and an object written again after the listing is not deleted on stale news.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import zlib from 'node:zlib';
+import { performance } from 'node:perf_hooks';
 import Database from 'better-sqlite3';
 import { DiskImageStore } from './storage/image-store.js';
+import { S3ImageStore } from './storage/s3-image-store.js';
+import { startFakeS3 } from './fake-s3-test-harness.js';
+// The whole module as well as the names: section 8 reads the per-pass cap and the Clean's budget off it.
+import * as health from './engine/storage-health.js';
 import {
     getDiskHealth,
     getStorageCleanPreview,
@@ -113,7 +123,7 @@ async function runTests() {
 
     // 3. Test Clean Preview
     console.log('\n--- 3. Storage Clean Preview ---');
-    const preview = getStorageCleanPreview({ db, dataDir: testDir });
+    const preview = await getStorageCleanPreview({ db, dataDir: testDir });
     assert(preview.orphanedPostPhotos.count === 1, 'Preview found 1 orphaned photo');
     assert(preview.orphanedPostPhotos.totalBytes > 0, 'Preview calculated orphaned photo bytes');
     assert(preview.orphanedThumbnails.count === 1, 'Preview found 1 orphaned thumbnail');
@@ -123,7 +133,7 @@ async function runTests() {
 
     // 4. Test Clean and Compress Execution
     console.log('\n--- 4. Clean Storage & Compress Logs Execution ---');
-    const cleanResult = cleanStorageAndCompressLogs({ db, dataDir: testDir });
+    const cleanResult = await cleanStorageAndCompressLogs({ db, dataDir: testDir });
     assert(cleanResult.success === true, 'Cleanup completed successfully');
     assert(cleanResult.removedPhotosCount === 1, 'Removed 1 orphaned photo');
     assert(cleanResult.removedThumbnailsCount === 1, 'Removed 1 orphaned thumbnail');
@@ -185,11 +195,11 @@ async function runTests() {
     fs.writeFileSync(path.join(thumbDir, `${missingHash}.bin`), Buffer.from('missing_thumb'));
     fs.writeFileSync(path.join(thumbDir, `${missingHash}.json`), JSON.stringify({ itemId: missingItemId, mime: 'image/jpeg' }));
 
-    const previewHashed = getStorageCleanPreview({ db, dataDir: testDir });
+    const previewHashed = await getStorageCleanPreview({ db, dataDir: testDir });
     // Out of the 3 hashed thumbnails: 1 is valid, 2 are orphans (soft-deleted + missing)
     assert(previewHashed.orphanedThumbnails.count === 2, `Preview identifies 2 orphaned hashed thumbnails (got: ${previewHashed.orphanedThumbnails.count})`);
 
-    const cleanHashed = cleanStorageAndCompressLogs({ db, dataDir: testDir });
+    const cleanHashed = await cleanStorageAndCompressLogs({ db, dataDir: testDir });
     assert(cleanHashed.removedThumbnailsCount === 2, `Cleaned 2 orphaned hashed thumbnails (got: ${cleanHashed.removedThumbnailsCount})`);
 
     assert(fs.existsSync(path.join(thumbDir, `${validHash}.bin`)), 'Valid hashed thumbnail .bin preserved');
@@ -233,7 +243,7 @@ async function runTests() {
     fs.utimesSync(objectAt('3-crashed.jpg.tmp-a1b2c3d4e5f6'), threeHoursAgo, threeHoursAgo);
 
     // Before the sweep: the preview counts the leftover, and `list` still refuses to show it.
-    const previewWithTemp = getStorageCleanPreview({ db: sweepDb, dataDir: sweepDir });
+    const previewWithTemp = await getStorageCleanPreview({ db: sweepDb, dataDir: sweepDir });
     assert(previewWithTemp.orphanedImageObjects.count === 2,
         `the preview counts the stale orphan AND the crashed write, and neither fresh one (got ${previewWithTemp.orphanedImageObjects.count})`);
     const listed = new DiskImageStore(path.join(sweepDir, 'images')).list('');
@@ -265,6 +275,8 @@ async function runTests() {
     sweepDb.close();
     try { fs.rmSync(sweepDir, { recursive: true, force: true }); } catch {}
 
+    await onABucket();
+
     // Clean up
     db.close();
     try {
@@ -273,6 +285,225 @@ async function runTests() {
 
     console.log(`\nAll ${passed}/${run} storage health tests passed.`);
     console.log('⭐️ Storage health & cleanup operations PASSED.\n');
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function waitFor(what: string, cond: () => Promise<boolean>, timeoutMs = 20_000): Promise<void> {
+    const until = Date.now() + timeoutMs;
+    while (Date.now() < until) {
+        if (await cond()) return;
+        await sleep(10);
+    }
+    throw new Error(`Timed out waiting for ${what}`);
+}
+
+/**
+ * The longest the event loop went without running a 2 ms interval while `fn` ran, and how long `fn` took. A
+ * blocking round trip to the bucket stops the interval dead, so a sweep that holds the node shows up here as
+ * a hold as long as the sweep itself.
+ */
+async function longestHold<T>(fn: () => Promise<T> | T): Promise<{ value: T; holdMs: number; tookMs: number }> {
+    let last = performance.now();
+    let longest = 0;
+    const tick = setInterval(() => { const now = performance.now(); longest = Math.max(longest, now - last); last = now; }, 2);
+    const t0 = performance.now();
+    try {
+        const value = await fn();
+        const now = performance.now();
+        return { value, holdMs: Math.max(longest, now - last), tookMs: now - t0 };
+    } finally {
+        clearInterval(tick);
+    }
+}
+
+/** Far below the ~60 s the host watchdog allows, and far above a healthy loop's jitter on a loaded CI box. */
+const HOLD_BOUND_MS = 250;
+
+// 8. On a bucket.
+//
+// Restoring an older backup onto an s3 node leaves every object written since then with no row, and all of them
+// long past the grace period. The sweep used to delete them in one synchronous loop — a blocking HEAD and a
+// blocking DELETE per object, and a blocking LIST per thousand — so a few hundred of them held the node for tens
+// of seconds, past the ~60 s host watchdog, which restarted it; and the next sweep did the same.
+async function onABucket(): Promise<void> {
+    console.log('\n--- 8. On an S3 bucket the sweep is bounded and never holds the node ---');
+    // Every check here reports and carries on, so a failure shows every way the sweep falls short at once.
+    const failures: string[] = [];
+    const check = (cond: boolean, msg: string) => {
+        run++;
+        if (cond) { passed++; console.log(`✓ ${msg}`); } else { failures.push(msg); console.error(`✗ ${msg}`); }
+    };
+    const fake = await startFakeS3();
+    const s3 = new S3ImageStore(fake.config());
+    const s3Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-sweep-s3-'));
+    const s3Db = new Database(path.join(s3Dir, 'state.db'));
+    const makeTables = (d: Database.Database) => d.exec(`
+        CREATE TABLE post_photos (post_id TEXT, order_num INTEGER, photo_data TEXT, storage_key TEXT);
+        CREATE TABLE message_attachments (message_id TEXT PRIMARY KEY, data TEXT, storage_key TEXT);
+    `);
+    makeTables(s3Db);
+    const photo = Buffer.from('a photo from after the backup that was restored');
+    const longAgo = Date.now() - 3 * 60 * 60 * 1000;
+    const seedOrphans = async (tag: string, n: number) => {
+        for (let i = 0; i < n; i += 200) {
+            await Promise.all(Array.from({ length: Math.min(200, n - i) }, (_, j) =>
+                fake.seed(`posts/${tag}-${String(i + j).padStart(5, '0')}/0-0a0b0c0d.jpg`, photo, 'image/jpeg', longAgo)));
+        }
+    };
+    const countUnder = async (prefix: string) => [...(await fake.objects()).keys()].filter((k) => k.startsWith(prefix)).length;
+    const requests = async (method: string, pathEnd?: string) =>
+        (await fake.log()).filter((e) => e.method === method && (!pathEnd || e.path.endsWith(pathEnd))).length;
+    const sweep = (db: Database.Database = s3Db) => health.sweepOrphanedImageObjects({ db, store: s3 }) as any;
+
+    const ORPHANS = 1_200;
+    await seedOrphans('restored-away', ORPHANS);
+    // What must survive every pass: an object a row points at, and a fresh one (a photo being written now).
+    await fake.seed('posts/kept/0-11111111.jpg', photo, 'image/jpeg', longAgo);
+    s3Db.prepare('INSERT INTO post_photos (post_id, order_num, storage_key) VALUES (?, ?, ?)').run('kept', 0, 'posts/kept/0-11111111.jpg');
+    await fake.seed('posts/fresh/0-22222222.jpg', photo, 'image/jpeg');
+
+    const cap = (health as any).ORPHAN_SWEEP_BATCH_S3 as number | undefined;
+    check(typeof cap === 'number' && cap > 0 && cap < ORPHANS,
+        `a pass on a bucket has a per-pass cap (${cap}), below the ${ORPHANS} orphans waiting`);
+
+    await fake.clearLog();
+    const first = await longestHold(() => sweep());
+    const firstDeletes = await requests('DELETE');
+    check(first.value.removed > 0 && first.value.removed <= (cap ?? 0) && firstDeletes <= (cap ?? 0),
+        `one pass removes at most the cap (removed ${first.value.removed}, ${firstDeletes} DELETE request(s))`);
+    check(first.value.remaining === ORPHANS - first.value.removed,
+        `and says how many it left for the next pass (remaining: ${first.value.remaining})`);
+    check(first.holdMs < HOLD_BOUND_MS,
+        `the event loop was never held longer than ${HOLD_BOUND_MS} ms during the pass `
+        + `(longest: ${first.holdMs.toFixed(0)} ms, over a pass of ${first.tookMs.toFixed(0)} ms)`);
+
+    let passes = 1;
+    let removedTotal = first.value.removed;
+    let worstHold = first.holdMs;
+    while (passes < 10 && (await countUnder('posts/restored-away-')) > 0) {
+        const next = await longestHold(() => sweep());
+        passes++;
+        removedTotal += next.value.removed;
+        worstHold = Math.max(worstHold, next.holdMs);
+    }
+    check((await countUnder('posts/restored-away-')) === 0 && removedTotal === ORPHANS,
+        `repeated passes converge: all ${ORPHANS} removed, in ${passes} passes`);
+    check(worstHold < HOLD_BOUND_MS, `and no pass held the loop longer than ${HOLD_BOUND_MS} ms (worst: ${worstHold.toFixed(0)} ms)`);
+    let survivors = await fake.objects();
+    check(survivors.has('posts/kept/0-11111111.jpg'), 'the object a row points at survived every pass');
+    check(survivors.has('posts/fresh/0-22222222.jpg'), 'and so did the fresh one, inside the grace period');
+
+    // The admin Clean: within its budget, and honest about what it did not get to.
+    const CLEAN_ORPHANS = 1_000;
+    await seedOrphans('clean', CLEAN_ORPHANS);
+    // A bucket some distance away: every DELETE takes 10 ms to answer.
+    await fake.fault({ method: 'DELETE', delayMs: 10, count: 1_000_000 });
+    const budget = (health as any).CLEAN_SWEEP_BUDGET_MS as number | undefined;
+    check(typeof budget === 'number' && budget > 0 && budget <= 10_000, `the Clean has a time budget for the bucket (${budget} ms)`);
+    const clean = await longestHold(() => cleanStorageAndCompressLogs({ db: s3Db, dataDir: s3Dir, store: s3 }));
+    await fake.clearFaults();
+    const cleaned = clean.value as any;
+    check(clean.tookMs < (budget ?? 0) + 2_000,
+        `the Clean answered in ${clean.tookMs.toFixed(0)} ms: its budget, not the ${CLEAN_ORPHANS} orphans, decides how long`);
+    check(clean.holdMs < HOLD_BOUND_MS,
+        `without holding the event loop longer than ${HOLD_BOUND_MS} ms (longest: ${clean.holdMs.toFixed(0)} ms)`);
+    check(cleaned.removedImageObjectsCount > 0 && cleaned.removedImageObjectsCount < CLEAN_ORPHANS,
+        `it removed some of them (${cleaned.removedImageObjectsCount})`);
+    check(cleaned.remainingImageObjectsCount === CLEAN_ORPHANS - cleaned.removedImageObjectsCount,
+        `and says how many remain (${cleaned.remainingImageObjectsCount}): "N removed, more remain", never a false "done"`);
+    check((await countUnder('posts/clean-')) === cleaned.remainingImageObjectsCount, 'which is exactly what is still in the bucket');
+    for (let i = 0; i < 10 && (await countUnder('posts/clean-')) > 0; i++) await sweep();
+    check((await countUnder('posts/clean-')) === 0, 'and the sweep takes the rest');
+
+    // The timer carries on by itself: a pass that stops at the cap schedules the next one soon, not tomorrow.
+    const TIMER_ORPHANS = Math.round((cap ?? 500) * 2.5);
+    await seedOrphans('timer', TIMER_ORPHANS);
+    stopOrphanObjectSweep();
+    startOrphanObjectSweep({ firstDelayMs: 20, intervalMs: 24 * 60 * 60 * 1000, continueMs: 30, db: s3Db, store: s3 } as any);
+    await waitFor('the scheduled sweep to clear the bucket', async () => (await countUnder('posts/timer-')) === 0, 60_000)
+        .catch(() => { /* asserted below */ });
+    stopOrphanObjectSweep();
+    check((await countUnder('posts/timer-')) === 0,
+        `the scheduled sweep carried on in short passes until all ${TIMER_ORPHANS} were gone, rather than one pass a day`);
+
+    // Safe to interrupt: stopped mid-pass, it sends no further deletes, and the next pass finishes the job.
+    await seedOrphans('interrupted', cap ?? 500);
+    await fake.clearLog();
+    await fake.fault({ method: 'DELETE', delayMs: 5, count: 1_000_000 });
+    startOrphanObjectSweep({ firstDelayMs: 0, intervalMs: 24 * 60 * 60 * 1000, continueMs: 30, db: s3Db, store: s3 } as any);
+    await waitFor('the sweep to be part-way through', async () => (await requests('DELETE')) >= 10).catch(() => {});
+    stopOrphanObjectSweep();
+    await sleep(100);
+    const deletesAtStop = await requests('DELETE');
+    await sleep(400);
+    const deletesLater = await requests('DELETE');
+    await fake.clearFaults();
+    const leftAtStop = await countUnder('posts/interrupted-');
+    check(deletesLater === deletesAtStop && leftAtStop > 0,
+        `stopped part-way, it sent no further deletes (${deletesAtStop} then ${deletesLater}) and left the rest (${leftAtStop}) where they were`);
+    for (let i = 0; i < 10 && (await countUnder('posts/interrupted-')) > 0; i++) await sweep();
+    check((await countUnder('posts/interrupted-')) === 0, 'and the next pass picked up where it stopped');
+
+    // A write racing the sweep's delete of the SAME key is never lost.
+    const raced = 'posts/raced/0-33333333.jpg';
+    await fake.seed(raced, photo, 'image/jpeg', longAgo);
+    await fake.clearLog();
+    await fake.fault({ method: 'DELETE', prefix: `/${fake.bucket}/${raced}`, delayMs: 400, count: 1 });
+    const racing = sweep();
+    await waitFor('the DELETE of the raced key to reach the bucket', async () => (await requests('DELETE', raced)) > 0);
+    let blockingRefused = false;
+    try { s3.put(raced, photo, { mime: 'image/jpeg' }); } catch { blockingRefused = true; }
+    check(blockingRefused,
+        'a blocking write of a key the sweep is deleting that moment is refused (the photo stays in its row), not sent to race the DELETE');
+    const lateWrite = s3.putAsync(raced, photo, { mime: 'image/jpeg' });
+    await racing;
+    await lateWrite;
+    check((await fake.objects()).has(raced), 'a non-blocking write of it waits for the delete and lands after it: the photo is in the bucket');
+
+    // An object written again after the listing is judged as it is NOW, not on the listing's word.
+    const staleA = 'posts/stale-a/0-44444444.jpg';
+    const staleB = 'posts/stale-b/0-55555555.jpg';
+    await fake.remove(raced);
+    await fake.seed(staleA, photo, 'image/jpeg', longAgo);
+    await fake.seed(staleB, photo, 'image/jpeg', longAgo);
+    await fake.clearLog();
+    await fake.fault({ method: 'HEAD', prefix: `/${fake.bucket}/${staleA}`, delayMs: 300, count: 1 });
+    const sweepingStale = sweep();
+    await waitFor('the sweep to reach the first of the two', async () => (await requests('HEAD', staleA)) > 0);
+    // While it waits on the first, a member re-posts the photo the second one is: written again, and a row made.
+    s3.put(staleB, photo, { mime: 'image/jpeg' });
+    s3Db.prepare('INSERT INTO post_photos (post_id, order_num, storage_key) VALUES (?, ?, ?)').run('stale-b', 0, staleB);
+    await sweepingStale;
+    survivors = await fake.objects();
+    check(!survivors.has(staleA), 'the aged orphan the listing found went');
+    check(survivors.has(staleB), 'the one written again after the listing stayed: it was judged as it is now, not as it was listed');
+
+    // A restore closes the database under a running pass. From then on the pass deletes nothing: what it judged
+    // the objects against is the database that just went, and the one replacing it may well name them.
+    const swapDb = new Database(path.join(s3Dir, 'swap.db'));
+    makeTables(swapDb);
+    // Named to come first in the listing. Against this empty database every object in the bucket is an orphan —
+    // the kept one and the re-posted one included — so it is the close, and only the close, that saves them.
+    const swapA = 'posts/aa-swap-1/0-66666666.jpg';
+    const swapB = 'posts/aa-swap-2/0-77777777.jpg';
+    await fake.seed(swapA, photo, 'image/jpeg', longAgo);
+    await fake.seed(swapB, photo, 'image/jpeg', longAgo);
+    await fake.clearLog();
+    await fake.fault({ method: 'HEAD', prefix: `/${fake.bucket}/${swapA}`, delayMs: 300, count: 1 });
+    const sweepingSwap = sweep(swapDb);
+    await waitFor('the sweep to reach the first object', async () => (await requests('HEAD', swapA)) > 0);
+    swapDb.close();
+    const swapPass = await sweepingSwap;
+    survivors = await fake.objects();
+    check([swapA, swapB, 'posts/kept/0-11111111.jpg', staleB].every((k) => survivors.has(k)) && swapPass.removed === 0,
+        `once the database it judged against is closed, the pass deletes nothing (removed ${swapPass.removed})`);
+
+    await s3.close();
+    await fake.stop();
+    s3Db.close();
+    try { fs.rmSync(s3Dir, { recursive: true, force: true }); } catch {}
+    if (failures.length) throw new Error(`${failures.length} check(s) failed in section 8: ${failures.join(' | ')}`);
 }
 
 runTests().catch((err) => {

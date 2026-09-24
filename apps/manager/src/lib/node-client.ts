@@ -60,6 +60,11 @@ export interface StorageCleanPreview {
         count: number;
         totalBytes: number;
     };
+    /** Objects in the node's image store (its disk, or its bucket) that no row points at. Absent from older nodes. */
+    orphanedImageObjects?: {
+        count: number;
+        totalBytes: number;
+    };
     orphanedThumbnails: {
         count: number;
         totalBytes: number;
@@ -77,6 +82,16 @@ export interface StorageCleanResult {
     success: boolean;
     removedPhotosCount: number;
     removedPhotosBytes: number;
+    /** Absent from older nodes. */
+    removedImageObjectsCount?: number;
+    removedImageObjectsBytes?: number;
+    /**
+     * Orphaned image-store objects the Clean found and did not get to: it answers within a few seconds rather
+     * than wait on thousands of them, and the node keeps removing the rest in the background. Absent from older
+     * nodes; above zero means "more remain", not "done".
+     */
+    remainingImageObjectsCount?: number;
+    remainingImageObjectsBytes?: number;
     removedThumbnailsCount: number;
     removedThumbnailsBytes: number;
     compressedLogsCount: number;

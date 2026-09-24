@@ -24,10 +24,21 @@
  * The {@link ImageStore} methods are synchronous by contract, so here they go through {@link BlockingFetcher}:
  * the node's event loop is held for the round trip. That is the price of the contract until the async port
  * (storage design §2), and it is paid only where the contract demands it — writing a new post's photos, an
- * attachment, a post-commit delete, the evacuation job, the daily orphan sweep. Everything that is already
- * async — serving a photo, the sync export, taking a backup, measuring a restore — uses the async methods
- * ({@link S3ImageStore.getAsync}, {@link S3ImageStore.openRead}, {@link S3ImageStore.scanAsync}), which never
- * hold the loop, and serving streams the object rather than buffering it.
+ * attachment, a post-commit delete, the evacuation job. Everything that is already async — serving a photo, the
+ * sync export, taking a backup, measuring a restore, the orphan sweep and the admin Clean — uses the async
+ * methods ({@link S3ImageStore.getAsync}, {@link S3ImageStore.openRead}, {@link S3ImageStore.scanAsync},
+ * {@link S3ImageStore.deleteAsync}), which never hold the loop, and serving streams the object rather than
+ * buffering it.
+ *
+ * ## A write and a delete of the same key never overlap
+ *
+ * The sweep's deletes are async, so other code runs while one is on its way to the bucket — and a write of the
+ * SAME key could land first and be deleted by it: a photo whose row then points at nothing. The store keeps
+ * the two apart for the keys it is in the middle of. While {@link S3ImageStore.deleteAsync} has a key, a
+ * non-blocking write of it waits for the delete to finish and lands after it, and a blocking one is refused at
+ * once as an {@link ImageStoreUnavailableError} (it cannot wait: it holds the loop the delete needs) — which
+ * every blocking writer already answers by keeping the photo in its row for the evacuation job. And while a
+ * non-blocking write of a key is in flight, a delete of it is not attempted at all.
  *
  * The blocking path is kept short on purpose. Each attempt has its own timeout, there are at most
  * {@link S3Tuning.syncAttempts} of them, and after the bucket fails a blocking call the store stops making
@@ -241,6 +252,10 @@ export class S3ImageStore implements ImageStore {
     private readonly fetcher = new BlockingFetcher();
     private breakerUntil = 0;
     private breakerReason = '';
+    /** Keys {@link deleteAsync} is deleting, each with what settles when it is done. */
+    private readonly deleting = new Map<string, Promise<void>>();
+    /** Keys {@link putAsync} is writing, with how many writes of each are in flight. */
+    private readonly writing = new Map<string, number>();
 
     constructor(config: S3Config, tuning: Partial<S3Tuning> = {}) {
         this.endpoint = config.endpoint.replace(/\/+$/, '');
@@ -366,6 +381,12 @@ export class S3ImageStore implements ImageStore {
 
     put(key: string, bytes: Buffer, options: PutOptions): StoredObject {
         const make = this.preparePut(key, bytes, options);
+        if (this.deleting.has(key)) {
+            throw new ImageStoreUnavailableError(
+                `S3 PUT ${key} not attempted: the orphan sweep is deleting that key this moment, and a blocking write `
+                + 'cannot wait for it. The write is retried later.',
+            );
+        }
         const res = this.syncCall(`PUT ${key}`, make, 64 * 1024);
         if (res.status !== 200) this.fail(`PUT ${key}`, res);
         return { key, bytes: bytes.length, sha256: sha256Hex(bytes), mime: options.mime };
@@ -374,10 +395,18 @@ export class S3ImageStore implements ImageStore {
     /** Non-blocking {@link put}: the federation importer writes a peer's photos through this. */
     async putAsync(key: string, bytes: Buffer, options: PutOptions): Promise<StoredObject> {
         const make = this.preparePut(key, bytes, options);
-        const res = await this.asyncCall(`PUT ${key}`, make);
-        if (res.status !== 200) return this.failAsync(`PUT ${key}`, res);
-        await res.body?.cancel().catch(() => {});
-        return { key, bytes: bytes.length, sha256: sha256Hex(bytes), mime: options.mime };
+        // After a delete of the same key, never beside it: see "A write and a delete of the same key never overlap".
+        for (let gate = this.deleting.get(key); gate; gate = this.deleting.get(key)) await gate;
+        this.writing.set(key, (this.writing.get(key) ?? 0) + 1);
+        try {
+            const res = await this.asyncCall(`PUT ${key}`, make);
+            if (res.status !== 200) return await this.failAsync(`PUT ${key}`, res);
+            await res.body?.cancel().catch(() => {});
+            return { key, bytes: bytes.length, sha256: sha256Hex(bytes), mime: options.mime };
+        } finally {
+            const left = (this.writing.get(key) ?? 1) - 1;
+            if (left > 0) this.writing.set(key, left); else this.writing.delete(key);
+        }
     }
 
     get(key: string): Buffer | null {
@@ -547,6 +576,35 @@ export class S3ImageStore implements ImageStore {
         }
         const stream = res.body ? Readable.fromWeb(res.body as any) : Readable.from([]);
         return { stream, bytes: Number.isFinite(declared) ? declared : null };
+    }
+
+    /**
+     * Non-blocking {@link delete}, for the orphan sweep and the admin Clean. A HEAD and then the DELETE, like
+     * {@link delete}, and `keep` is shown what the HEAD found: the object as the bucket has it now, not as a
+     * listing saw it earlier. True when something was removed.
+     *
+     * Not attempted — false — while a non-blocking write of the key is in flight, or another delete of it is.
+     * While this one runs, writes of the key wait or are refused (see "A write and a delete of the same key
+     * never overlap"), so what `keep` saw is still true when the DELETE lands.
+     */
+    async deleteAsync(key: string, keep?: (now: ObjectInfo) => boolean): Promise<boolean> {
+        let url: URL;
+        try { url = this.objectUrl(key); } catch { return false; }
+        if (this.writing.has(key) || this.deleting.has(key)) return false;
+        let settle!: () => void;
+        this.deleting.set(key, new Promise<void>((resolve) => { settle = resolve; }));
+        try {
+            const now = await this.headAsync(key);
+            if (!now || keep?.(now)) return false;
+            const res = await this.asyncCall(`DELETE ${key}`, () => this.build('DELETE', url));
+            if (res.status === 404) { await res.body?.cancel().catch(() => {}); return false; }
+            if (res.status !== 204 && res.status !== 200) return await this.failAsync(`DELETE ${key}`, res);
+            await res.body?.cancel().catch(() => {});
+            return true;
+        } finally {
+            this.deleting.delete(key);
+            settle();
+        }
     }
 
     async scanAsync(prefix: string): Promise<ObjectInfo[]> {

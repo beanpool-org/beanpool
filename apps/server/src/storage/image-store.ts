@@ -27,8 +27,8 @@
  * storage design §2) the store is sync too. On disk every method is a handful of syscalls on a local file; on
  * S3 the sync methods block for a round trip (s3-image-store.ts says how that is bounded), so the backends that
  * talk to a network ALSO implement the optional async methods below, and every caller that is already async —
- * serving, the sync export, backups, restore — reaches the store through {@link readObject},
- * {@link openObject} and {@link scanObjectsAsync}, which use them when they are there.
+ * serving, the sync export, backups, restore, the orphan sweep — reaches the store through {@link readObject},
+ * {@link openObject}, {@link scanObjectsAsync} and {@link deleteObjectUnless}, which use them when they are there.
  *
  * ## What it refuses
  *
@@ -114,6 +114,12 @@ export interface ImageStore {
     openRead?(key: string): Promise<{ stream: Readable; bytes: number | null } | null>;
     /** Non-blocking {@link scan}. */
     scanAsync?(prefix: string): Promise<ObjectInfo[]>;
+    /**
+     * Non-blocking {@link delete}. `keep`, when given, is shown the object as the store has it at that moment,
+     * right before the delete is sent, and calls it off by returning true. Use it through
+     * {@link deleteObjectUnless}.
+     */
+    deleteAsync?(key: string, keep?: (now: ObjectInfo) => boolean): Promise<boolean>;
     /** Where the objects are, in words an operator can act on. Never a credential. */
     describe?(): string;
 }
@@ -127,8 +133,9 @@ export class ImageStoreError extends Error {
 
 /**
  * The store did not answer, or turned this node away as a whole: no answer in time, a 5xx after the retries,
- * the breaker open, throttled (429), the credentials refused, the bucket missing. Nothing is wrong with the
- * object or the row that asked, and the same call can succeed once the store is back.
+ * the breaker open, throttled (429), the credentials refused, the bucket missing — or, for one key, a blocking
+ * write refused because the orphan sweep is deleting that key that moment. Nothing is wrong with the object or
+ * the row that asked, and the same call can succeed once the store is back.
  *
  * Still an {@link ImageStoreError}, so every caller that handles one handles this. It exists for the callers
  * that decide what to GIVE UP on — the evacuation's skip list above all — which must not mistake an outage for
@@ -575,6 +582,22 @@ export function scanObjects(store: ImageStore, prefix: string): ObjectInfo[] {
 
 export async function scanObjectsAsync(store: ImageStore, prefix: string): Promise<ObjectInfo[]> {
     return store.scanAsync ? store.scanAsync(prefix) : scanObjects(store, prefix);
+}
+
+/**
+ * Delete `key` unless `keep`, shown the object as the store has it NOW, says otherwise. True when something was
+ * removed; false when it was already gone or `keep` called it off.
+ *
+ * For a caller that decided on a listing and then waited — the orphan sweep, which yields between deletes. By
+ * the time it reaches a key, the object may have been written again (a re-post of the same photo is the same
+ * content-addressed key) and a row made for it; judging the object as it is now, rather than as it was listed,
+ * is what keeps that from being deleted on stale news. On S3 it never holds the event loop.
+ */
+export async function deleteObjectUnless(store: ImageStore, key: string, keep: (now: ObjectInfo) => boolean): Promise<boolean> {
+    if (store.deleteAsync) return store.deleteAsync(key, keep);
+    const now = store.head(key);
+    if (!now || keep(now)) return false;
+    return store.delete(key);
 }
 
 /** Every object of ours in the store: the {@link STORE_NAMESPACES}, never anything else in a shared bucket. */

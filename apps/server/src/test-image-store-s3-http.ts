@@ -17,7 +17,8 @@
  *   5. The sync export rebuilds each photo from the bucket byte for byte, and omits (and names) one it
  *      cannot read, so a replica keeps its own copy.
  *   6. The orphan sweep judges the BUCKET: an aged orphan goes, a fresh one and a referenced one stay, and an
- *      object outside this node's namespaces (projects/ among them: nothing writes there) is never touched.
+ *      object outside this node's namespaces (projects/ among them: nothing writes there) is never touched. The
+ *      admin Clean route waits for its pass and answers with what it removed and what remains.
  *   7. A backup says the photos are in the bucket (`X-Backup-Images: in-bucket`), carries no `images/`,
  *      carries `images-in-bucket.json` naming the bucket, lists what the bucket was missing, and holds no
  *      secret anywhere in the archive.
@@ -362,10 +363,10 @@ async function main(): Promise<void> {
         // nothing there: project photos stay in the projects row. Nothing of ours, so nothing to sweep.
         await fake.seed('projects/not-ours/0-0c0c0c0c.jpg', makePhoto('not ours either'), 'image/jpeg', twoHoursAgo);
         await fake.setMtime(rowE.storage_key, twoHoursAgo); // rowless since section 3, now aged too
-        const preview = getStorageCleanPreview();
+        const preview = await getStorageCleanPreview();
         assert(preview.orphanedImageObjects.count === 2,
             `the preview counts the two aged orphans in the bucket and nothing else (got ${preview.orphanedImageObjects.count})`);
-        const swept = sweepOrphanedImageObjects();
+        const swept = await sweepOrphanedImageObjects();
         const after = await fake.objects();
         assert(swept.removed === 2 && !after.has('posts/orphan-post/0-0a0a0a0a.jpg') && !after.has(rowE.storage_key),
             'the sweep removed both aged orphans from the bucket');
@@ -373,6 +374,16 @@ async function main(): Promise<void> {
         assert(after.has(rowC.storage_key) && after.has(attRow.storage_key), 'referenced objects are left alone');
         assert(after.has('backups/not-ours.tar.gz'), 'an object outside this node\'s namespaces is never touched');
         assert(after.has('projects/not-ours/0-0c0c0c0c.jpg'), 'nor one under projects/, a prefix this node never writes');
+
+        // The admin Clean, through its route: it waits for its pass and answers with what it removed and what is
+        // left, rather than a bare success.
+        await fake.seed('posts/orphan-post/2-0d0d0d0d.jpg', makePhoto('orphan-for-clean'), 'image/jpeg', twoHoursAgo);
+        const cleanRes = await adminFetch('/api/local/admin/storage/clean', { method: 'POST' });
+        const cleanBody = await cleanRes.json() as any;
+        assert(cleanRes.status === 200 && cleanBody.removedImageObjectsCount === 1 && cleanBody.remainingImageObjectsCount === 0,
+            `the Clean route removes the aged orphan and says none remain (removed ${cleanBody.removedImageObjectsCount}, `
+            + `remaining ${cleanBody.remainingImageObjectsCount})`);
+        assert(!(await fake.objects()).has('posts/orphan-post/2-0d0d0d0d.jpg'), 'and it is gone from the bucket');
     }
 
     // ── 7. a backup ────────────────────────────────────────────────────────────────────────────

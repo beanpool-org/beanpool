@@ -556,14 +556,14 @@ async function main(): Promise<void> {
     assert(health.breakdown.media.totalBytes >= health.breakdown.media.imageStoreBytes, 'media adds the store in');
 
     // An orphan younger than the grace period is left alone; the same object, aged, is swept.
-    const preview = getStorageCleanPreview();
+    const preview = await getStorageCleanPreview();
     assert(preview.orphanedImageObjects.count === 0, 'a freshly written orphan is inside the grace period and is not touched');
     const orphanPath = path.join(imagesDir(), orphanKey);
     const old = Date.now() - 3 * 60 * 60 * 1000;
     fs.utimesSync(orphanPath, old / 1000, old / 1000);
-    const agedPreview = getStorageCleanPreview();
+    const agedPreview = await getStorageCleanPreview();
     assert(agedPreview.orphanedImageObjects.count >= 1, 'an aged object no row points at is reported as reclaimable');
-    const cleaned = cleanStorageAndCompressLogs();
+    const cleaned = await cleanStorageAndCompressLogs();
     assert(cleaned.removedImageObjectsCount >= 1, 'the clean removes it');
     assert(store.get(orphanKey) === null, 'and it is gone from the store');
     assert(store.get(replacedRow.storage_key) !== null, 'while an object a row still points at is untouched');

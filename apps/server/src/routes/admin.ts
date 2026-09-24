@@ -846,17 +846,17 @@ router.post('/api/local/admin/storage/disk-health', async (ctx) => {
 
 router.get('/api/local/admin/storage/clean-preview', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    ctx.body = { success: true, preview: getStorageCleanPreview() };
+    ctx.body = { success: true, preview: await getStorageCleanPreview() };
 });
 
 router.post('/api/local/admin/storage/clean-preview', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    ctx.body = { success: true, preview: getStorageCleanPreview() };
+    ctx.body = { success: true, preview: await getStorageCleanPreview() };
 });
 
 router.post('/api/local/admin/storage/clean', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const result = cleanStorageAndCompressLogs();
+    const result = await cleanStorageAndCompressLogs();
     cachedDiskHealth = null;
     ctx.body = result;
 });

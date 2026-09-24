@@ -16,7 +16,17 @@
  * Both return '' when there is nothing to say, so a caller can append unconditionally.
  */
 
-/** `X-Backup-Images: <staged>/<referenced>` and `X-Backup-Missing-Images`, when the response is short. */
+/**
+ * `X-Backup-Images: <staged>/<referenced>` and `X-Backup-Missing-Images`, when the response is short.
+ *
+ * The sentence claims only what the counts establish, because this reads two sources that are short for
+ * different reasons. A node's own backup is short by objects its store no longer holds, and lists them in
+ * `missing-images.json` inside the archive. A copy the fleet manager holds (`/api/manager/backups/…`) is
+ * measured off its own database, and can be short by objects the MANAGER never kept — a harvester older than
+ * the image store kept only `state.db` — with no manifest in the archive at all. "The node no longer holds
+ * them, and the archive lists which ones" is false for that second kind, so it is not said for either; a
+ * restore says why, off the manifest when the archive carries one.
+ */
 export function downloadShortfall(res: {
     headers: { get(name: string): string | null };
 }): string {
@@ -28,8 +38,8 @@ export function downloadShortfall(res: {
         : (Number.isFinite(staged) && Number.isFinite(referenced) && referenced > staged ? referenced - staged : 0);
     if (missing <= 0) return '';
     const of = Number.isFinite(referenced) && referenced > 0 ? ` of ${referenced}` : '';
-    return `This backup is missing ${missing}${of} photo(s) or attachment(s): the node no longer holds those `
-        + 'objects, and the archive lists which ones. Everything else is in the file.';
+    return `This backup is missing ${missing}${of} photo(s) or attachment(s) its database references: the file `
+        + 'does not carry those objects. Everything else is in the file.';
 }
 
 /**

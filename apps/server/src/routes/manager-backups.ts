@@ -274,6 +274,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             // `<staged>/<referenced>`, exactly as a node's own backup route spells it, so one reader in each UI
             // covers both — and like the node's, `staged` counts the referenced objects the archive carries.
             if (measured) ctx.set('X-Backup-Images', `${measured.referenced - missing}/${measured.referenced}`);
+            // Counts only. A shortfall measured here and not reported by the node has no `missing-images.json`
+            // in this archive, so the UI sentence built from this header claims neither a list nor a cause.
             if (missing > 0) ctx.set('X-Backup-Missing-Images', String(missing));
             // eslint-disable-next-line no-control-regex
             ctx.set('Content-Disposition', `attachment; filename="${`${base}.tar.gz`.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);

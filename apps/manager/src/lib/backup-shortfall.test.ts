@@ -33,6 +33,20 @@ describe('downloadShortfall', () => {
         expect(said).toMatch(/Everything else is in the file/);
     });
 
+    // A copy the fleet manager holds, kept by a harvester older than the image store: its database names three
+    // objects and nothing was kept beside it. The manager measures that and says so — but there is no
+    // `missing-images.json` in that archive, and the node never lost anything. The sentence must not say either.
+    it('claims no list inside the archive and no loss on the node, which a manager-held copy may have neither of', () => {
+        const said = downloadShortfall(headers({
+            'X-Backup-Images': '0/3',
+            'X-Backup-Missing-Images': '3',
+            'X-Backup-Contents': 'database+images-partial',
+        }));
+        expect(said).toMatch(/missing 3 of 3/);
+        expect(said).not.toMatch(/lists which ones/);
+        expect(said).not.toMatch(/node no longer holds/);
+    });
+
     it('derives the shortfall from the counts alone when the count header is absent', () => {
         expect(downloadShortfall(headers({ 'X-Backup-Images': '400/412' }))).toMatch(/missing 12 of 412/);
     });

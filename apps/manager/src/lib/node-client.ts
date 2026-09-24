@@ -2035,6 +2035,84 @@ export async function resolveEscrowDisputeApi(
     return res.json();
 }
 
+// ===================== STRANDED ESCROW WRITE-OFF =====================
+
+export interface StrandedEscrowItem {
+    escrowId: string;
+    balance: number;
+    tradeId: string;
+    trade: { status: string; credits: number; postId: string; createdAt: string | null; completedAt: string | null } | null;
+    transactionCount: number;
+    lastTransaction: { memo: string; amount: number; timestamp: string } | null;
+    writeOff: { eligible: boolean; refusal: string | null; commonsAfter: number | null; wouldDeficit: boolean };
+}
+
+export interface StrandedEscrowsResponse {
+    success: boolean;
+    commonsBalance: number;
+    escrows: StrandedEscrowItem[];
+    commonsAfterAll: number;
+    eligibleCount: number;
+}
+
+export async function fetchStrandedEscrows(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<StrandedEscrowsResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/stranded-escrows');
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export interface StrandedEscrowWriteOffResponse {
+    success: true;
+    escrowId: string;
+    tradeId: string;
+    amount: number;
+    transactionId: string;
+    memo: string;
+    commonsBefore: number;
+    commonsAfter: number;
+}
+
+/** A refused write-off. `code` says why; a deficit refusal also carries the Commons now and after. */
+export class StrandedEscrowWriteOffError extends Error {
+    constructor(
+        message: string,
+        readonly code: string | undefined,
+        readonly commonsBalance?: number,
+        readonly commonsAfter?: number,
+    ) {
+        super(message);
+        this.name = 'StrandedEscrowWriteOffError';
+    }
+}
+
+export async function writeOffStrandedEscrow(
+    nodeUrl: string,
+    escrowId: string,
+    reason: string,
+    confirmDeficit: boolean,
+    adminPassword?: string,
+    tfaToken?: string,
+): Promise<StrandedEscrowWriteOffResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/stranded-escrows/${encodeURIComponent(escrowId)}/write-off`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ reason, confirmDeficit }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new StrandedEscrowWriteOffError(body.error || `HTTP ${res.status}: ${res.statusText}`, body.code, body.commonsBalance, body.commonsAfter);
+    }
+    return body;
+}
+
 // ===================== COMMUNITY DECISIONS & EMERGENCY SUSPENSION =====================
 
 export interface AdminDecisionItem {

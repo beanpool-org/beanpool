@@ -23,7 +23,7 @@
  *   Part 2: a funded Commons needs no confirmation, including one that covers the hole exactly.
  *   Part 3: refusals, each leaving the ledger untouched: a pending or requested trade, a positive balance, a zero
  *           or dust balance, non-escrow accounts, no such escrow, a missing, short or over-long reason, a non-owner
- *           actor, memory and disk disagreeing.
+ *           actor, a standby node, memory and disk disagreeing.
  *   Part 4: HTTP through the REAL checkAdminAuth: no or wrong credentials are refused on both routes, an admin
  *           and a moderator key session are refused the write-off, an owner key session and the password work,
  *           an actor in the body is ignored, `confirmDeficit` must be literally true, the deficit refusal carries
@@ -43,6 +43,7 @@ import { runLedgerAudit } from './engine/audit.js';
 import { listStrandedEscrows, writeOffStrandedEscrow, WRITE_OFF_REASON_MAX } from './engine/escrow-write-off.js';
 import {
     initStateEngine,
+    setNodeRole,
     seedGenesisMember,
     grantNodeRole,
     transfer,
@@ -348,6 +349,15 @@ async function main() {
         assert(ledgerState() === before, `${r.label}: the ledger is untouched`);
     }
 
+    // A standby's ledger is a copy of the main server's: refused there.
+    {
+        setNodeRole('backup');
+        const before = ledgerState();
+        const res = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON);
+        setNodeRole('primary');
+        assert(!res.ok && res.status === 409 && res.code === 'standby', `on a standby: refused (${!res.ok && res.code})`);
+        assert(ledgerState() === before, 'the ledger is untouched');
+    }
     // Memory and disk disagreeing: paying |memory| would land the row elsewhere than 0, so it is refused.
     {
         db.prepare(`UPDATE accounts SET balance = -6.5 WHERE public_key = ?`).run(hole.escrowId);

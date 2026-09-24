@@ -33,6 +33,7 @@ import {
     conservingTransaction,
     getCommonsBalanceExact,
     isOwnerLevelActor,
+    getNodeRole,
 } from '../state-engine.js';
 
 /** A reason long enough to say why, and short enough to sit in a ledger memo. */
@@ -67,7 +68,7 @@ export interface StrandedEscrowList {
 }
 
 export type WriteOffCode =
-    | 'reason_required' | 'reason_too_long' | 'not_owner' | 'not_escrow' | 'already_written_off' | 'not_found'
+    | 'reason_required' | 'reason_too_long' | 'not_owner' | 'standby' | 'not_escrow' | 'already_written_off' | 'not_found'
     | 'trade_open' | 'positive_balance' | 'nothing_to_write_off' | 'ledger_mismatch' | 'deficit_unconfirmed';
 
 export type WriteOffResult =
@@ -199,6 +200,12 @@ export function writeOffStrandedEscrow(
     }
     if (!isOwnerLevelActor(actor)) {
         return refuse(403, 'not_owner', 'Only an owner of this node can write off an escrow from the Commons');
+    }
+    // A standby's ledger is a copy of the main server's. A write-off here would be a row the main server never has
+    // (the replica check would then disagree on the transaction count for good), and the next sync would put the
+    // escrow back anyway. It is done on the main server, and reaches the standby with the next sync.
+    if (getNodeRole() === 'backup') {
+        return refuse(409, 'standby', 'This node is a standby. Write the escrow off on the main server; the standby picks it up with the next sync');
     }
     if (typeof escrowId !== 'string' || !isEscrowAccount(escrowId) || tradeIdOf(escrowId).length === 0) {
         return refuse(400, 'not_escrow', 'Only an escrow account (escrow_<trade id>) can be written off here');

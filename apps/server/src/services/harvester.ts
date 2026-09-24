@@ -76,8 +76,12 @@ export interface NodeHarvestState {
     /**
      * The node's latest backup came back SHORT: it carried fewer image objects than its own database
      * references, and named the missing keys inside the archive. Not a failure — the file was kept, and it is
-     * the most complete backup that node can make — but the dashboard keeps saying so until a pull comes back
-     * whole, because the alternative is a fleet quietly losing photos. Cleared by any complete pull.
+     * the most complete backup that node can make. Kept in harvester-state.json, and in the
+     * `/api/manager/backups/status` payload, until a pull comes back whole; cleared by any complete pull.
+     *
+     * No dashboard view renders it yet. What tells an operator today is the SHORT line
+     * {@link pullBackupForNode} logs on every such pull, and the alert the manager's download of the kept copy
+     * raises from its `X-Backup-Images` / `X-Backup-Missing-Images` headers.
      */
     shortImages?: { missing: number; note: string; since: string };
     /** The node key the seal-old pass trusts, and where it came from. */
@@ -947,8 +951,8 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
                     : { locked: false, message: r.message, at: new Date().toISOString() };
                 delete prev.pullBackoff;
                 if (r.carried.missingImages) {
-                    // Kept in the state rather than cleared: the dashboard should keep saying this node's
-                    // backups are short until the node itself stops leaving objects out.
+                    // Kept in the state rather than cleared, until the node itself stops leaving objects out.
+                    // Nothing in the dashboard reads it yet (see NodeHarvestState.shortImages).
                     prev.shortImages = {
                         missing: r.carried.missingImages,
                         note: `The node's latest backup is short by ${r.carried.missingImages} image object(s), `

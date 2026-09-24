@@ -553,7 +553,7 @@ async function harvestLocalNode(): Promise<void> {
             && fs.readFileSync(path.join(shortDir, 'state.db')).equals(oldStateDb) && s4.dbSizeBytes === oldStateDb.length,
             '…and the file is on this node\'s own disk, byte for byte, not just reported');
         assert(s4.shortImages?.missing === 1 && /short by 1/.test(s4.shortImages?.note || ''),
-            `…flagged short, so the dashboard keeps saying so ("${s4.shortImages?.note}")`);
+            `…flagged short in the harvester state until a pull comes back whole ("${s4.shortImages?.note}")`);
         assert(!s4.pullBackoff, '…and there is no back-off, because nothing failed');
 
         // ── A SHORT backup stays labelled short at every hop ──

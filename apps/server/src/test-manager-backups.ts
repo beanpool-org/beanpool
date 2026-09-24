@@ -8,6 +8,9 @@
  * 4. GET /api/manager/backups/download-history returns 400 for path-traversal or missing parameters.
  * 8. A SHORT harvested backup says how short on the wire, and the gzip that builds the archive does NOT hold
  *    the fleet manager's event loop (round 4: this route compresses more bytes than either backup path).
+ * 9. The label is MEASURED off the kept database, not read off the node's manifest: a copy with no images
+ *    beside it, or only some, is labelled short; a whole one is labelled whole; an unreadable one is never
+ *    labelled whole.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-manager-backups.ts
  */
@@ -20,6 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import Database from 'better-sqlite3';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -42,6 +46,28 @@ let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
+}
+
+/**
+ * The bytes of a real SQLite database whose rows reference `keys`: `posts/…` as post photos, anything else as
+ * message attachments. The two tables and the one column `referencedStorageKeys` reads, and nothing more.
+ */
+function dbReferencing(keys: string[], opts: { wal?: boolean } = {}): Buffer {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mgr-db-'));
+    const file = path.join(dir, 'state.db');
+    const handle = new Database(file);
+    // WAL leaves the file's header saying so after a clean close, which is what makes a read-only open of it
+    // create `-wal` and `-shm` beside it.
+    if (opts.wal) handle.pragma('journal_mode = WAL');
+    handle.exec('CREATE TABLE post_photos (post_id TEXT, storage_key TEXT); CREATE TABLE message_attachments (message_id TEXT, storage_key TEXT);');
+    for (const key of keys) {
+        if (key.startsWith('posts/')) handle.prepare('INSERT INTO post_photos VALUES (?, ?)').run(key.split('/')[1], key);
+        else handle.prepare('INSERT INTO message_attachments VALUES (?, ?)').run(key, key);
+    }
+    handle.close();
+    const bytes = fs.readFileSync(file);
+    fs.rmSync(dir, { recursive: true, force: true });
+    return bytes;
 }
 
 async function main(): Promise<void> {
@@ -152,7 +178,9 @@ async function main(): Promise<void> {
     //    file is listed (identity: true) and downloadable.
     const nodeDir = path.join(process.env.BEANPOOL_DATA_DIR!, 'backups', 'mullum');
     fs.mkdirSync(path.join(nodeDir, 'history'), { recursive: true });
-    const sqlite = Buffer.concat([Buffer.from('SQLite format 3\0'), Buffer.alloc(100)]);
+    // A real database now, referencing the one photo placed beside it below. This was 116 bytes of SQLite
+    // header that nothing opened; the route now reads the kept database to measure its label (section 9).
+    const sqlite = dbReferencing(['posts/p1/0-abcdef01.jpg']);
     fs.writeFileSync(path.join(nodeDir, 'state.db'), sqlite);
     fs.writeFileSync(path.join(nodeDir, 'history', 'beanpool-2026-09-18.db'), sqlite);
     const past = new Date(Date.now() - 3 * 86_400_000);
@@ -193,6 +221,11 @@ async function main(): Promise<void> {
         `download-db serves the readable backup as a restorable archive when it is newer than any locked file, marked not locked (got ${plainRes.status}, ${Object.keys(plainMembers).join(', ')})`);
     assert(plainMembers['images/posts/p1/0-abcdef01.jpg']?.equals(heldObject) === true,
         '…and the images beside that database come with it, byte for byte, so a restore from it is whole');
+    assert(plainRes.headers.get('x-backup-contents') === 'database+images'
+        && plainRes.headers.get('x-backup-images') === '1/1'
+        && plainRes.headers.get('x-backup-missing-images') === null,
+        `…and is labelled whole, because it is: 1 of the 1 object its database references `
+        + `(${plainRes.headers.get('x-backup-contents')}, ${plainRes.headers.get('x-backup-images')})`);
     const hist2 = (await (await fetch(`${BASE}/api/manager/backups/history?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } })).json() as any).history;
     const names = hist2.map((h: any) => `${h.filename}:${h.sealed}:${h.identity}`).sort();
     assert(JSON.stringify(names) === JSON.stringify([
@@ -204,6 +237,13 @@ async function main(): Promise<void> {
     const dayMembers = openTar(Buffer.from(await dayRes.arrayBuffer()));
     assert(dayRes.status === 200 && dayMembers['state.db']?.equals(sqlite) === true && dayRes.headers.get('x-backup-locked') === 'no',
         `download-history serves a readable daily copy as a restorable archive, marked not locked (got ${dayRes.status})`);
+    // That daily copy has no `.images` beside it — a day kept by a harvester older than the image store — so
+    // the one photo its database references is not in the file, and the label says so.
+    assert(dayRes.headers.get('x-backup-contents') === 'database+images-partial'
+        && dayRes.headers.get('x-backup-images') === '0/1'
+        && dayRes.headers.get('x-backup-missing-images') === '1',
+        `…and a daily copy with no images beside it is labelled short, not whole `
+        + `(${dayRes.headers.get('x-backup-contents')}, ${dayRes.headers.get('x-backup-images')}, missing ${dayRes.headers.get('x-backup-missing-images')})`);
     const keyRes = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-identity-2026-09-01-legacy.bpsealed`, { headers: { 'X-Admin-Password': ADMIN_PW } });
     assert(keyRes.status === 200 && Buffer.from(await keyRes.arrayBuffer()).equals(fakeSealed), `the locked legacy key file downloads (got ${keyRes.status})`);
     // Narrowed in round 3, and for the same reason: a LOCKED file and the 410 must never be a plain archive
@@ -214,6 +254,9 @@ async function main(): Promise<void> {
     // 8a. The shortfall on the wire. The harvester keeps the node's `missing-images.json` beside the database,
     //     so the manager's own download can say how short the file is in the same headers a node's backup
     //     route sets — one reader per UI covers both, and nothing has to open the archive to find out.
+    //     The database a short node sends still names the objects it could not send; the manifest says which.
+    fs.writeFileSync(path.join(nodeDir, 'state.db'),
+        dbReferencing(['posts/p1/0-abcdef01.jpg', 'posts/p2/0-deadbeef.jpg', 'attachments/m9.bin']));
     fs.writeFileSync(path.join(nodeDir, 'state.db.missing-images.json'), JSON.stringify({
         note: 'This backup is SHORT.', takenAt: '2026-09-24T02:03:04.000Z',
         referenced: 3, staged: 1, missing: ['posts/p2/0-deadbeef.jpg', 'attachments/m9.bin'],
@@ -269,6 +312,86 @@ async function main(): Promise<void> {
         `the event loop is never held for the length of a gzip — async execFile, not execFileSync `
         + `(worst stall ${worstStallMs} ms of ${elapsed} ms, budget ${STALL_BUDGET_MS} ms)`);
     fs.rmSync(bulkDir, { recursive: true, force: true });
+
+    // 9. The label is a measurement (#1097 round-5 follow-up).
+    //
+    //    It used to be `staged + the manifest's count`, so a kept copy short for any reason the NODE never
+    //    reported went out labelled whole, and neither UI said a word. Two real ways to get one: a node upgraded
+    //    while a harvester older than the image store kept only its state.db (thousands of storage_keys, no
+    //    `.images` at all), and a pull that hit ENOSPC while replacing `.images` after state.db was already
+    //    overwritten (a new database beside a partial store). Neither has a manifest. The count now comes from
+    //    the kept database's own storage_keys, as a node's backup and a restore count theirs.
+    const labelDir = path.join(process.env.BEANPOOL_DATA_DIR!, 'backups', 'bris');
+    fs.mkdirSync(labelDir, { recursive: true });
+    const labelKeys = ['posts/q1/0-aa11bb22.jpg', 'posts/q1/1-cc33dd44.jpg', 'attachments/msg-q.bin'];
+    const labelObjects: Record<string, Buffer> = Object.fromEntries(labelKeys.map(k => [k, crypto.randomBytes(700)]));
+    const labelDb = dbReferencing(labelKeys);
+    fs.writeFileSync(path.join(labelDir, 'state.db'), labelDb);
+    const holdHere = (keys: string[]) => {
+        fs.rmSync(path.join(labelDir, 'state.db.images'), { recursive: true, force: true });
+        for (const k of keys) {
+            const to = path.join(labelDir, 'state.db.images', k);
+            fs.mkdirSync(path.dirname(to), { recursive: true });
+            fs.writeFileSync(to, labelObjects[k]);
+        }
+    };
+    const labelOf = async () => {
+        const res = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=bris`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+        const members = openTar(Buffer.from(await res.arrayBuffer()));
+        return {
+            status: res.status, members,
+            contents: res.headers.get('x-backup-contents'),
+            images: res.headers.get('x-backup-images'),
+            missing: res.headers.get('x-backup-missing-images'),
+        };
+    };
+    const said = (l: { contents: string | null; images: string | null; missing: string | null }) =>
+        `${l.contents}, ${l.images}, missing ${l.missing}`;
+
+    // 9a. Kept by an old harvester: the database and nothing beside it.
+    holdHere([]);
+    const noImages = await labelOf();
+    assert(noImages.status === 200 && noImages.members['state.db']?.equals(labelDb) === true,
+        `a kept state.db with no images beside it still downloads, database byte for byte (got ${noImages.status})`);
+    assert(noImages.contents === 'database+images-partial' && noImages.images === '0/3' && noImages.missing === '3',
+        `…labelled short by every object its database references, not "0/0" (${said(noImages)})`);
+
+    // 9b. A pull cut short part-way through replacing `.images`: one of the three made it.
+    holdHere([labelKeys[0]]);
+    const partial = await labelOf();
+    assert(partial.contents === 'database+images-partial' && partial.images === '1/3' && partial.missing === '2',
+        `a partial images directory with no manifest is labelled short by the two it lacks (${said(partial)})`);
+    assert(partial.members[`images/${labelKeys[0]}`]?.equals(labelObjects[labelKeys[0]]) === true && !partial.members['missing-images.json'],
+        '…while still carrying the one it has, and inventing no manifest the node never wrote');
+
+    // 9c. All three: whole, and labelled whole.
+    holdHere(labelKeys);
+    const whole = await labelOf();
+    assert(whole.contents === 'database+images' && whole.images === '3/3' && whole.missing === null,
+        `a complete copy is labelled whole (${said(whole)})`);
+    assert(labelKeys.every(k => whole.members[`images/${k}`]?.equals(labelObjects[k]) === true),
+        '…and carries all three objects byte for byte');
+
+    // 9c′. The same, kept as a WAL-mode file (an older node's copy of its live database). Reading it read-only
+    //      creates `-wal` and `-shm` beside it, so the read must happen outside the tree that gets tarred.
+    const walDb = dbReferencing(labelKeys, { wal: true });
+    fs.writeFileSync(path.join(labelDir, 'state.db'), walDb);
+    const walWhole = await labelOf();
+    assert(walWhole.contents === 'database+images' && walWhole.images === '3/3' && walWhole.members['state.db']?.equals(walDb) === true,
+        `a WAL-mode kept database is measured the same (${said(walWhole)})`);
+    assert(Object.keys(walWhole.members).every(m => !/-(wal|shm)$/.test(m)),
+        `…and reading it leaves no -wal or -shm in the archive (${Object.keys(walWhole.members).join(', ')})`);
+
+    // 9d. A kept file that is not a database this can read. Nothing was measured, so nothing is claimed: it
+    //     is still handed over (it is the operator's copy, and a restore measures for itself), but never as
+    //     whole, and with no `<staged>/<referenced>` that would be a guess.
+    const notADb = Buffer.concat([Buffer.from('SQLite format 3\0'), Buffer.alloc(100)]);
+    fs.writeFileSync(path.join(labelDir, 'state.db'), notADb);
+    const unread = await labelOf();
+    assert(unread.status === 200 && unread.members['state.db']?.equals(notADb) === true,
+        `an unreadable kept database still downloads, byte for byte (got ${unread.status})`);
+    assert(unread.contents === 'database+images-partial' && unread.images === null,
+        `…but is never labelled whole, and claims no count it did not take (${said(unread)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

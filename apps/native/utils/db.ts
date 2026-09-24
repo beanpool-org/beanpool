@@ -645,8 +645,16 @@ export async function clearDB() {
  * `includeEvents`: events are opt-in here as they are on the server's list route. Only screens that know how
  * to draw an event ask for them; the map tab, the deals badge and My Deals read this cache too and would
  * otherwise show an event as a trade listing (the native map layer is its own, later slice).
+ *
+ * Audience: with no `audienceScope` or `targetGroupId` this reads public listings only, for the map (#823).
+ * `includeGroupsOf` adds the listings of the groups that member is active in by the cached memberships, for the
+ * Market's "All Groups & Public" feed (the node's feed for a signed member carries them too). It is bound to the
+ * membership rather than to what the cache holds, because leaving a group takes away only the membership row: the
+ * group's listings stay cached and must leave the feed with it. `allScopes` reads every listing the cache holds,
+ * whatever its audience, for the deals counters, which must find a deal on a group listing too. Nothing in the cache
+ * is beyond this member: it holds only what the node sent.
  */
-export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean }) {
+export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean; includeGroupsOf?: string; allScopes?: boolean }) {
     let database = await waitForInit();
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
@@ -675,8 +683,16 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
     if (filter?.audienceScope) {
         query += ' AND p.audience_scope = ?';
         params.push(filter.audienceScope);
-    } else if (!filter?.targetGroupId) {
-        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+    } else if (!filter?.targetGroupId && !filter?.allScopes) {
+        if (filter?.includeGroupsOf) {
+            query += ` AND (
+                (p.audience_scope IS NULL OR p.audience_scope = 'public')
+                OR (p.audience_scope = 'group' AND p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))
+            )`;
+            params.push(filter.includeGroupsOf);
+        } else {
+            query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+        }
     }
     query += ' ORDER BY p.created_at DESC';
     
@@ -824,41 +840,9 @@ export async function getPost(id: string) {
                 );
                 await acquireSyncLock();
                 try {
-                    await database.runAsync(
-                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                        [
-                            p.id ?? id,
-                            p.type ?? null,
-                            p.category ?? null,
-                            p.title ?? null,
-                            p.description ?? '',
-                            p.credits ?? 0,
-                            p.author_pubkey || p.authorPubkey || p.authorPublicKey || null,
-                            p.lat ?? null,
-                            p.lng ?? null,
-                            p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null,
-                            p.price_type || p.priceType || 'fixed',
-                            p.repeatable ? 1 : 0,
-                            (p.cashAlsoNeeded ?? p.cash_also_needed) ? 1 : 0,   // #108: API is camelCase; tolerate either
-                            p.status || 'active',
-                            p.active !== undefined ? (p.active ? 1 : 0) : 1,
-                            p.accepted_by || p.acceptedBy || null,
-                            p.accepted_by_callsign || p.acceptedByCallsign || null,
-                            p.accepted_at || p.acceptedAt || null,
-                            p.completed_at || p.completedAt || null,
-                            p.pending_transaction_id || p.pendingTransactionId || null,
-                            p.created_at || p.createdAt || null,
-                            p.updated_at || p.updatedAt || null,
-                            p.origin_node || p.originNode || null,
-                            p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
-                            p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
-                            p.reach || 'local',
-                            (p.reach_peers || p.reachPeers) ? JSON.stringify(p.reach_peers || p.reachPeers) : null,
-                            p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
-                            p.poll_closes_at || p.pollClosesAt || null,
-                            ...eventCacheColumns(p)
-                        ]
-                    );
+                    // The sync's own row writer: a second copy of it here had already drifted, and put a group
+                    // listing back to 'public' every time someone opened it.
+                    await writeSyncedPost(database, { ...p, id: p.id ?? id });
                 } finally {
                     releaseSyncLock();
                 }
@@ -2688,10 +2672,17 @@ function emitOwnProfileUpdated(pubkey: string): void {
     emitAppEvent('profile_updated', { pubkey });
 }
 
-/** One listing as the node sends it, written to the cache. The only row writer the delta sync and a pushed change use. */
+/**
+ * One listing as the node sends it, written to the cache. The only row writer the delta sync, a pushed change and
+ * the by-id refresh in getPost use. It names every column the node sends: INSERT OR REPLACE does not keep a column
+ * it leaves out, it puts it back to the table default, which is how every sync once cleared the 💸 marker and
+ * turned a group or direct listing into a public one. `target_archetypes` is the one column left out; the node never
+ * sends it and nothing reads it.
+ */
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, poll_options, poll_closes_at, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -2705,6 +2696,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null,
             p.price_type || p.priceType || 'fixed',
             p.repeatable ? 1 : 0,
+            (p.cashAlsoNeeded ?? p.cash_also_needed) ? 1 : 0,
             p.status || 'active',
             p.active !== undefined ? (p.active ? 1 : 0) : 1, // Defaulting to 1 if active boolean isn't provided
             p.accepted_by || p.acceptedBy || null,
@@ -2717,11 +2709,32 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.origin_node || p.originNode || null,
             p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
             p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
+            reach,
+            await syncedReachPeers(txn, p, reach),
             p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
             p.poll_closes_at || p.pollClosesAt || null,
+            // The node sends 'public' for a row with no scope (rowToPost); the table's default says the same.
+            p.audienceScope || p.audience_scope || 'public',
+            p.targetGroupId || p.target_group_id || null,
+            p.targetPubkey || p.target_pubkey || null,
+            p.assignedTo || p.assigned_to || null,
             ...eventCacheColumns(p)
         ]
     );
+}
+
+/**
+ * The `reach_peers` to store with a listing. The node gives the list to the listing's author alone (getPosts) and
+ * takes it off every broadcast (publicBroadcastPost), so a copy without it says nothing about the list and the row
+ * keeps what it holds: for anyone but the author that is nothing, since only the author's own reads ever carry it.
+ * The list means something only while reach is 'peers'; any other reach clears it.
+ */
+async function syncedReachPeers(txn: SQLite.SQLiteDatabase, p: any, reach: string): Promise<string | null> {
+    if (reach !== 'peers') return null;
+    const peers = p.reachPeers ?? p.reach_peers;
+    if (Array.isArray(peers)) return JSON.stringify(peers);
+    const held = await txn.getFirstAsync<{ reach_peers: string | null }>('SELECT reach_peers FROM posts WHERE id = ?', [p.id]);
+    return held?.reach_peers ?? null;
 }
 
 /**

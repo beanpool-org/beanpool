@@ -318,7 +318,8 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
     const loadData = async () => {
         if (!identity) return;
         try {
-            const allPosts = await getPosts();
+            // Every audience: a deal on a group listing is still my deal.
+            const allPosts = await getPosts({ allScopes: true });
             // Merge in the member's own posts (incl. paused, which getPosts hides from the feed) so
             // "My Posts" can show + re-activate them. Dedupe by id — getMyPosts wins (fresher status).
             const mine = identity ? await getMyPosts(identity.publicKey) : [];

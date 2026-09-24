@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, DEFAULT_MARKET_FILTERS,
+    MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFeedQuery, DEFAULT_MARKET_FILTERS,
     distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketFilterState,
 } from '../market-filters';
@@ -176,5 +176,23 @@ describe('chip labels and the empty state', () => {
         expect(marketFiltersActive(state({ eventWindow: 'today' }))).toBe(false);
         expect(marketFiltersActive(state({ type: 'events', eventWindow: 'today' }))).toBe(true);
         expect(marketFiltersActive(state({ groupId: 'g1' }))).toBe(true);
+    });
+});
+
+// Run against the phone's real schema in live-post-apply.test.ts; here, the read each chip asks for.
+describe('what the feed asks the cache for', () => {
+    it('maps each type pill to its post type; All and For You read every type, events included', () => {
+        expect(marketFeedQuery('all', 'all')).toEqual({ includeEvents: true });
+        expect(marketFeedQuery('for-you', 'all')).toEqual({ includeEvents: true });
+        expect(marketFeedQuery('offers', 'all')).toEqual({ includeEvents: true, type: 'offer' });
+        expect(marketFeedQuery('needs', 'all')).toEqual({ includeEvents: true, type: 'need' });
+        expect(marketFeedQuery('events', 'all')).toEqual({ includeEvents: true, type: 'event' });
+        expect(marketFeedQuery('polls', 'all')).toEqual({ includeEvents: true, type: 'poll' });
+    });
+
+    it("with no group chip adds the groups the member is in; a group chip reads that group alone", () => {
+        expect(marketFeedQuery('offers', 'all', 'pk-me')).toEqual({ includeEvents: true, type: 'offer', includeGroupsOf: 'pk-me' });
+        expect(marketFeedQuery('offers', 'g1', 'pk-me')).toEqual({ includeEvents: true, type: 'offer', targetGroupId: 'g1' });
+        expect(marketFeedQuery('all', 'all', null)).toEqual({ includeEvents: true });
     });
 });

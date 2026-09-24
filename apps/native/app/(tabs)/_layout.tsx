@@ -149,7 +149,7 @@ export default function TabLayout() {
                 // Count active deals — mirror usePendingDealsCount in MyDealsSheet so
                 // the bottom-tab Market badge matches the in-app My Deals pill.
                 const [allPosts, myTxns] = await Promise.all([
-                    getPosts(),
+                    getPosts({ allScopes: true }),
                     getMarketplaceTransactions(identity.publicKey),
                 ]);
                 const active = allPosts.filter((p: any) => {

@@ -113,6 +113,7 @@ import { createFederationCommissionRoutes } from './routes/federation-commission
 import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
+import { profileFeatureGate } from './routes/profile-feature-gate.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
@@ -1159,6 +1160,10 @@ export async function startHttpsServer(port: number): Promise<number> {
         if (!gatewayAdmitMember(ctx, gwConfig.rateLimiting?.maxRequestsPerMinute ?? 120)) return;
         await next();
     });
+
+    // The routes a node profile switch has turned off (Beans, escrow, enterprises and treasuries, crowdfunds)
+    // answer 404 feature_off before any handler runs (routes/profile-feature-gate.ts).
+    app.use(profileFeatureGate);
 
     // Trust endpoint — only for self-signed mode
     if (!isUsingLetsEncrypt()) {

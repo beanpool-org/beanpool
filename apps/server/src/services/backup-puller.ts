@@ -48,6 +48,25 @@ import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedT
 import { logger } from '../logger.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
+import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';
+
+// Said once per value, not on every 60 s pull.
+let lastProfileNote: string | null = null;
+
+function noteMainServerProfile(record: unknown): void {
+    if (!writeProfileRecord(record)) {
+        logger.warn('P2P', '[Backup] The main server sent a node profile this standby could not read; kept the record it had.');
+        return;
+    }
+    const copied = readProfileRecord().profile;
+    const here = getNodeProfile();
+    const note = `${copied}|${here}`;
+    if (copied && copied !== here && note !== lastProfileNote) {
+        logger.warn('P2P', `[Backup] ⚠️ The main server runs as ${copied}, but NODE_PROFILE here is ${here}. A take-over from `
+            + `this standby is refused until NODE_PROFILE=${copied === 'local' ? '(unset)' : copied} is set here.`);
+    }
+    lastProfileNote = note;
+}
 
 const SNAPSHOT_PATH = '/api/local/admin/sync-snapshot';
 const DELTA_PATH = '/api/local/admin/sync-delta';
@@ -236,6 +255,10 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         // unconditionally, A2-8). A forged/tampered payload is rejected there. It
         // applies partial (delta) or full payloads identically, LWW per row.
         const result = await importRemoteState(payload);
+        // The main server's node profile and switch overrides, signed with the payload the import just verified:
+        // kept as this database's record, so a take-over or a hand promotion from here meets the main server's
+        // profile, not this standby's (config/node-profile.ts). A primary too old to send it leaves the record alone.
+        if (payload.nodeProfile) noteMainServerProfile(payload.nodeProfile);
 
         if (payload.generatedAt) {
             const genMs = Date.parse(payload.generatedAt);

@@ -341,6 +341,12 @@ export interface SyncPayload {
      * the resync destroys. `clearReplicatedTables` keeps exactly these rows.
      */
     photosOmitted?: string[];
+    /**
+     * The main server's node profile record, `nodeProfile` in its node_config, and its switch overrides
+     * (`nodeProfile.<switch>` rows), so a standby knows what kind of node it copies (apps/server config/node-profile.ts).
+     * Additive and optional like `photosOmitted`: a peer that does not know it ignores it. Signed with the rest.
+     */
+    nodeProfile?: { profile: 'local' | 'global' | null; overrides: Record<string, string> };
     nodeId: string;
     generatedAt?: string;
     signature?: string;

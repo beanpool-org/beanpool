@@ -9,6 +9,7 @@ import { isServableAvatarValue } from '@beanpool/core';
 import { recordActivity } from '../db/activity-feed-db.js';
 import { adminActorName } from './admin-actor-name.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
+import { assertFeatureOn } from '../config/node-profile.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -135,6 +136,9 @@ export function requestPost(
     requesterPublicKey: string,
     hours?: number
 ): MarketplaceTransaction {
+    // Every escrow starts at one of the three doors (request, approve, accept); each refuses when escrow is off
+    // on this node (config/node-profile.ts), before a row is written. The routes answer 404 before this.
+    assertFeatureOn('escrow');
     assertMemberActive(requesterPublicKey);
     assertProfileComplete(requesterPublicKey);
     assertNotOnHoliday(requesterPublicKey);
@@ -260,6 +264,7 @@ export function approvePostRequest(
     authorPublicKey: string,
     opts?: { authSigner?: string }
 ): MarketplaceTransaction | null {
+    assertFeatureOn('escrow');
     const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='requested'").get(transactionId) as any;
     if (!row) return null;
 
@@ -499,6 +504,7 @@ export function acceptPost(
     hours?: number,
     opts?: { authSigner?: string }
 ): MarketplaceTransaction {
+    assertFeatureOn('escrow');
     assertMemberActive(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];

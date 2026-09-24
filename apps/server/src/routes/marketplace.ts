@@ -26,6 +26,7 @@ import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody } from './event-post.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -312,6 +313,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
 
         ctx.body = { success: true, post };
     } catch (e: any) {
+        // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
+        if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to create post' };
     }
@@ -390,6 +393,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         }
         ctx.body = { success: true, post };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to update post' };
     }

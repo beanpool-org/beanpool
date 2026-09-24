@@ -22,6 +22,7 @@ import {
 import { getThresholds } from '../config/local-config.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
@@ -180,6 +181,8 @@ router.post('/api/commons/decisions', async (ctx) => {
         });
         ctx.body = { success: true, decision: publicDecision(decision) };
     } catch (err: any) {
+        // A pool-money Decision with Beans off: 403 profile_no_beans (decisions-engine switchOffFor).
+        if (respondProfileRefusal(ctx, err)) return;
         ctx.status = 400;
         ctx.body = { error: err.message };
     }

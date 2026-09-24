@@ -41,6 +41,7 @@ import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { isNodeOwner } from './engine/node-roles.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import { getProfileSwitches, BeansOffError, FeatureOffError, type ProfileSwitch } from './config/node-profile.js';
 import {
     conservingTransaction,
     getCommonsBalanceExact,
@@ -230,6 +231,23 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
 
 /** Effects the node opens by itself; a member can never propose one. */
 const SYSTEM_ONLY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['keep_suspension']);
+
+/**
+ * The node profile switch an effect needs (config/node-profile.ts), or null. The pool effects pay Beans out of the
+ * Commons, outside transfer(), so they are refused here when Beans are off: at the proposal, and again at execution.
+ */
+function switchOffFor(effect: DecisionEffect): ProfileSwitch | null {
+    const s = getProfileSwitches();
+    if (TOUCHES_FOR_EFFECT[effect] === 'pool' && !s.beans) return 'beans';
+    if (effect === 'remove_lead_keeper' && !(s.enterprises && s.treasuries)) return 'enterprises';
+    return null;
+}
+
+function assertEffectAllowedHere(effect: DecisionEffect): void {
+    const off = switchOffFor(effect);
+    if (off === 'beans') throw new BeansOffError('Beans are switched off on this node, so the Commons has nothing to grant or write off.');
+    if (off) throw new FeatureOffError(off);
+}
 
 /** The node's impersonal voice: author of Decisions it opens by itself (emergency-suspension ratification). */
 export const SYSTEM_AUTHOR = 'SYSTEM';
@@ -477,6 +495,9 @@ export interface CreateDecisionOptions {
  * - Fixed 7-day duration (closes on tick).
  */
 export function createDecision(opts: CreateDecisionOptions): Decision {
+    // First: a Decision this node can't carry out gets the plain answer, whoever proposes it. An unknown effect falls
+    // through to the checks below as before.
+    if (Object.prototype.hasOwnProperty.call(TOUCHES_FOR_EFFECT, opts.effect)) assertEffectAllowedHere(opts.effect);
     const check = checkCanProposeDecision(opts.authorPubkey);
     if (!check.ok) {
         throw new Error(check.error || 'Cannot propose decision');
@@ -738,6 +759,10 @@ export function preflightAssert(decision: Decision): {
     status: 'ok' | 'void' | 'insufficient_funds' | 'blocked';
     reason?: string;
 } {
+    // 0. A switch this node runs with off: nothing to execute (config/node-profile.ts).
+    const off = switchOffFor(decision.effect);
+    if (off) return { status: 'blocked', reason: `${off} is switched off on this node` };
+
     // 1. Check subject existence
     if (decision.touches === 'member') {
         if (!decision.subject) return { status: 'blocked', reason: 'Missing member subject' };

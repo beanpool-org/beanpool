@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { getLocalConfig } from '../config/local-config.js';
+import { readProfileRecord } from '../config/node-profile.js';
 import {
     exportSyncState as exportSyncStateEngine,
     type SyncPayload,
@@ -302,6 +303,10 @@ export async function exportSyncState(
     commonsBalance = 0
 ): Promise<SyncPayload> {
     const payload = await restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance));
+    // What kind of node this is, so a standby keeps it and a take-over or a hand promotion from there can't run
+    // the community as another kind (config/node-profile.ts). node_config itself is not replicated. Before the
+    // signature, so it is signed with the rest.
+    payload.nodeProfile = readProfileRecord();
     return signSyncPayload(cb, payload);
 }
 

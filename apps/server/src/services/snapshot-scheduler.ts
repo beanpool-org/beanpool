@@ -280,6 +280,10 @@ export function createSnapshot(): SnapshotInfo {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const name = `${SNAPSHOT_PREFIX}${timestamp}${SNAPSHOT_EXT}`;
         const dest = path.join(SNAPSHOTS_DIR, name);
+        // The name is the timestamp to the second, so a second create inside the same second writes over the
+        // first. `writeDbSnapshot` unlinks the old .db; its captured images have to go the same way, or the
+        // new snapshot would inherit objects belonging to a database it is replacing.
+        removeSnapshotImages(dest);
         writeDbSnapshot(dest);
         // Immediately, and inside the same `creating` guard: the snapshot is a recovery point only if the
         // objects its rows name are captured before anything can unlink them (see the note at the top).

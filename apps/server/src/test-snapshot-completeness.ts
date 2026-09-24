@@ -63,6 +63,18 @@ function makePhoto(seed: string): Buffer {
 }
 const dataUrl = (buf: Buffer, mime = 'image/jpeg') => `data:${mime};base64,${buf.toString('base64')}`;
 
+/**
+ * Wait for the wall clock to cross a second.
+ *
+ * A snapshot is named for the timestamp to the second, so two taken inside the same second are one file
+ * under one name — and this suite needs two distinct snapshots to watch one of them be pruned.
+ */
+async function nextSecond(): Promise<void> {
+    const now = () => new Date().toISOString().slice(0, 19);
+    const started = now();
+    while (now() === started) await new Promise((r) => setTimeout(r, 60));
+}
+
 /** Extract a downloaded archive and hand back the directory it landed in. */
 function extract(tarPath: string, into: string): string {
     fs.rmSync(into, { recursive: true, force: true });
@@ -307,6 +319,7 @@ async function main(): Promise<void> {
 
     // ── 7. Pruning and deleting take the images with the snapshot ──────────────────────────────
     updateAutoSnapshotConfig({ keep: 1 });
+    await nextSecond();
     const survivor = createSnapshot(); // prunes `snap`
     assert(!fs.existsSync(snapPath), 'pruning removes the old snapshot');
     assert(!fs.existsSync(snapImages), 'and its captured images go with it');
@@ -322,6 +335,7 @@ async function main(): Promise<void> {
 
     // ── 8. The orphan sweep cannot reach a snapshot ────────────────────────────────────────────
     updateAutoSnapshotConfig({ keep: 7 });
+    await nextSecond();
     const guarded = createSnapshot();
     const guardedImages = snapshotImagesDir(path.join(SNAPSHOTS_DIR, guarded.name));
     const guardedKey = keptKey;

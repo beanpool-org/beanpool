@@ -54,6 +54,7 @@ import {
 } from '../engine/recovery-shares.js';
 import { depositSsoKeeperGeneration, KeeperDepositError, type SsoKeeperResult } from '../engine/keeper-deposit.js';
 import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
+import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import {
     issueNonce,
     signInCredentialFrom,
@@ -284,8 +285,12 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
      * code the member types at GitHub; `poll { sessionId }` answers pending, ok with the `sub` the
      * client seals to, denied or expired. The deposit then carries `proof: { sessionId }`.
      *
-     * Both are on the auth limiter. A device polling at GitHub's interval (5 seconds, or longer after a
-     * slow_down) stays inside it; one polling faster is answered 429 and should wait `intervalSeconds`.
+     * `start` is on the auth limiter: one call per sign-in. `poll` is on its own per-address bucket
+     * (github-poll-rate-limit.ts), shared with the recovery and door polls, never the auth limiter: a phone
+     * waits there for up to 15 minutes, and two of them on one address would otherwise lock that address out of
+     * callsign checks, recovery and pairing. Every poll counts, whatever session it names. A device polling at
+     * GitHub's interval (5 seconds, or longer after a slow_down) stays well inside it; one answered 429 should
+     * treat it as still pending and wait `intervalSeconds`.
      */
     router.post('/api/recovery/sso/github/start', async (ctx) => {
         const owner = activeSigner(ctx);
@@ -299,9 +304,9 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
     });
 
     router.post('/api/recovery/sso/github/poll', async (ctx) => {
+        if (!githubPollRateLimit(ctx)) return;
         const owner = activeSigner(ctx);
         if (!owner) return unauthenticated(ctx);
-        if (!rateLimit(ctx)) return;
         const sessionId = (ctx as any).requestBody?.sessionId;
         try {
             const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', owner);

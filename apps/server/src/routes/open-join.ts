@@ -45,9 +45,11 @@
  *
  * ## Limits
  *
- * The auth limiter (15 a minute per address) on both, the gateway limiter in front of everything, and on the join
- * itself 5 new accounts an hour and 20 a day per address (engine/open-join.ts). An address over its limit is told
- * before the sign-in is checked, so the nonce survives for later.
+ * The auth limiter (15 a minute per address) on the nonce, the GitHub start and the join; the GitHub poll on its own
+ * per-address bucket instead (github-poll-rate-limit.ts), so a phone waiting on its code does not spend its
+ * neighbours' auth limiter; the gateway limiter in front of everything, and on the join itself 5 new accounts an
+ * hour and 20 a day per address (engine/open-join.ts). An address over its limit is told before the sign-in is
+ * checked, so the nonce survives for later.
  */
 
 import Router from '@koa/router';
@@ -68,6 +70,7 @@ import {
     type SsoProvider,
 } from '../sso.js';
 import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
+import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import { recordFunnelEvent } from '../engine/funnel.js';
 import {
     forgetOldJoinAddresses,
@@ -158,13 +161,15 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
 
     /**
      * The key asking to start a sign-in at the door, or null once the refusal is written: the door shut,
-     * unsigned, over the auth limiter, already a member, or a key a re-key replaced.
+     * unsigned, over `limit`, already a member, or a key a re-key replaced. `limit` is the auth limiter, except
+     * for the GitHub poll, which is on its own per-address bucket (github-poll-rate-limit.ts): a phone polls there
+     * for up to 15 minutes, and must not spend the auth limiter its neighbours on the same address sign up with.
      */
-    function joiningKey(ctx: any): string | null {
+    function joiningKey(ctx: any, limit: (ctx: any) => boolean = rateLimit): string | null {
         if (!doorOpen()) { inviteOnly(ctx); return null; }
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) { unsigned(ctx); return null; }
-        if (!rateLimit(ctx)) return null;
+        if (!limit(ctx)) return null;
         if (getMember(actor)) {
             ctx.status = 409;
             ctx.body = { error: 'This key is already a member of this community.', code: 'already_member' };
@@ -212,7 +217,7 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
     });
 
     router.post('/api/join/github/poll', async (ctx) => {
-        const actor = joiningKey(ctx);
+        const actor = joiningKey(ctx, githubPollRateLimit);
         if (!actor) return;
         const sessionId = (ctx as any).requestBody?.sessionId;
         try {

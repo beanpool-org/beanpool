@@ -64,6 +64,7 @@ import {
 } from '../sso.js';
 import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
 import { githubFlowFailure } from './keepers.js';
+import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import type { RouteDeps } from './types.js';
 
 /** Callsign resolution, matching idx_members_callsign_unique's predicate exactly (see keepers.ts). */
@@ -286,7 +287,8 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
      * GitHub for the RECOVERING device, run by this node (engine/github-device.ts) and bound to the
      * ephemeral key, like the nonce above. `start { collectionId }`, then `poll { collectionId, sessionId }`
      * until ok, whose `sub` opens the blob; `/api/recovery/collect/sso` then carries
-     * `proof: { sessionId }`. Rate-limited as keepers.ts's pair is.
+     * `proof: { sessionId }`. Limited as keepers.ts's pair is: `start` on the auth limiter, `poll` on the
+     * per-address GitHub poll bucket (github-poll-rate-limit.ts), counted before the collection is looked up.
      */
     router.post('/api/recovery/collect/github/start', async (ctx) => {
         const collection = sessionFor(ctx);
@@ -300,9 +302,9 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     });
 
     router.post('/api/recovery/collect/github/poll', async (ctx) => {
+        if (!githubPollRateLimit(ctx)) return;
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx)) return;
         const sessionId = (ctx as any).requestBody?.sessionId;
         try {
             const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', collection.requesterEphemeralPubkey);

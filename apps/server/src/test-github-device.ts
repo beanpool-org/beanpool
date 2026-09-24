@@ -44,6 +44,7 @@ import {
     _githubSessionForTests,
 } from './engine/github-device.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
+import { pruneGithubPolls } from './github-poll-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { sealSeedToSso, openShareFromSso } from '@beanpool/core';
 
@@ -189,6 +190,7 @@ function newMember(): Id & { callsign: string } {
 
 async function call(id: Id | null, path: string, body: unknown): Promise<{ status: number; body: any; raw: string }> {
     pruneAuthAttempts(Date.now() + 120_000);
+    pruneGithubPolls(Date.now() + 120_000);
     resetGatewayRateLimit();
     const raw = JSON.stringify(body ?? {});
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

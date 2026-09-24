@@ -58,7 +58,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 
 ## 2026-08-07 - [manager tests] resolveAvatarUrl unit tests
 **Gap:** resolveAvatarUrl in apps/manager/src/lib/avatar.ts was untested.
-**Learning:** Vitest was already set up correctly for the manager app; running tests for lib utilities was straightforward and required no additional configuration.
+**Learning:** Testing `resolveAvatarUrl` required testing default fallbacks and custom URL formatting.
 **Action:** Continue identifying utility functions in `lib` or pure functions to test.
 
 ## 2026-08-08 - [manager tests] node-client unit tests
@@ -120,3 +120,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `IdlePausedBanner` component in `apps/manager/src/components/common/IdlePausedBanner.tsx` was untested.
 **Learning:** Testing `IdlePausedBanner` with `ActivityPauseProvider` using Vitest fake timers (`vi.useFakeTimers()`) allows advancing time past the idle threshold (`idleAfterMs`) and verifying that the banner appears and dismisses cleanly upon resume button click.
 **Action:** Continue identifying remaining untested common UI components in `apps/manager/src/components/common/`.
+
+## 2026-09-14 - [manager tests] EnterpriseLocationPicker component unit tests
+**Gap:** `EnterpriseLocationPicker` component in `apps/manager/src/components/modules/EnterpriseLocationPicker.tsx` was untested.
+**Learning:** Mocking `leaflet` (`L.map`, `L.marker`, `L.tileLayer`, `L.divIcon`) prevents DOM/canvas map rendering issues during component unit tests while allowing full assertion on location inputs, approximate rounding logic, save/clear location node-client API calls, error boundaries, and modal close callbacks.
+**Action:** Continue identifying remaining untested module components in `apps/manager/src/components/modules/`.

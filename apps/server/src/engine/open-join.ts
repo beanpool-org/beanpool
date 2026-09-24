@@ -125,7 +125,7 @@ export function openJoinKeyInvalidated(publicKey: string): boolean {
 }
 
 export interface OpenJoinInput {
-    /** The key that signed the request. Never a body field. */
+    /** The key that signed the request, never a body field. Checked and written in lower case, as the member table keeps keys. */
     publicKey: string;
     callsign: string;
     /** The provider whose token VERIFIED, not the one the request named. */
@@ -152,7 +152,10 @@ export type OpenJoinOutcome =
  * is gone at the next boot, as federation-link.ts sets out.
  */
 export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoinInput): OpenJoinOutcome {
-    const { publicKey, callsign, provider, joinHash, ipHash } = input;
+    const { callsign, provider, joinHash, ipHash } = input;
+    // The route already sends the member table's spelling (routes/open-join.ts `canonicalKey`); this keeps the one
+    // writer of a door member from ever storing another, so one keypair can never be two members.
+    const publicKey = input.publicKey.toLowerCase();
     return db.transaction((): OpenJoinOutcome => {
         if (getMember(db, publicKey)) return { ok: false, reason: 'already_member' };
         if (openJoinKeyInvalidated(publicKey)) return { ok: false, reason: 'key_invalidated' };

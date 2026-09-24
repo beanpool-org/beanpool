@@ -5,6 +5,11 @@
  *
  *   1. A global node whose ledger has never moved: the boot log says the door is open, /api/community/info says
  *      openJoin true, and a signed join nonce is issued.
+ *   1b. One key, one spelling. The middleware verifies X-Public-Key by decoding its hex, so a keypair signs as its
+ *      upper-case spelling too. The upper-case spelling of an existing member's key is refused as that member (409
+ *      already_member) on the nonce and the join; a new key's lower-case join works once, and its upper-case
+ *      spelling afterwards is that member, even with another sign-in account; a key that joins in upper case is
+ *      stored in lower case; a spelling with extra characters the decoder skips is refused (400 bad_key).
  *   2. A local node whose operator opened the door (`nodeProfile.openJoin=true`), Beans on: open while nothing has
  *      moved, and SHUT, with no restart, the moment the first Bean moves (a Commons grant). Every door route (the
  *      nonce, the join, and the GitHub start and poll) answers 404 invite_only, /api/community/info says openJoin false.
@@ -152,6 +157,56 @@ async function main(): Promise<void> {
     const opened = await call('POST', opener, '/api/join/sso-nonce', {});
     assert(opened.status === 200 && typeof opened.body?.nonce === 'string', `a signed join nonce is issued (${opened.status})`);
 
+    // ── 1b. One key, one spelling ──
+    console.log('\n── 1b. one key, one spelling ──');
+    const count = (sql: string, ...a: unknown[]) => (db.prepare(sql).get(...a) as { n: number }).n;
+    const membersOf = (pk: string) => count('SELECT COUNT(*) AS n FROM members WHERE lower(public_key) = ?', pk.toLowerCase());
+    const joinsOf = (pk: string) => count('SELECT COUNT(*) AS n FROM open_joins WHERE lower(member_pubkey) = ?', pk.toLowerCase());
+    /** A join through the door as `as` (a spelling of id's key): the nonce, then the join, both signed that way. */
+    const joinAs = async (id: Id, as: string, sub: string) => {
+        const n = await call('POST', id, '/api/join/sso-nonce', {}, as);
+        if (n.status !== 200) return n;
+        return call('POST', id, '/api/join', { callsign: 'Joiner', provider: 'google', idToken: mintGoogle(sub, n.body.nonce), nonce: n.body.nonce }, as);
+    };
+
+    const mira = member('Mira');
+    const MIRA = mira.pk.toUpperCase();
+    const miraNonce = await call('POST', mira, '/api/join/sso-nonce', {}, MIRA);
+    assert(miraNonce.status === 409 && miraNonce.body?.code === 'already_member',
+        `a join nonce signed as the UPPER-CASE spelling of member Mira's key: refused as Mira, 409 already_member (got ${miraNonce.status} ${miraNonce.body?.code})`);
+    const miraToken = sso.issueNonce(`open-join:${mira.pk}`);
+    const miraJoin = await call('POST', mira, '/api/join', { callsign: 'Mira again', provider: 'google', idToken: mintGoogle('mira-second-account', miraToken), nonce: miraToken }, MIRA);
+    assert(miraJoin.status === 409 && miraJoin.body?.code === 'already_member',
+        `a join signed as that spelling, with another sign-in account: 409 already_member (got ${miraJoin.status} ${miraJoin.body?.code})`);
+    assert(membersOf(mira.pk) === 1 && joinsOf(mira.pk) === 0, 'Mira is still one member, and no sign-in account was recorded against that key');
+
+    const nia = newId();
+    const niaFirst = await joinAs(nia, nia.pk, 'nia-google-sub');
+    assert(niaFirst.status === 200 && niaFirst.body?.member?.publicKey === nia.pk, `Nia joins with their key in lower case (${niaFirst.status} ${niaFirst.body?.code ?? ''})`);
+    const niaUpper = await joinAs(nia, nia.pk.toUpperCase(), 'nia-other-google-sub');
+    assert(niaUpper.status === 409 && niaUpper.body?.code === 'already_member',
+        `their UPPER-CASE spelling with another sign-in account: 409 already_member, not a second member (got ${niaUpper.status} ${niaUpper.body?.code})`);
+    const niaAgain = await joinAs(nia, nia.pk, 'nia-third-google-sub');
+    assert(niaAgain.status === 409 && niaAgain.body?.code === 'already_member', `their lower-case spelling again: 409 already_member (got ${niaAgain.status})`);
+    assert(membersOf(nia.pk) === 1 && joinsOf(nia.pk) === 1, `one keypair, one member, one sign-in account (members ${membersOf(nia.pk)}, joins ${joinsOf(nia.pk)})`);
+
+    const uma = newId();
+    const umaJoin = await joinAs(uma, uma.pk.toUpperCase(), 'uma-google-sub');
+    assert(umaJoin.status === 200 && umaJoin.body?.member?.publicKey === uma.pk,
+        `Uma joins signing as their UPPER-CASE spelling: stored under the lower-case key (${umaJoin.status} ${umaJoin.body?.member?.publicKey?.slice(0, 12)})`);
+    assert(!!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(uma.pk) && !db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(uma.pk.toUpperCase())
+        && !!db.prepare('SELECT 1 FROM open_joins WHERE member_pubkey = ?').get(uma.pk),
+        'the member row and the open_joins row are under the lower-case key, and nothing under the upper-case one');
+    const umaLower = await joinAs(uma, uma.pk, 'uma-other-google-sub');
+    assert(umaLower.status === 409 && umaLower.body?.code === 'already_member', `their lower-case spelling afterwards: 409 already_member (got ${umaLower.status})`);
+
+    const odd = newId();
+    const oddNonce = await call('POST', odd, '/api/join/sso-nonce', {}, `${odd.pk}zz`);
+    const oddJoin = await call('POST', odd, '/api/join', { callsign: 'Odd', provider: 'google', idToken: mintGoogle('odd-sub', 'x'), nonce: 'x' }, `${odd.pk}zz`);
+    assert(oddNonce.status === 400 && oddNonce.body?.code === 'bad_key' && oddJoin.status === 400 && oddJoin.body?.code === 'bad_key',
+        `a spelling with characters the hex decoder skips (…zz) signs, but the door refuses it, 400 bad_key (got ${oddNonce.status} ${oddNonce.body?.code}, ${oddJoin.status} ${oddJoin.body?.code})`);
+    assert(membersOf(odd.pk) === 0, 'and nobody joined');
+
     // ── 2. A local node whose operator opened the door: it shuts when the first Bean moves ──
     console.log('\n── 2. a local node with nodeProfile.openJoin=true: the first Bean shuts the door ──');
     process.env.NODE_PROFILE_ALLOW_CHANGE_FROM = 'global';
@@ -199,7 +254,7 @@ async function main(): Promise<void> {
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ The open door opens only on a ledger that has never moved.');
+    console.log('⭐️ The open door opens only on a ledger that has never moved, and one key is one member.');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

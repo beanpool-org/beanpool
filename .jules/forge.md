@@ -119,3 +119,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/local/admin/commons/reject` in `apps/server/src/routes/admin.ts` returned `200 OK` with `{ success: true }` even when `adminRejectProject(projectId)` returned `false` (project not found).
 **Learning:** Route handlers invoking boolean-returning domain functions must check the return status and set `ctx.status = 404` when the resource to mutate is missing.
 **Pattern:** Look for route handlers calling mutation functions where boolean return flags are ignored, leading to HTTP 200 responses on failed/missing mutations.
+
+## 2026-09-24 - [Missing 400 status code when pausePost or resumePost fails]
+**Issue:** `POST /api/marketplace/posts/pause` and `POST /api/marketplace/posts/resume` in `apps/server/src/routes/marketplace.ts` returned HTTP `200 OK` with `{ success: false }` when `pausePost` or `resumePost` returned `false`.
+**Learning:** Returning HTTP 200 OK on failed post state transition mutations misleads clients into treating failed post pause/resume requests as successful operations.
+**Pattern:** Ensure route handlers calling state mutation functions inspect the boolean return value and explicitly set `ctx.status = 400` on failure.

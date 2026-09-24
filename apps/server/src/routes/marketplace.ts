@@ -836,8 +836,12 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
         const success = pausePost(postId, authorPublicKey);
         if (success) {
             syncPulseMarketplaceGate();
+            ctx.body = { success: true };
+            return;
         }
-        ctx.body = { success };
+        // Return 400 status on failed mutation instead of HTTP 200 with { success: false }
+        ctx.status = 400;
+        ctx.body = { success: false, error: 'Post not found, not active, or not owned by author' };
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to pause post' };
@@ -856,8 +860,12 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         const success = resumePost(postId, authorPublicKey);
         if (success) {
             syncPulseMarketplaceGate();
+            ctx.body = { success: true };
+            return;
         }
-        ctx.body = { success };
+        // Return 400 status on failed mutation instead of HTTP 200 with { success: false }
+        ctx.status = 400;
+        ctx.body = { success: false, error: 'Post not found, not paused, or not owned by author' };
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to resume post' };

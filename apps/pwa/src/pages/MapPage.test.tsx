@@ -5,6 +5,8 @@ import { MapPage, resetSavedMapView } from './MapPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import L from 'leaflet';
+import { livePostChange } from '@beanpool/core';
+import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 
 vi.mock('leaflet.markercluster', () => ({}));
 
@@ -1044,5 +1046,46 @@ describe('MapPage: where the map opens (no hard-coded town)', () => {
         render(<MapPage identity={mockIdentity} />);
         expect(mapOptions(1).zoom).toBe(2);
         await waitFor(() => expect(mapInstance(1).fitBounds).toHaveBeenCalledTimes(1));
+    });
+});
+
+// A listing the node pushed over /ws, pinned from the payload (lib/live-posts). The live feed itself is mocked
+// out in this file, so the change is routed exactly as lib/sync.ts routes it.
+describe('MapPage: a listing pushed over the live feed', () => {
+    const pushed = {
+        id: 'post-lemons', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag', credits: 5,
+        priceType: 'fixed', authorPublicKey: 'author-erin', authorCallsign: 'Erin', createdAt: '2026-09-24T01:00:00.000Z',
+        updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public', repeatable: false,
+        lat: -28.5495, lng: 153.5005,
+    };
+    const offerPins = () => mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-map-pin'));
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetLivePostsForTest();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    it('pins a new public offer without asking the node for the list again', async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(api.getMarketplacePosts).toHaveBeenCalled());
+        await act(async () => {});
+        const calls = vi.mocked(api.getMarketplacePosts).mock.calls.length;
+        expect(offerPins()).toHaveLength(0);
+
+        await act(async () => {
+            expect(routeLivePostChange(livePostChange({ type: 'new_post', post: pushed })!, mockIdentity.publicKey)).toBe(true);
+        });
+
+        await waitFor(() => expect(offerPins().length).toBeGreaterThan(0));
+        expect(vi.mocked(api.getMarketplacePosts).mock.calls.length).toBe(calls);
     });
 });

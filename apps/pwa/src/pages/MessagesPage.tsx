@@ -18,6 +18,7 @@ import { encodePlaintext, decodePlaintext, encryptDM, decryptDM, isEncryptedNonc
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
+import { registerLivePostTie, conversationTie } from '../lib/live-posts';
 import { consumeChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
@@ -147,6 +148,11 @@ function ChatImageBubble({ messageId, conversationId, peerPubHex, myPrivHex, ori
 
 export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate }: Props) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
+    // A listing the viewer has a conversation about is not applied from the live feed: this list shows its title
+    // and status, and only the refresh re-reads them, so the change rings the doorbell (lib/live-posts).
+    const conversationsRef = useRef<Conversation[]>([]);
+    useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+    useEffect(() => registerLivePostTie(conversationTie(() => conversationsRef.current)), []);
     const [userTransactions, setUserTransactions] = useState<MarketplaceTransaction[]>([]);
     const [activeTab, setActiveTab] = useState<'all' | 'transactions' | 'direct'>('all');
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);

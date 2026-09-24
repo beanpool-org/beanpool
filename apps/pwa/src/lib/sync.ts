@@ -5,8 +5,10 @@
  * Stores latest state in localStorage for offline read-only access.
  */
 
+import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
+import { routeLivePostChange } from './live-posts';
 import {
     requestSync,
     registerSyncActivityListener,
@@ -43,7 +45,13 @@ let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 /** Armed on open; resets the backoff only if the socket is still up 10s later. */
 let stabilityTimeoutId: ReturnType<typeof setTimeout> | null = null;
 let pingIntervalId: ReturnType<typeof setInterval> | null = null;
-let reconnectDelay = 1000;
+/** Retries since the socket last proved stable; sizes the full-jitter window (@beanpool/core reconnectDelayMs). */
+let reconnectAttempt = 0;
+/** True while the connection being made is a retry after a drop, not a start or the tab coming back. */
+let isRetry = false;
+let reconnectSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
+/** The member this socket signed in as, so a pushed change about their own listing takes the full refresh. */
+let memberPubkey: string | null = null;
 let isConnecting = false;
 let currentUrl: string | null = null;
 
@@ -182,7 +190,7 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
         stabilityTimeoutId = setTimeout(() => {
             stabilityTimeoutId = null;
             if (ws === socket && socket.readyState === WebSocket.OPEN) {
-                reconnectDelay = 1000;
+                reconnectAttempt = 0;
             }
         }, 10_000);
         if (reconnectTimeoutId) {
@@ -199,10 +207,22 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
         currentState = { ...currentState, connected: true };
         notify();
 
-        // Fix sync-on-reconnect: trigger coordinated sync immediately
-        requestSync().catch(err => {
+        // The catch-up sync for whatever was missed while the socket was down. After a drop it waits a random
+        // 0–3 s: a node or edge restart drops every tab at once, and their retries are spread, but not so far that
+        // their syncs would not still land together. A first connect or the tab coming back syncs at once.
+        const syncNow = () => requestSync().catch(err => {
             console.warn('[WS Sync] Reconnect sync error:', err);
         });
+        if (isRetry) {
+            isRetry = false;
+            if (reconnectSyncTimeoutId) clearTimeout(reconnectSyncTimeoutId);
+            reconnectSyncTimeoutId = setTimeout(() => {
+                reconnectSyncTimeoutId = null;
+                syncNow();
+            }, reconnectSyncDelayMs());
+        } else {
+            syncNow();
+        }
 
         // Start 30s heartbeat keep-alive with opt-in pong
         startHeartbeat(socket);
@@ -248,7 +268,13 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             // Excluding it would kill the fast path MessagesPage documents at its
             // onSyncActivity subscription: the open conversation would stop updating on
             // arrival and fall back to its poll tick, which Stage 5 relaxes to a backstop.
+            //
+            // A public offer or need the node sent whole is not a doorbell: the views that hold
+            // listings write it into their lists (lib/live-posts), and nothing is fetched. One that
+            // involves this member, or a view is tied to, rings the doorbell as before.
             if (data.type !== 'state_snapshot') {
+                const change = livePostChange(data);
+                if (change && routeLivePostChange(change, memberPubkey)) return;
                 requestSync().catch(err => {
                     console.warn('[WS Sync] Broadcast sync error:', err);
                 });
@@ -292,6 +318,7 @@ export function connectToAnchor(url?: string): void {
 
     loadIdentity()
         .then(async (ident) => {
+            memberPubkey = ident?.publicKey ?? null;
             const params: string[] = [];
             if (ident && ident.callsign) {
                 params.push(`callsign=${encodeURIComponent(ident.callsign)}`);
@@ -316,12 +343,14 @@ export function connectToAnchor(url?: string): void {
 function scheduleReconnect(url: string): void {
     if (reconnectTimeoutId) return;
 
-    const jitter = Math.random() * 1000;
-    const delay = reconnectDelay + jitter;
+    // Full jitter over a window that starts at 5 s and grows to 30 s. When Cloudflare restarts an edge server,
+    // every tab on it drops at once; 1 s plus up to 1 s of jitter brought them all back inside two seconds.
+    const delay = reconnectDelayMs(reconnectAttempt);
 
     reconnectTimeoutId = setTimeout(() => {
         reconnectTimeoutId = null;
-        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+        reconnectAttempt++;
+        isRetry = true;
         connectToAnchor(url);
     }, delay);
 }
@@ -351,7 +380,10 @@ if (typeof document !== 'undefined') {
                     clearTimeout(reconnectTimeoutId);
                     reconnectTimeoutId = null;
                 }
-                reconnectDelay = 1000;
+                // One person coming back to the tab: reconnect and sync at once, and start any later
+                // backoff from the first window again.
+                reconnectAttempt = 0;
+                isRetry = false;
                 connectToAnchor(currentUrl ?? undefined);
             } else if (ws) {
                 startHeartbeat(ws);
@@ -414,9 +446,15 @@ export function resetSyncForTest(): void {
         clearTimeout(stabilityTimeoutId);
         stabilityTimeoutId = null;
     }
+    if (reconnectSyncTimeoutId) {
+        clearTimeout(reconnectSyncTimeoutId);
+        reconnectSyncTimeoutId = null;
+    }
     watchdogArmed = false;
     lastPongAt = null;
-    reconnectDelay = 1000;
+    reconnectAttempt = 0;
+    isRetry = false;
+    memberPubkey = null;
     isConnecting = false;
     currentUrl = null;
     listeners = [];

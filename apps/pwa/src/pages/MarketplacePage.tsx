@@ -26,6 +26,10 @@ import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusS
 import { loadEnabledPeers, togglePeer } from '../lib/peer-prefs';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
+import {
+    onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
+    type ListFilter,
+} from '../lib/live-posts';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
@@ -100,6 +104,22 @@ function remoteOriginLabel(post: any): string {
     const name = formatNodeName(remote, post?._remoteCallsign);
     if (!name) return '';
     return name.startsWith('peer (') ? ` from ${name}` : ` (from ${name})`;
+}
+
+/**
+ * The feed's list read for the current filter pills. One definition for the fetch and for deciding whether a
+ * listing pushed over the live feed belongs on the list the fetch produced (lib/live-posts `postFitsList`).
+ */
+function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter: string, beansOnly: boolean, groupFilter: string): ListFilter {
+    const filter: ListFilter = {};
+    if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
+    // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page renders them.
+    else filter.types = CLIENT_POST_TYPES;
+    // Under Events only the date chips filter (#895): the category and beans-only chips are off screen.
+    if (categoryFilter !== 'all' && typeFilter !== 'poll' && typeFilter !== 'event') filter.category = categoryFilter;
+    if (beansOnly && typeFilter !== 'event') filter.beansOnly = true;
+    if (groupFilter !== 'all') filter.targetGroupId = groupFilter;
+    return filter;
 }
 
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember }: Props) {
@@ -394,15 +414,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         }
         refreshKeyRef.current = refreshKey;
         const p = (async () => {
+            // Listings pushed while this read is in flight are replayed over it: it left before them.
+            const liveMark = liveChangeMark();
             try {
-                const filter: any = {};
-                if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
-                // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page renders them.
-                else filter.types = CLIENT_POST_TYPES;
-                // Under Events only the date chips filter (#895): the category and beans-only chips are off screen.
-                if (categoryFilter !== 'all' && typeFilter !== 'poll' && typeFilter !== 'event') filter.category = categoryFilter;
-                if (beansOnly && typeFilter !== 'event') filter.beansOnly = true;
-                if (groupFilter !== 'all') filter.targetGroupId = groupFilter;
+                const filter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
 
                 // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
                 // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
@@ -451,7 +466,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     }
                 }
 
-                setPosts(allPosts);
+                setPosts(replayLiveChanges(liveMark, allPosts, p => postFitsList(p, filter)));
                 setError(null);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
@@ -539,6 +554,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             unsubscribe();
         };
     }, [refresh]);
+
+    // A public offer or need the node pushed over the live feed lands in the feed directly, with no fetch, if
+    // the current pills' list read would include it (lib/live-posts). Removing something this feed holds as an
+    // event, a poll or the viewer's own still rings the doorbell, so it takes the refresh above.
+    const postsRef = useRef<MarketplacePost[]>(posts);
+    useEffect(() => { postsRef.current = posts; }, [posts]);
+    useEffect(() => {
+        const filter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
+        const fits = (p: MarketplacePost) => postFitsList(p, filter);
+        const offView = onLivePostChange(change => setPosts(prev => applyLivePostChange(prev, change, fits)));
+        const offTie = registerLivePostTie(heldPostTie(() => postsRef.current, identity?.publicKey));
+        return () => { offView(); offTie(); };
+    }, [typeFilter, categoryFilter, beansOnly, groupFilter, identity?.publicKey]);
 
     // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll
     useEffect(() => {

@@ -68,7 +68,8 @@ describe('livePostChange: what an app may apply from a /ws event without fetchin
 
     // A node that predates the field says nothing about the audience, and "unknown" must not read as "public".
     it('a payload that does not name its audience is not applied', () => {
-        const { audienceScope: _drop, ...noScope } = offer();
+        const noScope: Record<string, unknown> = offer();
+        delete noScope.audienceScope;
         expect(livePostChange({ type: 'new_post', post: noScope })).toBeNull();
         expect(livePostChange({ type: 'post_removed', id: 'post-1' })).toBeNull();
     });

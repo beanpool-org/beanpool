@@ -31,6 +31,9 @@ import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
+import {
+    onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
+} from '../lib/live-posts';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { EventCard } from '../components/EventCard';
 import { approximateLocation, tierForCredit, type AddressResult } from '@beanpool/core';
@@ -39,6 +42,10 @@ import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
 } from '../lib/events';
+
+// The map's list read, and whether a listing pushed over the live feed belongs on it (lib/live-posts).
+const MAP_LIST_FILTER = { types: CLIENT_POST_TYPES };
+const fitsMapList = (p: MarketplacePost) => postFitsList(p, MAP_LIST_FILTER);
 
 // Simple deterministic hash for consistent pin placement
 function simpleHash(str: string): number {
@@ -498,6 +505,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const refreshPosts = useCallback(async () => {
         if (refreshPromiseRef.current) return refreshPromiseRef.current;
         const p = (async () => {
+            // Listings pushed while this read is in flight are replayed over it: it left before them.
+            const liveMark = liveChangeMark();
             try {
                 getEnterpriseStatuses().then(res => {
                     const inactiveKeys = new Set(
@@ -519,7 +528,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 const [pinsRes, localData] = await Promise.all([
                     getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
                     // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them.
-                    getMarketplacePosts({ types: CLIENT_POST_TYPES }),
+                    getMarketplacePosts({ ...MAP_LIST_FILTER }),
                 ]);
                 setEnterprises(pinsRes?.enterprises || []);
                 let allPosts: MarketplacePost[] = [...localData];
@@ -544,7 +553,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         }
                     }
                 }
-                setPosts(allPosts);
+                setPosts(replayLiveChanges(liveMark, allPosts, fitsMapList));
                 setPinsLoaded(true);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
@@ -607,6 +616,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             unsubscribe();
         };
     }, [refreshPosts]);
+
+    // A public offer or need the node pushed over the live feed lands on the map directly, with no fetch
+    // (lib/live-posts). Removing something this map holds as an event, a poll or the viewer's own still rings
+    // the doorbell, so it takes the refresh above.
+    const postsRef = useRef<MarketplacePost[]>(posts);
+    useEffect(() => { postsRef.current = posts; }, [posts]);
+    useEffect(() => {
+        const offView = onLivePostChange(change => setPosts(prev => applyLivePostChange(prev, change, fitsMapList)));
+        const offTie = registerLivePostTie(heldPostTie(() => postsRef.current, identity?.publicKey));
+        return () => { offView(); offTie(); };
+    }, [identity?.publicKey]);
 
     // Create a new post from the map
     function resetEventForm() {

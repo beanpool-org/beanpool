@@ -1128,7 +1128,14 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
                 return;
             }
         }
-        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, { reasonCategory });
+        // Same as posts/:id/delete: a removal refunds each pending trade's escrow to its buyer, but only
+        // ever what the escrow actually holds, and a short refund is told to the moderator rather than
+        // left in the log. This is the flow moderators work through, so it must not be the quiet one.
+        const refundShortfalls: EscrowRefundShortfall[] = [];
+        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, {
+            reasonCategory,
+            onRefundShortfall: s => refundShortfalls.push(s),
+        });
         if (!ok) {
             ctx.status = 404;
             ctx.body = { success: false, error: 'Abuse report not found' };
@@ -1142,7 +1149,15 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             const by = ctx.state?.auth_signer ? String(ctx.state.auth_signer).substring(0, 12) : 'owner:password';
             logger.info('ADMIN', `Removed Pulse item ${pulseItemId} (report ${ctx.params.id}) by ${by}${suspendUser ? ', owner suspended' : ''}`);
         }
-        ctx.body = { success: true, message: 'Report actioned successfully' };
+        ctx.body = refundShortfalls.length > 0
+            ? {
+                success: true,
+                message: 'Report actioned successfully',
+                refundShortfalls,
+                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) were short: `
+                    + refundShortfalls.map(s => `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`).join('; '),
+            }
+            : { success: true, message: 'Report actioned successfully' };
     } catch (e: any) {
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to action report' };

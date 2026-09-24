@@ -5360,9 +5360,20 @@ export function dismissReport(reportId: string): boolean {
     return res.changes > 0;
 }
 
-export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false, removePulseItem: boolean = false, opts?: { reasonCategory?: string | null }): boolean {
+export function actionReport(
+    reportId: string,
+    deletePost: boolean = false,
+    suspendUser: boolean = false,
+    removePulseItem: boolean = false,
+    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void },
+): boolean {
     // Notices go out after the commit, never from inside it: a rollback must not leave a member told of a removal.
     let takedown: { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null = null;
+    // Refund shortfalls are held back for the same reason. This is the report flow — the path a moderator
+    // actually uses — so a buyer refunded less than the trade row said has to reach the moderator here too,
+    // not just the two direct removal routes; a shortfall only `console.warn` knows about is how the
+    // rows-vs-ledger discrepancy stays invisible. Reported only once the removal has actually committed.
+    const shortfalls: EscrowRefundShortfall[] = [];
     const ok = db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
@@ -5371,7 +5382,7 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
         
         if (deletePost && report.target_post_id) {
-            const removed = removePostByAdmin(report.target_post_id);
+            const removed = removePostByAdmin(report.target_post_id, s => shortfalls.push(s));
             if (removed) {
                 const reporters = closeOpenReportsOnPost(report.target_post_id);
                 if (wasOpen) reporters.push(report.reporter_pubkey);
@@ -5399,6 +5410,7 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
     })();
     const done = takedown as { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null;
     if (ok && done) notifyPostTakedown(moderationNoticeCb, done.post, done.reporters, normaliseRemovalReason(opts?.reasonCategory));
+    if (ok) for (const shortfall of shortfalls) opts?.onRefundShortfall?.(shortfall);
     return ok;
 }
 

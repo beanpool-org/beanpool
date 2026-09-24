@@ -24,6 +24,8 @@
  *   Part 3: a partly funded escrow refunds what it holds and reports the rest as short.
  *   Part 4: a forced top-up failure ABORTS the release — the seller receives nothing, the escrow keeps
  *           its base hold, and the trade is still pending.
+ *   Part 6: the same removal through the REPORT flow (`actionReport`, what a moderator actually clicks)
+ *           reports its shortfall to the caller too, rather than leaving it in the log.
  *   Part 5: the legitimate paths still close an escrow to exactly zero — release with the 1.5% fee, a
  *           cancel refund, and a dispute split on an amount that is not a round number of cents (the old
  *           split rounded both halves independently and could pay out more than the hold).
@@ -48,6 +50,8 @@ import {
     completePostTransaction,
     resolveEscrowDispute,
     adminDeletePost,
+    submitReport,
+    actionReport,
     moveToCommons,
     transfer,
     getBalance,
@@ -334,6 +338,74 @@ async function main() {
             `the two halves together never exceed the 12.345 that was held (paid out ${paidOut})`);
         assertNoNegativeEscrows('part5-split');
         assertConservation('part5-split');
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────
+    // Part 6: the report flow reports its shortfall too
+    // ──────────────────────────────────────────────────────────────────────────────
+    console.log('\n── Part 6: the same short refund through actionReport ──');
+    {
+        // Parts 2 and 3 go through adminDeletePost. A moderator working a report goes through
+        // actionReport instead, and that path used to drop the shortfall on the floor: the engine still
+        // capped the refund, but the only trace was a console.warn and the moderator saw a plain success.
+        const seller = makeMember('ReportSeller', 50);
+        const buyer = makeMember('ReportBuyer', 50);
+        const reporter = makeMember('Reporter', 50);
+        const offer = createPost('offer', 'goods', 'Reported listing', 'Never escrowed', 12, 'fixed', seller,
+            undefined, undefined, undefined, false)!;
+
+        // Same measured shape as Part 2: a pending trade row with no hold ever paid into its escrow.
+        const ghostTradeId = crypto.randomUUID();
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
+                    VALUES (?, ?, ?, ?, ?, 'pending')`).run(ghostTradeId, offer.id, buyer, seller, 12);
+        db.prepare(`UPDATE posts SET status='pending', accepted_by=?, pending_transaction_id=? WHERE id=?`)
+            .run(buyer, ghostTradeId, offer.id);
+
+        const report = submitReport(reporter, seller, 'Not as described', offer.id)!;
+        assert(Boolean(report), 'the listing is reported');
+
+        const buyerBefore = getBalance(buyer).balance;
+        const totalBefore = nodeTotal();
+        const shortfalls: any[] = [];
+
+        const ok = actionReport(report.id, true, false, false, { onRefundShortfall: s => shortfalls.push(s) });
+        assert(ok, 'the report is actioned and the post removed');
+
+        assert(shortfalls.length === 1, 'the report flow reports the shortfall to its caller, not just the log');
+        assert(shortfalls[0].transactionId === ghostTradeId, 'the shortfall names the trade id');
+        assert(shortfalls[0].owed === 12 && shortfalls[0].refunded === 0,
+            `the shortfall says 12 owed, 0 refunded (got ${shortfalls[0].owed}/${shortfalls[0].refunded})`);
+        assert(shortfalls[0].buyerPubkey === buyer, 'the shortfall names the buyer who went short');
+
+        assert(escrowBalance(ghostTradeId) === 0, 'the unfunded escrow is still 0, never negative');
+        assert(getBalance(buyer).balance === buyerBefore,
+            `the buyer receives nothing that was never held (${buyerBefore} → ${getBalance(buyer).balance})`);
+        const tradeRow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(ghostTradeId) as any;
+        assert(tradeRow.status === 'cancelled', 'the trade is cancelled');
+        const reportRow = db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(report.id) as any;
+        assert(reportRow.status === 'actioned', 'the report is marked actioned — a short escrow does not block moderation');
+        assert(Math.abs(nodeTotal() - totalBefore) < 0.0001,
+            `SUM(balances) including the Commons is unchanged (${totalBefore} → ${nodeTotal()})`);
+
+        // A healthy trade through the same flow reports nothing: the callback is not just always firing.
+        const seller2 = makeMember('ReportSeller2', 50);
+        const buyer2 = makeMember('ReportBuyer2', 50);
+        const offer2 = createPost('offer', 'goods', 'Properly held listing', 'Escrowed', 8, 'fixed', seller2,
+            undefined, undefined, undefined, false)!;
+        const deal2 = acceptPost(offer2.id, buyer2);
+        assert(escrowBalance(deal2.id) === 8, 'the second escrow really holds 8');
+        const buyer2Before = getBalance(buyer2).balance;
+        const report2 = submitReport(reporter, seller2, 'Also not as described', offer2.id)!;
+        const clean: any[] = [];
+        assert(actionReport(report2.id, true, false, false, { onRefundShortfall: s => clean.push(s) }),
+            'the second report is actioned');
+        assert(clean.length === 0, 'a fully funded escrow reports no shortfall');
+        assert(escrowBalance(deal2.id) === 0, 'the funded escrow drained to exactly 0');
+        assert(Math.abs(getBalance(buyer2).balance - (buyer2Before + 8)) < 0.0001,
+            `the buyer got the whole 8 back (${getBalance(buyer2).balance - buyer2Before})`);
+
+        assertNoNegativeEscrows('part6');
+        assertConservation('part6');
     }
 
     // A last global sweep: nothing anywhere on the node ended below the floor.

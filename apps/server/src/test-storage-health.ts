@@ -416,6 +416,17 @@ async function onABucket(): Promise<void> {
     for (let i = 0; i < 10 && (await countUnder('posts/clean-')) > 0; i++) await sweep();
     check((await countUnder('posts/clean-')) === 0, 'and the sweep takes the rest');
 
+    // A bucket slow to LIST: each listing alone outlasts the whole budget. The budget bounds the deletes, so the
+    // Clean still removes some itself rather than answering "0 removed, more remain" every time it is pressed.
+    await seedOrphans('slowlist', 50);
+    await fake.fault({ method: 'GET', delayMs: (budget ?? 3_000) + 500, count: 1_000_000 });
+    const slow = (await cleanStorageAndCompressLogs({ db: s3Db, dataDir: s3Dir, store: s3 })) as any;
+    await fake.clearFaults();
+    check(slow.removedImageObjectsCount > 0,
+        `with every LIST taking longer than the budget, the Clean still removed ${slow.removedImageObjectsCount} itself`);
+    for (let i = 0; i < 10 && (await countUnder('posts/slowlist-')) > 0; i++) await sweep();
+    check((await countUnder('posts/slowlist-')) === 0, 'and the sweep takes whatever it left');
+
     // The timer carries on by itself: a pass that stops at the cap schedules the next one soon, not tomorrow.
     const TIMER_ORPHANS = Math.round((cap ?? 500) * 2.5);
     await seedOrphans('timer', TIMER_ORPHANS);

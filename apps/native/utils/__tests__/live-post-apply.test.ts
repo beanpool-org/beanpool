@@ -51,6 +51,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { applyDelta, getDb, getPost, getPosts } from '../db';
 import { applyLivePostChange, performSync } from '../../services/pillar-sync';
 import { livePostChange } from '@beanpool/core';
+import { marketFeedQuery, type MarketTypeFilter } from '../market-filters';
 
 const ME = 'me'.padEnd(64, '0');
 const ANN = 'a'.repeat(64);
@@ -329,7 +330,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
         expect(card).toMatchObject({ id: 'post-1', cash_also_needed: 1 });
     });
 
-    it("the Market's public list shows no group or direct listing; the group filter shows the group's, after a sync and a push", async () => {
+    it("the public list (the map's) shows no group or direct listing; the group filter shows the group's, after a sync and a push", async () => {
         await applyDelta({ posts: [offer(), groupOffer(), directNeed()] });
         expect(await applyLivePostChange(upsert(offer({ id: 'post-2', title: 'Seedlings' }), true), ctx)).toBe(true);
 
@@ -375,6 +376,85 @@ describe('every column the node sends survives the write, on a sync and on a pus
         it("another member's 'peers' listing is stored with its reach and no list", async () => {
             await applyDelta({ posts: [offer({ reach: 'peers' })] });
             expect(row()).toMatchObject({ reach: 'peers', reach_peers: null });
+        });
+    });
+
+    // The default chip reads "All Groups & Public", as the node's own feed for a signed member is. The groups are the
+    // ones this member is active in by the cached memberships: leaving a group takes away only the membership row
+    // (the group's listings stay cached), and they must leave the feed with it.
+    describe("the Market feed with no group chip: public listings plus the groups I am in", () => {
+        const feed = (type: MarketTypeFilter = 'all', groupId = 'all') => getPosts(marketFeedQuery(type, groupId, ME));
+        const ids = (posts: { id: string }[]) => posts.map(p => p.id).sort();
+        const member = (groupId: string, pubkey: string, status: string) =>
+            sql.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status) VALUES (?, ?, 'member', ?)`).run(groupId, pubkey, status);
+        const groupEvent = offer({
+            id: 'event-g', type: 'event', category: 'community', title: 'Working bee', credits: 0,
+            eventStartAt: '2099-10-04T09:00:00.000Z', eventEndAt: '2099-10-04T12:00:00.000Z', eventPlaceName: 'The shed',
+            audienceScope: 'group', targetGroupId: 'g1',
+        });
+
+        beforeEach(() => {
+            sql.exec('DELETE FROM group_members');
+            sql.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('g2', 'Choir', 'choir', ?)`).run(ANN);
+            member('g1', ME, 'active');
+        });
+
+        it("shows a public listing and a listing for a group I am in, which carries what its badge reads", async () => {
+            await applyDelta({ posts: [offer(), groupOffer()] });
+            const posts = await feed();
+            expect(ids(posts)).toEqual(['post-1', 'post-g']);
+            expect(posts.find(p => p.id === 'post-g')).toMatchObject({ audienceScope: 'group', targetGroupId: 'g1', targetGroupName: 'Repair group' });
+        });
+
+        it('the Events pill and For You read the same audience', async () => {
+            await applyDelta({ posts: [offer(), groupOffer(), groupEvent] });
+            expect(ids(await feed('events'))).toEqual(['event-g']);
+            expect(ids(await feed('for-you'))).toEqual(['event-g', 'post-1', 'post-g']);
+        });
+
+        it("hides a group I am not in: no membership row, a membership that is not active, or someone else's", async () => {
+            await applyDelta({ posts: [offer(), groupOffer({ id: 'post-g2', targetGroupId: 'g2' })] });
+            expect(ids(await feed())).toEqual(['post-1']);
+            member('g2', ME, 'invited');
+            expect(ids(await feed())).toEqual(['post-1']);
+            sql.exec('DELETE FROM group_members');
+            member('g2', BOB, 'active');
+            expect(ids(await feed())).toEqual(['post-1']);
+        });
+
+        it("a group's listings leave the feed when I leave it, though the phone still holds them", async () => {
+            await applyDelta({ posts: [offer(), groupOffer()] });
+            expect(ids(await feed())).toEqual(['post-1', 'post-g']);
+            // What leaveGroupApi and fetchGroups do on the phone: the membership row goes, the listing stays cached.
+            sql.prepare('DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ?').run('g1', ME);
+            expect(ids(await feed())).toEqual(['post-1']);
+            expect(rowCount('post-g')).toBe(1);
+        });
+
+        it('hides a direct listing for someone else', async () => {
+            await applyDelta({ posts: [offer(), directNeed({ targetPubkey: BOB, assignedTo: BOB })] });
+            expect(ids(await feed())).toEqual(['post-1']);
+        });
+
+        it("a group chip still shows only that group's listings", async () => {
+            member('g2', ME, 'active');
+            await applyDelta({ posts: [offer(), groupOffer(), groupOffer({ id: 'post-g2', targetGroupId: 'g2' })] });
+            expect(ids(await feed('all', 'g1'))).toEqual(['post-g']);
+            expect(ids(await feed('all', 'g2'))).toEqual(['post-g2']);
+            expect(ids(await feed())).toEqual(['post-1', 'post-g', 'post-g2']);
+        });
+
+        it('the 💸 marker reaches the feed after a sync and a push', async () => {
+            await applyDelta({ posts: [offer({ cashAlsoNeeded: true }), groupOffer()] });
+            expect(await applyLivePostChange(upsert(offer({ cashAlsoNeeded: true, title: 'Meyer lemons', updatedAt: LATER })), ctx)).toBe(true);
+            const posts = await feed();
+            expect(posts.find(p => p.id === 'post-1')).toMatchObject({ title: 'Meyer lemons', cash_also_needed: 1 });
+            expect(posts.find(p => p.id === 'post-g')).toMatchObject({ cash_also_needed: 1 });
+        });
+
+        it('with nobody signed in it reads public listings only', async () => {
+            await applyDelta({ posts: [offer(), groupOffer()] });
+            expect(ids(await getPosts(marketFeedQuery('all', 'all', null)))).toEqual(['post-1']);
         });
     });
 });

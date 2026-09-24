@@ -155,6 +155,29 @@ export function feedPostVisible(p: any, state: MarketFilterState, ctx: MarketFil
     return true;
 }
 
+/** What the feed asks the phone's cache for (utils/db.ts getPosts); feedPostVisible narrows it from there. */
+export interface MarketFeedQuery {
+    includeEvents: true;
+    type?: 'need' | 'offer' | 'event' | 'poll';
+    targetGroupId?: string;
+    includeGroupsOf?: string;
+}
+
+/**
+ * A group chip reads that group's listings. With none chosen the chip says "All Groups & Public": public listings
+ * plus those of the groups the member is in, which the node's feed for a signed member carries too. The map reads
+ * public listings only and does not come through here.
+ */
+export function marketFeedQuery(type: MarketTypeFilter, groupId: string, memberPubkey?: string | null): MarketFeedQuery {
+    const query: MarketFeedQuery = { includeEvents: true };
+    if (type !== 'all' && type !== 'for-you') {
+        query.type = type === 'needs' ? 'need' : type === 'offers' ? 'offer' : type === 'events' ? 'event' : 'poll';
+    }
+    if (groupId !== 'all') query.targetGroupId = groupId;
+    else if (memberPubkey) query.includeGroupsOf = memberPubkey;
+    return query;
+}
+
 /**
  * Whether anything the member can see is narrowing the feed — picks the empty state ("No items found" with
  * Clear All Filters rather than the first-run loader). The search box is added by the screen.

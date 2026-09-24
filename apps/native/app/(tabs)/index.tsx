@@ -32,7 +32,7 @@ import { FilterChipRow, FilterChipBar } from '../../components/FilterChipRow';
 import { FilterChipButton, FilterChipPanel } from '../../components/FilterChipPicker';
 import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '../../utils/map-filters';
 import {
-    MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, distanceChipLabel, trustChipLabel, beansChipLabel,
+    MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
 } from '../../utils/market-filters';
 import { feedSections, localDaysAgo } from '../../utils/feed-sections';
@@ -618,10 +618,13 @@ export default function MarketScreen() {
         return () => sub.remove();
     }, []);
 
+    // The feed reads the groups I am in from the cached memberships, which fetchGroups above refreshes: read it
+    // again when they change, so it matches the group chips.
+    const userGroupsKey = userGroups.map(g => g.id).join(',');
     useFocusEffect(
         React.useCallback(() => {
             loadPosts();
-        }, [filter, groupFilter, identity?.publicKey])
+        }, [filter, groupFilter, identity?.publicKey, userGroupsKey])
     );
 
     const params = useLocalSearchParams<{ tab?: string, dealsTab?: string }>();
@@ -775,13 +778,7 @@ export default function MarketScreen() {
     }, [searchQuery, filter, categoryFilter]);
 
     const loadPosts = async (): Promise<boolean> => {
-        const queryFilter: any = { includeEvents: true };
-        if (filter !== 'all' && filter !== 'for-you') {
-            queryFilter.type = filter === 'needs' ? 'need' : filter === 'offers' ? 'offer' : filter === 'events' ? 'event' : 'poll';
-        }
-        if (groupFilter !== 'all') {
-            queryFilter.targetGroupId = groupFilter;
-        }
+        const queryFilter = marketFeedQuery(filter, groupFilter, identity?.publicKey);
         const runLoad = async () => {
             const data = await getPosts(queryFilter);
             setPosts(data);

@@ -646,11 +646,15 @@ export async function clearDB() {
  * to draw an event ask for them; the map tab, the deals badge and My Deals read this cache too and would
  * otherwise show an event as a trade listing (the native map layer is its own, later slice).
  *
- * Audience: with no `audienceScope` or `targetGroupId` this reads public listings only, for the Market and the map
- * (#823). `allScopes` reads every listing the cache holds, whatever its audience, for the deals counters, which must
- * find a deal on a group listing too. Nothing in the cache is beyond this member: it holds only what the node sent.
+ * Audience: with no `audienceScope` or `targetGroupId` this reads public listings only, for the map (#823).
+ * `includeGroupsOf` adds the listings of the groups that member is active in by the cached memberships, for the
+ * Market's "All Groups & Public" feed (the node's feed for a signed member carries them too). It is bound to the
+ * membership rather than to what the cache holds, because leaving a group takes away only the membership row: the
+ * group's listings stay cached and must leave the feed with it. `allScopes` reads every listing the cache holds,
+ * whatever its audience, for the deals counters, which must find a deal on a group listing too. Nothing in the cache
+ * is beyond this member: it holds only what the node sent.
  */
-export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean; allScopes?: boolean }) {
+export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean; includeGroupsOf?: string; allScopes?: boolean }) {
     let database = await waitForInit();
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
@@ -680,7 +684,15 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
         query += ' AND p.audience_scope = ?';
         params.push(filter.audienceScope);
     } else if (!filter?.targetGroupId && !filter?.allScopes) {
-        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+        if (filter?.includeGroupsOf) {
+            query += ` AND (
+                (p.audience_scope IS NULL OR p.audience_scope = 'public')
+                OR (p.audience_scope = 'group' AND p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))
+            )`;
+            params.push(filter.includeGroupsOf);
+        } else {
+            query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+        }
     }
     query += ' ORDER BY p.created_at DESC';
     

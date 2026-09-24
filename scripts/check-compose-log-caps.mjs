@@ -15,8 +15,14 @@ if (candidates.length === 0) {
   candidates = [...tracked, ...others].filter(Boolean).map(f => path.resolve(REPO_ROOT, f));
 }
 const composeFiles = [...new Set(candidates)]
-  .filter(f => /(?:^|\/)(?:docker-compose[^\/]*\.ya?ml|[^\/]*\.compose\.ya?ml)$/.test(f))
+  .filter(f => /(?:^|\/)(?:(?:docker-)?compose[^\/]*\.ya?ml|[^\/]*\.compose\.ya?ml)$/.test(f))
+  .filter(f => !f.includes('.override.'))
   .filter(f => existsSync(f));
+
+if (composeFiles.length === 0) {
+  console.error('❌ Compose log cap check failed: no compose files found');
+  process.exit(1);
+}
 
 const errors = [];
 for (const file of composeFiles) {

@@ -8,6 +8,9 @@
  * 4. Cleanup deletes orphaned post photos while keeping valid ones.
  * 5. Cleanup removes orphaned pulse thumbnails while keeping valid ones.
  * 6. Cleanup compresses and archives logs exceeding the latest 500 rows to gzip.
+ * 7. The orphan sweep runs ON A TIMER, not only when an admin presses Clean: an image-store object past the
+ *    grace period is reclaimed by the scheduled job, one inside it is left alone, and a referenced one is
+ *    never touched.
  */
 
 import fs from 'node:fs';
@@ -20,6 +23,8 @@ import {
     getStorageCleanPreview,
     cleanStorageAndCompressLogs,
     setSimulatedDiskUsageForTesting,
+    startOrphanObjectSweep,
+    stopOrphanObjectSweep,
 } from './engine/storage-health.js';
 
 let passed = 0;
@@ -191,6 +196,54 @@ async function runTests() {
     assert(!fs.existsSync(path.join(thumbDir, `${softDelHash}.json`)), 'Soft-deleted hashed thumbnail .json removed');
     assert(!fs.existsSync(path.join(thumbDir, `${missingHash}.bin`)), 'Missing item hashed thumbnail .bin removed');
     assert(!fs.existsSync(path.join(thumbDir, `${missingHash}.json`)), 'Missing item hashed thumbnail .json removed');
+
+    // 7. The sweep runs by itself.
+    //
+    // Everything in the image store that is "swept later" used to mean "kept until a human opens Settings →
+    // Storage and presses Clean": the objects a rolled-back transaction left, the old object behind an
+    // INSERT OR REPLACE on a replica, a post-commit delete that hit an I/O error. Nothing is ever SERVED
+    // from them — every serving path reads the row first — but a member's deleted photo sat on the disk
+    // indefinitely on a node nobody administers, which is most of them.
+    console.log('\n--- 7. The orphan sweep runs on a timer ---');
+    const sweepDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-sweep-test-'));
+    const sweepDb = new Database(path.join(sweepDir, 'state.db'));
+    sweepDb.exec(`
+        CREATE TABLE post_photos (post_id TEXT, order_num INTEGER, photo_data TEXT, storage_key TEXT);
+        CREATE TABLE message_attachments (message_id TEXT PRIMARY KEY, data TEXT, storage_key TEXT);
+    `);
+    const sweepImages = path.join(sweepDir, 'images', 'posts', 'p1');
+    fs.mkdirSync(sweepImages, { recursive: true });
+    const objectAt = (name: string) => path.join(sweepImages, name);
+    fs.writeFileSync(objectAt('0-referenced.jpg'), Buffer.from('a photo a row still points at'));
+    fs.writeFileSync(objectAt('1-oldorphan.jpg'), Buffer.from('a deleted photo, an hour ago'));
+    fs.writeFileSync(objectAt('2-neworphan.jpg'), Buffer.from('a photo being written right now'));
+    sweepDb.prepare('INSERT INTO post_photos (post_id, order_num, storage_key) VALUES (?, ?, ?)')
+        .run('p1', 0, 'posts/p1/0-referenced.jpg');
+    // Past the one-hour grace period. The fresh one keeps today's mtime: it is indistinguishable from a
+    // photo whose row is a millisecond away from being written, and deleting it would break that post.
+    const threeHoursAgo = (Date.now() - 3 * 60 * 60 * 1000) / 1000;
+    fs.utimesSync(objectAt('1-oldorphan.jpg'), threeHoursAgo, threeHoursAgo);
+
+    stopOrphanObjectSweep();
+    startOrphanObjectSweep({ firstDelayMs: 40, intervalMs: 60_000, db: sweepDb, dataDir: sweepDir });
+    await new Promise((r) => setTimeout(r, 400));
+    stopOrphanObjectSweep();
+
+    assert(!fs.existsSync(objectAt('1-oldorphan.jpg')),
+        'the scheduled sweep removed an orphan past the grace period — nobody pressed anything');
+    assert(fs.existsSync(objectAt('2-neworphan.jpg')),
+        'and left the one inside the grace period, which may be a post mid-write');
+    assert(fs.existsSync(objectAt('0-referenced.jpg')),
+        'and never touched the object a row still points at');
+
+    // Armed once: a second start must not stack a second timer on the first.
+    startOrphanObjectSweep({ firstDelayMs: 40, intervalMs: 60_000, db: sweepDb, dataDir: sweepDir });
+    startOrphanObjectSweep({ firstDelayMs: 40, intervalMs: 60_000, db: sweepDb, dataDir: sweepDir });
+    stopOrphanObjectSweep();
+    assert(true, 'starting the sweep twice arms one timer, and stopping it disarms cleanly');
+
+    sweepDb.close();
+    try { fs.rmSync(sweepDir, { recursive: true, force: true }); } catch {}
 
     // Clean up
     db.close();

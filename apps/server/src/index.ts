@@ -74,6 +74,7 @@ import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 import { startImageEvacuation } from './services/image-evacuation.js';
+import { startOrphanObjectSweep } from './engine/storage-health.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
 import { initShutdownRecovery } from './engine/shutdown-recovery.js';
 
@@ -241,6 +242,11 @@ async function main() {
     // (storage design §7). Idempotent, batched, safe to interrupt, and a no-op once it has finished —
     // which on a node installed at this version or later is its first and only check.
     startImageEvacuation();
+
+    // Step 8.66: Reclaim image-store objects no row points at, daily. Until now this only ever ran when an
+    // admin pressed Clean, so on a node nobody administers a member's deleted photo stayed on the disk
+    // indefinitely. Same pair of calls the button makes, same one-hour grace period, snapshots out of reach.
+    startOrphanObjectSweep();
 
     // Step 8.7: Daily Pulse scheduler (auto-rotates daily 0-Bean inspirational offer at 5 AM)
     scheduleDailyPulse();

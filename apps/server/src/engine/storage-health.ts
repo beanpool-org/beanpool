@@ -597,3 +597,87 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
         totalReclaimedBytes,
     };
 }
+
+// ── The sweep, on a timer ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Reclaim store objects nothing points at, daily, without anybody pressing anything.
+ *
+ * ## Why this has to be scheduled
+ *
+ * Until now the orphan sweep ran only when an admin opened Settings → Storage and pressed *Clean*
+ * (`routes/admin.ts`). Every path in the image store that says an object is "swept later" therefore meant
+ * "kept until a human clicks": the objects a rolled-back `createPost`/`updatePost`/import transaction left
+ * behind, the old object behind an `INSERT OR REPLACE` on a replica, what `clearReplicatedTables` leaves
+ * after a force-resync, and any post-commit `deleteStoredObjects` that hit an I/O error.
+ *
+ * None of those is ever served — every serving path reads the row first, and the row is gone — so this is
+ * not data leaking out of the node. It is a member's deleted photo still ON the disk, indefinitely, on a
+ * node nobody administers. Most BeanPool installs are a stranger's download running for their own
+ * community; "delete" has to mean the bytes go, whether or not anyone ever opens the admin panel.
+ *
+ * ## Why it is safe to run unattended
+ *
+ * It is exactly {@link findOrphanedImageObjects} plus {@link deleteStoredObjects}, the same pair the Clean
+ * button runs, with the same one-hour grace period — which is what makes the sweep safe at any moment,
+ * including in the middle of a post being written. It walks `<data>/images` only, so a snapshot's captured
+ * objects under `<data>/snapshots/<name>.db.images` are out of reach by construction, and it unlinks a name
+ * rather than an inode, so a snapshot's hard link keeps the bytes. It touches no rows at all.
+ */
+const ORPHAN_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** Well clear of the boot burst, and of the evacuation job's first passes. */
+const ORPHAN_SWEEP_FIRST_DELAY_MS = 15 * 60 * 1000;
+
+let orphanSweepTimer: NodeJS.Timeout | null = null;
+
+/**
+ * One pass. Never throws: a sweep that cannot read the store is a warning and a retry tomorrow, not a
+ * process that falls over. Returns what it removed so a caller (and the test) can see it.
+ */
+export function sweepOrphanedImageObjects(options?: { db?: any; dataDir?: string; nowMs?: number }):
+    { removed: number; bytes: number } {
+    const db = options?.db || defaultDb;
+    const dataDir = options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+    try {
+        const orphans = findOrphanedImageObjects(db, dataDir, options?.nowMs ?? Date.now());
+        if (orphans.keys.length === 0) return { removed: 0, bytes: 0 };
+        const removed = deleteStoredObjects(orphans.keys, new DiskImageStore(imagesDir(dataDir)));
+        console.log(
+            `🧹 [StorageHealth] Daily sweep: removed ${removed} orphaned image object(s) `
+            + `(${(orphans.totalBytes / 1024).toFixed(1)} KB) that no row points at. `
+            + `First: ${orphans.keys.slice(0, 3).join(', ')}`,
+        );
+        return { removed, bytes: orphans.totalBytes };
+    } catch (e) {
+        console.warn('[StorageHealth] Daily orphan sweep failed; trying again tomorrow:', e);
+        return { removed: 0, bytes: 0 };
+    }
+}
+
+/**
+ * Arm the daily sweep. Call once at boot, with no arguments.
+ *
+ * Every argument is a test seam — `intervalMs`/`firstDelayMs` so a suite can prove the schedule actually
+ * fires rather than only that the function works, and `db`/`dataDir` so it fires against the suite's own
+ * fixture, the same pair every other entry point in this module takes.
+ */
+export function startOrphanObjectSweep(opts?: { intervalMs?: number; firstDelayMs?: number; db?: any; dataDir?: string }): void {
+    if (orphanSweepTimer) return;
+    const interval = opts?.intervalMs ?? ORPHAN_SWEEP_INTERVAL_MS;
+    const first = opts?.firstDelayMs ?? ORPHAN_SWEEP_FIRST_DELAY_MS;
+    const tick = (delay: number): void => {
+        orphanSweepTimer = setTimeout(() => {
+            sweepOrphanedImageObjects({ db: opts?.db, dataDir: opts?.dataDir });
+            tick(interval);
+        }, delay);
+        // Never a reason to hold the process open: a sweep missed at shutdown runs at the next boot.
+        orphanSweepTimer.unref?.();
+    };
+    tick(first);
+}
+
+/** Stop it — for tests and for a clean shutdown. */
+export function stopOrphanObjectSweep(): void {
+    if (orphanSweepTimer) { clearTimeout(orphanSweepTimer); orphanSweepTimer = null; }
+}

@@ -10,7 +10,8 @@
  * 6. Cleanup compresses and archives logs exceeding the latest 500 rows to gzip.
  * 7. The orphan sweep runs ON A TIMER, not only when an admin presses Clean: an image-store object past the
  *    grace period is reclaimed by the scheduled job, one inside it is left alone, and a referenced one is
- *    never touched.
+ *    never touched — and a `.tmp-` file a crashed write left behind is reclaimed too, because `list` hides
+ *    it from everything else in the node and this sweep is the only thing that can ever find it.
  */
 
 import fs from 'node:fs';
@@ -18,6 +19,7 @@ import path from 'node:path';
 import os from 'node:os';
 import zlib from 'node:zlib';
 import Database from 'better-sqlite3';
+import { DiskImageStore } from './storage/image-store.js';
 import {
     getDiskHealth,
     getStorageCleanPreview,
@@ -217,12 +219,26 @@ async function runTests() {
     fs.writeFileSync(objectAt('0-referenced.jpg'), Buffer.from('a photo a row still points at'));
     fs.writeFileSync(objectAt('1-oldorphan.jpg'), Buffer.from('a deleted photo, an hour ago'));
     fs.writeFileSync(objectAt('2-neworphan.jpg'), Buffer.from('a photo being written right now'));
+    // Half-written objects: a crash mid-`put`, or mid-`copyObjectReplacing` during a restore. `list` skips
+    // these by name, so nothing else in the node — totalBytes, the media breakdown, the referenced-key walk
+    // — can see them. The old one must go; the fresh one may be a write in flight this second.
+    fs.writeFileSync(objectAt('3-crashed.jpg.tmp-a1b2c3d4e5f6'), Buffer.from('half of a photo, from a crash'));
+    fs.writeFileSync(objectAt('4-inflight.jpg.tmp-99887766aabb'), Buffer.from('a put happening right now'));
     sweepDb.prepare('INSERT INTO post_photos (post_id, order_num, storage_key) VALUES (?, ?, ?)')
         .run('p1', 0, 'posts/p1/0-referenced.jpg');
     // Past the one-hour grace period. The fresh one keeps today's mtime: it is indistinguishable from a
     // photo whose row is a millisecond away from being written, and deleting it would break that post.
     const threeHoursAgo = (Date.now() - 3 * 60 * 60 * 1000) / 1000;
     fs.utimesSync(objectAt('1-oldorphan.jpg'), threeHoursAgo, threeHoursAgo);
+    fs.utimesSync(objectAt('3-crashed.jpg.tmp-a1b2c3d4e5f6'), threeHoursAgo, threeHoursAgo);
+
+    // Before the sweep: the preview counts the leftover, and `list` still refuses to show it.
+    const previewWithTemp = getStorageCleanPreview({ db: sweepDb, dataDir: sweepDir });
+    assert(previewWithTemp.orphanedImageObjects.count === 2,
+        `the preview counts the stale orphan AND the crashed write, and neither fresh one (got ${previewWithTemp.orphanedImageObjects.count})`);
+    const listed = new DiskImageStore(path.join(sweepDir, 'images')).list('');
+    assert(!listed.some((k) => k.includes('.tmp-')),
+        `…while list() still hides half-written objects from everything that serves or counts them (${listed.join(', ')})`);
 
     stopOrphanObjectSweep();
     startOrphanObjectSweep({ firstDelayMs: 40, intervalMs: 60_000, db: sweepDb, dataDir: sweepDir });
@@ -235,6 +251,10 @@ async function runTests() {
         'and left the one inside the grace period, which may be a post mid-write');
     assert(fs.existsSync(objectAt('0-referenced.jpg')),
         'and never touched the object a row still points at');
+    assert(!fs.existsSync(objectAt('3-crashed.jpg.tmp-a1b2c3d4e5f6')),
+        'and reclaimed the half-written file a crash left behind, which nothing else in the node can see');
+    assert(fs.existsSync(objectAt('4-inflight.jpg.tmp-99887766aabb')),
+        'but not the one inside the grace period, which is a put happening right now');
 
     // Armed once: a second start must not stack a second timer on the first.
     startOrphanObjectSweep({ firstDelayMs: 40, intervalMs: 60_000, db: sweepDb, dataDir: sweepDir });

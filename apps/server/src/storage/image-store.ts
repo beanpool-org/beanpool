@@ -77,6 +77,13 @@ export interface ImageStore {
     delete(key: string): boolean;
     /** Every key under `prefix`, in no particular order. */
     list(prefix: string): string[];
+    /**
+     * Half-written objects a crash left behind, which {@link list} deliberately never shows.
+     *
+     * Optional: a backend with no such thing (an object store whose write is one atomic request) does not
+     * implement it, and the sweep skips it.
+     */
+    listTemporary?(): { key: string; bytes: number; mtimeMs: number }[];
     /** Total bytes held, for the disk-usage report. */
     totalBytes(): number;
 }
@@ -297,6 +304,44 @@ export class DiskImageStore implements ImageStore {
             }
         };
         walk(base, segments.join('/'));
+        return out;
+    }
+
+    /**
+     * The `<key>.tmp-<hex>` files a crashed {@link put} or {@link copyObjectReplacing} left behind.
+     *
+     * Deliberately not part of {@link list}: nothing should ever serve, count or reference one. But that
+     * makes them invisible to everything else in the node too — `totalBytes`, the media breakdown and the
+     * orphan sweep all walk `list` — so a crash mid-write leaked bytes that nothing could ever find again.
+     * The daily sweep is the one caller, and it applies the same grace period it applies to any orphan: a
+     * `put` in flight right now looks exactly like this.
+     *
+     * The names are safe to hand straight to {@link delete}: a temp name is a key segment plus
+     * `.tmp-<hex>`, which `assertSafeKey` accepts unchanged.
+     */
+    listTemporary(): { key: string; bytes: number; mtimeMs: number }[] {
+        const out: { key: string; bytes: number; mtimeMs: number }[] = [];
+        const walk = (dir: string, rel: string): void => {
+            let entries: fs.Dirent[];
+            try {
+                entries = fs.readdirSync(dir, { withFileTypes: true });
+            } catch (e: any) {
+                if (e?.code === 'ENOENT' || e?.code === 'ENOTDIR') return;
+                throw e;
+            }
+            for (const entry of entries) {
+                const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+                if (entry.isDirectory()) {
+                    walk(path.join(dir, entry.name), childRel);
+                } else if (entry.isFile() && entry.name.includes('.tmp-')) {
+                    try {
+                        const st = fs.statSync(path.join(dir, entry.name));
+                        out.push({ key: childRel, bytes: st.size, mtimeMs: st.mtimeMs });
+                    } catch { /* gone between the readdir and the stat: nothing to reclaim */ }
+                }
+            }
+        };
+        walk(this.root, '');
         return out;
     }
 

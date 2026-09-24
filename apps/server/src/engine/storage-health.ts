@@ -286,13 +286,22 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
  * its objects under `<data>/snapshots/<name>.db.images`, which is not below it. The same holds for the
  * deletes: `deleteStoredObjects` is handed the live store and can only unlink inside it, and unlinking a live
  * object leaves a snapshot's hard link to the same inode holding the bytes.
+ *
+ * ## Half-written objects count as orphans
+ *
+ * A `<key>.tmp-<hex>` left behind by a crash mid-`put`, or mid-`copyObjectReplacing` during a restore, is
+ * invisible to everything else in the node: `list` skips it on purpose, so `totalBytes`, the media breakdown
+ * and the referenced-key walk never see it, and nothing else walks the store. This sweep is the only thing
+ * that can ever reclaim one. No row can point at it — the object is written before the row, and under a name
+ * no row would ever hold — so the only question is age, and the same grace period answers it: a `put` in
+ * flight right now looks exactly like a leftover.
  */
 const ORPHAN_OBJECT_GRACE_MS = 60 * 60 * 1000;
 
 function findOrphanedImageObjects(db: any, dataDir: string, nowMs = Date.now()):
     { keys: string[]; totalBytes: number } {
     const out = { keys: [] as string[], totalBytes: 0 };
-    let store: ImageStore;
+    let store: DiskImageStore;
     try {
         store = new DiskImageStore(imagesDir(dataDir));
     } catch {
@@ -321,6 +330,17 @@ function findOrphanedImageObjects(db: any, dataDir: string, nowMs = Date.now()):
         if (nowMs - h.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
         out.keys.push(key);
         out.totalBytes += h.bytes;
+    }
+    // Leftovers of a crashed write, which `list` above will never return. No row can reference one, so
+    // there is nothing to check them against — only their age.
+    try {
+        for (const t of store.listTemporary()) {
+            if (nowMs - t.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
+            out.keys.push(t.key);
+            out.totalBytes += t.bytes;
+        }
+    } catch {
+        // The objects found above are still worth reclaiming; the temp walk retries tomorrow.
     }
     return out;
 }

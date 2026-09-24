@@ -304,8 +304,9 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 const why = alloc.pause_reason ? ' · ' + esc(alloc.pause_reason) : '';
                 const since = alloc.paused_at || alloc.released_at;
                 const sinceText = since ? '<br><span style="color: var(--text-muted); font-size: 0.7rem;">since ' + new Date(since * 1000).toLocaleString() + '</span>' : '';
-                // An admin release is already free; the owner's release is held 30 days for its key — "Free now" skips that.
-                const acts = (alloc.status === 'released' && alloc.pause_reason === 'admin') ? [] : (ACTIONS[alloc.status] || [['block', 'Block'], ['release', 'Release']]);
+                // An admin release (or a withdrawn claim nobody approved) is already free; the owner's release is held
+                // 30 days for its key — "Free now" skips that.
+                const acts = (alloc.status === 'released' && (alloc.pause_reason === 'admin' || alloc.pause_reason === 'withdrawn')) ? [] : (ACTIONS[alloc.status] || [['block', 'Block'], ['release', 'Release']]);
 
                 html += '<tr>' +
                     '<td style="font-weight: 700; color: ' + look[1] + '; font-family: monospace;">' + domain + '</td>' +

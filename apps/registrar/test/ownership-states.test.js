@@ -495,6 +495,44 @@ test('a gated name the admin released: its old key waits for approval again; the
     } finally { w.restore(); }
 });
 
+test('a gated claim the admin never approved, released by its key, is free at once; an auto one is held', async () => {
+    const w = await world();
+    try {
+        const [first, second, auto, other] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);
+        assert.equal((await w.claim(first, { name: 'sydney' })).body.status, 'pending');   // gated in the 0001 seed
+        const rel = await w.release(first);
+        assert.equal(rel.status, 200, JSON.stringify(rel.body));
+        assert.deepEqual(rel.body, { status: 'released', name: 'sydney' }, 'nothing is held, so no held_until');
+        const row = await w.row('sydney');
+        assert.equal(row.status, 'released');
+        assert.equal(row.pause_reason, 'withdrawn');
+        assert.deepEqual((await w.available('sydney')).body, { available: true, reason: 'needs-approval', tier: 'gated' });
+        const st = await w.status(first);
+        assert.equal(st.body.status, 'released');
+        assert.equal(st.body.reason, 'withdrawn');
+        assert.equal(st.body.held_until, undefined);
+
+        // Any key may queue for it now, the old one included, and the admin decides as for any gated claim.
+        const next = await w.claim(second, { name: 'sydney' });
+        assert.equal(next.status, 200, JSON.stringify(next.body));
+        assert.equal(next.body.status, 'pending');
+        assert.equal((await w.row('sydney')).node_pubkey, second.pubHex);
+        assert.equal(w.cf.calls.length, 0, 'none of this reached Cloudflare');
+        assert.deepEqual(w.events('sydney').map((e) => e.event), ['claimed', 'released', 'claimed']);
+
+        // A pending AUTO name is one whose provisioning failed: policy let that key have it, so it is held.
+        w.cf.fail.ingress = true;
+        assert.equal((await w.claim(auto, { name: 'hillside' })).status, 502);
+        w.cf.fail.ingress = false;
+        const held = await w.release(auto);
+        assert.equal(held.body.status, 'released');
+        assert.equal(held.body.held_until, (await w.row('hillside')).released_at + COOLOFF);
+        assert.equal((await w.row('hillside')).pause_reason, 'owner');
+        assert.equal((await w.available('hillside')).body.available, false);
+        assert.equal((await w.claim(other, { name: 'hillside' })).status, 409);
+    } finally { w.restore(); }
+});
+
 test('ensure: an existing record is PATCHed, never POSTed over; an intact name is left alone', async () => {
     const w = await world();
     try {

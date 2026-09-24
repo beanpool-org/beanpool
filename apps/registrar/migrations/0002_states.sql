@@ -9,7 +9,8 @@
 --                 'admin'               paused by the admin — only the admin resumes it
 --                 'incident-2026-09-24' revoked by the registrar's own verifier bug; its node heals it
 --   'released'  let go (owner `release`/`offline`, or admin `release`). Owner release: held RELEASE_COOLOFF_S
---               (30 d) for the same key, then free. Admin release (pause_reason 'admin'): free at once.
+--               (30 d) for the same key, then free. Admin release (pause_reason 'admin'): free at once. A gated
+--               claim the admin never approved, released by its key (pause_reason 'withdrawn'): free at once.
 --   'abandoned' free (set by a later PR, after the 12-month clock; nothing sets it yet)
 --   'blocked'   killed by the admin: not routed, never free, the owner cannot heal it
 -- A legacy 'revoked' row no longer exists after this file; code that meets one treats it as held.

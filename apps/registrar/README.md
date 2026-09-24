@@ -31,10 +31,10 @@ it, or — a later PR — after a long, warned abandonment. States (`name_alloca
 
 | State | Routed | Another key may claim it | How it gets there · how it leaves |
 |---|---|---|---|
-| `pending` | no | no | a gated claim · admin approve (→ live) or release |
+| `pending` | no | no | a gated claim · admin approve (→ live), or a release: its key's frees it at once (nobody approved it; `pause_reason` `withdrawn`) |
 | `live` | yes | no | claim / approve / heal / resume |
 | `paused` | no | no | sweep impostor (`pause_reason` `impostor`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`) · the owner's heal, except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
-| `released` | no | after the 30-day hold (owner's release) or at once (admin's) | release · the same key re-claims any time; others once free |
+| `released` | no | after the 30-day hold (owner's release) or at once (admin's, or a withdrawn claim) | release · the same key re-claims any time; others once free |
 | `blocked` | no | never | admin block (the kill switch) · admin resume or release; the owner can't heal or release it |
 | `abandoned` | no | yes | a later PR |
 

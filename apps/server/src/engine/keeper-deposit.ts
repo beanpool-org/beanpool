@@ -6,6 +6,7 @@ import {
     newSsoLookupSalt,
     SsoVerificationError,
     SSO_PROVIDERS,
+    type SsoIdentity,
     type SsoProvider,
 } from '../sso.js';
 import { isSingleBlobSso } from '@beanpool/core';
@@ -14,6 +15,7 @@ import {
     getCurrentShares,
     RecoveryShareError,
     type KeeperShareInput,
+    type StoredKeeperShare,
 } from './recovery-shares.js';
 
 /**
@@ -98,7 +100,40 @@ export async function depositSsoKeeperGeneration(
     deposit: SsoKeeperDeposit,
 ): Promise<SsoKeeperResult> {
     const { provider, ownerPubkey, shares, idToken, nonce } = deposit;
+    checkSsoKeeperShares(provider, ownerPubkey, shares);
 
+    // Order matters: verify BEFORE touching storage. A failed sign-in must leave the existing
+    // generation exactly as it was — the member's current keepers are what they fall back on.
+    let identity;
+    try {
+        identity = await verifyIdToken(
+            provider,
+            idToken,
+            getConfiguredAudiences(provider),
+            nonce,
+            ownerPubkey,
+        );
+    } catch (e) {
+        if (e instanceof SsoVerificationError) throw e;
+        throw new KeeperDepositError(`Sign-in could not be checked: ${(e as Error).message}`);
+    }
+
+    return storeVerifiedSsoKeeperGeneration(identity, ownerPubkey, shares);
+}
+
+/**
+ * Everything about a deposit that can be checked without the sign-in: the provider, the owner, the
+ * shape of the split, and its hub fragment against the generation stored now. Returns the one
+ * sign-in fragment. Throws KeeperDepositError.
+ *
+ * Run BEFORE the token is verified, by every caller, because verifying consumes the nonce: a split
+ * that was never going to be stored must not cost the member their sign-in.
+ */
+export function checkSsoKeeperShares(
+    provider: unknown,
+    ownerPubkey: string,
+    shares: KeeperShareInput[],
+): KeeperShareInput {
     // Checked before anything else because `provider` becomes `holderRef`, which is a stored,
     // member-visible string taking part in a UNIQUE constraint. An unrecognised value must not
     // reach storage even by way of a verification error.
@@ -130,7 +165,6 @@ export async function depositSsoKeeperGeneration(
             + 'each provider through its own verified flow.',
         );
     }
-    const ssoShare = ssoShares[0];
 
     // Refused, not ignored, and checked across EVERY fragment rather than just the sso one (CR).
     if (shares.some(s => s.ssoLookupHash || s.ssoLookupSalt)) {
@@ -139,35 +173,38 @@ export async function depositSsoKeeperGeneration(
         );
     }
 
-    // Order matters: verify BEFORE touching storage. A failed sign-in must leave the existing
-    // generation exactly as it was — the member's current keepers are what they fall back on.
-    let identity;
-    try {
-        identity = await verifyIdToken(
-            provider,
-            idToken,
-            getConfiguredAudiences(provider),
-            nonce,
-            ownerPubkey,
-        );
-    } catch (e) {
-        if (e instanceof SsoVerificationError) throw e;
-        throw new KeeperDepositError(`Sign-in could not be checked: ${(e as Error).message}`);
-    }
+    // The hub-fragment rules as well, against what is stored for this owner now: a split that breaks
+    // them was never going to be stored either. storeVerifiedSsoKeeperGeneration applies them again,
+    // to the generation it actually carries forward.
+    planCarryForward(getCurrentShares(ownerPubkey), provider, shares, ssoShares[0]);
+    return ssoShares[0];
+}
 
-    const salt = newSsoLookupSalt();
-    const lookupHash = await ssoLookupHash(identity.provider, identity.sub, salt);
+interface CarryForward {
+    /** The hub fragment this deposit brings, if any. */
+    hubShare: KeeperShareInput | undefined;
+    /** Other providers' sign-in fragments already stored, which the new generation keeps. */
+    existingOtherSso: StoredKeeperShare[];
+    /** Whether any of those is a two-layer (legacy) fragment, which pairs with the stored hub. */
+    legacyOtherSso: boolean;
+}
 
-    const current = getCurrentShares(ownerPubkey);
+/**
+ * What a deposit for `provider` carries forward from `current`, the generation stored now. Throws
+ * KeeperDepositError when the deposit's hub fragment would strand what it carries, or a two-layer
+ * split arrives without one.
+ */
+function planCarryForward(
+    current: StoredKeeperShare[],
+    provider: SsoProvider,
+    shares: KeeperShareInput[],
+    ssoShare: KeeperShareInput,
+): CarryForward {
     // Find existing SSO shares for other active providers to carry over
     const existingOtherSso = current.filter(
-        s => s.holderType === 'sso' && s.holderRef !== identity.provider && s.ssoLookupHash && s.ssoLookupSalt
+        s => s.holderType === 'sso' && s.holderRef !== provider && s.ssoLookupHash && s.ssoLookupSalt
     );
 
-    let nextIndex = 1;
-    const finalShares: KeeperShareInput[] = [];
-
-    // 1. Hub share
     const hubShare = shares.find(s => s.holderType === 'hub');
 
     const isNewDepositSingle = isSingleBlobSso(ssoShare.kdfParams);
@@ -204,6 +241,37 @@ export async function depositSsoKeeperGeneration(
         throw new KeeperDepositError('A legacy sign-in split needs a hub fragment.');
     }
 
+    return { hubShare, existingOtherSso, legacyOtherSso };
+}
+
+/**
+ * Store a generation whose sign-in fragment is filed under `identity`.
+ *
+ * `identity` MUST be what `verifyIdToken` returned inside the SAME request, for this owner. That is
+ * the whole of this file's one property (above): the lookup hash comes from a `sub` this node
+ * verified, never from the client. Two callers: `depositSsoKeeperGeneration` just above, and the
+ * open door (`POST /api/join`), which enrols the sign-in that joined as the new member's recovery
+ * keeper with the token it has just checked, so one sign-in (one nonce, consumed once) does both.
+ */
+export async function storeVerifiedSsoKeeperGeneration(
+    identity: SsoIdentity,
+    ownerPubkey: string,
+    shares: KeeperShareInput[],
+): Promise<SsoKeeperResult> {
+    const ssoShare = checkSsoKeeperShares(identity.provider, ownerPubkey, shares);
+
+    const salt = newSsoLookupSalt();
+    const lookupHash = await ssoLookupHash(identity.provider, identity.sub, salt);
+
+    // Planned again, not reused from the check above: this is what is stored now, after the await,
+    // and it is the generation the new one is built from.
+    const current = getCurrentShares(ownerPubkey);
+    const { hubShare, existingOtherSso, legacyOtherSso } = planCarryForward(current, identity.provider, shares, ssoShare);
+
+    let nextIndex = 1;
+    const finalShares: KeeperShareInput[] = [];
+
+    // 1. Hub share
     if (hubShare) {
         finalShares.push({ ...hubShare, shareIndex: nextIndex++ });
     } else if (legacyOtherSso) {

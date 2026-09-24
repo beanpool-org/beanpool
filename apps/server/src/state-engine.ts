@@ -18,6 +18,7 @@ import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
+import { releaseOpenJoin } from './engine/open-join.js';
 import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
@@ -6369,6 +6370,12 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             db.prepare("DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)").run(publicKey);
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
+        // A member who deletes their own account frees the sign-in account they joined with through the open door,
+        // so it can join again; the join itself stays on record and still counts for its address. Not while
+        // suspended or disabled (the signature middleware lets them sign this route), or deleting the account
+        // would be a way out of the sanction with the same sign-in; and never on adminPruneUser, so a member the
+        // community removed cannot walk straight back in (engine/open-join.ts).
+        if (member.status !== 'suspended' && member.status !== 'disabled') releaseOpenJoin(publicKey);
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {

@@ -166,7 +166,12 @@ export function s3ConfigFromEnv(env: NodeJS.ProcessEnv = process.env): S3Config 
     return { endpoint, bucket, region, accessKeyId, secretAccessKey };
 }
 
-/** The part of a failed answer worth logging: the S3 error code, never the body (which can echo the request). */
+/**
+ * The part of a failed answer worth logging: the S3 error code, never the body (which can echo the request).
+ *
+ * Also how a missing OBJECT is told from a missing BUCKET: both are a 404, and only the first is "not there" —
+ * the second is a misconfigured node, and reading it as an absent photo would hide that.
+ */
 function s3ErrorCode(body: Buffer | string | null | undefined): string | null {
     if (!body) return null;
     const text = typeof body === 'string' ? body : body.subarray(0, 4096).toString('utf8');
@@ -353,7 +358,7 @@ export class S3ImageStore implements ImageStore {
         let url: URL;
         try { url = this.objectUrl(key); } catch { return null; }
         const res = this.syncCall(`GET ${key}`, () => this.build('GET', url), MAX_OBJECT_BYTES);
-        if (res.status === 404) return null;
+        if (res.status === 404 && s3ErrorCode(res.body) !== 'NoSuchBucket') return null;
         if (res.status !== 200) this.fail(`GET ${key}`, res);
         return res.body;
     }
@@ -460,7 +465,11 @@ export class S3ImageStore implements ImageStore {
         let url: URL;
         try { url = this.objectUrl(key); } catch { return null; }
         const res = await this.asyncCall(`GET ${key}`, () => this.build('GET', url));
-        if (res.status === 404) { await res.body?.cancel().catch(() => {}); return null; }
+        if (res.status === 404) {
+            const text = await res.text().catch(() => '');
+            if (s3ErrorCode(text) !== 'NoSuchBucket') return null;
+            this.fail(`GET ${key}`, { status: 404, body: text });
+        }
         if (res.status !== 200) return this.failAsync(`GET ${key}`, res);
         return readCapped(res, MAX_OBJECT_BYTES, `GET ${key}`);
     }
@@ -484,7 +493,11 @@ export class S3ImageStore implements ImageStore {
         let url: URL;
         try { url = this.objectUrl(key); } catch { return null; }
         const res = await this.asyncCall(`GET ${key}`, () => this.build('GET', url));
-        if (res.status === 404) { await res.body?.cancel().catch(() => {}); return null; }
+        if (res.status === 404) {
+            const text = await res.text().catch(() => '');
+            if (s3ErrorCode(text) !== 'NoSuchBucket') return null;
+            this.fail(`GET ${key}`, { status: 404, body: text });
+        }
         if (res.status !== 200) return this.failAsync(`GET ${key}`, res);
         const declared = Number(res.headers.get('content-length'));
         if (Number.isFinite(declared) && declared > MAX_OBJECT_BYTES) {

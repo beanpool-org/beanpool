@@ -3,8 +3,10 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import { isSyntheticAccount } from '@beanpool/core';
-import { db } from '../db/db.js';
+import { db, afterTransactionCommit } from '../db/db.js';
 import crypto from 'node:crypto';
+import { attachmentKey, getImageStore } from '../storage/image-store.js';
+import { deleteStoredObjects, storeAttachmentColumns } from '../storage/image-columns.js';
 import {
     getMember,
     getConversation,
@@ -224,7 +226,12 @@ export function sendMessage(
     db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce, msg.type, msg.metadata, msg.timestamp);
     
     if (attachment?.data && attachment?.nonce) {
-        db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime) VALUES (?, ?, ?, ?)`).run(msg.id, attachment.data, attachment.nonce, attachment.mime || 'image/jpeg');
+        // The ciphertext goes to the image store and the row keeps the nonce, the mime and a key
+        // (storage design §7). The node has never held the key that would decrypt either half, so nothing
+        // about what it can read changes; only where the 8 MB of it lives.
+        const cols = storeAttachmentColumns(getImageStore(), attachmentKey(msg.id), attachment.data);
+        db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, ?, ?, ?, ?)`)
+            .run(msg.id, cols.data, attachment.nonce, attachment.mime || 'image/jpeg', cols.storage_key);
     }
 
     // Only the conversation's participants — the people GET /api/messages/:id lets read it.
@@ -629,7 +636,12 @@ export function removeOldChatGroups(): number {
     db.transaction(() => {
         for (const { id } of doomed) {
             const parts = db.prepare('SELECT public_key FROM conversation_participants WHERE conversation_id = ?').all(id) as any[];
+            // Tombstones before caches: the rows go now, the objects once this transaction has committed.
+            const doomedObjects = (db.prepare(
+                'SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT id FROM messages WHERE conversation_id = ?)'
+            ).all(id) as any[]).map(r => r.storage_key as string);
             db.prepare('DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = ?)').run(id);
+            if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomedObjects));
             db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id);
             db.prepare('DELETE FROM conversation_participants WHERE conversation_id = ?').run(id);
             db.prepare('DELETE FROM chat_mutes WHERE conversation_id = ?').run(id);

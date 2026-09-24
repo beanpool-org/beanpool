@@ -210,7 +210,18 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         // exact copy with no orphan rows. Only after a successful fetch+parse, so the
         // empty window is milliseconds.
         if (fresh) {
-            clearReplicatedTables();
+            // The photo rows the primary told us it could NOT put in this payload survive the clear. The
+            // export omits a row whose object the primary cannot read, precisely so an importer does not blank
+            // its own good copy — and this replica's copy may be the only readable one left. Clearing them
+            // here would delete the row, orphan its object, and let the daily sweep reclaim the bytes, on the
+            // one operation an operator reaches for when a replica "looks wrong".
+            const keepPhotos = Array.isArray(payload.photosOmitted) ? payload.photosOmitted : [];
+            if (keepPhotos.length > 0) {
+                logger.warn('P2P', `[Backup] ⚠️ Force-resync: the primary could not read ${keepPhotos.length} photo object(s) `
+                    + 'of its own, so this payload does not carry those rows. Keeping this replica\'s copies of them — '
+                    + 'they may be the only readable ones left.');
+            }
+            clearReplicatedTables(keepPhotos);
             lastGeneratedAtMs = 0;
             // Forget all cursors so a failed import can't leave the next pull 304-ing
             // ("unchanged") or delta-ing against a cleared replica — it re-seeds fully.

@@ -6,6 +6,8 @@
  * 2. GET /api/manager/backups/download-db returns 400 when missing nodeId, 404 when backup DB missing.
  * 3. GET /api/manager/backups/history returns 400 when missing nodeId, history array when missing history dir.
  * 4. GET /api/manager/backups/download-history returns 400 for path-traversal or missing parameters.
+ * 8. A SHORT harvested backup says how short on the wire, and the gzip that builds the archive does NOT hold
+ *    the fleet manager's event loop (round 4: this route compresses more bytes than either backup path).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-manager-backups.ts
  */
@@ -14,7 +16,10 @@ delete process.env.CF_RECORD_NAME;
 process.env.ADMIN_PASSWORD = 'TestManagerAdmin123!';
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -23,6 +28,15 @@ import { initAdminPassword } from './config/local-config.js';
 const PORT = 8563;
 const BASE = `https://localhost:${PORT}`;
 const ADMIN_PW = 'TestManagerAdmin123!';
+
+/**
+ * How long the fleet manager's event loop may be held in one go while a download's archive is built.
+ *
+ * Gzipping 24 MB of incompressible objects takes a few hundred ms on this machine and far longer on the
+ * 1 vCPU manager node, so a synchronous `tar` shows up as one stall of that order. Async `execFile` leaves
+ * only the ordinary jitter of streaming the response.
+ */
+const STALL_BUDGET_MS = 120;
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -145,11 +159,40 @@ async function main(): Promise<void> {
     fs.utimesSync(path.join(sealedDir, 'beanpool-2026-09-19T01-02-03.bpsealed'), past, past);
     fs.writeFileSync(path.join(sealedDir, 'beanpool-identity-2026-09-01-legacy.bpsealed'), fakeSealed);
     fs.utimesSync(path.join(sealedDir, 'beanpool-identity-2026-09-01-legacy.bpsealed'), past, past);
+    // CHANGED in round 3, because what these three asserted is the defect the round found: a readable
+    // download used to be the bare `.db`, which since the image store is a database whose every photo and
+    // attachment is a `storage_key` pointing at bytes the file does not carry — and which the restore
+    // wizard could not take anyway, since it extracts a tar. The database's bytes are still checked, to
+    // the byte; they are now checked inside the archive that carries the images with them.
+    fs.mkdirSync(path.join(nodeDir, 'state.db.images', 'posts', 'p1'), { recursive: true });
+    const heldObject = Buffer.from('the bytes of a photo the database references');
+    fs.writeFileSync(path.join(nodeDir, 'state.db.images', 'posts', 'p1', '0-abcdef01.jpg'), heldObject);
+    const openTar = (bytes: Buffer): Record<string, Buffer> => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mgr-dl-'));
+        fs.writeFileSync(path.join(dir, 'x.tar.gz'), bytes);
+        execFileSync('tar', ['-xzf', path.join(dir, 'x.tar.gz'), '-C', dir]);
+        fs.rmSync(path.join(dir, 'x.tar.gz'));
+        const out: Record<string, Buffer> = {};
+        const walk = (d: string) => {
+            for (const f of fs.readdirSync(d)) {
+                const full = path.join(d, f);
+                if (fs.lstatSync(full).isDirectory()) walk(full);
+                else out[path.relative(dir, full).split(path.sep).join('/')] = fs.readFileSync(full);
+            }
+        };
+        walk(dir);
+        fs.rmSync(dir, { recursive: true, force: true });
+        return out;
+    };
     const plainRes = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
     const plainBody = Buffer.from(await plainRes.arrayBuffer());
-    assert(plainRes.status === 200 && plainBody.equals(sqlite) && plainRes.headers.get('x-backup-locked') === 'no'
-        && /beanpool-backup-mullum\.db"/.test(plainRes.headers.get('content-disposition') || ''),
-        `download-db serves the readable state.db when it is newer than any locked file, marked not locked (got ${plainRes.status})`);
+    const plainMembers = openTar(plainBody);
+    assert(plainRes.status === 200 && plainMembers['state.db']?.equals(sqlite) === true
+        && plainRes.headers.get('x-backup-locked') === 'no'
+        && /beanpool-backup-mullum\.tar\.gz"/.test(plainRes.headers.get('content-disposition') || ''),
+        `download-db serves the readable backup as a restorable archive when it is newer than any locked file, marked not locked (got ${plainRes.status}, ${Object.keys(plainMembers).join(', ')})`);
+    assert(plainMembers['images/posts/p1/0-abcdef01.jpg']?.equals(heldObject) === true,
+        '…and the images beside that database come with it, byte for byte, so a restore from it is whole');
     const hist2 = (await (await fetch(`${BASE}/api/manager/backups/history?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } })).json() as any).history;
     const names = hist2.map((h: any) => `${h.filename}:${h.sealed}:${h.identity}`).sort();
     assert(JSON.stringify(names) === JSON.stringify([
@@ -158,11 +201,74 @@ async function main(): Promise<void> {
         'beanpool-identity-2026-09-01-legacy.bpsealed:true:true',
     ]), `history lists readable daily copies, locked backups and the locked key file (${names.join(', ')})`);
     const dayRes = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-2026-09-18.db`, { headers: { 'X-Admin-Password': ADMIN_PW } });
-    assert(dayRes.status === 200 && Buffer.from(await dayRes.arrayBuffer()).equals(sqlite) && dayRes.headers.get('x-backup-locked') === 'no',
-        `download-history serves a readable daily copy, marked not locked (got ${dayRes.status})`);
+    const dayMembers = openTar(Buffer.from(await dayRes.arrayBuffer()));
+    assert(dayRes.status === 200 && dayMembers['state.db']?.equals(sqlite) === true && dayRes.headers.get('x-backup-locked') === 'no',
+        `download-history serves a readable daily copy as a restorable archive, marked not locked (got ${dayRes.status})`);
     const keyRes = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-identity-2026-09-01-legacy.bpsealed`, { headers: { 'X-Admin-Password': ADMIN_PW } });
     assert(keyRes.status === 200 && Buffer.from(await keyRes.arrayBuffer()).equals(fakeSealed), `the locked legacy key file downloads (got ${keyRes.status})`);
-    assert(![dbBody, oneBody, idBody, plainBody].some(isGz), 'no manager download starts with gzip magic');
+    // Narrowed in round 3, and for the same reason: a LOCKED file and the 410 must never be a plain archive
+    // (that is what this was protecting), while the readable download now must be one.
+    assert(![dbBody, oneBody, idBody].some(isGz), 'no locked download starts with gzip magic: a sealed file is served as it is');
+    assert(isGz(plainBody), 'while a readable backup IS a gzip archive now — the database and its images together');
+
+    // 8a. The shortfall on the wire. The harvester keeps the node's `missing-images.json` beside the database,
+    //     so the manager's own download can say how short the file is in the same headers a node's backup
+    //     route sets — one reader per UI covers both, and nothing has to open the archive to find out.
+    fs.writeFileSync(path.join(nodeDir, 'state.db.missing-images.json'), JSON.stringify({
+        note: 'This backup is SHORT.', takenAt: '2026-09-24T02:03:04.000Z',
+        referenced: 3, staged: 1, missing: ['posts/p2/0-deadbeef.jpg', 'attachments/m9.bin'],
+    }));
+    const shortRes = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    const shortMembers = openTar(Buffer.from(await shortRes.arrayBuffer()));
+    assert(shortRes.status === 200 && shortRes.headers.get('x-backup-contents') === 'database+images-partial',
+        `download-db says the harvested backup is partial (got ${shortRes.headers.get('x-backup-contents')})`);
+    assert(shortRes.headers.get('x-backup-missing-images') === '2',
+        `…with the count a UI can show (${shortRes.headers.get('x-backup-missing-images')})`);
+    assert(shortRes.headers.get('x-backup-images') === '1/3',
+        `…as <staged>/<referenced>, spelled exactly as a node's own backup route spells it (${shortRes.headers.get('x-backup-images')})`);
+    assert(!!shortMembers['missing-images.json'],
+        '…and the manifest rides inside the archive, so a restore from it reports the shortfall too');
+    fs.rmSync(path.join(nodeDir, 'state.db.missing-images.json'));
+
+    // 8b. The gzip must not hold the event loop.
+    //
+    // `createPlainBackup` and `createSealedBackup` went async for exactly this reason, and this route
+    // compresses MORE bytes than either: the harvester's kept database plus every object beside it, per
+    // download. On the 1 vCPU manager node a synchronous `tar` stalls every other request for the duration,
+    // including the harvester's own pulls. Measured rather than asserted about the source: a timer ticking
+    // every 2 ms cannot fire at all while the loop is blocked in `execFileSync`.
+    const bulkDir = path.join(nodeDir, 'state.db.images', 'posts', 'bulk');
+    fs.mkdirSync(bulkDir, { recursive: true });
+    // Incompressible, so gzip has to do real work rather than run away with a run of zeroes.
+    for (let i = 0; i < 12; i++) {
+        fs.writeFileSync(path.join(bulkDir, `${i}-bulk.jpg`), crypto.randomBytes(2 * 1024 * 1024));
+    }
+    //
+    // The measurement is the LONGEST SINGLE STALL, not the number of ticks: a synchronous `tar` blocks only
+    // for the compression, and the rest of the request — TLS, the 24 MB response — leaves plenty of room for
+    // a tick either way. Counting ticks therefore passes on the blocking version too (measured: 39 of them).
+    // One gap the length of the gzip is the thing that actually distinguishes them.
+    let ticks = 0;
+    let worstStallMs = 0;
+    let lastTickAt = Date.now();
+    const ticker = setInterval(() => {
+        const now = Date.now();
+        worstStallMs = Math.max(worstStallMs, now - lastTickAt);
+        lastTickAt = now;
+        ticks++;
+    }, 2);
+    const startedAt = Date.now();
+    const bulkRes = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    const bulkBytes = Buffer.from(await bulkRes.arrayBuffer());
+    const elapsed = Date.now() - startedAt;
+    clearInterval(ticker);
+    assert(bulkRes.status === 200 && isGz(bulkBytes),
+        `download-db still serves the archive with 24 MB of objects in it (got ${bulkRes.status}, ${bulkBytes.length} bytes)`);
+    console.log(`   …the download took ${elapsed} ms: ${ticks} timer tick(s), worst single stall ${worstStallMs} ms.`);
+    assert(worstStallMs < STALL_BUDGET_MS,
+        `the event loop is never held for the length of a gzip — async execFile, not execFileSync `
+        + `(worst stall ${worstStallMs} ms of ${elapsed} ms, budget ${STALL_BUDGET_MS} ms)`);
+    fs.rmSync(bulkDir, { recursive: true, force: true });
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

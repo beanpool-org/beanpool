@@ -132,9 +132,20 @@ async function runSuite() {
             assert(JSON.stringify(members) === JSON.stringify(['node_config.json', 'state.db']),
                 `4. ${stage}: …holding state.db and node_config.json only — no keys, no bundle (${members.join(', ')})`);
         }
+        // This used to assert the snapshot download WAS the snapshot file — 'SQLite format 3' and nothing
+        // else. That is the shape the deciding pass refused: since the images left state.db, a bare .db is a
+        // database whose every photo is a storage_key pointing at bytes the download does not carry, and it
+        // restores an empty gallery without saying a word. Unlocked, the snapshot now leaves as the same
+        // readable tar.gz /backup sends — state.db, node_config.json and the objects that database
+        // references — and is still flagged not locked, which is what this check is here to hold.
         const sd = await hit('GET', `/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}`, { 'x-admin-password': testPass });
-        assert(sd.status === 200 && sd.body.subarray(0, 15).toString() === 'SQLite format 3' && sd.headers.get('x-backup-locked') === 'no',
-            `4. ${stage}: the snapshot download is the snapshot file itself, flagged not locked (got ${sd.status})`);
+        assert(sd.status === 200 && isGzip(sd.body) && sd.headers.get('x-backup-locked') === 'no',
+            `4. ${stage}: the snapshot download is a readable archive, flagged not locked (got ${sd.status})`);
+        assert(sd.headers.get('x-backup-contents') === 'database+images',
+            `4. ${stage}: …and says it carries the node's images, not the database alone (${sd.headers.get('x-backup-contents')})`);
+        const sdMembers = tarMembers(sd.body).sort();
+        assert(sdMembers.includes('state.db'),
+            `4. ${stage}: …with the snapshot inside it as state.db (${sdMembers.join(', ')})`);
         const st = await fetch(base + '/api/local/admin/backup-status', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': testPass }, body: '{}' });
         const sj: any = await st.json();
         assert(sj.backupLock?.locked === false && sj.backupLock?.message === NOT_LOCKED && sj.backupLock?.reason === 'no-recovery-code',

@@ -2,8 +2,10 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { db } from '../db/db.js';
+import { db, afterTransactionCommit } from '../db/db.js';
 import crypto from 'node:crypto';
+import { getImageStore, postPhotoKey } from '../storage/image-store.js';
+import { deleteStoredObjects, photoDataOf, storePhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { getLocalConfig } from '../config/local-config.js';
 import {
     exportSyncState as exportSyncStateEngine,
@@ -152,13 +154,117 @@ export async function signSyncPayload(cb: SyncCallbacks, payload: SyncPayload): 
     return payload;
 }
 
+/**
+ * Put the photo bytes back into the sync payload (storage design §7: the payload does NOT change this phase).
+ *
+ * `exportSyncStateEngine` does `SELECT * FROM post_photos`, so once a row has been evacuated its `photo_data`
+ * is null and four new columns have appeared. Both would be a wire change, and a wire change here is a
+ * compatibility break with every peer and every replica that has not been upgraded yet — including the delta
+ * backup replica, which reconstructs a whole node from this payload. So the rows are put back exactly as they
+ * were: `photo_data` rebuilt from the store, and the store's own columns stripped.
+ *
+ * `photoDataOf` reproduces the original string character for character (see storage/image-columns.ts), so a
+ * peer's import is byte-identical to what it would have received before the photo was evacuated. Photos by
+ * reference is a later phase; until then the saving is on disk here, not on the wire.
+ *
+ * ## A photo this node can no longer read is OMITTED, never exported empty
+ *
+ * If the images directory has been lost or unmounted, `photoDataOf` throws. That must not fail the whole
+ * export — a replica pulling a delta needs the ledger rows in it far more than it needs one photo. But it
+ * must not export the row either. The importer (`INSERT OR REPLACE INTO post_photos`, below) treats every
+ * row it receives as authoritative, and an empty `photo_data` is not storable, so the replica would write
+ * `photo_data = ''`: a row the evacuation job skips (`photo_data != ''`) and the photo route reads as
+ * nothing. The replica's intact copy would be gone for good, because the row's `updated_at` never changed
+ * and no later delta pull would ever send it again.
+ *
+ * So the row is dropped from the payload. The importer only upserts what it is given, so what it does not
+ * receive it keeps. This is the one case where the backup copy is the only good one left, and the export's
+ * job is to not destroy it.
+ *
+ * ## …and the payload SAYS which rows those were
+ *
+ * "What it does not receive it keeps" is true of an ordinary delta or full pull, and false of a FORCE-RESYNC:
+ * `pullOnce('resync')` calls `clearReplicatedTables()` — which lists `post_photos` — before importing, so a
+ * row dropped here is a row the replica deletes and never gets back. Its object becomes an orphan and the
+ * daily sweep reclaims it after the grace period. The one case this omission exists for would be destroyed by
+ * the natural thing an operator does when a replica "looks wrong".
+ *
+ * So the keys of the omitted rows go into {@link SyncPayload.photosOmitted} — an additive, optional field a
+ * peer that does not know it simply ignores — and the resync keeps exactly those rows and their objects. It
+ * is logged on both sides: this node says it could not read them, and the replica says it is keeping them.
+ */
+/**
+ * Put every photo in an incoming payload through the image store, keyed `post_id|order_num`.
+ *
+ * A peer still sends bytes inline (the payload is frozen this phase), and they go straight through the store
+ * on the way in — so an importing node's database does not re-grow by everything its peers hold. A value the
+ * store cannot reproduce exactly stays in the row, as it would have before.
+ *
+ * Runs before the import transaction opens, so the write lock is never held across an fsync. See the call
+ * site for why that matters on a small node.
+ */
+function storeImportedPhotos(photos: any[]): Map<string, PhotoColumns> {
+    const store = getImageStore();
+    const out = new Map<string, PhotoColumns>();
+    for (const ph of photos) {
+        // The other half of the rule `restoreInlinePhotos` keeps on the way out, enforced here on the way
+        // in — because the peer sending this payload may be a node that has not been upgraded yet, and
+        // during a rolling upgrade it usually is. A photo row with no bytes carries no information, and
+        // applying one can only destroy: INSERT OR REPLACE would overwrite an intact local photo with a row
+        // the evacuation job skips and the photo route serves as a 404, and the peer's unchanged
+        // `updated_at` means no later delta pull ever corrects it. Nothing to apply, so apply nothing.
+        if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
+        // Last one wins, exactly as the INSERT OR REPLACE loop did when a payload named the same slot twice.
+        out.set(`${ph.post_id}|${ph.order_num}`, storePhotoColumns(
+            store,
+            sb => postPhotoKey(ph.post_id, ph.order_num, sb.sha256, sb.mime),
+            ph.photo_data,
+        ));
+    }
+    return out;
+}
+
+function restoreInlinePhotos(payload: SyncPayload): SyncPayload {
+    const photos = (payload as any).photos as any[] | undefined;
+    if (!Array.isArray(photos) || photos.length === 0) return payload;
+    const store = getImageStore();
+    const omitted: string[] = [];
+    (payload as any).photos = photos.flatMap(row => {
+        let photoData: string | null;
+        try {
+            photoData = photoDataOf(row, store);
+        } catch (e) {
+            omitted.push(`${row.post_id}|${row.order_num}`);
+            console.error('[Sync] Could not read a photo out of the image store; omitting the row from this export so a replica keeps its own copy:', e);
+            return [];
+        }
+        // `photoDataOf` returns null only for a row that genuinely holds no image and names no object.
+        // Such a row exported whatever its column held before this change, so it still does.
+        const out: any = { post_id: row.post_id, photo_data: photoData ?? row.photo_data ?? null, order_num: row.order_num };
+        if (row.updated_at !== undefined) out.updated_at = row.updated_at;
+        return [out];
+    });
+    if (omitted.length > 0) {
+        // Named in the payload so a resync can keep the replica's copies. Additive: a peer that does not know
+        // the field ignores it, and the rows it receives are exactly the rows it received before.
+        payload.photosOmitted = omitted;
+        console.warn(
+            `[Sync] ⚠️  ${omitted.length} photo row(s) are NOT in this export: this node cannot read the object `
+            + `each one names, so sending the row would blank a peer's or a replica's good copy. `
+            + `The payload names them so a force-resync keeps them: ${omitted.slice(0, 5).join(', ')}`
+            + `${omitted.length > 5 ? ', …' : ''}`,
+        );
+    }
+    return payload;
+}
+
 export async function exportSyncState(
     cb: SyncCallbacks,
     nodeId: string,
     since?: string | null,
     commonsBalance = 0
 ): Promise<SyncPayload> {
-    const payload = exportSyncStateEngine(db, nodeId, since, commonsBalance);
+    const payload = restoreInlinePhotos(exportSyncStateEngine(db, nodeId, since, commonsBalance));
     return signSyncPayload(cb, payload);
 }
 
@@ -177,7 +283,11 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
         case 'post_photos': {
             const [postId, orderNum] = rowKey.split('|');
             if (!postId || orderNum === undefined) return false;
+            // Row now, object after the commit (storage design §7).
+            const key = (db.prepare(`SELECT storage_key FROM post_photos WHERE post_id=? AND order_num=?`)
+                .get(postId, Number(orderNum)) as any)?.storage_key as string | undefined;
             const r = db.prepare(`DELETE FROM post_photos WHERE post_id=? AND order_num=?`).run(postId, Number(orderNum));
+            if (r.changes > 0 && key) afterTransactionCommit(() => deleteStoredObjects([key]));
             return r.changes > 0;
         }
         case 'event_rsvps': {
@@ -204,7 +314,11 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
         // A whole conversation deleted on the primary: the old chat groups (removed 2026-09-19, groups decision 2)
         // and the per-post threads chat consolidation collapsed. Its messages and membership go with it.
         case 'conversations': {
+            const doomedObjects = (db.prepare(
+                `SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT id FROM messages WHERE conversation_id=?)`
+            ).all(rowKey) as any[]).map(r => r.storage_key as string);
             db.prepare(`DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id=?)`).run(rowKey);
+            if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomedObjects));
             db.prepare(`DELETE FROM messages WHERE conversation_id=?`).run(rowKey);
             db.prepare(`DELETE FROM conversation_participants WHERE conversation_id=?`).run(rowKey);
             const r = db.prepare(`DELETE FROM conversations WHERE id=?`).run(rowKey);
@@ -400,6 +514,17 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     let tombstonesApplied = 0, conflictsSkipped = 0, recoverySharesImported = 0;
     let groupChanges = 0;
 
+    // Photos go through the store BEFORE the transaction opens, never inside it — the same rule the create
+    // and update paths keep (`storedPhotoColumns` in engine/posts.ts). Each `store.put` is a mkdir, a temp
+    // write, an `fsyncSync` and a rename; doing that per photo while holding the write lock would, on a
+    // force-resync or a first full snapshot, stall a 1 vCPU node for one fsync per photo — thousands of them
+    // on a mature node — with nothing else able to run.
+    //
+    // It also keeps a failed import honest. If the transaction rolls back after the puts, the objects it
+    // wrote are orphans, but they are content-addressed: the retry re-derives the same keys and re-uses
+    // them, and the storage-health sweep reclaims whatever is genuinely left over.
+    const importedPhotoColumns = remote.photos ? storeImportedPhotos(remote.photos) : null;
+
     currentImportOrigin = remote.nodeId;
     db.pragma('foreign_keys = OFF');
 
@@ -569,14 +694,24 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
-            if (remote.photos) {
-                for (const ph of remote.photos) {
-                    db.prepare(`INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num) 
-                                VALUES (?, ?, ?)`).run(
-                        ph.post_id,
-                        ph.photo_data,
-                        ph.order_num
-                    );
+            if (importedPhotoColumns) {
+                // INSERT OR REPLACE over a row that already named an object leaves that object with
+                // nothing pointing at it. Deliberately not deleted here: the import is a hot loop over a
+                // whole payload, an unlink per row is a syscall per row, and the object is harmless where
+                // it is. The storage-health orphan sweep reclaims it. Re-importing the SAME photo costs
+                // nothing at all — the key is content-addressed, so it is the same key.
+                //
+                // The bytes are already on disk: `storeImportedPhotos` put them there before this
+                // transaction opened. All that is left in here is the row.
+                const insertPhoto = db.prepare(
+                    `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`
+                );
+                for (const [key, cols] of importedPhotoColumns) {
+                    const sep = key.lastIndexOf('|');
+                    const postId = key.slice(0, sep);
+                    const orderNum = Number(key.slice(sep + 1));
+                    insertPhoto.run(postId, cols.photo_data, orderNum, cols.storage_key, cols.sha256, cols.bytes, cols.mime);
                 }
             }
 

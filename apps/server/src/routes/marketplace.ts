@@ -17,6 +17,8 @@ import {
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
+import { getImageStore } from '../storage/image-store.js';
+import { attachmentDataOf, photoBytesOf, type AttachmentRow, type PostPhotoRow } from '../storage/image-columns.js';
 import { getPeerOrigins } from '../connector-manager.js';
 import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
@@ -62,9 +64,36 @@ export function createMarketplaceRoutes(deps: RouteDeps): Router {
 
 router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     const { id, orderNum } = ctx.params;
-    const photo = db.prepare(`SELECT photo_data FROM post_photos WHERE post_id = ? AND order_num = ?`).get(id, Number(orderNum)) as { photo_data: string } | undefined;
-    
+    // THE ROW FIRST, ALWAYS (storage design §7). Existence, and therefore deletion, is decided here and
+    // never by asking the store whether a file happens to be lying around: the delete paths remove the row
+    // inside their transaction and the object only after it commits, so between those two moments the file
+    // still exists and must not be served. Reading the row first is what makes that window safe.
+    const photo = db.prepare(
+        `SELECT photo_data, storage_key, sha256, bytes, mime FROM post_photos WHERE post_id = ? AND order_num = ?`
+    ).get(id, Number(orderNum)) as PostPhotoRow | undefined;
+
     if (!photo) {
+        ctx.status = 404;
+        ctx.body = { error: 'Photo not found' };
+        return;
+    }
+
+    // A row that has not been evacuated yet is served from the row, exactly as it always was; an evacuated
+    // one is served from the store. The two produce identical bytes and an identical content type — that is
+    // the whole contract of storage/image-columns.ts, and what lets a photo be evacuated under a client's
+    // immutable cache entry without invalidating it.
+    let served: { buffer: Buffer; contentType: string } | null;
+    try {
+        served = photoBytesOf(photo, getImageStore());
+    } catch (e) {
+        // The row says the bytes are in the store and they are not: a lost or unmounted images directory.
+        // 404 would tell the member their photo never existed and tell the operator nothing.
+        console.error(`[Photos] ${id}/${orderNum}:`, e);
+        ctx.status = 503;
+        ctx.body = { error: 'This photo is temporarily unavailable' };
+        return;
+    }
+    if (!served) {
         ctx.status = 404;
         ctx.body = { error: 'Photo not found' };
         return;
@@ -74,29 +103,38 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // updated_at (?v=…), so an edited photo is served under a NEW url. That lets clients cache
     // the bytes forever — killing the cold-start re-download of every photo — with no staleness.
     ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
-
-    // Parse out data URL if present
-    const match = photo.photo_data.match(/^data:([^;]+);base64,(.*)$/);
-    if (match) {
-        ctx.type = match[1];
-        ctx.body = Buffer.from(match[2], 'base64');
-    } else {
-        ctx.type = 'image/jpeg';
-        ctx.body = Buffer.from(photo.photo_data, 'base64');
-    }
+    ctx.type = served.contentType;
+    ctx.body = served.buffer;
 });
 
 // Lazy-load an encrypted message attachment (image). Returns ciphertext only —
 // the node can't read it; the recipient decrypts with the DM key + nonce.
 router.get('/api/messages/:id/attachment', async (ctx) => {
     const { id } = ctx.params;
-    const row = db.prepare(`SELECT data, nonce, mime FROM message_attachments WHERE message_id = ?`).get(id) as { data: string; nonce: string; mime: string } | undefined;
+    // The row first, for the same reason as the photo route above.
+    const row = db.prepare(`SELECT data, nonce, mime, storage_key FROM message_attachments WHERE message_id = ?`).get(id) as AttachmentRow | undefined;
     if (!row) {
         ctx.status = 404;
         ctx.body = { error: 'Attachment not found' };
         return;
     }
-    ctx.body = { data: row.data, nonce: row.nonce, mime: row.mime || 'image/jpeg' };
+    // `data` is the same base64 ciphertext whether it came from the row or from the store, and `nonce` never
+    // left the row: the recipient's decryption cannot tell the two apart, which it must not be able to.
+    let data: string | null;
+    try {
+        data = attachmentDataOf(row, getImageStore());
+    } catch (e) {
+        console.error(`[Attachments] ${id}:`, e);
+        ctx.status = 503;
+        ctx.body = { error: 'This attachment is temporarily unavailable' };
+        return;
+    }
+    if (data === null) {
+        ctx.status = 404;
+        ctx.body = { error: 'Attachment not found' };
+        return;
+    }
+    ctx.body = { data, nonce: row.nonce, mime: row.mime || 'image/jpeg' };
 });
 
 const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;

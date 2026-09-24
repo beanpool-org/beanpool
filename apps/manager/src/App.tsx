@@ -58,6 +58,7 @@ import { LogsModule, type LogEntry } from './components/modules/LogsModule';
 import { AiServicesModule } from './components/modules/AiServicesModule';
 
 import { IS_FLEET_MODE } from './lib/mode';
+import { downloadShortfall } from './lib/backup-shortfall';
 import { AdminLoginCard } from './components/auth/AdminLoginCard';
 import { HomeScreen } from './components/modules/HomeScreen';
 import { PeopleSafetySection } from './components/modules/PeopleSafetySection';
@@ -307,6 +308,10 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(downloadUrl);
+            // A backup that could not carry every photo is still a backup, and still a 200 — so this is the
+            // only place the operator can be told. Saying nothing here is what made the shortfall silent.
+            const short = downloadShortfall(res);
+            if (short) alert(`Backup downloaded, but it is not complete.\n\n${short}`);
         } catch (e: unknown) {
             alert('Failed to download backup: ' + (e instanceof Error ? e.message : String(e)));
         }

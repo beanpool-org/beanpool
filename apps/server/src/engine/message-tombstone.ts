@@ -10,7 +10,8 @@
 // convenor". Everything hung off the message goes with it — reactions, mentions, the reply it quoted, and any
 // attachment blob, which is node-local and so is hard-deleted rather than tombstoned.
 
-import { db } from '../db/db.js';
+import { db, afterTransactionCommit } from '../db/db.js';
+import { deleteStoredObjects } from '../storage/image-columns.js';
 
 export interface MessageTombstone {
     ciphertext: string;
@@ -45,7 +46,11 @@ export function writeMessageTombstone(messageId: string, row: any, removedBy: st
         db.prepare(`UPDATE messages SET type = 'removed', ciphertext = ?, nonce = 'plaintext-v1', metadata = ? WHERE id = ?`)
             .run(ciphertext, metadata, messageId);
         // The photo goes too, or /api/attachment/:id would still serve it after a "delete for everyone".
+        // The row inside the transaction, the stored object after it commits (storage design §7): the route
+        // reads the row, so the object being a moment behind can never make a removed photo servable.
+        const key = (db.prepare('SELECT storage_key FROM message_attachments WHERE message_id = ?').get(messageId) as any)?.storage_key as string | undefined;
         db.prepare('DELETE FROM message_attachments WHERE message_id = ?').run(messageId);
+        if (key) afterTransactionCommit(() => deleteStoredObjects([key]));
     })();
 
     return { ciphertext, metadata, removedAt };

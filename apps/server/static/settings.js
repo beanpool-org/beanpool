@@ -2665,6 +2665,28 @@
 
 
         // ======================== DATABASE BACKUP ========================
+
+        /**
+         * What a download said the file is SHORT of, or '' when it is whole.
+         *
+         * A node ships every image object its store holds and says how many it could not. A missing object no
+         * longer refuses the backup — that refusal made a node with one lost photo un-backupable from this
+         * very screen, with nothing the operator could click — so "short" now arrives as a SUCCESSFUL
+         * response, and this tab is the only place the operator can learn of it.
+         */
+        function backupShortfall(res) {
+            const counts = (res.headers.get('X-Backup-Images') || '').split('/').map(Number);
+            const staged = counts[0], referenced = counts[1];
+            const stated = Number(res.headers.get('X-Backup-Missing-Images'));
+            const missing = Number.isFinite(stated) && stated > 0
+                ? stated
+                : (Number.isFinite(staged) && Number.isFinite(referenced) && referenced > staged ? referenced - staged : 0);
+            if (missing <= 0) return '';
+            const of = Number.isFinite(referenced) && referenced > 0 ? ' of ' + referenced : '';
+            return 'This backup is missing ' + missing + of + ' photo(s) or attachment(s): this node no longer '
+                + 'holds those objects, and the archive lists which ones. Everything else is in the file.';
+        }
+
         async function downloadBackup() {
             if (!authToken) return;
             const btn = document.getElementById('btn-backup');
@@ -2693,8 +2715,14 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                statusEl.textContent = '✅ Backup downloaded';
-                statusEl.style.color = '#10b981';
+                const short = backupShortfall(res);
+                if (short) {
+                    statusEl.textContent = '⚠️ Backup downloaded, but not complete. ' + short;
+                    statusEl.style.color = '#f59e0b';
+                } else {
+                    statusEl.textContent = '✅ Backup downloaded';
+                    statusEl.style.color = '#10b981';
+                }
             } catch (e) {
                 statusEl.textContent = '❌ ' + e.message;
                 statusEl.style.color = '#ef4444';
@@ -2739,8 +2767,20 @@
                     throw new Error(err.error || `HTTP ${res.status}`);
                 }
 
-                statusEl.innerHTML = '✅ <b>Restore successful!</b><br/>The node is restarting. If you are not using a process manager (like Docker or PM2), your server has stopped and you must <b>restart it manually</b>.';
-                statusEl.style.color = '#10b981';
+                // A backup that was SHORT when it was taken, or an image store that could not be put back in
+                // full, still answers success: true — the database is in and the node is restarting. The
+                // only place the operator can learn the photos are missing is right here; without it they
+                // find out at the first 503.
+                const body = await res.json().catch(() => ({}));
+                const restarting = 'The node is restarting. If you are not using a process manager (like Docker or PM2), your server has stopped and you must <b>restart it manually</b>.';
+                if (body && typeof body.warning === 'string' && body.warning) {
+                    const safe = body.warning.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+                    statusEl.innerHTML = '⚠️ <b>Restored, but not complete.</b><br/>' + safe + '<br/>' + restarting;
+                    statusEl.style.color = '#f59e0b';
+                } else {
+                    statusEl.innerHTML = '✅ <b>Restore successful!</b><br/>' + restarting;
+                    statusEl.style.color = '#10b981';
+                }
                 statusEl.classList.add('show');
                 
                 // Attempt to reload after 5 seconds to show login or re-connect
@@ -3370,11 +3410,21 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = name;
+                // A snapshot download is no longer the bare `.db`: it is a tar.gz carrying the database AND
+                // the images that database references, or a sealed envelope. Save it under the name the
+                // server gave it, so the extension says what the file actually is.
+                const disposition = res.headers.get('content-disposition') || '';
+                const match = /filename="?([^";]+)"?/i.exec(disposition);
+                const served = match && match[1] ? match[1].trim() : '';
+                a.download = (served && !served.includes('/') && !served.includes('\\') && !served.includes('..')) ? served : name;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
+                // A snapshot's objects were captured when it was taken, so this is rare — but if one of them
+                // has since been lost from disk the file is short, and only this line says so.
+                const short = backupShortfall(res);
+                if (short) alert('Snapshot downloaded, but it is not complete.\n\n' + short);
             } catch (e) {
                 alert('Download failed: ' + e.message);
             }

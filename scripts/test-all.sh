@@ -386,6 +386,7 @@ run_federation_suites() {
       test-social-ratings
       test-app-store-versions
       test-node-profile
+      test-profile-feature-gate
       test-global-no-beans
       test-funnel-event
       test-handshake

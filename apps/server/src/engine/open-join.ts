@@ -115,6 +115,15 @@ export function openJoinTaken(joinHash: string): 'joined' | 'removed' | null {
     return row.status === 'pruned' ? 'removed' : 'joined';
 }
 
+/**
+ * Whether a re-key replaced this key, or is replacing it (engine/member-wizards.ts). A replaced key is no member any
+ * more, but it is not a newcomer's either: every write it signs is refused (assertMemberActive), so it is refused
+ * here too, rather than joined as a second member nobody can use. Both writers of `invalidated_keys` lowercase.
+ */
+export function openJoinKeyInvalidated(publicKey: string): boolean {
+    return !!db.prepare('SELECT 1 FROM invalidated_keys WHERE public_key = ?').get(publicKey.toLowerCase());
+}
+
 export interface OpenJoinInput {
     /** The key that signed the request. Never a body field. */
     publicKey: string;
@@ -125,7 +134,7 @@ export interface OpenJoinInput {
     ipHash: string;
 }
 
-export type OpenJoinRefusal = 'already_member' | 'already_joined' | 'removed' | 'rate_limited';
+export type OpenJoinRefusal = 'already_member' | 'key_invalidated' | 'already_joined' | 'removed' | 'rate_limited';
 
 export type OpenJoinOutcome =
     | { ok: true; member: Member }
@@ -146,6 +155,7 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
     const { publicKey, callsign, provider, joinHash, ipHash } = input;
     return db.transaction((): OpenJoinOutcome => {
         if (getMember(db, publicKey)) return { ok: false, reason: 'already_member' };
+        if (openJoinKeyInvalidated(publicKey)) return { ok: false, reason: 'key_invalidated' };
         const taken = openJoinTaken(joinHash);
         if (taken === 'removed') return { ok: false, reason: 'removed' };
         if (taken) return { ok: false, reason: 'already_joined' };

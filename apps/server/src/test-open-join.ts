@@ -20,6 +20,9 @@
  *      cleared once a day old, by the next join or by the timer when nobody joins; the auth limiter still applies
  *   8. deleting your own account frees the sign-in account; one deleted while suspended, or a member the community
  *      removed, stays used (403)
+ *   8b. a member re-keyed onto a new device keeps their sign-in account: deleting the new identity frees it, a
+ *      community removal keeps it used (403, not 409); the replaced key is refused at the door (403, never a
+ *      500), and a failure inside the join is an answer, not a 500 that names tables
  *   9. the door is read per request: back to local, the routes 404 again
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-join.ts
@@ -35,11 +38,12 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, adminPruneUser } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { _resetJwksCacheForTests, _clearNoncesForTests, ssoLookupHash } from './sso.js';
+import { _resetJwksCacheForTests, _clearNoncesForTests, ssoLookupHash, issueNonce } from './sso.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { getFunnel } from './engine/funnel.js';
-import { OPEN_JOIN_LIMITS, startForgettingJoinAddresses } from './engine/open-join.js';
+import { OPEN_JOIN_LIMITS, startForgettingJoinAddresses, forgetOldJoinAddresses, openJoinHash, registerOpenJoin } from './engine/open-join.js';
+import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { sealSeedToSso, sealShareToSso, openShareFromSso } from '@beanpool/core';
 
 const PORT = 8729;
@@ -435,6 +439,88 @@ async function main(): Promise<void> {
     const jonNonce = await joinNonce(jon);
     const jonJoin = await join(jon, { callsign: 'Jon', provider: 'apple', idToken: mint('apple', { sub: 'bea.apple.sub', nonce: jonNonce }), nonce: jonNonce });
     assert(jonJoin.status === 403 && jonJoin.body?.code === 'removed', `so that Apple account cannot rejoin fresh either (got ${jonJoin.status})`);
+
+    /** Every join from this address so far moved past both windows, and its address hash cleared: a fresh day. */
+    const freshAddress = () => {
+        db.prepare('UPDATE open_joins SET joined_at = ? WHERE ip_hash = ?').run(new Date(Date.now() - 25 * 3600_000).toISOString(), ipHash);
+        forgetOldJoinAddresses();
+    };
+
+    // ── 8b. a re-keyed member ────────────────────────────────────────────────────────────────────
+    console.log('\n── 8b. a member re-keyed onto a new device keeps their sign-in account ──');
+    freshAddress();
+    const rekey = (from: Id, to: Id) => completeRekey(from.pk, to.pk, issueRekeyCode(from.pk, 'owner:password').code, 'owner:password');
+    const kim = newId();
+    const kim2 = newId();
+    const KIM_SUB = 'kim-google-sub';
+    const kimNonce = await joinNonce(kim);
+    const kimJoin = await join(kim, { callsign: 'Kim', provider: 'google', idToken: mint('google', { sub: KIM_SUB, nonce: kimNonce }), nonce: kimNonce });
+    const kimHash = joinRow(kim.pk)?.join_hash;
+    rekey(kim, kim2);
+    assert(kimJoin.status === 200 && memberRow(kim2.pk)?.status === 'active' && !memberRow(kim.pk),
+        `setup: Kim joins, then is re-keyed onto a new device (got ${kimJoin.status})`);
+    assert(joinRow(kim2.pk)?.join_hash === kimHash && !joinRow(kim.pk),
+        'her open_joins row moves to the new key with the rest of her record');
+
+    // The replaced key is no member any more, but it is not a stranger's new key either: the door refuses it.
+    const oldKeyNonce = await call(kim, '/api/join/sso-nonce', {});
+    assert(oldKeyNonce.status === 403 && oldKeyNonce.body?.code === 'key_invalidated',
+        `the replaced key asking for a join nonce → 403 key_invalidated (got ${oldKeyNonce.status} ${JSON.stringify(oldKeyNonce.body)})`);
+    // Holding one anyway (issued here directly, as the route did before it refused), its join is an answer, not a 500.
+    const heldNonce = issueNonce(`open-join:${kim.pk}`);
+    const heldToken = mint('apple', { sub: 'kim-old-key-apple-sub', nonce: heldNonce });
+    const oldKeyJoin = await join(kim, { callsign: 'Kim', provider: 'apple', idToken: heldToken, nonce: heldNonce });
+    assert(oldKeyJoin.status === 403 && oldKeyJoin.body?.code === 'key_invalidated',
+        `the replaced key joining with a nonce it holds → 403 key_invalidated, not a 500 (got ${oldKeyJoin.status} ${JSON.stringify(oldKeyJoin.body)})`);
+    assert(!memberRow(kim.pk) && !joinRow(kim.pk), '...and it did not join');
+    let engineOldKey: any;
+    try {
+        engineOldKey = registerOpenJoin(() => {}, {
+            publicKey: kim.pk, callsign: 'Kim', provider: 'apple', joinHash: openJoinHash('apple', 'kim-old-key-apple-sub'), ipHash,
+        });
+    } catch (e) {
+        engineOldKey = { threw: (e as Error)?.message };
+    }
+    assert(engineOldKey?.ok === false && engineOldKey.reason === 'key_invalidated',
+        `registerOpenJoin refuses it too, inside the transaction that decides (got ${JSON.stringify(engineOldKey)})`);
+
+    const kimPurge = await call(kim2, '/api/member/purge', {});
+    assert(kimPurge.status === 200 && memberRow(kim2.pk)?.status === 'pruned', `Kim deletes her account from the new device (got ${kimPurge.status})`);
+    const lee = newId();
+    const leeNonce = await joinNonce(lee);
+    const leeJoin = await join(lee, { callsign: 'Lee', provider: 'google', idToken: mint('google', { sub: KIM_SUB, nonce: leeNonce }), nonce: leeNonce });
+    assert(leeJoin.status === 200 && memberRow(lee.pk)?.invited_by === 'open:google',
+        `that frees the Google account she joined with, as for anyone who deletes their account (got ${leeJoin.status} ${JSON.stringify(leeJoin.body)})`);
+
+    const max = newId();
+    const max2 = newId();
+    const MAX_SUB = '001234.maxmaxmaxmaxmaxmaxmaxmaxmaxmax.0003';
+    const maxNonce = await joinNonce(max);
+    const maxJoin = await join(max, { callsign: 'Max', provider: 'apple', idToken: mint('apple', { sub: MAX_SUB, nonce: maxNonce }), nonce: maxNonce });
+    rekey(max, max2);
+    adminPruneUser(max2.pk, 'owner:password');
+    assert(maxJoin.status === 200 && memberRow(max2.pk)?.status === 'pruned', `setup: Max joins, is re-keyed, and the community removes him (got ${maxJoin.status})`);
+    const ned = newId();
+    const nedNonce = await joinNonce(ned);
+    const nedJoin = await join(ned, { callsign: 'Ned', provider: 'apple', idToken: mint('apple', { sub: MAX_SUB, nonce: nedNonce }), nonce: nedNonce });
+    assert(nedJoin.status === 403 && nedJoin.body?.code === 'removed',
+        `his Apple account is refused as removed (403), not as still joined (got ${nedJoin.status} ${JSON.stringify(nedJoin.body)})`);
+    assert(!memberRow(ned.pk), '...and did not join');
+
+    // Whatever fails inside the join, the answer is plain and names nothing inside the node. Forced here with a
+    // trigger on this connection, so the member row written before it rolls back as a real failure would.
+    db.exec("CREATE TEMP TRIGGER open_join_forced_failure BEFORE INSERT ON open_joins BEGIN SELECT RAISE(ABORT, 'forced failure in open_joins'); END");
+    const oli = newId();
+    let oliJoin: { status: number; body: any };
+    try {
+        const oliNonce = await joinNonce(oli);
+        oliJoin = await join(oli, { callsign: 'Oli', provider: 'google', idToken: mint('google', { sub: 'oli-google-sub', nonce: oliNonce }), nonce: oliNonce });
+    } finally {
+        db.exec('DROP TRIGGER open_join_forced_failure');
+    }
+    assert(oliJoin.status === 503 && oliJoin.body?.code === 'join_failed' && !/open_joins|forced|sqlite|constraint/i.test(JSON.stringify(oliJoin.body)),
+        `a join that throws inside registerOpenJoin → 503 join_failed, with nothing internal in the answer (got ${oliJoin.status} ${JSON.stringify(oliJoin.body)})`);
+    assert(!memberRow(oli.pk) && !joinRow(oli.pk), '...and nothing of it was kept: the member row rolled back with the rest');
 
     // ── 9. the door follows the profile ──────────────────────────────────────────────────────────
     console.log('\n── 9. the door follows the profile, per request ──');

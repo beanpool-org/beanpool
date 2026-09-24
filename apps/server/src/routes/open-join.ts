@@ -24,6 +24,9 @@
  * the recovery routes, whose nonces are bound to the bare key, nor the other way round. One nonce, one
  * verification, consumed once.
  *
+ * A key a re-key replaced is refused on both (403 `key_invalidated`): it is no member any more, but every write it
+ * signs is refused, so it would join as a member nobody can use (engine/open-join.ts).
+ *
  * ## One sign-in, two jobs (design §2.3)
  *
  * `recovery: { shares }` enrols the SAME sign-in account as the new member's recovery keeper, in this request,
@@ -61,9 +64,11 @@ import {
     forgetOldJoinAddresses,
     openJoinAddressHash,
     openJoinHash,
+    openJoinKeyInvalidated,
     openJoinLimitReached,
     registerOpenJoin,
     OPEN_JOIN_LIMITS,
+    type OpenJoinOutcome,
     type OpenJoinRefusal,
 } from '../engine/open-join.js';
 import { checkSsoKeeperShares, storeVerifiedSsoKeeperGeneration, KeeperDepositError } from '../engine/keeper-deposit.js';
@@ -98,6 +103,8 @@ function badRequest(ctx: any, error: string, code = 'bad_request'): void {
     ctx.body = { error, code };
 }
 
+const KEY_INVALIDATED = 'This key was replaced by a new one, so it can\'t join. Use the device or the 12 words that hold the new key.';
+
 function refuse(ctx: any, reason: OpenJoinRefusal, provider: SsoProvider, window?: 'hour' | 'day'): void {
     recordFunnelEvent('open_join_failed', reason);
     const label = ssoProviderLabel(provider);
@@ -105,6 +112,10 @@ function refuse(ctx: any, reason: OpenJoinRefusal, provider: SsoProvider, window
         case 'already_member':
             ctx.status = 409;
             ctx.body = { error: 'This key is already a member of this community.', code: reason };
+            return;
+        case 'key_invalidated':
+            ctx.status = 403;
+            ctx.body = { error: KEY_INVALIDATED, code: reason };
             return;
         case 'already_joined':
             ctx.status = 409;
@@ -146,6 +157,11 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'This key is already a member of this community.', code: 'already_member' };
             return;
         }
+        if (openJoinKeyInvalidated(actor)) {
+            ctx.status = 403;
+            ctx.body = { error: KEY_INVALIDATED, code: 'key_invalidated' };
+            return;
+        }
         ctx.status = 200;
         ctx.body = {
             nonce: issueNonce(joinNonceSubject(actor)),
@@ -185,9 +201,10 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
 
         recordFunnelEvent('open_join_attempt', provider);
 
-        // Refused before the sign-in is checked, so these never spend the nonce. registerOpenJoin checks all three
+        // Refused before the sign-in is checked, so these never spend the nonce. registerOpenJoin checks all of them
         // again with its writes, and those are the checks that decide.
         if (getMember(actor)) return refuse(ctx, 'already_member', provider);
+        if (openJoinKeyInvalidated(actor)) return refuse(ctx, 'key_invalidated', provider);
         forgetOldJoinAddresses();
         const ipHash = openJoinAddressHash(clientLimiterKey(ctx));
         const window = openJoinLimitReached(ipHash);
@@ -219,13 +236,24 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const outcome = registerOpenJoin(broadcast, {
-            publicKey: actor,
-            callsign,
-            provider: identity.provider,
-            joinHash: openJoinHash(identity.provider, identity.sub),
-            ipHash,
-        });
+        let outcome: OpenJoinOutcome;
+        try {
+            outcome = registerOpenJoin(broadcast, {
+                publicKey: actor,
+                callsign,
+                provider: identity.provider,
+                joinHash: openJoinHash(identity.provider, identity.sub),
+                ipHash,
+            });
+        } catch (e) {
+            // Nothing was kept: the member row and the open_joins row roll back together (engine/open-join.ts). The
+            // exception's text names tables and constraints, so it goes to the log and never into the answer.
+            console.error('[OpenJoin] join could not be recorded:', (e as Error)?.message || e);
+            recordFunnelEvent('open_join_failed', 'join_failed');
+            ctx.status = 503;
+            ctx.body = { error: 'Your join could not be completed, and nothing was saved. Please sign in and try again in a minute.', code: 'join_failed' };
+            return;
+        }
         if (!outcome.ok) return refuse(ctx, outcome.reason, identity.provider, outcome.window);
 
         let recovery: Record<string, unknown> | undefined;

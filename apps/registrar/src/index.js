@@ -390,6 +390,9 @@ async function handleRelease(request, env, bodyText) {
         : await db.getOwnAllocation(env, pubkey);
     if (!isOwnRow(a, pubkey)) return json({ status: 'none' });
     if (a.status === 'blocked') return json({ error: 'name blocked' }, 403);
+    // An admin pause is the admin's to lift (resume, or the admin's own release). Released by its owner, it would
+    // be gone, and the owner's next claim a take-back: live again with no resume.
+    if (a.status === 'paused' && a.pause_reason === 'admin') return json({ error: 'paused by the admin' }, 403);
     if (a.status !== 'released') await releaseRow(env, a, 'owner', now);
     const cur = a.status === 'released' ? a : { ...a, released_at: now };
     return json({ status: 'released', name: a.name, held_until: (cur.released_at || now) + releaseCooloffS(env) });
@@ -434,7 +437,7 @@ async function handleAdmin(env, name, action) {
             if (a.status !== 'pending') return json({ error: 'not pending' }, 400);
             return adminGoLive(env, a, 'approved', 'approved by the admin', { decided_at: now, decided_by: 'admin' });
         case 'pause': {
-            // Routing off, name and tunnel kept; the owner's heal cannot lift it — only `resume`.
+            // Routing off, name and tunnel kept; its owner can neither heal nor release it — only `resume` (or `release`).
             if (a.status !== 'live' && a.status !== 'paused') return json({ error: `cannot pause a ${a.status} name` }, 400);
             await db.updateAllocation(env, name, {
                 status: 'paused', pause_reason: 'admin', paused_at: a.status === 'paused' ? a.paused_at : now, dns_record_id: await dnsOff(env, a),

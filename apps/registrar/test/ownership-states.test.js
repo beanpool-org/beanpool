@@ -317,6 +317,39 @@ test('an admin pause is lifted only by the admin; the owner\'s heal leaves it al
     } finally { w.restore(); }
 });
 
+test('an admin pause survives the owner\'s release-then-claim: the release is refused, as a block\'s is', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'stillwater', owner);
+        await w.admin('stillwater', 'pause');
+        const before = await w.row('stillwater');
+
+        // A release would turn the owner's next claim into a take-back — live again, with no admin resume.
+        for (const path of ['/api/registrar/release', '/api/registrar/offline']) {
+            const rel = await w.release(owner, {}, path);
+            assert.equal(rel.status, 403, JSON.stringify(rel.body));
+            assert.deepEqual(rel.body, { error: 'paused by the admin' });
+        }
+        assert.deepEqual(await w.row('stillwater'), before, 'the refused release changed nothing');
+        const claim = await w.claim(owner, { name: 'stillwater' });
+        assert.equal(claim.status, 200);
+        assert.equal(claim.body.status, 'paused');
+        assert.equal(claim.body.reason, 'admin');
+        assert.equal(claim.body.tunnelToken, undefined);
+        assert.equal(w.cf.recordAt('stillwater.beanpool.org'), null, 'routing stays off');
+        assert.equal((await w.row('stillwater')).pause_reason, 'admin');
+
+        // Only the admin lifts it: resume still works, and so does the admin's own release of a paused name.
+        assert.equal((await w.admin('stillwater', 'resume')).body.status, 'live');
+        assert.ok(w.cf.recordAt('stillwater.beanpool.org'));
+        await w.admin('stillwater', 'pause');
+        assert.equal((await w.admin('stillwater', 'release')).body.status, 'released');
+        assert.equal((await w.available('stillwater')).body.available, true);
+        assert.deepEqual(w.events('stillwater').map((e) => e.event), ['claimed', 'paused', 'resumed', 'paused', 'released']);
+    } finally { w.restore(); }
+});
+
 test('a released name: held 30 days for the same key, refused to others, then free', async () => {
     const w = await world();
     try {

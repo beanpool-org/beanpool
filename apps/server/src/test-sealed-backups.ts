@@ -132,8 +132,8 @@ async function child(): Promise<void> {
     const { setRestoreRestartForTests } = await import('./routes/backup.js');
     setRestoreRestartForTests(() => { /* the test inspects the data dir instead of restarting */ });
     await initTls();
-    const port = 20000 + Math.floor(Math.random() * 20000);
-    await startHttpsServer(port);
+    // Bind once and read the port back, rather than guessing a random one that may be taken.
+    const port = await startHttpsServer(0);
     // Before the restore, on this fresh server: its backups are readable until it has a recovery code, and the
     // operator manual's make-a-code line (password header, JSON body) makes one, after which they are locked.
     let makeCode: any = null;

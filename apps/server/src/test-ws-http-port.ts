@@ -24,7 +24,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
-import net from 'node:net';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import { initStateEngine, broadcast } from './state-engine.js';
@@ -42,17 +41,6 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-function freePort(): Promise<number> {
-    return new Promise((resolve, reject) => {
-        const s = net.createServer();
-        s.once('error', reject);
-        s.listen(0, '127.0.0.1', () => {
-            const { port } = s.address() as net.AddressInfo;
-            s.close(() => resolve(port));
-        });
-    });
-}
 
 function makeMember(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -101,11 +89,10 @@ async function main() {
     await initTls();
     initStateEngine();
 
-    const httpPort = await freePort();
-    const httpsPort = await freePort();
     // Same order as index.ts: the HTTP server exists before the HTTPS app it delegates to.
-    await startHttpServer(httpPort);
-    await startHttpsServer(httpsPort);
+    // Bind once and read the port back (two probes in a row could be handed the same port).
+    const httpPort = await startHttpServer(0);
+    const httpsPort = await startHttpsServer(0);
 
     const ports = [
         { name: 'HTTP (tunnel origin)', base: `ws://localhost:${httpPort}` },

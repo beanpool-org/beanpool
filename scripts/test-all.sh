@@ -441,6 +441,7 @@ run_federation_suites() {
       test-enterprise-season-lifecycle
       test-enterprise-keepers-slice6
       test-enterprise-keeper-answers
+      test-succession-broadcast-after-commit
       test-enterprise-location
       test-enterprise-thread
       test-enterprise-closed-states

@@ -24,7 +24,6 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
-import net from 'node:net';
 import { randomBytes } from 'node:crypto';
 import WebSocket from 'ws';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -46,17 +45,6 @@ let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
-}
-
-function freePort(): Promise<number> {
-    return new Promise((resolve, reject) => {
-        const s = net.createServer();
-        s.once('error', reject);
-        s.listen(0, '127.0.0.1', () => {
-            const { port } = s.address() as net.AddressInfo;
-            s.close(() => resolve(port));
-        });
-    });
 }
 
 const viaTunnel = (ip: string) => ({ 'cf-connecting-ip': ip, 'x-forwarded-for': ip });
@@ -355,10 +343,9 @@ async function main() {
     await initTls();
     initStateEngine();
     setTrustConfigForTests(undefined);
-    const httpPort = await freePort();
-    const httpsPort = await freePort();
-    await startHttpServer(httpPort);
-    await startHttpsServer(httpsPort);
+    // Bind once and read the port back (two probes in a row could be handed the same port).
+    const httpPort = await startHttpServer(0);
+    const httpsPort = await startHttpsServer(0);
     BASE = `http://127.0.0.1:${httpPort}`;
     WS_BASE = `ws://127.0.0.1:${httpPort}`;
     await part3Http();

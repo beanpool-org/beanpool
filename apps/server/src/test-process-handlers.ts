@@ -32,7 +32,6 @@ delete process.env.CF_RECORD_NAME;
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { installProcessHandlers, getUnhandledRejectionSummary, getUnhandledRejectionLogPath } from './process-handlers.js';
@@ -178,17 +177,6 @@ function logSize(dataDir: string): number {
 
 function reportFiles(dataDir: string): string[] {
     return fs.readdirSync(dataDir).filter((f) => f.startsWith('report') && f.endsWith('.json'));
-}
-
-function freePort(): Promise<number> {
-    return new Promise((resolve, reject) => {
-        const s = net.createServer();
-        s.once('error', reject);
-        s.listen(0, '127.0.0.1', () => {
-            const { port } = s.address() as net.AddressInfo;
-            s.close(() => resolve(port));
-        });
-    });
 }
 
 async function childProcessTests(root: string): Promise<void> {
@@ -488,10 +476,9 @@ async function diagnosticsAndHealthTests(): Promise<void> {
     updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false, totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
     updateGatewayConfig({ ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: false, maxRequestsPerMinute: 600 } });
 
-    const httpPort = await freePort();
-    const httpsPort = await freePort();
-    await startHttpServer(httpPort);
-    await startHttpsServer(httpsPort);
+    // Bind once and read the port back (two probes in a row could be handed the same port).
+    const httpPort = await startHttpServer(0);
+    const httpsPort = await startHttpsServer(0);
     const BASE = `http://127.0.0.1:${httpPort}`;
 
     // Only now, so that anything the boot itself rejected is already counted and the delta below is exact.

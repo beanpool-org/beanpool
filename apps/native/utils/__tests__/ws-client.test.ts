@@ -318,6 +318,19 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         expect(requestSync).toHaveBeenCalledTimes(1);
     });
 
+    it('a change whose doorbell throws does not stop the changes queued behind it', async () => {
+        const socket = await startAndConnect();
+        vi.mocked(applyLivePostChange).mockClear();
+        vi.mocked(applyLivePostChange).mockResolvedValueOnce(false);
+        vi.mocked(requestSync).mockImplementationOnce(() => { throw new Error('sync queue broke'); });
+
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post', post: publicOffer({ id: 'first' }) }) });
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post', post: publicOffer({ id: 'second' }) }) });
+        await vi.advanceTimersByTimeAsync(10);
+
+        expect(vi.mocked(applyLivePostChange).mock.calls.map(([c]: any) => c.post.id)).toEqual(['first', 'second']);
+    });
+
     it('a failed local write falls back to the doorbell', async () => {
         const socket = await startAndConnect();
         vi.mocked(requestSync).mockClear();

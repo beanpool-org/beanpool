@@ -168,9 +168,9 @@ class WebSocketSyncClient {
                     this.watchdogTimeoutId = null;
                 }
                 // The catch-up sync for whatever was missed while the socket was down. After a drop it waits a
-                // random 0–3 s: a node or edge restart drops every phone at once, and their retries are spread,
-                // but not so far that their syncs would not still land together. A start or a foreground syncs
-                // at once.
+                // random 0–3 s on top of the retry's own spread: a node or edge restart drops every phone at once,
+                // and their syncs must not all land in the same second either. A start or a foreground syncs at
+                // once.
                 if (this.isRetry) {
                     this.isRetry = false;
                     if (this.reconnectSyncTimeoutId) clearTimeout(this.reconnectSyncTimeoutId);
@@ -251,9 +251,10 @@ class WebSocketSyncClient {
 
     /**
      * Write a pushed listing change, then tell the market, map and post screens to re-read the cache — the same
-     * signal a sync that changed posts sends, once per burst. No `ws_activity`: its listeners are chats, unread counts and the
-     * needs-you row, each of which goes to the node, and a listing that does not involve this member is none of
-     * theirs. A change that does involve them, or that fails to write, rings the doorbell exactly as before.
+     * signal a sync that changed posts sends, once per burst. No `ws_activity`: its listeners are chats, unread
+     * counts and the needs-you row, each of which goes to the node, and a listing that does not involve this
+     * member is none of theirs. A change that does involve them, or that fails to write, rings the doorbell
+     * exactly as before.
      */
     private applyLive(data: any, change: LivePostChange) {
         const ctx = { anchorUrl: this.currentUrl, selfPubkey: this.memberPubkey };
@@ -266,7 +267,8 @@ class WebSocketSyncClient {
             }
             if (applied) this.signalDataUpdated();
             else this.ringDoorbell(data);
-        });
+        // The queue must always settle: a rejected link would skip every change queued behind it.
+        }).catch(err => console.warn('[WS Sync] Pushed listing change failed', err));
     }
 
     /** One `sync_data_updated` for a burst of pushed changes: the market and map re-query SQLite on each one. */

@@ -466,7 +466,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     }
                 }
 
-                setPosts(replayLiveChanges(liveMark, allPosts, p => postFitsList(p, filter)));
+                setPosts(replayLiveChanges(liveMark, allPosts, post => postFitsList(post, filter)));
                 setError(null);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale

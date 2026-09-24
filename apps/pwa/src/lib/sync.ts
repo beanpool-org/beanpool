@@ -208,8 +208,8 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
         notify();
 
         // The catch-up sync for whatever was missed while the socket was down. After a drop it waits a random
-        // 0–3 s: a node or edge restart drops every tab at once, and their retries are spread, but not so far that
-        // their syncs would not still land together. A first connect or the tab coming back syncs at once.
+        // 0–3 s on top of the retry's own spread: a node or edge restart drops every tab at once, and their syncs
+        // must not all land in the same second either. A first connect or the tab coming back syncs at once.
         const syncNow = () => requestSync().catch(err => {
             console.warn('[WS Sync] Reconnect sync error:', err);
         });

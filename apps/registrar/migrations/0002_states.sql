@@ -73,14 +73,16 @@ WHERE a.status IN ('pending', 'live') AND a.requested_at >= 1788134400
   AND NOT EXISTS (SELECT 1 FROM name_events e WHERE e.name = a.name AND e.event = 'incident-review');
 
 -- (2) The victims: revoked by the sweep (attest_fails >= 2 — /offline and admin revoke never set it) and live
--- before the cut-off. Back to their ORIGINAL key as paused/incident; the node's next claim heals it.
+-- before the cut-off. Back to their ORIGINAL key as paused/incident; the node's next claim heals it. Every code
+-- path that made a row live set decided_at; a row made by hand may lack it, and then its claim time stands in
+-- (without it, step 3 would call a victim an impostor).
 INSERT INTO name_events (name, at, event, detail)
 SELECT a.name, CAST(strftime('%s', 'now') AS INTEGER), 'incident-restore',
        'revoked by the registrar''s own verifier bug (attest_fails=' || a.attest_fails || '); restored to paused '
        || 'for its original key ' || substr(a.node_pubkey, 1, 16) || '…. Its node heals it (a fresh tunnel); '
        || 'no one needs to act.'
 FROM name_allocations a
-WHERE a.status = 'revoked' AND a.attest_fails >= 2 AND a.decided_at IS NOT NULL AND a.decided_at < 1790233200
+WHERE a.status = 'revoked' AND a.attest_fails >= 2 AND COALESCE(a.decided_at, a.requested_at) < 1790233200
   AND NOT EXISTS (SELECT 1 FROM name_events e WHERE e.name = a.name AND e.event = 'incident-restore');
 
 -- … and if that key has since taken another name, both are now its; say so.
@@ -90,13 +92,13 @@ SELECT a.name, CAST(strftime('%s', 'now') AS INTEGER), 'incident-review',
        || group_concat(b.name || ' (' || b.status || ')', ', ') || '. Decide which name that community keeps.'
 FROM name_allocations a
 JOIN name_allocations b ON b.node_pubkey = a.node_pubkey AND b.name <> a.name AND b.status IN ('pending', 'live')
-WHERE a.status = 'revoked' AND a.attest_fails >= 2 AND a.decided_at IS NOT NULL AND a.decided_at < 1790233200
+WHERE a.status = 'revoked' AND a.attest_fails >= 2 AND COALESCE(a.decided_at, a.requested_at) < 1790233200
   AND NOT EXISTS (SELECT 1 FROM name_events e WHERE e.name = a.name AND e.event = 'incident-review')
 GROUP BY a.name;
 
 UPDATE name_allocations
 SET status = 'paused', pause_reason = 'incident-2026-09-24', paused_at = CAST(strftime('%s', 'now') AS INTEGER)
-WHERE status = 'revoked' AND attest_fails >= 2 AND decided_at IS NOT NULL AND decided_at < 1790233200;
+WHERE status = 'revoked' AND attest_fails >= 2 AND COALESCE(decided_at, requested_at) < 1790233200;
 
 -- (3) Revoked by the sweep for a name that went live after the cut-off: PR 0's verifier, so a valid signature
 -- by another key really answered. Kept for its key as paused/impostor, like the sweep does from now on.

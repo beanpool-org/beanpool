@@ -670,13 +670,13 @@ function oldRow(sqlite, r) {
                     attest_fails, last_attest_at, requested_at, decided_at, decided_by)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(r.name, r.key.pubHex, `${r.name}.beanpool.org`, 'tunnel', r.status, `tun-old-${r.name}`, `dns-old-${r.name}`,
-            r.fails ?? 0, r.lastAttest ?? null, r.requested, r.decided ?? r.requested, 'auto');
+            r.fails ?? 0, r.lastAttest ?? null, r.requested, 'decided' in r ? r.decided : r.requested, 'auto');
 }
 
 test('migration 0002: incident victims go back to their original key, paused; a later other-key holder is recorded, not evicted', async () => {
     const w = await world({ migrations: ['0001_init.sql'] });
     try {
-        const [yarra, victim2, taker, oldtimer, offliner, impostored] = await Promise.all(Array.from({ length: 6 }, makeKey));
+        const [yarra, victim2, taker, oldtimer, offliner, impostored, handmade] = await Promise.all(Array.from({ length: 7 }, makeKey));
         // yarravalley: revoked by the incident, never re-claimed.
         oldRow(w.sqlite, { name: 'yarravalley', key: yarra, status: 'revoked', fails: 2, lastAttest: CUTOFF - 9 * DAY, requested: CUTOFF - 60 * DAY });
         // test: revoked by the incident, then claimed by ANOTHER key inside the window (the old row was overwritten).
@@ -689,6 +689,8 @@ test('migration 0002: incident victims go back to their original key, paused; a 
         // /offline'd (attest_fails 0), and an impostor revoke of a name that went live after the cut-off.
         oldRow(w.sqlite, { name: 'quietnode', key: offliner, status: 'revoked', requested: WINDOW - 30 * DAY });
         oldRow(w.sqlite, { name: 'newbie', key: impostored, status: 'revoked', fails: 2, requested: CUTOFF + DAY });
+        // A victim whose row was made by hand, with no decided_at: its claim time says it was live before the cut-off.
+        oldRow(w.sqlite, { name: 'handmade', key: handmade, status: 'revoked', fails: 2, requested: CUTOFF - 20 * DAY, decided: null });
 
         w.sqlite.exec(migration('0002_states.sql'));
 
@@ -721,6 +723,11 @@ test('migration 0002: incident victims go back to their original key, paused; a 
         assert.ok(q.released_at >= nowS() - 5, 'held 30 days for its key from the migration');
         assert.equal((await w.row('newbie')).status, 'paused');
         assert.equal((await w.row('newbie')).pause_reason, 'impostor');
+        const hm = await w.row('handmade');
+        assert.equal(hm.status, 'paused');
+        assert.equal(hm.pause_reason, 'incident-2026-09-24', 'a victim, not an impostor');
+        assert.equal(hm.node_pubkey, handmade.pubHex);
+        assert.deepEqual(w.events('handmade').map((e) => e.event), ['incident-restore']);
         assert.equal(w.sqlite.prepare("SELECT COUNT(*) n FROM name_allocations WHERE status='revoked'").get().n, 0);
 
         // A second run stops at its first statement and changes nothing.

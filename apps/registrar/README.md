@@ -60,7 +60,7 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    SELECT name, substr(node_pubkey,1,16) AS key, status, attest_fails,
           datetime(requested_at,'unixepoch') AS requested, datetime(decided_at,'unixepoch') AS decided,
           CASE
-            WHEN status='revoked' AND attest_fails>=2 AND decided_at IS NOT NULL AND decided_at<1790233200 THEN 'paused/incident (restored)'
+            WHEN status='revoked' AND attest_fails>=2 AND COALESCE(decided_at,requested_at)<1790233200 THEN 'paused/incident (restored)'
             WHEN status='revoked' AND attest_fails>=2 THEN 'paused/impostor'
             WHEN status='revoked' THEN 'released, held 30 days'
             ELSE 'unchanged + incident-review event'

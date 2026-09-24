@@ -270,10 +270,12 @@ export async function commitOutboundSettlement(
         // This closes a genuine double-spend (review finding), and unlike the earlier "not reachable
         // in-process" races this one WAS reachable: `signReceipt` is awaited between the state read above
         // and this transaction, so two overlapping retries both observed `escrowed` and both arrived here.
-        // The second would repeat the bridge and Commons moves — and because a synthetic `escrow_` account
-        // has an unbounded floor, `mustTransfer` happily drives it NEGATIVE rather than refusing. The bridge
-        // would be credited twice for one purchase, and the same-state metadata write would then replace the
-        // first receipt with the second. Two valid receipts, double the tab, one trade.
+        // The second would repeat the bridge and Commons moves. When this was found an `escrow_` account had
+        // an unbounded floor, so `mustTransfer` happily drove it NEGATIVE rather than refusing: the bridge was
+        // credited twice for one purchase, and the same-state metadata write then replaced the first receipt
+        // with the second. Two valid receipts, double the tab, one trade. `ESCROW_FLOOR` now refuses that
+        // second debit, so without this re-read the retry would fail with `ledger_refused` instead — still
+        // wrong, because a retry must hand back the first receipt.
         const fresh = getSettlement(key);
         if (!fresh) throw new SettlementError(`Unknown settlement ${key}`, 'unknown_settlement');
         if (fresh.state !== 'escrowed') {

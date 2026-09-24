@@ -12,8 +12,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { db as defaultDb } from '../db/db.js';
-import { DiskImageStore, imagesDir, type ImageStore } from '../storage/image-store.js';
-import { deleteStoredObjects } from '../storage/image-columns.js';
+import {
+    DiskImageStore, ImageStoreUnavailableError, deleteObjectUnless, getImageStore, imagesDir, scanOurObjectsAsync,
+    type ImageStore, type ObjectInfo,
+} from '../storage/image-store.js';
 
 export interface DiskBreakdownItem {
     dbSizeBytes: number;
@@ -87,6 +89,13 @@ export interface StorageCleanResult {
     removedPhotosBytes: number;
     removedImageObjectsCount: number;
     removedImageObjectsBytes: number;
+    /**
+     * Orphaned store objects this Clean found and did not get to: it stops at {@link CLEAN_SWEEP_BUDGET_MS} or
+     * the per-pass cap rather than keep the operator waiting. The background sweep carries on with them (it is
+     * brought forward when any remain), so a non-zero number here means "more remain", never "done".
+     */
+    remainingImageObjectsCount: number;
+    remainingImageObjectsBytes: number;
     removedThumbnailsCount: number;
     removedThumbnailsBytes: number;
     compressedLogsCount: number;
@@ -174,6 +183,11 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
     // The image store: post photos and message attachments, once the evacuation job has moved them out of
     // the database. They are exactly the same media as `postPhotosBytes` above, counted where they now live,
     // so the two together are the node's media whatever stage of the migration it is at.
+    //
+    // THIS disk's store, whatever IMAGE_STORE says. This report is about the disk the node runs on — the 80%
+    // warning exists to stop an SD card filling — and objects in an S3 bucket take none of it. Nor does this
+    // list a bucket: it is refreshed every minute by an open admin page, and a bucket listing on the blocking
+    // path would hold the node for a round trip per thousand objects to report bytes that are not here.
     let imageStoreBytes = 0;
     let imageStoreCount = 0;
     try {
@@ -284,7 +298,7 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
  * objects: those answer to the snapshot's database, and a row deleted yesterday is exactly what a recovery
  * point is for. It cannot. It walks one directory — `<data>/images`, the live store — while a snapshot keeps
  * its objects under `<data>/snapshots/<name>.db.images`, which is not below it. The same holds for the
- * deletes: `deleteStoredObjects` is handed the live store and can only unlink inside it, and unlinking a live
+ * deletes: `deleteObjectUnless` is handed the live store and can only unlink inside it, and unlinking a live
  * object leaves a snapshot's hard link to the same inode holding the bytes.
  *
  * ## Half-written objects count as orphans
@@ -298,15 +312,66 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
  */
 const ORPHAN_OBJECT_GRACE_MS = 60 * 60 * 1000;
 
-function findOrphanedImageObjects(db: any, dataDir: string, nowMs = Date.now()):
-    { keys: string[]; totalBytes: number } {
-    const out = { keys: [] as string[], totalBytes: 0 };
-    let store: DiskImageStore;
+/**
+ * The store the sweep judges and deletes from: the node's own (`IMAGE_STORE`: disk, or the S3 bucket) — or, for
+ * a caller that names a data directory (the suites, which point at their own fixture), that directory's disk
+ * store, as before.
+ *
+ * On S3 the sweep lists the bucket once per thousand objects, with each object's size and upload time in the
+ * listing itself, rather than a HEAD per object; and only this node's namespaces (`posts/`, `attachments/`),
+ * so anything else an operator keeps in the same bucket is never listed, let alone deleted.
+ */
+function sweepStore(options?: { dataDir?: string; store?: ImageStore }): ImageStore {
+    if (options?.store) return options.store;
+    if (options?.dataDir) return new DiskImageStore(imagesDir(options.dataDir));
+    return getImageStore();
+}
+
+/**
+ * Orphans one pass removes from a disk store. An unlink each, with a yield to the event loop after every one,
+ * so the cap is about how much a single pass takes on rather than about holding the loop.
+ */
+export const ORPHAN_SWEEP_BATCH = 2_000;
+
+/**
+ * Orphans one pass removes from an S3 bucket. Each is a HEAD and a DELETE, neither of which holds the event loop
+ * (the sweep uses the store's async path), so this bounds how long a pass runs and how hard it leans on the
+ * bucket: at 50-100 ms a round trip, a minute or two. After an older backup is restored every object written
+ * since is an orphan; the passes that follow take them a batch at a time, ORPHAN_SWEEP_CONTINUE_MS apart.
+ */
+export const ORPHAN_SWEEP_BATCH_S3 = 500;
+
+/**
+ * How long the admin Clean spends deleting orphaned objects before it answers. An operator is waiting on the
+ * page; what the Clean does not get to, it reports as remaining, and the background sweep carries on with it.
+ */
+export const CLEAN_SWEEP_BUDGET_MS = 3_000;
+
+/** Gap between passes while orphans remain, instead of a day. */
+const ORPHAN_SWEEP_CONTINUE_MS = 60_000;
+
+function sweepBatchFor(store: ImageStore): number {
+    return store.kind === 's3' ? ORPHAN_SWEEP_BATCH_S3 : ORPHAN_SWEEP_BATCH;
+}
+
+/**
+ * Every orphan in the store: an object of ours no row points at, older than the grace period, in listing order.
+ *
+ * Non-blocking on S3 (the listing is the store's async one). The rows are read AFTER the listing, so a row
+ * written while it was being taken is seen; an object written while it was being taken is either not listed or
+ * listed fresh, and the grace period passes over it.
+ */
+async function findOrphanedImageObjects(db: any, options: { dataDir?: string; store?: ImageStore } | undefined, nowMs = Date.now()):
+    Promise<{ objects: ObjectInfo[]; totalBytes: number }> {
+    const out = { objects: [] as ObjectInfo[], totalBytes: 0 };
+    let store: ImageStore;
     try {
-        store = new DiskImageStore(imagesDir(dataDir));
+        store = sweepStore(options);
     } catch {
         return out;
     }
+    let listed: ObjectInfo[];
+    try { listed = await scanOurObjectsAsync(store); } catch { return out; }
     const referenced = new Set<string>();
     for (const sql of [
         'SELECT storage_key FROM post_photos WHERE storage_key IS NOT NULL',
@@ -321,22 +386,19 @@ function findOrphanedImageObjects(db: any, dataDir: string, nowMs = Date.now()):
             return out;
         }
     }
-    let keys: string[];
-    try { keys = store.list(''); } catch { return out; }
-    for (const key of keys) {
-        if (referenced.has(key)) continue;
-        const h = store.head(key);
-        if (!h) continue;
-        if (nowMs - h.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
-        out.keys.push(key);
-        out.totalBytes += h.bytes;
+    for (const o of listed) {
+        if (referenced.has(o.key)) continue;
+        if (nowMs - o.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
+        out.objects.push(o);
+        out.totalBytes += o.bytes;
     }
     // Leftovers of a crashed write, which `list` above will never return. No row can reference one, so
-    // there is nothing to check them against — only their age.
+    // there is nothing to check them against — only their age. A store whose write is one atomic request
+    // (S3) has none, and does not implement this.
     try {
-        for (const t of store.listTemporary()) {
+        for (const t of store.listTemporary?.() ?? []) {
             if (nowMs - t.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
-            out.keys.push(t.key);
+            out.objects.push(t);
             out.totalBytes += t.bytes;
         }
     } catch {
@@ -345,10 +407,91 @@ function findOrphanedImageObjects(db: any, dataDir: string, nowMs = Date.now()):
     return out;
 }
 
+/** better-sqlite3 marks a closed handle `open: false`. A restore closes the node's before replacing the file. */
+function stillOpen(db: any): boolean {
+    return db?.open !== false;
+}
+
+/** What one pass of the sweep did. */
+export interface OrphanSweepPass {
+    removed: number;
+    bytes: number;
+    /**
+     * Orphans the pass found and did not remove: past its cap or its time budget, stopped, or failed to delete.
+     * The next pass lists the store afresh and takes them from there.
+     */
+    remaining: number;
+    remainingBytes: number;
+}
+
+/**
+ * One pass: find the orphans, then delete up to `max` of them, one at a time, back to the event loop after each.
+ *
+ * ## Bounded, yielding, and safe to stop anywhere
+ *
+ * Nothing here holds the event loop for more than one local step: on S3 the listing and every HEAD and DELETE go
+ * through the store's async path, and on disk each unlink is followed by a yield. The pass stops at `max`
+ * deletes, at `budgetMs` from its start, when `shouldStop` says so, or when the store stops answering — and
+ * whatever it did not reach is still an orphan the next pass will find. There is no state between passes to go
+ * stale: each one lists afresh, and a delete is idempotent, so a node killed half-way loses nothing.
+ *
+ * ## Judged again at the moment of each delete
+ *
+ * Yielding means the world moves between the listing and a delete. So each object is judged as the store has it
+ * right then ({@link deleteObjectUnless}): if it was written again in the meantime — a re-post of the same photo
+ * is the same content-addressed key, and every writer puts the object before it writes the row — it is inside
+ * the grace period again and stays. And once the database the orphans were judged against has been closed —
+ * a restore, which replaces it with one that may well name them — nothing more is deleted at all. On S3 the store
+ * also keeps a write and a delete of the same key from overlapping (s3-image-store.ts).
+ */
+async function sweepOnce(
+    db: any,
+    options: { dataDir?: string; store?: ImageStore; nowMs?: number } | undefined,
+    limits: { max?: number; budgetMs?: number; shouldStop?: () => boolean } = {},
+): Promise<OrphanSweepPass & { storeFailed: boolean }> {
+    const started = Date.now();
+    const pass = { removed: 0, bytes: 0, remaining: 0, remainingBytes: 0, storeFailed: false };
+    let store: ImageStore;
+    try { store = sweepStore(options); } catch { return pass; }
+    const found = await findOrphanedImageObjects(db, options, options?.nowMs ?? Date.now());
+    const max = limits.max ?? sweepBatchFor(store);
+    const clock = () => options?.nowMs ?? Date.now();
+    const keep = (now: ObjectInfo) => !stillOpen(db) || clock() - now.mtimeMs < ORPHAN_OBJECT_GRACE_MS;
+    let reached = 0;
+    let failures = 0;
+    for (const o of found.objects) {
+        if (reached >= max || !stillOpen(db) || limits.shouldStop?.()) break;
+        if (limits.budgetMs !== undefined && Date.now() - started >= limits.budgetMs) break;
+        reached++;
+        try {
+            if (await deleteObjectUnless(store, o.key, keep)) {
+                pass.removed++;
+                pass.bytes += o.bytes;
+            }
+        } catch (e) {
+            pass.remaining++;
+            pass.remainingBytes += o.bytes;
+            if (e instanceof ImageStoreUnavailableError) {
+                // The store is down or refusing this node: every other delete would fail the same way.
+                pass.storeFailed = true;
+                console.warn(`[StorageHealth] The image store stopped answering the orphan sweep; the rest wait for the next pass: ${e.message}`);
+                break;
+            }
+            if (++failures <= 3) console.warn(`[StorageHealth] Could not delete orphaned image object ${o.key}:`, e);
+        }
+        await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    for (const o of found.objects.slice(reached)) {
+        pass.remaining++;
+        pass.remainingBytes += o.bytes;
+    }
+    return pass;
+}
+
 /**
  * Previews what orphaned media and compressible logs will be removed before actually cleaning.
  */
-export function getStorageCleanPreview(options?: { db?: any; dataDir?: string }): StorageCleanPreview {
+export async function getStorageCleanPreview(options?: { db?: any; dataDir?: string; store?: ImageStore }): Promise<StorageCleanPreview> {
     const db = options?.db || defaultDb;
     const dataDir = options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
@@ -365,8 +508,9 @@ export function getStorageCleanPreview(options?: { db?: any; dataDir?: string })
         orphanedPhotosBytes = row?.totalBytes || 0;
     } catch {}
 
-    // 1b. Orphaned image-store objects (no row points at them).
-    const orphanedObjects = findOrphanedImageObjects(db, dataDir);
+    // 1b. Orphaned image-store objects (no row points at them). Every one of them, not a pass's worth: this is
+    // what there is to reclaim, and the Clean says how much of it one press got to.
+    const orphanedObjects = await findOrphanedImageObjects(db, options);
 
     // 2. Orphaned Pulse Thumbnails (cached thumbnails whose item no longer exists in pulse_items)
     let orphanedThumbnailsCount = 0;
@@ -438,7 +582,7 @@ export function getStorageCleanPreview(options?: { db?: any; dataDir?: string })
             totalBytes: orphanedPhotosBytes,
         },
         orphanedImageObjects: {
-            count: orphanedObjects.keys.length,
+            count: orphanedObjects.objects.length,
             totalBytes: orphanedObjects.totalBytes,
         },
         orphanedThumbnails: {
@@ -457,58 +601,44 @@ export function getStorageCleanPreview(options?: { db?: any; dataDir?: string })
 
 /**
  * Executes cleanup of orphaned media and compresses/prunes old logs.
+ *
+ * Async, and bounded where it touches the image store: see step 1b.
  */
-export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: string }): StorageCleanResult {
+export async function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: string; store?: ImageStore }): Promise<StorageCleanResult> {
     const db = options?.db || defaultDb;
     const dataDir = options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
-    const preview = getStorageCleanPreview({ db, dataDir });
+    const preview = await getStorageCleanPreview({ db, dataDir: options?.dataDir, store: options?.store });
 
-    // 1. Delete orphaned post photos — the rows, and then the objects they pointed at.
-    //
-    // Same order as every other delete path (storage design §7): the row goes inside a transaction and the
-    // object only after it has committed, so the serving route — which reads the row first — can never be
-    // caught serving a photo whose row this sweep has already removed.
+    // 1. Delete orphaned post photo ROWS. Their objects are orphans the moment this commits, and step 1b
+    // reclaims them the way it reclaims any other: after the rows are gone (storage design §7: the row first,
+    // so the serving route — which reads the row first — can never serve a photo whose row is gone), and past
+    // the same grace period. Not deleted here one by one: on a bucket that was a blocking HEAD and DELETE per
+    // photo with no bound, and after the grace period step 1b takes every one of them anyway.
     let removedPhotosCount = 0;
     try {
-        let doomed: string[] = [];
-        db.transaction(() => {
-            // In its OWN try: a schema without `storage_key` (a node whose upgrade could not add the
-            // column, or a caller-supplied handle) must still have its orphaned photo ROWS pruned. Letting
-            // this read throw into the outer catch would silently turn the whole sweep off, and the only
-            // symptom would be a node that quietly stopped reclaiming anything.
-            try {
-                doomed = (db.prepare(`
-                    SELECT storage_key FROM post_photos
-                    WHERE post_id NOT IN (SELECT id FROM posts) AND storage_key IS NOT NULL
-                `).all() as any[]).map((r: any) => r.storage_key as string);
-            } catch { doomed = []; }
-            const delRes = db.prepare(`
-                DELETE FROM post_photos
-                WHERE post_id NOT IN (SELECT id FROM posts)
-            `).run();
-            removedPhotosCount = delRes.changes || 0;
-        })();
-        // After the transaction has RETURNED, which is after it committed. Deliberately not
-        // `afterTransactionCommit`: this function accepts a caller-supplied `db` handle, and that hook is
-        // wired to the process-wide one — it would fire at the wrong moment for any other handle.
-        if (doomed.length > 0) deleteStoredObjects(doomed, new DiskImageStore(imagesDir(dataDir)));
+        const delRes = db.prepare(`
+            DELETE FROM post_photos
+            WHERE post_id NOT IN (SELECT id FROM posts)
+        `).run();
+        removedPhotosCount = delRes.changes || 0;
     } catch {}
 
-    // 1b. Delete store objects nothing points at (see findOrphanedImageObjects). No rows are involved, so
-    // there is no transaction to wait for — but they are re-found here rather than taken from the preview,
-    // so an object that acquired a row between the two calls is not deleted out from under it.
-    let removedImageObjectsCount = 0;
-    let removedImageObjectsBytes = 0;
+    // 1b. Delete store objects nothing points at: one pass of the same sweep the timer runs, re-finding them
+    // rather than taking the preview's list, so an object that acquired a row between the two calls is not
+    // deleted out from under it. Bounded by the pass's cap AND by CLEAN_SWEEP_BUDGET_MS, because an operator
+    // is waiting on the answer: after an older backup is restored onto an s3 node the bucket can hold thousands
+    // of orphans, which are minutes of round trips. What it does not get to it reports as remaining, and the
+    // background sweep is brought forward to carry on with them.
+    let orphanPass: OrphanSweepPass = { removed: 0, bytes: 0, remaining: 0, remainingBytes: 0 };
     try {
-        const orphans = findOrphanedImageObjects(db, dataDir);
-        if (orphans.keys.length > 0) {
-            removedImageObjectsCount = deleteStoredObjects(orphans.keys, new DiskImageStore(imagesDir(dataDir)));
-            removedImageObjectsBytes = orphans.totalBytes;
-        }
+        orphanPass = await sweepOnce(db, options, { budgetMs: CLEAN_SWEEP_BUDGET_MS });
+        if (orphanPass.remaining > 0) nudgeOrphanSweep();
     } catch (e) {
         console.warn('[StorageHealth] Could not sweep orphaned image objects:', e);
     }
+    const removedImageObjectsCount = orphanPass.removed;
+    const removedImageObjectsBytes = orphanPass.bytes;
 
     // 2. Delete orphaned pulse thumbnails
     let removedThumbnailsCount = 0;
@@ -610,6 +740,8 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
         removedPhotosBytes: effectiveRemovedPhotosBytes,
         removedImageObjectsCount,
         removedImageObjectsBytes,
+        remainingImageObjectsCount: orphanPass.remaining,
+        remainingImageObjectsBytes: orphanPass.remainingBytes,
         removedThumbnailsCount,
         removedThumbnailsBytes: effectiveRemovedThumbnailsBytes,
         compressedLogsCount,
@@ -638,11 +770,19 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
  *
  * ## Why it is safe to run unattended
  *
- * It is exactly {@link findOrphanedImageObjects} plus {@link deleteStoredObjects}, the same pair the Clean
- * button runs, with the same one-hour grace period — which is what makes the sweep safe at any moment,
- * including in the middle of a post being written. It walks `<data>/images` only, so a snapshot's captured
- * objects under `<data>/snapshots/<name>.db.images` are out of reach by construction, and it unlinks a name
- * rather than an inode, so a snapshot's hard link keeps the bytes. It touches no rows at all.
+ * It is exactly {@link findOrphanedImageObjects} plus {@link deleteObjectUnless} ({@link sweepOnce}), the same
+ * pass the Clean button runs, with the same one-hour grace period — which is what makes the sweep safe at any
+ * moment, including in the middle of a post being written. It walks `<data>/images` only, so a snapshot's
+ * captured objects under `<data>/snapshots/<name>.db.images` are out of reach by construction, and it unlinks a
+ * name rather than an inode, so a snapshot's hard link keeps the bytes. It touches no rows at all.
+ *
+ * ## Why it never holds the node
+ *
+ * A pass is capped ({@link ORPHAN_SWEEP_BATCH_S3} on a bucket, {@link ORPHAN_SWEEP_BATCH} on disk) and yields to
+ * the event loop between deletes; on S3 nothing in it blocks at all. When a pass stops at its cap, the next one
+ * comes ORPHAN_SWEEP_CONTINUE_MS later rather than a day later, until none remain. Before this, the sweep was
+ * one synchronous loop of blocking round trips: after a restore left a few hundred orphans in a bucket it held
+ * the node past the ~60 s host watchdog, which restarted it — and the next sweep did the same again.
  */
 const ORPHAN_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -651,53 +791,105 @@ const ORPHAN_SWEEP_FIRST_DELAY_MS = 15 * 60 * 1000;
 
 let orphanSweepTimer: NodeJS.Timeout | null = null;
 
+/** Bumped by every start and stop, so a pass or a timer from an earlier arming knows it has been called off. */
+let orphanSweepGeneration = 0;
+
+/** The armed sweep: when it fires next, whether a pass is running, and how to bring it forward. */
+let orphanSweepArmed: { continueMs: number; nextAt: number; running: boolean; schedule: (delayMs: number) => void } | null = null;
+
 /**
- * One pass. Never throws: a sweep that cannot read the store is a warning and a retry tomorrow, not a
- * process that falls over. Returns what it removed so a caller (and the test) can see it.
+ * One pass. Never throws: a sweep that cannot read the store is a warning and a retry later, not a process that
+ * falls over. Returns what it removed and what it left, so a caller (and the test) can see it.
  */
-export function sweepOrphanedImageObjects(options?: { db?: any; dataDir?: string; nowMs?: number }):
-    { removed: number; bytes: number } {
+export async function sweepOrphanedImageObjects(options?: { db?: any; dataDir?: string; store?: ImageStore; nowMs?: number }):
+    Promise<OrphanSweepPass> {
+    const { storeFailed: _storeFailed, ...pass } = await runSweepPass(options);
+    return pass;
+}
+
+async function runSweepPass(
+    options: { db?: any; dataDir?: string; store?: ImageStore; nowMs?: number } | undefined,
+    shouldStop?: () => boolean,
+): Promise<OrphanSweepPass & { storeFailed: boolean }> {
     const db = options?.db || defaultDb;
-    const dataDir = options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
     try {
-        const orphans = findOrphanedImageObjects(db, dataDir, options?.nowMs ?? Date.now());
-        if (orphans.keys.length === 0) return { removed: 0, bytes: 0 };
-        const removed = deleteStoredObjects(orphans.keys, new DiskImageStore(imagesDir(dataDir)));
-        console.log(
-            `🧹 [StorageHealth] Daily sweep: removed ${removed} orphaned image object(s) `
-            + `(${(orphans.totalBytes / 1024).toFixed(1)} KB) that no row points at. `
-            + `First: ${orphans.keys.slice(0, 3).join(', ')}`,
-        );
-        return { removed, bytes: orphans.totalBytes };
+        const pass = await sweepOnce(db, options, { shouldStop });
+        if (pass.removed > 0 || pass.remaining > 0) {
+            console.log(
+                `🧹 [StorageHealth] Orphan sweep: removed ${pass.removed} orphaned image object(s) `
+                + `(${(pass.bytes / 1024).toFixed(1)} KB) that no row points at`
+                + (pass.remaining > 0 ? `; ${pass.remaining} more left for the next pass.` : '.'),
+            );
+        }
+        return pass;
     } catch (e) {
-        console.warn('[StorageHealth] Daily orphan sweep failed; trying again tomorrow:', e);
-        return { removed: 0, bytes: 0 };
+        console.warn('[StorageHealth] Orphan sweep failed; trying again later:', e);
+        return { removed: 0, bytes: 0, remaining: 0, remainingBytes: 0, storeFailed: true };
     }
 }
 
 /**
  * Arm the daily sweep. Call once at boot, with no arguments.
  *
- * Every argument is a test seam — `intervalMs`/`firstDelayMs` so a suite can prove the schedule actually
- * fires rather than only that the function works, and `db`/`dataDir` so it fires against the suite's own
- * fixture, the same pair every other entry point in this module takes.
+ * Every argument is a test seam — `intervalMs`/`firstDelayMs`/`continueMs` so a suite can prove the schedule
+ * actually fires (and carries on while orphans remain) rather than only that the function works, and
+ * `db`/`dataDir`/`store` so it fires against the suite's own fixture, the same set every other entry point in
+ * this module takes.
  */
-export function startOrphanObjectSweep(opts?: { intervalMs?: number; firstDelayMs?: number; db?: any; dataDir?: string }): void {
-    if (orphanSweepTimer) return;
+export function startOrphanObjectSweep(opts?: {
+    intervalMs?: number; firstDelayMs?: number; continueMs?: number; db?: any; dataDir?: string; store?: ImageStore;
+}): void {
+    if (orphanSweepArmed) return;
+    const generation = ++orphanSweepGeneration;
+    const calledOff = () => orphanSweepGeneration !== generation;
     const interval = opts?.intervalMs ?? ORPHAN_SWEEP_INTERVAL_MS;
     const first = opts?.firstDelayMs ?? ORPHAN_SWEEP_FIRST_DELAY_MS;
-    const tick = (delay: number): void => {
-        orphanSweepTimer = setTimeout(() => {
-            sweepOrphanedImageObjects({ db: opts?.db, dataDir: opts?.dataDir });
-            tick(interval);
-        }, delay);
-        // Never a reason to hold the process open: a sweep missed at shutdown runs at the next boot.
-        orphanSweepTimer.unref?.();
+    const armed = {
+        continueMs: opts?.continueMs ?? ORPHAN_SWEEP_CONTINUE_MS,
+        nextAt: 0,
+        running: false,
+        schedule: (delayMs: number): void => {
+            if (orphanSweepTimer) clearTimeout(orphanSweepTimer);
+            armed.nextAt = Date.now() + delayMs;
+            orphanSweepTimer = setTimeout(async () => {
+                orphanSweepTimer = null;
+                armed.running = true;
+                let pass: OrphanSweepPass & { storeFailed: boolean };
+                try {
+                    pass = await runSweepPass({ db: opts?.db, dataDir: opts?.dataDir, store: opts?.store }, calledOff);
+                } finally {
+                    armed.running = false;
+                }
+                if (calledOff()) return;
+                // Orphans left at the cap: the next batch soon. Left because the store stopped answering: the
+                // usual interval, rather than knocking on a bucket that is down every minute.
+                armed.schedule(pass.remaining > 0 && !pass.storeFailed ? armed.continueMs : interval);
+            }, delayMs);
+            // Never a reason to hold the process open: a sweep missed at shutdown runs at the next boot.
+            orphanSweepTimer.unref?.();
+        },
     };
-    tick(first);
+    orphanSweepArmed = armed;
+    armed.schedule(first);
 }
 
-/** Stop it — for tests and for a clean shutdown. */
+/**
+ * Bring the next pass forward to ORPHAN_SWEEP_CONTINUE_MS from now, when it was due later: the admin Clean left
+ * orphans behind and the background carries on with them. A pass already running decides for itself by what it
+ * left; a sweep that was never armed (a suite) is left alone.
+ */
+function nudgeOrphanSweep(): void {
+    const armed = orphanSweepArmed;
+    if (!armed || armed.running) return;
+    if (armed.nextAt - Date.now() > armed.continueMs) armed.schedule(armed.continueMs);
+}
+
+/**
+ * Stop it — for tests and for a clean shutdown. A pass that is running stops before its next delete; the one it
+ * has already sent completes, and everything it did not reach waits for the next pass as an orphan.
+ */
 export function stopOrphanObjectSweep(): void {
+    orphanSweepGeneration++;
+    orphanSweepArmed = null;
     if (orphanSweepTimer) { clearTimeout(orphanSweepTimer); orphanSweepTimer = null; }
 }

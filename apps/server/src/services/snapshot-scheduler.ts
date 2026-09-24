@@ -35,6 +35,14 @@
  *
  * The directory is a SIBLING of the `.db` file, named `<snapshot>.images`, so it never ends in `.db`:
  * {@link listSnapshots} and {@link resolveSnapshotPath} keep seeing snapshots and nothing else.
+ *
+ * ## On an S3 node a snapshot is the database only (IMAGE_STORE=s3)
+ *
+ * There is nothing to hard-link in a bucket, and copying every object out of it daily is the global node's
+ * whole photo library through a small server's disk. So an s3 node's snapshot captures no objects: its keys
+ * resolve against the bucket, its download says `in-bucket` like any backup from that node, and a photo
+ * deleted from the bucket after the snapshot was taken does not come back from it — which the log says each
+ * time. A restore measures exactly which of its keys the bucket still holds.
  */
 
 import fs from 'node:fs';
@@ -42,7 +50,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
-import { assertSafeKey, copyObjectReplacing, imagesDir } from '../storage/image-store.js';
+import { assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -287,6 +295,15 @@ export function createSnapshot(): SnapshotInfo {
         // new snapshot would inherit objects belonging to a database it is replacing.
         removeSnapshotImages(dest);
         writeDbSnapshot(dest);
+        // An s3 node: the objects stay in the bucket and nothing is captured (see the note at the top).
+        const bucket = bucketOf(getImageStore());
+        if (bucket) {
+            const st = fs.statSync(dest);
+            prune(getAutoSnapshotConfig().keep);
+            logger.info('SYS', `[Snapshots] Created snapshot ${name} (${st.size} bytes): the database only — its photos and `
+                + `attachments stay in ${bucket.where}, and one deleted from there after now does not come back from this snapshot`);
+            return { name, sizeBytes: st.size, createdAt: st.mtimeMs, hasImages: false };
+        }
         // Immediately, and inside the same `creating` guard: the snapshot is a recovery point only if the
         // objects its rows name are captured before anything can unlink them (see the note at the top).
         let images: SnapshotImages;

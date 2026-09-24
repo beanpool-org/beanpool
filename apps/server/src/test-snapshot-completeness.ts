@@ -456,8 +456,8 @@ async function main(): Promise<void> {
     db.prepare('DELETE FROM posts WHERE id = ?').run(kept!.id);
     const aged = (Date.now() - 3 * 60 * 60 * 1000) / 1000;
     fs.utimesSync(path.join(imagesDir(), guardedKey), aged, aged);
-    assert(getStorageCleanPreview().orphanedImageObjects.count >= 1, 'the sweep sees the live copy as reclaimable');
-    const swept = cleanStorageAndCompressLogs();
+    assert((await getStorageCleanPreview()).orphanedImageObjects.count >= 1, 'the sweep sees the live copy as reclaimable');
+    const swept = await cleanStorageAndCompressLogs();
     assert(swept.removedImageObjectsCount >= 1, 'and reclaims it');
     assert(store.get(guardedKey) === null, 'the live object is gone');
     assert(fs.existsSync(guardedImages), 'the snapshot\'s directory is untouched');

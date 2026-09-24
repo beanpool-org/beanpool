@@ -35,6 +35,35 @@
 export function downloadShortfall(res: {
     headers: { get(name: string): string | null };
 }): string {
+    return downloadNotice(res).text;
+}
+
+/**
+ * {@link downloadShortfall}'s sentence, and whether it reports something MISSING.
+ *
+ * The two differ for one kind of file: an s3 node's backup that is whole. Its sentence is never '' — the
+ * operator must be told the photos are in the bucket, not in the file — but nothing is missing from it, and a
+ * caller that framed every non-empty sentence as "not complete" raised that alarm on every healthy download
+ * from an s3 node. `short` is what decides the framing; see {@link downloadedAlert}. It matches the node's own
+ * Backup tab (settings.js), which calls the same file "✅ Backup downloaded" with the bucket note beside it.
+ */
+export interface DownloadNotice {
+    text: string;
+    short: boolean;
+}
+
+export function downloadNotice(res: {
+    headers: { get(name: string): string | null };
+}): DownloadNotice {
+    if (res.headers.get('X-Backup-Images') === 'in-bucket') {
+        const missing = Number(res.headers.get('X-Backup-Missing-Images'));
+        return { text: inBucketSentence(res), short: Number.isFinite(missing) && missing > 0 };
+    }
+    const text = diskShortfall(res);
+    return { text, short: text !== '' };
+}
+
+function diskShortfall(res: { headers: { get(name: string): string | null } }): string {
     const counts = res.headers.get('X-Backup-Images') || '';
     const [staged, referenced] = counts.split('/').map(Number);
     const measured = Number.isFinite(staged) && Number.isFinite(referenced);
@@ -55,6 +84,27 @@ export function downloadShortfall(res: {
         + (unchecked
             ? 'The rest of its photos and attachments could not be checked against its database, so more may be missing.'
             : 'Everything else is in the file.');
+}
+
+/**
+ * A backup from a node that keeps its photos in an S3 bucket (`IMAGE_STORE=s3`): the file is the database, and
+ * the photos are in the bucket, by design. Never '' — whoever downloads it must not think the photos are
+ * inside it — and never "missing N of N", which would read as a node that lost every photo. What CAN be short
+ * is the bucket, which the node counted when it took the backup and sends as `X-Backup-Missing-Images`.
+ */
+function inBucketSentence(res: { headers: { get(name: string): string | null } }): string {
+    const bucket = res.headers.get('X-Backup-Images-Bucket') || '';
+    const missing = Number(res.headers.get('X-Backup-Missing-Images'));
+    const referenced = Number(res.headers.get('X-Backup-Images-Referenced'));
+    let text = 'This file holds the database only: the node keeps its photos and attachments in its S3 bucket'
+        + `${bucket ? ` "${bucket}"` : ''}, not inside the backup.`;
+    if (Number.isFinite(missing) && missing > 0) {
+        const of = Number.isFinite(referenced) && referenced > 0 ? ` of the ${referenced}` : '';
+        text += ` ${missing}${of} photo(s) or attachment(s) its database references were not in the bucket when it was taken.`;
+    } else if (res.headers.get('X-Backup-Images-Checked') === 'no') {
+        text += ' The bucket could not be checked when the backup was taken.';
+    }
+    return text;
 }
 
 /**
@@ -86,6 +136,18 @@ export function restoreShortfall(body: unknown): string {
         return 'The database was restored, but this node could not confirm its photos and attachments came with it.';
     }
     return '';
+}
+
+/**
+ * The alert after `what` downloaded, or '' when there is nothing to say. "…but it is not complete" only when
+ * the notice reports something missing; an s3 node's whole backup gets "`what` downloaded." and the note that
+ * its photos are in the bucket. Takes a missing notice (a declined download, a mocked client) as nothing to say.
+ */
+export function downloadedAlert(what: string, notice: DownloadNotice | null | undefined): string {
+    if (!notice?.text) return '';
+    return notice.short
+        ? `${what} downloaded, but it is not complete.\n\n${notice.text}`
+        : `${what} downloaded.\n\n${notice.text}`;
 }
 
 /** The same sentence as a suffix for a success message: ' ⚠️ …', or '' when there is nothing short. */

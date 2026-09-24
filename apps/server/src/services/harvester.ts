@@ -37,7 +37,7 @@ import { pipeline } from 'node:stream/promises';
 import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import { peerIdFromPrivateKey, peerIdFromString } from '@libp2p/peer-id';
 import { readSealedHeader, verifySealedHeader, type CodeStanza, type SealedEnvelopeHeader } from '@beanpool/core';
-import { sealFileVerified, checkBackupArchive, MISSING_MEMBER } from './sealed-backup.js';
+import { sealFileVerified, checkBackupArchive, MISSING_MEMBER, IN_BUCKET_MEMBER } from './sealed-backup.js';
 import { peerIdOfKeyFile } from './takeover-envelope.js';
 
 export interface FleetNodeConfig {
@@ -294,7 +294,10 @@ function readHeaderOf(file: string): SealedEnvelopeHeader {
 
 /** What the node said its backup carried, from the response headers (storage design §7). */
 export interface BackupContents {
-    /** 'database+images', 'database+images-partial' or 'database-only'; null from a node too old to say. */
+    /**
+     * 'database+images', 'database+images-partial', 'database+images-in-bucket' (an s3 node: the objects are
+     * in its bucket, not the file) or 'database-only'; null from a node too old to say.
+     */
     contents: string | null;
     /** `<staged>/<referenced>` image objects, as the node counted them; null when it did not say. */
     images: string | null;
@@ -327,6 +330,10 @@ function backupContents(res: Response): BackupContents {
 function describeContents(c: BackupContents): string {
     if (!c.contents) return 'contents not stated (an older node)';
     if (c.contents === 'database-only') return 'DATABASE ONLY — no photos or attachments in this file';
+    if (c.contents === 'database+images-in-bucket') {
+        return 'database only — the node keeps its photos and attachments in an S3 bucket, not in this file'
+            + (c.missingImages ? `; SHORT by ${c.missingImages} the bucket does not hold` : '');
+    }
     if (c.missingImages) {
         return `database + ${c.images || 'some'} image object(s) — SHORT by ${c.missingImages}, which are gone from the node's store`;
     }
@@ -356,6 +363,28 @@ export function imagesDirFor(dbPath: string): string {
 /** A short backup's manifest, beside the database it belongs to. */
 export function missingManifestFor(dbPath: string): string {
     return `${dbPath}.${MISSING_MEMBER}`;
+}
+
+/**
+ * An s3 node's label, beside the database it belongs to: that copy's photos are in the node's bucket, not
+ * beside it. Kept for the same reason the short manifest is — it is the only thing that tells whoever
+ * downloads the copy later that `images/` is empty on purpose.
+ */
+export function inBucketLabelFor(dbPath: string): string {
+    return `${dbPath}.${IN_BUCKET_MEMBER}`;
+}
+
+/** Carry an s3 node's label across, or clear a stale one (the node may have moved back to disk). */
+function keepInBucketLabel(from: string, destDb: string): boolean {
+    const dest = inBucketLabelFor(destDb);
+    fs.rmSync(dest, { force: true });
+    try {
+        if (!fs.lstatSync(from).isFile()) return false;
+    } catch {
+        return false;
+    }
+    fs.copyFileSync(from, dest);
+    return true;
 }
 
 /**
@@ -434,6 +463,8 @@ interface KeptBackup {
     /** True when the archive carried a {@link MISSING_MEMBER} manifest, with its count when it could be read. */
     short: boolean;
     missing: number | null;
+    /** True when the node keeps its objects in an S3 bucket, so none were in the archive by design. */
+    inBucket: boolean;
 }
 
 /** Keep a readable backup WHOLE: state.db, its images and any manifest, and one copy a day in history/. */
@@ -454,8 +485,9 @@ function keepPlainBackup(node: FleetNodeConfig, tarPath: string): KeptBackup {
         // and nothing would say so, because the headers that did are gone the moment the response ends.
         const images = replaceTree(path.join(extract, 'images'), imagesDirFor(destDb), false);
         const short = keepMissingManifest(path.join(extract, MISSING_MEMBER), destDb);
+        const inBucket = keepInBucketLabel(path.join(extract, IN_BUCKET_MEMBER), destDb);
         createDailyArchive(node);
-        return { dbSize: fs.statSync(destDb).size, images: images.files, ...short };
+        return { dbSize: fs.statSync(destDb).size, images: images.files, ...short, inBucket };
     } finally {
         fs.rmSync(extract, { recursive: true, force: true });
     }
@@ -466,6 +498,7 @@ function describeKept(kept: KeptBackup): string {
     const shortly = kept.short
         ? ` — SHORT by ${kept.missing ?? 'an unreadable number of'} object(s), listed in ${MISSING_MEMBER} beside it`
         : '';
+    if (kept.inBucket) return `database only — the node's photos and attachments stay in its S3 bucket${shortly}`;
     return `database + ${kept.images} image object(s)${shortly}`;
 }
 
@@ -488,6 +521,7 @@ function createDailyArchive(node: FleetNodeConfig): void {
         const images = replaceTree(imagesDirFor(dbPath), imagesDirFor(archivePath), true);
         const manifest = missingManifestFor(dbPath);
         if (fs.existsSync(manifest)) fs.copyFileSync(manifest, missingManifestFor(archivePath));
+        if (fs.existsSync(inBucketLabelFor(dbPath))) fs.copyFileSync(inBucketLabelFor(dbPath), inBucketLabelFor(archivePath));
         console.log(
             `[Harvester] Created daily archive for ${nodeSlug(node)}: beanpool-${todayStr}.db `
             + `with ${images.files} image object(s)${fs.existsSync(manifest) ? ' (SHORT: see its ' + MISSING_MEMBER + ')' : ''}`,
@@ -503,6 +537,7 @@ function createDailyArchive(node: FleetNodeConfig): void {
                 // reachable by nothing and reclaimed by nothing: the harvester has no orphan sweep.
                 fs.rmSync(imagesDirFor(filePath), { recursive: true, force: true });
                 fs.rmSync(missingManifestFor(filePath), { force: true });
+                fs.rmSync(inBucketLabelFor(filePath), { force: true });
                 console.log(`[Harvester] Pruned old snapshot archive for ${nodeSlug(node)}: ${file}`);
             }
         } catch { /* ignore */ }
@@ -578,6 +613,7 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
             // What was KEPT, not what the node said it sent: this log line used to read `database + N image
             // object(s)` off the response headers while the code beside it threw the images away.
             console.warn(`[Harvester] ${node.name}: kept a readable backup (${describeKept(kept)}). ${message}`);
+            // `in-bucket` parses as NaN: an s3 node sends no objects, so there is no count to compare.
             const claimed = Number(carried.images?.split('/')[0]);
             if (Number.isFinite(claimed) && claimed !== kept.images) {
                 console.warn(
@@ -738,6 +774,11 @@ export async function sealOldBackups(node: FleetNodeConfig, header: SealedEnvelo
                 if (fs.existsSync(manifest)) {
                     fs.copyFileSync(manifest, path.join(stage, MISSING_MEMBER));
                     consumed.push(manifest);
+                }
+                const label = inBucketLabelFor(src);
+                if (fs.existsSync(label)) {
+                    fs.copyFileSync(label, path.join(stage, IN_BUCKET_MEMBER));
+                    consumed.push(label);
                 }
             }
         }

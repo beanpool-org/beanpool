@@ -1172,5 +1172,67 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByText(/Successfully reclaimed/i)).toBeInTheDocument();
         expect(onRefreshDiagMock).toHaveBeenCalled();
     });
+
+    it('a Clean that stopped with stored images left says how many remain, never "complete"', async () => {
+        vi.spyOn(nodeClient, 'fetchStorageCleanPreview').mockResolvedValue({
+            success: true,
+            preview: {
+                orphanedPostPhotos: { count: 0, totalBytes: 0 },
+                orphanedImageObjects: { count: 1200, totalBytes: 60 * 1024 * 1024 },
+                orphanedThumbnails: { count: 0, totalBytes: 0 },
+                compressibleLogs: { count: 0, totalBytes: 0 },
+                totalReclaimableBytes: 60 * 1024 * 1024,
+            },
+        });
+        vi.spyOn(nodeClient, 'cleanStorageAndCompressLogs').mockResolvedValue({
+            success: true,
+            removedPhotosCount: 0,
+            removedPhotosBytes: 0,
+            removedImageObjectsCount: 205,
+            removedImageObjectsBytes: 10 * 1024 * 1024,
+            remainingImageObjectsCount: 995,
+            remainingImageObjectsBytes: 50 * 1024 * 1024,
+            removedThumbnailsCount: 0,
+            removedThumbnailsBytes: 0,
+            compressedLogsCount: 0,
+            compressedLogsBytes: 0,
+            totalReclaimedBytes: 10 * 1024 * 1024,
+        });
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="diagnostics"
+                />
+            );
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Clean Orphaned Media & Compress Logs/i }));
+        });
+        expect(screen.getByText('1200 objects')).toBeInTheDocument();
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Confirm & Clean Now/i }));
+        });
+
+        expect(screen.queryByText(/Cleanup Complete!/i)).not.toBeInTheDocument();
+        expect(screen.getByText(/Cleanup started: more to remove/i)).toBeInTheDocument();
+        expect(screen.getByText(/Removed 205 unreferenced stored photos and attachments/i)).toBeInTheDocument();
+        expect(screen.getByText('995 more')).toBeInTheDocument();
+        expect(screen.getByText(/keeps removing them in the/i)).toBeInTheDocument();
+    });
 });
 

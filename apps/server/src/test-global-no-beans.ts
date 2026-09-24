@@ -14,9 +14,10 @@
  *      every ledger primitive refuses on its own. The ledger audit is clean and nothing was written.
  *   3. That database, now recorded as global, refuses to boot as local; a standby of it doesn't refuse; started
  *      once with NODE_PROFILE_ALLOW_CHANGE_FROM=global it converts.
- *   4. The local profile: unchanged. A send fails for the old reason, a price is kept, the routes answer, and a
- *      real escrow opens.
- *   5. Now the ledger has moved: `nodeProfile.beans=false` is refused at boot (the log says why) and Beans stay on;
+ *   4. The local profile: unchanged. Beans switched off and back on at runtime first, before anything moves. A send
+ *      fails for the old reason, a price is kept, the routes answer, and a real escrow opens.
+ *   5. Now the ledger has moved: `nodeProfile.beans=false` is refused at runtime, with no reboot (the "never moved"
+ *      seen in 4 did not outlive Beans coming back on), and at boot (the log says why), and Beans stay on;
  *      NODE_PROFILE=global on this database keeps all five money switches on, and the open escrow completes.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-global-no-beans.ts
@@ -282,6 +283,12 @@ async function main() {
 
     // ── 4. The local profile: unchanged ──
     console.log('\n── 4. local: everything as before ──');
+    // Beans switched off and back on at runtime while nothing has moved yet: what was seen while they were off must
+    // not outlive them, or 5 below would find the ledger "never moved" after it has.
+    setOverride('beans', 'false');
+    assert(getProfileSwitches().beans === false, 'switched off at runtime on a ledger that has never moved, Beans are off');
+    clearOverrides();
+    assert(getProfileSwitches().beans === true, 'and switched back on, they are on');
     const info4 = await call('GET', '/api/community/info', null, alice);
     assert(info4.body.profile === 'local' && info4.body.features?.beans === true && info4.body.features?.escrow === true && info4.body.features?.enterprises === true,
         `info: local, Beans, escrow and enterprises on (${JSON.stringify(info4.body.features)})`);
@@ -305,7 +312,13 @@ async function main() {
 
     // ── 5. Money is never frozen ──
     console.log('\n── 5. a ledger that has moved ──');
+    // At runtime first, with no reboot to look at the ledger again.
     setOverride('beans', 'false');
+    const live5 = getProfileSwitches();
+    assert(live5.beans && live5.escrow, `nodeProfile.beans=false set at runtime on this node: Beans and escrow stay on (${JSON.stringify({ beans: live5.beans, escrow: live5.escrow })})`);
+    const liveSend5 = await send(alice, bob);
+    assert(liveSend5.status !== 403 && liveSend5.body?.code !== 'profile_no_beans',
+        `and a send is not refused for the profile (${liveSend5.status} ${liveSend5.body?.error})`);
     setOverride('escrow', 'false');
     const lockBoot = await capture(() => mirrorNodeProfileAtBoot());
     const lockLine = lockBoot.warns.find(w => w.includes('stay ON') && w.includes('ledger has moved')) ?? '';

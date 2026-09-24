@@ -249,8 +249,9 @@ export function ledgerHistory(): string | null {
 }
 
 // A ledger that has moved has moved for good, so what was found is kept for the life of the process. "Never moved"
-// is kept only while Beans are configured off, because only then can nothing here move it; an import or a restore
-// writes the ledger from outside, so it forgets (forgetLedgerHistory).
+// is kept only while Beans are configured off, because only then can nothing here move it: every read of the
+// switches with Beans on drops it, and every money path reads them before it writes. An import or a restore writes
+// the ledger from outside, so it forgets (forgetLedgerHistory).
 let historyFound: string | null = null;
 let quietWhileBeansOff = false;
 
@@ -261,7 +262,6 @@ export function forgetLedgerHistory(): void {
 
 function cachedLedgerHistory(beansConfigured: boolean): string | null {
     if (historyFound) return historyFound;
-    if (beansConfigured) quietWhileBeansOff = false;
     if (quietWhileBeansOff) return null;
     historyFound = ledgerHistory();
     quietWhileBeansOff = historyFound === null && !beansConfigured;
@@ -269,6 +269,9 @@ function cachedLedgerHistory(beansConfigured: boolean): string | null {
 }
 
 function lockMoneySwitches(s: ProfileSwitches): ProfileSwitches {
+    // Whether or not any money switch is off: Beans switched back on with every switch on would otherwise keep
+    // "never moved" through the sends that follow, and switched off again the ledger would freeze.
+    if (s.beans) quietWhileBeansOff = false;
     const off = MONEY_SWITCHES.filter((k) => !s[k]);
     if (off.length > 0) {
         const history = cachedLedgerHistory(s.beans);

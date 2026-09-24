@@ -2716,6 +2716,7 @@
             btn.disabled = true;
             btn.textContent = '⏳ Creating backup...';
             statusEl.textContent = '';
+            statusEl.classList.remove('show');
             try {
                 const res = await fetch('/api/local/admin/backup', {
                     method: 'POST',
@@ -2749,9 +2750,13 @@
                     statusEl.textContent = '✅ Backup downloaded';
                     statusEl.style.color = '#10b981';
                 }
+                // .status-msg is display:none until it is shown: without this, the shortfall and the bucket note
+                // above were written into a line nobody could see.
+                statusEl.classList.add('show');
             } catch (e) {
                 statusEl.textContent = '❌ ' + e.message;
                 statusEl.style.color = '#ef4444';
+                statusEl.classList.add('show');
             } finally {
                 btn.disabled = false;
                 btn.textContent = '💾 Download Backup';

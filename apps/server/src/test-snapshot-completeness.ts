@@ -64,13 +64,6 @@ async function drain(body: NodeJS.ReadableStream): Promise<void> {
         body.on('error', reject);
     });
 }
-async function rejects(fn: () => Promise<unknown>, name: string, msg: string): Promise<void> {
-    let caught: any = null;
-    try { await fn(); } catch (e) { caught = e; }
-    assert(!!caught && (caught.name === name || caught.constructor?.name === name),
-        `${msg}${caught ? '' : ' (it did not throw at all)'}${caught && caught.name !== name ? ` (threw ${caught.name})` : ''}`);
-}
-
 /** A photo of a realistic size, deterministic per seed, behind a real JPEG header. */
 function makePhoto(seed: string): Buffer {
     const body = crypto.createHash('sha512').update(seed).digest();

@@ -37,7 +37,9 @@
  */
 
 import { db } from '../db/db.js';
-import { getImageStore, postPhotoKey, attachmentKey, sha256Hex, type ImageStore } from '../storage/image-store.js';
+import {
+    ImageStoreUnavailableError, getImageStore, postPhotoKey, attachmentKey, sha256Hex, type ImageStore,
+} from '../storage/image-store.js';
 import { prepareStorablePhoto, prepareStorableCiphertext } from '../storage/image-columns.js';
 
 /** Rows per pass. Small enough that a pass is a few hundred milliseconds on the slowest node we run. */
@@ -51,6 +53,12 @@ export const EVACUATION_BATCH_S3 = 5;
 
 /** Gap between passes, so the job is a background hum rather than a boot-time stall. */
 const EVACUATION_INTERVAL_MS = 2_000;
+
+/**
+ * Gap after a pass the store cut short by not answering. Long enough that an R2 outage is not a warning every
+ * two seconds, and past the S3 store's 30 s breaker, so the next pass gets a real attempt.
+ */
+const EVACUATION_STORE_RETRY_MS = 60_000;
 
 /** How long after boot the first pass runs — well clear of the startup burst. */
 const EVACUATION_START_DELAY_MS = 20_000;
@@ -90,6 +98,11 @@ function addCounts(a: EvacuationCounts, b: EvacuationCounts): EvacuationCounts {
  * A value that cannot be reproduced exactly is skipped EVERY pass — it is the row's permanent answer, not a
  * transient failure — so without this the job would re-read the same handful of rows forever and never reach
  * the ones behind them. Per-process, so a restart re-examines them once (cheap) in case a fix has shipped.
+ *
+ * A store that is not answering ({@link ImageStoreUnavailableError}) is NOT a row's answer, and never lands a
+ * row here: it ends the pass instead. Recorded here, every row the job reached during an outage would be given
+ * up on for the life of the process, the job would then find nothing left, call itself done, and vacuum —
+ * leaving those photos in the database until a restart.
  */
 const skippedPhotos = new Set<string>();
 const skippedAttachments = new Set<string>();
@@ -187,6 +200,8 @@ function evacuatePhotoBatch(store: ImageStore, limit: number): EvacuationCounts 
                 counts.photoBytesMoved += row.photo_data.length;
             }
         } catch (e) {
+            // The store, not this row: stop the pass and leave the row for the next one.
+            if (e instanceof ImageStoreUnavailableError) throw e;
             console.warn(`[ImageEvacuation] Could not move photo ${id}:`, e);
             skippedPhotos.add(id);
             counts.photosSkipped++;
@@ -239,6 +254,7 @@ function evacuateAttachmentBatch(store: ImageStore, limit: number): EvacuationCo
                 counts.attachmentBytesMoved += row.data.length;
             }
         } catch (e) {
+            if (e instanceof ImageStoreUnavailableError) throw e;
             console.warn(`[ImageEvacuation] Could not move attachment ${row.message_id}:`, e);
             skippedAttachments.add(row.message_id);
             counts.attachmentsSkipped++;
@@ -261,6 +277,9 @@ export function pendingEvacuationCount(): { photos: number; attachments: number 
 /**
  * One batch of work. Exported so a suite can drive the job a pass at a time — and kill it between passes,
  * which is exactly what "safe to interrupt" has to mean.
+ *
+ * Throws {@link ImageStoreUnavailableError} when the store stops answering part-way: the rows moved before it
+ * are moved, the rest are untouched and not skipped.
  */
 export function evacuateImagesOnce(limit = EVACUATION_BATCH): EvacuationCounts {
     const store = getImageStore();
@@ -351,6 +370,7 @@ export function startImageEvacuation(): void {
             timer = null;
             if (running) { schedule(EVACUATION_INTERVAL_MS); return; }
             running = true;
+            let next = EVACUATION_INTERVAL_MS;
             try {
                 const pass = evacuateImagesOnce(getImageStore().kind === 's3' ? EVACUATION_BATCH_S3 : EVACUATION_BATCH);
                 total = addCounts(total, pass);
@@ -369,11 +389,18 @@ export function startImageEvacuation(): void {
                     return; // nothing rescheduled: the job is over until the next restart
                 }
             } catch (e) {
-                console.warn('[ImageEvacuation] Pass failed; trying again shortly:', e);
+                if (e instanceof ImageStoreUnavailableError) {
+                    // Nothing was given up on: the rows it did not reach are still inline, still authoritative,
+                    // and the next pass starts with them.
+                    console.warn(`[ImageEvacuation] The image store is not answering; no photo was skipped. Trying again in ${EVACUATION_STORE_RETRY_MS / 1000} s: ${e.message}`);
+                    next = EVACUATION_STORE_RETRY_MS;
+                } else {
+                    console.warn('[ImageEvacuation] Pass failed; trying again shortly:', e);
+                }
             } finally {
                 running = false;
             }
-            schedule(EVACUATION_INTERVAL_MS);
+            schedule(next);
         }, delay);
         timer.unref?.();
     };

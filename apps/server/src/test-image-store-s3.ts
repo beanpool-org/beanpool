@@ -30,7 +30,7 @@ import util from 'node:util';
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import {
-    DiskImageStore, MAX_OBJECT_BYTES, STORE_NAMESPACES,
+    DiskImageStore, ImageStoreError, ImageStoreUnavailableError, MAX_OBJECT_BYTES, STORE_NAMESPACES,
     checkImageStoreAtBoot, configuredImageStoreKind, getImageStore, headObject, openObject, postPhotoKey,
     attachmentKey, readObject, resetImageStoreForTests, scanObjects, scanObjectsAsync, scanOurObjects,
     scanOurObjectsAsync, sha256Hex, type ImageStore, type ObjectInfo,
@@ -48,8 +48,14 @@ function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); }
 }
+/** The error the last {@link throws} or {@link rejects} caught, for a check on its kind. */
+let lastThrown: unknown = null;
+/** An outage, not a fault in the object: what the evacuation must never give up on a row for. */
+const isOutage = (e: unknown) => e instanceof ImageStoreUnavailableError;
 function throws(fn: () => unknown, re: RegExp | null, msg: string): string {
+    lastThrown = null;
     try { fn(); } catch (e: any) {
+        lastThrown = e;
         const text = String(e?.message || e);
         assert(re ? re.test(text) : true, `${msg}${re && !re.test(text) ? ` (threw: ${text})` : ''}`);
         return text;
@@ -58,7 +64,9 @@ function throws(fn: () => unknown, re: RegExp | null, msg: string): string {
     return '';
 }
 async function rejects(fn: () => Promise<unknown>, re: RegExp | null, msg: string): Promise<string> {
+    lastThrown = null;
     try { await fn(); } catch (e: any) {
+        lastThrown = e;
         const text = String(e?.message || e);
         assert(re ? re.test(text) : true, `${msg}${re && !re.test(text) ? ` (threw: ${text})` : ''}`);
         return text;
@@ -156,8 +164,11 @@ async function contract(name: string, store: ImageStore): Promise<void> {
     throws(() => store.put('posts/p/0-empty.jpg', Buffer.alloc(0), { mime: 'image/jpeg' }), /empty/, `${name}: an empty object is refused`);
     throws(() => store.put('posts/p/0-huge.jpg', Buffer.alloc(MAX_OBJECT_BYTES + 1), { mime: 'image/jpeg' }), /over the/,
         `${name}: an object over the cap is refused`);
+    assert(lastThrown instanceof ImageStoreError && !isOutage(lastThrown),
+        `${name}: as a fault in the object, not an outage of the store`);
     throws(() => store.put('posts/p/0-bad.jpg', JPEG, { mime: 'image/jpeg', sha256: '0'.repeat(64) }), /do not match/,
         `${name}: bytes that do not match the caller's hash are refused`);
+    assert(lastThrown instanceof ImageStoreError && !isOutage(lastThrown), `${name}: and that is not an outage either`);
     assert(store.get('posts/p/0-bad.jpg') === null, `${name}: and nothing was written for the refused put`);
 
     // The image-columns round trip — the rule that a row's bytes come back character for character.
@@ -286,6 +297,7 @@ async function main(): Promise<void> {
         errorTexts.push(throws(() => wrong.put('posts/w/0-aaaaaaaa.jpg', JPEG, { mime: 'image/jpeg' }), /403.*SignatureDoesNotMatch/,
             'a request signed with the wrong secret is refused 403 SignatureDoesNotMatch'));
         assert((await fake.log()).filter((e) => e.method === 'PUT').length === 1, 'and a 403 is not retried');
+        assert(isOutage(lastThrown), 'refused credentials are an outage of the store, not a fault in the photo');
         const kept = storePhotoColumns(wrong, (s) => postPhotoKey('post-w', 0, s.sha256, s.mime), encodeDataUrl('image/jpeg', JPEG));
         assert(kept.photo_data === encodeDataUrl('image/jpeg', JPEG) && kept.storage_key === null,
             'a photo the bucket refuses stays in its row (the evacuation job moves it later) — never a failed post');
@@ -306,6 +318,7 @@ async function main(): Promise<void> {
         await fake.clearLog();
         await fake.fault({ method: 'GET', status: 403, code: 'AccessDenied', count: 1 });
         errorTexts.push(throws(() => s3.get(k503), /403.*AccessDenied/, 'a 403 on a read is an error'));
+        assert(isOutage(lastThrown), 'and an outage of the store');
         assert((await fake.log()).filter((e) => e.method === 'GET').length === 1, 'and is not retried');
 
         // Timeouts and the breaker, with short settings so the suite is quick.
@@ -315,12 +328,14 @@ async function main(): Promise<void> {
         let t = Date.now();
         errorTexts.push(throws(() => quick.get(k503), /failed after 2 attempt\(s\): no answer within 300 ms/,
             'a bucket that does not answer times out, after the bounded number of attempts'));
+        assert(isOutage(lastThrown), 'a bucket that does not answer is an outage');
         const waited = Date.now() - t;
         assert(waited < 2_000, `and the node was held for ${waited} ms — bounded by attempts × timeout, not by the bucket`);
         const before = (await fake.log()).length;
         t = Date.now();
         errorTexts.push(throws(() => quick.put('posts/b/0-bbbbbbbb.jpg', JPEG, { mime: 'image/jpeg' }), /not attempted/,
             'straight after, the breaker is open: a blocking call fails at once'));
+        assert(isOutage(lastThrown), 'and so is the open breaker');
         assert(Date.now() - t < 100 && (await fake.log()).length === before,
             'without waiting and without sending a request');
         const inline = storePhotoColumns(quick, (s) => postPhotoKey('post-b', 0, s.sha256, s.mime), encodeDataUrl('image/jpeg', JPEG));
@@ -335,12 +350,25 @@ async function main(): Promise<void> {
         await fake.fault({ method: 'GET', status: 500, count: 2 });
         assert((await s3.getAsync(k503))!.equals(PNG), 'the async path retries a 500 twice and then reads the object');
         assert((await fake.log()).filter((e) => e.method === 'GET').length === 3, 'in three attempts');
+        await fake.fault({ method: 'GET', status: 500, count: 3 });
+        errorTexts.push(await rejects(() => s3.getAsync(k503), /failed after 3 attempt\(s\): HTTP 500/, 'and gives up after the third'));
+        assert(isOutage(lastThrown), 'as an outage of the store');
+        await fake.clearFaults();
         assert((await s3.getAsync('posts/none/0-00000000.jpg')) === null, 'the async path reads a missing object as null');
 
         // A missing BUCKET is not a missing photo.
         const noBucket = track(new S3ImageStore(fake.config({ bucket: 'no-such-bucket-here' })));
         errorTexts.push(throws(() => noBucket.get(k503), /404.*NoSuchBucket/, 'a GET against a bucket that does not exist is an error, not "no such photo"'));
+        assert(isOutage(lastThrown), 'a missing bucket is an outage of the store');
         errorTexts.push(await rejects(() => noBucket.getAsync(k503), /404.*NoSuchBucket/, 'on the async path too'));
+        assert(isOutage(lastThrown), 'on the async path too, an outage');
+
+        // Throttled: not retried on the spot, but an outage, never a fault in the photo.
+        await fake.clearLog();
+        await fake.fault({ method: 'PUT', status: 429, code: 'TooManyRequests', count: 1 });
+        errorTexts.push(throws(() => s3.put(k503, PNG, { mime: 'image/png' }), /429/, 'a 429 on a write is an error'));
+        assert(isOutage(lastThrown), 'and an outage of the store');
+        await fake.clearFaults();
 
         // A slow body: the deadline covers the bucket's answer, not a phone's download.
         const slow = track(new S3ImageStore(fake.config(), { asyncAttemptTimeoutMs: 300, asyncAttempts: 1 }));

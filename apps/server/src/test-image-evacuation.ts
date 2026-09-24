@@ -12,7 +12,8 @@
  *   3. Serving is byte-identical before and after evacuation, with the same content type and the same
  *      cache headers, on the same URL.
  *   4. The evacuation job nulls a column only after a verified put, is idempotent, and is resumable —
- *      including from the exact state a kill between "put" and "update the row" leaves behind.
+ *      including from the exact state a kill between "put" and "update the row" leaves behind. A store that
+ *      stops answering ends the pass without giving up on any row.
  *   5. A sync export is byte-identical for an evacuated photo: the federation payload does not change —
  *      and a photo this node can no longer read is omitted from the payload rather than exported empty,
  *      so a replica holding the only good copy keeps it.
@@ -155,7 +156,9 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { initStateEngine, exportSyncState, createPost } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { getImageStore, postPhotoKey, sha256Hex, imagesDir, DiskImageStore } = await import('./storage/image-store.js');
+    const {
+        getImageStore, postPhotoKey, sha256Hex, imagesDir, DiskImageStore, ImageStoreUnavailableError, resetImageStoreForTests,
+    } = await import('./storage/image-store.js');
     const { evacuateImagesOnce, evacuationPassDidWork, pendingEvacuationCount, resetEvacuationSkipsForTests } = await import('./services/image-evacuation.js');
     const { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs } = await import('./engine/storage-health.js');
     const { createPlainBackup } = await import('./services/sealed-backup.js');
@@ -260,6 +263,43 @@ async function main(): Promise<void> {
     store.put(interruptedKey, interruptedBytes, { mime: 'image/jpeg' });
     assert((db.prepare('SELECT photo_data FROM post_photos WHERE post_id = ?').get(interrupted.postId) as any).photo_data === interrupted.value,
         'the interrupted row still holds its bytes — nothing has been lost');
+
+    // The store stops answering mid-migration (an R2 outage, the S3 breaker open). That is not the rows' fault:
+    // the pass must end with the store's error and give up on nothing, so that once the store is back the very
+    // rows it reached are moved. Given up on, the job would find nothing left, call itself done, and vacuum.
+    // Checked BEFORE the skip list is reset below, which would otherwise hide a row wrongly skipped here.
+    {
+        const pendingBeforeOutage = pendingEvacuationCount();
+        const reached = (db.prepare(`
+            SELECT post_id FROM post_photos
+             WHERE storage_key IS NULL AND photo_data IS NOT NULL AND photo_data != ''
+             ORDER BY post_id, order_num LIMIT 3
+        `).all() as any[]).map((r) => r.post_id as string);
+        const down = new Proxy(store, {
+            get(target, prop) {
+                if (prop === 'put') {
+                    return () => { throw new ImageStoreUnavailableError('S3 PUT failed after 2 attempt(s): HTTP 503 SlowDown'); };
+                }
+                const v = Reflect.get(target, prop, target);
+                return typeof v === 'function' ? v.bind(target) : v;
+            },
+        });
+        resetImageStoreForTests(down);
+        let outage: unknown = null;
+        let duringOutage: ReturnType<typeof evacuateImagesOnce> | null = null;
+        try { duringOutage = evacuateImagesOnce(3); } catch (e) { outage = e; }
+        resetImageStoreForTests(store);
+        assert(outage instanceof ImageStoreUnavailableError,
+            `a pass the store does not answer ends with the store's error${duringOutage ? ` (it returned instead, skipping ${duringOutage.photosSkipped})` : ''}`);
+        const pendingAfterOutage = pendingEvacuationCount();
+        assert(pendingAfterOutage.photos === pendingBeforeOutage.photos && pendingAfterOutage.attachments === pendingBeforeOutage.attachments,
+            'and moved nothing');
+        const recovered = evacuateImagesOnce(3);
+        const movedNow = reached.filter((id) =>
+            (db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = 0').get(id) as any)?.storage_key);
+        assert(recovered.photosMoved === 3 && recovered.photosSkipped === 0 && movedNow.length === reached.length,
+            `once the store answers, the very rows the outage pass reached are moved — none was given up on (${movedNow.length}/${reached.length})`);
+    }
 
     // One pass at a time, killing the job between passes. After every pass, every row must be either
     // wholly inline or wholly evacuated: there is no half state to be caught in.

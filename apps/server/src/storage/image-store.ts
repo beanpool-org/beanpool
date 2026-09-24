@@ -126,6 +126,22 @@ export class ImageStoreError extends Error {
 }
 
 /**
+ * The store did not answer, or turned this node away as a whole: no answer in time, a 5xx after the retries,
+ * the breaker open, throttled (429), the credentials refused, the bucket missing. Nothing is wrong with the
+ * object or the row that asked, and the same call can succeed once the store is back.
+ *
+ * Still an {@link ImageStoreError}, so every caller that handles one handles this. It exists for the callers
+ * that decide what to GIVE UP on — the evacuation's skip list above all — which must not mistake an outage for
+ * something wrong with a row.
+ */
+export class ImageStoreUnavailableError extends ImageStoreError {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ImageStoreUnavailableError';
+    }
+}
+
+/**
  * A key segment may only be these characters: no separators to walk with, no `..` to climb with, nothing the
  * filesystem treats specially. Applied per segment, so `posts/<id>/<n>-<sha8>.jpg` passes and
  * `posts/../../etc/passwd` does not.

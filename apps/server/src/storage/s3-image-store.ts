@@ -47,7 +47,7 @@
 import util from 'node:util';
 import { Readable } from 'node:stream';
 import {
-    ImageStoreError, MAX_OBJECT_BYTES, assertSafeKey, assertSafePrefix, sha256Hex,
+    ImageStoreError, ImageStoreUnavailableError, MAX_OBJECT_BYTES, assertSafeKey, assertSafePrefix, sha256Hex,
     type ImageStore, type ObjectInfo, type PutOptions, type StoredObject,
 } from './image-store.js';
 import { EMPTY_PAYLOAD_SHA256, signRequest, uriEncode, type SigV4Credentials } from './s3-sigv4.js';
@@ -220,6 +220,15 @@ function retryableStatus(status: number): boolean {
     return status >= 500 && status <= 599;
 }
 
+/**
+ * An answer about the bucket or this node's access to it, not about the object: throttled, credentials
+ * refused, no such bucket. Not retried on the spot, but the same request can succeed later, once the
+ * provider or the operator has fixed it — so it is an {@link ImageStoreUnavailableError}.
+ */
+function storeWideRefusal(status: number, code: string | null): boolean {
+    return status === 429 || status === 401 || status === 403 || code === 'NoSuchBucket';
+}
+
 /** Where the credentials live: off the instance, so logging or serialising a store cannot print them. */
 const secrets = new WeakMap<S3ImageStore, SigV4Credentials>();
 
@@ -289,7 +298,7 @@ export class S3ImageStore implements ImageStore {
     private checkBreaker(what: string): void {
         const now = Date.now();
         if (now < this.breakerUntil) {
-            throw new ImageStoreError(
+            throw new ImageStoreUnavailableError(
                 `S3 ${what} not attempted: the bucket failed ${Math.round((now - (this.breakerUntil - this.tuning.breakerMs)) / 1000)} s ago `
                 + `(${this.breakerReason}), and the node does not wait on it again until ${new Date(this.breakerUntil).toISOString()}`,
             );
@@ -325,12 +334,13 @@ export class S3ImageStore implements ImageStore {
         }
         this.breakerUntil = Date.now() + this.tuning.breakerMs;
         this.breakerReason = last;
-        throw new ImageStoreError(`S3 ${what} failed after ${this.tuning.syncAttempts} attempt(s): ${last}`);
+        throw new ImageStoreUnavailableError(`S3 ${what} failed after ${this.tuning.syncAttempts} attempt(s): ${last}`);
     }
 
     private fail(what: string, res: { status: number; body?: Buffer | string | null }): never {
         const code = s3ErrorCode(res.body ?? null);
-        throw new ImageStoreError(`S3 ${what} answered HTTP ${res.status}${code ? ` (${code})` : ''}`);
+        const message = `S3 ${what} answered HTTP ${res.status}${code ? ` (${code})` : ''}`;
+        throw storeWideRefusal(res.status, code) ? new ImageStoreUnavailableError(message) : new ImageStoreError(message);
     }
 
     /** The checks every write makes before a byte leaves the node, shared by {@link put} and {@link putAsync}. */
@@ -482,7 +492,7 @@ export class S3ImageStore implements ImageStore {
             this.breakerUntil = 0;
             return res;
         }
-        throw new ImageStoreError(`S3 ${what} failed after ${this.tuning.asyncAttempts} attempt(s): ${last}`);
+        throw new ImageStoreUnavailableError(`S3 ${what} failed after ${this.tuning.asyncAttempts} attempt(s): ${last}`);
     }
 
     private async failAsync(what: string, res: Response): Promise<never> {

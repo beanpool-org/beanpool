@@ -258,6 +258,12 @@ function stageImages(stage: string, sourceRoot: string, dbInStage: string): Stag
  *
  * `databaseOnly` is the one way to get a backup without them, and every path that offers it labels the
  * result: a short backup must be something the operator ASKED for, never something they discover at restore.
+ *
+ * One window worth naming. A snapshot's objects were captured when it was taken, so its download is exact.
+ * A LIVE backup is `VACUUM INTO` and then this, and a photo replaced between the two unlinks an object the
+ * copied database still names — so the backup fails where it could have succeeded a second earlier. That is
+ * the safe side of the trade: a retry (the operator's, or the harvester's back-off) takes a consistent one,
+ * where the alternative is shipping a file that is quietly missing a photo. The window is one VACUUM long.
  */
 function stageImagesOrRefuse(
     stage: string, dbInStage: string, opts: { imagesDir?: string; dbFile?: string; databaseOnly?: boolean },

@@ -380,6 +380,7 @@ run_federation_suites() {
       test-message-attachment
       test-social-ratings
       test-app-store-versions
+      test-node-profile
       test-funnel-event
       test-handshake
       test-post-pause-resume

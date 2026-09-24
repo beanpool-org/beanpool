@@ -42,6 +42,13 @@ services:
       - ENFORCE_READ_AUTH=${ENFORCE_READ_AUTH:-}
       - ENFORCE_WS_AUTH=${ENFORCE_WS_AUTH:-}
       - ENFORCE_LEDGER_AUTH=${ENFORCE_LEDGER_AUTH:-}
+      # What kind of node this is. EMPTY = local, a community with its own ledger, which is every node but one.
+      # `global` is for the worldwide lobby. Read at every boot, never taken from a restored backup; the
+      # switches it flips, and which are built yet, are in apps/server/src/config/node-profile.ts.
+      - NODE_PROFILE=${NODE_PROFILE:-}
+      # The oldest app build this node works with; phones below it see a banner they can't dismiss. EMPTY = the
+      # built-in floor, far below anything in the field (apps/server/src/app-store-versions.ts).
+      - MIN_APP_VERSION=${MIN_APP_VERSION:-}
       # Apple `sub` parity probe (temporary — see routes/apple-probe.ts). Empty
       # default = the probe pages are not registered at all, which is what every
       # node except the one being tested should have. APPLE_DOMAIN_ASSOCIATION is

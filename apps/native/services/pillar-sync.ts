@@ -149,14 +149,14 @@ let isSyncing = false;
 // real one, and reconciles anything a push missed. The catch-up sync remains the backstop on reconnect, on
 // foreground and on its periodic tick.
 
-// Changes applied, in order, so a cycle in flight can replay the ones that landed after it began. Bounded: a
-// cycle that outlives this many pushes leaves the rest to the next cycle.
+// Changes applied, in order, so a cycle in flight can replay the ones that landed after it began — only into the
+// database they were written to. Bounded: a cycle that outlives this many pushes leaves the rest to the next cycle.
 const LIVE_LOG_MAX = 500;
 let liveSeq = 0;
-const liveLog: Array<{ seq: number; change: LivePostChange }> = [];
+const liveLog: Array<{ seq: number; dbName: string; change: LivePostChange }> = [];
 
-function liveChangesSince(mark: number): { liveChanges?: LivePostChange[] } {
-    const changes = liveLog.filter(e => e.seq > mark).map(e => e.change);
+function liveChangesSince(mark: number, dbName: string): { liveChanges?: LivePostChange[] } {
+    const changes = liveLog.filter(e => e.seq > mark && e.dbName === dbName).map(e => e.change);
     return changes.length > 0 ? { liveChanges: changes } : {};
 }
 
@@ -187,7 +187,7 @@ export async function applyLivePostChange(
     if (self && ties.authorPubkey === self) return false;
     if (change.kind === 'remove' && ties.type !== null && !LIVE_POST_TYPES.has(ties.type)) return false;
 
-    liveLog.push({ seq: ++liveSeq, change });
+    liveLog.push({ seq: ++liveSeq, dbName: expectedDbName, change });
     if (liveLog.length > LIVE_LOG_MAX) liveLog.splice(0, liveLog.length - LIVE_LOG_MAX);
     await applyDelta({ liveChanges: [change] }, expectedDbName);
     return true;
@@ -390,7 +390,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const earlyApplied = new Set<string>();
         if (!postsIsIncremental && Array.isArray(postsData) && postsData.length > 0) {
             try {
-                await applyDelta({ posts: postsData, ...liveChangesSince(liveMark) }, expectedDbName);
+                await applyDelta({ posts: postsData, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
                 earlyApplied.add('posts');
                 delete delta.posts;
                 rawGated.delete('posts');
@@ -621,7 +621,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Listings the node pushed while this cycle was in flight. Its posts pull may have left before them, and
         // applyDelta writes these after `posts`, so a push is never undone by the older copy this cycle carries.
         // Not a table: never fingerprinted, never a reason to tell the screens something changed.
-        Object.assign(gatedDelta, liveChangesSince(liveMark));
+        Object.assign(gatedDelta, liveChangesSince(liveMark, expectedDbName));
 
         onProgress?.(5, 5, 'Finalizing Local SQLite Database Cache...');
         // Apply physical updates to local Native device SQLite Matrix

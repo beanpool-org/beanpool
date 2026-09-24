@@ -246,7 +246,7 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
 
         const post = publicOffer();
         socket.onmessage({ data: JSON.stringify({ type: 'new_post', post }) });
-        await vi.advanceTimersByTimeAsync(10);
+        await vi.advanceTimersByTimeAsync(WebSocketSyncClient.DATA_UPDATED_COALESCE_MS + 10);
 
         expect(applyLivePostChange).toHaveBeenCalledWith(
             { kind: 'upsert', post, created: true },
@@ -257,6 +257,20 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         expect(DeviceEventEmitter.emit).not.toHaveBeenCalledWith('ws_activity', expect.anything());
         // The market, map and post screens re-read the cache on the same signal a sync that changed posts sends.
         expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('sync_data_updated');
+    });
+
+    it('a burst of pushed changes makes the screens re-read once, not once per change', async () => {
+        const socket = await startAndConnect();
+        vi.mocked(DeviceEventEmitter.emit).mockClear();
+
+        for (let i = 0; i < 5; i++) {
+            socket.onmessage({ data: JSON.stringify({ type: 'new_post', post: publicOffer({ id: `post-${i}` }) }) });
+        }
+        await vi.advanceTimersByTimeAsync(WebSocketSyncClient.DATA_UPDATED_COALESCE_MS + 10);
+
+        expect(applyLivePostChange).toHaveBeenCalledTimes(5);
+        const rereads = vi.mocked(DeviceEventEmitter.emit).mock.calls.filter(([e]) => e === 'sync_data_updated');
+        expect(rereads).toHaveLength(1);
     });
 
     it('post_updated and a public post_removed take the same path', async () => {

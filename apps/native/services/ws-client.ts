@@ -20,6 +20,9 @@ class WebSocketSyncClient {
     private memberPubkey: string | null = null;
     /** Pushed listing changes are written one at a time, in the order the node sent them. */
     private liveQueue: Promise<void> = Promise.resolve();
+    private dataUpdatedTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    /** The window a burst of pushed changes shares one screen re-read in — the one requestSync coalesces in. */
+    public static readonly DATA_UPDATED_COALESCE_MS = 150;
     private isStarted = false;
     private isConnecting = false; // Fixes the AsyncStorage race condition
     private appStateSubscription: NativeEventSubscription | null = null;
@@ -248,7 +251,7 @@ class WebSocketSyncClient {
 
     /**
      * Write a pushed listing change, then tell the market, map and post screens to re-read the cache — the same
-     * signal a sync that changed posts sends. No `ws_activity`: its listeners are chats, unread counts and the
+     * signal a sync that changed posts sends, once per burst. No `ws_activity`: its listeners are chats, unread counts and the
      * needs-you row, each of which goes to the node, and a listing that does not involve this member is none of
      * theirs. A change that does involve them, or that fails to write, rings the doorbell exactly as before.
      */
@@ -261,9 +264,18 @@ class WebSocketSyncClient {
             } catch (err) {
                 console.warn('[WS Sync] Could not write a pushed listing change; syncing instead', err);
             }
-            if (applied) DeviceEventEmitter.emit('sync_data_updated');
+            if (applied) this.signalDataUpdated();
             else this.ringDoorbell(data);
         });
+    }
+
+    /** One `sync_data_updated` for a burst of pushed changes: the market and map re-query SQLite on each one. */
+    private signalDataUpdated() {
+        if (this.dataUpdatedTimeoutId) return;
+        this.dataUpdatedTimeoutId = setTimeout(() => {
+            this.dataUpdatedTimeoutId = null;
+            DeviceEventEmitter.emit('sync_data_updated');
+        }, WebSocketSyncClient.DATA_UPDATED_COALESCE_MS);
     }
 
     private disconnect() {

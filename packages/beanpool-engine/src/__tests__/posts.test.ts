@@ -1,7 +1,7 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert';
 import Database from 'better-sqlite3';
-import { generateSearchKeywords, getPosts } from '../posts.js';
+import { generateSearchKeywords, getPosts, publicBroadcastPost, type MarketplacePost } from '../posts.js';
 
 describe('Posts Search Keyword Expansion', () => {
     const synonymMap: Record<string, string[]> = {
@@ -152,5 +152,40 @@ describe('Posts ignore archetypes', () => {
         for (const post of posts) {
             assert.ok(!('targetArchetypes' in post), 'post must not carry targetArchetypes');
         }
+    });
+});
+
+// The copy of a post the live feed sends every member socket. Posts are read for their author (or a poll's voter)
+// before they are broadcast, and the apps keep what the feed sends them, so nothing only that one reader may see
+// can ride along.
+describe('publicBroadcastPost', () => {
+    const base = {
+        id: 'p1', type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 5,
+        authorPublicKey: 'a'.repeat(64), authorCallsign: 'Ann', createdAt: '2026-09-24T01:00:00.000Z',
+        updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public',
+    } as MarketplacePost;
+
+    it('drops reachPeers from every type: getPosts gives it to the author alone', () => {
+        for (const type of ['offer', 'need', 'poll', 'event'] as const) {
+            const out = publicBroadcastPost({ ...base, type, reach: 'peers', reachPeers: ['12D3KooWPeer'] });
+            assert.ok(!('reachPeers' in out), `${type}: reachPeers must not be broadcast`);
+            assert.strictEqual(out.reach, 'peers', `${type}: reach is a property of the listing and stays`);
+        }
+    });
+
+    it("still drops an event's host-only and reader-only fields", () => {
+        const out = publicBroadcastPost({
+            ...base, type: 'event', eventPrivateNote: 'Gate 1234', myRsvp: 'going',
+            eventRsvps: [{ memberPubkey: 'b'.repeat(64), status: 'going', updatedAt: base.updatedAt! }],
+        });
+        assert.ok(!('eventPrivateNote' in out) && !('myRsvp' in out) && !('eventRsvps' in out));
+    });
+
+    it("leaves everything else as it was, and does not touch the caller's copy", () => {
+        const post = { ...base, reachPeers: ['12D3KooWPeer'] };
+        const out = publicBroadcastPost(post);
+        const { reachPeers: _dropped, ...rest } = post;
+        assert.deepStrictEqual(out, rest);
+        assert.deepStrictEqual(post.reachPeers, ['12D3KooWPeer']);
     });
 });

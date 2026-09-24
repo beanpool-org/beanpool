@@ -405,6 +405,7 @@ run_federation_suites() {
       test-ws-http-port
       test-ws-auth-default
       test-ws-feed-parties
+      test-live-post-payloads
       test-moderation-notifications
       test-polls
       test-events

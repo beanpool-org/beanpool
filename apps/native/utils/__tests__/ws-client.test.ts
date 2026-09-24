@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, DeviceEventEmitter } from 'react-native';
-import { requestSync } from '../../services/pillar-sync';
+import { requestSync, applyLivePostChange } from '../../services/pillar-sync';
 import { WebSocketSyncClient } from '../../services/ws-client';
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -33,8 +33,10 @@ vi.mock('react-native', () => ({
 
 vi.mock('../../services/pillar-sync', () => ({
     requestSync: vi.fn(),
+    applyLivePostChange: vi.fn().mockResolvedValue(true),
 }));
 
+const ME = 'e'.repeat(64);
 vi.mock('../identity', () => ({
     loadIdentity: vi.fn().mockResolvedValue(null),
 }));
@@ -50,12 +52,15 @@ vi.mock('../node-url', () => ({
 describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
     let wsInstance: any = null;
     let client: WebSocketSyncClient;
+    // False stands in for a node that is down: new sockets never open.
+    let autoOpen = true;
 
     beforeEach(() => {
         vi.useFakeTimers();
         vi.clearAllMocks();
         mockAppStateListeners.length = 0;
         (AppState as any).currentState = 'active';
+        autoOpen = true;
 
         vi.mocked(AsyncStorage.getItem).mockImplementation(async (key: string) => {
             if (key === 'beanpool_anchor_url') return 'https://testnode.beanpool.org';
@@ -80,6 +85,7 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
             constructor(public url: string) {
                 // eslint-disable-next-line @typescript-eslint/no-this-alias
                 wsInstance = this;
+                if (!autoOpen) return;
                 setTimeout(() => {
                     if (this.onopen) this.onopen();
                 }, 0);
@@ -93,6 +99,7 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
     afterEach(() => {
         client.stop();
         vi.useRealTimers();
+        if (vi.isMockFunction(Math.random)) vi.mocked(Math.random).mockRestore();
     });
 
     async function startAndConnect(): Promise<any> {
@@ -220,5 +227,212 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
 
         // Advancing time does not trigger any stale watchdog errors
         await vi.advanceTimersByTimeAsync(100_000);
+    });
+
+    // ── Live updates: apply the change the node already sent, instead of re-fetching everything ──────────
+
+    const publicOffer = (extra: Record<string, unknown> = {}) => ({
+        id: 'post-1', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag', credits: 5,
+        authorPublicKey: 'a'.repeat(64), authorCallsign: 'Ann', createdAt: '2026-09-24T01:00:00.000Z',
+        updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public', ...extra,
+    });
+
+    it('a new_post carrying a public offer is written locally and does NOT run the catch-up sync', async () => {
+        const { loadIdentity } = await import('../identity');
+        vi.mocked(loadIdentity).mockResolvedValueOnce({ publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any);
+        const socket = await startAndConnect();
+        vi.mocked(requestSync).mockClear();
+        vi.mocked(DeviceEventEmitter.emit).mockClear();
+
+        const post = publicOffer();
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post', post }) });
+        await vi.advanceTimersByTimeAsync(WebSocketSyncClient.DATA_UPDATED_COALESCE_MS + 10);
+
+        expect(applyLivePostChange).toHaveBeenCalledWith(
+            { kind: 'upsert', post, created: true },
+            { anchorUrl: 'https://testnode.beanpool.org', selfPubkey: ME },
+        );
+        expect(requestSync).not.toHaveBeenCalled();
+        // The chat and unread listeners on ws_activity each go to the network; a listing change is not theirs.
+        expect(DeviceEventEmitter.emit).not.toHaveBeenCalledWith('ws_activity', expect.anything());
+        // The market, map and post screens re-read the cache on the same signal a sync that changed posts sends.
+        expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('sync_data_updated');
+    });
+
+    it('a burst of pushed changes makes the screens re-read once, not once per change', async () => {
+        const socket = await startAndConnect();
+        vi.mocked(DeviceEventEmitter.emit).mockClear();
+
+        for (let i = 0; i < 5; i++) {
+            socket.onmessage({ data: JSON.stringify({ type: 'new_post', post: publicOffer({ id: `post-${i}` }) }) });
+        }
+        await vi.advanceTimersByTimeAsync(WebSocketSyncClient.DATA_UPDATED_COALESCE_MS + 10);
+
+        expect(applyLivePostChange).toHaveBeenCalledTimes(5);
+        const rereads = vi.mocked(DeviceEventEmitter.emit).mock.calls.filter(([e]) => e === 'sync_data_updated');
+        expect(rereads).toHaveLength(1);
+    });
+
+    it('post_updated and a public post_removed take the same path', async () => {
+        const socket = await startAndConnect();
+        vi.mocked(requestSync).mockClear();
+
+        const post = publicOffer({ title: 'Lemons and limes', updatedAt: '2026-09-24T02:00:00.000Z' });
+        socket.onmessage({ data: JSON.stringify({ type: 'post_updated', post }) });
+        socket.onmessage({ data: JSON.stringify({ type: 'post_removed', id: 'post-1', audienceScope: 'public' }) });
+        await vi.advanceTimersByTimeAsync(10);
+
+        const changes = vi.mocked(applyLivePostChange).mock.calls.map(([c]) => c);
+        expect(changes).toEqual([{ kind: 'upsert', post, created: false }, { kind: 'remove', id: 'post-1' }]);
+        expect(requestSync).not.toHaveBeenCalled();
+    });
+
+    it('pushed changes are applied one at a time, in the order they arrived', async () => {
+        const socket = await startAndConnect();
+        const order: string[] = [];
+        let releaseFirst!: () => void;
+        vi.mocked(applyLivePostChange)
+            .mockImplementationOnce(async (c: any) => { order.push(`start ${c.post.title}`); await new Promise<void>(r => { releaseFirst = r; }); order.push(`end ${c.post.title}`); return true; })
+            .mockImplementationOnce(async (c: any) => { order.push(`start ${c.post.title}`); order.push(`end ${c.post.title}`); return true; });
+
+        socket.onmessage({ data: JSON.stringify({ type: 'post_updated', post: publicOffer({ title: 'v2', updatedAt: '2026-09-24T02:00:00.000Z' }) }) });
+        socket.onmessage({ data: JSON.stringify({ type: 'post_updated', post: publicOffer({ title: 'v3', updatedAt: '2026-09-24T03:00:00.000Z' }) }) });
+        await vi.advanceTimersByTimeAsync(10);
+        expect(order).toEqual(['start v2']);
+        releaseFirst();
+        await vi.advanceTimersByTimeAsync(10);
+        expect(order).toEqual(['start v2', 'end v2', 'start v3', 'end v3']);
+    });
+
+    it('when the change touches this member (their post, their deal), it falls back to the doorbell exactly as before', async () => {
+        const socket = await startAndConnect();
+        vi.mocked(requestSync).mockClear();
+        vi.mocked(DeviceEventEmitter.emit).mockClear();
+        vi.mocked(applyLivePostChange).mockResolvedValueOnce(false);
+
+        const event = { type: 'new_post', post: publicOffer() };
+        socket.onmessage({ data: JSON.stringify(event) });
+        await vi.advanceTimersByTimeAsync(10);
+
+        expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('ws_activity', event);
+        expect(requestSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('a change whose doorbell throws does not stop the changes queued behind it', async () => {
+        const socket = await startAndConnect();
+        vi.mocked(applyLivePostChange).mockClear();
+        vi.mocked(applyLivePostChange).mockResolvedValueOnce(false);
+        vi.mocked(requestSync).mockImplementationOnce(() => { throw new Error('sync queue broke'); });
+
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post', post: publicOffer({ id: 'first' }) }) });
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post', post: publicOffer({ id: 'second' }) }) });
+        await vi.advanceTimersByTimeAsync(10);
+
+        expect(vi.mocked(applyLivePostChange).mock.calls.map(([c]: any) => c.post.id)).toEqual(['first', 'second']);
+    });
+
+    it('a failed local write falls back to the doorbell', async () => {
+        const socket = await startAndConnect();
+        vi.mocked(requestSync).mockClear();
+        vi.mocked(applyLivePostChange).mockRejectedValueOnce(new Error('database is closing'));
+
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post', post: publicOffer() }) });
+        await vi.advanceTimersByTimeAsync(10);
+        expect(requestSync).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        ['a transaction_completed doorbell', { type: 'transaction_completed' }],
+        ['a group listing', { type: 'new_post', post: publicOffer({ audienceScope: 'group', targetGroupId: 'g1' }) }],
+        ['an event', { type: 'post_updated', post: publicOffer({ type: 'event' }) }],
+        ['a poll vote', { type: 'post_updated', post: publicOffer({ type: 'poll' }) }],
+        ['a pause (id only)', { type: 'post_updated', id: 'post-1' }],
+        ['a removal that does not say its audience (older node)', { type: 'post_removed', id: 'post-1' }],
+        ['a group removal', { type: 'post_removed', id: 'post-1', audienceScope: 'group' }],
+    ])('%s still runs the catch-up sync and is never written from the payload', async (_name, event) => {
+        const socket = await startAndConnect();
+        vi.mocked(requestSync).mockClear();
+        vi.mocked(applyLivePostChange).mockClear();
+        vi.mocked(DeviceEventEmitter.emit).mockClear();
+
+        socket.onmessage({ data: JSON.stringify(event) });
+        await vi.advanceTimersByTimeAsync(10);
+
+        expect(applyLivePostChange).not.toHaveBeenCalled();
+        expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('ws_activity', event);
+        expect(requestSync).toHaveBeenCalledTimes(1);
+    });
+
+    // ── Reconnect: full jitter, so a restarted edge does not get every phone back in the same second ─────
+
+    async function dropAndCountReconnect(random: number): Promise<number> {
+        const first = await startAndConnect();
+        vi.spyOn(Math, 'random').mockReturnValue(random);
+        first.close(); // onclose → scheduleReconnect
+        let waited = 0;
+        while (wsInstance === first && waited < 60_000) {
+            await vi.advanceTimersByTimeAsync(100);
+            waited += 100;
+        }
+        return waited;
+    }
+
+    it('the first retry after a drop can wait the whole 0–5 s window', async () => {
+        const waited = await dropAndCountReconnect(0.999);
+        expect(waited).toBeGreaterThan(4500);
+        expect(waited).toBeLessThanOrEqual(5100);
+    });
+
+    it('and can also come back at once', async () => {
+        const waited = await dropAndCountReconnect(0);
+        expect(waited).toBeLessThanOrEqual(100);
+    });
+
+    it('a server that keeps refusing is retried with a growing window, never more than 30 s apart', async () => {
+        await startAndConnect();
+        vi.spyOn(Math, 'random').mockReturnValue(0.999);
+        autoOpen = false; // the node is down: no retry's socket ever opens
+        const gaps: number[] = [];
+        for (let i = 0; i < 8; i++) {
+            const current = wsInstance;
+            current.close();
+            let waited = 0;
+            while (wsInstance === current && waited < 120_000) {
+                await vi.advanceTimersByTimeAsync(100);
+                waited += 100;
+            }
+            gaps.push(waited);
+        }
+        expect(gaps[0]).toBeLessThanOrEqual(5100);
+        expect(Math.max(...gaps)).toBeLessThanOrEqual(30_100);
+        expect(gaps[gaps.length - 1]).toBeGreaterThan(29_000);
+    });
+
+    it('the catch-up sync after a reconnect waits a random 0–3 s', async () => {
+        await dropAndCountReconnect(0.999);
+        vi.mocked(requestSync).mockClear();
+        // The retry's socket opens on the next tick; its sync is spread, not immediate.
+        await vi.advanceTimersByTimeAsync(10);
+        expect(requestSync).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(requestSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('bringing the app to the front reconnects at once and syncs at once — one person, not a crowd', async () => {
+        const first = await startAndConnect();
+        vi.spyOn(Math, 'random').mockReturnValue(0.999);
+        first.close(); // a retry is now ~5 s away
+        await vi.advanceTimersByTimeAsync(100);
+        expect(wsInstance).toBe(first);
+
+        (AppState as any).currentState = 'background';
+        mockAppStateListeners.forEach(l => l('background'));
+        (AppState as any).currentState = 'active';
+        vi.mocked(requestSync).mockClear();
+        mockAppStateListeners.forEach(l => l('active'));
+        await vi.advanceTimersByTimeAsync(10);
+
+        expect(wsInstance).not.toBe(first);
+        expect(requestSync).toHaveBeenCalledTimes(1);
     });
 });

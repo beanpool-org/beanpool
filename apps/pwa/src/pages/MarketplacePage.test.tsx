@@ -4,6 +4,8 @@ import React from 'react';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
+import { livePostChange } from '@beanpool/core';
+import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -347,5 +349,113 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         expect(pollOptions().className).toBe('space-y-2 mb-3 mt-1');
         expect(screen.getByText('It is Amazing and we should start on it this weekend').className)
             .toMatch(/(^|\s)truncate(\s|$)/);
+    });
+});
+
+// A listing the node pushed over /ws, applied to the list this page holds, the same list its refresh writes
+// (lib/live-posts). The live feed itself is mocked out in this file, so the change is routed exactly as
+// lib/sync.ts routes it.
+describe('MarketplacePage: a listing pushed over the live feed', () => {
+    const pushed = (extra: Record<string, unknown> = {}) => ({
+        id: 'post-9', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag of them', credits: 5,
+        priceType: 'fixed', authorPublicKey: 'member-erin', authorCallsign: 'Erin', createdAt: '2026-09-24T01:00:00.000Z',
+        updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public', repeatable: false,
+        ...extra,
+    });
+    const push = (event: unknown) => act(async () => {
+        const change = livePostChange(event);
+        expect(change).not.toBeNull();
+        routeLivePostChange(change!, identity.publicKey);
+    });
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        resetLivePostsForTest();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue(posts as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    });
+
+    it('a new listing appears without asking the node for the list again', async () => {
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        const calls = vi.mocked(api.getMarketplacePosts).mock.calls.length;
+
+        await push({ type: 'new_post', post: pushed() });
+
+        expect(await screen.findByText('Spare lemons')).toBeTruthy();
+        expect(screen.getByText('Bicycle Repair')).toBeTruthy();
+        expect(vi.mocked(api.getMarketplacePosts).mock.calls.length).toBe(calls);
+    });
+
+    it('an edit replaces it and a removal takes it away, still without a fetch', async () => {
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        const calls = vi.mocked(api.getMarketplacePosts).mock.calls.length;
+
+        await push({ type: 'new_post', post: pushed() });
+        await screen.findByText('Spare lemons');
+        await push({ type: 'post_updated', post: pushed({ title: 'Lemons and limes', updatedAt: '2026-09-24T02:00:00.000Z' }) });
+        await screen.findByText('Lemons and limes');
+        expect(screen.queryByText('Spare lemons')).toBeNull();
+
+        await push({ type: 'post_removed', id: 'post-9', audienceScope: 'public' });
+        await waitFor(() => expect(screen.queryByText('Lemons and limes')).toBeNull());
+        expect(vi.mocked(api.getMarketplacePosts).mock.calls.length).toBe(calls);
+    });
+
+    it('a later refresh that returns the same listing shows it once', async () => {
+        const view = render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        await push({ type: 'new_post', post: pushed() });
+        await screen.findByText('Spare lemons');
+
+        // The node now lists it too; a filter change makes the page fetch again.
+        vi.mocked(api.getMarketplacePosts).mockResolvedValue([pushed(), ...posts] as any);
+        await act(async () => { screen.getByRole('button', { name: '🟢 Offers' }).click(); });
+        await waitFor(() => expect(vi.mocked(api.getMarketplacePosts).mock.calls.some(([f]) => (f as any)?.type === 'offer')).toBe(true));
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(view.getAllByText('Spare lemons')).toHaveLength(1);
+    });
+
+    it('a listing pushed while the page was still loading survives the load', async () => {
+        // The feed read and the viewer's-own read are both held until the push has landed.
+        const pending: Array<(v: any) => void> = [];
+        vi.mocked(api.getMarketplacePosts).mockImplementation(() => new Promise(r => { pending.push(r); }));
+        render(<MarketplacePage identity={identity} />);
+        await waitFor(() => expect(pending.length).toBe(2));
+
+        // The list was read before this listing existed.
+        await push({ type: 'new_post', post: pushed() });
+        await act(async () => { pending[0](posts); pending[1]([]); });
+
+        expect(await screen.findByText('Bicycle Repair')).toBeTruthy();
+        expect(await screen.findByText('Spare lemons')).toBeTruthy();
+    });
+
+    it('my own listing is not applied here: it goes to the doorbell, and the full refresh', async () => {
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        const change = livePostChange({ type: 'new_post', post: pushed({ authorPublicKey: identity.publicKey }) })!;
+        let applied = true;
+        await act(async () => { applied = routeLivePostChange(change, identity.publicKey); });
+        expect(applied).toBe(false);
+        expect(screen.queryByText('Spare lemons')).toBeNull();
+    });
+
+    it('removing a listing this page holds as a poll or event is left to the doorbell', async () => {
+        vi.mocked(api.getMarketplacePosts).mockResolvedValue([
+            ...posts,
+            { ...pushed({ id: 'poll-1', type: 'poll', title: 'Market day?' }), pollOptions: [{ id: 'a', text: 'Saturday' }] },
+        ] as any);
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Market day?');
+        let applied = true;
+        await act(async () => { applied = routeLivePostChange(livePostChange({ type: 'post_removed', id: 'poll-1', audienceScope: 'public' })!, identity.publicKey); });
+        expect(applied).toBe(false);
+        await act(async () => { applied = routeLivePostChange(livePostChange({ type: 'post_removed', id: 'post-1', audienceScope: 'public' })!, identity.publicKey); });
+        expect(applied).toBe(true);
     });
 });

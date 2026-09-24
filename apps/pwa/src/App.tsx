@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
 import { connectToAnchor, onSystemAnnouncement, onSyncActivity } from './lib/sync';
+import { registerLivePostTie, openDealTie } from './lib/live-posts';
 import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth, type MarketplaceTransaction } from './lib/api';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
@@ -162,6 +163,11 @@ export function App() {
     const [totalUnread, setTotalUnread] = useState(0);
     const [pendingDealsCount, setPendingDealsCount] = useState(0);
     const [myTransactions, setMyTransactions] = useState<MarketplaceTransaction[]>([]);
+    // A listing the viewer has an open deal on is not applied from the live feed: its change can reject or cancel
+    // the deal without a trade event of its own, so it rings the doorbell and this poll runs (lib/live-posts).
+    const myTransactionsRef = useRef<MarketplaceTransaction[]>([]);
+    useEffect(() => { myTransactionsRef.current = myTransactions; }, [myTransactions]);
+    useEffect(() => registerLivePostTie(openDealTie(() => myTransactionsRef.current)), []);
     const [marketClickCount, setMarketClickCount] = useState(0);
     // null until the node has answered the membership check. The Market, Commons and Map pages wait for it
     // before asking for the viewer's balance, so a guest never sends that request; everything else reads

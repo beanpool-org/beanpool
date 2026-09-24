@@ -13,8 +13,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { BeanPoolMerkleTree } from '@beanpool/core';
-import { applyDelta, fetchFriendsFromServer, getDb } from '../utils/db';
+import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
+import { applyDelta, fetchFriendsFromServer, getDb, localPostTies } from '../utils/db';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
@@ -138,6 +138,61 @@ async function discoverAnchor(): Promise<string | null> {
 
 let isSyncing = false;
 
+// ===================== LIVE LISTING CHANGES =====================
+//
+// The node sends the whole listing with `new_post` / `post_updated` (and the id with `post_removed`). A public
+// offer or need is written straight into the cache here instead of running a catch-up sync for it: one new
+// listing used to send every open phone back to the node for every pillar below. The rule for what qualifies
+// is @beanpool/core `livePostChange`; services/ws-client.ts routes to this.
+//
+// A pushed change never moves the sync cursor — the next real sync still asks for everything since the last
+// real one, and reconciles anything a push missed. The catch-up sync remains the backstop on reconnect, on
+// foreground and on its periodic tick.
+
+// Changes applied, in order, so a cycle in flight can replay the ones that landed after it began — only into the
+// database they were written to. Bounded: a cycle that outlives this many pushes leaves the rest to the next cycle.
+const LIVE_LOG_MAX = 500;
+let liveSeq = 0;
+const liveLog: Array<{ seq: number; dbName: string; change: LivePostChange }> = [];
+
+function liveChangesSince(mark: number, dbName: string): { liveChanges?: LivePostChange[] } {
+    const changes = liveLog.filter(e => e.seq > mark && e.dbName === dbName).map(e => e.change);
+    return changes.length > 0 ? { liveChanges: changes } : {};
+}
+
+/**
+ * Write a pushed listing change into this phone's cache, through applyDelta. Returns false — and writes
+ * nothing — when the change should go through the full catch-up sync as it always did:
+ *   - the socket's node is no longer the active one (the cache belongs to another community now);
+ *   - it is this member's own listing, one they accepted, one they have an open deal on or a conversation
+ *     about: one person, not a crowd, and their deals, chats and offer gate need the sync, not just the row;
+ *   - a removal of a cached event or poll, whose removal means more than a cancelled row (an event's chat
+ *     goes read-only; the rule for pushes is offers and needs only).
+ * Throws only if the write itself fails; the caller then rings the doorbell instead.
+ */
+export async function applyLivePostChange(
+    change: LivePostChange,
+    ctx: { anchorUrl: string | null; selfPubkey: string | null },
+): Promise<boolean> {
+    if (!ctx.anchorUrl) return false;
+    const expectedDbName = getDatabaseFilenameForNode(ctx.anchorUrl);
+    const activeAnchor = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (getDatabaseFilenameForNode(activeAnchor) !== expectedDbName) return false;
+
+    const self = ctx.selfPubkey;
+    const postId = change.kind === 'upsert' ? change.post.id : change.id;
+    if (change.kind === 'upsert' && self && (change.post.authorPublicKey === self || change.post.acceptedBy === self)) return false;
+    const ties = await localPostTies(postId);
+    if (ties.openDeal || ties.conversation) return false;
+    if (self && ties.authorPubkey === self) return false;
+    if (change.kind === 'remove' && ties.type !== null && !LIVE_POST_TYPES.has(ties.type)) return false;
+
+    liveLog.push({ seq: ++liveSeq, dbName: expectedDbName, change });
+    if (liveLog.length > LIVE_LOG_MAX) liveLog.splice(0, liveLog.length - LIVE_LOG_MAX);
+    await applyDelta({ liveChanges: [change] }, expectedDbName);
+    return true;
+}
+
 /** DeviceEventEmitter event fired when a performSync cycle ends, with `{ success: boolean }`. */
 export const PILLAR_SYNC_ENDED = 'pillar_sync_ended';
 
@@ -158,6 +213,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
     isSyncing = true;
     const startTime = Date.now();
     const deadline = startTime + SYNC_TIMEOUT_MS;
+    // Pushed listing changes applied after this point are replayed over this cycle's writes (liveChangesSince).
+    const liveMark = liveSeq;
 
     onProgress?.(1, 5, 'Discovering Node Connection...');
 
@@ -333,7 +390,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const earlyApplied = new Set<string>();
         if (!postsIsIncremental && Array.isArray(postsData) && postsData.length > 0) {
             try {
-                await applyDelta({ posts: postsData }, expectedDbName);
+                await applyDelta({ posts: postsData, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
                 earlyApplied.add('posts');
                 delete delta.posts;
                 rawGated.delete('posts');
@@ -561,6 +618,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
         // The full-directory GC flag must travel with the members table it describes.
         if (gatedDelta.members && delta.membersComplete) gatedDelta.membersComplete = true;
+        // Listings the node pushed while this cycle was in flight. Its posts pull may have left before them, and
+        // applyDelta writes these after `posts`, so a push is never undone by the older copy this cycle carries.
+        // Not a table: never fingerprinted, never a reason to tell the screens something changed.
+        Object.assign(gatedDelta, liveChangesSince(liveMark, expectedDbName));
 
         onProgress?.(5, 5, 'Finalizing Local SQLite Database Cache...');
         // Apply physical updates to local Native device SQLite Matrix

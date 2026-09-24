@@ -823,6 +823,8 @@ export interface MarketplacePost {
     authorPublicKey: string;
     authorCallsign: string;
     createdAt: string;
+    /** Every change on the node moves this; a pushed copy older than the one held is not applied (lib/live-posts). */
+    updatedAt?: string;
     active: boolean;
     status: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
     repeatable: boolean;

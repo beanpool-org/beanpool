@@ -7546,7 +7546,8 @@ export function deleteGroupPost(groupId: string, convenorPubkey: string, postId:
     if (res) {
         bumpPostsVersion();
         const recipients = getGroupActiveMemberRecipients(groupId);
-        broadcast({ type: 'post_removed', id: postId }, recipients);
+        // Only a group post is deleted here (deleteGroupPostEngine matches audience_scope = 'group').
+        broadcast({ type: 'post_removed', id: postId, audienceScope: 'group' }, recipients);
     }
     return res;
 }

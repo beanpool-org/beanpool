@@ -10,7 +10,7 @@ import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant } from '@beanpool/core';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -2688,6 +2688,78 @@ function emitOwnProfileUpdated(pubkey: string): void {
     emitAppEvent('profile_updated', { pubkey });
 }
 
+/** One listing as the node sends it, written to the cache. The only row writer the delta sync and a pushed change use. */
+async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    await txn.runAsync(
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, poll_options, poll_closes_at, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+            p.id ?? null,
+            p.type ?? null,
+            p.category ?? null,
+            p.title ?? null,
+            p.description ?? '',
+            p.credits ?? 0,
+            p.author_pubkey || p.authorPubkey || p.authorPublicKey || null,
+            p.lat ?? null,
+            p.lng ?? null,
+            p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null,
+            p.price_type || p.priceType || 'fixed',
+            p.repeatable ? 1 : 0,
+            p.status || 'active',
+            p.active !== undefined ? (p.active ? 1 : 0) : 1, // Defaulting to 1 if active boolean isn't provided
+            p.accepted_by || p.acceptedBy || null,
+            p.accepted_by_callsign || p.acceptedByCallsign || null,
+            p.accepted_at || p.acceptedAt || null,
+            p.completed_at || p.completedAt || null,
+            p.pending_transaction_id || p.pendingTransactionId || null,
+            p.created_at || p.createdAt || null,
+            p.updated_at || p.updatedAt || null,
+            p.origin_node || p.originNode || null,
+            p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
+            p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
+            p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
+            p.poll_closes_at || p.pollClosesAt || null,
+            ...eventCacheColumns(p)
+        ]
+    );
+}
+
+/**
+ * A pushed listing change, inside applyDelta's lock and transaction. An upsert goes through the same row writer as
+ * the delta sync, unless the cached copy is strictly newer (a late push must not move a listing backwards). A
+ * removal cancels the row exactly as the node's own removal does (status 'cancelled', active 0, and an event's
+ * state 'cancelled'), and creates nothing when the phone never had the listing. `updated_at` is left alone: the
+ * node's tombstone carries the real one, and the next catch-up sync writes it over this row as usual.
+ */
+async function applyLivePostRow(txn: SQLite.SQLiteDatabase, change: LivePostChange): Promise<void> {
+    if (change.kind === 'remove') {
+        await txn.runAsync(
+            `UPDATE posts SET status = 'cancelled', active = 0,
+                              event_state = CASE WHEN type = 'event' THEN 'cancelled' ELSE event_state END
+             WHERE id = ?`,
+            [change.id]);
+        return;
+    }
+    const local = await txn.getFirstAsync<{ updated_at: string | null }>('SELECT updated_at FROM posts WHERE id = ?', [change.post.id]);
+    if (local && pushedPostIsStale(local.updated_at, change.post.updatedAt)) return;
+    await writeSyncedPost(txn, change.post);
+}
+
+/**
+ * What this phone holds that ties a listing to its own member beyond the listing itself: who wrote the cached copy
+ * and its type, an open deal on it, or a conversation about it (conversations cache the listing's title and status).
+ * services/pillar-sync.ts sends a change with any of these through the full catch-up sync, as before.
+ */
+export async function localPostTies(postId: string): Promise<{ authorPubkey: string | null; type: string | null; openDeal: boolean; conversation: boolean }> {
+    const database = await getDb();
+    const post = await database.getFirstAsync<{ author_pubkey: string | null; type: string | null }>(
+        'SELECT author_pubkey, type FROM posts WHERE id = ?', [postId]);
+    const deal = await database.getFirstAsync(
+        "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') LIMIT 1", [postId]);
+    const conversation = await database.getFirstAsync('SELECT 1 FROM conversations WHERE post_id = ? LIMIT 1', [postId]);
+    return { authorPubkey: post?.author_pubkey ?? null, type: post?.type ?? null, openDeal: !!deal, conversation: !!conversation };
+}
+
 export async function applyDelta(delta: any, expectedDbName?: string) {
     await acquireSyncLock();
     try {
@@ -2806,38 +2878,16 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             // Delta Sync: Server dataset only transmits modified rows.
             // Deleted posts are transmitted with active=0 and tombstoned here natively.
             for (const p of delta.posts) {
-                await txn.runAsync(
-                    'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, poll_options, poll_closes_at, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [
-                        p.id ?? null,
-                        p.type ?? null,
-                        p.category ?? null,
-                        p.title ?? null,
-                        p.description ?? '',
-                        p.credits ?? 0,
-                        p.author_pubkey || p.authorPubkey || p.authorPublicKey || null,
-                        p.lat ?? null,
-                        p.lng ?? null,
-                        p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null,
-                        p.price_type || p.priceType || 'fixed',
-                        p.repeatable ? 1 : 0,
-                        p.status || 'active',
-                        p.active !== undefined ? (p.active ? 1 : 0) : 1, // Defaulting to 1 if active boolean isn't provided
-                        p.accepted_by || p.acceptedBy || null,
-                        p.accepted_by_callsign || p.acceptedByCallsign || null,
-                        p.accepted_at || p.acceptedAt || null,
-                        p.completed_at || p.completedAt || null,
-                        p.pending_transaction_id || p.pendingTransactionId || null,
-                        p.created_at || p.createdAt || null,
-                        p.updated_at || p.updatedAt || null,
-                        p.origin_node || p.originNode || null,
-                        p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
-                        p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
-                        p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
-                        p.poll_closes_at || p.pollClosesAt || null,
-                        ...eventCacheColumns(p)
-                    ]
-                );
+                await writeSyncedPost(txn, p);
+            }
+        }
+
+        // Listing changes the node pushed over /ws (services/pillar-sync.ts applyLivePostChange), in the order they
+        // arrived. They come after `posts` so that a catch-up sync whose pull left the node BEFORE a push replays
+        // the push over its own older copy instead of undoing it.
+        if (Array.isArray(delta.liveChanges)) {
+            for (const change of delta.liveChanges as LivePostChange[]) {
+                await applyLivePostRow(txn, change);
             }
         }
 

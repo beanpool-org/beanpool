@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus, DeviceEventEmitter, NativeEventSubscription } from 'react-native';
-import { requestSync } from './pillar-sync';
+import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, type LivePostChange } from '@beanpool/core';
+import { requestSync, applyLivePostChange } from './pillar-sync';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
@@ -10,7 +11,18 @@ class WebSocketSyncClient {
     private currentUrl: string | null = null;
     private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private pingIntervalId: ReturnType<typeof setInterval> | null = null;
-    private reconnectDelay = 1000;
+    /** Retries since the socket last opened; sizes the full-jitter window (@beanpool/core reconnectDelayMs). */
+    private reconnectAttempt = 0;
+    /** True while the connection being made is a retry after a drop, not a start or a foreground. */
+    private isRetry = false;
+    private reconnectSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    /** The member this socket signed in as, so a pushed change about their own listing takes the full sync. */
+    private memberPubkey: string | null = null;
+    /** Pushed listing changes are written one at a time, in the order the node sent them. */
+    private liveQueue: Promise<void> = Promise.resolve();
+    private dataUpdatedTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    /** The window a burst of pushed changes shares one screen re-read in — the one requestSync coalesces in. */
+    public static readonly DATA_UPDATED_COALESCE_MS = 150;
     private isStarted = false;
     private isConnecting = false; // Fixes the AsyncStorage race condition
     private appStateSubscription: NativeEventSubscription | null = null;
@@ -56,6 +68,10 @@ class WebSocketSyncClient {
     private handleAppStateChange = (nextAppState: AppStateStatus) => {
         if (nextAppState === 'active') {
             console.log('[WS Sync] App foregrounded. Reconnecting WebSocket...');
+            // One person bringing the app to the front: reconnect and sync at once, and start any later
+            // backoff from the first window again.
+            this.reconnectAttempt = 0;
+            this.isRetry = false;
             this.connect();
         } else {
             console.log('[WS Sync] App backgrounded. Closing WebSocket...');
@@ -93,6 +109,7 @@ class WebSocketSyncClient {
             }
 
             this.currentUrl = anchorUrl;
+            this.memberPubkey = identity?.publicKey ?? null;
             let wsUrl = anchorUrl.replace(/^http/, 'ws');
             if (!wsUrl.endsWith('/ws')) {
                 wsUrl = wsUrl.replace(/\/$/, '') + '/ws';
@@ -143,14 +160,27 @@ class WebSocketSyncClient {
             socket.onopen = () => {
                 if (this.ws !== socket) return; // Stale socket guard
                 console.log(`[WS Sync] ✅ Connected to WebSocket: ${wsUrl.split('?')[0]}`);
-                this.reconnectDelay = 1000; 
+                this.reconnectAttempt = 0;
                 this.watchdogArmed = false;
                 this.lastPongAt = null;
                 if (this.watchdogTimeoutId) {
                     clearTimeout(this.watchdogTimeoutId);
                     this.watchdogTimeoutId = null;
                 }
-                requestSync();
+                // The catch-up sync for whatever was missed while the socket was down. After a drop it waits a
+                // random 0–3 s on top of the retry's own spread: a node or edge restart drops every phone at once,
+                // and their syncs must not all land in the same second either. A start or a foreground syncs at
+                // once.
+                if (this.isRetry) {
+                    this.isRetry = false;
+                    if (this.reconnectSyncTimeoutId) clearTimeout(this.reconnectSyncTimeoutId);
+                    this.reconnectSyncTimeoutId = setTimeout(() => {
+                        this.reconnectSyncTimeoutId = null;
+                        requestSync();
+                    }, reconnectSyncDelayMs());
+                } else {
+                    requestSync();
+                }
 
                 // Start 30s heartbeat keep-alive with opt-in pong
                 this.startHeartbeat(socket);
@@ -169,17 +199,13 @@ class WebSocketSyncClient {
                     }
 
                     console.log(`[WS Sync] 📥 Received broadcast message type: ${data.type}`);
-                    
+
                     if (data.type !== 'state_snapshot') {
-                        // Fast path: let any open screen (e.g. the active chat)
-                        // do an immediate targeted refresh. The full reconciliation
-                        // below still runs as the correctness backstop.
-                        DeviceEventEmitter.emit('ws_activity', data);
-                        // new_message is chat-plane traffic — the open chat's targeted
-                        // sync and the unread-badge listener both react to ws_activity.
-                        // Running a full pillar sync per received message hammered the
-                        // node and kept applyDelta churning the sync lock.
-                        if (data.type !== 'new_message') requestSync();
+                        // A public offer or need the node sent whole: write it into the cache instead of
+                        // sending this phone back to the node for everything (see applyLivePostChange).
+                        const change = livePostChange(data);
+                        if (change) this.applyLive(data, change);
+                        else this.ringDoorbell(data);
                     }
                 } catch (err) {
                     console.warn('[WS Sync] Failed to parse WebSocket message', err);
@@ -210,11 +236,60 @@ class WebSocketSyncClient {
         }
     }
 
+    /**
+     * The doorbell: something changed that this phone must fetch. Any open screen (e.g. the active chat) gets
+     * `ws_activity` for an immediate targeted refresh; the full reconciliation runs as the correctness backstop.
+     */
+    private ringDoorbell(data: any) {
+        DeviceEventEmitter.emit('ws_activity', data);
+        // new_message is chat-plane traffic — the open chat's targeted
+        // sync and the unread-badge listener both react to ws_activity.
+        // Running a full pillar sync per received message hammered the
+        // node and kept applyDelta churning the sync lock.
+        if (data.type !== 'new_message') requestSync();
+    }
+
+    /**
+     * Write a pushed listing change, then tell the market, map and post screens to re-read the cache — the same
+     * signal a sync that changed posts sends, once per burst. No `ws_activity`: its listeners are chats, unread
+     * counts and the needs-you row, each of which goes to the node, and a listing that does not involve this
+     * member is none of theirs. A change that does involve them, or that fails to write, rings the doorbell
+     * exactly as before.
+     */
+    private applyLive(data: any, change: LivePostChange) {
+        const ctx = { anchorUrl: this.currentUrl, selfPubkey: this.memberPubkey };
+        this.liveQueue = this.liveQueue.then(async () => {
+            let applied = false;
+            try {
+                applied = await applyLivePostChange(change, ctx);
+            } catch (err) {
+                console.warn('[WS Sync] Could not write a pushed listing change; syncing instead', err);
+            }
+            if (applied) this.signalDataUpdated();
+            else this.ringDoorbell(data);
+        // The queue must always settle: a rejected link would skip every change queued behind it.
+        }).catch(err => console.warn('[WS Sync] Pushed listing change failed', err));
+    }
+
+    /** One `sync_data_updated` for a burst of pushed changes: the market and map re-query SQLite on each one. */
+    private signalDataUpdated() {
+        if (this.dataUpdatedTimeoutId) return;
+        this.dataUpdatedTimeoutId = setTimeout(() => {
+            this.dataUpdatedTimeoutId = null;
+            DeviceEventEmitter.emit('sync_data_updated');
+        }, WebSocketSyncClient.DATA_UPDATED_COALESCE_MS);
+    }
+
     private disconnect() {
         if (this.reconnectTimeoutId) {
             clearTimeout(this.reconnectTimeoutId);
             this.reconnectTimeoutId = null;
         }
+        if (this.reconnectSyncTimeoutId) {
+            clearTimeout(this.reconnectSyncTimeoutId);
+            this.reconnectSyncTimeoutId = null;
+        }
+        this.isRetry = false;
 
         this.stopHeartbeat();
         this.watchdogArmed = false;
@@ -305,13 +380,15 @@ class WebSocketSyncClient {
         if (!this.isStarted || AppState.currentState !== 'active') return;
         if (this.reconnectTimeoutId) return;
 
-        const jitter = Math.random() * 1000;
-        const delay = this.reconnectDelay + jitter;
+        // Full jitter over a window that starts at 5 s and grows to 30 s. When Cloudflare restarts an edge server,
+        // every phone on it drops at once; 1 s plus up to 1 s of jitter brought them all back inside two seconds.
+        const delay = reconnectDelayMs(this.reconnectAttempt);
         console.log(`[WS Sync] Scheduling reconnect in ${(delay / 1000).toFixed(1)}s`);
 
         this.reconnectTimeoutId = setTimeout(() => {
             this.reconnectTimeoutId = null;
-            this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
+            this.reconnectAttempt++;
+            this.isRetry = true;
             this.connect();
         }, delay);
     }

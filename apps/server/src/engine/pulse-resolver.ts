@@ -51,6 +51,16 @@ export class ProhibitedContentTypeError extends Error {
     }
 }
 
+/**
+ * The whole fetch — DNS through the last body byte, across every redirect hop — exceeded timeoutMs.
+ */
+export class RequestTimeoutError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'RequestTimeoutError';
+    }
+}
+
 export class PayloadTooLargeError extends Error {
     constructor(message: string) {
         super(message);
@@ -479,6 +489,21 @@ function createByteLimitTransform(maxBytes: number, onLimitExceeded: () => void)
     });
 }
 
+/**
+ * Settle with whatever `work` produces, or reject with makeError() once ms have passed. The
+ * underlying work is not cancellable (dns.lookup has no abort), so it is left to finish and its
+ * result is dropped; the caller stops waiting on time either way.
+ */
+function withDeadline<T>(work: Promise<T>, ms: number, makeError: () => Error): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const handle = setTimeout(() => reject(makeError()), Math.max(0, ms));
+        work.then(
+            (value) => { clearTimeout(handle); resolve(value); },
+            (err) => { clearTimeout(handle); reject(err); },
+        );
+    });
+}
+
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 const DEFAULT_MAX_REDIRECTS = 5;
@@ -494,15 +519,54 @@ const DEFAULT_ALLOWED_CONTENT_TYPES = [
     'application/xhtml+xml',
 ];
 
+/**
+ * Resolve a hostname to a single pinned, SSRF-validated IP. The real implementation is
+ * resolveAndPinHost; only the test hook below ever supplies a different one.
+ */
+export type HostResolver = (hostname: string) => Promise<PinnedResolution>;
+
+/**
+ * Test-only entry point. Runs the exact ssrfSafeFetch pipeline but with a caller-supplied host
+ * resolver, so a test can aim it at a local server it controls without loosening a single check in
+ * the guard. It is double-locked: the export is prefixed __ and it refuses to run unless the
+ * process sets BEANPOOL_SSRF_TEST_HOOK=1, which nothing in production does. ssrfSafeFetch itself
+ * never consults the env var and always resolves through resolveAndPinHost.
+ */
+export async function __ssrfSafeFetchWithResolverForTests(
+    rawUrl: string,
+    options: SsrfSafeFetchOptions,
+    resolveHost: HostResolver
+): Promise<SsrfSafeResponse> {
+    if (process.env.BEANPOOL_SSRF_TEST_HOOK !== '1') {
+        throw new SsrfSecurityError('The ssrfSafeFetch test hook is disabled (BEANPOOL_SSRF_TEST_HOOK is not 1)');
+    }
+    return ssrfSafeFetchInternal(rawUrl, options, resolveHost);
+}
+
 export async function ssrfSafeFetch(
     rawUrl: string,
     options: SsrfSafeFetchOptions = {}
+): Promise<SsrfSafeResponse> {
+    return ssrfSafeFetchInternal(rawUrl, options, resolveAndPinHost);
+}
+
+async function ssrfSafeFetchInternal(
+    rawUrl: string,
+    options: SsrfSafeFetchOptions = {},
+    resolveHost: HostResolver = resolveAndPinHost
 ): Promise<SsrfSafeResponse> {
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
     const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
     const method = options.method ?? 'GET';
     const allowedTypes = options.allowedContentTypes ?? DEFAULT_ALLOWED_CONTENT_TYPES;
+
+    // One budget for the whole call, not one per phase and not one per redirect hop. Every phase
+    // below — the SSRF DNS pre-flight, connect, TLS, response headers, body streaming, and each
+    // redirect hop — spends from this single deadline, so the call cannot outlive timeoutMs.
+    const deadline = Date.now() + timeoutMs;
+    const msLeft = () => deadline - Date.now();
+    const timedOut = () => new RequestTimeoutError(`Request timed out after ${timeoutMs}ms`);
 
     let currentUrl = rawUrl;
     let redirectsRemaining = maxRedirects;
@@ -533,7 +597,12 @@ export async function ssrfSafeFetch(
         const hostname = parsed.hostname;
         const port = parsed.port ? Number(parsed.port) : (isHttps ? 443 : 80);
 
-        const { pinnedIp, family } = await resolveAndPinHost(hostname);
+        // resolveHost does a DNS lookup, which has no timeout of its own: a resolver that never
+        // answers used to hang the call forever, outside every timer. Race it against what is left
+        // of the budget. The SSRF validation inside resolveHost is untouched — a slow lookup fails
+        // the call, it never skips a check.
+        if (msLeft() <= 0) throw timedOut();
+        const { pinnedIp, family } = await withDeadline(resolveHost(hostname), msLeft(), timedOut);
 
         const customLookup = createCustomLookup(pinnedIp, family);
 
@@ -543,6 +612,9 @@ export async function ssrfSafeFetch(
         };
 
         const agent = isHttps ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
+
+        // Set once the response headers are in, so the deadline can tear the body stream down too.
+        let activeIncoming: http.IncomingMessage | null = null;
 
         const response = await new Promise<{
             incoming: http.IncomingMessage;
@@ -554,9 +626,22 @@ export async function ssrfSafeFetch(
             let settled = false;
             const abortController = new AbortController();
 
+            // Armed for what is LEFT of the whole-call budget, not a fresh timeoutMs, so a chain of
+            // redirects cannot each buy another full timeout. It stays armed past the headers: the
+            // caller reads the body through the stream below and the deadline must still bite there.
             const timeoutHandle = setTimeout(() => {
-                abortController.abort(new Error(`Request timed out after ${timeoutMs}ms`));
-            }, timeoutMs);
+                const err = timedOut();
+                abortController.abort(err);
+                // Aborting destroys the request, but a response already handed to the caller does
+                // not reliably surface that as an error on the body stream, so end it explicitly.
+                activeIncoming?.destroy(err);
+                // cleanup() unconditionally, on both branches: it also drops the listener on a
+                // caller-supplied options.signal, which would otherwise be left attached for the
+                // life of that signal once the deadline fired after the headers. It is idempotent,
+                // so the body-read path calling it again later is harmless.
+                cleanup();
+                if (!settled) { settled = true; reject(err); }
+            }, Math.max(0, msLeft()));
 
             const externalSignal = options.signal;
             const onExternalAbort = () => {
@@ -593,8 +678,9 @@ export async function ssrfSafeFetch(
             const client = isHttps ? https.request(reqOptions) : http.request(reqOptions);
 
             client.on('response', (res) => {
-                if (settled) return;
+                if (settled) { res.destroy(); return; }
                 settled = true;
+                activeIncoming = res;
                 resolve({
                     incoming: res,
                     statusCode: res.statusCode || 0,
@@ -694,6 +780,8 @@ export async function ssrfSafeFetch(
             response.cleanup();
         });
 
+        const chain: (Readable | Transform)[] = [incomingStream, rawLimitTransform];
+
         if (decompressor) {
             const decompressedLimitTransform = createByteLimitTransform(maxBytes, () => {
                 incomingStream.destroy();
@@ -705,13 +793,47 @@ export async function ssrfSafeFetch(
                 .pipe(rawLimitTransform)
                 .pipe(decompressor)
                 .pipe(decompressedLimitTransform);
+            chain.push(decompressor, decompressedLimitTransform);
         } else {
             responseStream = incomingStream.pipe(rawLimitTransform);
         }
 
+        // .pipe() forwards data but never errors. Without this, a socket destroyed by the deadline
+        // (or by a gzip failure mid-stream) leaves the tail of the chain open and the body read
+        // hangs forever — which is exactly how an 8-second timeout became a 15-minute stall.
+        const tail = responseStream;
+        const failTail = (err: Error) => {
+            if (!tail.destroyed) tail.destroy(err);
+        };
+        for (const link of chain) {
+            if (link !== tail) link.on('error', failTail);
+        }
+
+        // The deadline can now fire before the caller ever calls .text()/.buffer(), and a HEAD
+        // caller never calls them at all. Record the failure instead of emitting 'error' into a
+        // stream with no listener, which would take the process down.
+        let streamError: Error | null = null;
+        let streamClosedEarly = false;
+        tail.on('error', (err: Error) => { streamError = err; });
+        tail.on('close', () => { if (!tail.readableEnded) streamClosedEarly = true; });
+
         const readBodyBuffer = async (): Promise<Buffer> => {
+            if (streamError) {
+                response.cleanup();
+                throw streamError;
+            }
+            if (streamClosedEarly) {
+                response.cleanup();
+                throw timedOut();
+            }
             const chunks: Buffer[] = [];
             return new Promise<Buffer>((resPromise, rejPromise) => {
+                responseStream.on('close', () => {
+                    if (!responseStream.readableEnded) {
+                        response.cleanup();
+                        rejPromise(streamError ?? timedOut());
+                    }
+                });
                 responseStream.on('data', (chunk: Buffer) => chunks.push(chunk));
                 responseStream.on('end', () => {
                     response.cleanup();

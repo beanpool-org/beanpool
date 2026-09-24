@@ -2,7 +2,7 @@
   "expo": {
     "name": "Bean Pool",
     "slug": "beanpool-pillar",
-    "version": "1.2.49",
+    "version": "1.2.50",
     "orientation": "default",
     "icon": "./assets/images/app-icon.png",
     "scheme": "beanpool",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "org.beanpool.pillar",
-      "buildNumber": "213",
+      "buildNumber": "214",
       "associatedDomains": [
         "applinks:beanpool.org",
         "applinks:*.beanpool.org",
@@ -46,7 +46,7 @@
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 271,
+      "versionCode": 272,
       "package": "org.beanpool.pillar",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {

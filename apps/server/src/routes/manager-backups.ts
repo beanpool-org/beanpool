@@ -8,11 +8,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import Database from 'better-sqlite3';
 import {
     loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, listSealedBackups, listPlainHistory,
     imagesDirFor, missingManifestFor, type FleetNodeConfig,
 } from '../services/harvester.js';
 import { MISSING_MEMBER } from '../services/sealed-backup.js';
+import { referencedStorageKeys } from '../storage/image-columns.js';
+import { assertSafeKey } from '../storage/image-store.js';
 import type { RouteDeps } from './types.js';
 
 const execFileAsync = promisify(execFile);
@@ -124,18 +127,66 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
     }
 
     /**
-     * How many objects the node said it could not put in this backup, from the manifest kept beside the
-     * database. For the `X-Backup-Missing-Images` header, so the dashboard can say "this backup is missing N
-     * photos" without opening the archive. Zero when the manifest is absent or unreadable — the archive still
-     * carries it, and a restore reads it there.
+     * The keys the node said it could not put in this backup, from the manifest kept beside the database.
+     * Empty when the manifest is there but unreadable: present is still the label, and the archive carries it
+     * for a restore to read.
      */
-    function missingCount(dbPath: string): number {
+    function labelledMissing(dbPath: string): string[] {
         try {
             const parsed = JSON.parse(fs.readFileSync(missingManifestFor(dbPath), 'utf8'));
-            return Array.isArray(parsed?.missing) ? parsed.missing.length : 0;
+            return Array.isArray(parsed?.missing) ? parsed.missing.filter((k: unknown) => typeof k === 'string') : [];
         } catch {
-            return 0;
+            return [];
         }
+    }
+
+    /**
+     * How short the archive being built is, MEASURED: the `storage_key`s in the database it carries, checked
+     * against the objects staged beside it, plus every key the node's own manifest names.
+     *
+     * The manifest alone is not enough, because it only says what the NODE could not send. A copy held here can
+     * be short for reasons the node never saw: one kept by a harvester older than the image store has thousands
+     * of `storage_key`s and no `<db>.images/` at all, and a pull that hit ENOSPC part-way through replacing
+     * `<db>.images/` leaves a new database beside a partial store. Neither carries a manifest, and both were
+     * labelled whole. Counting off the database is how `stageImages` counts a node's own backup and how
+     * `missingAfterRestore` counts a restore, so the label on every hop is now a measurement.
+     *
+     * The database is opened through a second link OUTSIDE the stage: a read-only open of a WAL-mode file
+     * leaves `-wal` and `-shm` beside it (measured), and the stage is what gets tarred.
+     *
+     * Null when the database cannot be read. That is not a count of anything, so the caller claims nothing:
+     * no `<staged>/<referenced>`, and never "whole".
+     */
+    function measureShortfall(
+        work: string, stagedDb: string, staged: ReadonlySet<string>, labelled: readonly string[],
+    ): { referenced: number; missing: string[] } | null {
+        const probe = path.join(work, 'measure');
+        fs.mkdirSync(probe, { recursive: true, mode: 0o700 });
+        const probeDb = path.join(probe, 'state.db');
+        let keys: string[];
+        try {
+            try { fs.linkSync(stagedDb, probeDb); } catch { fs.copyFileSync(stagedDb, probeDb); }
+            const handle = new Database(probeDb, { readonly: true });
+            try {
+                keys = referencedStorageKeys(handle);
+            } finally {
+                try { handle.close(); } catch { /* the read is done */ }
+            }
+        } catch (e: any) {
+            console.warn(`[Manager] Could not read the kept database to check its image objects: ${e?.message || e}`);
+            return null;
+        }
+        // What this copy needs: every key its database names, and anything the node said it could not send.
+        const listed = new Set(labelled);
+        const named = new Set([...keys, ...listed]);
+        const missing: string[] = [];
+        for (const key of named) {
+            if (listed.has(key)) { missing.push(key); continue; }
+            // A storage_key is row data from a node; an unusable one names nothing a restore could serve.
+            try { assertSafeKey(key); } catch { missing.push(key); continue; }
+            if (!staged.has(key)) missing.push(key);
+        }
+        return { referenced: named.size, missing };
     }
 
     function sendSealedFile(ctx: any, filePath: string, filename: string): void {
@@ -158,6 +209,10 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
      * The staging hard-links rather than copies, so a download does not write a second copy of a node's images
      * onto the manager's disk. `Content-Disposition` names it `.tar.gz`, and both clients honour that name.
      *
+     * The headers are a measurement of THIS archive ({@link measureShortfall}), not a read of the node's label:
+     * a copy held here can be short for reasons the node never reported, and until this measured it, such a
+     * copy went out labelled whole.
+     *
      * The gzip is ASYNC, for the reason `createPlainBackup` and `createSealedBackup` are: this compresses more
      * bytes than either — a whole node's kept database plus every object beside it, per download — and a
      * synchronous `tar` here holds the fleet manager's single event loop for the duration, stalling every other
@@ -167,8 +222,9 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         const base = filename.replace(/\.db$/i, '');
         const work = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-backup-dl-'));
         const stage = path.join(work, 'stage');
-        let images = 0;
-        let short = false;
+        // Every object staged under `images/`, by its key (`posts/<id>/<n>-<hash>.jpg`), for the measurement.
+        const staged = new Set<string>();
+        let labelled: string[] | null = null;
         try {
             fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
             const place = (from: string, to: string): void => {
@@ -177,36 +233,50 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             place(dbPath, path.join(stage, 'state.db'));
             const src = imagesDirFor(dbPath);
             if (fs.existsSync(src)) {
-                const walk = (from: string, to: string): void => {
+                const walk = (from: string, to: string, prefix: string): void => {
                     fs.mkdirSync(to, { recursive: true, mode: 0o700 });
                     for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
                         const a = path.join(from, entry.name);
                         const b = path.join(to, entry.name);
+                        const key = prefix + entry.name;
                         if (entry.isSymbolicLink()) continue;
-                        if (entry.isDirectory()) { walk(a, b); continue; }
+                        if (entry.isDirectory()) { walk(a, b, `${key}/`); continue; }
                         if (!entry.isFile()) continue;
                         place(a, b);
-                        images++;
+                        staged.add(key);
                     }
                 };
-                walk(src, path.join(stage, 'images'));
+                walk(src, path.join(stage, 'images'), '');
             }
             const manifest = missingManifestFor(dbPath);
             if (fs.existsSync(manifest)) {
                 fs.copyFileSync(manifest, path.join(stage, MISSING_MEMBER));
-                short = true;
+                labelled = labelledMissing(dbPath);
+            }
+            const measured = measureShortfall(work, path.join(stage, 'state.db'), staged, labelled ?? []);
+            if (measured && measured.missing.length > (labelled?.length ?? 0)) {
+                console.warn(
+                    `[Manager] ${filename} goes out SHORT: ${measured.missing.length} of the ${measured.referenced} image `
+                    + `object(s) it needs are not held here${labelled ? `, ${labelled.length} of them listed by the node` : ''}. `
+                    + `First: ${measured.missing.slice(0, 3).join(', ')}`,
+                );
             }
             const tarPath = path.join(work, 'backup.tar.gz');
             await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
             ctx.set('Cache-Control', 'no-store');
             ctx.set('Content-Type', 'application/gzip');
             ctx.set('X-Backup-Locked', 'no');
-            ctx.set('X-Backup-Contents', short ? 'database+images-partial' : 'database+images');
+            // Whole only when measured whole. A manifest is a label on its own, even one that lists nothing
+            // readable; a database that could not be read measured nothing.
+            const missing = measured ? measured.missing.length : (labelled?.length ?? 0);
+            const whole = measured !== null && missing === 0 && labelled === null;
+            ctx.set('X-Backup-Contents', whole ? 'database+images' : 'database+images-partial');
             // `<staged>/<referenced>`, exactly as a node's own backup route spells it, so one reader in each UI
-            // covers both. `referenced` is `staged + missing` here: the manager holds what the node sent plus
-            // the node's own list of what it could not send.
-            const missing = short ? missingCount(dbPath) : 0;
-            ctx.set('X-Backup-Images', `${images}/${images + missing}`);
+            // covers both — and like the node's, `staged` counts the referenced objects the archive carries. Left
+            // unset when nothing was measured: the manager UI reads a partial label with no count as unchecked.
+            if (measured) ctx.set('X-Backup-Images', `${measured.referenced - missing}/${measured.referenced}`);
+            // Counts only. A shortfall measured here and not reported by the node has no `missing-images.json`
+            // in this archive, so the UI sentence built from this header claims neither a list nor a cause.
             if (missing > 0) ctx.set('X-Backup-Missing-Images', String(missing));
             // eslint-disable-next-line no-control-regex
             ctx.set('Content-Disposition', `attachment; filename="${`${base}.tar.gz`.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);

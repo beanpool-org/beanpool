@@ -17,7 +17,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -31,8 +33,16 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { hapticSuccess } from '../../utils/haptics';
 
 export default function GroupInviteLanding() {
-    const params = useLocalSearchParams<Record<string, string>>();
-    const id = String(params.id || '');
+    const params = useLocalSearchParams<{
+        id?: string | string[];
+        name?: string | string[];
+        category?: string | string[];
+        joinPolicy?: string | string[];
+        memberCount?: string | string[];
+        invited?: string | string[];
+    }>();
+    const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
+    const id = rawId || '';
     const preview = React.useMemo(() => inviteLandingPreviewFromParams(params), [params.name, params.category, params.joinPolicy, params.memberCount, params.invited]);
     const insets = useSafeAreaInsets();
     const { colors, theme } = useTheme();

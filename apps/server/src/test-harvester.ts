@@ -14,6 +14,9 @@
  *   every readable file, deleting each only after its locked copy was read back and opened (sealFileVerified
  *   refuses a tar without state.db, and anything without a code stanza);
  * - a failing node is backed off, not pulled every minute; an old node's readable archive is kept, pulled once.
+ * - a node refusing every backup because an object it references is gone from its image store: refused three
+ *   times running, then pulled with allowMissing, so the node ends up with a labelled short backup instead of
+ *   none at all — and a node that answers normally never gets the opt-in.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-harvester.ts
  */
@@ -32,6 +35,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { openEnvelope, readSealedHeader, verifySealedHeader, sealEnvelope } from '@beanpool/core';
 import {
     nodeSlug, getNodes, saveNodes, loadHarvestState, harvestNode, listSealedBackups, sealOldBackups, backoffDelayMs,
+    ALLOW_MISSING_AFTER_FAILURES,
     type FleetNodeConfig,
 } from './services/harvester.js';
 import { sealFileVerified } from './services/sealed-backup.js';
@@ -108,7 +112,7 @@ async function harvestLocalNode(): Promise<void> {
     };
     // Two stand-in nodes beside the real one: an old node (a BeanPool older than locked backups: a readable archive,
     // no X-Backup-Locked header) and a node whose /backup fails. Each counts its /backup hits; both report counts.
-    const hits = { old: 0, down: 0 };
+    const hits = { old: 0, down: 0, short: 0, shortWithAllowMissing: 0 };
     const oldStateDb = crypto.randomBytes(4000);
     const oldTar = fs.readFileSync(tarOf({ 'state.db': oldStateDb, 'node_config.json': Buffer.from('{}') }));
     const app = new Koa();
@@ -123,6 +127,31 @@ async function harvestLocalNode(): Promise<void> {
             hits.down++;
             ctx.status = 500;
             ctx.body = { error: 'disk full' };
+            return;
+        }
+        // A node with one object gone for good: it refuses every backup, exactly as sendBackup does, until
+        // the caller says allowMissing — and then it sends a labelled short one. The failure that never
+        // clears on its own, which is the whole reason the opt-in exists.
+        if (ctx.path === '/short-node/api/local/admin/backup') {
+            hits.short++;
+            if (!ctx.query?.allowMissing) {
+                ctx.status = 500;
+                ctx.set('X-Backup-Error', 'incomplete-images');
+                ctx.body = { error: 'Backup failed: Backup refused: the image store holds 411 of the 412 object(s)…',
+                    images: { referenced: 412, staged: 411, missing: 1 } };
+                return;
+            }
+            hits.shortWithAllowMissing++;
+            ctx.set('X-Backup-Contents', 'database+images-partial');
+            ctx.set('X-Backup-Images', '411/412');
+            ctx.set('X-Backup-Missing-Images', '1');
+            ctx.set('Content-Type', 'application/gzip');
+            ctx.body = oldTar;
+            return;
+        }
+        if (ctx.path === '/short-node/api/community/info') {
+            // A different count every time, so every harvest sees drift and tries to pull.
+            ctx.body = { memberCount: 3 + hits.short, postCount: 7 };
             return;
         }
         if (ctx.path === '/old-node/api/community/info' || ctx.path === '/down-node/api/community/info') {
@@ -334,6 +363,7 @@ async function harvestLocalNode(): Promise<void> {
 
         // ── An old node: its readable archive is kept as before, pulled once, not every minute ──
         const oldNode: FleetNodeConfig = { id: 'bris', name: 'Old Node', url: url + '/old-node', replicationToken: TOKEN };
+        const oldNodeForCheck = oldNode;
         const oldDir = path.join(dataDir, 'backups', nodeSlug(oldNode));
         const o1 = await harvestNode(oldNode, false);
         const o2 = await harvestNode(oldNode, false);
@@ -344,6 +374,42 @@ async function harvestLocalNode(): Promise<void> {
         assert(o3.status === 'ok' && o3.backupLock?.locked === false && /older than locked backups/.test(o3.sealedBackup?.message || '') && o2.status === 'ok',
             `an old node: the status says why it is not locked ("${o3.sealedBackup?.message}")`);
         assert(/not locked yet/.test(o3.sealOld?.error || '') && fs.existsSync(path.join(oldDir, 'state.db')), 'an old node: seal-old deletes nothing');
+
+        // ── A node missing an object for good: refused N times, then a labelled SHORT backup ──
+        //
+        // Refusing is right and stays the default. But the bytes are gone, so the refusal never lifts by
+        // itself: without this the node's nightly backup fails every night from now on and it ends up with
+        // NO backup, which is strictly worse than one short by a photo and saying so.
+        // `castlemaine` so nodeSlug gives it a directory and a state entry of its own rather than the
+        // localhost fallback every other stand-in here shares.
+        const shortNode: FleetNodeConfig = { id: 'castlemaine', name: 'Short Node', url: url + '/short-node', replicationToken: TOKEN };
+        const s1 = await harvestNode(shortNode, true);
+        assert(s1.status === 'error' && /incomplete|image store holds/.test(s1.error || '') && s1.incompleteImages?.failures === 1,
+            `a node missing an object: the first refusal is counted, not acted on (${s1.incompleteImages?.failures}: ${s1.error})`);
+        assert(hits.shortWithAllowMissing === 0, 'and nothing was asked for with allowMissing yet');
+        const s2 = await harvestNode(shortNode, true);
+        assert(s2.incompleteImages?.failures === 2 && s2.incompleteImages?.allowingMissing !== true && hits.shortWithAllowMissing === 0,
+            `…nor on the second: a refusal can be the one-VACUUM window, and that one clears itself (${s2.incompleteImages?.failures})`);
+        const s3 = await harvestNode(shortNode, true);
+        assert(s3.incompleteImages?.failures === ALLOW_MISSING_AFTER_FAILURES && s3.incompleteImages?.allowingMissing === true,
+            `…the ${ALLOW_MISSING_AFTER_FAILURES}rd marks the node as one to take a short backup from (${s3.incompleteImages?.failures})`);
+        assert(s3.status === 'error' && hits.shortWithAllowMissing === 0,
+            'that pull itself still failed — the decision applies to the NEXT one, not retroactively');
+
+        const s4 = await harvestNode(shortNode, true);
+        assert(hits.shortWithAllowMissing === 1, `…and the next pull asks for allowMissing (${hits.shortWithAllowMissing})`);
+        assert(s4.status === 'ok' && s4.error === null, `…which succeeds, so the node has a backup again (${s4.status}: ${s4.error})`);
+        const shortDir = path.join(dataDir, 'backups', nodeSlug(shortNode));
+        assert(fs.existsSync(path.join(shortDir, 'state.db'))
+            && fs.readFileSync(path.join(shortDir, 'state.db')).equals(oldStateDb) && s4.dbSizeBytes === oldStateDb.length,
+            '…and the file is on this node\'s own disk, byte for byte, not just reported');
+        assert(s4.incompleteImages?.allowingMissing === true && /short by 1/.test(s4.incompleteImages?.lastError || ''),
+            `…still flagged short, so the dashboard keeps saying so ("${s4.incompleteImages?.lastError}")`);
+        assert(!s4.pullBackoff, '…and the back-off is cleared, because the pull worked');
+
+        // A node that answers normally never gets the opt-in.
+        assert(!(await harvestNode(oldNodeForCheck, true)).incompleteImages,
+            'a node whose backups are whole is never marked, and is never asked for a short one');
 
         // A wrong admin password: the harvest reports it; nothing crashes.
         const wrongPw: FleetNodeConfig = { ...tokenOnly, replicationToken: undefined, adminPassword: 'wrong-password-1!' };

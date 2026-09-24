@@ -63,6 +63,11 @@ export interface NodeHarvestState {
     backupLock?: { locked: boolean; message: string; at: string };
     /** After a failed pull: no automatic pull again before `nextPullAt` (a forced one still goes). */
     pullBackoff?: { failures: number; nextPullAt: string; lastError: string };
+    /**
+     * Consecutive `incomplete-images` refusals from this node, and whether the harvester has started asking
+     * for a short backup instead. Cleared by any successful pull. See {@link ALLOW_MISSING_AFTER_FAILURES}.
+     */
+    incompleteImages?: { failures: number; lastError: string; since: string; allowingMissing?: boolean };
     /** The node key the seal-old pass trusts, and where it came from. */
     pinnedPeerId?: string | null;
     pinSource?: 'manager-nodes.json' | 'collected key file' | null;
@@ -273,10 +278,12 @@ function readHeaderOf(file: string): SealedEnvelopeHeader {
 
 /** What the node said its backup carried, from the response headers (storage design §7). */
 export interface BackupContents {
-    /** 'database+images' or 'database-only'; null from a node too old to say. */
+    /** 'database+images', 'database+images-partial' or 'database-only'; null from a node too old to say. */
     contents: string | null;
     /** `<staged>/<referenced>` image objects, as the node counted them; null when it did not say. */
     images: string | null;
+    /** How many referenced objects the node could NOT put in the file; null unless it said. */
+    missingImages: number | null;
 }
 
 export type PullResult =
@@ -290,9 +297,11 @@ export type PullResult =
  * pull is recorded as a failure.
  */
 function backupContents(res: Response): BackupContents {
+    const missing = Number(res.headers.get('x-backup-missing-images'));
     return {
         contents: res.headers.get('x-backup-contents'),
         images: res.headers.get('x-backup-images'),
+        missingImages: Number.isFinite(missing) && missing > 0 ? missing : null,
     };
 }
 
@@ -300,8 +309,35 @@ function backupContents(res: Response): BackupContents {
 function describeContents(c: BackupContents): string {
     if (!c.contents) return 'contents not stated (an older node)';
     if (c.contents === 'database-only') return 'DATABASE ONLY — no photos or attachments in this file';
+    if (c.missingImages) {
+        return `database + ${c.images || 'some'} image object(s) — SHORT by ${c.missingImages}, which are gone from the node's store`;
+    }
     return c.images ? `database + ${c.images} image object(s)` : 'database + images';
 }
+
+/**
+ * The node refused to make a backup because an object its database references is not in its image store.
+ *
+ * Distinguished from every other pull failure because it is the one that does not clear on its own: the
+ * bytes are gone, so the same refusal comes back every night until a human edits or deletes the post or
+ * message that names them. {@link ALLOW_MISSING_AFTER_FAILURES} is how long the harvester waits for that
+ * human before taking the most complete backup the node can still make.
+ */
+export class NodeIncompleteImagesError extends Error {
+    constructor(message: string, public readonly missing: number, public readonly referenced: number) {
+        super(message);
+        this.name = 'NodeIncompleteImagesError';
+    }
+}
+
+/**
+ * Consecutive `incomplete-images` refusals before the harvester asks for a SHORT backup instead.
+ *
+ * Not one: a refusal can be the one-VACUUM-long window where a photo was replaced mid-backup, and that one
+ * clears by itself on the next attempt. Three in a row, across the back-off (five minutes, then ten), is an
+ * object that is really gone — and from then on the choice is a labelled near-complete backup or none at all.
+ */
+export const ALLOW_MISSING_AFTER_FAILURES = 3;
 
 /** The node's own words when it sends a readable backup, or ours for a node too old to say. */
 function notLockedMessage(res: Response): string {
@@ -374,7 +410,7 @@ export function listPlainHistory(target: string | FleetNodeConfig): { file: stri
  * harvester cannot open it and does not need to. A readable one — the node has no recovery code, or it is older
  * than locked backups — is kept as it always was (state.db + history/), with the node's reason.
  */
-export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResult> {
+export async function pullBackupForNode(node: FleetNodeConfig, opts: { allowMissing?: boolean } = {}): Promise<PullResult> {
     if (!node.adminPassword && !node.replicationToken) {
         throw new Error('No admin credentials (adminPassword / replicationToken) configured');
     }
@@ -384,14 +420,25 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
     if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
     if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
 
-    const res = await fetch(`${baseUrl}/api/local/admin/backup`, {
+    // Never a default: the query parameter is on the URL only when harvestNode has decided the node's
+    // missing object is permanent (ALLOW_MISSING_AFTER_FAILURES), and it is logged when it is.
+    const url = `${baseUrl}/api/local/admin/backup${opts.allowMissing ? '?allowMissing=1' : ''}`;
+    const res = await fetch(url, {
         method: 'POST',
         headers,
         signal: AbortSignal.timeout(120000),
     });
 
     if (!res.ok) {
-        const detail = await res.json().then((j: any) => j?.error).catch(() => null);
+        const body: any = await res.json().catch(() => null);
+        const detail = body?.error;
+        if (res.headers.get('x-backup-error') === 'incomplete-images') {
+            throw new NodeIncompleteImagesError(
+                `HTTP ${res.status}: ${detail || res.statusText}`,
+                Number(body?.images?.missing) || 0,
+                Number(body?.images?.referenced) || 0,
+            );
+        }
         throw new Error(`HTTP ${res.status}: ${detail || res.statusText}`);
     }
 
@@ -407,6 +454,11 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
         const carried = backupContents(res);
         if (carried.contents === 'database-only') {
             console.warn(`[Harvester] ${node.name}: this backup carries NO images — ${describeContents(carried)}.`);
+        } else if (carried.missingImages) {
+            console.warn(
+                `[Harvester] ${node.name}: this backup is SHORT — ${describeContents(carried)}. `
+                + `The archive lists the missing keys; those photos or attachments are gone from the node.`,
+            );
         }
         if (start[0] === 0x1f && start[1] === 0x8b) {
             const message = notLockedMessage(res);
@@ -730,18 +782,56 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
             pullError = `${prev.pullBackoff!.lastError} (next try after ${prev.pullBackoff!.nextPullAt.slice(0, 16).replace('T', ' ')} UTC)`;
         } else if (hasDrift) {
             console.log(`[Harvester] Pulling backup for ${node.name} (${slug}) [force: ${force}]`);
+            // A node that has refused this many times running is missing an object for good, not for a
+            // moment. Asking for a labelled short backup beats leaving it with none — loudly, every time,
+            // because the alternative to a noisy log line here is a node that quietly stops being backed up.
+            const priorRefusals = prev.incompleteImages?.failures || 0;
+            const allowMissing = priorRefusals >= ALLOW_MISSING_AFTER_FAILURES;
+            if (allowMissing) {
+                console.warn(
+                    `[Harvester] ⚠️  ${node.name}: ${priorRefusals} backup(s) in a row refused because the node's `
+                    + `image store is missing object(s) it references. Asking for a SHORT backup (allowMissing) so `
+                    + `this node has one at all. Last refusal: ${prev.incompleteImages?.lastError}`,
+                );
+            }
             try {
-                const r = await pullBackupForNode(node);
+                const r = await pullBackupForNode(node, { allowMissing });
                 prev.dbSizeBytes = r.dbSize;
                 prev.backupLock = r.kind === 'sealed'
                     ? { locked: true, message: 'Backups are locked.', at: new Date().toISOString() }
                     : { locked: false, message: r.message, at: new Date().toISOString() };
                 delete prev.pullBackoff;
+                if (r.carried.missingImages) {
+                    // Kept in the state rather than cleared: the dashboard should keep saying this node's
+                    // backups are short until the node itself stops leaving objects out.
+                    prev.incompleteImages = {
+                        failures: priorRefusals,
+                        lastError: `The node's latest backup is short by ${r.carried.missingImages} image object(s).`,
+                        since: prev.incompleteImages?.since || new Date().toISOString(),
+                        allowingMissing: true,
+                    };
+                } else {
+                    delete prev.incompleteImages;
+                }
             } catch (e: any) {
                 const msg = e?.message || String(e);
                 const failures = (prev.pullBackoff?.failures || 0) + 1;
                 prev.pullBackoff = { failures, nextPullAt: new Date(Date.now() + backoffDelayMs(failures)).toISOString(), lastError: msg };
                 pullError = msg;
+                if (e instanceof NodeIncompleteImagesError) {
+                    const refusals = priorRefusals + 1;
+                    prev.incompleteImages = {
+                        failures: refusals,
+                        lastError: msg,
+                        since: prev.incompleteImages?.since || new Date().toISOString(),
+                        allowingMissing: refusals >= ALLOW_MISSING_AFTER_FAILURES,
+                    };
+                    console.warn(
+                        `[Harvester] ⚠️  ${node.name}: backup refused — ${e.missing} of ${e.referenced} referenced `
+                        + `image object(s) are not in the node's store (refusal ${refusals} of `
+                        + `${ALLOW_MISSING_AFTER_FAILURES} before a short backup is taken instead).`,
+                    );
+                }
             }
         }
 

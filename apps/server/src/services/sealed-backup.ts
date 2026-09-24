@@ -152,9 +152,22 @@ export interface StagedImages {
     /** Of those, how many cost no disk because they were hard-linked out of the store. */
     linked: number;
     bytes: number;
-    /** Referenced keys the store did not hold. A backup with any of these is refused. */
+    /**
+     * Referenced keys the store did not hold. A backup with any of these is refused, unless the caller asked
+     * for {@link BackupSource.allowMissing} — in which case they are listed in {@link MISSING_MEMBER} inside
+     * the archive instead, and the counts say how short it is.
+     */
     missing: string[];
 }
+
+/**
+ * The member a short backup carries so it can never be mistaken for a whole one.
+ *
+ * Inside the archive, beside `state.db`, because that is the copy that outlives the HTTP response: a year
+ * from now the operator restoring this file has the headers nowhere and this list right there. A complete
+ * backup does not carry it at all, so its presence IS the label.
+ */
+export const MISSING_MEMBER = 'missing-images.json';
 
 /** A backup that would have been short. Never sent: the operator gets an error, not two-thirds of a node. */
 export class IncompleteBackupError extends Error {
@@ -163,7 +176,8 @@ export class IncompleteBackupError extends Error {
             `Backup refused: the image store holds ${images.staged} of the ${images.referenced} object(s) this `
             + `database references, so the backup would be missing ${images.missing.length} photo(s) or attachment(s). `
             + `First missing: ${images.missing.slice(0, 3).join(', ')}. `
-            + 'Ask for a database-only backup if you want one anyway — it will be labelled as such.',
+            + 'Send allowMissing=1 to take everything the store DOES hold (labelled short, with the missing '
+            + 'keys listed inside the archive), or databaseOnly=1 for the database alone.',
         );
         this.name = 'IncompleteBackupError';
     }
@@ -258,17 +272,31 @@ function stageImages(stage: string, sourceRoot: string, dbInStage: string): Stag
 /**
  * Stage the images for a backup whose database is already at `dbInStage`, or refuse the backup.
  *
- * `databaseOnly` is the one way to get a backup without them, and every path that offers it labels the
- * result: a short backup must be something the operator ASKED for, never something they discover at restore.
+ * `databaseOnly` is one way to get a backup without them, and every path that offers it labels the result:
+ * a short backup must be something the operator ASKED for, never something they discover at restore.
  *
  * One window worth naming. A snapshot's objects were captured when it was taken, so its download is exact.
  * A LIVE backup is `VACUUM INTO` and then this, and a photo replaced between the two unlinks an object the
  * copied database still names — so the backup fails where it could have succeeded a second earlier. That is
  * the safe side of the trade: a retry (the operator's, or the harvester's back-off) takes a consistent one,
  * where the alternative is shipping a file that is quietly missing a photo. The window is one VACUUM long.
+ *
+ * ## Why there is a second way past it
+ *
+ * Refusing is right, and it stays the default. But an object CAN be lost for good — a disk that dropped a
+ * file, an images directory restored short, a row pointing at bytes no copy still holds — and then the
+ * refusal never lifts. On a node nobody administers, that is not "a loud error": it is the nightly backup
+ * failing every night from now on, so the node ends up with NO backup at all rather than one short by a
+ * photo. `databaseOnly` is a worse answer for that operator than the thing being refused, because it drops
+ * every image instead of the one that is gone.
+ *
+ * So `allowMissing` ships everything the store does hold, writes the keys it could not find into
+ * {@link MISSING_MEMBER} inside the archive, and leaves the counts short so every label downstream says so.
+ * It is never a default and never inferred: a caller asks for it by name.
  */
 function stageImagesOrRefuse(
-    stage: string, dbInStage: string, opts: { imagesDir?: string; dbFile?: string; databaseOnly?: boolean },
+    stage: string, dbInStage: string,
+    opts: { imagesDir?: string; dbFile?: string; databaseOnly?: boolean; allowMissing?: boolean },
 ): StagedImages | null {
     if (opts.databaseOnly) return null;
     // A caller sealing a database that is not the live one (a snapshot) MUST say where that database's
@@ -279,8 +307,28 @@ function stageImagesOrRefuse(
     }
     const sourceRoot = opts.imagesDir ?? imagesDir(dataDir());
     const staged = stageImages(stage, sourceRoot, dbInStage);
-    if (staged.missing.length > 0) throw new IncompleteBackupError(staged);
+    if (staged.missing.length === 0) return staged;
+    if (!opts.allowMissing) throw new IncompleteBackupError(staged);
+    writeMissingManifest(stage, staged);
+    console.warn(
+        `[Backup] SHORT BACKUP (allowMissing): ${staged.staged} of ${staged.referenced} referenced object(s) staged; `
+        + `${staged.missing.length} could not be found and are listed in ${MISSING_MEMBER}. `
+        + `First missing: ${staged.missing.slice(0, 3).join(', ')}`,
+    );
     return staged;
+}
+
+/** The manifest a short backup carries: what is NOT in it, and in plain words why that matters. */
+function writeMissingManifest(stage: string, staged: StagedImages): void {
+    fs.writeFileSync(path.join(stage, MISSING_MEMBER), JSON.stringify({
+        note: 'This backup is SHORT. The image store did not hold the objects listed below when it was taken, '
+            + 'so restoring this file will leave those photos or attachments missing. Everything else — the '
+            + 'database, and every other image object — is complete.',
+        takenAt: new Date().toISOString(),
+        referenced: staged.referenced,
+        staged: staged.staged,
+        missing: staged.missing,
+    }, null, 2), { mode: 0o600 });
 }
 
 /** What a backup was asked to carry, and where the database's objects are when it is not the live one. */
@@ -290,8 +338,14 @@ export interface BackupSource {
     /** The image store that `dbFile`'s `storage_key`s belong to. Required whenever `dbFile` is given. */
     imagesDir?: string;
     filenamePrefix?: string;
-    /** Deliberately leave the images out. The only way to get a short backup, and every caller labels it. */
+    /** Deliberately leave the images out. Asked for by name, and every caller labels the result. */
     databaseOnly?: boolean;
+    /**
+     * Take the backup even though the store cannot supply every object the database references: ship what it
+     * does hold, list the rest in {@link MISSING_MEMBER}, and leave `staged < referenced` so every label says
+     * it is short. Asked for by name; without it a missing object is {@link IncompleteBackupError}.
+     */
+    allowMissing?: boolean;
 }
 
 /**

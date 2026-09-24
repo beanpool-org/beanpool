@@ -238,15 +238,30 @@ function markLock(ctx: any, lock: BackupLock): void {
  * Say what the file actually holds, so a short backup is visible on the wire and not only at restore time
  * (storage design §7). The harvester copies these into its log for every node it pulls.
  *
- * `X-Backup-Contents` is `database+images` or `database-only`; `X-Backup-Images` is `<staged>/<referenced>`,
- * which for a whole backup are equal — a backup that would have been short is an error, never a response.
+ * `X-Backup-Contents` is `database-only`, `database+images`, or `database+images-partial` when the caller
+ * asked for `allowMissing` and the store could not supply everything. `X-Backup-Images` is
+ * `<staged>/<referenced>`, equal for a whole backup and deliberately unequal for a partial one, and
+ * `X-Backup-Missing-Images` counts what is not there. Without `allowMissing`, a backup that would have been
+ * short is an error, never a response.
  */
 function markContents(ctx: any, what: { images: StagedImages | null; databaseOnly: boolean }): void {
-    ctx.set('X-Backup-Contents', what.databaseOnly ? 'database-only' : 'database+images');
+    const short = !!what.images && what.images.missing.length > 0;
+    ctx.set('X-Backup-Contents', what.databaseOnly ? 'database-only' : short ? 'database+images-partial' : 'database+images');
     if (what.images) {
         ctx.set('X-Backup-Images', `${what.images.staged}/${what.images.referenced}`);
         ctx.set('X-Backup-Image-Bytes', String(what.images.bytes));
+        if (short) ctx.set('X-Backup-Missing-Images', String(what.images.missing.length));
     }
+}
+
+/** For the log: 'database + 412 image object(s)', or the short version spelled out. */
+function describeBackup(what: { images: StagedImages | null; databaseOnly: boolean }): string {
+    if (what.databaseOnly) return 'database only (asked for)';
+    const images = what.images;
+    if (!images) return 'database';
+    if (images.missing.length === 0) return `database + ${images.staged} image object(s)`;
+    return `database + ${images.staged}/${images.referenced} image object(s) — SHORT by ${images.missing.length}, `
+        + `asked for with allowMissing; the missing keys are listed in the archive`;
 }
 
 /**
@@ -270,7 +285,7 @@ async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
             ctx.set('Content-Disposition', `attachment; filename="${plain.filename}"`);
             ctx.res.on('close', () => plain.cleanup());
             ctx.body = plain.body;
-            console.log(`[Backup] ${plain.filename}: ${plain.databaseOnly ? 'database only (asked for)' : `database + ${plain.images?.staged ?? 0} image object(s)`}`);
+            console.log(`[Backup] ${plain.filename}: ${describeBackup(plain)}`);
             return;
         }
         const backup = await createSealedBackup(opts);
@@ -284,7 +299,7 @@ async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
         ctx.set('X-Sealed-To', who.opensWith.replace(/[^\x20-\x7E]/g, '?'));
         ctx.res.on('close', () => backup.cleanup());
         ctx.body = backup.body;
-        console.log(`[Backup] ${backup.filename}: ${backup.databaseOnly ? 'database only (asked for)' : `database + ${backup.images?.staged ?? 0} image object(s)`}`);
+        console.log(`[Backup] ${backup.filename}: ${describeBackup(backup)}`);
     } catch (e: any) {
         console.error('Backup failed:', e);
         ctx.status = 500;
@@ -302,17 +317,34 @@ async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
     }
 }
 
-/** `databaseOnly` as a caller may send it: a query parameter on a GET, a body field on a POST. */
-function askedForDatabaseOnly(ctx: any): boolean {
-    const raw = ctx.query?.databaseOnly ?? (ctx as any).requestBody?.databaseOnly;
+/** A boolean flag as a caller may send it: a query parameter on a GET, a body field on a POST. */
+function askedFor(ctx: any, name: string): boolean {
+    const raw = ctx.query?.[name] ?? (ctx as any).requestBody?.[name];
     return raw === true || raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+/** Leave the images out entirely. */
+function askedForDatabaseOnly(ctx: any): boolean {
+    return askedFor(ctx, 'databaseOnly');
+}
+
+/**
+ * Take the backup even though an object the database references is not in the store.
+ *
+ * The opt-in that keeps an unattended node backed up. Without it a single lost object makes every backup of
+ * that node fail from then until a human edits or deletes the referencing post or message — which on a node
+ * nobody administers means no backups at all. With it the node keeps taking the most complete backup it can,
+ * labelled short in the headers and in a manifest inside the archive.
+ */
+function askedForAllowMissing(ctx: any): boolean {
+    return askedFor(ctx, 'allowMissing');
 }
 
 router.post('/api/local/admin/backup', async (ctx) => {
     const token = ctx.request.header['x-replication-token'];
     const isTokenValid = token && (await verifyReplicationToken(String(token)));
     if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
-    await sendBackup(ctx, { databaseOnly: askedForDatabaseOnly(ctx) });
+    await sendBackup(ctx, { databaseOnly: askedForDatabaseOnly(ctx), allowMissing: askedForAllowMissing(ctx) });
 });
 
 // The plain-text identity bundle (`/api/local/admin/identity-bundle`) is gone (§6.1): the node keys now travel
@@ -560,6 +592,7 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
         imagesDir: snapshotImagesDir(target),
         filenamePrefix: `beanpool-${base}`,
         databaseOnly: askedForDatabaseOnly(ctx),
+        allowMissing: askedForAllowMissing(ctx),
     });
 });
 

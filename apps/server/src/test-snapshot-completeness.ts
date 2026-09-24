@@ -27,6 +27,9 @@
  *   9. A snapshot taken BEFORE this version — a separate database file nothing migrates, whose `post_photos`
  *      still has the pre-PR DDL and no `storage_key` column — still downloads, complete, as `0/0` images.
  *      Every photo in it is inline, so zero referenced objects is the truthful count.
+ *  10. `allowMissing` is the second way past a lost object: it ships what the store does hold, labels the
+ *      result short on the wire AND inside the archive, and lists the keys that are gone. Without it the
+ *      refusal stands.
  *  11. A restore never writes THROUGH a store object's inode: restoring an older `attachments/<id>.bin` over
  *      one a snapshot hard-links leaves the snapshot's bytes exactly as captured.
  *
@@ -182,7 +185,7 @@ async function main(): Promise<void> {
         createSnapshot, listSnapshots, snapshotImagesDir, updateAutoSnapshotConfig, SNAPSHOTS_DIR,
     } = await import('./services/snapshot-scheduler.js');
     const {
-        createPlainBackup, createSealedBackup, openSealedFileTo, IncompleteBackupError,
+        createPlainBackup, createSealedBackup, openSealedFileTo, IncompleteBackupError, MISSING_MEMBER,
     } = await import('./services/sealed-backup.js');
     const { getImageStore, imagesDir, attachmentKey } = await import('./storage/image-store.js');
     const { writeMessageTombstone } = await import('./engine/message-tombstone.js');
@@ -458,6 +461,70 @@ async function main(): Promise<void> {
     legacyHandle.close();
     assert(legacyRow?.photo_data === dataUrl(legacyPhoto),
         'and the archive is COMPLETE: the photo is inline in the row, exactly as that node held it');
+
+    // ── 10. allowMissing: a labelled short backup beats no backup at all ──────────────────────
+    //
+    // Refusing stays the default. But an object can be gone for good, and then the refusal never lifts: on
+    // an unattended node that is not "a loud error", it is zero backups from tonight until a human edits the
+    // referencing post. databaseOnly is worse for that operator — it drops EVERY image, not the lost one.
+    const shortPhoto = makePhoto('the-object-that-is-really-gone');
+    const shortPost = createPost('offer', 'food', 'A loaf whose photo the disk lost', 'gone', 1, 'fixed', author,
+        undefined, undefined, [dataUrl(shortPhoto)]);
+    const lostKey = keyOf(shortPost!.id);
+    fs.unlinkSync(path.join(imagesDir(), lostKey));
+    assert(store.get(lostKey) === null, 'setup: an object the live database references is gone from the store');
+    const stillHeld = keyOf(legacyPost!.id);
+
+    // The default has not moved.
+    await rejects(() => createSealedBackup(), 'IncompleteBackupError',
+        'with no opt-in, a lost object still refuses the backup outright');
+    const refusedAgain = await fetch(`${BASE}/api/local/admin/backup`, {
+        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
+    });
+    assert(refusedAgain.status === 500 && refusedAgain.headers.get('x-backup-error') === 'incomplete-images',
+        'and the route still answers 500 with the reason');
+
+    // The opt-in, through the route the harvester uses.
+    const shortRes = await fetch(`${BASE}/api/local/admin/backup?allowMissing=1`, {
+        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
+    });
+    const shortBody = Buffer.from(await shortRes.arrayBuffer());
+    assert(shortRes.status === 200, `allowMissing=1 produces a backup (got ${shortRes.status})`);
+    assert(shortRes.headers.get('x-backup-contents') === 'database+images-partial',
+        `and the answer says it is partial (got ${shortRes.headers.get('x-backup-contents')})`);
+    const [staged, referenced] = (shortRes.headers.get('x-backup-images') || '0/0').split('/').map(Number);
+    assert(referenced > staged && referenced - staged === 1,
+        `with counts that do not match, so it cannot pass for whole (${staged}/${referenced})`);
+    assert(shortRes.headers.get('x-backup-missing-images') === '1',
+        `and the number that is missing (got ${shortRes.headers.get('x-backup-missing-images')})`);
+
+    const shortFile = path.join(work, 'short-backup.bpsealed');
+    fs.writeFileSync(shortFile, shortBody);
+    const shortOpened = path.join(work, 'short-opened.tar.gz');
+    await openSealedFileTo(shortFile, { type: 'code', code: recovery.code }, shortOpened);
+    const shortDir = extract(shortOpened, path.join(work, 'short'));
+    assert(fs.existsSync(path.join(shortDir, MISSING_MEMBER)),
+        `the archive carries ${MISSING_MEMBER} — the label that outlives the HTTP response`);
+    const manifest = JSON.parse(fs.readFileSync(path.join(shortDir, MISSING_MEMBER), 'utf8'));
+    assert(Array.isArray(manifest.missing) && manifest.missing.length === 1 && manifest.missing[0] === lostKey,
+        `naming exactly the key that is gone (${JSON.stringify(manifest.missing)})`);
+    assert(manifest.referenced === referenced && manifest.staged === staged,
+        'and the same counts the headers gave');
+    assert(fs.existsSync(path.join(shortDir, 'state.db')), 'the database is in there in full');
+    assert(fs.existsSync(path.join(shortDir, 'images', stillHeld)),
+        'and so is every object the store DID hold — this is short by one photo, not by all of them');
+    assert(!fs.existsSync(path.join(shortDir, 'images', lostKey)), 'only the lost one is absent');
+
+    // A complete backup carries no manifest at all, so its presence is the label.
+    fs.writeFileSync(path.join(imagesDir(), lostKey), shortPhoto);
+    const wholeAgain = await createSealedBackup({ allowMissing: true });
+    await new Promise<void>((resolve, reject) => {
+        wholeAgain.body.on('data', () => { /* to the bit bucket */ });
+        wholeAgain.body.on('end', () => resolve());
+        wholeAgain.body.on('error', reject);
+    });
+    assert(wholeAgain.images?.missing.length === 0 && wholeAgain.images?.staged === wholeAgain.images?.referenced,
+        'with the object back, allowMissing takes an ordinary complete backup and labels nothing');
 
     // ── 11. A restore lays objects over the store; it never writes through one ────────────────
     //

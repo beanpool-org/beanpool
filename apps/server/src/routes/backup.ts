@@ -6,6 +6,7 @@ import Router from '@koa/router';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import Database from 'better-sqlite3';
 import {
     getNodeRole, exportSyncState,
     getConversationsByMember, getConversationMessages,
@@ -27,7 +28,8 @@ import {
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
-import { copyObjectReplacing } from '../storage/image-store.js';
+import { assertSafeKey, copyObjectReplacing, imagesDir } from '../storage/image-store.js';
+import { referencedStorageKeys } from '../storage/image-columns.js';
 import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { acquirePasswordAttempt, refuseBraked, settlePasswordAttempt } from '../password-brake.js';
@@ -38,7 +40,7 @@ import {
 import {
     createSealedBackup, createPlainBackup, backupLockState, describeSealedHeader, isGzip, readFileStart,
     readSealedFileHeader, signerCheck, openSealedFileTo, readBundleFrom, applyBundle, checkBackupArchive,
-    IncompleteBackupError, MISSING_MEMBER,
+    MISSING_MEMBER,
     type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
 
@@ -172,6 +174,53 @@ function readMissingManifest(tmpDir: string): { missing: string[]; referenced: n
 }
 
 /**
+ * What the node will actually be missing once this restore finishes, read off the restored data.
+ *
+ * The manifest is a label the archive carries, and a label is not a measurement. A backup taken with no
+ * `images/` at all, or one whose `images/` was stripped in transit, carries no manifest and used to restore
+ * as `complete: true, missing: 0` over a database whose every `storage_key` points at nothing — the operator
+ * found out at the first 503. So the count that drives the answer comes from the same place a photo request
+ * will come from: the `storage_key`s in the database that is now on disk, checked against the store that is
+ * now beside it.
+ *
+ * Runs AFTER {@link restoreImages}, so the archive's objects are already in the store: a key that cannot be
+ * found here is one no copy of this node still holds, including the case where `restoreImages` itself failed
+ * part-way. A pre-version backup references no keys at all (its photos are inline in the rows it brought),
+ * so it truthfully measures as complete.
+ *
+ * Never throws. A database this cannot read is one the restart will fail on anyway, and a restore does not
+ * become an error because the count could not be taken — but `complete` must not be claimed either, so an
+ * unreadable database comes back as `null` and the caller says it does not know.
+ */
+function missingAfterRestore(dataDir: string): { referenced: number; missing: string[] } | null {
+    let keys: string[];
+    try {
+        const handle = new Database(path.join(dataDir, 'state.db'), { readonly: true });
+        try {
+            keys = referencedStorageKeys(handle);
+        } finally {
+            try { handle.close(); } catch { /* the read is done */ }
+        }
+    } catch (e) {
+        console.error('[Restore] Could not read the restored database to check its image objects:', e);
+        return null;
+    }
+    const root = imagesDir(dataDir);
+    const missing: string[] = [];
+    for (const key of keys) {
+        // A storage_key out of a restored database is attacker-controlled input like any other row value.
+        // An unusable one names no object that can ever be served, so it is missing, never a path.
+        try { assertSafeKey(key); } catch { missing.push(key); continue; }
+        try {
+            if (!fs.lstatSync(path.join(root, key)).isFile()) missing.push(key);
+        } catch {
+            missing.push(key);
+        }
+    }
+    return { referenced: keys.length, missing };
+}
+
+/**
  * The restore from an opened (or legacy plain) tar on: the hostile-archive checks, state.db, node_config.json, the
  * take-over bundle when a sealed file carries one, then a restart. Shared by restore-by-code and restore by an
  * owner's phone. Returns the answer body; throws on a bad archive (the caller cleans up).
@@ -232,6 +281,18 @@ async function restoreFromTar(
     const restoredKeys = bundle ? applyBundle(bundle) : [];
     if (bundle) console.log(`[Restore] Restored the community's keys from the sealed backup: ${restoredKeys.join(', ')}`);
 
+    // What this node is REALLY missing, counted off the restored database and the store now beside it —
+    // not read off the archive's label. This is the number that decides `complete`.
+    const shortfall = missingAfterRestore(DATA_DIR);
+    if (shortfall && shortfall.missing.length > 0) {
+        console.warn(
+            `[Restore] ⚠️  ${shortfall.missing.length} of the ${shortfall.referenced} image object(s) this `
+            + `database references are not in the store after the restore, so those photos or attachments will `
+            + `not load: ${shortfall.missing.slice(0, 5).join(', ')}${shortfall.missing.length > 5 ? ', …' : ''}`
+            + `${short ? ' The backup itself was labelled short, which explains it.' : ''}`,
+        );
+    }
+
     cleanupRestoreTemp();
 
     // Restart shortly. A restore by phone waits longer: the screen that started it polls to see it finished.
@@ -243,21 +304,39 @@ async function restoreFromTar(
     // `complete` is the one an operator reads: the database is in and the node is restarting either way, so
     // `success` stays true — but a restore that could not put every object back must never answer with
     // nothing but `success: true`, which is what it did before.
+    //
+    // And it is the MEASURED count, not the archive's label: `shortfall` is what the restored database
+    // references and the store beside it does not hold. The manifest only explains WHY — already gone when
+    // the backup was taken, rather than never in the archive at all, which is what a `databaseOnly` or
+    // images-stripped file looks like and what used to restore as "complete".
+    const lacking = shortfall ? shortfall.missing.length : 0;
+    const reason = short
+        ? ' They were already gone from the node when this backup was taken.'
+        : ' This archive did not carry them.';
     const warning = images.error
         ? `The database was restored, but the image store was not put back in full: ${images.error}. `
-          + `${images.restored} object(s) went back; some photos or attachments will be missing.`
-        : short
-            ? `The backup was SHORT: ${short.missing.length || 'some'} photo(s) or attachment(s) were already `
-              + 'gone from the node when it was taken, and are not coming back.'
-            : null;
+          + `${images.restored} object(s) went back`
+          + (lacking ? `, and ${lacking} of the ${shortfall!.referenced} the database references are still missing` : '')
+          + '; some photos or attachments will be missing.'
+        : lacking > 0
+            ? `The database was restored, but ${lacking} of the ${shortfall!.referenced} photo(s) or `
+              + `attachment(s) it references are not on this node.${reason} Everything else came back.`
+            : !shortfall
+                ? 'The database was restored, but this node could not check whether its photos and '
+                  + 'attachments came with it.'
+                : null;
     return {
         success: true,
-        complete: !images.error && !short,
+        complete: !images.error && !!shortfall && lacking === 0,
         images: {
             restored: images.restored,
             error: images.error,
-            missing: short ? short.missing.length : 0,
-            missingKeys: short ? short.missing.slice(0, 5) : [],
+            // Measured, so an archive with no `images/` member and no manifest cannot answer 0.
+            referenced: shortfall ? shortfall.referenced : null,
+            missing: lacking,
+            missingKeys: shortfall ? shortfall.missing.slice(0, 5) : [],
+            // The label the archive carried, when it carried one: the explanation, never the count.
+            labelledShort: !!short,
         },
         ...(warning ? { warning } : {}),
         sealed: !!sealedHeader,
@@ -302,32 +381,28 @@ function markLock(ctx: any, lock: BackupLock): void {
 
 /**
  * Say what the file actually holds, so a short backup is visible on the wire and not only at restore time
- * (storage design §7). The harvester copies these into its log for every node it pulls.
+ * (storage design §7). The harvester copies these into its log for every node it pulls, and both UIs show
+ * the shortfall from them.
  *
- * `X-Backup-Contents` is `database-only`, `database+images`, or `database+images-partial` when the caller
- * asked for `allowMissing` and the store could not supply everything. `X-Backup-Images` is
- * `<staged>/<referenced>`, equal for a whole backup and deliberately unequal for a partial one, and
- * `X-Backup-Missing-Images` counts what is not there. Without `allowMissing`, a backup that would have been
- * short is an error, never a response.
+ * `X-Backup-Contents` is `database+images`, or `database+images-partial` when the store could not supply
+ * every object the database references. `X-Backup-Images` is always `<staged>/<referenced>` — equal for a
+ * whole backup, deliberately unequal for a short one — and `X-Backup-Missing-Images` counts what is not
+ * there. A short backup is still a 200: these headers are how the caller learns it is short.
  */
-function markContents(ctx: any, what: { images: StagedImages | null; databaseOnly: boolean }): void {
-    const short = !!what.images && what.images.missing.length > 0;
-    ctx.set('X-Backup-Contents', what.databaseOnly ? 'database-only' : short ? 'database+images-partial' : 'database+images');
-    if (what.images) {
-        ctx.set('X-Backup-Images', `${what.images.staged}/${what.images.referenced}`);
-        ctx.set('X-Backup-Image-Bytes', String(what.images.bytes));
-        if (short) ctx.set('X-Backup-Missing-Images', String(what.images.missing.length));
-    }
+function markContents(ctx: any, what: { images: StagedImages }): void {
+    const short = what.images.missing.length > 0;
+    ctx.set('X-Backup-Contents', short ? 'database+images-partial' : 'database+images');
+    ctx.set('X-Backup-Images', `${what.images.staged}/${what.images.referenced}`);
+    ctx.set('X-Backup-Image-Bytes', String(what.images.bytes));
+    if (short) ctx.set('X-Backup-Missing-Images', String(what.images.missing.length));
 }
 
 /** For the log: 'database + 412 image object(s)', or the short version spelled out. */
-function describeBackup(what: { images: StagedImages | null; databaseOnly: boolean }): string {
-    if (what.databaseOnly) return 'database only (asked for)';
+function describeBackup(what: { images: StagedImages }): string {
     const images = what.images;
-    if (!images) return 'database';
     if (images.missing.length === 0) return `database + ${images.staged} image object(s)`;
-    return `database + ${images.staged}/${images.referenced} image object(s) — SHORT by ${images.missing.length}, `
-        + `asked for with allowMissing; the missing keys are listed in the archive`;
+    return `database + ${images.staged}/${images.referenced} image object(s) — SHORT by ${images.missing.length}; `
+        + `the missing keys are listed in ${MISSING_MEMBER} inside the archive`;
 }
 
 /**
@@ -340,6 +415,23 @@ function describeBackup(what: { images: StagedImages | null; databaseOnly: boole
  */
 async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
     const lock = backupLockState();
+    /**
+     * A short backup is NOT an error (confirmation round 4). It used to be — and since no shipped UI could
+     * send the `allowMissing=1` the refusal named, one object lost for good made this node un-backupable
+     * from the Backup tab, the fleet manager and every snapshot download, for good. So the shortfall is
+     * reported and the file is sent: loudly in the log here, in the headers `markContents` sets, and in the
+     * manifest inside the archive. Only a real I/O error still fails a backup.
+     */
+    const shout = (what: { images: StagedImages }, filename: string): void => {
+        if (what.images.missing.length === 0) return;
+        console.warn(
+            `[Backup] ⚠️  ${filename} is SHORT: ${what.images.staged} of ${what.images.referenced} referenced `
+            + `image object(s) went in. ${what.images.missing.length} are not in this node's store and are `
+            + `listed in ${MISSING_MEMBER} inside the archive: ${what.images.missing.slice(0, 5).join(', ')}`
+            + `${what.images.missing.length > 5 ? ', …' : ''}. Those photos or attachments are gone from this `
+            + `node; the backup carries everything else.`,
+        );
+    };
     try {
         if (!lock.locked) {
             console.warn(`[Backup] ${lock.message} Sent an unlocked backup (${opts.dbFile ? 'snapshot ' + path.basename(opts.dbFile) : 'database'}).`);
@@ -352,6 +444,7 @@ async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
             ctx.res.on('close', () => plain.cleanup());
             ctx.body = plain.body;
             console.log(`[Backup] ${plain.filename}: ${describeBackup(plain)}`);
+            shout(plain, plain.filename);
             return;
         }
         const backup = await createSealedBackup(opts);
@@ -366,51 +459,22 @@ async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
         ctx.res.on('close', () => backup.cleanup());
         ctx.body = backup.body;
         console.log(`[Backup] ${backup.filename}: ${describeBackup(backup)}`);
+        shout(backup, backup.filename);
     } catch (e: any) {
+        // Only a real failure gets here now: ENOSPC, EACCES, a read error on an object that IS there, a
+        // truncated write, a tar that did not run. A file of unknown contents is not a backup, so it is an
+        // error — where a KNOWN shortfall is a 200 with the counts.
         console.error('Backup failed:', e);
         ctx.status = 500;
-        if (e instanceof IncompleteBackupError) {
-            // A distinct code, because this one is not a transient failure: a photo is gone and the operator
-            // has to decide. Repeating the counts in the body keeps them where the fleet manager reads them.
-            ctx.set('X-Backup-Error', 'incomplete-images');
-            ctx.body = {
-                error: 'Backup failed: ' + e.message,
-                images: { referenced: e.images.referenced, staged: e.images.staged, missing: e.images.missing.length },
-            };
-            return;
-        }
         ctx.body = { error: 'Backup failed: ' + (e?.message || 'unknown error') };
     }
-}
-
-/** A boolean flag as a caller may send it: a query parameter on a GET, a body field on a POST. */
-function askedFor(ctx: any, name: string): boolean {
-    const raw = ctx.query?.[name] ?? (ctx as any).requestBody?.[name];
-    return raw === true || raw === '1' || raw === 'true' || raw === 'yes';
-}
-
-/** Leave the images out entirely. */
-function askedForDatabaseOnly(ctx: any): boolean {
-    return askedFor(ctx, 'databaseOnly');
-}
-
-/**
- * Take the backup even though an object the database references is not in the store.
- *
- * The opt-in that keeps an unattended node backed up. Without it a single lost object makes every backup of
- * that node fail from then until a human edits or deletes the referencing post or message — which on a node
- * nobody administers means no backups at all. With it the node keeps taking the most complete backup it can,
- * labelled short in the headers and in a manifest inside the archive.
- */
-function askedForAllowMissing(ctx: any): boolean {
-    return askedFor(ctx, 'allowMissing');
 }
 
 router.post('/api/local/admin/backup', async (ctx) => {
     const token = ctx.request.header['x-replication-token'];
     const isTokenValid = token && (await verifyReplicationToken(String(token)));
     if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
-    await sendBackup(ctx, { databaseOnly: askedForDatabaseOnly(ctx), allowMissing: askedForAllowMissing(ctx) });
+    await sendBackup(ctx);
 });
 
 // The plain-text identity bundle (`/api/local/admin/identity-bundle`) is gone (§6.1): the node keys now travel
@@ -657,8 +721,6 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
         dbFile: target,
         imagesDir: snapshotImagesDir(target),
         filenamePrefix: `beanpool-${base}`,
-        databaseOnly: askedForDatabaseOnly(ctx),
-        allowMissing: askedForAllowMissing(ctx),
     });
 });
 
@@ -685,7 +747,6 @@ router.post('/api/local/admin/backup/verify', async (ctx) => {
                 ctx.body = { error: 'Snapshot not found' };
                 return;
             }
-            const Database = (await import('better-sqlite3')).default;
             const snapDb = new Database(target, { readonly: true });
             let check: any[];
             try {

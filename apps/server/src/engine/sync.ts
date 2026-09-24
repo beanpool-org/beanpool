@@ -180,6 +180,18 @@ export async function signSyncPayload(cb: SyncCallbacks, payload: SyncPayload): 
  * So the row is dropped from the payload. The importer only upserts what it is given, so what it does not
  * receive it keeps. This is the one case where the backup copy is the only good one left, and the export's
  * job is to not destroy it.
+ *
+ * ## …and the payload SAYS which rows those were
+ *
+ * "What it does not receive it keeps" is true of an ordinary delta or full pull, and false of a FORCE-RESYNC:
+ * `pullOnce('resync')` calls `clearReplicatedTables()` — which lists `post_photos` — before importing, so a
+ * row dropped here is a row the replica deletes and never gets back. Its object becomes an orphan and the
+ * daily sweep reclaims it after the grace period. The one case this omission exists for would be destroyed by
+ * the natural thing an operator does when a replica "looks wrong".
+ *
+ * So the keys of the omitted rows go into {@link SyncPayload.photosOmitted} — an additive, optional field a
+ * peer that does not know it simply ignores — and the resync keeps exactly those rows and their objects. It
+ * is logged on both sides: this node says it could not read them, and the replica says it is keeping them.
  */
 /**
  * Put every photo in an incoming payload through the image store, keyed `post_id|order_num`.
@@ -216,11 +228,13 @@ function restoreInlinePhotos(payload: SyncPayload): SyncPayload {
     const photos = (payload as any).photos as any[] | undefined;
     if (!Array.isArray(photos) || photos.length === 0) return payload;
     const store = getImageStore();
+    const omitted: string[] = [];
     (payload as any).photos = photos.flatMap(row => {
         let photoData: string | null;
         try {
             photoData = photoDataOf(row, store);
         } catch (e) {
+            omitted.push(`${row.post_id}|${row.order_num}`);
             console.error('[Sync] Could not read a photo out of the image store; omitting the row from this export so a replica keeps its own copy:', e);
             return [];
         }
@@ -230,6 +244,17 @@ function restoreInlinePhotos(payload: SyncPayload): SyncPayload {
         if (row.updated_at !== undefined) out.updated_at = row.updated_at;
         return [out];
     });
+    if (omitted.length > 0) {
+        // Named in the payload so a resync can keep the replica's copies. Additive: a peer that does not know
+        // the field ignores it, and the rows it receives are exactly the rows it received before.
+        payload.photosOmitted = omitted;
+        console.warn(
+            `[Sync] ⚠️  ${omitted.length} photo row(s) are NOT in this export: this node cannot read the object `
+            + `each one names, so sending the row would blank a peer's or a replica's good copy. `
+            + `The payload names them so a force-resync keeps them: ${omitted.slice(0, 5).join(', ')}`
+            + `${omitted.length > 5 ? ', …' : ''}`,
+        );
+    }
     return payload;
 }
 

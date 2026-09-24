@@ -2665,6 +2665,28 @@
 
 
         // ======================== DATABASE BACKUP ========================
+
+        /**
+         * What a download said the file is SHORT of, or '' when it is whole.
+         *
+         * A node ships every image object its store holds and says how many it could not. A missing object no
+         * longer refuses the backup — that refusal made a node with one lost photo un-backupable from this
+         * very screen, with nothing the operator could click — so "short" now arrives as a SUCCESSFUL
+         * response, and this tab is the only place the operator can learn of it.
+         */
+        function backupShortfall(res) {
+            const counts = (res.headers.get('X-Backup-Images') || '').split('/').map(Number);
+            const staged = counts[0], referenced = counts[1];
+            const stated = Number(res.headers.get('X-Backup-Missing-Images'));
+            const missing = Number.isFinite(stated) && stated > 0
+                ? stated
+                : (Number.isFinite(staged) && Number.isFinite(referenced) && referenced > staged ? referenced - staged : 0);
+            if (missing <= 0) return '';
+            const of = Number.isFinite(referenced) && referenced > 0 ? ' of ' + referenced : '';
+            return 'This backup is missing ' + missing + of + ' photo(s) or attachment(s): this node no longer '
+                + 'holds those objects, and the archive lists which ones. Everything else is in the file.';
+        }
+
         async function downloadBackup() {
             if (!authToken) return;
             const btn = document.getElementById('btn-backup');
@@ -2693,8 +2715,14 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                statusEl.textContent = '✅ Backup downloaded';
-                statusEl.style.color = '#10b981';
+                const short = backupShortfall(res);
+                if (short) {
+                    statusEl.textContent = '⚠️ Backup downloaded, but not complete. ' + short;
+                    statusEl.style.color = '#f59e0b';
+                } else {
+                    statusEl.textContent = '✅ Backup downloaded';
+                    statusEl.style.color = '#10b981';
+                }
             } catch (e) {
                 statusEl.textContent = '❌ ' + e.message;
                 statusEl.style.color = '#ef4444';
@@ -3393,6 +3421,10 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
+                // A snapshot's objects were captured when it was taken, so this is rare — but if one of them
+                // has since been lost from disk the file is short, and only this line says so.
+                const short = backupShortfall(res);
+                if (short) alert('Snapshot downloaded, but it is not complete.\n\n' + short);
             } catch (e) {
                 alert('Download failed: ' + e.message);
             }

@@ -6,13 +6,16 @@ import Router from '@koa/router';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import {
     loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, listSealedBackups, listPlainHistory,
     imagesDirFor, missingManifestFor, type FleetNodeConfig,
 } from '../services/harvester.js';
 import { MISSING_MEMBER } from '../services/sealed-backup.js';
 import type { RouteDeps } from './types.js';
+
+const execFileAsync = promisify(execFile);
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
@@ -120,6 +123,21 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         return slug;
     }
 
+    /**
+     * How many objects the node said it could not put in this backup, from the manifest kept beside the
+     * database. For the `X-Backup-Missing-Images` header, so the dashboard can say "this backup is missing N
+     * photos" without opening the archive. Zero when the manifest is absent or unreadable — the archive still
+     * carries it, and a restore reads it there.
+     */
+    function missingCount(dbPath: string): number {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(missingManifestFor(dbPath), 'utf8'));
+            return Array.isArray(parsed?.missing) ? parsed.missing.length : 0;
+        } catch {
+            return 0;
+        }
+    }
+
     function sendSealedFile(ctx: any, filePath: string, filename: string): void {
         ctx.set('Cache-Control', 'no-store');
         ctx.set('Content-Type', 'application/octet-stream');
@@ -139,8 +157,13 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
      *
      * The staging hard-links rather than copies, so a download does not write a second copy of a node's images
      * onto the manager's disk. `Content-Disposition` names it `.tar.gz`, and both clients honour that name.
+     *
+     * The gzip is ASYNC, for the reason `createPlainBackup` and `createSealedBackup` are: this compresses more
+     * bytes than either — a whole node's kept database plus every object beside it, per download — and a
+     * synchronous `tar` here holds the fleet manager's single event loop for the duration, stalling every other
+     * request including the harvester's own pulls.
      */
-    function sendReadableBackup(ctx: any, dbPath: string, filename: string): void {
+    async function sendReadableBackup(ctx: any, dbPath: string, filename: string): Promise<void> {
         const base = filename.replace(/\.db$/i, '');
         const work = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-backup-dl-'));
         const stage = path.join(work, 'stage');
@@ -174,12 +197,17 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                 short = true;
             }
             const tarPath = path.join(work, 'backup.tar.gz');
-            execFileSync('tar', ['-czf', tarPath, '-C', stage, '.']);
+            await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
             ctx.set('Cache-Control', 'no-store');
             ctx.set('Content-Type', 'application/gzip');
             ctx.set('X-Backup-Locked', 'no');
             ctx.set('X-Backup-Contents', short ? 'database+images-partial' : 'database+images');
-            ctx.set('X-Backup-Images', String(images));
+            // `<staged>/<referenced>`, exactly as a node's own backup route spells it, so one reader in each UI
+            // covers both. `referenced` is `staged + missing` here: the manager holds what the node sent plus
+            // the node's own list of what it could not send.
+            const missing = short ? missingCount(dbPath) : 0;
+            ctx.set('X-Backup-Images', `${images}/${images + missing}`);
+            if (missing > 0) ctx.set('X-Backup-Missing-Images', String(missing));
             // eslint-disable-next-line no-control-regex
             ctx.set('Content-Disposition', `attachment; filename="${`${base}.tar.gz`.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);
             const body = fs.createReadStream(tarPath);
@@ -206,7 +234,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         const plainPath = path.join(BACKUPS_DIR, slug, 'state.db');
         const plain = fs.existsSync(plainPath) ? fs.statSync(plainPath) : null;
         if (plain && (!newest || plain.mtimeMs > newest.mtimeMs)) {
-            sendReadableBackup(ctx, plainPath, `beanpool-backup-${slug}.db`);
+            await sendReadableBackup(ctx, plainPath, `beanpool-backup-${slug}.db`);
             return;
         }
         if (!newest) {
@@ -277,7 +305,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
         if (isSealed) sendSealedFile(ctx, filePath, filename);
-        else sendReadableBackup(ctx, filePath, filename);
+        else await sendReadableBackup(ctx, filePath, filename);
     });
 
     // The plain-text identity bundle is gone (sealed-keys.md §6.1): the node keys travel only inside the sealed

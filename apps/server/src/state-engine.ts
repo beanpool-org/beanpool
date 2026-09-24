@@ -6732,22 +6732,66 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
  * primary hard-deleted without a tombstone would otherwise linger forever. Only
  * the tables exportSyncState dumps are cleared — node-local tables (push_tokens,
  * invite_codes, message_attachments, sync_cursors, node_config, …) are untouched.
+ *
+ * ## One exception, and it is the whole reason the primary says anything
+ *
+ * `keepPhotoRows` names `post_id|order_num` rows the incoming payload deliberately does NOT carry: photos the
+ * PRIMARY could not read out of its own image store (`SyncPayload.photosOmitted`). Clearing those would
+ * destroy the only readable copy left — the replica's — and nothing would ever send them again, because the
+ * omitted rows' `updated_at` never changed on the primary. The row survives, so its `storage_key` is still
+ * referenced and the daily orphan sweep leaves the object alone too.
+ *
+ * Rows named here are kept AS THEY ARE. Any of them the payload turns out to carry after all is upserted by
+ * the import that follows, exactly as it would have been.
  */
-export function clearReplicatedTables(): void {
+export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): void {
     const tables = [
-        'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
+        'members', 'posts', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
         'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
         'tombstones',
     ];
+    // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
+    // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.
+    const keep: { postId: string; orderNum: number }[] = [];
+    for (const rowKey of keepPhotoRows) {
+        const key = String(rowKey);
+        const cut = key.lastIndexOf('|');
+        if (cut <= 0) continue;
+        const postId = key.slice(0, cut);
+        const orderNum = Number(key.slice(cut + 1));
+        if (!postId || !Number.isInteger(orderNum)) continue;
+        keep.push({ postId, orderNum });
+    }
+    let kept = 0;
     db.transaction(() => {
         for (const t of tables) {
             try { db.prepare(`DELETE FROM ${t}`).run(); }
             catch (e) { console.warn(`[Resync] could not clear ${t}:`, e); }
         }
+        try {
+            if (keep.length === 0) {
+                db.prepare(`DELETE FROM post_photos`).run();
+                return;
+            }
+            // One `OR`-ed predicate over every spared pair, negated: a statement per row would delete the
+            // other spared rows along with everything else. Values stay bound, never interpolated.
+            const pairs = keep.map(() => '(post_id = ? AND order_num = ?)').join(' OR ');
+            const params = keep.flatMap(k => [k.postId, k.orderNum]);
+            kept = (db.prepare(`SELECT COUNT(*) AS n FROM post_photos WHERE ${pairs}`).get(...params) as any)?.n || 0;
+            db.prepare(`DELETE FROM post_photos WHERE NOT (${pairs})`).run(...params);
+        } catch (e) { console.warn('[Resync] could not clear post_photos:', e); }
     })();
-    console.log('🧹 [Resync] Cleared replicated tables — awaiting fresh snapshot import.');
+    if (keep.length > 0) {
+        console.log(
+            `🧹 [Resync] Cleared replicated tables, KEEPING ${kept} of the ${keep.length} photo row(s) the primary `
+            + 'could not read out of its own store — this replica holds the only readable copy of those, and the '
+            + 'incoming payload does not carry them.',
+        );
+    } else {
+        console.log('🧹 [Resync] Cleared replicated tables — awaiting fresh snapshot import.');
+    }
 }
 
 // ===================== PUSH NOTIFICATIONS =====================

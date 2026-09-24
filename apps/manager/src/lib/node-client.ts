@@ -2,6 +2,8 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
+import { downloadShortfall } from './backup-shortfall';
+
 export interface ShutdownStatus {
     uncleanShutdown: boolean;
     recovered?: boolean;
@@ -385,13 +387,20 @@ function serverFilename(res: Response): string | null {
     return name;
 }
 
+/**
+ * Fetch an admin file and save it, and return what the response said the file is SHORT of.
+ *
+ * A short backup is a 200 now (confirmation round 4): the node ships every object it holds and says in the
+ * headers how many it could not. That sentence is the only place the operator can learn of it, so this hands
+ * it back rather than dropping it — '' when the file is whole, or when the download was declined.
+ */
 export async function downloadAdminFile(
     endpointPath: string,
     params: Record<string, string>,
     adminPassword: string | undefined,
     filename: string,
     tfaToken?: string,
-): Promise<void> {
+): Promise<string> {
     const headers = buildAdminHeaders(adminPassword, tfaToken);
     const url = new URL(endpointPath, window.location.origin);
     for (const [k, v] of Object.entries(params)) {
@@ -428,7 +437,7 @@ export async function downloadAdminFile(
             `${filename} is about ${gb} GB. It has to be held in memory before it can be saved, `
             + `which may make this tab run out of memory. Download anyway?`
         );
-        if (!proceed) return;
+        if (!proceed) return '';
     }
 
     const blob = await res.blob();
@@ -455,6 +464,7 @@ export async function downloadAdminFile(
         // instantly.
         setTimeout(() => URL.revokeObjectURL(objectUrl), REVOKE_DELAY_MS);
     }
+    return downloadShortfall(res);
 }
 
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {

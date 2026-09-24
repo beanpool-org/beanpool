@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { restoreShortfall, shortfallSuffix } from '../../lib/backup-shortfall';
 import { OwnerPhoneUnlock, type OwnerPhoneSession } from './OwnerPhoneUnlock';
 
 /**
@@ -45,16 +46,14 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
     onDoneRef.current = onDone;
 
     /**
-     * What a restore that did not come back whole has to say.
+     * What a restore that did not come back whole has to say. Shared with `ApplianceSection`'s own restore
+     * path (`../../lib/backup-shortfall`), which takes the same answer from the same route.
      *
-     * A backup that was SHORT when it was taken, or an image store that could not be put back in full, both
-     * answer `success: true` — the database IS in and the node IS restarting — so the only place the
-     * operator can learn the photos are missing is here. Without it they find out at the first 503.
+     * A restore that is short of photos still answers `success: true` — the database IS in and the node IS
+     * restarting — so the only place the operator can learn of it is here. Without it they find out at the
+     * first 503.
      */
-    const shortfall = (body: unknown): string => {
-        const warning = (body as { warning?: unknown } | null)?.warning;
-        return typeof warning === 'string' && warning ? ` ⚠️ ${warning}` : '';
-    };
+    const shortfall = (body: unknown): string => shortfallSuffix(restoreShortfall(body));
 
     const upload = async (extra: Record<string, string>) => {
         const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));

@@ -26,7 +26,8 @@ if (composeFiles.length === 0) {
 
 const errors = [];
 for (const file of composeFiles) {
-  const lines = readFileSync(file, 'utf-8').split('\n');
+  const rawLines = readFileSync(file, 'utf-8').split('\n');
+  const lines = rawLines.map(line => line.replace(/#.*$/, '').trimEnd());
   const anchorsWithMaxSize = new Set();
 
   for (let i = 0; i < lines.length; i++) {
@@ -34,7 +35,7 @@ for (const file of composeFiles) {
     if (!m) continue;
     const indent = lines[i].match(/^\s*/)[0].length;
     for (let j = i + 1; j < lines.length; j++) {
-      if (!lines[j].trim() || lines[j].trim().startsWith('#')) continue;
+      if (!lines[j].trim()) continue;
       if (lines[j].match(/^\s*/)[0].length <= indent) break;
       if (/max-size:\s*["']?\w+["']?/.test(lines[j])) anchorsWithMaxSize.add(m[1]);
     }
@@ -43,29 +44,39 @@ for (const file of composeFiles) {
   const rel = path.relative(REPO_ROOT, file);
   const displayPath = rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : file;
   let inServices = false, currentService = null, serviceHasCap = false, inLogging = false, loggingIndent = -1;
+  let serviceIndent = -1;
+
   const endService = () => {
     if (currentService && !serviceHasCap) errors.push(`${displayPath}: service "${currentService}" missing log cap`);
     currentService = null; serviceHasCap = false; inLogging = false; loggingIndent = -1;
   };
 
   for (const line of lines) {
-    if (!line.trim() || line.trim().startsWith('#')) continue;
+    if (!line.trim()) continue;
     const indent = line.match(/^\s*/)[0].length;
+    const trimmed = line.trim();
+
     if (indent === 0) {
       if (inServices) endService();
-      inServices = /^services:\s*$/.test(line.trim());
+      inServices = /^services:\s*$/.test(trimmed);
+      serviceIndent = -1;
       continue;
     }
     if (!inServices) continue;
-    if (indent === 2 && line.trim().endsWith(':')) {
-      endService();
-      currentService = line.trim().slice(0, -1);
-      continue;
+
+    if (indent > 0 && /^["']?[a-zA-Z0-9_.-]+["']?:(?:\s*&[a-zA-Z0-9_-]+)?$/.test(trimmed)) {
+      if (serviceIndent === -1) serviceIndent = indent;
+      if (indent === serviceIndent) {
+        endService();
+        currentService = trimmed.split(':')[0].trim().replace(/^["']|["']$/g, '');
+        continue;
+      }
     }
+
     if (currentService) {
       const aliasMatch = line.match(/logging:\s*\*([a-zA-Z0-9_-]+)/);
       if (aliasMatch && anchorsWithMaxSize.has(aliasMatch[1])) serviceHasCap = true;
-      if (/^logging:\s*$/.test(line.trim())) {
+      if (/^logging:(?:\s*&[a-zA-Z0-9_-]+)?\s*$/.test(trimmed)) {
         inLogging = true; loggingIndent = indent;
       } else if (inLogging) {
         if (indent <= loggingIndent) inLogging = false;

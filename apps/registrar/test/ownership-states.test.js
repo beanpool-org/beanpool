@@ -46,7 +46,7 @@ function fakeCloudflare() {
     const calls = [];
     const tunnels = new Map();   // id → { id, name, deleted_at, ingress }
     const dns = new Map();       // id → { id, type, name (fqdn), content, proxied }
-    const fail = { deleteTunnel: false };
+    const fail = { deleteTunnel: false, ingress: false };
     let seq = 0;
     const ok = (result) => Response.json({ success: true, result });
     const err = (status, code, message) => Response.json({ success: false, errors: [{ code, message }] }, { status });
@@ -77,6 +77,7 @@ function fakeCloudflare() {
         if ((m = p.match(/^\/accounts\/acct\/cfd_tunnel\/([^/]+)\/configurations$/)) && method === 'PUT') {
             const t = tunnels.get(m[1]);
             if (!t || t.deleted_at) return err(404, 1003, 'tunnel not found');
+            if (fail.ingress) return err(500, 1000, 'internal error');
             t.ingress = body.config.ingress;
             return ok({});
         }
@@ -512,6 +513,30 @@ test('ensure: an existing record is PATCHed, never POSTed over; an intact name i
         const now = await w.row('meadow');
         assert.equal(retunnel.body.tunnelToken, `token-${now.tunnel_id}`);
         assert.equal(w.cf.recordAt('meadow.beanpool.org').content, `${now.tunnel_id}.cfargotunnel.com`);
+    } finally { w.restore(); }
+});
+
+test('ensure: a tunnel made for a provisioning that then fails is removed, so the retry can make one', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        w.cf.fail.ingress = true;
+        const failed = await w.claim(owner, { name: 'hillside' });
+        assert.equal(failed.status, 502, JSON.stringify(failed.body));
+        const row = await w.row('hillside');
+        assert.equal(row.status, 'pending', 'held by its key; its next claim retries');
+        assert.equal(row.node_pubkey, owner.pubHex);
+        assert.equal(row.tunnel_id, null);
+        const bp = () => [...w.cf.tunnels.values()].filter((t) => !t.deleted_at && t.name === 'bp-hillside');
+        assert.equal(bp().length, 0, 'the half-made tunnel is gone');
+
+        w.cf.fail.ingress = false;
+        const retry = await w.claim(owner, { name: 'hillside' });
+        assert.equal(retry.status, 200, JSON.stringify(retry.body));
+        assert.equal(retry.body.status, 'live');
+        assert.equal(bp().length, 1);
+        assert.equal(retry.body.tunnelToken, `token-${bp()[0].id}`);
+        assert.equal((await w.row('hillside')).tunnel_id, bp()[0].id);
     } finally { w.restore(); }
 });
 

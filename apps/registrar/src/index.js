@@ -63,7 +63,7 @@ const dnsTarget = (a) => a.mode === 'direct'
 // ingress, and find the DNS record by name — keep it, PATCH it if it points elsewhere, POST only if there is none
 // (or the record is the wrong type for the mode, which Cloudflare can't PATCH: then it is replaced).
 // Never deprovisions first. Returns the ids and what had to be (re)made: changed ⊆ ['tunnel', 'dns']; a new tunnel
-// means a new token. Throws on a Cloudflare failure, having written nothing to the row.
+// means a new token. Throws on a Cloudflare failure, having written nothing to the row and removed any tunnel it made.
 async function ensure(env, a) {
     const changed = [];
     let tunnel_id = null;
@@ -73,7 +73,6 @@ async function ensure(env, a) {
             tunnel_id = (await cf.createTunnel(env, `bp-${a.name}`)).id;
             changed.push('tunnel');
         }
-        await cf.setTunnelIngress(env, tunnel_id, a.hostname, a.origin || DEFAULT_ORIGIN);
     } else if (a.mode === 'direct') {
         if (!a.public_ip) throw new Error('direct mode needs public_ip');
         // Moving tunnel → direct: the owner's old tunnel has nothing left to serve.
@@ -81,25 +80,36 @@ async function ensure(env, a) {
     } else {
         throw new Error(`unknown mode ${a.mode}`);
     }
-    const want = dnsTarget({ ...a, tunnel_id });
-    let rec = await cf.findDnsRecord(env, a.hostname);
-    if (rec && rec.type !== want.type) {
-        // Cloudflare won't change a record's type in place (tunnel ↔ direct is CNAME ↔ A): replace it.
-        try { await cf.deleteDnsRecord(env, rec.id); } catch (e) { if (e?.status !== 404) throw e; }
-        rec = null;
-    }
-    let dns_record_id;
-    if (!rec) {
-        dns_record_id = (await cf.createDnsRecord(env, a.name, want)).id;
-        changed.push('dns');
-    } else {
-        dns_record_id = rec.id;
-        if (rec.content !== want.content || rec.proxied !== want.proxied) {
-            await cf.patchDnsRecord(env, rec.id, want);
-            changed.push('dns');
+    try {
+        if (a.mode === 'tunnel') await cf.setTunnelIngress(env, tunnel_id, a.hostname, a.origin || DEFAULT_ORIGIN);
+        const want = dnsTarget({ ...a, tunnel_id });
+        let rec = await cf.findDnsRecord(env, a.hostname);
+        if (rec && rec.type !== want.type) {
+            // Cloudflare won't change a record's type in place (tunnel ↔ direct is CNAME ↔ A): replace it.
+            try { await cf.deleteDnsRecord(env, rec.id); } catch (e) { if (e?.status !== 404) throw e; }
+            rec = null;
         }
+        let dns_record_id;
+        if (!rec) {
+            dns_record_id = (await cf.createDnsRecord(env, a.name, want)).id;
+            changed.push('dns');
+        } else {
+            dns_record_id = rec.id;
+            if (rec.content !== want.content || rec.proxied !== want.proxied) {
+                await cf.patchDnsRecord(env, rec.id, want);
+                changed.push('dns');
+            }
+        }
+        return { tunnel_id, dns_record_id, changed };
+    } catch (e) {
+        // A tunnel made just now is recorded nowhere (the caller writes nothing on a throw), and Cloudflare refuses
+        // a second tunnel of the same name: left behind, it would fail every retry. It goes.
+        if (changed.includes('tunnel')) {
+            try { await cf.deleteTunnel(env, tunnel_id); }
+            catch (d) { console.error('[PROVISION_ORPHAN]', a.name, tunnel_id, d.message || d); }
+        }
+        throw e;
     }
-    return { tunnel_id, dns_record_id, changed };
 }
 
 // Delete a row's tunnel and DNS record. Returns the ids still to remember: null once a resource is gone (deleted

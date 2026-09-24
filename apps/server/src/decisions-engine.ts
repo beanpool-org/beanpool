@@ -495,6 +495,9 @@ export interface CreateDecisionOptions {
  * - Fixed 7-day duration (closes on tick).
  */
 export function createDecision(opts: CreateDecisionOptions): Decision {
+    // First: a Decision this node can't carry out gets the plain answer, whoever proposes it. An unknown effect falls
+    // through to the checks below as before.
+    if (Object.prototype.hasOwnProperty.call(TOUCHES_FOR_EFFECT, opts.effect)) assertEffectAllowedHere(opts.effect);
     const check = checkCanProposeDecision(opts.authorPubkey);
     if (!check.ok) {
         throw new Error(check.error || 'Cannot propose decision');
@@ -510,7 +513,6 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
         throw new Error(`Invalid touch '${opts.touches}' for effect '${opts.effect}'. Expected '${TOUCHES_FOR_EFFECT[opts.effect]}'.`);
     }
-    assertEffectAllowedHere(opts.effect);
 
     const id = crypto.randomUUID();
     const franchise = franchiseForTouch(opts.touches);

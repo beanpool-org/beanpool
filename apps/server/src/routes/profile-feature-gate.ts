@@ -67,11 +67,12 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
     },
 ];
 
-/** The switch that has this path off right now, or null when it is served. */
-export function featureOffFor(path: string, switches: ProfileSwitches = getProfileSwitches()): ProfileSwitch | null {
+/** The switch that has this path off right now, or null when it is served. Reads the switches only for a gated path. */
+export function featureOffFor(path: string, switches?: ProfileSwitches): ProfileSwitch | null {
     for (const group of PROFILE_GATED_ROUTES) {
         if (!group.paths.some((re) => re.test(path))) continue;
-        const off = group.needs.find((k) => !switches[k]);
+        switches ??= getProfileSwitches();
+        const off = group.needs.find((k) => !switches![k]);
         if (off) return off;
     }
     return null;

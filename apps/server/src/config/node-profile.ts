@@ -372,6 +372,11 @@ export function writeProfileRecord(record: unknown): boolean {
     if (!r.overrides || typeof r.overrides !== 'object' || Array.isArray(r.overrides)) return false;
     const rows = Object.entries(r.overrides)
         .filter(([name, value]) => SWITCH_NAMES.includes(name as ProfileSwitch) && typeof value === 'string' && value.length <= 16);
+    // A standby is sent the same record every pull: write only what changed.
+    const now = readProfileRecord();
+    const sameOverrides = JSON.stringify(Object.fromEntries([...rows].sort(([a], [b]) => a.localeCompare(b))))
+        === JSON.stringify(Object.fromEntries(Object.entries(now.overrides).sort(([a], [b]) => a.localeCompare(b))));
+    if (sameOverrides && (r.profile === null || r.profile === now.profile)) return true;
     const upsert = db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
     db.transaction(() => {
         if (r.profile) upsert.run(NODE_PROFILE_KEY, r.profile);

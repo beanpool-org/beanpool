@@ -167,7 +167,7 @@ async function main() {
         ['/api/marketplace/posts/request', { postId: freeId, buyerPublicKey: bob.pubKeyHex }],
         ['/api/marketplace/transactions/approve', { transactionId: 'x', authorPublicKey: alice.pubKeyHex }],
         ['/api/marketplace/transactions/reject', { transactionId: 'x', authorPublicKey: alice.pubKeyHex }],
-        ['/api/marketplace/transactions/cancel-request', { transactionId: 'x', requesterPublicKey: bob.pubKeyHex }],
+        ['/api/marketplace/transactions/cancel-request', { transactionId: 'x', buyerPublicKey: bob.pubKeyHex }],
         ['/api/marketplace/transactions/complete', { transactionId: 'x', confirmerPublicKey: bob.pubKeyHex }],
         ['/api/marketplace/transactions/cancel', { transactionId: 'x', cancellerPublicKey: bob.pubKeyHex }],
     ];
@@ -219,6 +219,11 @@ async function main() {
         'the inbound settlement gate refuses a purchase and a receipt from a trading peer, even with settlement enabled');
 
     // Decisions
+    const noStanding = await call('POST', '/api/commons/decisions', {
+        title: 'Help Dave', description: 'A hardship grant for Dave', touches: 'pool', effect: 'grant_hardship', subject: dave.pubKeyHex, params: { amount: 5 },
+    }, alice);
+    assert(noStanding.status === 403 && noStanding.body?.code === 'profile_no_beans',
+        `a pool-money Decision gets the plain answer first, even from a member with no standing to propose (${noStanding.status} ${JSON.stringify(noStanding.body)})`);
     db.prepare('UPDATE members SET earned_credit = 1 WHERE public_key = ?').run(carol.pubKeyHex); // standing to propose
     const grant = await call('POST', '/api/commons/decisions', {
         title: 'Help Dave', description: 'A hardship grant for Dave', touches: 'pool', effect: 'grant_hardship', subject: dave.pubKeyHex, params: { amount: 5 },

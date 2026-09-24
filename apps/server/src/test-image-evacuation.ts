@@ -1,0 +1,394 @@
+/**
+ * Test Suite: moving a node's images out of state.db, and everything that must not change when it happens.
+ *
+ * This suite starts from a state.db in the shape a node ALREADY RUNNING carries — `photo_data TEXT NOT NULL`,
+ * `data TEXT NOT NULL`, every image inline — because that is what the upgrade ladder and the evacuation job
+ * actually meet on mullum and castlemaine. Everything after that is the same node, one version later.
+ *
+ * Verifies:
+ *   1. The upgrade ladder rebuilds post_photos and message_attachments so the inline column may be NULL,
+ *      without losing a row or a byte.
+ *   2. A NEW photo is written straight to the store: storage_key set, photo_data null, sha256 correct.
+ *   3. Serving is byte-identical before and after evacuation, with the same content type and the same
+ *      cache headers, on the same URL.
+ *   4. The evacuation job nulls a column only after a verified put, is idempotent, and is resumable —
+ *      including from the exact state a kill between "put" and "update the row" leaves behind.
+ *   5. A sync export is byte-identical for an evacuated photo: the federation payload does not change.
+ *   6. The serving route consults the ROW, never the store: a photo whose row has gone 404s while its file
+ *      is still on disk, and an object with no row is never served.
+ *   7. An attachment's ciphertext and nonce come back unchanged through the store.
+ *   8. A backup carries images/ beside state.db, and a backup taken BEFORE this change still restores.
+ *   9. storage-health counts the store, and sweeps objects no row points at.
+ *  10. The database is measurably smaller afterwards.
+ *
+ * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-evacuation.ts
+ */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+delete process.env.CF_RECORD_NAME;
+
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import Database from 'better-sqlite3';
+
+const PORT = 8571;
+const BASE = `https://localhost:${PORT}`;
+const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+
+let run = 0, passed = 0;
+function assert(cond: boolean, msg: string): void {
+    run++;
+    if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); }
+}
+
+/** A photo of a realistic size: ~90 KB of incompressible bytes behind a real JPEG header. */
+function makePhoto(seed: string): Buffer {
+    const body = crypto.createHash('sha512').update(seed).digest();
+    const filler = Buffer.alloc(90 * 1024);
+    for (let i = 0; i < filler.length; i += body.length) body.copy(filler, i);
+    // Deterministic per seed, and not a run of zeroes, so the fixture's size is honest about a real node.
+    for (let i = 0; i < filler.length; i++) filler[i] ^= (i * 31 + seed.charCodeAt(0)) & 0xff;
+    return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), filler, Buffer.from([0xff, 0xd9])]);
+}
+function dataUrl(buf: Buffer, mime = 'image/jpeg'): string {
+    return `data:${mime};base64,${buf.toString('base64')}`;
+}
+function dbSizeBytes(file: string): number {
+    try { return fs.statSync(file).size; } catch { return 0; }
+}
+
+/** How many inline photos the fixture carries. Enough for the size measurement to mean something. */
+const FIXTURE_PHOTOS = 30;
+const FIXTURE_ATTACHMENTS = 10;
+
+/**
+ * Build a state.db in the OLD shape, before anything imports db.ts. `CREATE TABLE IF NOT EXISTS` in
+ * schema.sql is a no-op on a table that already exists, so this is the only way to exercise the rebuild the
+ * live nodes will go through.
+ */
+function seedLegacyDatabase(): { photos: { postId: string; order: number; value: string }[]; attachments: { id: string; data: string; nonce: string }[] } {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const legacy = new Database(path.join(DATA_DIR, 'state.db'));
+    legacy.pragma('journal_mode = WAL');
+    // As the node runs (db.ts: an accepted risk, documented there). Without it these two tables cannot even
+    // be written to until `posts` and `messages` exist, and creating stubs for them here would make
+    // schema.sql's CREATE TABLE IF NOT EXISTS skip the real ones.
+    legacy.pragma('foreign_keys = OFF');
+    legacy.exec(`
+        CREATE TABLE IF NOT EXISTS post_photos (
+            post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+            photo_data TEXT NOT NULL,
+            order_num INTEGER NOT NULL,
+            updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            PRIMARY KEY (post_id, order_num)
+        );
+        CREATE TABLE IF NOT EXISTS message_attachments (
+            message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+            data TEXT NOT NULL,
+            nonce TEXT NOT NULL,
+            mime TEXT,
+            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+    `);
+    const photos: { postId: string; order: number; value: string }[] = [];
+    const insertPhoto = legacy.prepare(
+        `INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, ?, ?)`);
+    for (let i = 0; i < FIXTURE_PHOTOS; i++) {
+        const postId = `legacy-post-${String(i).padStart(3, '0')}`;
+        const value = dataUrl(makePhoto(`photo-${i}`));
+        insertPhoto.run(postId, value, 0, '2026-01-01T00:00:00.000Z');
+        photos.push({ postId, order: 0, value });
+    }
+    // One photo the store must REFUSE to take: base64 wrapped across lines, which re-encodes differently.
+    const wrapped = `data:image/jpeg;base64,${makePhoto('wrapped').toString('base64').replace(/(.{40})/, '$1\n')}`;
+    insertPhoto.run('legacy-post-wrapped', wrapped, 0, '2026-01-01T00:00:00.000Z');
+    photos.push({ postId: 'legacy-post-wrapped', order: 0, value: wrapped });
+
+    const attachments: { id: string; data: string; nonce: string }[] = [];
+    const insertAttachment = legacy.prepare(
+        `INSERT INTO message_attachments (message_id, data, nonce, mime) VALUES (?, ?, ?, ?)`);
+    for (let i = 0; i < FIXTURE_ATTACHMENTS; i++) {
+        const id = `legacy-msg-${String(i).padStart(3, '0')}`;
+        const data = makePhoto(`cipher-${i}`).toString('base64');
+        const nonce = crypto.randomBytes(24).toString('base64');
+        insertAttachment.run(id, data, nonce, 'image/jpeg');
+        attachments.push({ id, data, nonce });
+    }
+    // Fold the WAL back into state.db so the "before" size is the whole database, not the part of it that
+    // happens to have been checkpointed.
+    legacy.pragma('wal_checkpoint(TRUNCATE)');
+    legacy.close();
+    return { photos, attachments };
+}
+
+async function main(): Promise<void> {
+    console.log('\n=== Testing the image evacuation, end to end ===\n');
+
+    const fixture = seedLegacyDatabase();
+    const dbFile = path.join(DATA_DIR, 'state.db');
+    const sizeBeforeUpgrade = dbSizeBytes(dbFile);
+
+    // Everything below imports db.ts, which opens state.db and runs the upgrade ladder on the file above.
+    const { initTls } = await import('./services/tls.js');
+    const { db } = await import('./db/db.js');
+    const { initStateEngine, exportSyncState, createPost } = await import('./state-engine.js');
+    const { startHttpsServer } = await import('./https-server.js');
+    const { getImageStore, postPhotoKey, sha256Hex, imagesDir, DiskImageStore } = await import('./storage/image-store.js');
+    const { evacuateImagesOnce, evacuationPassDidWork, pendingEvacuationCount, resetEvacuationSkipsForTests } = await import('./services/image-evacuation.js');
+    const { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs } = await import('./engine/storage-health.js');
+    const { createPlainBackup } = await import('./services/sealed-backup.js');
+
+    await initTls();
+    initStateEngine();
+    await startHttpsServer(PORT);
+    const store = getImageStore();
+
+    // The posts the fixture's photos belong to. `posts` is created by schema.sql, so it could not exist in
+    // the legacy file above — and without these rows storage-health would rightly read every fixture photo
+    // as orphaned media and prune it.
+    const authorKey = crypto.randomBytes(32).toString('hex');
+    const insertPost = db.prepare(`
+        INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+        VALUES (?, 'offer', 'food', ?, 'from before the upgrade', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')
+    `);
+    for (const p of fixture.photos) insertPost.run(p.postId, `Legacy ${p.postId}`, authorKey);
+
+    // ── 1. the upgrade ladder ──────────────────────────────────────────────────────────────────
+    const photoDdl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string;
+    assert(!/photo_data\s+TEXT\s+NOT\s+NULL/i.test(photoDdl), 'post_photos.photo_data is no longer NOT NULL after the upgrade');
+    assert(/storage_key/.test(photoDdl) && /sha256/.test(photoDdl) && /\bbytes\b/.test(photoDdl) && /\bmime\b/.test(photoDdl),
+        'post_photos gained storage_key, sha256, bytes and mime');
+    const attachDdl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='message_attachments'").get() as any)?.sql as string;
+    assert(!/\bdata\s+TEXT\s+NOT\s+NULL/i.test(attachDdl), 'message_attachments.data is no longer NOT NULL');
+    assert(/storage_key/.test(attachDdl), 'message_attachments gained storage_key');
+    assert(/nonce\s+TEXT\s+NOT\s+NULL/i.test(attachDdl), 'the nonce is still required — it never leaves the row');
+
+    const survived = (db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c as number;
+    assert(survived === fixture.photos.length, `every photo row survived the rebuild (${survived}/${fixture.photos.length})`);
+    const sampleAfterUpgrade = (db.prepare('SELECT photo_data FROM post_photos WHERE post_id = ?').get(fixture.photos[0].postId) as any).photo_data;
+    assert(sampleAfterUpgrade === fixture.photos[0].value, 'a rebuilt row holds exactly the characters it held before');
+    assert((db.prepare('SELECT COUNT(*) AS c FROM message_attachments').get() as any).c === FIXTURE_ATTACHMENTS,
+        'every attachment row survived the rebuild');
+    assert(!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_post_photos_updated_at'").get(),
+        'the updated_at index was rebuilt with the table');
+
+    // ── 2. a new photo goes straight to the store ──────────────────────────────────────────────
+    const author = crypto.randomBytes(32).toString('hex');
+    // An avatar, because the marketplace gate requires a profile photo before a member may post.
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url) VALUES (?, 'Ayla', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
+        .run(author, dataUrl(makePhoto('avatar')));
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
+    const freshBytes = makePhoto('fresh');
+    const freshValue = dataUrl(freshBytes);
+    const fresh = createPost('offer', 'food', 'Sourdough', 'Baked this morning', 3, 'fixed', author, undefined, undefined, [freshValue], true);
+    if (!fresh) throw new Error('setup: the post with a photo was not created');
+    const freshRow = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(fresh.id) as any;
+    assert(freshRow.photo_data === null, 'a new photo is not written to the database at all');
+    assert(typeof freshRow.storage_key === 'string' && freshRow.storage_key.startsWith(`posts/${fresh.id}/`),
+        'the row points at an object in the post namespace');
+    assert(freshRow.sha256 === sha256Hex(freshBytes), 'the row records the SHA-256 of the image bytes');
+    assert(freshRow.bytes === freshBytes.length && freshRow.mime === 'image/jpeg', 'the row records the size and the mime');
+    assert(store.get(freshRow.storage_key)!.equals(freshBytes), 'the store holds exactly those bytes');
+
+    // ── 3. serving, before evacuation ──────────────────────────────────────────────────────────
+    const legacyUrl = `${BASE}/api/marketplace/posts/${fixture.photos[0].postId}/photos/0`;
+    const beforeRes = await fetch(legacyUrl);
+    const beforeBytes = Buffer.from(await beforeRes.arrayBuffer());
+    assert(beforeRes.status === 200, 'an inline photo still serves 200 before it is evacuated');
+    assert(beforeBytes.equals(makePhoto('photo-0')), 'the bytes served are the photo');
+    const beforeType = beforeRes.headers.get('content-type');
+    const beforeCache = beforeRes.headers.get('cache-control');
+    assert(beforeCache === 'public, max-age=31536000, immutable', 'the immutable cache header is what it always was');
+
+    // ── 5a. the sync export, before evacuation ─────────────────────────────────────────────────
+    const exportBefore = await exportSyncState('test-node');
+    const photosBefore = JSON.stringify((exportBefore as any).photos);
+    const watermarksBefore = JSON.stringify(
+        db.prepare('SELECT post_id, order_num, updated_at FROM post_photos ORDER BY post_id, order_num').all());
+
+    // ── 7a. the attachment, before evacuation ──────────────────────────────────────────────────
+    const attachUrl = `${BASE}/api/messages/${fixture.attachments[0].id}/attachment`;
+    const attachBefore = await (await fetch(attachUrl)).json() as any;
+    assert(attachBefore.data === fixture.attachments[0].data, 'the ciphertext serves from the row before evacuation');
+
+    // ── 4. the evacuation job ──────────────────────────────────────────────────────────────────
+    const pendingAtStart = pendingEvacuationCount();
+    assert(pendingAtStart.photos === fixture.photos.length, 'every inline photo is pending');
+    assert(pendingAtStart.attachments === FIXTURE_ATTACHMENTS, 'every inline attachment is pending');
+
+    // Resumable from the exact state a kill between "put" and "update the row" leaves: the object is
+    // already in the store under its content-addressed key, and the row still holds the bytes.
+    const interrupted = fixture.photos[1];
+    const interruptedBytes = makePhoto('photo-1');
+    const interruptedKey = postPhotoKey(interrupted.postId, 0, sha256Hex(interruptedBytes), 'image/jpeg');
+    store.put(interruptedKey, interruptedBytes, { mime: 'image/jpeg' });
+    assert((db.prepare('SELECT photo_data FROM post_photos WHERE post_id = ?').get(interrupted.postId) as any).photo_data === interrupted.value,
+        'the interrupted row still holds its bytes — nothing has been lost');
+
+    // One pass at a time, killing the job between passes. After every pass, every row must be either
+    // wholly inline or wholly evacuated: there is no half state to be caught in.
+    resetEvacuationSkipsForTests();
+    let passes = 0;
+    let halfRows = 0;
+    while (passes < 100) {
+        if (!evacuationPassDidWork(evacuateImagesOnce(3))) break;
+        passes++;
+        halfRows += (db.prepare(
+            `SELECT COUNT(*) AS c FROM post_photos
+              WHERE (photo_data IS NOT NULL AND photo_data != '' AND storage_key IS NOT NULL)
+                 OR (photo_data IS NULL AND storage_key IS NULL)`
+        ).get() as any).c as number;
+        // Serving keeps working with the job half done — some rows inline, some evacuated.
+        const mid = await fetch(legacyUrl);
+        if (mid.status !== 200) { console.error('✗ serving broke mid-evacuation'); run++; }
+    }
+    assert(passes > 1, `the job ran in batches, not one pass (${passes} passes)`);
+    assert(halfRows === 0, 'no row was ever half-evacuated, at any point between passes');
+
+    const afterCounts = pendingEvacuationCount();
+    assert(afterCounts.photos === 1, 'the one photo the store cannot reproduce exactly is left in the database');
+    assert(afterCounts.attachments === 0, 'every attachment moved');
+    const stillInline = db.prepare(`SELECT post_id FROM post_photos WHERE storage_key IS NULL`).all() as any[];
+    assert(stillInline.length === 1 && stillInline[0].post_id === 'legacy-post-wrapped',
+        'and it is the wrapped-base64 one, left alone rather than mangled');
+
+    // Nulled only after a verified put: every evacuated row's recorded hash is the hash of the object.
+    let hashMismatches = 0;
+    for (const row of db.prepare('SELECT storage_key, sha256, bytes FROM post_photos WHERE storage_key IS NOT NULL').all() as any[]) {
+        const obj = store.get(row.storage_key);
+        if (!obj || sha256Hex(obj) !== row.sha256 || obj.length !== row.bytes) hashMismatches++;
+    }
+    assert(hashMismatches === 0, 'every evacuated row names an object whose bytes hash to the sha256 it recorded');
+    assert(store.get(interruptedKey)!.equals(interruptedBytes), 'the interrupted row finished onto the same content-addressed key');
+
+    // Idempotent: another pass moves nothing and changes nothing.
+    const again = evacuateImagesOnce(50);
+    assert(again.photosMoved === 0 && again.attachmentsMoved === 0, 'running the job again moves nothing');
+
+    // ── 3b. serving, after evacuation ──────────────────────────────────────────────────────────
+    const afterRes = await fetch(legacyUrl);
+    const afterBytes = Buffer.from(await afterRes.arrayBuffer());
+    assert(afterRes.status === 200, 'the same URL still serves 200 after evacuation');
+    assert(afterBytes.equals(beforeBytes), 'the bytes served are BYTE-IDENTICAL after evacuation');
+    assert(afterRes.headers.get('content-type') === beforeType, 'the content type is unchanged');
+    assert(afterRes.headers.get('cache-control') === beforeCache, 'the cache headers are unchanged');
+    const wrappedRes = await fetch(`${BASE}/api/marketplace/posts/legacy-post-wrapped/photos/0`);
+    assert(wrappedRes.status === 200, 'the photo that stayed inline still serves');
+
+    // ── 5b. the sync export, after evacuation ──────────────────────────────────────────────────
+    const exportAfter = await exportSyncState('test-node');
+    assert(JSON.stringify((exportAfter as any).photos) === photosBefore,
+        'the sync payload photos are BYTE-IDENTICAL after evacuation — the federation wire did not change');
+    // `updated_at` is the delta-sync watermark AND the ?v= clients cache by, and schema.sql's
+    // post_photos_touch_updated_at bumps it on ANY update that does not set it. If the evacuation let that
+    // happen, every replica would re-pull every photo and every phone would re-download every photo, for a
+    // change nothing can see.
+    assert(JSON.stringify(db.prepare('SELECT post_id, order_num, updated_at FROM post_photos ORDER BY post_id, order_num').all()) === watermarksBefore,
+        'not one photo row had its updated_at watermark disturbed by the evacuation');
+
+    // ── 7b. the attachment, after evacuation ───────────────────────────────────────────────────
+    const attachAfter = await (await fetch(attachUrl)).json() as any;
+    assert(attachAfter.data === fixture.attachments[0].data, 'the ciphertext is unchanged, character for character');
+    assert(attachAfter.nonce === fixture.attachments[0].nonce, 'the nonce is unchanged');
+    assert(attachAfter.mime === attachBefore.mime, 'the mime is unchanged');
+    assert((db.prepare('SELECT data FROM message_attachments WHERE message_id = ?').get(fixture.attachments[0].id) as any).data === null,
+        'and the ciphertext is no longer in the database');
+
+    // ── 6. the row decides, never the store ────────────────────────────────────────────────────
+    const doomed = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ?').get(fixture.photos[2].postId) as any;
+    db.prepare('DELETE FROM post_photos WHERE post_id = ?').run(fixture.photos[2].postId);
+    assert(store.get(doomed.storage_key) !== null, 'the file is still on disk (the post-commit delete has not run)');
+    const goneRes = await fetch(`${BASE}/api/marketplace/posts/${fixture.photos[2].postId}/photos/0`);
+    assert(goneRes.status === 404, 'a deleted photo 404s even though its file lingers — the route reads the row');
+    // And the reverse: an object with no row is never reachable.
+    const orphanKey = postPhotoKey('no-such-post', 0, sha256Hex(freshBytes), 'image/jpeg');
+    store.put(orphanKey, freshBytes, { mime: 'image/jpeg' });
+    assert((await fetch(`${BASE}/api/marketplace/posts/no-such-post/photos/0`)).status === 404,
+        'an object with no row behind it is not served');
+
+    // A post whose photos are replaced drops the old object once the edit has committed.
+    const { updatePost } = await import('./state-engine.js');
+    const replacementBytes = makePhoto('replacement');
+    const oldKey = freshRow.storage_key as string;
+    updatePost(fresh.id, author, { photos: [dataUrl(replacementBytes)] } as any);
+    const replacedRow = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = 0').get(fresh.id) as any;
+    assert(replacedRow.storage_key !== oldKey, 'an edited photo takes a new content-addressed key');
+    assert(store.get(oldKey) === null, 'and the object it replaced was deleted after the transaction committed');
+    assert(store.get(replacedRow.storage_key)!.equals(replacementBytes), 'the new object holds the new bytes');
+
+    // ── 9. storage-health ──────────────────────────────────────────────────────────────────────
+    const health = getDiskHealth();
+    assert(health.breakdown.media.imageStoreCount > 0, 'the disk breakdown counts the image store');
+    assert(health.breakdown.media.imageStoreBytes > 0, 'and its bytes');
+    assert(health.breakdown.media.totalBytes >= health.breakdown.media.imageStoreBytes, 'media adds the store in');
+
+    // An orphan younger than the grace period is left alone; the same object, aged, is swept.
+    const preview = getStorageCleanPreview();
+    assert(preview.orphanedImageObjects.count === 0, 'a freshly written orphan is inside the grace period and is not touched');
+    const orphanPath = path.join(imagesDir(), orphanKey);
+    const old = Date.now() - 3 * 60 * 60 * 1000;
+    fs.utimesSync(orphanPath, old / 1000, old / 1000);
+    const agedPreview = getStorageCleanPreview();
+    assert(agedPreview.orphanedImageObjects.count >= 1, 'an aged object no row points at is reported as reclaimable');
+    const cleaned = cleanStorageAndCompressLogs();
+    assert(cleaned.removedImageObjectsCount >= 1, 'the clean removes it');
+    assert(store.get(orphanKey) === null, 'and it is gone from the store');
+    assert(store.get(replacedRow.storage_key) !== null, 'while an object a row still points at is untouched');
+
+    // ── 8. backups ─────────────────────────────────────────────────────────────────────────────
+    const backup = await createPlainBackup();
+    const backupPath = path.join(DATA_DIR, 'test-backup.tar.gz');
+    await new Promise<void>((resolve, reject) => {
+        const out = fs.createWriteStream(backupPath);
+        backup.body.pipe(out);
+        out.on('finish', () => resolve());
+        out.on('error', reject);
+    });
+    const { execFileSync } = await import('node:child_process');
+    const listing = execFileSync('tar', ['-tzf', backupPath], { encoding: 'utf8' }).split('\n').map(s => s.trim()).filter(Boolean);
+    assert(listing.some(e => e === './state.db'), 'the backup carries state.db');
+    const imageMembers = listing.filter(e => e.startsWith('./images/') && !e.endsWith('/'));
+    assert(imageMembers.length > 0, `the backup carries images/ beside it (${imageMembers.length} object(s))`);
+
+    const restoreDir = path.join(DATA_DIR, 'restore-check');
+    fs.mkdirSync(restoreDir, { recursive: true });
+    execFileSync('tar', ['-xzf', backupPath, '-C', restoreDir]);
+    const restoredObject = path.join(restoreDir, 'images', replacedRow.storage_key);
+    assert(fs.existsSync(restoredObject), 'an object from the store comes back out of the archive at its own key');
+    assert(fs.readFileSync(restoredObject).equals(replacementBytes), 'and with exactly its bytes');
+
+    // A backup taken BEFORE this change has no images/ member — and must still restore. The archive check
+    // and the state.db copy are what a restore does; `restoreImages` is a no-op when there is nothing there.
+    const oldStyle = path.join(DATA_DIR, 'old-style');
+    fs.mkdirSync(oldStyle, { recursive: true });
+    fs.copyFileSync(path.join(restoreDir, 'state.db'), path.join(oldStyle, 'state.db'));
+    fs.writeFileSync(path.join(oldStyle, 'node_config.json'), '{}');
+    const oldTar = path.join(DATA_DIR, 'old-style.tar.gz');
+    execFileSync('tar', ['-czf', oldTar, '-C', oldStyle, '.']);
+    const { checkBackupArchive } = await import('./services/sealed-backup.js');
+    let preChangeOk = true;
+    try { checkBackupArchive(oldTar, { requireStateDb: true }); } catch { preChangeOk = false; }
+    assert(preChangeOk, 'a pre-change backup (state.db and node_config.json only) still passes the archive checks');
+    const preChangeMembers = execFileSync('tar', ['-tzf', oldTar], { encoding: 'utf8' });
+    assert(!preChangeMembers.includes('images/'), 'and it carries no images/ member, as it did not before this change');
+
+    // ── 10. the size of it ─────────────────────────────────────────────────────────────────────
+    // The same two-checkpoint dance reclaimSpaceOnce does, and for the same reason: in WAL mode the
+    // VACUUM's rewrite lands in the WAL, so state.db does not shrink until it is folded back.
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    db.exec('VACUUM');
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    const sizeAfter = dbSizeBytes(dbFile);
+    const storeBytes = new DiskImageStore(imagesDir()).totalBytes();
+    console.log(
+        `\n   state.db: ${(sizeBeforeUpgrade / 1024 / 1024).toFixed(2)} MB before → ` +
+        `${(sizeAfter / 1024 / 1024).toFixed(2)} MB after, with ${(storeBytes / 1024 / 1024).toFixed(2)} MB now in the image store.\n`
+    );
+    assert(sizeAfter < sizeBeforeUpgrade / 2, 'the database is less than half the size it was');
+
+    console.log(`\n${passed}/${run} checks passed.`);
+    if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
+    console.log('⭐️ Image evacuation tests PASSED.\n');
+}
+
+main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

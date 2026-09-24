@@ -169,6 +169,85 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN can_operate INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // ── Images out of the database (storage design §7) ─────────────────────────────────────────
+    //
+    // The rows that used to carry base64 learn to point at the image store instead. Adding the columns is
+    // an ALTER; making the old column optional is not — SQLite cannot drop a NOT NULL — so the two tables
+    // are rebuilt, once, on nodes whose table still declares it. `CREATE TABLE IF NOT EXISTS` in schema.sql
+    // is a no-op on an existing table, so a live node would otherwise keep NOT NULL forever and the
+    // evacuation job would have nothing it could null.
+    //
+    // The rebuild copies every column across by name, so it survives whatever else has been ALTERed on in
+    // front of it, and runs inside a transaction: interrupted, nothing happened.
+    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN storage_key TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN sha256 TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN bytes INTEGER`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN mime TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN storage_key TEXT`).run(); } catch { }
+    try {
+        const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string | undefined;
+        if (ddl && /photo_data\s+TEXT\s+NOT\s+NULL/i.test(ddl)) {
+            db.transaction(() => {
+                db.prepare(`
+                    CREATE TABLE post_photos_imgstore_new (
+                        post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+                        photo_data TEXT,
+                        order_num INTEGER NOT NULL,
+                        updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        storage_key TEXT,
+                        sha256 TEXT,
+                        bytes INTEGER,
+                        mime TEXT,
+                        PRIMARY KEY (post_id, order_num)
+                    )
+                `).run();
+                db.prepare(`
+                    INSERT INTO post_photos_imgstore_new
+                        (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
+                    SELECT post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime
+                      FROM post_photos
+                `).run();
+                db.prepare(`DROP TABLE post_photos`).run();
+                db.prepare(`ALTER TABLE post_photos_imgstore_new RENAME TO post_photos`).run();
+                db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run();
+            })();
+            console.log('[DB] post_photos.photo_data is now optional — the image store holds the bytes.');
+        }
+    } catch (e) {
+        // A node that cannot be rebuilt keeps working exactly as before: every row stays inline, the
+        // evacuation job finds nothing it may null, and nothing is lost. Loud, because the saving is not
+        // happening on this node and an operator should know why.
+        console.error('[DB] ⚠️  Could not make post_photos.photo_data optional; photos stay in the database:', e);
+    }
+    try {
+        const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='message_attachments'").get() as any)?.sql as string | undefined;
+        if (ddl && /\bdata\s+TEXT\s+NOT\s+NULL/i.test(ddl)) {
+            db.transaction(() => {
+                db.prepare(`
+                    CREATE TABLE message_attachments_imgstore_new (
+                        message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+                        data TEXT,
+                        nonce TEXT NOT NULL,
+                        mime TEXT,
+                        created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        storage_key TEXT
+                    )
+                `).run();
+                db.prepare(`
+                    INSERT INTO message_attachments_imgstore_new
+                        (message_id, data, nonce, mime, created_at, storage_key)
+                    SELECT message_id, data, nonce, mime, created_at, storage_key
+                      FROM message_attachments
+                `).run();
+                db.prepare(`DROP TABLE message_attachments`).run();
+                db.prepare(`ALTER TABLE message_attachments_imgstore_new RENAME TO message_attachments`).run();
+            })();
+            console.log('[DB] message_attachments.data is now optional — the image store holds the ciphertext.');
+        }
+    } catch (e) {
+        console.error('[DB] ⚠️  Could not make message_attachments.data optional; attachments stay in the database:', e);
+    }
+
     try { db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // Phase 2 delta backup — the remaining mutable tables gain their watermark
     // column here, BEFORE schema.sql exec, so the messages/friends/abuse_reports/
@@ -559,84 +638,6 @@ export function initSchema() {
         }
     }
 
-    // ── Images out of the database (storage design §7) ─────────────────────────────────────────
-    //
-    // The rows that used to carry base64 learn to point at the image store instead. Adding the columns is
-    // an ALTER; making the old column optional is not — SQLite cannot drop a NOT NULL — so the two tables
-    // are rebuilt, once, on nodes whose table still declares it. `CREATE TABLE IF NOT EXISTS` in schema.sql
-    // is a no-op on an existing table, so a live node would otherwise keep NOT NULL forever and the
-    // evacuation job would have nothing it could null.
-    //
-    // The rebuild copies every column across by name, so it survives whatever else has been ALTERed on in
-    // front of it, and runs inside a transaction: interrupted, nothing happened.
-    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN storage_key TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN sha256 TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN bytes INTEGER`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE post_photos ADD COLUMN mime TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN storage_key TEXT`).run(); } catch { }
-    try {
-        const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string | undefined;
-        if (ddl && /photo_data\s+TEXT\s+NOT\s+NULL/i.test(ddl)) {
-            db.transaction(() => {
-                db.prepare(`
-                    CREATE TABLE post_photos_imgstore_new (
-                        post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-                        photo_data TEXT,
-                        order_num INTEGER NOT NULL,
-                        updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        storage_key TEXT,
-                        sha256 TEXT,
-                        bytes INTEGER,
-                        mime TEXT,
-                        PRIMARY KEY (post_id, order_num)
-                    )
-                `).run();
-                db.prepare(`
-                    INSERT INTO post_photos_imgstore_new
-                        (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
-                    SELECT post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime
-                      FROM post_photos
-                `).run();
-                db.prepare(`DROP TABLE post_photos`).run();
-                db.prepare(`ALTER TABLE post_photos_imgstore_new RENAME TO post_photos`).run();
-                db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run();
-            })();
-            console.log('[DB] post_photos.photo_data is now optional — the image store holds the bytes.');
-        }
-    } catch (e) {
-        // A node that cannot be rebuilt keeps working exactly as before: every row stays inline, the
-        // evacuation job finds nothing it may null, and nothing is lost. Loud, because the saving is not
-        // happening on this node and an operator should know why.
-        console.error('[DB] ⚠️  Could not make post_photos.photo_data optional; photos stay in the database:', e);
-    }
-    try {
-        const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='message_attachments'").get() as any)?.sql as string | undefined;
-        if (ddl && /\bdata\s+TEXT\s+NOT\s+NULL/i.test(ddl)) {
-            db.transaction(() => {
-                db.prepare(`
-                    CREATE TABLE message_attachments_imgstore_new (
-                        message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-                        data TEXT,
-                        nonce TEXT NOT NULL,
-                        mime TEXT,
-                        created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        storage_key TEXT
-                    )
-                `).run();
-                db.prepare(`
-                    INSERT INTO message_attachments_imgstore_new
-                        (message_id, data, nonce, mime, created_at, storage_key)
-                    SELECT message_id, data, nonce, mime, created_at, storage_key
-                      FROM message_attachments
-                `).run();
-                db.prepare(`DROP TABLE message_attachments`).run();
-                db.prepare(`ALTER TABLE message_attachments_imgstore_new RENAME TO message_attachments`).run();
-            })();
-            console.log('[DB] message_attachments.data is now optional — the image store holds the ciphertext.');
-        }
-    } catch (e) {
-        console.error('[DB] ⚠️  Could not make message_attachments.data optional; attachments stay in the database:', e);
-    }
 
     // Enterprise discussion threads (docs/the-commons.md §2.2, Slice 6)
     // created_at is when the row is written, not the enterprise's joined_at: the delta backup exporter cursors

@@ -17,6 +17,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createConversation } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { getImageStore } from './storage/image-store.js';
 
 const PORT = 8549;
 const BASE = `https://localhost:${PORT}`;
@@ -83,9 +84,19 @@ async function main() {
     const msgId1 = sendRes1.json?.message?.id;
     assert(!!msgId1, 'Message ID returned in response');
 
-    // Verify row in DB directly
+    // Verify row in DB directly.
+    //
+    // The ciphertext no longer lives in the row — it is in the image store (storage design §7) and the row
+    // names it. So this checks what still has to be true, and more of it than it used to: the row keeps the
+    // nonce and the mime, the store holds the ciphertext EXACTLY as it was sent, and the database does not
+    // hold a second copy of it.
     const dbRow1 = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(msgId1) as any;
-    assert(!!dbRow1 && dbRow1.data === attachmentData1.data && dbRow1.mime === 'image/png', 'Attachment stored in database correctly');
+    assert(!!dbRow1 && dbRow1.mime === 'image/png' && dbRow1.nonce === attachmentData1.nonce,
+        'Attachment row keeps its nonce and mime');
+    assert(!!dbRow1 && dbRow1.data === null && dbRow1.storage_key === `attachments/${msgId1}.bin`,
+        'Attachment ciphertext is in the image store, not in the database');
+    assert(getImageStore().get(dbRow1.storage_key)!.toString('base64') === attachmentData1.data,
+        'and the stored object is exactly the ciphertext that was sent');
 
     // 2. GET /api/messages/:id/attachment returns stored attachment (public unauthenticated route)
     const getRes1 = await fetch(`${BASE}/api/messages/${msgId1}/attachment`);

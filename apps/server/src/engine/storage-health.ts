@@ -439,10 +439,16 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
     try {
         let doomed: string[] = [];
         db.transaction(() => {
-            doomed = (db.prepare(`
-                SELECT storage_key FROM post_photos
-                WHERE post_id NOT IN (SELECT id FROM posts) AND storage_key IS NOT NULL
-            `).all() as any[]).map((r: any) => r.storage_key as string);
+            // In its OWN try: a schema without `storage_key` (a node whose upgrade could not add the
+            // column, or a caller-supplied handle) must still have its orphaned photo ROWS pruned. Letting
+            // this read throw into the outer catch would silently turn the whole sweep off, and the only
+            // symptom would be a node that quietly stopped reclaiming anything.
+            try {
+                doomed = (db.prepare(`
+                    SELECT storage_key FROM post_photos
+                    WHERE post_id NOT IN (SELECT id FROM posts) AND storage_key IS NOT NULL
+                `).all() as any[]).map((r: any) => r.storage_key as string);
+            } catch { doomed = []; }
             const delRes = db.prepare(`
                 DELETE FROM post_photos
                 WHERE post_id NOT IN (SELECT id FROM posts)

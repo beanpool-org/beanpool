@@ -116,7 +116,7 @@ function evacuatePhotoBatch(store: ImageStore, limit: number): EvacuationCounts 
     let rows: any[];
     try {
         rows = db.prepare(`
-            SELECT post_id, order_num, photo_data
+            SELECT post_id, order_num, photo_data, updated_at
               FROM post_photos
              WHERE storage_key IS NULL AND photo_data IS NOT NULL AND photo_data != ''
              ORDER BY post_id, order_num
@@ -132,6 +132,29 @@ function evacuatePhotoBatch(store: ImageStore, limit: number): EvacuationCounts 
            SET photo_data = NULL, storage_key = ?, sha256 = ?, bytes = ?, mime = ?
          WHERE post_id = ? AND order_num = ? AND storage_key IS NULL
     `);
+    const restoreWatermark = db.prepare(`
+        UPDATE post_photos SET updated_at = ? WHERE post_id = ? AND order_num = ?
+    `);
+
+    /**
+     * Move one row WITHOUT disturbing its `updated_at`.
+     *
+     * schema.sql's `post_photos_touch_updated_at` fires on any UPDATE that leaves `updated_at` alone
+     * (`WHEN NEW.updated_at IS OLD.updated_at`) and stamps it with the current time. That is right for an
+     * edit and completely wrong for this: `updated_at` is the delta-sync watermark AND the `?v=` in the
+     * photo URL that clients cache by. Letting the evacuation bump it would re-ship every photo on the node
+     * to every replica and every peer on their next pull, and make every phone re-download every photo it
+     * already has — for a change that alters not one byte anybody can see.
+     *
+     * So the value is put back in the same transaction. The restoring UPDATE does NOT re-fire the trigger:
+     * it sets `updated_at` to something other than what the row now holds, so `NEW.updated_at IS
+     * OLD.updated_at` is false. Both statements commit together, so no reader ever sees the bumped value.
+     */
+    const moveRow = db.transaction((postId: string, orderNum: number, key: string, sha: string, size: number, mime: string, watermark: string | null) => {
+        const res = update.run(key, sha, size, mime, postId, orderNum);
+        if (res.changes > 0) restoreWatermark.run(watermark, postId, orderNum);
+        return res.changes;
+    });
 
     let done = 0;
     for (const row of rows) {
@@ -152,7 +175,7 @@ function evacuatePhotoBatch(store: ImageStore, limit: number): EvacuationCounts 
             if (bytes === null) { skippedPhotos.add(id); counts.photosSkipped++; continue; }
             // `AND storage_key IS NULL` in the UPDATE: if anything else evacuated or replaced this row
             // while the file was being written, that writer wins and this one changes nothing.
-            const res = update.run(key, storable.sha256, bytes, storable.mime, row.post_id, row.order_num);
+            const res = { changes: moveRow(row.post_id, row.order_num, key, storable.sha256, bytes, storable.mime, row.updated_at ?? null) as number };
             if (res.changes > 0) {
                 counts.photosMoved++;
                 counts.photoBytesMoved += row.photo_data.length;
@@ -236,11 +259,18 @@ export function pendingEvacuationCount(): { photos: number; attachments: number 
 export function evacuateImagesOnce(limit = EVACUATION_BATCH): EvacuationCounts {
     const store = getImageStore();
     const photos = evacuatePhotoBatch(store, limit);
-    // Attachments only once the photos are done: they are the bigger win per row, and doing one table at a
-    // time keeps each pass's read set small.
-    const remainingPhotos = pendingEvacuationCount().photos;
-    const attachments = remainingPhotos === 0 ? evacuateAttachmentBatch(store, limit) : emptyCounts();
+    // Attachments once a pass has run out of photo work — one table at a time keeps each pass's read set
+    // small. Deliberately "this pass did nothing" and NOT "no photos are pending": a photo the store cannot
+    // reproduce exactly stays pending forever by design, and gating on the pending count would leave every
+    // attachment on a node with one such photo stuck behind it, permanently.
+    const photoWorkLeft = photos.photosMoved + photos.photosSkipped > 0;
+    const attachments = photoWorkLeft ? emptyCounts() : evacuateAttachmentBatch(store, limit);
     return addCounts(photos, attachments);
+}
+
+/** Did a pass do anything at all? False means there is nothing left this process can move. */
+export function evacuationPassDidWork(counts: EvacuationCounts): boolean {
+    return counts.photosMoved + counts.photosSkipped + counts.attachmentsMoved + counts.attachmentsSkipped > 0;
 }
 
 /**
@@ -264,6 +294,10 @@ function reclaimSpaceOnce(): void {
         db.pragma('wal_checkpoint(TRUNCATE)');
         // VACUUM cannot run inside a transaction, and nothing here opens one.
         db.exec('VACUUM');
+        // And AGAIN afterwards. In WAL mode the rewritten database goes into the WAL, so state.db itself
+        // does not shrink by a byte until the WAL is folded back — checkpointing only before the VACUUM
+        // leaves an operator looking at a file exactly as large as it was, and the reclaim looking broken.
+        db.pragma('wal_checkpoint(TRUNCATE)');
     } catch (e) {
         console.warn('[ImageEvacuation] Could not reclaim space (the images are still out of the DB):', e);
         return;
@@ -312,9 +346,12 @@ export function startImageEvacuation(): void {
             if (running) { schedule(EVACUATION_INTERVAL_MS); return; }
             running = true;
             try {
-                total = addCounts(total, evacuateImagesOnce());
-                const left = pendingEvacuationCount();
-                if (left.photos === 0 && left.attachments === 0) {
+                const pass = evacuateImagesOnce();
+                total = addCounts(total, pass);
+                // "Nothing moved and nothing skipped" is the end, not "nothing pending": the rows the store
+                // cannot reproduce exactly stay pending for good, and waiting for that count to reach zero
+                // would leave the timer ticking for the life of the process.
+                if (!evacuationPassDidWork(pass)) {
                     console.log(
                         `🖼️  [ImageEvacuation] Done: ${total.photosMoved} photo(s) (${mb(total.photoBytesMoved)}) and ` +
                         `${total.attachmentsMoved} attachment(s) (${mb(total.attachmentBytesMoved)}) moved to the image store` +

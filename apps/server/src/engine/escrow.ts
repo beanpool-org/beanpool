@@ -793,12 +793,22 @@ export function completePostTransaction(
                     } else {
                         db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
                             .run(diff, row.buyer_pubkey);
-                        cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
+                        // THROW, don't ignore. The release below pays the seller `releaseCredits`, which is
+                        // the base hold PLUS this top-up. If the top-up silently fails the escrow is short by
+                        // `diff` and the seller is paid beans that were never held — the escrow ends at -diff
+                        // and the node stops summing to zero. We are inside the enclosing conservingTransaction,
+                        // so a throw unwinds the status update, the earned_surplus debit and the ledger together.
+                        const toppedUp = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
+                        if (!toppedUp) throw new Error('Failed to top up escrow for the extra hours');
                     }
                 } else {
                     if (balance - diff < floor) throw new Error('Insufficient balance to cover extra hours');
                     if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
-                    cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
+                    // Same reasoning as the keeper branch above: an ignored failure here pays the seller out
+                    // of an escrow that never received the top-up. The floor checks on the two lines above
+                    // are a pre-flight, not the authority — `transfer()` re-checks and can still refuse.
+                    const toppedUp = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
+                    if (!toppedUp) throw new Error('Failed to top up escrow for the extra hours');
                 }
             } else if (diff < 0) {
                 const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
@@ -811,7 +821,11 @@ export function completePostTransaction(
                     db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
                         .run(Math.abs(diff), row.buyer_pubkey);
                 }
-                cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
+                // The mirror case, and it was ignored too: fewer hours than booked, so the unearned part goes back
+                // to the buyer before the rest is released. A silent failure here strands `|diff|` in an escrow
+                // that the release then closes, and the buyer never sees their change.
+                const refunded = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
+                if (!refunded) throw new Error('Failed to refund the unearned escrow hours');
             }
             db.prepare(`UPDATE marketplace_transactions SET credits=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
         }
@@ -1029,8 +1043,14 @@ export function resolveEscrowDispute(
     } else if (action === 'refund_to_buyer') {
         buyerShare = row.credits;
     } else if (action === 'split') {
+        // The seller's half is the EXACT remainder, not a second independent rounding. Rounding both to 2dp
+        // could make them sum to more than the escrow holds: at row.credits = 12.345 (an hourly deal is not
+        // a round number of cents) the old arithmetic gave 6.17 + 6.18 = 12.35, so a split paid out half a
+        // cent that nobody put in. Under the escrow floor that no longer mints beans — the second transfer
+        // is refused and the arbitration throws — which would be a working dispute turning into an error.
+        // So fix the arithmetic: round the buyer's half for legibility, and give the seller what is left.
         buyerShare = Math.round((row.credits / 2) * 100) / 100;
-        sellerShare = Math.round((row.credits - buyerShare) * 100) / 100;
+        sellerShare = row.credits - buyerShare;
     }
 
     cb.conservingTransaction(() => {

@@ -181,8 +181,13 @@ export function extensionForMime(mime: string | null | undefined): string {
 /**
  * The top-level namespaces this node writes. Anything else in a store — above all in a bucket, which an
  * operator may share with other things — is not ours, and the orphan sweep never lists or deletes it.
+ *
+ * Not `projects/`: {@link projectPhotoKey} exists, but nothing writes with it yet — project photos stay in
+ * `projects.photos` — and no row can reference an object there, so the sweep would read every one as an
+ * orphan. Whatever moves project photos out adds the namespace here together with the table that references
+ * it, in the sweep (engine/storage-health.ts) and in `STORAGE_KEY_TABLES` (storage/image-columns.ts).
  */
-export const STORE_NAMESPACES = ['posts', 'attachments', 'projects'] as const;
+export const STORE_NAMESPACES = ['posts', 'attachments'] as const;
 
 // ── Key builders ───────────────────────────────────────────────────────────────────────────────
 //

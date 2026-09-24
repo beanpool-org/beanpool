@@ -17,7 +17,7 @@
  *   5. The sync export rebuilds each photo from the bucket byte for byte, and omits (and names) one it
  *      cannot read, so a replica keeps its own copy.
  *   6. The orphan sweep judges the BUCKET: an aged orphan goes, a fresh one and a referenced one stay, and an
- *      object outside this node's namespaces is never touched.
+ *      object outside this node's namespaces (projects/ among them: nothing writes there) is never touched.
  *   7. A backup says the photos are in the bucket (`X-Backup-Images: in-bucket`), carries no `images/`,
  *      carries `images-in-bucket.json` naming the bucket, lists what the bucket was missing, and holds no
  *      secret anywhere in the archive.
@@ -358,6 +358,9 @@ async function main(): Promise<void> {
         await fake.seed('posts/orphan-post/0-0a0a0a0a.jpg', makePhoto('orphan-old'), 'image/jpeg', twoHoursAgo);
         await fake.seed('posts/orphan-post/1-0b0b0b0b.jpg', makePhoto('orphan-new'), 'image/jpeg');
         await fake.seed('backups/not-ours.tar.gz', makePhoto('not ours'), 'application/gzip', twoHoursAgo);
+        // `projects/` is a name an operator's own things in a shared bucket may well use, and this node writes
+        // nothing there: project photos stay in the projects row. Nothing of ours, so nothing to sweep.
+        await fake.seed('projects/not-ours/0-0c0c0c0c.jpg', makePhoto('not ours either'), 'image/jpeg', twoHoursAgo);
         await fake.setMtime(rowE.storage_key, twoHoursAgo); // rowless since section 3, now aged too
         const preview = getStorageCleanPreview();
         assert(preview.orphanedImageObjects.count === 2,
@@ -369,6 +372,7 @@ async function main(): Promise<void> {
         assert(after.has('posts/orphan-post/1-0b0b0b0b.jpg'), 'a fresh orphan (a photo being written right now) is left alone');
         assert(after.has(rowC.storage_key) && after.has(attRow.storage_key), 'referenced objects are left alone');
         assert(after.has('backups/not-ours.tar.gz'), 'an object outside this node\'s namespaces is never touched');
+        assert(after.has('projects/not-ours/0-0c0c0c0c.jpg'), 'nor one under projects/, a prefix this node never writes');
     }
 
     // ── 7. a backup ────────────────────────────────────────────────────────────────────────────

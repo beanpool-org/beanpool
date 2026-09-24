@@ -309,8 +309,8 @@ const ORPHAN_OBJECT_GRACE_MS = 60 * 60 * 1000;
  * store, as before.
  *
  * On S3 the sweep lists the bucket once per thousand objects, with each object's size and upload time in the
- * listing itself, rather than a HEAD per object; and only this node's namespaces (`posts/`, `attachments/`,
- * `projects/`), so anything else an operator keeps in the same bucket is never listed, let alone deleted.
+ * listing itself, rather than a HEAD per object; and only this node's namespaces (`posts/`, `attachments/`),
+ * so anything else an operator keeps in the same bucket is never listed, let alone deleted.
  */
 function sweepStore(options?: { dataDir?: string; store?: ImageStore }): ImageStore {
     if (options?.store) return options.store;

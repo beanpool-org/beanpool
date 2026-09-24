@@ -17,7 +17,8 @@
  *      recovery body is refused before the nonce is spent
  *   7. sign-ups per address: 5 an hour and 20 a day → 429 without spending the nonce; the address hash is
  *      cleared once a day old; the auth limiter still applies
- *   8. deleting your own account frees the sign-in account; a member the community removed stays used (403)
+ *   8. deleting your own account frees the sign-in account; one deleted while suspended, or a member the community
+ *      removed, stays used (403)
  *   9. the door is read per request: back to local, the routes 404 again
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-join.ts
@@ -370,9 +371,18 @@ async function main(): Promise<void> {
     const hal = newId();
     const halNonce = await joinNonce(hal);
     const halJoin = await join(hal, { callsign: 'Hal', provider: 'apple', idToken: mint('apple', { sub: DEE_SUB, nonce: halNonce }), nonce: halNonce });
-    assert(halJoin.status === 403 && halJoin.body?.code === 'removed' && /removed by this community/.test(String(halJoin.body?.error)),
+    assert(halJoin.status === 403 && halJoin.body?.code === 'removed' && /removed from this community/.test(String(halJoin.body?.error)),
         `so that Apple account cannot come straight back in (got ${halJoin.status} ${JSON.stringify(halJoin.body)})`);
     assert(!memberRow(hal.pk), '...and did not join');
+
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(bea.pk);
+    const beaPurge = await call(bea, '/api/member/purge', {});
+    assert(beaPurge.status === 200 && memberRow(bea.pk)?.status === 'pruned', `a suspended member deletes their own account (got ${beaPurge.status})`);
+    assert(!!joinRow(bea.pk), '...and their open_joins row stays: deleting the account is not a way out of the suspension');
+    const jon = newId();
+    const jonNonce = await joinNonce(jon);
+    const jonJoin = await join(jon, { callsign: 'Jon', provider: 'apple', idToken: mint('apple', { sub: 'bea.apple.sub', nonce: jonNonce }), nonce: jonNonce });
+    assert(jonJoin.status === 403 && jonJoin.body?.code === 'removed', `so that Apple account cannot rejoin fresh either (got ${jonJoin.status})`);
 
     // ── 9. the door follows the profile ──────────────────────────────────────────────────────────
     console.log('\n── 9. the door follows the profile, per request ──');

@@ -630,8 +630,9 @@ CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases
 -- secret per node (node_config `openJoinSalt`): the raw subject and the email are never stored, and two nodes'
 -- hashes for the same person do not match. `ip_hash` (same key, its own domain) feeds the sign-up limit, 5 an
 -- hour and 20 a day per address, and is cleared once it is a day old, when the limiter no longer needs it.
--- A member who deletes their own account frees their sign-in account (the row goes); a member the community
--- removes keeps theirs used, so a removed account cannot come straight back in.
+-- A member in good standing who deletes their own account frees their sign-in account (the row goes); a member
+-- the community removes, or one who deletes their account while suspended, keeps it used, so that account cannot
+-- come straight back in.
 CREATE TABLE IF NOT EXISTS open_joins (
     member_pubkey TEXT PRIMARY KEY REFERENCES members(public_key),
     provider TEXT NOT NULL,

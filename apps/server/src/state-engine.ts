@@ -6371,9 +6371,10 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
         // A member who deletes their own account frees the sign-in account they joined with through the open door,
-        // so it can join again. Only here: adminPruneUser keeps the row, so a member the community removed cannot
-        // walk straight back in with the same account (engine/open-join.ts).
-        releaseOpenJoin(publicKey);
+        // so it can join again. Not while suspended or disabled (the signature middleware lets them sign this
+        // route), or deleting the account would be a way out of the sanction with the same sign-in; and never on
+        // adminPruneUser, so a member the community removed cannot walk straight back in (engine/open-join.ts).
+        if (member.status !== 'suspended' && member.status !== 'disabled') releaseOpenJoin(publicKey);
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {

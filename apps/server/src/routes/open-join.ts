@@ -115,7 +115,7 @@ function refuse(ctx: any, reason: OpenJoinRefusal, provider: SsoProvider, window
         case 'removed':
             ctx.status = 403;
             ctx.body = {
-                error: `The BeanPool identity this ${label} account joined with was removed by this community, so it can't join again.`,
+                error: `The BeanPool identity this ${label} account joined with was removed from this community, so it can't join again.`,
                 code: reason,
             };
             return;

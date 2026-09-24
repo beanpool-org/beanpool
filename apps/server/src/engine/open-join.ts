@@ -85,8 +85,9 @@ export function openJoinLimitReached(ipHash: string, now = Date.now()): 'hour' |
 }
 
 /**
- * Whether this sign-in account has already joined. `removed` when the member it joined as was removed by the
- * community (pruned): the row is kept on purpose, so that account cannot simply join again.
+ * Whether this sign-in account has already joined. `removed` when the member it joined as is gone (pruned) and
+ * the row was kept on purpose: removed by the community, or deleted while suspended. That account cannot simply
+ * join again. (A member in good standing who deletes their account takes the row with them: releaseOpenJoin.)
  */
 export function openJoinTaken(joinHash: string): 'joined' | 'removed' | null {
     const row = db.prepare(`
@@ -151,7 +152,7 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
     })();
 }
 
-/** A member deleting their own account frees the sign-in account they joined with (purgeMemberSelf). */
+/** A member in good standing deleting their own account frees the sign-in account they joined with (purgeMemberSelf). */
 export function releaseOpenJoin(publicKey: string): void {
     db.prepare('DELETE FROM open_joins WHERE member_pubkey = ?').run(publicKey);
 }

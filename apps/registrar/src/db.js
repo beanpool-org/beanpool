@@ -10,6 +10,14 @@ export const getAllocationByPubkey = (env, pubkey) =>
         "SELECT * FROM name_allocations WHERE node_pubkey=? AND status IN ('pending','live') ORDER BY requested_at DESC"
     ).bind(pubkey).first();
 
+// The node's own row in any state, a pending/live one first — what /status reports, so a node whose name was
+// revoked hears 'revoked' rather than 'none' (which reads as "you never had a name").
+export const getOwnAllocation = (env, pubkey) =>
+    env.DB.prepare(
+        `SELECT * FROM name_allocations WHERE node_pubkey=?
+         ORDER BY CASE WHEN status IN ('pending','live') THEN 0 ELSE 1 END, requested_at DESC`
+    ).bind(pubkey).first();
+
 export const policyTier = async (env, name) => {
     const r = await env.DB.prepare('SELECT tier FROM name_policy WHERE pattern=?').bind(name).first();
     return r?.tier || 'auto';

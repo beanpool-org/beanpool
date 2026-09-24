@@ -13,8 +13,13 @@ crons = ["*/5 * * * *"]
 # Public, non-secret config.
 [vars]
 BASE_DOMAIN = "beanpool.org"
-ATTEST_FAIL_LIMIT = "2"     # consecutive MIS-attestations (wrong identity) before auto-revoke.
-                            # Offline/unreachable nodes are NEVER auto-revoked (solar-node safe).
+ATTEST_FAIL_LIMIT = "2"     # consecutive IMPOSTOR verdicts (a valid signature by ANOTHER node key) before
+                            # auto-revoke. Anything the registrar can't verify (offline, 5xx, an unknown
+                            # signing format) never counts (solar-node safe; 2026-09-24 incident).
+# Circuit-breaker canary: one of OUR nodes, which must attest 'ok' in a sweep for that sweep to act on any
+# row. Leave unset until that node is live in the registrar again (`test` was revoked 2026-09-24 and is
+# `blocked` in name_policy) — a configured canary that isn't live suspends every sweep.
+# CANARY_NAME = "test"
 
 # D1 binding — set database_id after `wrangler d1 create`.
 [[d1_databases]]

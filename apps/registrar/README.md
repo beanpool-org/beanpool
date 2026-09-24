@@ -8,8 +8,14 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 - **Admin (shared secret):** `GET /api/local/admin/registrar/pending` ·
   `POST /api/local/admin/registrar/:name/approve` · `POST /api/local/admin/registrar/:name/revoke`
 - **Switchboard:** `GET /i/:code` (trampoline)
-- **Cron:** attestation sweep every 5 min — a live name that stops proving it's the registered node
-  (a signed `/api/attest` challenge) is auto-revoked after `ATTEST_FAIL_LIMIT` misses.
+- **Cron:** attestation sweep every 5 min, in two phases. Phase 1 challenges every live name
+  (`/api/attest`) and writes nothing; each reply is `ok`, `impostor` (a valid signature by a
+  *different* node key) or `unverifiable` (down, 5xx, not an attest, or a signature we can't verify —
+  never evidence). Phase 2 runs only if the sweep is believable: a configured `CANARY_NAME` attested
+  `ok`, impostors ≤ max(2, 10% of live) and not every live name, unverifiable ≤ half of live. Otherwise
+  it acts on no row and logs `[ATTEST_SWEEP] suspended:…`. `ATTEST_FAIL_LIMIT` consecutive impostor
+  verdicts revoke the name; an `ok` or `unverifiable` verdict in an applied sweep ends the run (a
+  suspended sweep changes nothing).
 
 ## Signed request scheme (node → registrar)
 

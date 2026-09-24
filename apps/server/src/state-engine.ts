@@ -1600,7 +1600,8 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // account can move, so a daily rate-limit keyed off the now-cosmetic "Newcomer" tier is moot.)
 
     // Sender's spending limit:
-    //  • System wallets (escrow_*, COMMONS_POOL, genesis) — unbounded.
+    //  • System wallets (COMMONS_POOL, genesis) — unbounded.
+    //  • Escrow wallets (escrow_*) — only what they hold (`ESCROW_FLOOR`, a hair below zero); see below.
     //  • Marketplace / escrow spends — the full earned credit LINE (your floor, may be negative):
     //    the overdraft exists so you can trade for real goods/services, backed by a promise to reciprocate.
     //  • Direct "send credits" gifts — POSITIVE BALANCE ONLY (floor 0). You can only gift beans you
@@ -1934,9 +1935,11 @@ function resyncMemoryToRows(commonsSnapshot: number | null, cause: unknown): voi
  * to the completed-trade send gate, which had been refusing sweeps from treasuries that had never traded
  * with a bare "Sweep failed".
  *
- * FLOOR. Synthetic senders are unbounded (an escrow account is drained to exactly zero by design, and a
- * bridge must be able to go negative — that negative IS the extended credit). A treasury is floored at 0:
- * it may only sweep surplus it actually holds, and must never be driven into debt by a sweep.
+ * FLOOR. An escrow may pay out only what it holds (`ESCROW_FLOOR`, a hair below zero): it drains to zero by
+ * design, and paying out more would mint beans. The other synthetic senders are unbounded — a bridge must be
+ * able to go negative, because that negative IS the extended credit. A treasury, or a member debited under
+ * `allowMemberDebit`, is floored at 0: it may only move what it actually holds, and must never be driven
+ * into debt by this path.
  *
  * #104 uses it for the cross-node fee, which the buyer pays on top of the price (§2.1) and which lands in
  * the buyer node's own Commons because that is the node carrying the write-off if the buyer is ever pruned.

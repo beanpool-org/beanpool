@@ -61,6 +61,21 @@ export class SsoVerificationError extends Error {
     }
 }
 
+/**
+ * The provider could not be asked: its keys or its user endpoint failed (5xx), came back unusable,
+ * or could not be reached. Nothing was learned about the token, and the nonce is still unspent.
+ *
+ * A subclass, so every caller that treats any SsoVerificationError as "the sign-in did not check
+ * out" keeps doing exactly that. A caller that can tell the member "try again in a minute" instead
+ * (the open door, routes/open-join.ts) checks for this one first.
+ */
+export class SsoProviderUnavailableError extends SsoVerificationError {
+    constructor(message: string) {
+        super(message);
+        this.name = 'SsoProviderUnavailableError';
+    }
+}
+
 // ─── the provider table ───────────────────────────────────────────────────────────────────────
 //
 // Everything provider-specific is here. If a third provider is ever un-paused, it is an entry in
@@ -241,12 +256,12 @@ async function fetchJwks(provider: SsoProvider): Promise<Jwk[]> {
         try {
             const res = await fetch(config.jwksUri, { signal: controller.signal });
             if (!res.ok) {
-                throw new SsoVerificationError(`${config.label} JWKS fetch failed: HTTP ${res.status}`);
+                throw new SsoProviderUnavailableError(`${config.label} JWKS fetch failed: HTTP ${res.status}`);
             }
             const body = await res.json() as { keys?: Jwk[] };
             const keys = (body.keys ?? []).filter(k => k.kty === 'RSA' && k.n && k.e && k.kid);
             if (!keys.length) {
-                throw new SsoVerificationError(`${config.label} JWKS contained no usable RSA keys`);
+                throw new SsoProviderUnavailableError(`${config.label} JWKS contained no usable RSA keys`);
             }
             jwksCache.set(provider, {
                 keys,
@@ -462,7 +477,8 @@ export async function verifyIdToken(
             });
             clearTimeout(timeoutId);
             if (!res.ok) {
-                throw new SsoVerificationError(`GitHub authentication failed (status ${res.status}).`);
+                const Refusal = res.status >= 500 ? SsoProviderUnavailableError : SsoVerificationError;
+                throw new Refusal(`GitHub authentication failed (status ${res.status}).`);
             }
             const data = await res.json() as { id: number | string; email?: string; login?: string };
             if (!data.id) {
@@ -482,7 +498,8 @@ export async function verifyIdToken(
             };
         } catch (err: any) {
             if (err instanceof SsoVerificationError) throw err;
-            throw new SsoVerificationError(`Failed to verify GitHub token: ${err.message}`);
+            // Unreachable, timed out, or an answer that was not a profile: GitHub failed, not the token.
+            throw new SsoProviderUnavailableError(`Failed to verify GitHub token: ${err.message}`);
         }
     }
 
@@ -523,7 +540,8 @@ export async function verifyIdToken(
             });
             clearTimeout(timeoutId);
             if (!res.ok) {
-                throw new SsoVerificationError(`Facebook authentication failed (status ${res.status}).`);
+                const Refusal = res.status >= 500 ? SsoProviderUnavailableError : SsoVerificationError;
+                throw new Refusal(`Facebook authentication failed (status ${res.status}).`);
             }
             const data = await res.json() as { id?: string | number; email?: string };
             if (!data.id) {
@@ -543,7 +561,8 @@ export async function verifyIdToken(
             };
         } catch (err: any) {
             if (err instanceof SsoVerificationError) throw err;
-            throw new SsoVerificationError(`Failed to verify Facebook token: ${err.message}`);
+            // Unreachable, timed out, or an answer that was not a profile: Facebook failed, not the token.
+            throw new SsoProviderUnavailableError(`Failed to verify Facebook token: ${err.message}`);
         }
     }
 

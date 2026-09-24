@@ -51,6 +51,7 @@ import {
     isSsoProvider,
     ssoProviderLabel,
     SsoVerificationError,
+    SsoProviderUnavailableError,
     SSO_PROVIDERS,
     type SsoIdentity,
     type SsoProvider,
@@ -202,13 +203,15 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
                 joinNonceSubject(actor),
             );
         } catch (e) {
-            if (e instanceof SsoVerificationError) {
+            // An SsoProviderUnavailableError is also an SsoVerificationError, so it is ruled out explicitly.
+            if (e instanceof SsoVerificationError && !(e instanceof SsoProviderUnavailableError)) {
                 recordFunnelEvent('open_join_failed', 'sign_in');
                 ctx.status = 401;
                 ctx.body = { error: e.message, code: 'sign_in' };
                 return;
             }
-            // Not the member's sign-in: the provider's keys could not be fetched (network, timeout).
+            // Not the member's sign-in: the provider could not be asked (its keys or its user endpoint failed,
+            // came back unusable, or timed out). The nonce was not spent, so the same sign-in can try again.
             console.warn('[OpenJoin] sign-in could not be checked:', (e as Error)?.message || e);
             recordFunnelEvent('open_join_failed', 'sign_in_unavailable');
             ctx.status = 503;

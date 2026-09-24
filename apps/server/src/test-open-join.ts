@@ -7,7 +7,8 @@
  *      /api/community/info says openJoin false
  *   2. global profile: openJoin true; unsigned → 401; a body publicKey naming someone else → refused
  *   3. the sign-in: forged, expired, wrong-audience, wrong-issuer, wrong-nonce, unissued-nonce, another key's
- *      nonce → 401 and nothing written; the other key's nonce still works for them afterwards
+ *      nonce → 401 and nothing written; the other key's nonce still works for them afterwards; the provider's
+ *      keys failing (HTTP 503, or no usable keys) → 503 sign_in_unavailable, not 401, and the nonce is kept
  *   4. a good join: member with invited_by open:google and no invite code, the open_joins row, the funnel counts,
  *      and neither the raw sub nor the email anywhere in the database
  *   5. the same sign-in account again → 409 with the restore hint; a replayed nonce → 401; the joined key
@@ -201,6 +202,31 @@ async function main(): Promise<void> {
         assert(r.status === 401 && r.body?.code === 'sign_in', `${label} → 401 sign_in (got ${r.status} ${JSON.stringify(r.body)})`);
     }
     assert(!memberRow(ada.pk) && countJoins() === 0, 'none of them joined anybody or marked a sign-in account used');
+
+    // The provider failing is not the member's sign-in failing. Google's keys are dropped from the cache and its
+    // key endpoint answers 503, then an empty key set: both must be 503 sign_in_unavailable, not 401 sign_in.
+    const realFetch = globalThis.fetch;
+    const unavailableBefore = funnelCount('open_join_failed', 'sign_in_unavailable');
+    const outages: Array<[string, () => Response]> = [
+        ['Google\'s key endpoint answering 503', () => new Response('unavailable', { status: 503 })],
+        ['Google\'s key endpoint answering with no usable keys', () => new Response(JSON.stringify({ keys: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })],
+    ];
+    for (const [label, answer] of outages) {
+        _resetJwksCacheForTests('google', null);
+        globalThis.fetch = (async (input: any, init?: any) =>
+            String(input?.url ?? input).startsWith('https://www.googleapis.com/') ? answer() : realFetch(input, init)) as typeof fetch;
+        try {
+            const r = await join(ada, { callsign: 'Ada', provider: 'google', idToken: mint('google', { sub: GOOGLE_SUB, nonce: n }), nonce: n });
+            assert(r.status === 503 && r.body?.code === 'sign_in_unavailable',
+                `${label} → 503 sign_in_unavailable, not a refused sign-in (got ${r.status} ${JSON.stringify(r.body)})`);
+        } finally {
+            globalThis.fetch = realFetch;
+        }
+    }
+    primeJwks();
+    assert(funnelCount('open_join_failed', 'sign_in_unavailable') === unavailableBefore + outages.length,
+        'the funnel counts them as open_join_failed:sign_in_unavailable');
+    assert(!memberRow(ada.pk) && countJoins() === 0, '...and nobody joined (the nonce is still unspent: Ada joins with it in step 4)');
 
     const bea = newId();
     const beaNonce = await joinNonce(bea);

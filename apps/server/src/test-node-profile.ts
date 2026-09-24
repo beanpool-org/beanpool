@@ -5,8 +5,10 @@
  *   1. parsing: unset, empty or spaces → local; `global` in any case, with spaces → global; anything else → local
  *      with ONE log line however often it is read
  *   2. the per-profile defaults (design §4.2)
- *   3. boot over a database restored from a global node, with NODE_PROFILE unset: the node runs local, the mirror is
- *      rewritten, the boot log says so; a mirror changed at runtime changes nothing either
+ *   3. boot over a database restored from a global node, with NODE_PROFILE unset: the boot REFUSES (G1: run as local,
+ *      a global node would switch Beans on for strangers) and the record stays global; started once with
+ *      NODE_PROFILE_ALLOW_CHANGE_FROM=global it runs local, the record is rewritten, the boot log says so; a record
+ *      changed at runtime changes nothing either
  *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the six
  *      `features` exactly, and every field it had before
  *   5. node_config overrides change the configured switch (and the boot log reports them), bad ones are ignored with
@@ -56,9 +58,13 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
     return { status: res.status, body: await res.json() };
 }
 
-// What this build does on EVERY profile until G1 (Beans off), G2 (open join), G4 (distance search) and G6 (knocks)
-// land. The PR that builds one of these changes its line here, with the test that proves it.
-const BUILT_TODAY = { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: false };
+// What this build does on each profile until G2 (open join), G4 (distance search) and G6 (knocks) land. The PR that
+// builds one of these changes its line here, with the test that proves it. G1 built Beans off: on global, Beans,
+// escrow and enterprises are off (this database's ledger has never moved; test-global-no-beans covers one that has).
+const BUILT_TODAY = {
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: false },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: false, knocks: false, distanceSearch: false },
+};
 
 async function main() {
     const profile = await import('./config/node-profile.js');
@@ -115,8 +121,20 @@ async function main() {
     initSchema();
     db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(NODE_PROFILE_KEY, 'global');
     const { initStateEngine } = await import('./state-engine.js');
-    const boot = capture(() => initStateEngine());
+    const { NodeProfileMismatchError, ALLOW_CHANGE_ENV } = profile;
     const mirror = () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(NODE_PROFILE_KEY) as { value: string }).value;
+    let refused: unknown = null;
+    try { initStateEngine(); } catch (e) { refused = e; }
+    assert(refused instanceof NodeProfileMismatchError, `the boot refuses: a global node run as local would switch Beans on for strangers (got ${String(refused)})`);
+    const why = String((refused as Error | null)?.message ?? '');
+    assert(why.includes('NODE_PROFILE=global') && why.includes(`${ALLOW_CHANGE_ENV}=global`),
+        `the refusal says what to set, and how to convert on purpose (${why.slice(0, 120)}…)`);
+    assert(mirror() === 'global', 'a refused boot leaves the record as it was');
+    process.env[ALLOW_CHANGE_ENV] = 'global';
+    const boot = capture(() => initStateEngine());
+    delete process.env[ALLOW_CHANGE_ENV];
+    assert(boot.warns.some(l => l.includes(`${ALLOW_CHANGE_ENV}=global`) && l.includes('on purpose')),
+        `started once with ${ALLOW_CHANGE_ENV}=global, the boot says it converts on purpose`);
     assert(getNodeProfile() === 'local', 'the node runs as local: the restored mirror is not the profile');
     assert(mirror() === 'local', `boot rewrote node_config.${NODE_PROFILE_KEY} to local (got ${mirror()})`);
     assert(boot.logs.some(l => l.includes('Node profile: local')), 'the boot log names the profile');
@@ -139,7 +157,7 @@ async function main() {
             const r = await getInfo(id);
             assert(r.status === 200, `${label}, ${who}: 200 (got ${r.status})`);
             assert(r.body.profile === want, `${label}, ${who}: profile is ${want} (got ${JSON.stringify(r.body.profile)})`);
-            assert(JSON.stringify(r.body.features) === JSON.stringify(BUILT_TODAY),
+            assert(JSON.stringify(r.body.features) === JSON.stringify(BUILT_TODAY[want]),
                 `${label}, ${who}: features are exactly what this build does (got ${JSON.stringify(r.body.features)})`);
             const b = r.body;
             assert(typeof b.memberCount === 'number' && typeof b.postCount === 'number' && typeof b.transactionCount === 'number'
@@ -189,7 +207,7 @@ async function main() {
     assert(reported.logs.some(l => l.includes('Not built yet') && l.includes('knocks=true')),
         'the boot log says which overrides ask for something this build does not have yet');
     assert(mirror() === 'global', 'the mirror follows NODE_PROFILE=global at boot');
-    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify(BUILT_TODAY),
+    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify(BUILT_TODAY.global),
         'global with overrides: /api/community/info still reports only what this build does');
 
     setOverride('beans', 'maybe');
@@ -203,7 +221,12 @@ async function main() {
 
     clearOverrides();
     delete process.env.NODE_PROFILE;
+    let refusedAgain = false;
+    try { mirrorNodeProfileAtBoot(); } catch (e) { refusedAgain = e instanceof NodeProfileMismatchError; }
+    assert(refusedAgain && mirror() === 'global', 'after running as global, a boot with NODE_PROFILE unset refuses again');
+    process.env[ALLOW_CHANGE_ENV] = 'global';
     mirrorNodeProfileAtBoot();
+    delete process.env[ALLOW_CHANGE_ENV];
     assert(JSON.stringify(getConfiguredSwitches()) === JSON.stringify(profileDefaults('local')), 'with no overrides and no NODE_PROFILE, the node is set to the local defaults');
     assert(mirror() === 'local', 'and the mirror is back to local');
 

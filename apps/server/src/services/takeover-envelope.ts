@@ -42,6 +42,7 @@ import {
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
+import { readProfileRecord, type ProfileRecord } from '../config/node-profile.js';
 import { logger } from '../logger.js';
 import { setTakeoverChangeHandler } from './takeover-signal.js';
 
@@ -89,6 +90,11 @@ export interface TakeoverBundle {
     /** How many take-overs this identity has been through (services/identity-epoch.ts). A take-over writes this + 1.
      *  Absent in a bundle sealed before slice 8: read as 0. */
     identityEpoch?: number;
+    /** The node profile this community runs as and the operator's switch overrides (config/node-profile.ts), so a
+     *  promoted server is the same kind of node. A take-over is refused when the standby's NODE_PROFILE doesn't
+     *  match, and writes these into its database otherwise (the `profile` step). Absent in a bundle sealed before
+     *  this field existed: the record the standby copied with the replication payload decides. */
+    nodeProfile?: ProfileRecord;
 }
 
 export interface NodeIdentity {
@@ -155,6 +161,7 @@ function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
         publicAddress: readPublicAddress(),
         recoveryCode: config.recoveryCode ?? null,
         identityEpoch: Number.isSafeInteger(config.identityEpoch) && config.identityEpoch > 0 ? config.identityEpoch : 0,
+        nodeProfile: readProfileRecord(),
     };
 }
 

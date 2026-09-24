@@ -49,6 +49,7 @@ import {
 } from '../federation-link.js';
 import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
+import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
 import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
@@ -1114,6 +1115,13 @@ router.post('/api/profile/unvouch', async (ctx) => {
 });
 
 router.post('/api/ledger/transfer', async (ctx) => {
+    // Before every other check: on a node whose `beans` switch is off (config/node-profile.ts) there is no send to
+    // make, and the answer says so plainly rather than as a failed send. transfer() refuses again underneath.
+    if (!getProfileSwitches().beans) {
+        ctx.status = 403;
+        ctx.body = { error: BEANS_OFF_MESSAGE, code: PROFILE_NO_BEANS };
+        return;
+    }
     const { to, amount, memo, from: bodyFrom } = (ctx as any).requestBody || {};
     // The sender is the authenticated signer, and only that. The signature middleware sets both the actor
     // and authSig; requiring them to agree here keeps this route fail-closed on its own, rather than

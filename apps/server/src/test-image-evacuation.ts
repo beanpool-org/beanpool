@@ -17,7 +17,8 @@
  *      and a photo this node can no longer read is omitted from the payload rather than exported empty,
  *      so a replica holding the only good copy keeps it.
  *   6. The serving route consults the ROW, never the store: a photo whose row has gone 404s while its file
- *      is still on disk, and an object with no row is never served.
+ *      is still on disk, and an object with no row is never served. And a post whose object has vanished is
+ *      still editable — the member can replace or remove the broken photo rather than meeting a 500.
  *   7. An attachment's ciphertext and nonce come back unchanged through the store.
  *   8. A backup carries images/ beside state.db, and a backup taken BEFORE this change still restores.
  *   9. storage-health counts the store, and sweeps objects no row points at.
@@ -392,6 +393,52 @@ async function main(): Promise<void> {
     assert(replacedRow.storage_key !== oldKey, 'an edited photo takes a new content-addressed key');
     assert(store.get(oldKey) === null, 'and the object it replaced was deleted after the transaction committed');
     assert(store.get(replacedRow.storage_key)!.equals(replacementBytes), 'the new object holds the new bytes');
+
+    // A photo whose object has vanished must not make the post uneditable — including the edit that gets
+    // rid of it. Every row of the post is read to rebuild the "unchanged" URLs, so before this was caught
+    // per row one lost object 500'd every photo edit and the member could not even remove the broken photo.
+    {
+        const brokenBytes = makePhoto('broken-object');
+        const broken = createPost('offer', 'food', 'Jam', 'Last of the plums', 2, 'fixed', author, undefined, undefined,
+            [dataUrl(brokenBytes), dataUrl(makePhoto('broken-second'))], true);
+        if (!broken) throw new Error('setup: the two-photo post was not created');
+        const brokenRow = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = 0').get(broken.id) as any;
+        const survivorRow = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = 1').get(broken.id) as any;
+        store.delete(brokenRow.storage_key);
+        assert(store.get(brokenRow.storage_key) === null, 'setup: order 0 now points at an object that is not there');
+
+        // The client keeps photo 1 by sending back the URL it was given, and replaces the broken photo 0.
+        const keptUrl = `${BASE}/api/marketplace/posts/${broken.id}/photos/1`;
+        const healBytes = makePhoto('heal');
+        let editErr: unknown = null;
+        try {
+            updatePost(broken.id, author, { photos: [dataUrl(healBytes), keptUrl] } as any);
+        } catch (e) { editErr = e; }
+        assert(editErr === null, 'an edit that replaces the photo whose object is missing SUCCEEDS');
+        const healedRow = db.prepare('SELECT storage_key, photo_data FROM post_photos WHERE post_id = ? AND order_num = 0').get(broken.id) as any;
+        assert(healedRow && store.get(healedRow.storage_key)?.equals(healBytes) === true,
+            'and order 0 now holds the replacement bytes');
+        const keptRow = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = 1').get(broken.id) as any;
+        assert(store.get(keptRow.storage_key)?.equals(makePhoto('broken-second')) === true,
+            'the untouched photo came back through its URL unchanged, not as a broken row');
+        assert(keptRow.storage_key === survivorRow.storage_key,
+            'and it re-stored under the same content-addressed key, so the edit cost nothing');
+    }
+
+    // The same post is still editable down to zero photos when the object is missing and NOT replaced.
+    {
+        const lonelyBytes = makePhoto('lonely');
+        const lonely = createPost('offer', 'food', 'Bread', 'One loaf', 1, 'fixed', author, undefined, undefined,
+            [dataUrl(lonelyBytes)], true);
+        if (!lonely) throw new Error('setup: the one-photo post was not created');
+        const lonelyRow = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = 0').get(lonely.id) as any;
+        store.delete(lonelyRow.storage_key);
+        let dropErr: unknown = null;
+        try { updatePost(lonely.id, author, { photos: [] } as any); } catch (e) { dropErr = e; }
+        assert(dropErr === null, 'and an edit that simply DELETES the broken photo succeeds too');
+        assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos WHERE post_id = ?').get(lonely.id) as any).c === 0,
+            'the post is left with no photos');
+    }
 
     // ── 9. storage-health ──────────────────────────────────────────────────────────────────────
     const health = getDiskHealth();

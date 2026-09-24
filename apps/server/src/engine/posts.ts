@@ -698,7 +698,20 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         const existingByOrder = new Map<number, string>(
             (db.prepare(`SELECT order_num, photo_data, storage_key, sha256, bytes, mime FROM post_photos WHERE post_id=?`).all(id) as any[])
                 .flatMap(r => {
-                    const data = photoDataOf(r, store);
+                    // A row whose object has vanished must not make the whole post uneditable — this loop
+                    // runs over EVERY row of the post, not only the ones the client sent back, so one lost
+                    // object would otherwise 500 every photo edit, including the one that removes it.
+                    // The photo route answers 503 for this and the sync export drops the row; here the order
+                    // is simply left out. A client URL pointing at it then falls through unchanged and
+                    // `validatePostPhotos` rejects it only if the client actually kept that photo. Replacing
+                    // or dropping it goes through, and the row is rewritten.
+                    let data: string | null;
+                    try {
+                        data = photoDataOf(r, store);
+                    } catch (e) {
+                        console.error(`[Posts] Could not read photo ${r.order_num} of post ${id} out of the image store; leaving it out of this edit:`, e);
+                        return [];
+                    }
                     return data ? [[r.order_num, data] as [number, string]] : [];
                 })
         );

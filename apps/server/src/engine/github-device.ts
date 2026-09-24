@@ -316,8 +316,13 @@ export async function pollGithubSession(sessionId: string, subject: string): Pro
             try {
                 user = await readGithubUser(body.access_token);
             } catch (e) {
-                // GitHub issues one token per device code, so this flow cannot be finished now.
+                // GitHub issues one token per device code, so this flow cannot be finished now. However GitHub
+                // failed, the member has to start again, and is told so: a "try again in a minute" would send
+                // them back to a session that is gone.
                 forget(sessionId);
+                if (e instanceof SsoProviderUnavailableError) {
+                    throw new SsoVerificationError('GitHub could not say who signed in just now. Start the GitHub sign-in again.');
+                }
                 throw e;
             }
             const doneAt = clock();

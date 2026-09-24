@@ -9,7 +9,8 @@
  *   1. start and poll need a signed active member (401 otherwise); start asks GitHub with our client id
  *   2. a poll inside the interval answers pending with no GitHub request
  *   3. GitHub's answers mapped: authorization_pending, slow_down (the interval grows), access_denied,
- *      expired_token, GitHub down (start 503, a poll stays pending); starting again replaces the old session
+ *      expired_token, GitHub down (start 503, a poll stays pending); starting again replaces the old session;
+ *      /user failing after the token is issued → 400 start again, never a 503 try-again for a session that is gone
  *   4. success keeps only { sub, email }: the access token is not reachable from the session object, not in
  *      any answer, not in the logs, not in the database
  *   5. another key cannot poll or spend a session, and does not consume it; a session is spent once; an
@@ -83,6 +84,8 @@ const gh = {
     tokens: new Map<string, GhUser>(),
     /** The device-code endpoint answering 503. */
     down: false,
+    /** When set, /user answers with this HTTP status instead of the user. */
+    userStatus: 0,
     calls: { deviceCode: 0, accessToken: 0, user: 0, emails: 0 },
 };
 
@@ -125,6 +128,8 @@ function fakeGithub(url: string, init: any): Response {
     const user = gh.tokens.get(bearer);
     if (url === 'https://api.github.com/user') {
         gh.calls.user++;
+        if (gh.userStatus === 429) return json({ message: 'API rate limit exceeded for user ID 1.' }, 429);
+        if (gh.userStatus) return new Response('unavailable', { status: gh.userStatus });
         return user ? json({ id: user.id, login: user.login, email: user.email }) : json({ message: 'Bad credentials' }, 401);
     }
     if (url === 'https://api.github.com/user/emails') {
@@ -329,6 +334,23 @@ async function main(): Promise<void> {
     const down = await call(ada, `${MEMBER}/start`, {});
     gh.down = false;
     assert(down.status === 503 && /GitHub/.test(String(down.body?.error)), `GitHub down at start → 503, try again (got ${down.status} ${down.raw})`);
+
+    // GitHub issued the token, then would not say whose it is. The device code is spent and the token is
+    // dropped, so the session is gone: the answer must say start again, never "try again in a minute".
+    for (const [label, status] of [['down (502)', 502], ['rate-limiting (429)', 429]] as const) {
+        const cut = await call(ada, `${MEMBER}/start`, {});
+        const cutDevice = gh.byUserCode.get(cut.body.userCode)!;
+        cutDevice.user = ghUser('cut@example.com');
+        cutDevice.queue.push('token');
+        gh.userStatus = status;
+        advance(5000);
+        const lost = await call(ada, `${MEMBER}/poll`, { sessionId: cut.body.sessionId });
+        gh.userStatus = 0;
+        assert(lost.status === 400 && /start .*again/i.test(String(lost.body?.error)),
+            `/user ${label} after GitHub issued the token → 400 start again, not a 503 try-again (got ${lost.status} ${lost.raw})`);
+        const afterLost = await call(ada, `${MEMBER}/poll`, { sessionId: cut.body.sessionId });
+        assert(afterLost.status === 400, `...and the session is gone, as that answer said (got ${afterLost.status})`);
+    }
 
     // ── 4. what is kept ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. success keeps { sub, email } and nothing else ──');

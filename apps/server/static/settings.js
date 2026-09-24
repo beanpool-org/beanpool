@@ -2739,8 +2739,20 @@
                     throw new Error(err.error || `HTTP ${res.status}`);
                 }
 
-                statusEl.innerHTML = '✅ <b>Restore successful!</b><br/>The node is restarting. If you are not using a process manager (like Docker or PM2), your server has stopped and you must <b>restart it manually</b>.';
-                statusEl.style.color = '#10b981';
+                // A backup that was SHORT when it was taken, or an image store that could not be put back in
+                // full, still answers success: true — the database is in and the node is restarting. The
+                // only place the operator can learn the photos are missing is right here; without it they
+                // find out at the first 503.
+                const body = await res.json().catch(() => ({}));
+                const restarting = 'The node is restarting. If you are not using a process manager (like Docker or PM2), your server has stopped and you must <b>restart it manually</b>.';
+                if (body && typeof body.warning === 'string' && body.warning) {
+                    const safe = body.warning.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+                    statusEl.innerHTML = '⚠️ <b>Restored, but not complete.</b><br/>' + safe + '<br/>' + restarting;
+                    statusEl.style.color = '#f59e0b';
+                } else {
+                    statusEl.innerHTML = '✅ <b>Restore successful!</b><br/>' + restarting;
+                    statusEl.style.color = '#10b981';
+                }
                 statusEl.classList.add('show');
                 
                 // Attempt to reload after 5 seconds to show login or re-connect

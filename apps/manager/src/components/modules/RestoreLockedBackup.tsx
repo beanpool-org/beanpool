@@ -44,6 +44,18 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
     const onDoneRef = useRef(onDone);
     onDoneRef.current = onDone;
 
+    /**
+     * What a restore that did not come back whole has to say.
+     *
+     * A backup that was SHORT when it was taken, or an image store that could not be put back in full, both
+     * answer `success: true` — the database IS in and the node IS restarting — so the only place the
+     * operator can learn the photos are missing is here. Without it they find out at the first 503.
+     */
+    const shortfall = (body: unknown): string => {
+        const warning = (body as { warning?: unknown } | null)?.warning;
+        return typeof warning === 'string' && warning ? ` ⚠️ ${warning}` : '';
+    };
+
     const upload = async (extra: Record<string, string>) => {
         const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
         delete headers['Content-Type'];
@@ -59,7 +71,7 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
         setError(null);
         try {
             const { res, data } = await upload({ 'X-Recovery-Code': code });
-            if (res.ok) onDone('Backup restored. The server restarts to load it; sign in again with the community\'s admin password.');
+            if (res.ok) onDone('Backup restored. The server restarts to load it; sign in again with the community\'s admin password.' + shortfall(data));
             else setError(typeof data.error === 'string' ? data.error : `The server answered HTTP ${res.status}.`);
         } catch (err: unknown) {
             setError(`The server did not answer: ${err instanceof Error ? err.message : String(err)}`);
@@ -96,7 +108,7 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
                 const data = await res.json().catch(() => ({}));
                 if (cancelled) return;
                 if (data.state === 'restored') {
-                    onDoneRef.current(`Backup restored, opened by ${data.unlockedBy}'s phone. The server restarts to load it; sign in again with the community's admin password.`);
+                    onDoneRef.current(`Backup restored, opened by ${data.unlockedBy}'s phone. The server restarts to load it; sign in again with the community's admin password.${shortfall(data.result)}`);
                     return;
                 }
                 if (data.state === 'failed') { setError(data.error || 'The restore failed.'); setPhone(null); return; }

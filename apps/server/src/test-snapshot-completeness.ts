@@ -559,7 +559,7 @@ async function main(): Promise<void> {
     fs.rmSync(restoreTmp, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(path.join(restoreTmp, 'images', restoreKey)), { recursive: true });
     fs.writeFileSync(path.join(restoreTmp, 'images', restoreKey), restoredCipher);
-    const restoredCount = restoreImages(restoreTmp, DATA_DIR);
+    const restoredCount = restoreImages(restoreTmp, DATA_DIR).restored;
 
     assert(restoredCount === 1 && store.get(restoreKey)?.equals(restoredCipher) === true,
         'the restore put the backup\'s bytes in the live store, as it must');

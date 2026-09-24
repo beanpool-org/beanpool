@@ -38,7 +38,7 @@ import {
 import {
     createSealedBackup, createPlainBackup, backupLockState, describeSealedHeader, isGzip, readFileStart,
     readSealedFileHeader, signerCheck, openSealedFileTo, readBundleFrom, applyBundle, checkBackupArchive,
-    IncompleteBackupError,
+    IncompleteBackupError, MISSING_MEMBER,
     type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
 
@@ -100,10 +100,16 @@ function cleanupRestoreTemp(): void {
  *
  * Exported for the suite that proves the rule above: it is a pure function of two directories, so the test
  * can restore over a live object a snapshot hard-links without standing up a restore and a restart.
+ *
+ * Returns what it managed to put back AND what stopped it. A half-restored store is still better than none,
+ * so a failure here is not fatal — but it used to be a `console.error` and nothing else, and the caller
+ * answered `success: true` over the top of it. The operator found out at the first 503.
  */
-export function restoreImages(tmpDir: string, dataDir: string): number {
+export function restoreImages(tmpDir: string, dataDir: string): { restored: number; error: string | null } {
     const src = path.join(tmpDir, 'images');
-    if (!fs.existsSync(src) || !fs.lstatSync(src).isDirectory()) return 0;
+    // A backup from before this version has no `images/` member, and that is not a failure: every photo is
+    // still inline in the database it brought, and the evacuation job moves them out afterwards.
+    if (!fs.existsSync(src) || !fs.lstatSync(src).isDirectory()) return { restored: 0, error: null };
     const dest = path.join(dataDir, 'images');
     let copied = 0;
     const walk = (from: string, to: string): void => {
@@ -125,12 +131,44 @@ export function restoreImages(tmpDir: string, dataDir: string): number {
         fs.mkdirSync(dest, { recursive: true, mode: 0o700 });
         walk(src, dest);
         console.log(`[Restore] Restored ${copied} image object(s) from the backup.`);
-    } catch (e) {
+    } catch (e: any) {
         // Loud, and NOT fatal: the database is already in place and a half-restored store is still better
-        // than none. The operator needs to know some photos may be missing.
+        // than none. The operator needs to know some photos may be missing — so this goes back to the
+        // caller as well as to the log, and into the answer the person restoring is looking at.
         console.error('[Restore] ⚠️  Could not restore the image store; some photos may be missing:', e);
+        return { restored: copied, error: String(e?.message || e) };
     }
-    return copied;
+    return { restored: copied, error: null };
+}
+
+/**
+ * The short-backup manifest inside the archive, when it carries one.
+ *
+ * Its presence IS the label: `sealed-backup.ts` writes {@link MISSING_MEMBER} only for a backup that came
+ * up short, and puts it inside the archive precisely because that is the copy which outlives the HTTP
+ * response. This is the moment it was written for — the `X-Backup-Missing-Images` header that said so went
+ * out with the response a year ago, and the operator restoring the file has only what is in it.
+ *
+ * Never throws: an unreadable manifest is still a label, and a restore does not fail over one.
+ */
+function readMissingManifest(tmpDir: string): { missing: string[]; referenced: number | null; takenAt: string | null } | null {
+    const file = path.join(tmpDir, MISSING_MEMBER);
+    try {
+        if (!fs.existsSync(file) || !fs.lstatSync(file).isFile()) return null;
+    } catch {
+        return null;
+    }
+    try {
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+        return {
+            missing: Array.isArray(parsed?.missing) ? parsed.missing.filter((k: unknown) => typeof k === 'string') : [],
+            referenced: Number.isFinite(parsed?.referenced) ? Number(parsed.referenced) : null,
+            takenAt: typeof parsed?.takenAt === 'string' ? parsed.takenAt : null,
+        };
+    } catch {
+        // Present but unreadable. Present is the label; an unknown count beats reporting "complete".
+        return { missing: [], referenced: null, takenAt: null };
+    }
 }
 
 /**
@@ -176,7 +214,17 @@ async function restoreFromTar(
 
     // Replace files
     fs.copyFileSync(path.join(tmpDir, 'state.db'), path.join(DATA_DIR, 'state.db'));
-    restoreImages(tmpDir, DATA_DIR);
+    const images = restoreImages(tmpDir, DATA_DIR);
+    // Read BEFORE cleanupRestoreTemp deletes tmpDir. A short backup says so inside the archive precisely so
+    // that it can be said here, to the person doing the restore, instead of being discovered at the first 503.
+    const short = readMissingManifest(tmpDir);
+    if (short) {
+        console.warn(
+            `[Restore] ⚠️  This backup is SHORT: ${short.missing.length || 'an unstated number of'} image `
+            + `object(s) were already gone from the node when it was taken${short.takenAt ? ` (${short.takenAt})` : ''}, `
+            + `so those photos or attachments are not coming back. First: ${short.missing.slice(0, 3).join(', ') || '(not listed)'}`,
+        );
+    }
     const nodeConfig = path.join(tmpDir, 'node_config.json');
     if (fs.existsSync(nodeConfig) && fs.lstatSync(nodeConfig).isFile()) {
         fs.copyFileSync(nodeConfig, path.join(DATA_DIR, 'node_config.json'));
@@ -192,8 +240,26 @@ async function restoreFromTar(
         restartAfterRestore();
     }, restartAfterMs);
 
+    // `complete` is the one an operator reads: the database is in and the node is restarting either way, so
+    // `success` stays true — but a restore that could not put every object back must never answer with
+    // nothing but `success: true`, which is what it did before.
+    const warning = images.error
+        ? `The database was restored, but the image store was not put back in full: ${images.error}. `
+          + `${images.restored} object(s) went back; some photos or attachments will be missing.`
+        : short
+            ? `The backup was SHORT: ${short.missing.length || 'some'} photo(s) or attachment(s) were already `
+              + 'gone from the node when it was taken, and are not coming back.'
+            : null;
     return {
         success: true,
+        complete: !images.error && !short,
+        images: {
+            restored: images.restored,
+            error: images.error,
+            missing: short ? short.missing.length : 0,
+            missingKeys: short ? short.missing.slice(0, 5) : [],
+        },
+        ...(warning ? { warning } : {}),
         sealed: !!sealedHeader,
         restoredKeys: restoredKeys.length > 0,
         ...(signerAcceptedByName ? { keysIgnored: true, note: 'Accepted by its signer\'s name: the database came back; keys and passwords inside it were not used.' } : {}),

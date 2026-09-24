@@ -586,11 +586,15 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
 
 /**
  * The copy of a post that may go to every socket. `new_post` / `post_updated` broadcasts are not addressed
- * to the viewer the post was read for, so an event's viewer-only fields come off first.
+ * to the viewer the post was read for, so the viewer-only fields come off first: an event's note, RSVP list
+ * and the reader's own RSVP, and — for every type — `reachPeers`, which `getPosts` gives to the author alone.
+ * These posts are read for the author (or the voter, for a poll vote), and the apps now keep what the feed
+ * sends them (@beanpool/core `livePostChange`).
  */
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
-    if (post.type !== 'event') return post;
-    const { eventPrivateNote: _note, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = post;
+    const { reachPeers: _peers, ...shared } = post;
+    if (shared.type !== 'event') return shared;
+    const { eventPrivateNote: _note, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = shared;
     return rest;
 }
 

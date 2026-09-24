@@ -565,7 +565,10 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
         recipients = Array.from(new Set([postRow.author_pubkey, postRow.target_pubkey, postRow.assigned_to].filter(Boolean) as string[]));
     }
 
-    broadcast({ type: 'post_removed', id }, recipients);
+    // The audience rides along so the apps can tell a public removal, which they apply without fetching, from a
+    // group or direct one, which keeps the doorbell (@beanpool/core `livePostChange`). A socket without a member
+    // gets the bare `{ type }` doorbell either way. NULL is a row from before audience scoping: public.
+    broadcast({ type: 'post_removed', id, audienceScope: postRow.audience_scope ?? 'public' }, recipients);
     // Cancelling an event tells everyone who said they were going (§2.2). The chat turns read-only on its
     // own: event-thread.ts reads `event_state`, which the transaction above has already set to 'cancelled'.
     if (postRow.type === 'event') {
@@ -963,7 +966,7 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
         } else if (updated.audienceScope === 'direct') {
             recipients = Array.from(new Set([updated.authorPublicKey, updated.targetPubkey, updated.assignedTo].filter(Boolean) as string[]));
         }
-        broadcast({ type: 'post_updated', post: updated }, recipients);
+        broadcast({ type: 'post_updated', post: publicBroadcastPost(updated) }, recipients);
     }
     return updated;
 }
@@ -1071,7 +1074,7 @@ export function votePoll(
     } else if (updatedPost.audienceScope === 'direct') {
         recipients = Array.from(new Set([updatedPost.authorPublicKey, updatedPost.targetPubkey, updatedPost.assignedTo].filter(Boolean) as string[]));
     }
-    broadcast({ type: 'post_updated', post: updatedPost }, recipients);
+    broadcast({ type: 'post_updated', post: publicBroadcastPost(updatedPost) }, recipients);
     return { success: true, post: updatedPost };
 }
 
@@ -1196,7 +1199,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
         }
     });
     if (!deleted) return false;
-    broadcast({ type: 'post_removed', id: postId }, audienceRow?.audience_scope === 'direct'
+    broadcast({ type: 'post_removed', id: postId, audienceScope: audienceRow?.audience_scope ?? 'public' }, audienceRow?.audience_scope === 'direct'
         ? Array.from(new Set([audienceRow.author_pubkey, audienceRow.target_pubkey, audienceRow.assigned_to].filter(Boolean) as string[]))
         : audienceRecipients(audienceRow ?? {}));
     if (eventRow) notifyEventChange(push, 'cancelled', postId, eventRow.title, 'SYSTEM');

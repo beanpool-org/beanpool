@@ -278,7 +278,8 @@ export class S3ImageStore implements ImageStore {
             region: this.region,
         }, creds);
         // `host` is the URL's; fetch sets it and refuses to be handed one.
-        const { host: _host, ...headers } = signed.headers;
+        const headers = { ...signed.headers };
+        delete headers.host;
         return { url: url.toString(), method, headers, body: opts.body };
     }
 
@@ -438,26 +439,40 @@ export class S3ImageStore implements ImageStore {
     /**
      * One request with retries on 5xx / no answer, never holding the event loop. Returns the response with its
      * body unread, so a caller can stream it.
+     *
+     * The attempt's timeout covers the whole exchange — except with `streamBody`, where it stops at the headers.
+     * A streamed body goes to a phone at the phone's pace, and on a slow connection (this project's audience) a
+     * photo can legitimately take longer than any deadline worth setting on the bucket; cutting it off would be
+     * a broken photo. A body that genuinely stalls is still ended by undici's own idle timeout between chunks.
      */
-    private async asyncCall(what: string, make: () => BuiltRequest): Promise<Response> {
+    private async asyncCall(what: string, make: () => BuiltRequest, opts: { streamBody?: boolean } = {}): Promise<Response> {
         let last = '';
         for (let attempt = 0; attempt < this.tuning.asyncAttempts; attempt++) {
             if (attempt > 0) await new Promise((r) => setTimeout(r, this.tuning.backoffMs * 2 ** (attempt - 1)));
             const req = make();
+            const abort = new AbortController();
+            const timer = setTimeout(
+                () => abort.abort(new DOMException(`no answer within ${this.tuning.asyncAttemptTimeoutMs} ms`, 'TimeoutError')),
+                this.tuning.asyncAttemptTimeoutMs,
+            );
+            timer.unref?.();
             let res: Response;
             try {
                 res = await fetch(req.url, {
                     method: req.method,
                     headers: req.headers,
                     body: req.body ? new Uint8Array(req.body) : undefined,
-                    signal: AbortSignal.timeout(this.tuning.asyncAttemptTimeoutMs),
+                    signal: abort.signal,
                     redirect: 'manual',
                 });
             } catch (e: any) {
+                clearTimeout(timer);
                 const timedOut = e?.name === 'TimeoutError' || e?.name === 'AbortError';
                 last = timedOut ? `no answer within ${this.tuning.asyncAttemptTimeoutMs} ms` : String(e?.cause?.code || e?.message || e);
                 continue;
             }
+            // Headers are in. A caller that reads the body itself keeps the deadline for it; a streamed body does not.
+            if (opts.streamBody) clearTimeout(timer);
             if (retryableStatus(res.status)) {
                 const text = await res.text().catch(() => '');
                 last = `HTTP ${res.status}${s3ErrorCode(text) ? ' ' + s3ErrorCode(text) : ''}`;
@@ -502,12 +517,13 @@ export class S3ImageStore implements ImageStore {
 
     /**
      * The object as a stream, for serving: nothing is buffered beyond what the socket is ready to take. Null
-     * when the object is not there. The whole body must arrive within the per-attempt timeout.
+     * when the object is not there. The per-attempt timeout covers the wait for the headers, not the body — see
+     * {@link asyncCall}.
      */
     async openRead(key: string): Promise<{ stream: Readable; bytes: number | null } | null> {
         let url: URL;
         try { url = this.objectUrl(key); } catch { return null; }
-        const res = await this.asyncCall(`GET ${key}`, () => this.build('GET', url));
+        const res = await this.asyncCall(`GET ${key}`, () => this.build('GET', url), { streamBody: true });
         if (res.status === 404) {
             const text = await res.text().catch(() => '');
             if (s3ErrorCode(text) !== 'NoSuchBucket') return null;
@@ -601,7 +617,13 @@ async function readCapped(res: Response, maxBytes: number, what: string): Promis
     let total = 0;
     const reader = res.body.getReader();
     for (;;) {
-        const { value, done } = await reader.read();
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try {
+            chunk = await reader.read();
+        } catch (e: any) {
+            throw new ImageStoreError(`S3 ${what}: the body did not arrive (${e?.message || e})`);
+        }
+        const { value, done } = chunk;
         if (done) break;
         total += value.byteLength;
         if (total > maxBytes) {

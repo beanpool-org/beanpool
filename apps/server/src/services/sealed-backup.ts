@@ -225,10 +225,18 @@ export function readInBucketMember(dir: string, name: string = IN_BUCKET_MEMBER)
         return null;
     }
     try {
+        // An archive is untrusted input, and these two end up in a sentence on an operator's screen: a bucket is
+        // kept only if it IS a bucket name, and an endpoint only if it parses as an http(s) URL.
         const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const bucket = typeof parsed?.bucket === 'string' && /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(parsed.bucket) ? parsed.bucket : '';
+        let endpoint = '';
+        try {
+            const u = new URL(String(parsed?.endpoint ?? ''));
+            if (u.protocol === 'https:' || u.protocol === 'http:') endpoint = u.origin;
+        } catch { /* not a URL: left out */ }
         return {
-            bucket: typeof parsed?.bucket === 'string' ? parsed.bucket : '',
-            endpoint: typeof parsed?.endpoint === 'string' ? parsed.endpoint : '',
+            bucket,
+            endpoint,
             referenced: Number.isFinite(parsed?.referenced) ? Number(parsed.referenced) : null,
         };
     } catch {

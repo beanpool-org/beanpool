@@ -30,7 +30,7 @@ import util from 'node:util';
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import {
-    DiskImageStore, ImageStoreError, MAX_OBJECT_BYTES, STORE_NAMESPACES,
+    DiskImageStore, MAX_OBJECT_BYTES, STORE_NAMESPACES,
     checkImageStoreAtBoot, configuredImageStoreKind, getImageStore, headObject, openObject, postPhotoKey,
     attachmentKey, readObject, resetImageStoreForTests, scanObjects, scanObjectsAsync, scanOurObjects, sha256Hex,
     type ImageStore,
@@ -41,7 +41,7 @@ import {
     MissingObjectError, attachmentDataOf, attachmentDataOfAsync, deleteStoredObjects, encodeDataUrl, openPhotoOf,
     photoDataOf, photoDataOfAsync, storeAttachmentColumns, storePhotoColumns, storePhotoColumnsAsync,
 } from './storage/image-columns.js';
-import { startFakeS3, type FakeS3 } from './fake-s3-test-harness.js';
+import { startFakeS3 } from './fake-s3-test-harness.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -341,6 +341,16 @@ async function main(): Promise<void> {
         const noBucket = track(new S3ImageStore(fake.config({ bucket: 'no-such-bucket-here' })));
         errorTexts.push(throws(() => noBucket.get(k503), /404.*NoSuchBucket/, 'a GET against a bucket that does not exist is an error, not "no such photo"'));
         errorTexts.push(await rejects(() => noBucket.getAsync(k503), /404.*NoSuchBucket/, 'on the async path too'));
+
+        // A slow body: the deadline covers the bucket's answer, not a phone's download.
+        const slow = track(new S3ImageStore(fake.config(), { asyncAttemptTimeoutMs: 300, asyncAttempts: 1 }));
+        await fake.fault({ method: 'GET', slowBodyMs: 800, count: 1 });
+        const slowOpen = await slow.openRead(k503);
+        assert(!!slowOpen && (await streamBytes(slowOpen.stream)).equals(PNG),
+            'a streamed photo whose body takes longer than the attempt timeout still arrives whole');
+        await fake.fault({ method: 'GET', slowBodyMs: 800, count: 1 });
+        errorTexts.push(await rejects(() => slow.getAsync(k503), /did not arrive/,
+            'while a buffered read keeps its deadline for the body, and says so'));
 
         // Streaming.
         const streamed = await s3.openRead(k503);

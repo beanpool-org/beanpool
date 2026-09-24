@@ -91,7 +91,8 @@ function untar(file: string): string {
 // ── The fresh server (child process) ───────────────────────────────────────────────────────
 
 async function child(): Promise<void> {
-    const [, , , mode, file] = process.argv;
+    // argv: --child <s3|disk> <file>. The mode is carried by the environment the parent built (IMAGE_STORE set or not).
+    const file = process.argv[4];
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
     const { initStateEngine } = await import('./state-engine.js');
     const { ensureGenesis } = await import('./genesis.js');

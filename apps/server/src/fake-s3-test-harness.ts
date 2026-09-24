@@ -112,6 +112,12 @@ function handle(req, res, body) {
     const answer = (status, headers, payload) => {
         entry.status = status;
         res.writeHead(status, headers || {});
+        if (fault && fault.slowBodyMs && req.method !== 'HEAD') {
+            // The headers now, the body later: a bucket that answers at once and then trickles.
+            res.flushHeaders();
+            setTimeout(() => res.end(payload), fault.slowBodyMs);
+            return;
+        }
         res.end(req.method === 'HEAD' ? undefined : payload);
     };
     const fault = takeFault(req.method, u.pathname);
@@ -213,6 +219,8 @@ export interface FakeS3Fault {
     network?: boolean;
     /** Wait this long before answering (or before failing, with `status`/`network`). */
     delayMs?: number;
+    /** Send the headers at once and the body this much later. */
+    slowBodyMs?: number;
     /** How many matching requests this applies to. */
     count: number;
 }

@@ -27,6 +27,8 @@
  *   9. A snapshot taken BEFORE this version — a separate database file nothing migrates, whose `post_photos`
  *      still has the pre-PR DDL and no `storage_key` column — still downloads, complete, as `0/0` images.
  *      Every photo in it is inline, so zero referenced objects is the truthful count.
+ *  11. A restore never writes THROUGH a store object's inode: restoring an older `attachments/<id>.bin` over
+ *      one a snapshot hard-links leaves the snapshot's bytes exactly as captured.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -184,6 +186,7 @@ async function main(): Promise<void> {
     } = await import('./services/sealed-backup.js');
     const { getImageStore, imagesDir, attachmentKey } = await import('./storage/image-store.js');
     const { writeMessageTombstone } = await import('./engine/message-tombstone.js');
+    const { restoreImages } = await import('./routes/backup.js');
     const { cleanStorageAndCompressLogs, getStorageCleanPreview } = await import('./engine/storage-health.js');
 
     await initTls();
@@ -455,6 +458,50 @@ async function main(): Promise<void> {
     legacyHandle.close();
     assert(legacyRow?.photo_data === dataUrl(legacyPhoto),
         'and the archive is COMPLETE: the photo is inline in the row, exactly as that node held it');
+
+    // ── 11. A restore lays objects over the store; it never writes through one ────────────────
+    //
+    // Everything in this file rests on a store object being written temp-then-rename and afterwards only
+    // unlinked, which is what makes a snapshot's hard link a point-in-time copy rather than a live view.
+    // `copyFileSync` onto an existing object breaks that: it opens the inode and writes through it, so every
+    // snapshot linked to the object is silently rewritten — during a restore, which is when the operator has
+    // least to spare. `posts/…` keys are content-addressed so the bytes would match anyway; an attachment is
+    // keyed by its message id alone and holds ciphertext, so the same key really is two different objects.
+    const restoreMsgId = 'msg-restore-' + crypto.randomBytes(6).toString('hex');
+    const restoreConvoId = 'convo-restore-' + crypto.randomBytes(6).toString('hex');
+    const capturedCipher = makePhoto('the ciphertext this node holds today');
+    const restoreKey = attachmentKey(restoreMsgId);
+    store.put(restoreKey, capturedCipher, { mime: 'application/octet-stream' });
+    db.prepare(`INSERT INTO conversations (id, type, created_by) VALUES (?, 'direct', ?)`).run(restoreConvoId, author);
+    db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce) VALUES (?, ?, ?, ?, ?)`)
+        .run(restoreMsgId, restoreConvoId, author, 'ignored', 'nonce-v1');
+    db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, NULL, ?, ?, ?)`)
+        .run(restoreMsgId, crypto.randomBytes(24).toString('base64'), 'image/jpeg', restoreKey);
+
+    await nextSecond();
+    const linked = createSnapshot();
+    const linkedImages = snapshotImagesDir(path.join(SNAPSHOTS_DIR, linked.name));
+    const snapshotCopy = path.join(linkedImages, restoreKey);
+    const liveCopy = path.join(imagesDir(), restoreKey);
+    assert(fs.existsSync(snapshotCopy) && fs.statSync(snapshotCopy).ino === fs.statSync(liveCopy).ino,
+        'setup: the snapshot captured the attachment as a hard link — one inode, two names');
+
+    // An older backup being restored onto this node: the same key, genuinely different ciphertext.
+    const restoredCipher = makePhoto('the ciphertext inside the backup being restored');
+    const restoreTmp = path.join(work, 'restore-extract');
+    fs.rmSync(restoreTmp, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(path.join(restoreTmp, 'images', restoreKey)), { recursive: true });
+    fs.writeFileSync(path.join(restoreTmp, 'images', restoreKey), restoredCipher);
+    const restoredCount = restoreImages(restoreTmp, DATA_DIR);
+
+    assert(restoredCount === 1 && store.get(restoreKey)?.equals(restoredCipher) === true,
+        'the restore put the backup\'s bytes in the live store, as it must');
+    assert(fs.readFileSync(snapshotCopy).equals(capturedCipher),
+        'and the snapshot still holds the bytes it captured, to the byte — the restore did NOT write through the shared inode');
+    assert(fs.statSync(snapshotCopy).ino !== fs.statSync(liveCopy).ino,
+        'because the restore renamed a NEW inode into place, leaving the snapshot\'s name on the old one');
+    assert(!fs.readdirSync(path.dirname(liveCopy)).some((f) => f.includes('.tmp-')),
+        'and left no half-written temp file behind');
 
     console.log(`\n${passed}/${run} passed\n`);
     process.exit(passed === run ? 0 : 1);

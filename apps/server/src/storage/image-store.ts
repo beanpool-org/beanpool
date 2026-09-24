@@ -310,6 +310,32 @@ export class DiskImageStore implements ImageStore {
     }
 }
 
+/**
+ * Copy `from` onto `to` WITHOUT ever writing through an existing inode.
+ *
+ * The whole hard-link design rests on one rule: a store object is written under a temp name and renamed into
+ * place ({@link DiskImageStore.put}), and afterwards it is only ever unlinked. That is what makes a second
+ * name for it — a snapshot's captured copy, a backup stage's — a true point-in-time copy rather than a live
+ * view. `copyFileSync` straight onto an existing file breaks it: it opens that inode and writes through it,
+ * so every other name for the object is rewritten too, silently.
+ *
+ * `posts/…` and `projects/…` keys are content-addressed, so the bytes would happen to match. But
+ * `attachments/<messageId>.bin` is keyed by the message id alone and holds AEAD ciphertext, so the same key
+ * in two different backups is two genuinely different objects — and the older snapshot's copy would quietly
+ * become the newer one's. Hence: copy beside the destination, then `rename(2)` over it. The rename replaces
+ * the directory entry; any other link to the old inode keeps the bytes it always had.
+ */
+export function copyObjectReplacing(from: string, to: string): void {
+    const tmp = `${to}.tmp-${crypto.randomBytes(6).toString('hex')}`;
+    try {
+        fs.copyFileSync(from, tmp);
+        fs.renameSync(tmp, to);
+    } catch (e) {
+        try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+        throw e;
+    }
+}
+
 // ── Selection ──────────────────────────────────────────────────────────────────────────────────
 
 /** Where the disk store keeps its objects, beside `state.db` in the data directory. */

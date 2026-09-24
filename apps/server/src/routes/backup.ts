@@ -27,6 +27,7 @@ import {
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
+import { copyObjectReplacing } from '../storage/image-store.js';
 import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { acquirePasswordAttempt, refuseBraked, settlePasswordAttempt } from '../password-brake.js';
@@ -78,14 +79,29 @@ function cleanupRestoreTemp(): void {
  *     restored database still carries every photo inline, exactly as it did when the backup was written, and
  *     the evacuation job moves them out afterwards like it does for any upgrading node;
  *   - a backup from this version restored onto a node that already has an images directory: the archive's
- *     objects are laid over the existing ones. Keys are content-addressed, so a key present in both holds
- *     the same bytes in both; what is NOT in the archive is left alone rather than deleted, because deleting
- *     it is irreversible and the orphan sweep in storage-health will reclaim it safely later.
+ *     objects are laid over the existing ones. What is NOT in the archive is left alone rather than deleted,
+ *     because deleting it is irreversible and the orphan sweep in storage-health will reclaim it safely later.
+ *
+ * ## Never in place, always temp-then-rename
+ *
+ * Every other part of this design rests on a store object being written once, under a temp name, and renamed
+ * into place — {@link DiskImageStore.put} does exactly that — so an object's INODE is never rewritten and a
+ * second name for it (a snapshot's hard link, a backup stage's) is a true point-in-time copy. A `copyFileSync`
+ * straight onto an existing object breaks that: it opens the live inode and writes through it, so every
+ * `snapshot-*.db.images/` tree hard-linked to that object has its bytes rewritten too, silently, at the one
+ * moment an operator is restoring because something already went wrong. `posts/…` keys are content-addressed
+ * so the bytes would match anyway, but `attachments/<messageId>.bin` is keyed by the message id alone: the
+ * same key in two different backups is two different ciphertexts, and the older snapshot's copy would become
+ * the newer one's. {@link copyObjectReplacing} is the one way any of this code copies onto a name that may
+ * already exist, and the rule it keeps.
  *
  * `checkBackupArchive` has already refused the whole archive if any member could escape the extraction
  * directory or was a link, so the tree being copied here is known to be plain files under `tmpDir`.
+ *
+ * Exported for the suite that proves the rule above: it is a pure function of two directories, so the test
+ * can restore over a live object a snapshot hard-links without standing up a restore and a restart.
  */
-function restoreImages(tmpDir: string, dataDir: string): number {
+export function restoreImages(tmpDir: string, dataDir: string): number {
     const src = path.join(tmpDir, 'images');
     if (!fs.existsSync(src) || !fs.lstatSync(src).isDirectory()) return 0;
     const dest = path.join(dataDir, 'images');
@@ -100,7 +116,7 @@ function restoreImages(tmpDir: string, dataDir: string): number {
                 walk(fromPath, toPath);
             } else if (entry.isFile()) {
                 fs.mkdirSync(path.dirname(toPath), { recursive: true, mode: 0o700 });
-                fs.copyFileSync(fromPath, toPath);
+                copyObjectReplacing(fromPath, toPath);
                 copied++;
             }
         }

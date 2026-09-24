@@ -51,7 +51,7 @@ import {
 import Database from 'better-sqlite3';
 import { getLocalConfig, redactLocalConfig } from '../config/local-config.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
-import { assertSafeKey, imagesDir } from '../storage/image-store.js';
+import { assertSafeKey, copyObjectReplacing, imagesDir } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import {
     readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS,
@@ -237,7 +237,9 @@ function stageImages(stage: string, sourceRoot: string, dbInStage: string): Stag
             else if (e?.code === 'EXDEV' || e?.code === 'EPERM' || e?.code === 'EMLINK' || e?.code === 'ENOSYS') {
                 linked = false;
                 try {
-                    fs.copyFileSync(from, to);
+                    // Never a bare copyFileSync: `to` is a name in a tree whose other entries are hard links
+                    // to LIVE store inodes, so an in-place write here would rewrite the store itself.
+                    copyObjectReplacing(from, to);
                 } catch (copyErr: any) {
                     if (copyErr?.code === 'ENOENT') { out.missing.push(key); continue; }
                     throw copyErr;

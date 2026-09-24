@@ -42,7 +42,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
-import { assertSafeKey, imagesDir } from '../storage/image-store.js';
+import { assertSafeKey, copyObjectReplacing, imagesDir } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -191,7 +191,9 @@ export function captureSnapshotImages(snapshotDbPath: string, storeRoot = images
             else if (e?.code === 'EXDEV' || e?.code === 'EPERM' || e?.code === 'EMLINK' || e?.code === 'ENOSYS') {
                 linked = false;
                 try {
-                    fs.copyFileSync(from, to);
+                    // `to` sits beside hard links to live store inodes, and a re-capture over an existing
+                    // name would write through one. copyObjectReplacing renames into place instead.
+                    copyObjectReplacing(from, to);
                 } catch (copyErr: any) {
                     if (copyErr?.code === 'ENOENT') { out.missing.push(key); continue; }
                     throw copyErr;

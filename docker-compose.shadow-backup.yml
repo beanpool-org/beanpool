@@ -3,6 +3,12 @@
 # no public ports needed, self-signed TLS fallback (no CF_RECORD_NAME set).
 # BACKUP_REPLICATION_TOKEN is supplied via shell env at `docker compose up`,
 # never written into this file or committed.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   beanpool-shadow-backup:
     image: beanpool-shadow-backup:latest
@@ -15,3 +21,4 @@ services:
     volumes:
       - ./shadow-backup/data:/data
     restart: "no"
+    logging: *default-logging

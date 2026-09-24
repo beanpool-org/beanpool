@@ -128,9 +128,11 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             .then(([bal, treasuries]) => {
                 if (cancelled) return;
                 const keeperOf: string[] = Array.isArray((bal as any)?.keeperOf) ? (bal as any).keeperOf : [];
+                // ⚡ Bolt: O(1) Map lookup for enterprise treasuries by publicKey instead of O(T) .find() scans
+                const treasuriesMap = new Map((treasuries || []).map(t => [t.publicKey, t.name]));
                 setEnterprises(keeperOf.map(pk => ({
                     publicKey: pk,
-                    name: treasuries.find(t => t.publicKey === pk)?.name || 'Enterprise',
+                    name: treasuriesMap.get(pk) || 'Enterprise',
                 })));
             })
             .catch(() => {});

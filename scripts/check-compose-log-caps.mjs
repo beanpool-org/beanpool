@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 import { execSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
-const tracked = execSync('git ls-files', { encoding: 'utf-8' }).trim().split('\n');
-let others = [];
-try { others = execSync('git ls-files --others --exclude-standard', { encoding: 'utf-8' }).trim().split('\n'); } catch {}
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-const candidates = args.length > 0 ? args : [...tracked, ...others].filter(Boolean);
+let candidates = args.map(f => path.resolve(process.cwd(), f));
+
+if (candidates.length === 0) {
+  let tracked = [], others = [];
+  try { tracked = execSync('git ls-files', { cwd: REPO_ROOT, encoding: 'utf-8' }).trim().split('\n'); } catch {}
+  try { others = execSync('git ls-files --others --exclude-standard', { cwd: REPO_ROOT, encoding: 'utf-8' }).trim().split('\n'); } catch {}
+  candidates = [...tracked, ...others].filter(Boolean).map(f => path.resolve(REPO_ROOT, f));
+}
 const composeFiles = [...new Set(candidates)]
   .filter(f => /(?:^|\/)(?:docker-compose[^\/]*\.ya?ml|[^\/]*\.compose\.ya?ml)$/.test(f))
   .filter(f => existsSync(f));
@@ -27,9 +34,11 @@ for (const file of composeFiles) {
     }
   }
 
+  const rel = path.relative(REPO_ROOT, file);
+  const displayPath = rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : file;
   let inServices = false, currentService = null, serviceHasCap = false, inLogging = false, loggingIndent = -1;
   const endService = () => {
-    if (currentService && !serviceHasCap) errors.push(`${file}: service "${currentService}" missing log cap`);
+    if (currentService && !serviceHasCap) errors.push(`${displayPath}: service "${currentService}" missing log cap`);
     currentService = null; serviceHasCap = false; inLogging = false; loggingIndent = -1;
   };
 

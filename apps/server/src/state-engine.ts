@@ -6,6 +6,7 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
+import { getNodeProfile, getNodeFeatures, mirrorNodeProfileAtBoot, type NodeProfile, type NodeFeatures } from './config/node-profile.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
@@ -510,6 +511,8 @@ export function initStateEngine(): void {
     initSchema();
     clearEnterpriseFloorCache();
     migrateLegacyState();
+    // NODE_PROFILE decides at every boot; node_config.nodeProfile is only its mirror (config/node-profile.ts).
+    mirrorNodeProfileAtBoot();
     seedPulseCurated();
     
     // Seed SYSTEM user securely
@@ -4965,7 +4968,7 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
 
 // ===================== COMMUNITY INFO =====================
 
-export function getCommunityInfo(publicKey?: string): { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string } } {
+export function getCommunityInfo(publicKey?: string): { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures } {
     const memberCount = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
     const postCount = getActivePostCount();
     let txCount = 0;
@@ -4975,7 +4978,12 @@ export function getCommunityInfo(publicKey?: string): { memberCount: number; pos
         txCount = (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c;
     }
     const config = getLocalConfig();
-    return { memberCount, postCount, transactionCount: txCount, commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100, currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' } };
+    // profile + features are additive: the apps read them to know what this node does; older apps ignore them.
+    return {
+        memberCount, postCount, transactionCount: txCount, commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
+        currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
+        profile: getNodeProfile(), features: getNodeFeatures(),
+    };
 }
 
 /**

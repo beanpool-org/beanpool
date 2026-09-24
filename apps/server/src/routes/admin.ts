@@ -38,7 +38,8 @@ import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
-import { issueCsrfToken, issueWsTicket } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
+import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
 import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
@@ -509,6 +510,50 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Rebaseline failed' };
     }
+});
+
+// ===================== STRANDED ESCROW WRITE-OFF =====================
+// A negative escrow left by the pre-#1099 removal refunds is written off from the Commons, recorded
+// (engine/escrow-write-off.ts). Listing is open to any admin, like the audit itself; writing off is owner level.
+
+router.get('/api/local/admin/stranded-escrows', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        ctx.body = { success: true, ...listStrandedEscrows() };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to list stranded escrows' };
+    }
+});
+
+router.post('/api/local/admin/stranded-escrows/:escrowId/write-off', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can write off an escrow from the Commons')) return;
+    // Never read the actor from the body: a key session's member, or 'owner:password' under the password.
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
+    const body = (ctx as any).requestBody || {};
+    const result = writeOffStrandedEscrow(ctx.params.escrowId, actor, body.reason, { confirmDeficit: body.confirmDeficit === true });
+    if (!result.ok) {
+        const { ok: _ok, status, ...refusal } = result;
+        ctx.status = status;
+        ctx.body = { success: false, ...refusal };
+        return;
+    }
+    // The log redacts anything shaped like a 64-hex key, so a key session's actor goes in short, as on the other
+    // admin lines here. The full signer is on the ledger row's auth_signer, which `transactionId` points to.
+    logger.info('ADMIN', `Wrote off stranded ${result.escrowId} from the Commons: ${result.amount} Beans (Commons ${result.commonsBefore} → ${result.commonsAfter})`, {
+        escrowId: result.escrowId,
+        tradeId: result.tradeId,
+        amount: result.amount,
+        transactionId: result.transactionId,
+        commonsBefore: result.commonsBefore,
+        commonsAfter: result.commonsAfter,
+        actor: /^[0-9a-f]{64}$/i.test(actor) ? actor.substring(0, 12) : actor,
+        memo: result.memo,
+    });
+    const { ok: _ok, ...written } = result;
+    ctx.body = { success: true, ...written };
 });
 
 // ===================== SYNC AUDIT LOG ENDPOINT =====================

@@ -6506,6 +6506,30 @@ export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     return next;
 }
 
+export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): string | null {
+    let host: string | null = null;
+    const pa: any = config.publicAddress;
+    if (pa) {
+        if (typeof pa === 'string' && pa.trim()) {
+            host = pa.trim();
+        } else if (typeof pa === 'object') {
+            if (typeof pa.hostname === 'string' && pa.hostname.trim()) {
+                host = pa.hostname.trim();
+            } else if (typeof pa.name === 'string' && pa.name.trim()) {
+                const n = pa.name.trim();
+                host = n.includes('.') ? n : `${n}.beanpool.org`;
+            }
+        }
+    }
+    if (!host && process.env.CF_RECORD_NAME && process.env.CF_RECORD_NAME.trim()) {
+        const cf = process.env.CF_RECORD_NAME.trim();
+        host = cf.includes('.') ? cf : `${cf}.beanpool.org`;
+    }
+    if (!host) return null;
+    const clean = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    return clean ? `https://${clean}` : null;
+}
+
 export function getDirectoryInfo(): any {
     const config = getNodeConfig();
     if (!config.publishLocation && !config.publishMembers && !config.publishContacts && !config.publishHealth) {
@@ -6514,7 +6538,8 @@ export function getDirectoryInfo(): any {
     
     const localConfig = getLocalConfig();
     const info: any = {
-        name: localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node'
+        name: localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
+        publicUrl: resolvePublicNodeUrl(config),
     };
 
     if (config.publishLocation) {
@@ -6531,18 +6556,23 @@ export function getDirectoryInfo(): any {
 
     if (config.publishContacts) {
         if (localConfig.communityName) info.name = localConfig.communityName;
+        info.communityName = localConfig.communityName || null;
         if (localConfig.contactEmail) info.contactEmail = localConfig.contactEmail;
         if (localConfig.contactPhone) info.contactPhone = localConfig.contactPhone;
     } else {
+        info.communityName = null;
         info.contactEmail = null;
         info.contactPhone = null;
     }
 
     if (config.publishHealth) {
-        info.version = '1.0.33';
+        const realVersion = getVersion();
+        info.version = realVersion;
+        info.nodeVersion = realVersion;
         info.status = 'online';
     } else {
         info.version = null;
+        info.nodeVersion = null;
         info.status = null;
     }
 

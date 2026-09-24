@@ -602,6 +602,9 @@ run_check "secrets_guard" bash -c '
   if [ -n "$LEAKS" ]; then
     echo "❌ Error: Hardcoded assignment to inventoried secret key found in tracked file:" && echo "$LEAKS" && exit 1
   fi
+
+  # Check 4: Container log caps on every compose file
+  node scripts/check-compose-log-caps.mjs || exit 1
 '
 
 # The federation suites need @beanpool/core's dist to be settled, so they start only once `build` has

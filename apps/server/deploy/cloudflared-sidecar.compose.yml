@@ -9,6 +9,12 @@
 #
 # Merge the `cloudflared` service into your node's docker-compose.yml; it must share the node's data dir.
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # --- your existing node service, shown for reference ---
   node:
@@ -19,6 +25,7 @@ services:
       REGISTRAR_URL: https://beanpool.org
     volumes:
       - ./data:/app/data                   # the node writes ./data/tunnel-token here
+    logging: *default-logging
 
   # --- the tunnel connector ---
   cloudflared:
@@ -27,3 +34,4 @@ services:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token-file /data/tunnel-token
+    logging: *default-logging

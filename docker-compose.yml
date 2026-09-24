@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   beanpool-node:
     image: ghcr.io/beanpool-org/beanpool-node:${BEANPOOL_IMAGE_TAG:-latest}
@@ -87,6 +93,7 @@ services:
       - default
       - beanpool-shared
     restart: unless-stopped
+    logging: *default-logging
 
   cloudflared:
     profiles:
@@ -100,6 +107,7 @@ services:
     # Keeping cloudflared on the project-default network ensures it always routes
     # to this stack's node only.
     restart: unless-stopped
+    logging: *default-logging
 
 networks:
   beanpool-shared:

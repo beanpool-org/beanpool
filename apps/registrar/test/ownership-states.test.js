@@ -426,6 +426,36 @@ test('the admin rejecting a pending (gated) claim frees the name; approving one 
     } finally { w.restore(); }
 });
 
+test('a gated name the admin released: its old key waits for approval again; the owner\'s own release does not', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        assert.equal((await w.claim(owner, { name: 'perth' })).body.status, 'pending');   // gated in the 0001 seed
+        assert.equal((await w.admin('perth', 'approve')).body.status, 'live');
+
+        // The owner's own release, taken back inside the hold: approved before, so live again at once.
+        await w.release(owner);
+        const back = await w.claim(owner, { name: 'perth' });
+        assert.equal(back.body.status, 'live');
+        assert.ok(back.body.tunnelToken);
+
+        // The admin's release: the name is not that key's any more, so it is just another claimant.
+        assert.equal((await w.admin('perth', 'release')).body.status, 'released');
+        const from = w.cf.calls.length;
+        const again = await w.claim(owner, { name: 'perth' });
+        assert.equal(again.status, 200, JSON.stringify(again.body));
+        assert.equal(again.body.status, 'pending');
+        assert.equal(again.body.tunnelToken, undefined);
+        const row = await w.row('perth');
+        assert.equal(row.status, 'pending');
+        assert.equal(row.node_pubkey, owner.pubHex);
+        assert.equal(row.decided_at, null);
+        assert.equal(w.cf.recordAt('perth.beanpool.org'), null, 'not routed until the admin approves');
+        assert.ok(!w.cf.calls.slice(from).some((c) => c.startsWith('POST') || c.startsWith('PUT') || c.startsWith('PATCH')));
+        assert.equal((await w.admin('perth', 'approve')).body.status, 'live');
+    } finally { w.restore(); }
+});
+
 test('ensure: an existing record is PATCHed, never POSTed over; an intact name is left alone', async () => {
     const w = await world();
     try {

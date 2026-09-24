@@ -203,12 +203,13 @@ async function heal(env, cur, b, now) {
 }
 
 // A name nobody else holds, or the claimant's own released one taken back: a new tenure. A gated name waits for
-// the admin — unless it is the same key taking back a name the admin (or policy) already let it have.
+// the admin — unless it is the same key taking back a name the admin (or policy) already let it have. A name the
+// admin released, or an abandoned one, is not the old key's any more (isOwnRow): that key waits like anyone.
 async function takeName(env, existing, pubkey, b, now) {
     const name = String(b.name).toLowerCase();
     const mode = b.mode === 'direct' ? 'direct' : 'tunnel';
     const tier = await db.policyTier(env, name);
-    const sameKey = !!existing && existing.node_pubkey === pubkey;
+    const sameKey = isOwnRow(existing, pubkey);
     const fields = {
         node_pubkey: pubkey, hostname: `${name}.${env.BASE_DOMAIN}`, mode, status: 'pending',
         community_name: b.community_name || b.communityName || null,

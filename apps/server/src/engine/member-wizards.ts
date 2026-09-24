@@ -660,9 +660,13 @@ export function executeOffboard(
 
         if (balance > 0) {
             if (resolution === 'donate_to_commons') {
-                moveToCommons(cleanPub, balance, `Donation to Commons on member offboarding: ${member.callsign.trim()}`, {
+                // Refusal must abort the offboarding, not be ignored: the member is marked 'pruned' below,
+                // so a swallowed null leaves their balance stranded on an account nobody can sign for and
+                // the node no longer sums to zero. Inside the enclosing conservingTransaction.
+                const donated = moveToCommons(cleanPub, balance, `Donation to Commons on member offboarding: ${member.callsign.trim()}`, {
                     allowMemberDebit: true,
                 });
+                if (!donated) throw new Error('Could not move the departing balance to the Commons — offboarding aborted');
             } else if (resolution === 'gift_to_member') {
                 if (!cleanOperator || cleanOperator === 'owner:password') {
                     const err: any = new Error('Two-person rule requires signed key-based admin authentication to gift offboarding funds.');

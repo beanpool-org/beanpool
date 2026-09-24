@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, SYNONYM_MAP } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope } from '@beanpool/core';
+export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
@@ -255,7 +256,8 @@ import {
     closePoll as closePollEngine,
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
-    adminDeletePost as adminDeletePostEngine
+    adminDeletePost as adminDeletePostEngine,
+    type EscrowRefundShortfall
 } from './engine/posts.js';
 import {
     requestPost as requestPostEngine,
@@ -1607,9 +1609,16 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // negative IS the credit extended to the peer. It is not unbounded in effect: settlementCapacity()
     // bounds it upstream against the operator-set per-peer cap, which is the only place that limit
     // belongs (docs/federation-economics.md Rule 5). A floor here would make settlement impossible.
-    const isSystemFrom = from.startsWith('escrow_') || from === 'COMMONS_POOL' || from === 'genesis'
-        || from.startsWith('bridge_');
-    const senderFloor = isSystemFrom ? -Infinity
+    //
+    // ESCROW IS NOT UNBOUNDED. It used to be lumped in with the other system wallets on the line below
+    // and given a `-Infinity` floor, which meant any debit from an escrow succeeded regardless of what
+    // the escrow actually held — the bug that let a post removal refund 15 Beans out of two escrows that
+    // had never been funded (see `ESCROW_FLOOR` in @beanpool/core for the measurement). An escrow holds
+    // beans somebody already paid in; it can only ever pay out what it holds. `ledger.transfer` clamps
+    // this again as a primitive, so no caller can re-open the hole by passing its own floor.
+    const isUnboundedFrom = from === 'COMMONS_POOL' || from === 'genesis' || from.startsWith('bridge_');
+    const senderFloor = isEscrowAccount(from) ? ESCROW_FLOOR
+        : isUnboundedFrom ? -Infinity
         : isEscrow ? usableFloor(from)   // v3: marketplace spends bounded by the offer-banded floor
         : 0;
     // Fee policy: the 1.5% community fee applies ONLY to marketplace/escrow settlements. Direct
@@ -1954,9 +1963,13 @@ export function moveToCommons(
     if (amount <= 0) return null;
 
     return conservingTransaction(() => {
-        // Synthetic senders are unbounded (escrow drains to zero by design; a bridge must be able to go
-        // negative). A treasury or a member is floored at 0 — neither may be driven into debt by this path.
-        if (!ledger.moveToCommons(from, amount, synthetic ? -Infinity : 0)) return null;
+        // A bridge must be able to go negative (that negative IS the credit extended to a peer), so the
+        // other synthetic senders stay unbounded. An ESCROW does not: it drains to zero by design, and
+        // "by design" has to be enforced rather than assumed — #104 moves the cross-node fee to the
+        // Commons straight out of the settlement's escrow account through this very path.
+        // A treasury or a member is floored at 0 — neither may be driven into debt by this path.
+        const fromFloor = isEscrowAccount(from) ? ESCROW_FLOOR : synthetic ? -Infinity : 0;
+        if (!ledger.moveToCommons(from, amount, fromFloor)) return null;
 
         const txn: Transaction = {
             id: crypto.randomUUID(),
@@ -5393,11 +5406,11 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
  * Prune Stale Posts. Each removal closes its open reports, as a single removal does, but nobody is told per
  * post: each author hears once, with the count, that this was routine tidying, not a takedown.
  */
-export function adminBulkDeletePosts(postIds: string[]): number {
+export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfall?: (s: EscrowRefundShortfall) => void }): number {
     const removed: NonNullable<ReturnType<typeof removePostByAdmin>>[] = [];
     const reportersByPost = new Map<string, string[]>();
     for (const postId of postIds) {
-        const r = removePostByAdmin(postId);
+        const r = removePostByAdmin(postId, opts?.onRefundShortfall);
         if (!r) continue;
         removed.push(r);
         reportersByPost.set(postId, closeOpenReportsOnPost(postId));
@@ -6044,12 +6057,23 @@ function postBeforeTakedown(postId: string): PostBeforeTakedown | null {
     return { id: row.id, title: row.title ?? null, authorPubkey: row.author_pubkey ?? null, wasLive: row.active === 1 && row.status !== 'cancelled', createdAt: row.created_at ?? null };
 }
 
-/** Remove the post, without telling anyone yet. Returns what the notices need, or null when nothing was removed. */
-function removePostByAdmin(postId: string): PostBeforeTakedown | null {
+/**
+ * Remove the post, without telling anyone yet. Returns what the notices need, or null when nothing was removed.
+ *
+ * `onRefundShortfall` is how a removal reports that a pending trade's escrow held less than the trade row
+ * said, so its buyer could not be made whole. The engine refunds what the escrow actually holds and calls
+ * this; it never tops the difference up out of nothing.
+ */
+function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundShortfall) => void): PostBeforeTakedown | null {
     const before = postBeforeTakedown(postId);
     // The push dispatcher is passed so an admin removing a reported EVENT tells everyone marked Going
     // that it is off (docs/events-on-the-map.md §2.5); it is a no-op for every other post type.
-    const ok = adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction, dispatchPushNotification);
+    const ok = adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction, dispatchPushNotification, {
+        // Straight off the in-memory ledger, which is what `transfer()` checks its floor against — a
+        // refund capped by any other reading of the balance could still be refused, or still overdraw.
+        balanceOf: (escrowAccount: string) => ledger.getAccount(escrowAccount).balance,
+        onRefundShortfall,
+    });
     return ok && before ? before : null;
 }
 
@@ -6058,8 +6082,11 @@ function removePostByAdmin(postId: string): PostBeforeTakedown | null {
  * report on it is closed and its reporter told the post was removed. `reasonCategory` is one of
  * REMOVAL_REASON_LABELS' keys, or ignored.
  */
-export function adminDeletePost(postId: string, opts?: { reasonCategory?: string | null }): boolean {
-    const removed = removePostByAdmin(postId);
+export function adminDeletePost(
+    postId: string,
+    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void },
+): boolean {
+    const removed = removePostByAdmin(postId, opts?.onRefundShortfall);
     if (!removed) return false;
     const reporters = closeOpenReportsOnPost(postId);
     notifyPostTakedown(moderationNoticeCb, removed, reporters, normaliseRemovalReason(opts?.reasonCategory));
@@ -6158,8 +6185,13 @@ export function adminPruneUser(publicKey: string, actor: string) {
             const D = Math.abs(balance);
             payFromCommons(publicKey, D, `Settle bad debt for pruned user: ${who}`, { allowDeficit: true });
         } else if (balance > 0) {
-            moveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${who}`,
+            // THROW on refusal. The prune below marks the member 'pruned' and anonymises the row; if the
+            // confiscation quietly returned null the account would keep its balance with nobody able to
+            // reach it, and the network would stop summing to zero — the precise invariant the comment
+            // above says a prune must always preserve. We are inside a conservingTransaction.
+            const confiscated = moveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${who}`,
                 { allowMemberDebit: true });
+            if (!confiscated) throw new Error(`Could not confiscate the balance of ${who} — prune aborted`);
         }
 
         // `setUserStatusRow`, not `adminSetUserStatus` — the latter broadcasts, and a broadcast cannot be
@@ -6249,7 +6281,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             const D = Math.abs(balance);
             payFromCommons(publicKey, D, `Settle bad debt for self-purged user: ${who}`, { allowDeficit: true });
         } else if (balance > 0) {
-            moveToCommons(publicKey, balance, `Return balance to Commons for self-purged user: ${who}`, { allowMemberDebit: true });
+            // Same as adminPruneUser: an ignored refusal strands the balance on an anonymised account.
+            const returned = moveToCommons(publicKey, balance, `Return balance to Commons for self-purged user: ${who}`, { allowMemberDebit: true });
+            if (!returned) throw new Error('Could not return your balance to the Commons — account deletion aborted');
         }
 
         const now = new Date().toISOString();

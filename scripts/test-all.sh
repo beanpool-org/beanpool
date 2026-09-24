@@ -386,6 +386,7 @@ run_federation_suites() {
       test-cancel-post-request
       test-marketplace-auth
       test-escrow-fail-closed
+      test-escrow-floor
       test-version-resolution
       test-avatar-endpoint
       test-etag-short-circuit

@@ -15,9 +15,51 @@ export function setCommonsBalance(value: number): void {
     COMMONS_BALANCE = value;
 }
 
-import { isSyntheticAccount } from './protocol.js';
+import { isEscrowAccount, isSyntheticAccount } from './protocol.js';
 
 export const TRANSACTION_FEE_RATE = 0.015;
+
+/**
+ * Floating-point dust on a synthetic account. Beans are carried to 4dp, so anything under this is
+ * arithmetic noise rather than value, and is absorbed into the Commons rather than left stranded.
+ */
+export const DUST_THRESHOLD = 1e-6;
+
+/**
+ * THE FLOOR FOR AN ESCROW ACCOUNT. An escrow can never pay out more than it holds.
+ *
+ * Every other account in this ledger is a credit line of some kind: a member may go into debt down to
+ * their offer-banded floor, a `bridge_<peer>` account MUST be able to go negative (that negative is the
+ * credit extended to the peer), and the Commons may run a deficit when it writes off a pruned member's
+ * debt. An escrow is none of those. It holds beans a buyer already paid in, and paying out more than it
+ * holds MINTS beans out of nothing — the node stops summing to zero and the extra is real spendable
+ * money in somebody's account.
+ *
+ * That is not hypothetical. Escrow senders used to carry a `-Infinity` floor, and a moderator's post
+ * removal refunded 15 Beans to two buyers out of escrows that had never been funded (measured on the
+ * test node, 2026-09-24: two escrow accounts sitting at -5 and -10, each with exactly one transaction
+ * ever, and no matching hold). The federation settlement commit path carries a comment describing the
+ * same hazard from the other side.
+ *
+ * WHY NOT EXACTLY ZERO. A legitimate close-out debits a hold that was itself computed by rounding —
+ * `round4(amount + fee)` in, `amount` then `fee` out — so the last debit can land a few units of
+ * IEEE-754 noise below zero (order 1e-13) on a settlement that is arithmetically exact. Allowing
+ * `DUST_THRESHOLD` of slack keeps those closing to zero while still being 100× smaller than the
+ * smallest representable bean (1e-4). The dust is then swept into the Commons by the same
+ * `DUST_THRESHOLD` rule below, so it never accumulates.
+ */
+export const ESCROW_FLOOR = -DUST_THRESHOLD;
+
+/**
+ * The effective floor for a debit from `fromId`, given whatever floor the caller asked for.
+ *
+ * Callers pass `-Infinity` for synthetic senders. For an escrow that is wrong, and this is where it is
+ * made impossible rather than in each of the dozen call sites that debit an escrow — the whole shape of
+ * the bug was one caller out of many forgetting the guard.
+ */
+function effectiveFloor(fromId: string, requestedFloor: number): number {
+    return isEscrowAccount(fromId) ? Math.max(requestedFloor, ESCROW_FLOOR) : requestedFloor;
+}
 
 /**
  * A demurrage decay applied to an account. Collected so the host (server) can
@@ -274,7 +316,7 @@ export class LedgerManager {
         const fromAccount = this.getAccount(fromId);
         const toAccount = this.getAccount(toId);
 
-        const floor = floorOverride ?? this.DEFAULT_CREDIT_LIMIT;
+        const floor = effectiveFloor(fromId, floorOverride ?? this.DEFAULT_CREDIT_LIMIT);
 
         // Mutual Credit: ensure the fromAccount doesn't exceed the credit floor
         if (fromAccount.balance - amount < floor) {
@@ -294,7 +336,6 @@ export class LedgerManager {
         }
 
         // #160: Absorb synthetic account floating-point dust (< 1e-6) into COMMONS_BALANCE to preserve total supply conservation
-        const DUST_THRESHOLD = 1e-6;
         if (isSyntheticAccount(fromId) && Math.abs(fromAccount.balance) > 0 && Math.abs(fromAccount.balance) < DUST_THRESHOLD) {
             COMMONS_BALANCE += fromAccount.balance;
             fromAccount.balance = 0;
@@ -332,7 +373,10 @@ export class LedgerManager {
         if (amount === 0) return true;
 
         const fromAccount = this.getAccount(fromId);      // applies any pending decay, and settles the epoch
-        const floor = floorOverride ?? this.DEFAULT_CREDIT_LIMIT;
+        // Clamped for an escrow sender exactly as in `transfer()`: this is the other way value leaves an
+        // escrow (#104 moves the cross-node fee to the Commons from the settlement's own escrow account),
+        // and its caller passes `-Infinity` for every synthetic sender.
+        const floor = effectiveFloor(fromId, floorOverride ?? this.DEFAULT_CREDIT_LIMIT);
 
         if (fromAccount.balance - amount < floor) return false;
 

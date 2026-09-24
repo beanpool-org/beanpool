@@ -1052,6 +1052,30 @@ type TransferFn = (from: string, to: string, amount: number, memo: string, metho
 type ConservingTxnFn = <T>(fn: () => T) => T;
 
 /**
+ * A pending trade whose escrow held LESS than the trade was written for, so its buyer could not be made
+ * whole when the post was removed. Reported rather than swallowed: the shortfall is a real discrepancy
+ * between the deal rows and the ledger, and the only honest thing to do is refund what is actually there
+ * and say so. See `ESCROW_FLOOR` in @beanpool/core for how the node got into that state.
+ */
+export interface EscrowRefundShortfall {
+    transactionId: string;
+    postId: string;
+    buyerPubkey: string;
+    /** What the trade row said the buyer paid in. */
+    owed: number;
+    /** What the escrow actually held, and therefore all that could be returned. */
+    refunded: number;
+}
+
+/** How much this escrow account actually holds. Supplied by the host, which owns the ledger. */
+type EscrowBalanceFn = (escrowAccount: string) => number;
+
+export interface AdminDeleteHooks {
+    balanceOf?: EscrowBalanceFn;
+    onRefundShortfall?: (shortfall: EscrowRefundShortfall) => void;
+}
+
+/**
  * Admin removal, the far end of the report flow (routes/admin.ts -> actionReport -> here).
  *
  * An event needs one thing more than a listing does (docs/events-on-the-map.md §2.5): the chat has to go
@@ -1065,7 +1089,7 @@ type ConservingTxnFn = <T>(fn: () => T) => T;
  * whether it was the host or an admin who ended it. The actor is SYSTEM, so nobody is dropped as
  * "the person who caused this" — an admin is not in the Going list.
  */
-export function adminDeletePost(broadcast: BroadcastFn, postId: string, transferFn?: TransferFn, conservingTxn?: ConservingTxnFn, push?: PushFn): boolean {
+export function adminDeletePost(broadcast: BroadcastFn, postId: string, transferFn?: TransferFn, conservingTxn?: ConservingTxnFn, push?: PushFn, hooks?: AdminDeleteHooks): boolean {
     let deleted = false;
     const eventRow = db.prepare("SELECT title FROM posts WHERE id = ? AND type = 'event'").get(postId) as { title: string } | undefined;
     // Same audience as removePost: a group or direct post's removal goes to the people who could see it.
@@ -1075,7 +1099,30 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
         if (transferFn) {
             const pending = db.prepare("SELECT * FROM marketplace_transactions WHERE post_id=? AND status='pending'").all(postId) as any[];
             for (const tx of pending) {
-                transferFn(`escrow_${tx.id}`, tx.buyer_pubkey, tx.credits, `Escrow refund for removed post`, 'escrow', true);
+                const escrowAccount = `escrow_${tx.id}`;
+                // REFUND WHAT THE ESCROW HOLDS, NOT WHAT THE ROW CLAIMS. This loop used to refund
+                // `tx.credits` outright and ignore the result, so a trade row pointing at an escrow that
+                // held nothing paid the buyer out of thin air — measured on the test node (2026-09-24):
+                // two escrow accounts left at -5 and -10 by a single moderator removal, each with no hold
+                // ever recorded against it. A removal is a tidy-up; it must never create Beans.
+                const held = hooks?.balanceOf ? hooks.balanceOf(escrowAccount) : tx.credits;
+                const refund = Math.max(0, Math.min(tx.credits, held));
+                if (refund > 0) {
+                    const refunded = transferFn(escrowAccount, tx.buyer_pubkey, refund, `Escrow refund for removed post`, 'escrow', true);
+                    // Inside the caller's conservingTransaction, so this unwinds the whole removal rather
+                    // than leaving a cancelled trade beside an escrow that never paid out.
+                    if (!refunded) throw new Error(`Escrow refund failed for trade ${tx.id} (${refund} from ${escrowAccount})`);
+                }
+                if (refund < tx.credits) {
+                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${tx.credits}, escrow held ${held}, refunded ${refund}`);
+                    hooks?.onRefundShortfall?.({
+                        transactionId: tx.id,
+                        postId,
+                        buyerPubkey: tx.buyer_pubkey,
+                        owed: tx.credits,
+                        refunded: refund,
+                    });
+                }
                 db.prepare("UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?").run(tx.id);
             }
         }
@@ -1095,10 +1142,10 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
     return true;
 }
 
-export function adminBulkDeletePosts(broadcast: BroadcastFn, postIds: string[], transferFn?: TransferFn, conservingTxn?: ConservingTxnFn, push?: PushFn): number {
+export function adminBulkDeletePosts(broadcast: BroadcastFn, postIds: string[], transferFn?: TransferFn, conservingTxn?: ConservingTxnFn, push?: PushFn, hooks?: AdminDeleteHooks): number {
     let deletedCount = 0;
     for (const postId of postIds) {
-        if (adminDeletePost(broadcast, postId, transferFn, conservingTxn, push)) {
+        if (adminDeletePost(broadcast, postId, transferFn, conservingTxn, push, hooks)) {
             deletedCount++;
         }
     }

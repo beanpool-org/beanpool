@@ -48,7 +48,7 @@ vi.mock('../nodes', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { applyDelta, getDb } from '../db';
+import { applyDelta, getDb, getPost, getPosts } from '../db';
 import { applyLivePostChange, performSync } from '../../services/pillar-sync';
 import { livePostChange } from '@beanpool/core';
 
@@ -195,17 +195,18 @@ describe('applyLivePostChange: written locally, no request to the node, cursor u
     });
 });
 
-describe('a catch-up sync already in flight does not undo a push', () => {
-    function syncFetch(postsBody: () => Promise<string>) {
-        fetchMock.mockImplementation(async (url: string) => {
-            if (url.includes('/api/marketplace/posts')) {
-                const body = await postsBody();
-                return { ok: true, status: 200, text: async () => body, json: async () => JSON.parse(body) };
-            }
-            return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
-        });
-    }
+/** The node's posts pull answers with this body; every other request 404s. */
+function syncFetch(postsBody: () => Promise<string>) {
+    fetchMock.mockImplementation(async (url: string) => {
+        if (url.includes('/api/marketplace/posts')) {
+            const body = await postsBody();
+            return { ok: true, status: 200, text: async () => body, json: async () => JSON.parse(body) };
+        }
+        return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+    });
+}
 
+describe('a catch-up sync already in flight does not undo a push', () => {
     it('an edit pushed while the sync\'s older copy was on its way survives the sync', async () => {
         await applyDelta({ posts: [offer({ title: 'v1' })] });
         let release!: () => void;
@@ -245,5 +246,135 @@ describe('a catch-up sync already in flight does not undo a push', () => {
         syncFetch(async () => JSON.stringify([offer({ title: 'v3', updatedAt: '2026-09-24T03:00:00.000Z' })]));
         await performSync();
         expect(row().title).toBe('v3');
+    });
+});
+
+// The row writer used to name 32 of the posts table's 40 columns, and INSERT OR REPLACE does not keep a column it
+// leaves out: it resets it to the table's default. So every sync put the 💸 marker back to 0, and a group or direct
+// listing back to 'public' with no group or recipient, which moved it onto the public Market and off its group's.
+describe('every column the node sends survives the write, on a sync and on a push', () => {
+    const BOB = 'b'.repeat(64);
+    const LATER = '2026-09-24T02:00:00.000Z';
+
+    /** A group listing as `getPosts` sends it to a member of the group (packages/beanpool-engine/src/posts.ts `rowToPost`). */
+    function groupOffer(extra: Record<string, unknown> = {}) {
+        return offer({
+            id: 'post-g', category: 'tools', title: 'Box trailer for the working bee', credits: 20, priceType: 'daily',
+            repeatable: true, cashAlsoNeeded: true, status: 'pending', acceptedBy: BOB, acceptedByCallsign: 'Bob',
+            acceptedAt: '2026-09-24T01:30:00.000Z', pendingTransactionId: 'tx-9', originNode: 'test.beanpool.org',
+            photos: ['/api/marketplace/posts/post-g/photos/0?v=0'], reach: 'local',
+            audienceScope: 'group', targetGroupId: 'g1', targetGroupName: 'Repair group',
+            ...extra,
+        });
+    }
+    /** The whole cached row for `groupOffer()`: every column of the phone's posts table. */
+    const GROUP_ROW = {
+        id: 'post-g', type: 'offer', category: 'tools', title: 'Box trailer for the working bee', description: 'A bag',
+        credits: 20, author_pubkey: ANN, created_at: '2026-09-24T01:00:00.000Z', updated_at: '2026-09-24T01:00:00.000Z',
+        active: 1, status: 'pending', price_type: 'daily', repeatable: 1, cash_also_needed: 1,
+        accepted_by: BOB, accepted_by_callsign: 'Bob', accepted_at: '2026-09-24T01:30:00.000Z',
+        pending_transaction_id: 'tx-9', completed_at: null, lat: -28.5, lng: 153.4, origin_node: 'test.beanpool.org',
+        photos: '["/api/marketplace/posts/post-g/photos/0?v=0"]', reach: 'local', reach_peers: null,
+        author_energy_cycled: 12, author_founding_needed: 0, poll_options: null, poll_closes_at: null,
+        audience_scope: 'group', target_group_id: 'g1', target_pubkey: null, assigned_to: null,
+        target_archetypes: null, // dormant: the node never sends it and nothing reads it
+        event_start_at: null, event_end_at: null, event_place_name: null, event_state: null,
+        event_going_count: 0, event_interested_count: 0,
+    };
+    const directNeed = (extra: Record<string, unknown> = {}) => offer({
+        id: 'post-d', type: 'need', title: 'Lift to the station', audienceScope: 'direct', targetPubkey: ME, assignedTo: ME, ...extra,
+    });
+
+    beforeEach(() => {
+        sql.exec('DELETE FROM groups');
+        sql.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('g1', 'Repair group', 'repair-group', ?)`).run(ANN);
+    });
+
+    it('a delta sync writes the whole row: the 💸 marker, the audience and the group', async () => {
+        await applyDelta({ posts: [groupOffer()] });
+        expect(row('post-g')).toEqual(GROUP_ROW);
+    });
+
+    it('a later delta sync of an edit changes the edit and nothing else', async () => {
+        await applyDelta({ posts: [groupOffer()] });
+        await applyDelta({ posts: [groupOffer({ title: 'Box trailer (caged)', updatedAt: LATER })] });
+        expect(row('post-g')).toEqual({ ...GROUP_ROW, title: 'Box trailer (caged)', updated_at: LATER });
+    });
+
+    it('a direct listing keeps who it is for', async () => {
+        await applyDelta({ posts: [directNeed()] });
+        expect(row('post-d')).toMatchObject({ audience_scope: 'direct', target_pubkey: ME, assigned_to: ME, target_group_id: null });
+    });
+
+    it('a pushed change is written by the same writer, so it keeps every column too', async () => {
+        await applyDelta({ liveChanges: [{ kind: 'upsert', post: groupOffer() as any, created: true }] });
+        expect(row('post-g')).toEqual(GROUP_ROW);
+    });
+
+    it("a group listing's broadcast rings the doorbell, and the catch-up sync it rings keeps the listing in its group", async () => {
+        await applyDelta({ posts: [groupOffer()] });
+        const edited = groupOffer({ title: 'Box trailer (caged)', updatedAt: LATER });
+        expect(livePostChange({ type: 'post_updated', post: edited })).toBeNull();
+        syncFetch(async () => JSON.stringify([edited]));
+        expect((await performSync()).success).toBe(true);
+        expect(row('post-g')).toEqual({ ...GROUP_ROW, title: 'Box trailer (caged)', updated_at: LATER });
+    });
+
+    it("a public offer's 💸 marker survives a sync and a push, and the Market reads it off the cache", async () => {
+        await applyDelta({ posts: [offer({ cashAlsoNeeded: true })] });
+        expect(row().cash_also_needed).toBe(1);
+        expect(await applyLivePostChange(upsert(offer({ cashAlsoNeeded: true, title: 'Meyer lemons', updatedAt: LATER })), ctx)).toBe(true);
+        expect(row()).toMatchObject({ title: 'Meyer lemons', cash_also_needed: 1 });
+        const [card] = await getPosts();
+        expect(card).toMatchObject({ id: 'post-1', cash_also_needed: 1 });
+    });
+
+    it("the Market's public list shows no group or direct listing; the group filter shows the group's, after a sync and a push", async () => {
+        await applyDelta({ posts: [offer(), groupOffer(), directNeed()] });
+        expect(await applyLivePostChange(upsert(offer({ id: 'post-2', title: 'Seedlings' }), true), ctx)).toBe(true);
+
+        expect((await getPosts()).map(p => p.id).sort()).toEqual(['post-1', 'post-2']);
+        const inGroup = await getPosts({ targetGroupId: 'g1' });
+        expect(inGroup.map(p => p.id)).toEqual(['post-g']);
+        expect(inGroup[0]).toMatchObject({ audienceScope: 'group', targetGroupId: 'g1', targetGroupName: 'Repair group', cash_also_needed: 1 });
+    });
+
+    it('the deals counters read every audience, so a deal on a group listing is still counted', async () => {
+        await applyDelta({ posts: [offer(), groupOffer()] });
+        const all = await getPosts({ allScopes: true });
+        expect(all.map(p => p.id).sort()).toEqual(['post-1', 'post-g']);
+        expect(all.find(p => p.id === 'post-g')).toMatchObject({ audienceScope: 'group', targetGroupId: 'g1' });
+    });
+
+    it('opening a listing refreshes it through the same writer, so it stays in its group and keeps its 💸 marker', async () => {
+        await applyDelta({ posts: [groupOffer()] });
+        fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => [groupOffer({ title: 'v2', updatedAt: LATER })] });
+        await getPost('post-g');
+        await vi.waitFor(() => expect(row('post-g').title).toBe('v2'));
+        expect(row('post-g')).toEqual({ ...GROUP_ROW, title: 'v2', updated_at: LATER });
+    });
+
+    describe('reach_peers: the node sends it to the author alone and never in a broadcast', () => {
+        const mine = (extra: Record<string, unknown> = {}) =>
+            offer({ id: 'post-m', authorPublicKey: ME, reach: 'peers', reachPeers: ['peer-a', 'peer-b'], ...extra });
+
+        it("is stored from the author's own read, kept when a copy arrives without it, and cleared when reach leaves 'peers'", async () => {
+            await applyDelta({ posts: [mine()] });
+            expect(row('post-m')).toMatchObject({ reach: 'peers', reach_peers: '["peer-a","peer-b"]' });
+
+            // The copy every socket gets has the list taken off (publicBroadcastPost): it says nothing about the list.
+            const broadcast: Record<string, unknown> = mine({ title: 'edited', updatedAt: LATER });
+            delete broadcast.reachPeers;
+            await applyDelta({ liveChanges: [{ kind: 'upsert', post: broadcast as any, created: false }] });
+            expect(row('post-m')).toMatchObject({ title: 'edited', reach: 'peers', reach_peers: '["peer-a","peer-b"]' });
+
+            await applyDelta({ posts: [mine({ reach: 'local', reachPeers: [], updatedAt: '2026-09-24T03:00:00.000Z' })] });
+            expect(row('post-m')).toMatchObject({ reach: 'local', reach_peers: null });
+        });
+
+        it("another member's 'peers' listing is stored with its reach and no list", async () => {
+            await applyDelta({ posts: [offer({ reach: 'peers' })] });
+            expect(row()).toMatchObject({ reach: 'peers', reach_peers: null });
+        });
     });
 });

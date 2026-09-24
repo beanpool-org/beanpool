@@ -585,8 +585,11 @@ export default function MarketScreen() {
     const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [showNewPostTypePicker, setShowNewPostTypePicker] = useState(false);
     const [myTransactions, setMyTransactions] = useState<any[]>([]);
+    // Every listing I could have a deal on, whatever its audience or the feed's filters: the pill counts what the
+    // My Deals sheet it opens lists, as the tab badge does (_layout.tsx).
+    const [dealPosts, setDealPosts] = useState<any[]>([]);
 
-    const pendingCount = usePendingDealsCount(identity, posts, myTransactions);
+    const pendingCount = usePendingDealsCount(identity, dealPosts, myTransactions);
 
     useEffect(() => {
         let cancelled = false;
@@ -785,6 +788,7 @@ export default function MarketScreen() {
             if (identity) {
                 const txs = await getMarketplaceTransactions(identity.publicKey);
                 setMyTransactions(txs);
+                setDealPosts(await getPosts({ allScopes: true }));
             }
         };
         try {

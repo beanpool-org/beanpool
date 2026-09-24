@@ -72,6 +72,7 @@ export async function findDnsRecord(env, fqdn) {
     return (Array.isArray(list) ? list : []).find((r) => ['CNAME', 'A', 'AAAA'].includes(r.type)) || null;
 }
 
+// Content and proxied only; ensure() replaces a record whose type must change (Cloudflare won't PATCH a type).
 export const patchDnsRecord = (env, id, rec) =>
     cf(env, 'PATCH', `/zones/${env.CF_ZONE_ID}/dns_records/${id}`, { type: rec.type, content: rec.content, proxied: rec.proxied });
 

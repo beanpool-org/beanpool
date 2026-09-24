@@ -92,7 +92,12 @@ function fakeCloudflare() {
         if ((m = p.match(/^\/zones\/zone\/dns_records\/([^/]+)$/))) {
             const r = dns.get(m[1]);
             if (!r) return err(404, 81044, 'Record does not exist.');
-            if (method === 'PATCH') { Object.assign(r, body); return ok(r); }
+            if (method === 'PATCH') {
+                // A record's type can't be changed in place (CNAME ↔ A): the caller must delete and re-create it.
+                if (body.type && body.type !== r.type) return err(400, 1004, 'DNS Validation Error: record type cannot be changed');
+                Object.assign(r, body);
+                return ok(r);
+            }
             if (method === 'DELETE') { dns.delete(m[1]); return ok({ id: m[1] }); }
         }
         throw new Error(`fake cloudflare: unhandled ${method} ${p}`);
@@ -507,6 +512,37 @@ test('ensure: an existing record is PATCHed, never POSTed over; an intact name i
         const now = await w.row('meadow');
         assert.equal(retunnel.body.tunnelToken, `token-${now.tunnel_id}`);
         assert.equal(w.cf.recordAt('meadow.beanpool.org').content, `${now.tunnel_id}.cfargotunnel.com`);
+    } finally { w.restore(); }
+});
+
+test('ensure: moving tunnel ↔ direct replaces the record (its type can\'t be PATCHed), one record throughout', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        await liveName(w, 'riverbend', owner);
+        const tunnelRow = await w.row('riverbend');
+        const records = () => [...w.cf.dns.values()].filter((d) => d.name === 'riverbend.beanpool.org');
+
+        const direct = await w.heal(owner, { mode: 'direct', public_ip: '203.0.113.7' });
+        assert.equal(direct.status, 200, JSON.stringify(direct.body));
+        assert.equal(direct.body.status, 'live');
+        assert.deepEqual(direct.body.changed, ['dns']);
+        assert.deepEqual(records().map((d) => [d.type, d.content]), [['A', '203.0.113.7']]);
+        assert.equal(w.cf.liveTunnel(tunnelRow.tunnel_id), null, 'the old tunnel has nothing left to serve');
+        let row = await w.row('riverbend');
+        assert.equal(row.mode, 'direct');
+        assert.equal(row.tunnel_id, null);
+        assert.equal(row.dns_record_id, records()[0].id);
+
+        const back = await w.heal(owner, { mode: 'tunnel' });
+        assert.equal(back.status, 200, JSON.stringify(back.body));
+        assert.equal(back.body.status, 'live');
+        assert.deepEqual(back.body.changed, ['tunnel', 'dns']);
+        row = await w.row('riverbend');
+        assert.equal(back.body.tunnelToken, `token-${row.tunnel_id}`);
+        assert.deepEqual(records().map((d) => [d.type, d.content]), [['CNAME', `${row.tunnel_id}.cfargotunnel.com`]]);
+        assert.equal(row.dns_record_id, records()[0].id);
+        assert.ok(!w.cf.calls.some((c) => c.startsWith('PATCH')), 'a type change is never PATCHed');
     } finally { w.restore(); }
 });
 

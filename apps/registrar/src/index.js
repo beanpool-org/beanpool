@@ -60,7 +60,8 @@ const dnsTarget = (a) => a.mode === 'direct'
     : { type: 'CNAME', content: `${a.tunnel_id}.cfargotunnel.com`, proxied: true };
 
 // Make Cloudflare route `a`, idempotently (design §2.5): keep the tunnel if Cloudflare still has it, re-PUT the
-// ingress, and find the DNS record by name — keep it, PATCH it if it points elsewhere, POST only if there is none.
+// ingress, and find the DNS record by name — keep it, PATCH it if it points elsewhere, POST only if there is none
+// (or the record is the wrong type for the mode, which Cloudflare can't PATCH: then it is replaced).
 // Never deprovisions first. Returns the ids and what had to be (re)made: changed ⊆ ['tunnel', 'dns']; a new tunnel
 // means a new token. Throws on a Cloudflare failure, having written nothing to the row.
 async function ensure(env, a) {
@@ -81,14 +82,19 @@ async function ensure(env, a) {
         throw new Error(`unknown mode ${a.mode}`);
     }
     const want = dnsTarget({ ...a, tunnel_id });
-    const rec = await cf.findDnsRecord(env, a.hostname);
+    let rec = await cf.findDnsRecord(env, a.hostname);
+    if (rec && rec.type !== want.type) {
+        // Cloudflare won't change a record's type in place (tunnel ↔ direct is CNAME ↔ A): replace it.
+        try { await cf.deleteDnsRecord(env, rec.id); } catch (e) { if (e?.status !== 404) throw e; }
+        rec = null;
+    }
     let dns_record_id;
     if (!rec) {
         dns_record_id = (await cf.createDnsRecord(env, a.name, want)).id;
         changed.push('dns');
     } else {
         dns_record_id = rec.id;
-        if (rec.type !== want.type || rec.content !== want.content || rec.proxied !== want.proxied) {
+        if (rec.content !== want.content || rec.proxied !== want.proxied) {
             await cf.patchDnsRecord(env, rec.id, want);
             changed.push('dns');
         }

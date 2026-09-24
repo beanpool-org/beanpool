@@ -513,7 +513,9 @@ function countLocalObjects(dataDir?: string): number {
  *   - this node's own disk still holds objects. Those are photos and attachments the database points at, and
  *     an s3 node would look for them in the bucket, find nothing, and answer 503 for every one. Moving a node
  *     from disk to a bucket is the migration tool's job, which this version does not have;
- *   - the bucket cannot be reached with these credentials (a HEAD on the bucket).
+ *   - the bucket cannot be reached with these credentials (a HEAD on the bucket), or they can reach it but not
+ *     write a test object to it, read it back and delete it again (a read-only token passes the HEAD and then
+ *     fails every PUT, which would leave every new photo in state.db and nothing refusing).
  *
  * Returns a line for the boot log.
  */

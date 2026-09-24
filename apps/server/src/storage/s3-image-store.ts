@@ -9,8 +9,10 @@
  * `IMAGE_S3_ENDPOINT`, `IMAGE_S3_BUCKET`, `IMAGE_S3_REGION` (`auto` on R2), `IMAGE_S3_ACCESS_KEY_ID`,
  * `IMAGE_S3_SECRET_ACCESS_KEY` — from the environment only, never node_config, never a backup. Any one of them
  * missing or malformed is a boot failure that names every setting at fault (by NAME: a value is never
- * printed), and so is a bucket the credentials cannot reach. Never a silent fall back to disk: a node that
- * believes its photos are in a bucket must not quietly fill a local disk nobody is watching.
+ * printed), and so is a bucket the credentials cannot reach — or can reach but not write to, read back from and
+ * delete from, which boot proves with a test object of its own ({@link S3ImageStore.checkBucket}). Never a
+ * silent fall back to disk: a node that believes its photos are in a bucket must not quietly fill a local disk
+ * nobody is watching.
  *
  * The endpoint must be `https:`. Plain `http:` is accepted for a loopback host only, which is what the tests'
  * in-process stand-in is; anything else would send every photo and every attachment's ciphertext across the
@@ -56,6 +58,7 @@
  */
 
 import util from 'node:util';
+import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import {
     ImageStoreError, ImageStoreUnavailableError, MAX_OBJECT_BYTES, assertSafeKey, assertSafePrefix, sha256Hex,
@@ -105,6 +108,13 @@ export const DEFAULT_S3_TUNING: S3Tuning = {
 const MAX_LIST_PAGE_BYTES = 8 * 1024 * 1024;
 /** A bucket of a hundred million objects is not ours; a listing that long is a loop. */
 const MAX_LIST_PAGES = 100_000;
+
+/**
+ * Where the boot check writes its test object. Outside every namespace of ours (image-store.ts
+ * `STORE_NAMESPACES`), so no sweep, backup or restore ever lists it or takes it for a photo; and one object per
+ * boot, uniquely named, deleted again before the node starts.
+ */
+export const WRITE_CHECK_PREFIX = 'beanpool-write-check';
 
 export const S3_ENV = {
     endpoint: 'IMAGE_S3_ENDPOINT',
@@ -630,8 +640,16 @@ export class S3ImageStore implements ImageStore {
     }
 
     /**
-     * The boot check: can these credentials reach this bucket? Throws an {@link ImageStoreError} that says
-     * which of the likely causes it is, in words, and never prints a credential.
+     * The boot check: can these credentials use this bucket — reach it, write to it, read back from it and delete
+     * from it? Throws an {@link ImageStoreError} that says which of the likely causes it is, in words, and never
+     * prints a credential.
+     *
+     * Reaching it is a HEAD on the bucket. That alone passes an R2 API token scoped "Object Read only" — the
+     * likeliest credential mistake beside the right one — and a node booted on it answers 403 to every PUT: each
+     * new photo stays in state.db, which is what the bucket is for, and nothing ever refuses. So boot also writes a
+     * small object of its own under {@link WRITE_CHECK_PREFIX}, reads it back byte for byte, deletes it and makes
+     * sure it is gone, all without holding the event loop. Any step failing is a boot refusal naming the step:
+     * refused rather than half-working. A test object it could not delete is named, so it can be removed by hand.
      */
     async checkBucket(): Promise<void> {
         let res: Response;
@@ -640,7 +658,6 @@ export class S3ImageStore implements ImageStore {
         } catch (e: any) {
             throw new ImageStoreError(`Could not reach the S3 endpoint for ${this.describe()}: ${e?.message || e}`);
         }
-        if (res.status === 200) return;
         if (res.status === 404) {
             throw new ImageStoreError(`${this.describe()}: no such bucket (HTTP 404). Create it, or fix ${S3_ENV.bucket}.`);
         }
@@ -650,7 +667,107 @@ export class S3ImageStore implements ImageStore {
                 + `${S3_ENV.secretAccessKey}, and that the token may read and write this bucket.`,
             );
         }
-        throw new ImageStoreError(`${this.describe()} answered HTTP ${res.status} to a bucket check.`);
+        if (res.status !== 200) throw new ImageStoreError(`${this.describe()} answered HTTP ${res.status} to a bucket check.`);
+        await this.checkWriteReadDelete();
+    }
+
+    /** The write half of {@link checkBucket}. */
+    private async checkWriteReadDelete(): Promise<void> {
+        const where = this.describe();
+        const stamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+        const key = `${WRITE_CHECK_PREFIX}/${stamp}-${crypto.randomBytes(8).toString('hex')}.txt`;
+        const url = this.objectUrl(key);
+        const body = Buffer.from(`BeanPool boot check: proves this node can write, read back and delete in this bucket. `
+            + `Deleted again at once; safe to delete if it is ever left behind. ${key}\n`);
+        const needs = 'on Cloudflare R2, an API token with "Object Read & Write" on this bucket';
+        const refused = (status: number) => status === 401 || status === 403;
+        const answer = async (r: Response) => {
+            const code = s3ErrorCode(await r.text().catch(() => ''));
+            return `HTTP ${r.status}${code ? ` ${code}` : ''}`;
+        };
+        const byHand = `remove "${key}" from bucket "${this.bucket}" by hand`;
+        // After a failed write or read-back: take the test object away again, and say so if that fails too.
+        const tidy = async (): Promise<string> => {
+            try {
+                const d = await this.asyncCall(`DELETE ${key}`, () => this.build('DELETE', url));
+                await d.body?.cancel().catch(() => {});
+                if (d.status === 204 || d.status === 200 || d.status === 404) return '';
+            } catch { /* reported below */ }
+            return ` The test object may still be in the bucket: ${byHand}.`;
+        };
+
+        let res: Response;
+
+        // 1. Write.
+        try {
+            res = await this.asyncCall(`PUT ${key}`, () => this.build('PUT', url, { body, headers: { 'content-type': 'text/plain' } }));
+        } catch (e: any) {
+            throw new ImageStoreError(`Could not complete a test write to ${where}: ${e?.message || e}.${await tidy()}`);
+        }
+        if (refused(res.status)) {
+            throw new ImageStoreError(
+                `${where} let these credentials read the bucket but refused a test write (${await answer(res)}). The node `
+                + `writes every new photo and attachment there, so the token needs write access: ${needs}. An R2 token `
+                + 'scoped "Object Read only" is refused exactly like this.',
+            );
+        }
+        if (res.status !== 200) {
+            throw new ImageStoreError(`${where} did not accept a test write (${await answer(res)}).${await tidy()}`);
+        }
+        await res.body?.cancel().catch(() => {});
+
+        // 2. Read it back, byte for byte.
+        try {
+            res = await this.asyncCall(`GET ${key}`, () => this.build('GET', url));
+        } catch (e: any) {
+            throw new ImageStoreError(`Could not read back a test write from ${where}: ${e?.message || e}.${await tidy()}`);
+        }
+        if (res.status !== 200) {
+            const said = await answer(res);
+            const left = await tidy();
+            throw new ImageStoreError(refused(res.status)
+                ? `${where} accepted a test write but refused to read it back (${said}). The node serves every photo from `
+                    + `the bucket, so the token needs read access too: ${needs}.${left}`
+                : `${where} did not give back a test write (${said}).${left}`);
+        }
+        let back: Buffer;
+        try {
+            back = await readCapped(res, 64 * 1024, `GET ${key}`);
+        } catch (e: any) {
+            throw new ImageStoreError(`Could not read back a test write from ${where}: ${e?.message || e}.${await tidy()}`);
+        }
+        if (!back.equals(body)) {
+            throw new ImageStoreError(
+                `${where} gave back different bytes for a test write than were written: something between this node and `
+                + `the bucket is altering objects.${await tidy()}`,
+            );
+        }
+
+        // 3. Delete it, and make sure it is gone.
+        try {
+            res = await this.asyncCall(`DELETE ${key}`, () => this.build('DELETE', url));
+        } catch (e: any) {
+            throw new ImageStoreError(
+                `Could not delete the test object from ${where}: ${e?.message || e}. It may still be in the bucket: ${byHand}.`,
+            );
+        }
+        if (res.status !== 204 && res.status !== 200) {
+            const said = await answer(res);
+            throw new ImageStoreError(refused(res.status)
+                ? `${where} refused to delete the test object (${said}). The node deletes a member's photo when its post `
+                    + `is removed, and an attachment when its message is, so the token needs delete access: ${needs}. `
+                    + `The test object is still in the bucket: ${byHand}.`
+                : `${where} did not delete the test object (${said}). It may still be in the bucket: ${byHand}.`);
+        }
+        await res.body?.cancel().catch(() => {});
+        let still: ObjectInfo | null | undefined;
+        try { still = await this.headAsync(key); } catch { still = undefined; }
+        if (still !== null) {
+            throw new ImageStoreError(
+                `${where} answered the delete of the test object, but ${still ? 'still has it' : 'could not then say whether it is gone'}. `
+                + `It may still be in the bucket: ${byHand}.`,
+            );
+        }
     }
 
     /** Stop the blocking path's worker thread (tests, shutdown). */

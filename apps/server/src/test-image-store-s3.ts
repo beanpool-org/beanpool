@@ -17,7 +17,9 @@
  *      are not ours are never listed; a GET streams; a missing bucket is an error, not a missing photo.
  *   5. The boot check refuses with each missing setting, a bucket these credentials cannot reach, a missing
  *      bucket, an unreachable endpoint, a standby role, and photos still on the node's disk — and passes a
- *      good configuration.
+ *      good configuration. It proves a write, not just a read: credentials that cannot write, read back or
+ *      delete a test object are refused, a test object it could not delete is named, and a good boot leaves
+ *      the bucket exactly as it found it.
  *   6. The secret access key appears in no log line, no error message, and no serialisation of the store.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-store-s3.ts
@@ -470,6 +472,64 @@ async function main(): Promise<void> {
         const ok = await checkImageStoreAtBoot({ role: 'primary', dataDir });
         assert(ok.includes(fake.bucket) && !ok.includes(fake.secretAccessKey), `a good configuration boots: "${ok}"`);
         track(getImageStore() as S3ImageStore);
+
+        // Reading is not writing. An R2 token scoped "Object Read only" passes a HEAD on the bucket, and then every
+        // PUT is a 403: the node would run with every new photo kept in state.db — what the bucket exists to avoid —
+        // and nothing would refuse. So boot writes a small object of its own, reads it back and deletes it.
+        const bucketKeys = async () => JSON.stringify([...(await fake.objects()).keys()].sort());
+        const keyOf = (p: string) => p.split('/').slice(2).map(decodeURIComponent).join('/');
+        const asBefore = await bucketKeys();
+        const bootWith = async (fault: { method: string; status: number; code: string } | null) => {
+            setEnv(goodEnv);
+            await fake.clearLog();
+            await fake.clearFaults();
+            if (fault) await fake.fault({ ...fault, count: 1_000 });
+            try {
+                return await checkImageStoreAtBoot({ role: 'primary', dataDir });
+            } finally {
+                await fake.clearFaults();
+                track(getImageStore() as S3ImageStore);
+            }
+        };
+        const probeKeyIn = async () => {
+            const put = (await fake.log()).find((e) => e.method === 'PUT');
+            return put ? keyOf(put.path) : '';
+        };
+
+        const readOnly = await rejects(() => bootWith({ method: 'PUT', status: 403, code: 'AccessDenied' }), /refused a test write \(HTTP 403 AccessDenied\)/,
+            'boot refuses credentials that can read the bucket but not write to it');
+        errorTexts.push(readOnly);
+        assert(lastThrown instanceof ImageStoreError && /Object Read & Write/.test(readOnly),
+            'and says what the token needs (on R2, "Object Read & Write" on this bucket)');
+        assert((await bucketKeys()) === asBefore, 'and nothing is left in the bucket');
+
+        const noRead = await rejects(() => bootWith({ method: 'GET', status: 403, code: 'AccessDenied' }), /refused to read it back \(HTTP 403/,
+            'boot refuses credentials that can write but not read back');
+        errorTexts.push(noRead);
+        assert((await bucketKeys()) === asBefore, 'and the test object it wrote was still deleted');
+
+        const noDelete = await rejects(() => bootWith({ method: 'DELETE', status: 403, code: 'AccessDenied' }),
+            /refused to delete the test object \(HTTP 403/,
+            'boot refuses credentials that can write but not delete (the node deletes a photo when its post goes)');
+        errorTexts.push(noDelete);
+        const leftKey = await probeKeyIn();
+        assert(!!leftKey && noDelete.includes(leftKey) && /still in the bucket/.test(noDelete) && (await fake.objects()).has(leftKey),
+            `and says plainly that the test object is still in the bucket, by name — which it is (${leftKey})`);
+        assert(!!leftKey && !STORE_NAMESPACES.some((ns) => leftKey.startsWith(`${ns}/`)),
+            'the test object is outside this node\'s namespaces, so no sweep or backup ever takes it for a photo');
+        if (leftKey) await fake.remove(leftKey);
+
+        let healthy = '';
+        try { healthy = await bootWith(null); } catch (e: any) { errorTexts.push(String(e?.message || e)); }
+        const healthyKey = await probeKeyIn();
+        const probeLog = await fake.log();
+        const answered = (method: string) => probeLog.some((e) => e.method === method && keyOf(e.path) === healthyKey && e.status >= 200 && e.status < 300);
+        assert(healthy.includes(fake.bucket) && !!healthyKey && answered('PUT') && answered('GET') && answered('DELETE'),
+            'a bucket these credentials can use boots, having written a test object, read it back and deleted it');
+        assert((await bucketKeys()) === asBefore, 'and leaves no test object behind: the bucket is exactly as it was');
+        await bootWith(null).catch(() => '');
+        const secondKey = await probeKeyIn();
+        assert(!!secondKey && secondKey !== healthyKey, 'each boot\'s test object has a name of its own');
         setEnv({});
     }
 

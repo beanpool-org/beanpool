@@ -122,8 +122,9 @@ async function main() {
     resumeTakeoverAtBoot();
 
     // Step 2.7: The image store (storage design §7). IMAGE_STORE=s3 with a setting missing, a bucket these
-    // credentials cannot reach, photos still on this node's disk, or a standby role: the node does NOT start,
-    // and says which. Never a silent fall back to disk. After the role is settled (2.6), before anything serves.
+    // credentials cannot reach or cannot write to (proved with a test object, written, read back and deleted),
+    // photos still on this node's disk, or a standby role: the node does NOT start, and says which. Never a
+    // silent fall back to disk. After the role is settled (2.6), before anything serves.
     console.log(`🖼️  Image store: ${await checkImageStoreAtBoot({ role: getNodeRole() })}`);
 
     // Step 3: TLS certificates (LE or self-signed)

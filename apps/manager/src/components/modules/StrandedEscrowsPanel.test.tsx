@@ -114,6 +114,69 @@ describe('StrandedEscrowsPanel', () => {
         expect(writeOff).toHaveBeenCalledTimes(1);
     });
 
+    // The Commons holds fractional Beans from demurrage, and the server sends its figures rounded to the cent. A
+    // Commons of 4.9973 against a -5 hole reads 5 now and 0 after (-0.0027 rounded), while the server, comparing
+    // the exact figures, needs the deficit confirmed. The panel must offer the confirmation all the same.
+    it('asks for the deficit confirmation when the Commons falls short by less than a cent', async () => {
+        vi.spyOn(nodeClient, 'fetchStrandedEscrows').mockResolvedValue({
+            ...list,
+            commonsBalance: 5,
+            commonsAfterAll: 0,
+            eligibleCount: 1,
+            escrows: [{ ...list.escrows[1], writeOff: { eligible: true, refusal: null, commonsAfter: 0, wouldDeficit: true } }],
+        });
+        const writeOff = vi.spyOn(nodeClient, 'writeOffStrandedEscrow').mockResolvedValue({
+            success: true, escrowId: list.escrows[1].escrowId, tradeId: list.escrows[1].tradeId, amount: 5,
+            transactionId: 't1', memo: 'm', commonsBefore: 5, commonsAfter: 0,
+        });
+        renderPanel();
+        fireEvent.click(await screen.findByRole('button', { name: 'Write off from the Commons' }));
+        fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: REASON } });
+        const submit = screen.getByRole('button', { name: 'Write off 5 Beans from the Commons' });
+        expect(submit).toBeDisabled(); // the deficit is not confirmed yet
+        expect(screen.getByText(/The Commons now:/)).toHaveTextContent('The Commons now: 5 Beans · after this write-off: just under 0 Beans');
+
+        fireEvent.click(screen.getByRole('checkbox', { name: /I confirm the Commons goes to just under 0 Beans/ }));
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        await waitFor(() => expect(writeOff).toHaveBeenCalledWith(
+            node.url, list.escrows[1].escrowId, REASON, true, node.adminPassword, undefined,
+        ));
+    });
+
+    it('offers the confirmation when the server refuses a deficit its rounded figures put at 0', async () => {
+        vi.spyOn(nodeClient, 'fetchStrandedEscrows').mockResolvedValue({
+            ...list,
+            commonsBalance: 20,
+            escrows: [{ ...list.escrows[1], writeOff: { eligible: true, refusal: null, commonsAfter: 15, wouldDeficit: false } }],
+        });
+        const writeOff = vi.spyOn(nodeClient, 'writeOffStrandedEscrow')
+            .mockRejectedValueOnce(new nodeClient.StrandedEscrowWriteOffError(
+                'The Commons holds 5 Beans; writing off 5 Beans would leave it at 0. Confirm to let the Commons go into deficit',
+                'deficit_unconfirmed', 5, 0,
+            ))
+            .mockResolvedValueOnce({
+                success: true, escrowId: list.escrows[1].escrowId, tradeId: list.escrows[1].tradeId, amount: 5,
+                transactionId: 't1', memo: 'm', commonsBefore: 5, commonsAfter: 0,
+            });
+        renderPanel();
+        fireEvent.click(await screen.findByRole('button', { name: 'Write off from the Commons' }));
+        fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: REASON } });
+        const submit = screen.getByRole('button', { name: 'Write off 5 Beans from the Commons' });
+        fireEvent.click(submit);
+
+        const confirm = await screen.findByRole('checkbox', { name: /I confirm the Commons goes to just under 0 Beans/ });
+        expect(confirm).not.toBeChecked();
+        expect(submit).toBeDisabled();
+        fireEvent.click(confirm);
+        expect(submit).toBeEnabled();
+        fireEvent.click(submit);
+        await waitFor(() => expect(writeOff).toHaveBeenLastCalledWith(
+            node.url, list.escrows[1].escrowId, REASON, true, node.adminPassword, undefined,
+        ));
+        expect(writeOff).toHaveBeenCalledTimes(2);
+    });
+
     it('offers no action to a non-owner', async () => {
         renderPanel({ canWriteOff: false });
         expect(await screen.findByText('Only an owner of this node can write one off.')).toBeInTheDocument();

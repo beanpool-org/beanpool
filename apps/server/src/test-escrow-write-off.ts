@@ -20,7 +20,8 @@
  *           admin on auth_signer; the audit reads clean. A restart then runs the hygiene sweep, which treats an
  *           exactly-0 escrow as settled and removes it; the audit stays clean, the deficit survives the restart,
  *           and a second write-off of the same escrow is still refused.
- *   Part 2: a funded Commons needs no confirmation, including one that covers the hole exactly.
+ *   Part 2: a funded Commons needs no confirmation, including one that covers the hole exactly. One short by less
+ *           than a cent still does, and says so, though its figures (rounded to the cent) read 0 after.
  *   Part 3: refusals, each leaving the ledger untouched: a pending or requested trade, a positive balance, a zero
  *           or dust balance, non-escrow accounts, no such escrow, a missing, short or over-long reason, a non-owner
  *           actor, a standby node, memory and disk disagreeing.
@@ -302,6 +303,24 @@ async function main() {
             'an escrow with no trade row is listed, eligible, and would leave the Commons at exactly 0');
         const res = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON);
         assert(res.ok && getCommonsBalanceExact() === 0, `a Commons that covers the hole exactly needs no confirmation, and ends at 0 (${res.ok ? getCommonsBalanceExact() : res.error})`);
+    }
+    {
+        // Short by less than a cent. The figures sent are rounded to the cent, so they read 5 now and 0 after, yet
+        // the Commons would end below 0: a deficit, which needs the confirmation. The manager decides on
+        // `wouldDeficit` and on the refusal, never on the rounded `commonsAfter`, so both must say so here.
+        setCommonsTo(4.9973, funder, debtor);
+        const hole = seedEscrow(-5, buyer1, 'cancelled', seller);
+        const listed = listStrandedEscrows().escrows.find(e => e.escrowId === hole.escrowId);
+        assert(!!listed && listed.writeOff.eligible && listed.writeOff.commonsAfter === 0 && listed.writeOff.wouldDeficit,
+            `the list flags the deficit though its rounded figure reads 0 (${listed?.writeOff.commonsAfter}, wouldDeficit ${listed?.writeOff.wouldDeficit})`);
+        const before = ledgerState();
+        const res = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON);
+        assert(!res.ok && res.code === 'deficit_unconfirmed' && res.commonsBalance === 5 && res.commonsAfter === 0,
+            `a sub-cent deficit still needs the confirmation (${!res.ok ? `${res.code}: ${res.commonsBalance} → ${res.commonsAfter}` : 'written off'})`);
+        assert(ledgerState() === before, 'the ledger is untouched');
+        const confirmed = writeOffStrandedEscrow(hole.escrowId, 'owner:password', REASON, { confirmDeficit: true });
+        assert(confirmed.ok && ledger.getAccount(hole.escrowId).balance === 0 && near(getCommonsBalanceExact(), 4.9973 - 5),
+            `with it, written off to 0, the Commons just under 0 (${confirmed.ok ? getCommonsBalanceExact() : confirmed.error})`);
     }
     assert(runLedgerAudit().ok, 'the audit reads clean');
 

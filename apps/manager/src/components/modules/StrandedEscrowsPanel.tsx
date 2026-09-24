@@ -133,7 +133,11 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
                 const isOpen = openId === e.escrowId;
                 const commonsNow = serverDeficit?.commonsBalance ?? data?.commonsBalance ?? 0;
                 const commonsAfter = serverDeficit?.commonsAfter ?? e.writeOff.commonsAfter ?? commonsNow + e.balance;
-                const deficit = commonsAfter < 0;
+                // Whether there is a deficit is the server's call, made on the exact figures. The ones it sends are
+                // rounded to the cent, so a Commons short by less than a cent reads 0 after, yet still needs the
+                // confirmation: a deficit refusal, or the listing's own flag, decides it — never the rounded figure.
+                const deficit = serverDeficit !== null || e.writeOff.wouldDeficit;
+                const afterText = deficit && commonsAfter >= 0 ? 'just under 0 Beans' : beans(commonsAfter);
                 const reasonOk = reason.trim().length >= REASON_MIN;
                 const reasonId = `write-off-reason-${e.escrowId}`;
                 return (
@@ -185,13 +189,13 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
                                 <div className="text-nature-400">
                                     The Commons now: <span className="font-mono text-white">{beans(commonsNow)}</span>
                                     {' · '}after this write-off:{' '}
-                                    <span className={`font-mono font-bold ${deficit ? 'text-amber-300' : 'text-white'}`}>{beans(commonsAfter)}</span>
+                                    <span className={`font-mono font-bold ${deficit ? 'text-amber-300' : 'text-white'}`}>{afterText}</span>
                                 </div>
 
                                 {deficit && (
                                     <div className="p-3 rounded-xl bg-amber-950/70 border border-amber-500/50 text-amber-200 space-y-2">
                                         <div>
-                                            This leaves the Commons in deficit, at {beans(commonsAfter)}. That is the honest record of a community
+                                            This leaves the Commons in deficit, at {afterText}. That is the honest record of a community
                                             that has paid out more than it collected; every account still sums to zero.
                                         </div>
                                         <label className="flex items-start gap-2 cursor-pointer">
@@ -201,7 +205,7 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
                                                 onChange={(ev) => setConfirmDeficit(ev.target.checked)}
                                                 className="mt-0.5 rounded border-nature-700 text-terra-500 focus:ring-0"
                                             />
-                                            <span>I confirm the Commons goes to {beans(commonsAfter)}</span>
+                                            <span>I confirm the Commons goes to {afterText}</span>
                                         </label>
                                     </div>
                                 )}

@@ -17,7 +17,7 @@
  *      lookup hash is the node's, from the verified sub, and the stored blob opens with it; a malformed
  *      recovery body, or a two-layer split with no hub fragment, is refused before the nonce is spent
  *   7. sign-ups per address: 5 an hour and 20 a day → 429 without spending the nonce; the address hash is
- *      cleared once a day old; the auth limiter still applies
+ *      cleared once a day old, by the next join or by the timer when nobody joins; the auth limiter still applies
  *   8. deleting your own account frees the sign-in account; one deleted while suspended, or a member the community
  *      removed, stays used (403)
  *   9. the door is read per request: back to local, the routes 404 again
@@ -39,7 +39,7 @@ import { _resetJwksCacheForTests, _clearNoncesForTests, ssoLookupHash } from './
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { getFunnel } from './engine/funnel.js';
-import { OPEN_JOIN_LIMITS } from './engine/open-join.js';
+import { OPEN_JOIN_LIMITS, startForgettingJoinAddresses } from './engine/open-join.js';
 import { sealSeedToSso, sealShareToSso, openShareFromSso } from '@beanpool/core';
 
 const PORT = 8729;
@@ -382,6 +382,17 @@ async function main(): Promise<void> {
     assert(typeof joinRow(fay.pk).ip_hash === 'string', 'while the newest join still has its own');
     const delFake = db.prepare('DELETE FROM open_joins WHERE member_pubkey = ?');
     for (const pk of fakes) delFake.run(pk);
+
+    // ...and on a timer, not only when somebody joins: a node nobody joins for a day must not keep them either.
+    // The server started the timer; restarted here with a short period, then put back.
+    const quietPk = crypto.randomBytes(32).toString('hex');
+    insertFake.run(quietPk, 'google', crypto.randomBytes(32).toString('base64url'), dayAndAHourAgo, ipHash);
+    startForgettingJoinAddresses(50);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    startForgettingJoinAddresses();
+    assert(joinRow(quietPk)?.ip_hash === null, 'with nobody joining, the timer clears an address once it is a day old');
+    assert(typeof joinRow(fay.pk).ip_hash === 'string', '...and leaves a newer one alone');
+    delFake.run(quietPk);
 
     freshLimiters();
     holdLimiters = true;

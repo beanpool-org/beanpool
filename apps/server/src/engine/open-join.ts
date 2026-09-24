@@ -71,6 +71,22 @@ export function forgetOldJoinAddresses(now = Date.now()): number {
         .run(new Date(now - DAY_MS).toISOString()).changes;
 }
 
+let addressSweep: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Clear old addresses on a timer as well as on each join. Otherwise a node nobody joins for a while keeps them
+ * past the day, and so does every snapshot and backup taken meanwhile. Every node runs it (the table is on every
+ * node, and a node switched back to local still holds what it had). Started by the HTTPS server; calling it again
+ * restarts it with the new period, which is how the test shortens it.
+ */
+export function startForgettingJoinAddresses(everyMs = 60_000): void {
+    if (addressSweep) clearInterval(addressSweep);
+    addressSweep = setInterval(() => {
+        try { forgetOldJoinAddresses(); } catch (e) { console.warn('[OpenJoin] could not clear old join addresses:', (e as Error)?.message || e); }
+    }, everyMs);
+    addressSweep.unref?.();
+}
+
 /** Which window, if any, an address has used up. */
 export function openJoinLimitReached(ipHash: string, now = Date.now()): 'hour' | 'day' | null {
     const row = db.prepare(`

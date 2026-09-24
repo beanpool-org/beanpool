@@ -40,6 +40,18 @@ If neither answers, the server is down or unreachable. See Troubleshooting.
 
 The server keeps its most recent log lines, which Settings shows under Logs. Some messages only appear in Docker's own log: docker compose logs --tail 200 beanpool-node
 
+## The ledger audit
+
+Beans only ever move from one account to another, so the total across every account, the Commons included, never changes. The server checks that when it starts and once a day. To check now, open **Diagnostics & Logs** and press **Run Audit Now** under **Ledger Conservation Audit**. The drift should be 0, and so should the stranded escrows.
+
+An escrow holds a buyer's Beans while a deal is open, and is empty once the deal ends. A stranded escrow is one that is not. After the audit runs, each stranded escrow is listed under it, with its deal and the last payment in or out of it.
+
+- **Below zero:** the escrow paid out Beans it never held. Older servers could do this when a post with an open deal was taken down: the buyer was refunded from an escrow nobody had paid into. The buyer already has those Beans, so the community covers the hole. An owner presses **Write off from the Commons**, gives a reason, and the Commons pays in exactly what is missing. The escrow ends at 0, the total does not change, and the ledger records the deal, the reason and who wrote it off. An escrow can only be written off once.
+- **If that leaves the Commons below zero**, Settings shows the Commons now and after, and asks you to confirm first. A Commons below zero is allowed: it is the honest record of a community that has paid out more than it has collected.
+- **Above zero:** the escrow holds Beans a member paid in. Those never go to the Commons, so there is no write-off. Settle the deal instead (see Stuck deals and disputes).
+
+Only an owner can write off an escrow, and only on the main server. A standby picks up the change with its next sync.
+
 ## When a background job fails
 
 Sometimes a job the server started in the background fails on its own — a peer answers oddly, a lookup times out. The server used to stop and start again when that happened, which signed everybody out of the app for about a minute. It no longer does: it writes the failure down and keeps serving.

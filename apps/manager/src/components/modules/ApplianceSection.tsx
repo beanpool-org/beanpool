@@ -34,6 +34,7 @@ import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { StrandedEscrowsPanel } from './StrandedEscrowsPanel';
 
 interface ApplianceSectionProps {
     activeNode: NodeProfile;
@@ -955,6 +956,18 @@ export function ApplianceSection({
                             <div className="text-xs text-nature-400 italic">
                                 Run on-demand audit to verify zero-sum integrity across all member and enterprise accounts.
                             </div>
+                        )}
+
+                        {auditState.result && (
+                            <SectionErrorBoundary sectionName="Stranded escrows" resetKey={activeNode.id}>
+                                <StrandedEscrowsPanel
+                                    activeNode={activeNode}
+                                    refreshKey={auditState.result}
+                                    canWriteOff={rolesViewer.kind === 'password' || rolesViewer.role === 'owner'}
+                                    isStandby={isStandby}
+                                    onWrittenOff={onRunLedgerAudit}
+                                />
+                            </SectionErrorBoundary>
                         )}
                     </div>
 

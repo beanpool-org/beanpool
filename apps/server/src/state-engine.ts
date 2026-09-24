@@ -2016,7 +2016,9 @@ export function payFromCommons(
     // and docs/commons-pool-transparency.md's Solvency Rule requires a prune to always balance the books.
     // A negative Commons is the honest record of a community that has paid out more than it has collected;
     // the network still sums to zero, which is the invariant that matters.
-    opts?: { allowDeficit?: boolean },
+    // `authSigner` records the admin who authorised the payment on the row's audit column, as `moveToCommons`
+    // does; the memo names them in words only (adminActorName).
+    opts?: { allowDeficit?: boolean; authSigner?: string },
 ): Transaction | null {
     if (amount <= 0) return null;
     if (!ledger.deductFromCommons(amount)) {
@@ -2032,9 +2034,10 @@ export function payFromCommons(
         id: crypto.randomUUID(),
         from: 'COMMONS_POOL', to, amount, taxFee: 0,
         memo: memo || '', timestamp: new Date().toISOString(),
+        authSigner: opts?.authSigner ?? null,
     };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp);
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null);
     db.prepare(`
         INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
         VALUES (?, ?, ?, ?)

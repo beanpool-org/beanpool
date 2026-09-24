@@ -1,21 +1,24 @@
 // D1 helpers for the registrar. The `name` PRIMARY KEY is the atomic arbiter: a second
 // simultaneous claim for the same name fails the INSERT rather than racing.
+// States: migrations/0002_states.sql.
 
 export const getAllocation = (env, name) =>
     env.DB.prepare('SELECT * FROM name_allocations WHERE name=?').bind(name).first();
 
-// Most recent non-revoked allocation for a node (a node holds one live/pending name).
+// The node's current name: the most recent row it still holds and may use (a node holds one name).
 export const getAllocationByPubkey = (env, pubkey) =>
     env.DB.prepare(
-        "SELECT * FROM name_allocations WHERE node_pubkey=? AND status IN ('pending','live') ORDER BY requested_at DESC"
+        "SELECT * FROM name_allocations WHERE node_pubkey=? AND status IN ('pending','live','paused') ORDER BY requested_at DESC"
     ).bind(pubkey).first();
 
-// The node's own row in any state, a pending/live one first — what /status reports, so a node whose name was
-// revoked hears 'revoked' rather than 'none' (which reads as "you never had a name").
+// The node's own row in ANY state, the one that matters most first — what /status reports, so a node whose
+// name is paused, released or blocked hears that rather than 'none' (which reads as "you never had a name",
+// and makes the node claim again or wipe its saved address: the 2026-09-24 incident).
 export const getOwnAllocation = (env, pubkey) =>
     env.DB.prepare(
         `SELECT * FROM name_allocations WHERE node_pubkey=?
-         ORDER BY CASE WHEN status IN ('pending','live') THEN 0 ELSE 1 END, requested_at DESC`
+         ORDER BY CASE status WHEN 'live' THEN 0 WHEN 'pending' THEN 1 WHEN 'paused' THEN 2 WHEN 'blocked' THEN 3
+                              WHEN 'released' THEN 4 ELSE 5 END, requested_at DESC`
     ).bind(pubkey).first();
 
 export const policyTier = async (env, name) => {
@@ -26,9 +29,10 @@ export const policyTier = async (env, name) => {
 export const listByStatus = async (env, status) =>
     (await env.DB.prepare('SELECT * FROM name_allocations WHERE status=?').bind(status).all()).results || [];
 
+// Every name someone holds or held (not the abandoned ones), newest first — the admin page's list.
 export const listActive = async (env) =>
     (await env.DB.prepare(
-        "SELECT * FROM name_allocations WHERE status IN ('pending','live') ORDER BY requested_at DESC"
+        "SELECT * FROM name_allocations WHERE status IN ('pending','live','paused','blocked','released') ORDER BY requested_at DESC"
     ).all()).results || [];
 
 // Atomic reserve. Throws (UNIQUE constraint) if the name is already held.
@@ -48,6 +52,26 @@ export const updateAllocation = async (env, name, fields) => {
         .bind(...keys.map((k) => fields[k]), name).run();
 };
 
+// Overwrite `expected` — a row as it was just read — with a new tenure, only if nobody changed it meanwhile:
+// two keys racing for a freed name must not both think they won. False = someone else got there first.
+export const replaceAllocation = async (env, name, expected, fields) => {
+    const keys = Object.keys(fields);
+    const set = keys.map((k) => `${k}=?`).join(', ');
+    const r = await env.DB.prepare(
+        `UPDATE name_allocations SET ${set} WHERE name=? AND node_pubkey=? AND status=? AND requested_at=?`
+    ).bind(...keys.map((k) => fields[k]), name, expected.node_pubkey, expected.status, expected.requested_at).run();
+    return (r?.meta?.changes ?? 1) > 0;
+};
+
+// A valid signed request from `pubkey`: the abandonment clock restarts and any warning clears, on every name
+// the key holds. At most one write an hour per key (nodes ask every 5 min), unless a warning must clear.
+export const touchContact = (env, pubkey, now, proto = 'v1') =>
+    env.DB.prepare(
+        `UPDATE name_allocations SET last_contact_at=?, warned_at=NULL, proto=?
+         WHERE node_pubkey=? AND status <> 'abandoned'
+           AND (last_contact_at IS NULL OR last_contact_at < ? OR warned_at IS NOT NULL)`
+    ).bind(now, proto, pubkey, now - 3600).run();
+
 export const deleteAllocation = (env, name) =>
     env.DB.prepare('DELETE FROM name_allocations WHERE name=?').bind(name).run();
 
@@ -57,3 +81,19 @@ export const getInvite = (env, code) =>
 export const insertInvite = (env, code, nodeName, createdAt = Math.floor(Date.now() / 1000)) =>
     env.DB.prepare('INSERT INTO invites (code, node_name, created_at) VALUES (?,?,?)').bind(code, nodeName, createdAt).run();
 
+export const insertEvent = (env, name, event, detail = null, at = Math.floor(Date.now() / 1000)) =>
+    env.DB.prepare('INSERT INTO name_events (name, at, event, detail) VALUES (?,?,?,?)').bind(name, at, event, detail).run();
+
+export const listEvents = async (env, name, limit = 200) =>
+    (name
+        ? await env.DB.prepare('SELECT * FROM name_events WHERE name=? ORDER BY at DESC, id DESC LIMIT ?').bind(name, limit).all()
+        : await env.DB.prepare('SELECT * FROM name_events ORDER BY at DESC, id DESC LIMIT ?').bind(limit).all()
+    ).results || [];
+
+// One row per sweep; rows older than 90 days go (288 sweeps a day).
+export const insertSweepLog = async (env, s, now) => {
+    await env.DB.prepare(
+        'INSERT INTO sweep_log (ran_at, live_count, ok, unverifiable, impostor, content_swap, action) VALUES (?,?,?,?,?,?,?)'
+    ).bind(now, s.live, s.ok, s.unverifiable, s.impostor, s.content_swap || 0, s.action).run();
+    await env.DB.prepare('DELETE FROM sweep_log WHERE ran_at < ?').bind(now - 90 * 86400).run();
+};

@@ -247,8 +247,9 @@ test('R2: /i/:code Invite resolution and deep-linking response', async () => {
 // revoked the name after two sweeps. That is the behaviour behind the 09-24 incident (a Worker that couldn't
 // verify the nodes' signing format revoked `test` and `yarravalley`), so it now asserts the reply is
 // 'unverifiable' and changes nothing. The revoke assertions moved to part 3, where the reply PROVES another key
-// answers at the hostname.
-test('Attestation sweep logic: impostor revokes; unverifiable preserves', async () => {
+// answers at the hostname. Since PR 1 (ownership states) part 3 ends 'paused', not 'revoked': routing stops, the
+// name stays the owner's (design §2.3; a revoke freed it for the impostor to claim).
+test('Attestation sweep logic: impostor pauses; unverifiable preserves', async () => {
     const d1 = createMockD1();
     const env = mockEnv(d1);
 
@@ -341,11 +342,13 @@ test('Attestation sweep logic: impostor revokes; unverifiable preserves', async 
         assert.equal(checkImpostor1.status, 'live');
         assert.equal(checkImpostor1.attest_fails, 1);
 
-        // Second sweep: attest_fails reaches limit (2) -> auto-revoked
+        // Second sweep: attest_fails reaches limit (2) -> routing paused, name kept for its key
         await attestSweep(env);
         const checkImpostor2 = await db.getAllocation(env, 'testnode');
-        assert.equal(checkImpostor2.status, 'revoked');
+        assert.equal(checkImpostor2.status, 'paused');
+        assert.equal(checkImpostor2.pause_reason, 'impostor');
         assert.equal(checkImpostor2.attest_fails, 2);
+        assert.equal(checkImpostor2.node_pubkey, pubHex);
 
     } finally {
         globalThis.fetch = originalFetch;

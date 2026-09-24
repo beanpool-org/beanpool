@@ -131,8 +131,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         </div>
 
         <div class="admin-card">
-            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #10b981; margin-bottom: 1rem;">🌐 Active Subdomain & Tunnel Allocations</h2>
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #10b981; margin-bottom: 1rem;">🌐 Names (live, paused, blocked, released)</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">A name belongs to its node's key. Pause and Block stop routing but never free a name; only Release frees one (at once, to anyone).</p>
             <div id="activeTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading active allocations...</p></div>
+        </div>
+
+        <div class="admin-card">
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #818cf8; margin-bottom: 1rem;">🧾 Name events (newest first)</h2>
+            <div id="eventsTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading events...</p></div>
         </div>
     </div>
 
@@ -181,17 +187,24 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         headerLogoutBtn.addEventListener('click', performLogout);
         refreshBtn.addEventListener('click', function() { loadRegistrarData(); });
 
+        // Node-supplied text (community name, contact, event details) goes into innerHTML: escape all of it.
+        function esc(v) {
+            return String(v == null ? '' : v).replace(/[&<>"']/g, function(c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        const CONFIRM = {
+            approve: function(n) { return 'Approve ' + n + '.beanpool.org?'; },
+            pause: function(n) { return 'Pause ' + n + '.beanpool.org?\\n\\nRouting stops (DNS removed); the name and tunnel stay with its owner. Only Resume lifts it — the node cannot.'; },
+            resume: function(n) { return 'Resume ' + n + '.beanpool.org?\\n\\nRouting comes back (tunnel and DNS re-made if needed).'; },
+            block: function(n) { return '⚠️ BLOCK ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted. The name stays held by this key and is NEVER free; its node cannot heal or release it. Undo with Resume, or free it with Release.'; },
+            release: function(n) { return '⚠️ RELEASE ' + n + '.beanpool.org?\\n\\nTunnel and DNS are deleted and the name is FREE AT ONCE, to any key.'; },
+        };
+
         document.addEventListener('click', function(e) {
-            const approveTarget = e.target.closest('.btn-act-approve');
-            if (approveTarget) {
-                approveClaim(approveTarget.getAttribute('data-name'));
-                return;
-            }
-            const revokeTarget = e.target.closest('.btn-act-revoke');
-            if (revokeTarget) {
-                revokeClaim(revokeTarget.getAttribute('data-name'));
-                return;
-            }
+            const target = e.target.closest('[data-action]');
+            if (target) adminAction(target.getAttribute('data-name'), target.getAttribute('data-action'));
         });
 
         async function loadRegistrarData() {
@@ -217,10 +230,11 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 const allocs = data.allocations || [];
 
                 const pending = allocs.filter(function(a) { return a.status === 'pending'; });
-                const active = allocs.filter(function(a) { return a.status !== 'pending' && a.status !== 'revoked'; });
+                const active = allocs.filter(function(a) { return a.status !== 'pending'; });
 
                 renderPending(pending);
                 renderActive(active);
+                loadEvents(secret);
             } catch (err) {
                 console.error(err);
                 document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading allocations.</p>';
@@ -237,22 +251,22 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Community / Operator</th><th>Node Pubkey</th><th>Mode</th><th>Requested</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
 
             pending.forEach(function(claim) {
-                const domain = claim.name + '.beanpool.org';
+                const domain = esc(claim.name) + '.beanpool.org';
                 const date = claim.requested_at ? new Date(claim.requested_at * 1000).toLocaleString() : '—';
-                const pubkeyShort = claim.node_pubkey ? claim.node_pubkey.slice(0, 12) + '...' + claim.node_pubkey.slice(-8) : '—';
+                const pubkeyShort = claim.node_pubkey ? esc(claim.node_pubkey.slice(0, 12) + '...' + claim.node_pubkey.slice(-8)) : '—';
                 const modeClass = claim.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
-                const comm = claim.community_name ? claim.community_name : '—';
-                const contactInfo = claim.contact ? ' (' + claim.contact + ')' : '';
+                const comm = claim.community_name ? esc(claim.community_name) : '—';
+                const contactInfo = claim.contact ? ' (' + esc(claim.contact) + ')' : '';
 
                 html += '<tr>' +
                     '<td style="font-weight: 700; color: #fbbf24; font-family: monospace;">' + domain + '</td>' +
                     '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
-                    '<td><span class="badge-mode ' + modeClass + '">' + (claim.mode || 'tunnel') + '</span></td>' +
+                    '<td><span class="badge-mode ' + modeClass + '">' + esc(claim.mode || 'tunnel') + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + date + '</td>' +
                     '<td style="text-align: right;">' +
-                        '<button data-name="' + claim.name + '" class="btn-approve btn-act-approve">Approve</button>' +
-                        '<button data-name="' + claim.name + '" class="btn-revoke btn-act-revoke" style="margin-left: 0.4rem;">Reject</button>' +
+                        '<button data-name="' + esc(claim.name) + '" data-action="approve" class="btn-approve">Approve</button>' +
+                        '<button data-name="' + esc(claim.name) + '" data-action="release" class="btn-revoke" style="margin-left: 0.4rem;" title="Rejects the claim; the name is free again">Reject</button>' +
                     '</td>' +
                 '</tr>';
             });
@@ -270,21 +284,39 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
             let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Community / Operator</th><th>Node Pubkey</th><th>Mode</th><th>Status</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
 
+            const LOOK = {
+                live: ['🟢', '#10b981'], paused: ['⏸️', '#fbbf24'], blocked: ['⛔', '#f87171'], released: ['↩️', '#94a3b8'],
+            };
+            const ACTIONS = {
+                live: [['pause', 'Pause'], ['block', 'Block']],
+                paused: [['resume', 'Resume'], ['block', 'Block']],
+                blocked: [['resume', 'Resume'], ['release', 'Release']],
+                released: [['release', 'Free now']],
+            };
+
             active.forEach(function(alloc) {
-                const domain = alloc.name + '.beanpool.org';
-                const pubkeyShort = alloc.node_pubkey ? alloc.node_pubkey.slice(0, 12) + '...' + alloc.node_pubkey.slice(-8) : '—';
+                const domain = esc(alloc.name) + '.beanpool.org';
+                const pubkeyShort = alloc.node_pubkey ? esc(alloc.node_pubkey.slice(0, 12) + '...' + alloc.node_pubkey.slice(-8)) : '—';
                 const modeClass = alloc.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
-                const comm = alloc.community_name ? alloc.community_name : '—';
-                const contactInfo = alloc.contact ? ' (' + alloc.contact + ')' : '';
+                const comm = alloc.community_name ? esc(alloc.community_name) : '—';
+                const contactInfo = alloc.contact ? ' (' + esc(alloc.contact) + ')' : '';
+                const look = LOOK[alloc.status] || ['•', '#cbd5e1'];
+                const why = alloc.pause_reason ? ' · ' + esc(alloc.pause_reason) : '';
+                const since = alloc.paused_at || alloc.released_at;
+                const sinceText = since ? '<br><span style="color: var(--text-muted); font-size: 0.7rem;">since ' + new Date(since * 1000).toLocaleString() + '</span>' : '';
+                // An admin release is already free; the owner's release is held 30 days for its key — "Free now" skips that.
+                const acts = (alloc.status === 'released' && alloc.pause_reason === 'admin') ? [] : (ACTIONS[alloc.status] || [['block', 'Block'], ['release', 'Release']]);
 
                 html += '<tr>' +
-                    '<td style="font-weight: 700; color: #10b981; font-family: monospace;">' + domain + '</td>' +
+                    '<td style="font-weight: 700; color: ' + look[1] + '; font-family: monospace;">' + domain + '</td>' +
                     '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
-                    '<td><span class="badge-mode ' + modeClass + '">' + (alloc.mode || 'tunnel') + '</span></td>' +
-                    '<td><span style="color: #10b981; font-weight: 600; font-size: 0.75rem; font-family: monospace;">🟢 ' + alloc.status + '</span></td>' +
-                    '<td style="text-align: right;">' +
-                        '<button data-name="' + alloc.name + '" class="btn btn-revoke btn-act-revoke">🗑️ Revoke</button>' +
+                    '<td><span class="badge-mode ' + modeClass + '">' + esc(alloc.mode || 'tunnel') + '</span></td>' +
+                    '<td><span style="color: ' + look[1] + '; font-weight: 600; font-size: 0.75rem; font-family: monospace;">' + look[0] + ' ' + esc(alloc.status) + why + '</span>' + sinceText + '</td>' +
+                    '<td style="text-align: right; white-space: nowrap;">' +
+                        acts.map(function(a) {
+                            return '<button data-name="' + esc(alloc.name) + '" data-action="' + a[0] + '" class="' + (a[0] === 'resume' ? 'btn-approve' : 'btn btn-revoke') + '" style="margin-left: 0.4rem;">' + a[1] + '</button>';
+                        }).join('') +
                     '</td>' +
                 '</tr>';
             });
@@ -293,45 +325,48 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             container.innerHTML = html;
         }
 
-        async function approveClaim(name) {
+        async function adminAction(name, action) {
             const secret = secretInput.value.trim();
-            if (!confirm('Approve ' + name + '.beanpool.org?')) return;
+            if (!CONFIRM[action] || !confirm(CONFIRM[action](name))) return;
 
             try {
-                const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/approve', {
+                const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/' + action, {
                     method: 'POST',
                     headers: { 'x-admin-secret': secret }
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    alert('Approved ' + name + '.beanpool.org successfully!');
+                    alert(name + '.beanpool.org is now ' + data.status + '.');
                     loadRegistrarData();
                 } else {
-                    alert('Approval failed: ' + (data.error || data.detail));
+                    alert(action + ' failed: ' + (data.error || '') + (data.detail ? ' — ' + data.detail : ''));
                 }
             } catch (err) {
                 alert('Network error: ' + err.message);
             }
         }
 
-        async function revokeClaim(name) {
-            const secret = secretInput.value.trim();
-            if (!confirm('⚠️ Are you sure you want to REVOKE ' + name + '.beanpool.org?\n\nThis will delete the Cloudflare Tunnel, remove the DNS record, and release the subdomain.')) return;
-
+        async function loadEvents(secret) {
+            const container = document.getElementById('eventsTableContainer');
             try {
-                const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/revoke', {
-                    method: 'POST',
-                    headers: { 'x-admin-secret': secret }
+                const res = await fetch('/api/local/admin/registrar/events?limit=100', { headers: { 'x-admin-secret': secret } });
+                if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load events.</p>'; return; }
+                const events = (await res.json()).events || [];
+                if (events.length === 0) { container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">No events yet.</p>'; return; }
+                let html = '<table class="admin-table"><thead><tr><th>When</th><th>Name</th><th>Event</th><th>Detail</th></tr></thead><tbody>';
+                events.forEach(function(ev) {
+                    // incident-review rows are the ones waiting for a human decision.
+                    const colour = ev.event === 'incident-review' ? '#fbbf24' : 'var(--text-secondary)';
+                    html += '<tr>' +
+                        '<td style="font-family: monospace; font-size: 0.75rem; white-space: nowrap;">' + new Date(ev.at * 1000).toLocaleString() + '</td>' +
+                        '<td style="font-family: monospace;">' + esc(ev.name) + '</td>' +
+                        '<td style="color: ' + colour + '; font-weight: 600;">' + esc(ev.event) + '</td>' +
+                        '<td style="font-size: 0.8rem;">' + esc(ev.detail) + '</td>' +
+                    '</tr>';
                 });
-                const data = await res.json();
-                if (res.ok) {
-                    alert('Revoked ' + name + '.beanpool.org successfully.');
-                    loadRegistrarData();
-                } else {
-                    alert('Revocation failed: ' + (data.error || data.detail));
-                }
+                container.innerHTML = html + '</tbody></table>';
             } catch (err) {
-                alert('Network error: ' + err.message);
+                container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading events.</p>';
             }
         }
 

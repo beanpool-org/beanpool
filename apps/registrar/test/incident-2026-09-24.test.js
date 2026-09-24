@@ -4,7 +4,7 @@
 // §2.4): something the registrar cannot VERIFY is never evidence against a node, and a sweep that looks
 // wrong as a whole acts on nobody.
 //
-// Unlike the other suites this runs db.js against a real in-memory SQLite loaded with schema.sql, so the
+// Unlike the other suites this runs db.js against a real in-memory SQLite loaded with the migrations, so the
 // queries under test are the ones D1 runs. No network: every fetch is answered here (or throws), and
 // Cloudflare API calls are only recorded, never sent.
 
@@ -21,7 +21,8 @@ const toHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16)
 // D1's prepare/bind/first/all/run over node:sqlite.
 function sqliteD1() {
     const sqlite = new DatabaseSync(':memory:');
-    sqlite.exec(readFileSync(new URL('../schema.sql', import.meta.url), 'utf8'));
+    for (const m of ['0001_init.sql', '0002_states.sql'])
+        sqlite.exec(readFileSync(new URL(`../migrations/${m}`, import.meta.url), 'utf8'));
     const d1 = {
         prepare(sql) {
             const stmt = sqlite.prepare(sql);
@@ -97,6 +98,19 @@ async function seedLive(env, name, key) {
 }
 
 const row = (rows, name) => rows().find((r) => r.name === name);
+
+async function signedPost(url, key, body) {
+    const ts = String(nowS());
+    const path = new URL(url).pathname;
+    const text = JSON.stringify(body);
+    return new Request(url, {
+        method: 'POST', body: text,
+        headers: {
+            'content-type': 'application/json', 'x-bp-pubkey': key.pubHex, 'x-bp-timestamp': ts,
+            'x-bp-signature': await sign(key, `beanpool-registrar-request/v1\nPOST\n${path}\n${ts}\n${text}`),
+        },
+    });
+}
 
 async function signedGet(url, key) {
     const ts = String(nowS());
@@ -207,7 +221,12 @@ test('incident (2c): a small fleet where EVERY live name is an impostor is the r
     }
 });
 
-test('incident (3): an attest validly signed by ANOTHER key is an impostor; twice → revoked (the kill switch survives)', async () => {
+// Until PR 1 (ownership states) part 3 and the control at the end of 3b asserted status 'revoked' — the interim kill
+// switch, which also freed the name, so the impostor could claim it next (design §1 failure 9; the design's PR 0 row
+// says "today's revoke still (until PR1)"). The kill switch now pauses: routing stops exactly as before (tunnel and
+// DNS deleted, asserted unchanged below) but the name stays its owner's. Only the status string changed; the checks
+// that the name is still held are new.
+test('incident (3): an attest validly signed by ANOTHER key is an impostor; twice → paused, name kept (the kill switch survives)', async () => {
     const { env, rows } = makeEnv();
     const [owner, intruder, n1, n2] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);
     await seedLive(env, 'swapped', owner);
@@ -227,7 +246,8 @@ test('incident (3): an attest validly signed by ANOTHER key is an impostor; twic
 
         summary = await attestSweep(env);
         assert.equal(summary.action, 'applied');
-        assert.equal(row(rows, 'swapped').status, 'revoked');
+        assert.equal(row(rows, 'swapped').status, 'paused');
+        assert.equal(row(rows, 'swapped').pause_reason, 'impostor');
         assert.equal(row(rows, 'swapped').attest_fails, 2);
         assert.deepEqual(net.cfCalls.sort(), [
             'DELETE /client/v4/accounts/acct/cfd_tunnel/tun-swapped',
@@ -237,10 +257,20 @@ test('incident (3): an attest validly signed by ANOTHER key is an impostor; twic
             assert.equal(row(rows, n).status, 'live');
             assert.equal(row(rows, n).attest_fails, 0);
         }
+
+        // The name is still the owner's: taken to everyone else, the intruder's key included.
+        assert.equal(row(rows, 'swapped').node_pubkey, owner.pubHex);
+        const avail = await (await worker.fetch(new Request('https://beanpool.org/api/registrar/available?name=swapped'), env)).json();
+        assert.equal(avail.available, false);
+        assert.equal(avail.reason, 'taken');
+        const grab = await worker.fetch(await signedPost('https://beanpool.org/api/registrar/claim', intruder, { name: 'swapped', mode: 'tunnel' }), env);
+        assert.equal(grab.status, 409);
+        assert.equal(row(rows, 'swapped').node_pubkey, owner.pubHex);
+        assert.equal(row(rows, 'swapped').status, 'paused');
     } finally { net.restore(); }
 });
 
-test('incident (3b): an unverifiable verdict ends a run of impostor verdicts — sightings apart never revoke', async () => {
+test('incident (3b): an unverifiable verdict ends a run of impostor verdicts — sightings apart never pause', async () => {
     // attest_fails counts CONSECUTIVE impostor verdicts. A name that goes quiet between two sightings (asleep,
     // down, or answering in a format this verifier can't check) must not carry the first sighting over to one
     // days or weeks later: that is the drift-then-revoke path again, only slower.
@@ -272,15 +302,16 @@ test('incident (3b): an unverifiable verdict ends a run of impostor verdicts —
             nodes['swapped.beanpool.org'] = attestsAs(intruder);
             summary = await attestSweep(env);
             assert.equal(summary.action, 'applied');
-            assert.equal(row(rows, 'swapped').status, 'live', `${label}: one sighting after a quiet spell must not revoke`);
+            assert.equal(row(rows, 'swapped').status, 'live', `${label}: one sighting after a quiet spell must not pause`);
             assert.equal(row(rows, 'swapped').attest_fails, 1, `${label}: it starts a new run`);
         }
         assert.deepEqual(net.cfCalls, [], 'no Cloudflare resource was touched');
 
-        // Control: the next sweep is a second CONSECUTIVE sighting, and that still revokes.
+        // Control: the next sweep is a second CONSECUTIVE sighting, and that still pulls routing (see part 3).
         summary = await attestSweep(env);
         assert.equal(summary.action, 'applied');
-        assert.equal(row(rows, 'swapped').status, 'revoked');
+        assert.equal(row(rows, 'swapped').status, 'paused');
+        assert.equal(row(rows, 'swapped').pause_reason, 'impostor');
         assert.equal(row(rows, 'swapped').attest_fails, 2);
     } finally { net.restore(); }
 });

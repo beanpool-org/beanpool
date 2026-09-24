@@ -8,7 +8,7 @@
  * design exists to prevent.
  */
 import { describe, it, expect } from 'vitest';
-import { downloadShortfall, restoreShortfall, shortfallSuffix } from './backup-shortfall';
+import { downloadNotice, downloadShortfall, downloadedAlert, restoreShortfall, shortfallSuffix } from './backup-shortfall';
 
 const headers = (map: Record<string, string>) => ({
     headers: { get: (name: string) => map[name] ?? map[name.toLowerCase()] ?? null },
@@ -118,6 +118,81 @@ describe('downloadShortfall', () => {
     it('says so when an s3 node could not check its bucket', () => {
         const said = downloadShortfall(headers({ 'X-Backup-Images': 'in-bucket', 'X-Backup-Images-Checked': 'no' }));
         expect(said).toMatch(/could not be checked/);
+    });
+});
+
+// Whether the sentence reports something MISSING. An s3 node's whole backup has a sentence (its photos are in the
+// bucket) but is not short; framing that as "not complete" raised a false alarm on every healthy download.
+describe('downloadNotice', () => {
+    const inBucketWhole = {
+        'X-Backup-Contents': 'database+images-in-bucket',
+        'X-Backup-Images': 'in-bucket',
+        'X-Backup-Images-Bucket': 'global-photos',
+        'X-Backup-Images-Referenced': '412',
+        'X-Backup-Images-Checked': 'yes',
+    };
+
+    it('carries the same sentence as downloadShortfall', () => {
+        for (const map of [inBucketWhole, { 'X-Backup-Images': '400/412' }, { 'X-Backup-Images': '412/412' }]) {
+            expect(downloadNotice(headers(map)).text).toBe(downloadShortfall(headers(map)));
+        }
+    });
+
+    it('is not short for an s3 node\'s whole backup, though it still says where the photos are', () => {
+        const notice = downloadNotice(headers(inBucketWhole));
+        expect(notice.short).toBe(false);
+        expect(notice.text).toMatch(/database only/);
+    });
+
+    it('is short when the bucket did not hold what the database references', () => {
+        expect(downloadNotice(headers({ ...inBucketWhole, 'X-Backup-Missing-Images': '3' })).short).toBe(true);
+    });
+
+    it('is not short when an s3 node could not check its bucket, as the node\'s own Backup tab says', () => {
+        const notice = downloadNotice(headers({ 'X-Backup-Images': 'in-bucket', 'X-Backup-Images-Checked': 'no' }));
+        expect(notice.short).toBe(false);
+        expect(notice.text).toMatch(/could not be checked/);
+    });
+
+    it('is short for a disk backup missing objects, and for one labelled partial that was never measured', () => {
+        expect(downloadNotice(headers({ 'X-Backup-Images': '400/412' })).short).toBe(true);
+        expect(downloadNotice(headers({ 'X-Backup-Contents': 'database+images-partial' })).short).toBe(true);
+    });
+
+    it('is neither short nor saying anything for a whole disk backup', () => {
+        expect(downloadNotice(headers({ 'X-Backup-Images': '412/412', 'X-Backup-Contents': 'database+images' })))
+            .toEqual({ text: '', short: false });
+    });
+});
+
+describe('downloadedAlert', () => {
+    it('says nothing when there is nothing to say, or no notice at all', () => {
+        expect(downloadedAlert('Backup', { text: '', short: false })).toBe('');
+        expect(downloadedAlert('Backup', undefined)).toBe('');
+        expect(downloadedAlert('Backup', null)).toBe('');
+    });
+
+    it('never calls an s3 node\'s whole backup incomplete', () => {
+        const said = downloadedAlert('Backup', downloadNotice(headers({
+            'X-Backup-Images': 'in-bucket', 'X-Backup-Images-Bucket': 'global-photos', 'X-Backup-Images-Checked': 'yes',
+        })));
+        expect(said).toMatch(/^Backup downloaded\./);
+        expect(said).not.toMatch(/not complete/);
+        expect(said).toMatch(/"global-photos"/);
+    });
+
+    it('calls a short backup not complete, and says what is missing', () => {
+        const said = downloadedAlert('beanpool-2026-09-24.db', downloadNotice(headers({ 'X-Backup-Images': '400/412' })));
+        expect(said).toMatch(/^beanpool-2026-09-24\.db downloaded, but it is not complete\./);
+        expect(said).toMatch(/missing 12 of 412/);
+    });
+
+    it('calls an s3 node\'s backup not complete when its bucket was short', () => {
+        const said = downloadedAlert('Backup', downloadNotice(headers({
+            'X-Backup-Images': 'in-bucket', 'X-Backup-Images-Referenced': '412', 'X-Backup-Missing-Images': '3',
+        })));
+        expect(said).toMatch(/not complete/);
+        expect(said).toMatch(/3 of the 412/);
     });
 });
 

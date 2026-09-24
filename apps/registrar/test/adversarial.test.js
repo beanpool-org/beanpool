@@ -238,7 +238,7 @@ test('Adversarial /i/:code - Malformed code, URL encoding, and HTML escaping', a
 // 2. ATTESTATION SWEEP & CLASSIFICATION
 // ==========================================
 
-test('Attestation Sweep - Solar node protection (unverified)', async () => {
+test('Attestation Sweep - Solar node protection (unverifiable)', async () => {
     const d1 = createMockD1();
     const env = mockEnv(d1);
     const { pubHex } = await generateKeypair();
@@ -259,17 +259,17 @@ test('Attestation Sweep - Solar node protection (unverified)', async () => {
         // Scenario 1: Network connection error / DNS fail (fetch throws)
         globalThis.fetch = async () => { throw new Error('Fetch failed / Connection reset'); };
         const res1 = await attestOne(env, alloc);
-        assert.equal(res1, 'unverified');
+        assert.equal(res1, 'unverifiable');
 
         // Scenario 2: HTTP 500, 502, 503, 504, 521, 522
         const errorStatuses = [500, 502, 503, 504, 404, 521, 522];
         for (const status of errorStatuses) {
             globalThis.fetch = async () => new Response(`Error ${status}`, { status });
             const resStatus = await attestOne(env, alloc);
-            assert.equal(resStatus, 'unverified', `HTTP status ${status} should yield unverified`);
+            assert.equal(resStatus, 'unverifiable', `HTTP status ${status} should yield unverifiable`);
         }
 
-        // Run sweep while unverified for multiple rounds
+        // Run sweep while unverifiable for multiple rounds
         for (let i = 0; i < 5; i++) {
             await attestSweep(env);
             const check = await db.getAllocation(env, 'solarnode');
@@ -281,7 +281,11 @@ test('Attestation Sweep - Solar node protection (unverified)', async () => {
     }
 });
 
-test('Attestation Sweep - Mismatch classification (abuse detection)', async () => {
+// Until 2026-09-24 scenarios 1–6 were all 'mismatch', which revoked the name after two sweeps. That lumping is
+// the bug behind the 09-24 incident (a Worker that couldn't verify the nodes' signing format revoked `test` and
+// `yarravalley`): none of these replies PROVES another node answers, so each is now 'unverifiable', which never
+// counts. Only a valid signature under a different key (scenario 8) is an impostor.
+test('Attestation Sweep - Classification: only a valid signature under another key is an impostor', async () => {
     const d1 = createMockD1();
     const env = mockEnv(d1);
     const { keyPair, pubHex } = await generateKeypair();
@@ -299,14 +303,14 @@ test('Attestation Sweep - Mismatch classification (abuse detection)', async () =
     const originalFetch = globalThis.fetch;
 
     try {
-        // Scenario 1: 200 OK with non-JSON HTML
+        // Scenario 1: 200 OK with non-JSON HTML (content swap: design D2, never grounds for revoke on its own)
         globalThis.fetch = async () => new Response('<html><body>Swapped Content</body></html>', {
             status: 200,
             headers: { 'content-type': 'text/html' }
         });
-        assert.equal(await attestOne(env, alloc), 'mismatch');
+        assert.equal(await attestOne(env, alloc), 'unverifiable');
 
-        // Scenario 2: 200 OK with JSON but wrong pubkey
+        // Scenario 2: 200 OK with JSON naming another pubkey, but a signature that doesn't verify under it
         const { pubHex: wrongPubHex } = await generateKeypair();
         globalThis.fetch = async (url) => {
             const parsed = new URL(url);
@@ -319,7 +323,7 @@ test('Attestation Sweep - Mismatch classification (abuse detection)', async () =
                 signature: '00'.repeat(64)
             }), { status: 200, headers: { 'content-type': 'application/json' } });
         };
-        assert.equal(await attestOne(env, alloc), 'mismatch');
+        assert.equal(await attestOne(env, alloc), 'unverifiable');
 
         // Scenario 3: 200 OK with JSON but wrong nonce
         globalThis.fetch = async (url) => {
@@ -331,7 +335,7 @@ test('Attestation Sweep - Mismatch classification (abuse detection)', async () =
                 signature: '00'.repeat(64)
             }), { status: 200, headers: { 'content-type': 'application/json' } });
         };
-        assert.equal(await attestOne(env, alloc), 'mismatch');
+        assert.equal(await attestOne(env, alloc), 'unverifiable');
 
         // Scenario 4: Expired timestamp (> 120s)
         globalThis.fetch = async (url) => {
@@ -345,7 +349,7 @@ test('Attestation Sweep - Mismatch classification (abuse detection)', async () =
                 signature: '00'.repeat(64)
             }), { status: 200, headers: { 'content-type': 'application/json' } });
         };
-        assert.equal(await attestOne(env, alloc), 'mismatch');
+        assert.equal(await attestOne(env, alloc), 'unverifiable');
 
         // Scenario 5: Future timestamp (> 120s)
         globalThis.fetch = async (url) => {
@@ -359,9 +363,9 @@ test('Attestation Sweep - Mismatch classification (abuse detection)', async () =
                 signature: '00'.repeat(64)
             }), { status: 200, headers: { 'content-type': 'application/json' } });
         };
-        assert.equal(await attestOne(env, alloc), 'mismatch');
+        assert.equal(await attestOne(env, alloc), 'unverifiable');
 
-        // Scenario 6: Invalid Ed25519 signature
+        // Scenario 6: Invalid Ed25519 signature under the registered key (what an unknown signing format looks like)
         globalThis.fetch = async (url) => {
             const parsed = new URL(url);
             const nonce = parsed.searchParams.get('nonce');
@@ -373,7 +377,25 @@ test('Attestation Sweep - Mismatch classification (abuse detection)', async () =
                 signature: 'ff'.repeat(64)
             }), { status: 200, headers: { 'content-type': 'application/json' } });
         };
-        assert.equal(await attestOne(env, alloc), 'mismatch');
+        assert.equal(await attestOne(env, alloc), 'unverifiable');
+
+        // Scenario 8: a VALID signature for our nonce, but by a different key → impostor
+        const other = await generateKeypair();
+        globalThis.fetch = async (url) => {
+            const parsed = new URL(url);
+            const nonce = parsed.searchParams.get('nonce');
+            const ts = String(Math.floor(Date.now() / 1000));
+            const msg = `beanpool-node-attest/v1\n${nonce}\n${ts}`;
+            const sigBuf = new Uint8Array(await crypto.subtle.sign('Ed25519', other.keyPair.privateKey, new TextEncoder().encode(msg)));
+            const sigHex = Array.from(sigBuf).map(b => b.toString(16).padStart(2, '0')).join('');
+            return new Response(JSON.stringify({
+                pubkey: other.pubHex,
+                nonce,
+                timestamp: ts,
+                signature: sigHex
+            }), { status: 200, headers: { 'content-type': 'application/json' } });
+        };
+        assert.equal(await attestOne(env, alloc), 'impostor');
 
         // Scenario 7: Valid Ed25519 signature! (domain-separated, as the node now signs it)
         globalThis.fetch = async (url) => {

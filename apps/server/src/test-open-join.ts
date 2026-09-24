@@ -15,7 +15,7 @@
  *      again → 409; a join nonce cannot be spent on the recovery routes
  *   6. one sign-in, two jobs: the recovery body enrols the same account from the one verification; the
  *      lookup hash is the node's, from the verified sub, and the stored blob opens with it; a malformed
- *      recovery body is refused before the nonce is spent
+ *      recovery body, or a two-layer split with no hub fragment, is refused before the nonce is spent
  *   7. sign-ups per address: 5 an hour and 20 a day → 429 without spending the nonce; the address hash is
  *      cleared once a day old; the auth limiter still applies
  *   8. deleting your own account frees the sign-in account; one deleted while suspended, or a member the community
@@ -40,7 +40,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { getFunnel } from './engine/funnel.js';
 import { OPEN_JOIN_LIMITS } from './engine/open-join.js';
-import { sealSeedToSso, openShareFromSso } from '@beanpool/core';
+import { sealSeedToSso, sealShareToSso, openShareFromSso } from '@beanpool/core';
 
 const PORT = 8729;
 const BASE = `https://localhost:${PORT}`;
@@ -312,7 +312,16 @@ async function main(): Promise<void> {
         recovery: { shares: [{ holderType: 'sso', holderRef: 'apple', shareIndex: 1, ...sealedEve, ssoLookupHash: 'chosen-by-client' }] },
     });
     assert(smuggled.status === 400 && smuggled.body?.code === 'recovery_invalid', `a client-chosen lookup hash → 400 (got ${smuggled.status})`);
-    assert(!memberRow(eve.pk), '...and neither joined');
+    // A two-layer split is only whole with its hub fragment. Without one it would never be stored, so it is refused
+    // here too, before the sign-in is checked: otherwise the join would spend the nonce and stand with no keeper.
+    const twoLayerSso = await sealShareToSso(crypto.randomBytes(32), 'apple', EVE_SUB);
+    const noHub = await join(eve, {
+        callsign: 'Eve', provider: 'apple', idToken: eveToken, nonce: eveNonce,
+        recovery: { shares: [{ holderType: 'sso', holderRef: 'apple', shareIndex: 1, ...twoLayerSso }] },
+    });
+    assert(noHub.status === 400 && noHub.body?.code === 'recovery_invalid' && /hub fragment/.test(String(noHub.body?.error)),
+        `a two-layer split with no hub fragment → 400 recovery_invalid (got ${noHub.status} ${JSON.stringify(noHub.body)})`);
+    assert(!memberRow(eve.pk) && !joinRow(eve.pk), '...and none of them joined');
     const both = await join(eve, {
         callsign: 'Eve', provider: 'apple', idToken: eveToken, nonce: eveNonce,
         recovery: { shares: [{ holderType: 'sso', holderRef: 'apple', shareIndex: 1, ...sealedEve }] },

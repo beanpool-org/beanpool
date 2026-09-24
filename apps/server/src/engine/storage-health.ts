@@ -449,11 +449,13 @@ async function sweepOnce(
     options: { dataDir?: string; store?: ImageStore; nowMs?: number } | undefined,
     limits: { max?: number; budgetMs?: number; shouldStop?: () => boolean } = {},
 ): Promise<OrphanSweepPass & { storeFailed: boolean }> {
-    const started = Date.now();
     const pass = { removed: 0, bytes: 0, remaining: 0, remainingBytes: 0, storeFailed: false };
     let store: ImageStore;
     try { store = sweepStore(options); } catch { return pass; }
     const found = await findOrphanedImageObjects(db, options, options?.nowMs ?? Date.now());
+    // The budget bounds the deletes, not the listing: on a bucket slow to list, a clock started before it would
+    // spend the whole budget there, and the Clean would remove nothing itself however often it was pressed.
+    const started = Date.now();
     const max = limits.max ?? sweepBatchFor(store);
     const clock = () => options?.nowMs ?? Date.now();
     const keep = (now: ObjectInfo) => !stillOpen(db) || clock() - now.mtimeMs < ORPHAN_OBJECT_GRACE_MS;

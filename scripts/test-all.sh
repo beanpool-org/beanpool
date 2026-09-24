@@ -425,6 +425,9 @@ run_federation_suites() {
       test-process-handlers
       test-shutdown-recovery
       test-storage-health
+      test-image-store
+      test-image-evacuation
+      test-snapshot-completeness
       test-groups-isolation
       test-groups-routes
       test-groups-invite-only-hidden

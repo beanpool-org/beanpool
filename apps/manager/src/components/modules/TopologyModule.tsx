@@ -218,17 +218,21 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         const key = `${slug}:${kind}`;
         setDownloadingKey(key);
         try {
-            await downloadAdminFile(
+            const short = await downloadAdminFile(
                 kind === 'db'
                     ? '/api/manager/backups/download-db'
                     : '/api/manager/backups/download-identity',
                 { nodeId: slug },
                 node?.adminPassword,
+                // Only a fallback: the server names the file, and `downloadAdminFile` prefers that name.
+                // A readable backup comes back as a tar.gz of the database AND its images, a locked one as
+                // a .bpsealed; `.db` was the name of the thing this used to serve and no longer does.
                 kind === 'db'
-                    ? `beanpool-backup-${slug}.db`
+                    ? `beanpool-backup-${slug}.tar.gz`
                     : `identity-bundle-${slug}.tar.gz`,
                 node ? getTfaSessionToken(node.id) : undefined,
             );
+            if (short) alert(`The backup held for ${slug} downloaded, but it is not complete.\n\n${short}`);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             // "Failed to fetch" is what a browser says when the request never got an answer
@@ -268,13 +272,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const handleDownloadSnapshot = async (snapName: string) => {
         if (!targetSnapshotNode) return;
         try {
-            await downloadAdminFile(
+            const short = await downloadAdminFile(
                 resolveNodeApiUrl(targetSnapshotNode.url, '/api/local/admin/snapshots/download'),
                 { name: snapName },
                 targetSnapshotNode.adminPassword,
                 snapName,
                 getTfaSessionToken(targetSnapshotNode.id),
             );
+            if (short) alert(`${snapName} downloaded, but it is not complete.\n\n${short}`);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             alert(`Snapshot download failed: ${msg}`);
@@ -284,13 +289,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const handleDownloadHistoryArchive = async (nodeId: string, filename: string) => {
         const historyNode = profiles.find(p => p.id === nodeId) || activeNode;
         try {
-            await downloadAdminFile(
+            const short = await downloadAdminFile(
                 '/api/manager/backups/download-history',
                 { nodeId, filename },
                 historyNode?.adminPassword,
                 filename,
                 historyNode ? getTfaSessionToken(historyNode.id) : undefined,
             );
+            if (short) alert(`${filename} downloaded, but it is not complete.\n\n${short}`);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             alert(`Archive download failed: ${msg}`);

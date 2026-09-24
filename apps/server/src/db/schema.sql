@@ -267,23 +267,35 @@ CREATE INDEX IF NOT EXISTS idx_posts_created_by ON posts(created_by);
 CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
 CREATE INDEX IF NOT EXISTS idx_posts_updated_at ON posts(updated_at);
 
+-- photo_data holds the base64 data URL only until the image store has the bytes (storage design §7).
+-- A row is EITHER inline (photo_data set, storage_key null) or evacuated (storage_key set, photo_data null),
+-- never both and never neither. photo_data stays nullable-but-present this release: a node that rolls back
+-- to the previous image still finds the column, and the evacuation job is what empties it.
 CREATE TABLE IF NOT EXISTS post_photos (
     post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-    photo_data TEXT NOT NULL,
+    photo_data TEXT,
     order_num INTEGER NOT NULL,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    storage_key TEXT,
+    sha256 TEXT,
+    bytes INTEGER,
+    mime TEXT,
     PRIMARY KEY (post_id, order_num)
 );
 CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at);
 
 -- Encrypted message attachments (lazy-loaded; the node only ever holds ciphertext).
 -- data = base64 AEAD ciphertext of the image; nonce = its x25519-xc20p-v2 nonce.
+-- `data` is the ciphertext until the image store has it, then `storage_key` names the object and `data` is
+-- null. `nonce` and `mime` never leave the row: the recipient needs both to decrypt, they are a few dozen
+-- bytes, and the node has never held the key that would let it read either the object or the row.
 CREATE TABLE IF NOT EXISTS message_attachments (
     message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-    data TEXT NOT NULL,
+    data TEXT,
     nonce TEXT NOT NULL,
     mime TEXT,
-    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    storage_key TEXT
 );
 
 -- 5. Marketplace Transactions

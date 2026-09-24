@@ -330,6 +330,17 @@ export interface SyncPayload {
     groups?: SyncGroup[];
     groupMembers?: SyncGroupMember[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
+    /**
+     * `post_id|order_num` for every photo row the exporter left OUT because it could not read the object the
+     * row names (storage design §7). Additive and optional: a peer that does not know the field ignores it,
+     * and the payload it sees is the same one it saw before.
+     *
+     * The importer only upserts what it is given, so an omitted row is normally harmless — the replica keeps
+     * its own copy. A FORCE-RESYNC is the exception: it clears `post_photos` before importing, so without
+     * this list the one case the omission exists for (the replica holds the only readable copy) is the case
+     * the resync destroys. `clearReplicatedTables` keeps exactly these rows.
+     */
+    photosOmitted?: string[];
     nodeId: string;
     generatedAt?: string;
     signature?: string;

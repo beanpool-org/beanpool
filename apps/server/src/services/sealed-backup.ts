@@ -12,12 +12,41 @@
  * Only when this server has a recovery code. The only opener that ships today is the code (restore, and the
  * take-over on a standby); opening with an owner's phone is slice 6. A file locked to owners alone would be
  * a backup nothing can open, so without a code a backup leaves in the readable format it always had — the tar.gz
- * of state.db and node_config.json, or the raw snapshot file — and says so: {@link NOT_LOCKED_MESSAGE} in a
+ * of state.db, node_config.json and the image store — and says so: {@link NOT_LOCKED_MESSAGE} in a
  * response header, in the backup status, and in the log. Never a false "locked".
+ *
+ * ## A backup carries the whole node, and says so when it cannot (storage design §7, confirmation round 4)
+ *
+ * Since the images left state.db, a database on its own is not a node: its rows carry `storage_key`s and no
+ * bytes. So every backup — locked or readable, live or a snapshot — carries the objects ITS OWN database
+ * references, taken from the store that database belongs to.
+ *
+ * One policy covers what to do when the store cannot supply one of them, and it is the same on every path
+ * that produces a backup:
+ *
+ *   - **A missing object never stops a backup.** The archive ships every object the store DOES hold, lists
+ *     the referenced keys it could not include in {@link MISSING_MEMBER} inside the archive, and leaves
+ *     `staged < referenced` so every label downstream says it is short.
+ *   - **A real staging error still fails it.** ENOSPC, EACCES, a read error on an object that exists, a
+ *     truncated write: that is an archive of unknown state, not a known shortfall, and it throws.
+ *
+ * ## Why refusing was wrong
+ *
+ * This used to throw `IncompleteBackupError` for a single lost object, with `allowMissing=1` as the way past
+ * it. No shipped UI could send that parameter, so one object lost for good — a disk that dropped a file, an
+ * images directory restored short — made the node un-backupable from the Backup tab, from the fleet manager
+ * and from every snapshot download, permanently, with nothing the operator could click. A member's DM
+ * attachment has no post to edit. A node with one lost photo and no backups is far worse off than a node
+ * with a backup that is short by that photo and says so in three places.
  *
  * ## What never happens
  *
  * - A backup is produced that no shipped tool can open.
+ * - A backup that is missing photos is handed over as a good one: short is labelled on the wire
+ *   (`X-Backup-Images`, `X-Backup-Contents`), in the log, and in the archive itself.
+ * - A lost object leaves a node with no backup at all.
+ * - An I/O error is reported as a known shortfall.
+ * - A snapshot's keys are resolved against the LIVE store: a snapshot ships the objects it captured.
  * - A readable backup carries the node keys. The take-over bundle goes only into a locked file.
  * - A restore trusts the archive inside the envelope. Opening only proves the file was locked to a key someone
  *   here holds; the tar inside goes through exactly the hostile-archive checks a legacy upload does.
@@ -38,8 +67,11 @@ import {
     sealEnvelopeStream, openEnvelopeStream, readSealedHeader, verifySealedHeader,
     type SealedEnvelopeHeader, type SealedEnvelopeKey, type CodeStanza,
 } from '@beanpool/core';
+import Database from 'better-sqlite3';
 import { getLocalConfig, redactLocalConfig } from '../config/local-config.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
+import { assertSafeKey, copyObjectReplacing, imagesDir } from '../storage/image-store.js';
+import { referencedStorageKeys } from '../storage/image-columns.js';
 import {
     readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS,
     type TakeoverBundle,
@@ -117,6 +149,8 @@ export interface SealedBackup {
     body: Readable;
     /** Remove the staging files. Safe to call more than once. */
     cleanup(): void;
+    /** What went into `images/`. Short (`staged < referenced`) when the store could not supply everything. */
+    images: StagedImages;
 }
 
 /** Thrown by {@link createSealedBackup} when the backup may not be locked; callers check {@link backupLockState}. */
@@ -127,13 +161,194 @@ export class BackupNotLockableError extends Error {
     }
 }
 
+/** What a backup's `images/` member ended up holding. Reported in the response headers and the log. */
+export interface StagedImages {
+    /** Objects the database in THIS archive references. */
+    referenced: number;
+    /** Objects actually in the archive. */
+    staged: number;
+    /** Of those, how many cost no disk because they were hard-linked out of the store. */
+    linked: number;
+    bytes: number;
+    /**
+     * Referenced keys the store did not hold. The backup still goes: these are listed in
+     * {@link MISSING_MEMBER} inside the archive, and the counts say how short it is. A key that is not
+     * usable as a path (`assertSafeKey`) counts here too — no object can be shipped for it either.
+     */
+    missing: string[];
+}
+
 /**
- * Build and seal a backup. `dbFile` seals that SQLite file as the database (a snapshot being downloaded);
- * without it, a consistent copy of the live database is taken. Refuses ({@link BackupNotLockableError}) unless
- * there is a recovery code to lock it to; anything else that fails throws before a byte is produced, so a caller
- * can still answer with an error rather than a truncated file.
+ * The member a short backup carries so it can never be mistaken for a whole one.
+ *
+ * Inside the archive, beside `state.db`, because that is the copy that outlives the HTTP response: a year
+ * from now the operator restoring this file has the headers nowhere and this list right there. A complete
+ * backup does not carry it at all, so its presence IS the label.
  */
-export async function createSealedBackup(opts: { dbFile?: string; filenamePrefix?: string } = {}): Promise<SealedBackup> {
+export const MISSING_MEMBER = 'missing-images.json';
+
+/**
+ * Put the image store into the backup stage as `images/` (storage design §7).
+ *
+ * A backup used to be the whole node because the whole node was in state.db. Now most of a node's bytes sit
+ * beside it, so a tar of state.db alone would restore a database full of `storage_key`s pointing at nothing:
+ * every photo and every attachment gone, silently, and only discovered when somebody opened a post.
+ *
+ * ## Exactly what the database references, and nothing else
+ *
+ * Driven by the keys in the archive's OWN database file rather than by a walk of the store, so the archive is
+ * self-consistent by construction: what it carries is what it needs, an orphan the sweep has not reclaimed yet
+ * is not shipped, and the count to check against comes out of the same pass.
+ *
+ * ## Hard links, not copies
+ *
+ * An object is content-addressed and written temp-then-rename, so a file is never rewritten in place and a
+ * second name for it is a true point-in-time copy. `link(2)` is one syscall and no bytes, where the copy this
+ * replaced wrote a second full copy of the node's largest component — on the event loop, on a 1 vCPU VM, at
+ * the moment an operator is trying to back up a disk that may be nearly full. A filesystem that cannot link
+ * (EXDEV across a mount, EPERM, EMLINK) falls back to copying that object.
+ *
+ * ## It fails rather than coming up short
+ *
+ * This used to swallow every error and return counts nobody read, so ENOSPC a thousand objects in produced a
+ * tar that looked exactly like a complete one and was discovered at restore time. Now any I/O error throws,
+ * and a referenced object the store does not hold is collected in `missing` for the caller to refuse on.
+ */
+function stageImages(stage: string, sourceRoot: string, dbInStage: string): StagedImages {
+    const out: StagedImages = { referenced: 0, staged: 0, linked: 0, bytes: 0, missing: [] };
+    const handle = new Database(dbInStage, { readonly: true });
+    let keys: string[];
+    try {
+        keys = referencedStorageKeys(handle);
+    } finally {
+        try { handle.close(); } catch { /* the read is done */ }
+    }
+    out.referenced = keys.length;
+    if (keys.length === 0) return out;
+
+    const dest = path.join(stage, 'images');
+    fs.mkdirSync(dest, { recursive: true, mode: 0o700 });
+    for (const key of keys) {
+        // A storage_key comes out of a row, and rows arrive from federation peers and restored backups.
+        // An unusable one is a missing object, never a path this turns into a write.
+        try { assertSafeKey(key); } catch { out.missing.push(key); continue; }
+        const from = path.join(sourceRoot, key);
+        const to = path.join(dest, key);
+        // Never carry a link INTO the tar: checkBackupArchive refuses link members on the way back in, so one
+        // here would make the whole backup unrestorable. A hard link to a regular file is a regular file to
+        // tar, which is why this is safe — but a symlink in the store is not followed.
+        let st: fs.Stats;
+        try {
+            st = fs.lstatSync(from);
+        } catch (e: any) {
+            if (e?.code === 'ENOENT') { out.missing.push(key); continue; }
+            throw e;
+        }
+        if (!st.isFile()) { out.missing.push(key); continue; }
+        fs.mkdirSync(path.dirname(to), { recursive: true, mode: 0o700 });
+        let linked = true;
+        try {
+            fs.linkSync(from, to);
+        } catch (e: any) {
+            if (e?.code === 'ENOENT') { out.missing.push(key); continue; }
+            if (e?.code === 'EEXIST') { /* two rows, one object: already staged */ }
+            else if (e?.code === 'EXDEV' || e?.code === 'EPERM' || e?.code === 'EMLINK' || e?.code === 'ENOSYS') {
+                linked = false;
+                try {
+                    // Never a bare copyFileSync: `to` is a name in a tree whose other entries are hard links
+                    // to LIVE store inodes, so an in-place write here would rewrite the store itself.
+                    copyObjectReplacing(from, to);
+                } catch (copyErr: any) {
+                    if (copyErr?.code === 'ENOENT') { out.missing.push(key); continue; }
+                    throw copyErr;
+                }
+            } else {
+                throw e;
+            }
+        }
+        out.staged++;
+        if (linked) out.linked++;
+        out.bytes += st.size;
+    }
+    return out;
+}
+
+/**
+ * Stage the images for a backup whose database is already at `dbInStage`. Never refuses over a lost object.
+ *
+ * Every backup ships every object the store holds. When one a row names is not there, the key goes into
+ * {@link MISSING_MEMBER} inside the archive, the counts stay short, and a loud line goes into the log — but
+ * the backup is produced. See the file header for why refusing was the wrong policy.
+ *
+ * Two kinds of shortfall, and only one of them is survivable:
+ *
+ *   - **A known shortfall**: the object is not in the store (ENOENT), or its key is not usable as a path.
+ *     Nothing anyone does at backup time brings it back, so the backup says exactly which keys are gone.
+ *   - **An I/O error**: ENOSPC, EACCES, a read error on an object that IS there, a short write. That is an
+ *     archive of unknown contents, and {@link stageImages} throws it straight through to the caller.
+ *
+ * One window worth naming. A snapshot's objects were captured when it was taken, so its download is exact.
+ * A LIVE backup is `VACUUM INTO` and then this, and a photo replaced between the two unlinks an object the
+ * copied database still names — so a live backup can come back short by one object where a retry a second
+ * later is complete. That is the cheap end of this trade now: a labelled short file the operator can see and
+ * retry, instead of a refusal they can do nothing about.
+ */
+function stageImagesForBackup(
+    stage: string, dbInStage: string,
+    opts: { imagesDir?: string; dbFile?: string },
+): StagedImages {
+    // A caller sealing a database that is not the live one (a snapshot) MUST say where that database's
+    // objects are. Falling back to the live store here is precisely the bug this replaced: the snapshot's
+    // keys would be resolved against whatever the node happens to hold today.
+    if (opts.dbFile && !opts.imagesDir) {
+        throw new Error('Backup refused: a backup of a database other than the live one must say where its image store is.');
+    }
+    const sourceRoot = opts.imagesDir ?? imagesDir(dataDir());
+    const staged = stageImages(stage, sourceRoot, dbInStage);
+    if (staged.missing.length === 0) return staged;
+    writeMissingManifest(stage, staged);
+    // Loud, every time, and never fatal. The alternative to a noisy log line here is a node that quietly
+    // stops being backed up.
+    console.warn(
+        `[Backup] ⚠️  SHORT BACKUP: ${staged.staged} of ${staged.referenced} referenced image object(s) staged; `
+        + `${staged.missing.length} are not in the store and are listed in ${MISSING_MEMBER} inside the archive. `
+        + `Those photos or attachments are gone from this node and will not come back from this backup. `
+        + `First missing: ${staged.missing.slice(0, 3).join(', ')}`,
+    );
+    return staged;
+}
+
+/** The manifest a short backup carries: what is NOT in it, and in plain words why that matters. */
+function writeMissingManifest(stage: string, staged: StagedImages): void {
+    fs.writeFileSync(path.join(stage, MISSING_MEMBER), JSON.stringify({
+        note: 'This backup is SHORT. The image store did not hold the objects listed below when it was taken, '
+            + 'so restoring this file will leave those photos or attachments missing. Everything else — the '
+            + 'database, and every other image object — is complete.',
+        takenAt: new Date().toISOString(),
+        referenced: staged.referenced,
+        staged: staged.staged,
+        missing: staged.missing,
+    }, null, 2), { mode: 0o600 });
+}
+
+/** What a backup was asked to carry, and where the database's objects are when it is not the live one. */
+export interface BackupSource {
+    /** Seal this SQLite file as the database (a snapshot being downloaded) instead of a fresh copy of the live one. */
+    dbFile?: string;
+    /** The image store that `dbFile`'s `storage_key`s belong to. Required whenever `dbFile` is given. */
+    imagesDir?: string;
+    filenamePrefix?: string;
+}
+
+/**
+ * Build and seal a backup. `dbFile` seals that SQLite file as the database (a snapshot being downloaded), and
+ * must come with the `imagesDir` its keys belong to; without either, a consistent copy of the live database
+ * and the live store is taken. Refuses ({@link BackupNotLockableError}) unless there is a recovery code to
+ * lock it to. An object the store cannot supply does NOT refuse it: the file comes back short and labelled
+ * (see {@link stageImagesForBackup}). An I/O error throws before a byte is produced, so a caller can still
+ * answer with an error rather than a truncated file.
+ */
+export async function createSealedBackup(opts: BackupSource = {}): Promise<SealedBackup> {
     const lock = backupLockState();
     if (!lock.locked) throw new BackupNotLockableError(lock);
     const inputs = readSealingInputs();
@@ -147,7 +362,8 @@ export async function createSealedBackup(opts: { dbFile?: string; filenamePrefix
     };
     try {
         fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
-        // Only these three names go in the tar, so it never swallows data/snapshots/ or anything else in data/.
+        // Only these names go in the tar — the database, the config, the take-over bundle and the image
+        // store — so it never swallows data/snapshots/ or anything else in data/.
         const dbPath = path.join(stage, 'state.db');
         if (opts.dbFile) fs.copyFileSync(opts.dbFile, dbPath);
         else writeDbSnapshot(dbPath);
@@ -159,6 +375,8 @@ export async function createSealedBackup(opts: { dbFile?: string; filenamePrefix
             fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
         }
         fs.writeFileSync(path.join(stage, BUNDLE_MEMBER), JSON.stringify(inputs.bundle), { mode: 0o600 });
+        // From the staged database, not the live one: what the archive carries is what the archive needs.
+        const images = stageImagesForBackup(stage, dbPath, opts);
         // Async: gzip of a large database must not hold the event loop.
         await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
         fs.rmSync(stage, { recursive: true, force: true });
@@ -183,7 +401,7 @@ export async function createSealedBackup(opts: { dbFile?: string; filenamePrefix
             }
         }
         const body = Readable.from(all(), { objectMode: false });
-        return { header, filename: sealedBackupFilename(opts.filenamePrefix), body, cleanup };
+        return { header, filename: sealedBackupFilename(opts.filenamePrefix), body, cleanup, images };
     } catch (e) {
         cleanup();
         throw e;
@@ -194,14 +412,20 @@ export interface PlainBackup {
     filename: string;
     body: Readable;
     cleanup(): void;
+    /** What went into `images/`. Short (`staged < referenced`) when the store could not supply everything. */
+    images: StagedImages;
 }
 
 /**
- * The readable backup this server made before sealed backups, unchanged: a tar.gz of a consistent copy of
- * state.db and node_config.json, and nothing else — no node keys. Sent only while {@link backupLockState} says the
- * backup cannot be locked.
+ * The readable backup this server made before sealed backups: a tar.gz of a consistent copy of state.db and
+ * node_config.json — no node keys — and, since the image store, the objects that database references.
+ * Sent only while {@link backupLockState} says the backup cannot be locked.
+ *
+ * `dbFile` puts a snapshot in the archive instead of a fresh copy of the live database, and then `imagesDir`
+ * must name that snapshot's own captured objects. This is what makes the unlocked snapshot download a whole
+ * node: it used to hand over the bare `.db`, which after the evacuation is a database with no photos in it.
  */
-export async function createPlainBackup(): Promise<PlainBackup> {
+export async function createPlainBackup(opts: BackupSource = {}): Promise<PlainBackup> {
     const work = path.join(dataDir(), `.backup-tmp-${crypto.randomBytes(6).toString('hex')}`);
     const stage = path.join(work, 'stage');
     const tarPath = path.join(work, 'backup.tar.gz');
@@ -210,19 +434,23 @@ export async function createPlainBackup(): Promise<PlainBackup> {
     };
     try {
         fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
-        writeDbSnapshot(path.join(stage, 'state.db'));
+        const dbPath = path.join(stage, 'state.db');
+        if (opts.dbFile) fs.copyFileSync(opts.dbFile, dbPath);
+        else writeDbSnapshot(dbPath);
         const configPath = path.join(dataDir(), 'node_config.json');
         if (fs.existsSync(configPath)) {
             fs.copyFileSync(configPath, path.join(stage, 'node_config.json'));
         } else {
             fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
         }
+        const images = stageImagesForBackup(stage, dbPath, opts);
         await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
         fs.rmSync(stage, { recursive: true, force: true });
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const body = fs.createReadStream(tarPath);
         body.on('close', cleanup);
-        return { filename: `beanpool-backup-${timestamp}.tar.gz`, body, cleanup };
+        const prefix = opts.filenamePrefix || 'beanpool-backup';
+        return { filename: `${prefix}-${timestamp}.tar.gz`, body, cleanup, images };
     } catch (e) {
         cleanup();
         throw e;

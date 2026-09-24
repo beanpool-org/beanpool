@@ -19,6 +19,7 @@ import {
     fetchStorageCleanPreview,
     cleanStorageAndCompressLogs,
 } from '../../lib/node-client';
+import { restoreShortfall } from '../../lib/backup-shortfall';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { PublicAddressPanel } from './PublicAddressPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
@@ -374,7 +375,15 @@ export function ApplianceSection({
             });
 
             if (res.ok) {
-                setRestoreStatus('Database successfully restored! State engine refreshed.');
+                // The body, not just the status. This is the path a plain `.tar.gz` takes when the server
+                // answers 200 directly, and it used to report a flat success over an archive that came back
+                // short of photos — the same hole `RestoreLockedBackup` closed for the locked path, through
+                // the same helper.
+                const body = await res.json().catch(() => ({}));
+                const short = restoreShortfall(body);
+                setRestoreStatus(short
+                    ? `⚠️ Restored, but not complete. ${short} The state engine has been refreshed.`
+                    : 'Database successfully restored! State engine refreshed.');
                 setRestoreFile(null);
                 onRefreshDiag();
             } else {

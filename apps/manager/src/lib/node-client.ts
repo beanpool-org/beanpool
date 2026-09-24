@@ -2,6 +2,8 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
+import { downloadShortfall } from './backup-shortfall';
+
 export interface ShutdownStatus {
     uncleanShutdown: boolean;
     recovered?: boolean;
@@ -372,13 +374,33 @@ const REVOKE_DELAY_MS = 60_000;
 /** Above this, ask before buffering. Set far above any real node database. */
 const HUGE_DOWNLOAD_BYTES = 500 * 1024 * 1024;
 
+/**
+ * The filename from `Content-Disposition`, when the response carries a usable one. Never a path: the value
+ * comes from the node, and a `../` in it would be a download written outside the browser's download folder.
+ */
+function serverFilename(res: Response): string | null {
+    const header = res.headers.get('content-disposition');
+    if (!header) return null;
+    const match = /filename="?([^";]+)"?/i.exec(header);
+    const name = match?.[1]?.trim();
+    if (!name || name.includes('/') || name.includes('\\') || name.includes('..')) return null;
+    return name;
+}
+
+/**
+ * Fetch an admin file and save it, and return what the response said the file is SHORT of.
+ *
+ * A short backup is a 200 now (confirmation round 4): the node ships every object it holds and says in the
+ * headers how many it could not. That sentence is the only place the operator can learn of it, so this hands
+ * it back rather than dropping it — '' when the file is whole, or when the download was declined.
+ */
 export async function downloadAdminFile(
     endpointPath: string,
     params: Record<string, string>,
     adminPassword: string | undefined,
     filename: string,
     tfaToken?: string,
-): Promise<void> {
+): Promise<string> {
     const headers = buildAdminHeaders(adminPassword, tfaToken);
     const url = new URL(endpointPath, window.location.origin);
     for (const [k, v] of Object.entries(params)) {
@@ -415,7 +437,7 @@ export async function downloadAdminFile(
             `${filename} is about ${gb} GB. It has to be held in memory before it can be saved, `
             + `which may make this tab run out of memory. Download anyway?`
         );
-        if (!proceed) return;
+        if (!proceed) return '';
     }
 
     const blob = await res.blob();
@@ -423,7 +445,10 @@ export async function downloadAdminFile(
     try {
         const a = document.createElement('a');
         a.href = objectUrl;
-        a.download = filename;
+        // The server's name wins where it gives one: a snapshot download asks for `snapshot-….db` and comes
+        // back as a `.tar.gz` (the database AND its images) or a `.bpsealed`, and saving that under the `.db`
+        // name hands the operator a file whose extension lies about what is inside it.
+        a.download = serverFilename(res) || filename;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -439,6 +464,7 @@ export async function downloadAdminFile(
         // instantly.
         setTimeout(() => URL.revokeObjectURL(objectUrl), REVOKE_DELAY_MS);
     }
+    return downloadShortfall(res);
 }
 
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {

@@ -3,12 +3,14 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope } from '@beanpool/core';
-import { db, writeTombstone } from '../db/db.js';
+import { db, writeTombstone, afterTransactionCommit } from '../db/db.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
 import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
+import { getImageStore, postPhotoKey } from '../storage/image-store.js';
+import { deleteStoredObjects, photoDataOf, storePhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
     getMember,
     getPosts,
@@ -24,6 +26,21 @@ import {
 } from '@beanpool/engine';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
+
+/**
+ * Put a post's photo bytes in the image store and return the columns for each row (storage design §7).
+ *
+ * Done BEFORE the enclosing `db.transaction` opens, not inside it: a `put` is a file write, and the
+ * transaction should hold its write lock for as little as possible on a 1 vCPU node. The cost is that a
+ * transaction which then rolls back leaves objects nothing points at — harmless (the content-addressed key
+ * is re-used verbatim on the retry) and swept up by the storage-health orphan pass. The opposite order
+ * would be the unsafe one: a committed row pointing at bytes that were never written.
+ */
+function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
+    const store = getImageStore();
+    return photos.map((p, idx) =>
+        storePhotoColumns(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p));
+}
 
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
 
@@ -398,6 +415,8 @@ export function createPost(
     const createdAt = new Date().toISOString();
     const searchKeywords = generateSearchKeywords(title, description, category);
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
+    // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos.
+    const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5));
 
     db.transaction(() => {
         if (type === 'poll') {
@@ -444,9 +463,12 @@ export function createPost(
             type === 'event' ? 'scheduled' : null
         );
 
-        if (photos && photos.length > 0) {
-            const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
-            photos.slice(0, 5).forEach((p, idx) => insertPhoto.run(finalId, p, idx));
+        if (photoColumns.length > 0) {
+            const insertPhoto = db.prepare(
+                `INSERT INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`
+            );
+            photoColumns.forEach((c, idx) => insertPhoto.run(finalId, c.photo_data, idx, c.storage_key, c.sha256, c.bytes, c.mime));
         }
 
         if (type === 'event') {
@@ -668,9 +690,30 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     }
 
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
+        // A client that is not changing a photo sends back the URL it was given, and this turns it into the
+        // photo again. Once the row is evacuated the bytes come from the store — `photoDataOf` rebuilds the
+        // exact data URL the row used to hold, so an unchanged photo re-stores as the same object under the
+        // same content-addressed key and the edit costs nothing.
+        const store = getImageStore();
         const existingByOrder = new Map<number, string>(
-            (db.prepare(`SELECT order_num, photo_data FROM post_photos WHERE post_id=?`).all(id) as any[])
-                .map(r => [r.order_num, r.photo_data])
+            (db.prepare(`SELECT order_num, photo_data, storage_key, sha256, bytes, mime FROM post_photos WHERE post_id=?`).all(id) as any[])
+                .flatMap(r => {
+                    // A row whose object has vanished must not make the whole post uneditable — this loop
+                    // runs over EVERY row of the post, not only the ones the client sent back, so one lost
+                    // object would otherwise 500 every photo edit, including the one that removes it.
+                    // The photo route answers 503 for this and the sync export drops the row; here the order
+                    // is simply left out. A client URL pointing at it then falls through unchanged and
+                    // `validatePostPhotos` rejects it only if the client actually kept that photo. Replacing
+                    // or dropping it goes through, and the row is rewritten.
+                    let data: string | null;
+                    try {
+                        data = photoDataOf(r, store);
+                    } catch (e) {
+                        console.error(`[Posts] Could not read photo ${r.order_num} of post ${id} out of the image store; leaving it out of this edit:`, e);
+                        return [];
+                    }
+                    return data ? [[r.order_num, data] as [number, string]] : [];
+                })
         );
         updates.photos = updates.photos.map(p => {
             const m = typeof p === 'string' ? p.match(/\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d+)(?:\?.*)?$/) : null;
@@ -748,13 +791,31 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     values.push(id, authorPublicKey);
 
+    // Outside the transaction, like the create path: see storedPhotoColumns.
+    const nextPhotoColumns = (updates.photos !== undefined && Array.isArray(updates.photos))
+        ? storedPhotoColumns(id, updates.photos.slice(0, 5))
+        : null;
+
     db.transaction(() => {
         db.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ? AND author_pubkey = ?`).run(...values);
 
-        if (updates.photos !== undefined && Array.isArray(updates.photos)) {
+        if (nextPhotoColumns) {
+            // Tombstones before caches (storage design §7): the row goes inside the transaction and the
+            // object only after it commits, so the serving route — which reads the row first — can never
+            // answer from an object whose row has gone. The keys the NEW photos just took are excluded:
+            // an unchanged photo re-stores to the same content-addressed key, and deleting it here would
+            // delete the object the row about to be written points at.
+            const keeping = new Set(nextPhotoColumns.map(c => c.storage_key).filter(Boolean) as string[]);
+            const doomed = (db.prepare(`SELECT storage_key FROM post_photos WHERE post_id = ? AND storage_key IS NOT NULL`).all(id) as any[])
+                .map(r => r.storage_key as string)
+                .filter(k => !keeping.has(k));
             db.prepare(`DELETE FROM post_photos WHERE post_id = ?`).run(id);
-            const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, ?, ?)`);
-            updates.photos.slice(0, 5).forEach((p, idx) => insertPhoto.run(id, p, idx, now));
+            const insertPhoto = db.prepare(
+                `INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, sha256, bytes, mime)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+            );
+            nextPhotoColumns.forEach((c, idx) => insertPhoto.run(id, c.photo_data, idx, now, c.storage_key, c.sha256, c.bytes, c.mime));
+            if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomed));
         }
     })();
 

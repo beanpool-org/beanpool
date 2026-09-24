@@ -22,8 +22,8 @@ import { _resetJwksCacheForTests, _clearNoncesForTests, ssoLookupHash } from './
 
 initStateEngine();
 
-// No provider is contacted from this suite. The Facebook case below names a provider whose key set
-// is never primed, so the verifier refetches it; that request is answered here, as an outage.
+// No provider is contacted from this suite. The Facebook case below first names a provider whose key
+// set is not primed, so the verifier refetches it; that request is answered here, as an outage.
 globalThis.fetch = (async () =>
     new Response('stubbed: test-keeper-routes contacts no provider', { status: 503 })) as typeof fetch;
 
@@ -156,13 +156,21 @@ async function main(): Promise<void> {
     });
     assert(stolenNonce.status === 400, 'a nonce issued to another member cannot be used');
 
-    // Paused provider
+    // Facebook, no longer paused: an ordinary OIDC provider in sso.ts's table. Until the outage status was
+    // fixed this was one check, "a paused provider is refused (D11)", and it passed only because the refetch of
+    // Facebook's keys met the stubbed outage and an outage was answered 400. Now the two are checked apart.
     const aliceNonce = (await call('POST', '/api/recovery/sso-nonce', { actor: alice.pubkey })).body.nonce;
-    const badProvider = await call('POST', '/api/recovery/shares/sso', {
+    const facebookDeposit = () => call('POST', '/api/recovery/shares/sso', {
         actor: alice.pubkey,
         body: { provider: 'facebook', idToken: googleToken(aliceNonce), nonce: aliceNonce, shares: ssoShares },
     });
-    assert(badProvider.status === 400, 'a paused provider is refused (D11)');
+    const facebookDown = await facebookDeposit();
+    assert(facebookDown.status === 503 && facebookDown.body.code === 'sign_in_unavailable',
+        'Facebook\'s keys unavailable → 503 sign_in_unavailable, try again, not a refused sign-in');
+    _resetJwksCacheForTests('facebook', { keys: [gJwk], expiresAt: Date.now() + 3600_000 });
+    const badProvider = await facebookDeposit();
+    assert(badProvider.status === 400 && badProvider.body.code === undefined,
+        'a Google token presented as Facebook is refused (400): its issuer is not Facebook\'s');
 
     // Client-supplied lookup hash refused
     const clientHash = await call('POST', '/api/recovery/shares/sso', {

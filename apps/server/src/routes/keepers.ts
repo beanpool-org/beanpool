@@ -232,13 +232,16 @@ function unauthenticated(ctx: any): void {
 }
 
 /**
- * A GitHub start or poll that did not work: 503 when GitHub could not be asked (try again), 400 when the
- * sign-in itself did not check out. Anything else is a bug and is left to the error handler.
+ * A sign-in that did not work, on the keeper and recovery routes: 503 when the provider could not be asked
+ * (its keys, or GitHub, failed or could not be reached: the member did nothing wrong and should try again, in
+ * the open door's shape), 400 when the sign-in itself did not check out. The outage is tested first because
+ * SsoProviderUnavailableError is also an SsoVerificationError. Anything else is a bug and is left to the
+ * error handler.
  */
-export function githubFlowFailure(ctx: any, e: unknown): void {
+export function signInFailure(ctx: any, e: unknown): void {
     if (e instanceof SsoProviderUnavailableError) {
         ctx.status = 503;
-        ctx.body = { error: e.message };
+        ctx.body = { error: e.message, code: 'sign_in_unavailable' };
         return;
     }
     if (e instanceof SsoVerificationError) {
@@ -300,7 +303,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             const started = await startGithubSession(owner);
             ctx.status = 200;
             ctx.body = started;
-        } catch (e) { return githubFlowFailure(ctx, e); }
+        } catch (e) { return signInFailure(ctx, e); }
     });
 
     router.post('/api/recovery/sso/github/poll', async (ctx) => {
@@ -312,7 +315,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', owner);
             ctx.status = 200;
             ctx.body = polled;
-        } catch (e) { return githubFlowFailure(ctx, e); }
+        } catch (e) { return signInFailure(ctx, e); }
     });
 
     /**
@@ -387,10 +390,11 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             ctx.status = 200;
             ctx.body = ssoDepositBody(owner, result);
         } catch (e) {
-            // 400 rather than 401/403 throughout: none of these mean "you are not signed in" — the
-            // caller is a verified member — they mean the sign-in they attached did not check out.
-            if (e instanceof SsoVerificationError || e instanceof KeeperDepositError
-                || e instanceof RecoveryShareError) {
+            // A provider that could not be asked is 503, try again (signInFailure); nothing was stored.
+            // Otherwise 400 rather than 401/403 throughout: none of these mean "you are not signed in" —
+            // the caller is a verified member — they mean the sign-in they attached did not check out.
+            if (e instanceof SsoVerificationError) return signInFailure(ctx, e);
+            if (e instanceof KeeperDepositError || e instanceof RecoveryShareError) {
                 ctx.status = 400;
                 ctx.body = { error: e.message };
                 return;

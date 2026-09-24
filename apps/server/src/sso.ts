@@ -68,7 +68,8 @@ export class SsoVerificationError extends Error {
  *
  * A subclass, so every caller that treats any SsoVerificationError as "the sign-in did not check
  * out" keeps doing exactly that. A caller that can tell the member "try again in a minute" instead
- * (the open door, routes/open-join.ts) checks for this one first.
+ * (the open door, routes/open-join.ts; the keeper and recovery routes, signInFailure in
+ * routes/keepers.ts) checks for this one first.
  */
 export class SsoProviderUnavailableError extends SsoVerificationError {
     constructor(message: string) {
@@ -284,16 +285,32 @@ async function fetchJwks(provider: SsoProvider): Promise<Jwk[]> {
     const request = (async () => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10_000);
+        // Every way of not getting keys is the provider failing, not the member: these messages reach
+        // the member (routes/keepers.ts signInFailure), so they say what happened and to try again.
+        const unusable = `${config.label} sent sign-in keys this node could not use, so the sign-in could not be `
+            + 'checked. Please try again in a minute.';
         try {
-            const res = await fetch(config.jwksUri, { signal: controller.signal });
+            let res: Response;
+            try {
+                res = await fetch(config.jwksUri, { signal: controller.signal });
+            } catch {
+                // Unreachable, or the 10 s timeout above.
+                throw new SsoProviderUnavailableError(
+                    `${config.label} could not be reached to check the sign-in. Please try again in a minute.`);
+            }
             if (!res.ok) {
-                throw new SsoProviderUnavailableError(`${config.label} JWKS fetch failed: HTTP ${res.status}`);
+                throw new SsoProviderUnavailableError(`${config.label} is not answering right now (HTTP ${res.status}), so `
+                    + 'the sign-in could not be checked. Please try again in a minute.');
             }
-            const body = await res.json() as { keys?: Jwk[] };
-            const keys = (body.keys ?? []).filter(k => k.kty === 'RSA' && k.n && k.e && k.kid);
-            if (!keys.length) {
-                throw new SsoProviderUnavailableError(`${config.label} JWKS contained no usable RSA keys`);
+            let body: { keys?: unknown } | null;
+            try {
+                body = await res.json() as { keys?: unknown } | null;
+            } catch {
+                throw new SsoProviderUnavailableError(unusable);
             }
+            const listed: unknown = body?.keys;
+            const keys = (Array.isArray(listed) ? listed as Jwk[] : []).filter(k => k && k.kty === 'RSA' && k.n && k.e && k.kid);
+            if (!keys.length) throw new SsoProviderUnavailableError(unusable);
             jwksCache.set(provider, {
                 keys,
                 expiresAt: Date.now() + parseMaxAge(res.headers.get('cache-control')),

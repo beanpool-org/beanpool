@@ -268,6 +268,7 @@ run_federation_suites() {
       test-message-tombstone
       test-recovery-shares
       test-sso
+      test-sso-unavailable
       test-github-device
       test-github-poll-limit
       test-daily-pulse

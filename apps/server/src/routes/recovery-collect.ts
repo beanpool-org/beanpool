@@ -63,7 +63,7 @@ import {
     type SsoProvider,
 } from '../sso.js';
 import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
-import { githubFlowFailure } from './keepers.js';
+import { signInFailure } from './keepers.js';
 import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import type { RouteDeps } from './types.js';
 
@@ -103,7 +103,9 @@ function notifySeedReleased(collection: Collection, provider: SsoProvider): void
 }
 
 function fail(ctx: any, e: unknown): void {
-    if (e instanceof RecoveryReleaseError || e instanceof SsoVerificationError) {
+    // A sign-in first: a provider that could not be asked is 503, try again, not a refused sign-in (signInFailure).
+    if (e instanceof SsoVerificationError) return signInFailure(ctx, e);
+    if (e instanceof RecoveryReleaseError) {
         ctx.status = 400;
         ctx.body = { error: (e as Error).message };
         return;
@@ -298,7 +300,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             const started = await startGithubSession(collection.requesterEphemeralPubkey);
             ctx.status = 200;
             ctx.body = started;
-        } catch (e) { return githubFlowFailure(ctx, e); }
+        } catch (e) { return signInFailure(ctx, e); }
     });
 
     router.post('/api/recovery/collect/github/poll', async (ctx) => {
@@ -310,7 +312,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             const polled = await pollGithubSession(typeof sessionId === 'string' ? sessionId : '', collection.requesterEphemeralPubkey);
             ctx.status = 200;
             ctx.body = polled;
-        } catch (e) { return githubFlowFailure(ctx, e); }
+        } catch (e) { return signInFailure(ctx, e); }
     });
 
     /** K3 — released on a verified fresh sign-in with the provider account that is the keeper. */

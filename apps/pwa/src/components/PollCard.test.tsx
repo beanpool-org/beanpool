@@ -119,6 +119,17 @@ describe('PollCard (PWA)', () => {
         expect(optionButtons.every(b => b.hasAttribute('disabled'))).toBe(true);
     });
 
+    it('wraps decorative emojis in aria-hidden="true" and provides focus ring classes on options', () => {
+        const { container } = render(<PollCard post={mockPost} identity={mockIdentity} />);
+
+        const hiddenEmojis = Array.from(container.querySelectorAll('[aria-hidden="true"]'));
+        const emojiElements = hiddenEmojis.filter(el => el.textContent?.includes('🗳️'));
+        expect(emojiElements.length).toBeGreaterThan(0);
+
+        const optionButton = screen.getByText('North Gate').closest('button');
+        expect(optionButton).toHaveClass('focus-visible:ring-2');
+    });
+
     // In the Market grid a poll is given two columns (MarketplacePage), so it can afford two columns of answers
     // and full labels. Everywhere else — List View, the single-post view — it keeps the column it had.
     describe('answers in the Market grid', () => {

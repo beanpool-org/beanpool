@@ -177,3 +177,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-21 - EventCard Decorative Emoji Hiding & Focus Ring Styling
 **Learning:** `EventCard.tsx` rendered decorative location and count emojis (`📍`, `👥`) exposed to screen readers without `aria-hidden="true"`, and interactive controls (RSVP buttons, "Show on map", host link button, event chat button, "Edit event", "Copy to a new date", and "Cancel event") lacked explicit `focus-visible` ring indicators for keyboard users.
 **Action:** Wrapped decorative emojis in `EventCard.tsx` with `<span aria-hidden="true">`, added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500` focus ring styling across interactive buttons in `EventCard` and `EventDetail`, and updated tests in `EventCard.test.tsx`.
+
+## 2026-09-22 - PollCard Focus Ring Styling & Decorative Emoji Hiding
+**Learning:** `PollCard.tsx` interactive option buttons lacked explicit `focus-visible` ring indicators for keyboard users, author profile trigger and close poll buttons lacked focus rings, and decorative emojis (`🗳️`, `👁️`, `📊`, `ℹ️`) were exposed to screen readers without `aria-hidden="true"`.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-1` styling to option buttons and focus rings to action buttons, wrapped decorative emojis with `<span aria-hidden="true">`, and added test coverage in `PollCard.test.tsx`.

@@ -9,8 +9,9 @@
  *   1. start and poll need a signed active member (401 otherwise); start asks GitHub with our client id
  *   2. a poll inside the interval answers pending with no GitHub request
  *   3. GitHub's answers mapped: authorization_pending, slow_down (the interval grows), access_denied,
- *      expired_token, GitHub down (start 503, a poll stays pending); starting again replaces the old session;
- *      /user failing after the token is issued → 400 start again, never a 503 try-again for a session that is gone
+ *      expired_token, GitHub down (start 503, a poll stays pending), GitHub rate-limiting a poll (429, or its
+ *      rate-limit 403: pending, the session survives); starting again replaces the old session; /user failing
+ *      after the token is issued → 400 start again, never a 503 try-again for a session that is gone
  *   4. success keeps only { sub, email }: the access token is not reachable from the session object, not in
  *      any answer, not in the logs, not in the database
  *   5. another key cannot poll or spend a session, and does not consume it; a session is spent once; an
@@ -74,7 +75,7 @@ interface GhDevice {
     clientId: string;
     scope: string;
     /** What the next access_token polls answer, in order; empty means authorization_pending. */
-    queue: Array<'token' | 'authorization_pending' | 'slow_down' | 'access_denied' | 'expired_token' | 'down'>;
+    queue: Array<'token' | 'authorization_pending' | 'slow_down' | 'access_denied' | 'expired_token' | 'down' | 'rate_limited' | 'rate_limited_403'>;
     user?: GhUser;
     token?: string;
 }
@@ -116,6 +117,12 @@ function fakeGithub(url: string, init: any): Response {
         }
         const next = device.queue.shift() ?? 'authorization_pending';
         if (next === 'down') return new Response('unavailable', { status: 502 });
+        // GitHub's rate limits: JSON with a `message` and no OAuth `error`, as a 429 or as a 403 with the headers.
+        if (next === 'rate_limited') return json({ message: 'API rate limit exceeded for 203.0.113.9.' }, 429);
+        if (next === 'rate_limited_403') {
+            return new Response(JSON.stringify({ message: 'API rate limit exceeded for 203.0.113.9.' }),
+                { status: 403, headers: { 'Content-Type': 'application/json', 'x-ratelimit-remaining': '0' } });
+        }
         if (next === 'token') {
             device.token = `gho_${crypto.randomBytes(18).toString('hex')}`;
             gh.tokens.set(device.token, device.user!);
@@ -304,6 +311,18 @@ async function main(): Promise<void> {
     const dropped = await call(ada, `${MEMBER}/poll`, { sessionId: sid });
     assert(dropped.status === 200 && dropped.body?.status === 'pending',
         `GitHub failing mid-poll is a dropped poll, not a failed sign-in: pending (got ${dropped.status} ${dropped.raw})`);
+
+    adaDevice.queue.push('rate_limited');
+    advance(10_000);
+    const throttled = await call(ada, `${MEMBER}/poll`, { sessionId: sid });
+    assert(throttled.status === 200 && throttled.body?.status === 'pending',
+        `GitHub rate-limiting a poll (429) is a dropped poll too: pending (got ${throttled.status} ${throttled.raw})`);
+    adaDevice.queue.push('rate_limited_403');
+    advance(10_000);
+    const throttled403 = await call(ada, `${MEMBER}/poll`, { sessionId: sid });
+    assert(throttled403.status === 200 && throttled403.body?.status === 'pending',
+        `...and so is its rate-limit 403 (got ${throttled403.status} ${throttled403.raw})`);
+    assert(!!_githubSessionForTests(sid), '...and the session survives both, for the member still typing the code');
 
     adaDevice.queue.push('access_denied');
     advance(10_000);

@@ -72,6 +72,8 @@ const SWEEP_THRESHOLD = 1000;
 const SWEEP_INTERVAL_MS = 60_000;
 const MAX_LIVE_SESSIONS = 10_000;
 
+const RATE_LIMITED = 'GitHub is limiting requests from this node right now. Please try again in a minute.';
+
 interface GithubSession {
     subject: string;
     clientId: string;
@@ -146,7 +148,7 @@ function sweep(now: number, force: boolean): void {
 
 /**
  * One request to GitHub, JSON both ways. Anything that is not an answer (unreachable, timed out, a 5xx,
- * a body that is not JSON) is SsoProviderUnavailableError: GitHub failed, not the member.
+ * a rate limit, a body that is not JSON) is SsoProviderUnavailableError: GitHub failed, not the member.
  *
  * `bearer` is sent in the Authorization header and nowhere else. No message built here includes it.
  */
@@ -171,11 +173,19 @@ async function askGithub(url: string, init: { body?: Record<string, string>; bea
         if (res.status >= 500) {
             throw new SsoProviderUnavailableError(`GitHub is not answering right now (HTTP ${res.status}). Please try again in a minute.`);
         }
+        if (res.status === 429) throw new SsoProviderUnavailableError(RATE_LIMITED);
         let body: any;
         try {
             body = await res.json();
         } catch {
             throw new SsoProviderUnavailableError('GitHub sent an answer this node could not read. Please try again in a minute.');
+        }
+        // GitHub answers a rate limit with a 403 as often as a 429: `x-ratelimit-remaining: 0` for the
+        // primary limit, `retry-after` or a message naming it for a secondary one. Its body has a `message`
+        // and no OAuth `error`, so taken as an answer it would end a sign-in the member is still finishing.
+        if (res.status === 403 && (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.has('retry-after')
+            || /rate limit/i.test(String(body?.message ?? '')))) {
+            throw new SsoProviderUnavailableError(RATE_LIMITED);
         }
         return { status: res.status, body };
     } finally {

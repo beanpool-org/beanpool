@@ -31,6 +31,16 @@ delete process.env.GOOGLE_CLIENT_IDS;
 
 import crypto from 'node:crypto';
 
+// Nothing in this suite may reach a real identity provider or any other host, even if a regression opens a door that
+// should be shut (the GitHub start would then ask github.com for a device code): every request that is not to this
+// machine fails as unreachable, which the sign-in code answers with 503.
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') throw new TypeError(`this suite reaches no host but this machine (${url.host})`);
+    return realFetch(input, init);
+}) as typeof fetch;
+
 const PORT = 8751;
 const BASE = `https://localhost:${PORT}`;
 

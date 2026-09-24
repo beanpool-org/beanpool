@@ -34,6 +34,16 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.GOOGLE_CLIENT_IDS;
 delete process.env.CF_RECORD_NAME;
 
+// Nothing in this suite may reach a real identity provider or any other host, even if a regression opens a door that
+// should be shut (the GitHub start would then ask github.com for a device code): every request that is not to this
+// machine fails as unreachable, which the sign-in code answers with 503.
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') throw new TypeError(`this suite reaches no host but this machine (${url.host})`);
+    return realFetch(input, init);
+}) as typeof fetch;
+
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Door-Failover-Main-Pw-731!';
 const PW_STANDBY = 'Door-Failover-Standby-Pw-58!';
@@ -298,9 +308,9 @@ async function main(): Promise<void> {
         const danJoin = await join(mainHttps, dan, 'dan-google-sub', 'Dan');
         assert(danJoin.status === 200, `Dan joins the main server after the standby's last copy (${danJoin.status})`);
         const sealed2 = await main.send('reseal');
-        assert(sealed2.members.includes(dan.pk) && sealed2.total === 4, `the main server re-seals: the bundle has Dan's row (${sealed2.total} in all)`);
+        assert(sealed2.members?.includes(dan.pk) && sealed2.total === 4, `the main server re-seals: the bundle has Dan's row (${sealed2.total} in all)`);
         const envOnly = await standby.send('pull', { envelopeOnly: true });
-        require_(envOnly.envelope === 'stored', `the standby pulls only the new envelope (${JSON.stringify(envOnly)})`);
+        assert(envOnly.envelope === 'stored', `the standby pulls only the new envelope (${JSON.stringify(envOnly)})`);
         await standby.send('forget-door');
         const wiped = await standby.send('door');
         require_(wiped.rows.length === 0 && wiped.saltFp === null, 'the standby\'s own copy of the door\'s record is gone: no rows, no key');

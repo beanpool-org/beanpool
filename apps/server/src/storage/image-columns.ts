@@ -272,12 +272,40 @@ export interface ReadableDb {
 }
 
 /**
+ * Whether `table` in THIS database file has a `storage_key` column.
+ *
+ * The table names are the frozen {@link STORAGE_KEY_TABLES} constants, never caller input, so interpolating
+ * one into the PRAGMA is safe — and it has to be interpolated, because `PRAGMA table_info(?)` is not a thing
+ * SQLite binds.
+ */
+function hasStorageKeyColumn(handle: ReadableDb, table: string): boolean {
+    const columns = handle.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    return columns.some((c) => c.name === 'storage_key');
+}
+
+/**
  * Every `storage_key` the database references, de-duplicated.
  *
  * This is the manifest a complete backup or snapshot has to satisfy: the keys in THIS database file, not in
  * whatever the live node holds now. A table the file does not have holds no keys — checked against
  * `sqlite_master` rather than by swallowing the error, so a read that fails for any OTHER reason throws and
  * the caller fails loudly instead of quietly deciding the node references nothing.
+ *
+ * ## A table WITHOUT the column holds no keys either
+ *
+ * The database this reads is very often one nothing has migrated: every `snapshot-*.db` taken before this
+ * version is a separate file that `initSchema` never touches, and the download route seals exactly that file.
+ * Checking only `sqlite_master` for the table left those snapshots throwing `no such column: storage_key`,
+ * which the route answered as a 500 — so on the morning after an upgrade, every recovery point an operator
+ * might reach for was undownloadable, precisely when the upgrade is the thing that might have gone wrong.
+ *
+ * A pre-upgrade file is not short of anything: its photos and attachments are all still inline in the rows.
+ * Zero referenced keys is the truthful answer for it, and the archive it produces is complete.
+ *
+ * This is the ONE place any of the new columns is read out of a database this process did not migrate
+ * itself — `stageImages` (a backup) and `captureSnapshotImages` (a snapshot) both come through here, so both
+ * are covered. Every other reader (the engine, the evacuation job, the orphan sweep) works on the live
+ * handle, which `initSchema` has migrated by the time anything can call it.
  */
 export function referencedStorageKeys(handle: ReadableDb): string[] {
     const present = new Set(
@@ -287,6 +315,7 @@ export function referencedStorageKeys(handle: ReadableDb): string[] {
     const keys = new Set<string>();
     for (const table of STORAGE_KEY_TABLES) {
         if (!present.has(table)) continue;
+        if (!hasStorageKeyColumn(handle, table)) continue;
         for (const row of handle.prepare(`SELECT storage_key FROM ${table} WHERE storage_key IS NOT NULL`).all() as { storage_key: string }[]) {
             if (typeof row.storage_key === 'string' && row.storage_key) keys.add(row.storage_key);
         }

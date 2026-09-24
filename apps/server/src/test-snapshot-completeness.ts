@@ -24,6 +24,9 @@
  *   7. Pruning a snapshot, and deleting one, take its images with it.
  *   8. The storage-health orphan sweep never touches a snapshot's directory, and unlinking the live copy
  *      leaves the snapshot's bytes intact.
+ *   9. A snapshot taken BEFORE this version — a separate database file nothing migrates, whose `post_photos`
+ *      still has the pre-PR DDL and no `storage_key` column — still downloads, complete, as `0/0` images.
+ *      Every photo in it is inline, so zero referenced objects is the truthful count.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -109,6 +112,54 @@ function resolveAll(dbFile: string, imagesRoot: string): Map<string, Buffer | nu
         handle.close();
     }
     return out;
+}
+
+/**
+ * Rewrite a snapshot's database into the shape a node running origin/main wrote: the pre-PR DDL for both
+ * storage-key tables — `photo_data TEXT NOT NULL`, `data TEXT NOT NULL`, and no `storage_key`, `sha256`,
+ * `bytes` or `mime` column at all — with every photo back inline where such a node kept it.
+ *
+ * This is the file every node already has in `data/snapshots/` the moment it boots this version, and nothing
+ * migrates it: `initSchema` runs on `state.db` alone. `inline` supplies the bytes for rows that had been
+ * evacuated by the time the snapshot was taken.
+ */
+function makeSnapshotPreUpgrade(snapshotDbFile: string, inline: Map<string, string>): void {
+    const handle = new Database(snapshotDbFile);
+    try {
+        const photos = handle.prepare('SELECT post_id, order_num, photo_data, storage_key, updated_at FROM post_photos').all() as any[];
+        const attachments = handle.prepare('SELECT message_id, data, nonce, mime, storage_key, created_at FROM message_attachments').all() as any[];
+        handle.exec(`
+            DROP TABLE post_photos;
+            CREATE TABLE post_photos (
+                post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+                photo_data TEXT NOT NULL,
+                order_num INTEGER NOT NULL,
+                updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                PRIMARY KEY (post_id, order_num)
+            );
+            CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at);
+            DROP TABLE message_attachments;
+            CREATE TABLE message_attachments (
+                message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+                data TEXT NOT NULL,
+                nonce TEXT NOT NULL,
+                mime TEXT,
+                created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+        `);
+        const insPhoto = handle.prepare('INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, ?, ?)');
+        for (const r of photos) {
+            const value = r.photo_data || inline.get(r.storage_key) || '';
+            if (value) insPhoto.run(r.post_id, value, r.order_num, r.updated_at);
+        }
+        const insAttachment = handle.prepare('INSERT INTO message_attachments (message_id, data, nonce, mime, created_at) VALUES (?, ?, ?, ?, ?)');
+        for (const r of attachments) {
+            const value = r.data || inline.get(r.storage_key) || '';
+            if (value) insAttachment.run(r.message_id, value, r.nonce, r.mime, r.created_at);
+        }
+    } finally {
+        handle.close();
+    }
 }
 
 async function main(): Promise<void> {
@@ -358,6 +409,52 @@ async function main(): Promise<void> {
         'and the snapshot still holds the bytes, to the byte: the sweep unlinked a name, not an inode');
     const survivingSnapshotObjects = fs.readdirSync(path.join(guardedImages, 'posts'), { recursive: true } as any) as string[];
     assert(survivingSnapshotObjects.length > 0, 'the sweep never walked into data/snapshots at all');
+
+    // ── 9. A snapshot from BEFORE this version still downloads, and downloads complete ────────
+    //
+    // The file every node already has in data/snapshots/ when it boots this version. Nothing migrates it —
+    // initSchema runs on state.db alone — so its post_photos still declares the pre-PR DDL with no
+    // storage_key column. Reading the column out of it threw `no such column: storage_key`, and the download
+    // route turned that into a 500: on the morning after an upgrade, every recovery point an operator might
+    // reach for was unreachable, which is exactly when an upgrade is the thing that might have gone wrong.
+    const legacyPhoto = makePhoto('a-node-that-never-upgraded');
+    const legacyPost = createPost('offer', 'food', 'A loaf from before the upgrade', 'inline bytes', 1, 'fixed', author,
+        undefined, undefined, [dataUrl(legacyPhoto)]);
+    assert(!!legacyPost, 'setup: a post whose photo the live node put in the store');
+    await nextSecond();
+    const legacy = createSnapshot();
+    const legacyPath = path.join(SNAPSHOTS_DIR, legacy.name);
+    makeSnapshotPreUpgrade(legacyPath, new Map([[keyOf(legacyPost!.id), dataUrl(legacyPhoto)]]));
+    // A pre-upgrade node never wrote a captured-images directory either.
+    fs.rmSync(snapshotImagesDir(legacyPath), { recursive: true, force: true });
+    {
+        const handle = new Database(legacyPath, { readonly: true });
+        const ddl = (handle.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string;
+        handle.close();
+        assert(!/storage_key/.test(ddl), 'setup: the snapshot\'s post_photos really has no storage_key column');
+    }
+
+    const legacyFile = path.join(work, 'legacy-snapshot.bpsealed');
+    const legacyGot = await download(`${BASE}/api/local/admin/snapshots/download?name=${encodeURIComponent(legacy.name)}`, legacyFile);
+    assert(legacyGot.status === 200,
+        `a pre-upgrade snapshot downloads instead of answering 500 (got ${legacyGot.status})`);
+    assert(legacyGot.headers.get('x-backup-error') !== 'incomplete-images'
+        && !/no such column/.test(JSON.stringify(legacyGot.body.subarray(0, 400).toString('utf8'))),
+        'and not with "no such column: storage_key"');
+    assert(legacyGot.headers.get('x-backup-contents') === 'database+images',
+        'it is a whole backup, not a labelled-short one');
+    assert(legacyGot.headers.get('x-backup-images') === '0/0',
+        `a database with no storage_key column references no objects (got ${legacyGot.headers.get('x-backup-images')})`);
+
+    const legacyOpened = path.join(work, 'legacy-opened.tar.gz');
+    await openSealedFileTo(legacyFile, { type: 'code', code: recovery.code }, legacyOpened);
+    const legacyDir = extract(legacyOpened, path.join(work, 'legacy'));
+    const legacyHandle = new Database(path.join(legacyDir, 'state.db'), { readonly: true });
+    const legacyRow = legacyHandle.prepare('SELECT photo_data FROM post_photos WHERE post_id = ? AND order_num = 0')
+        .get(legacyPost!.id) as any;
+    legacyHandle.close();
+    assert(legacyRow?.photo_data === dataUrl(legacyPhoto),
+        'and the archive is COMPLETE: the photo is inline in the row, exactly as that node held it');
 
     console.log(`\n${passed}/${run} passed\n`);
     process.exit(passed === run ? 0 : 1);

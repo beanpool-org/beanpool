@@ -891,6 +891,7 @@ export async function removeReportedPulseItem(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
         body: JSON.stringify({ removePulseItem: true, password: adminPassword }),
     });
     if (!res.ok) {
@@ -917,6 +918,7 @@ export async function dismissNodeReport(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {

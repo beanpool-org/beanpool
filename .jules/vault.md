@@ -103,3 +103,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** `OnboardingModule.tsx` invoked `fetchOnboardingFunnel()` without `tfaToken`, causing onboarding funnel requests to fail with 401 Unauthorized on 2FA-protected nodes.
 **Learning:** React component hooks calling admin API client helpers must pass `getTfaSessionToken(active.id)` to forward `X-Admin-2FA-Session`.
 **Prevention:** Ensure every call site invoking administrative fetch helpers passes `getTfaSessionToken(node.id)` when querying node endpoints.
+
+## 2026-10-02 - Missing Cookie Credentials Forwarding in Report Action Helpers
+**Vulnerability:** `dismissNodeReport` and `removeReportedPulseItem` omitted `credentials: 'same-origin'` from `fetch` options, causing cookie-authenticated moderator sessions to fail with 401 Unauthorized.
+**Learning:** Key-session authenticated endpoints rely on ambient HTTP cookies; omiting `credentials: 'same-origin'` prevents the browser from attaching session cookies.
+**Prevention:** Always include `credentials: 'same-origin'` on same-origin fetch calls for routes supporting cookie or key-session authentication.

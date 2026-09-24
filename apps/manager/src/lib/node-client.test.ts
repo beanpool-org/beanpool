@@ -31,6 +31,8 @@ import {
     pruneInviteBranch,
     deleteNodePost,
     fetchReports,
+    dismissNodeReport,
+    removeReportedPulseItem,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -943,6 +945,22 @@ describe('report normalisation keeps enterprise reports off the post line', () =
             json: async () => ({ error: 'Moderators can review reports and remove reported posts only' }),
         }));
         await expect(fetchReports('https://node.example', 'open')).rejects.toThrow('Moderators can review reports');
+        vi.unstubAllGlobals();
+    });
+
+    it('dismissNodeReport and removeReportedPulseItem include credentials same-origin for moderator sessions', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await dismissNodeReport('https://node.example', 'rep_123');
+        expect(fetchMock.mock.calls[0][1].credentials).toBe('same-origin');
+
+        await removeReportedPulseItem('https://node.example', 'rep_456');
+        expect(fetchMock.mock.calls[1][1].credentials).toBe('same-origin');
+
         vi.unstubAllGlobals();
     });
 });

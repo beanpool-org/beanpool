@@ -15,6 +15,10 @@
  *      nonce, the join, and the GitHub start and poll) answers 404 invite_only, /api/community/info says openJoin false.
  *   3. That live community switched to the global profile (the finding): money stays on (G1), and the door stays
  *      shut. At runtime first, then at boot, where a loud line says why; every door route is 404, openJoin false.
+ *   4. What travels (engine/open-join.ts; test-open-join-failover runs it across processes): a release and a re-key
+ *      stamp `updated_at`, so a delta export carries them; the merge keeps the newer row per member, moves a hash a
+ *      re-key moved and never moves it back, leaves out a member this database lacks, and keeps its own key when
+ *      the one sent is missing or too short to hash with.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-door-hardening.ts
  */
@@ -251,6 +255,67 @@ async function main(): Promise<void> {
         'an operator override nodeProfile.openJoin=true opens nothing on this ledger');
     await doorRoutesShut('global, ledger moved, openJoin override');
     clearOverrides();
+
+    // ── 4. What travels ──
+    console.log('\n── 4. what travels: the watermark and the merge ──');
+    const oj = await import('./engine/open-join.js');
+    const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+    const rowOf = (pk: string) => db.prepare('SELECT member_pubkey, join_hash, updated_at FROM open_joins WHERE member_pubkey = ?').get(pk) as any;
+    const tick = () => new Promise((r) => setTimeout(r, 5));
+    const deltaMembers = async (since: string) => ((await se.exportSyncState('test', since)).openJoins ?? []).map((j) => j.memberPubkey);
+
+    await tick();
+    const beforeRelease = new Date().toISOString();
+    await tick();
+    oj.releaseOpenJoin(nia.pk);
+    const released = rowOf(nia.pk);
+    assert(released.join_hash.startsWith('released:') && released.updated_at > beforeRelease, 'a release stamps updated_at');
+    const afterRelease = await deltaMembers(beforeRelease);
+    assert(afterRelease.includes(nia.pk) && !afterRelease.includes(uma.pk), 'so a delta export carries the release, and not the rows that did not change');
+
+    const umaHash = rowOf(uma.pk).join_hash;
+    const umaNew = newId();
+    const beforeRekey = new Date().toISOString();
+    await tick();
+    completeRekey(uma.pk, umaNew.pk, issueRekeyCode(uma.pk, 'owner:password').code, 'owner:password');
+    const moved = rowOf(umaNew.pk);
+    assert(moved?.join_hash === umaHash && moved.updated_at > beforeRekey && !rowOf(uma.pk), 'a re-key moves the row to the new key and stamps it');
+    assert((await deltaMembers(beforeRekey)).includes(umaNew.pk), 'so a delta export carries it');
+
+    // The merge, as a standby or a take-over runs it, against rows this database already holds.
+    const saltHere = oj.readOpenJoinSalt();
+    const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
+    const incoming = (pk: string, hash: string, updatedAt: string) => ({ memberPubkey: pk, provider: 'google', joinHash: hash, joinedAt: iso(3_600_000), updatedAt });
+    // A standby that copied Uma before the re-key: the old key's row, older.
+    db.prepare('DELETE FROM open_joins WHERE member_pubkey = ?').run(umaNew.pk);
+    db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, updated_at) VALUES (?, 'google', ?, ?, ?)")
+        .run(uma.pk, umaHash, iso(3_600_000), iso(60_000));
+    const rekeyMerge = oj.writeOpenJoinRecord(undefined, [incoming(umaNew.pk, umaHash, iso(1_000))]);
+    assert(rekeyMerge.written === 1 && rowOf(umaNew.pk)?.join_hash === umaHash && !rowOf(uma.pk),
+        `a newer row whose hash a re-key moved: written, and the old key's row goes (${JSON.stringify(rekeyMerge)})`);
+    // A standby keeps the replaced key's member row (replication never removes a re-keyed member), so the stale row's
+    // member is there, and only the newer row under the new key keeps it out.
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at, invited_by)
+                VALUES (?, 'Uma old copy', 'active', ?, ?, 'open:google')`).run(uma.pk, iso(3_600_000), iso(3_600_000));
+    const staleMerge = oj.writeOpenJoinRecord(undefined, [incoming(uma.pk, umaHash, iso(120_000))]);
+    assert(staleMerge.kept === 1 && staleMerge.written === 0 && rowOf(umaNew.pk)?.join_hash === umaHash && !rowOf(uma.pk),
+        `an older row with that hash under the replaced key: kept out, the re-key stands (${JSON.stringify(staleMerge)})`);
+    const olderMerge = oj.writeOpenJoinRecord(undefined, [incoming(nia.pk, 'an-older-hash', iso(3_000_000))]);
+    assert(olderMerge.kept === 1 && rowOf(nia.pk).join_hash.startsWith('released:'), `an older row for a member: the newer one here stands (${JSON.stringify(olderMerge)})`);
+    const newerMerge = oj.writeOpenJoinRecord(undefined, [incoming(nia.pk, 'released:from-the-main-server', new Date(Date.now() + 1_000).toISOString())]);
+    assert(newerMerge.written === 1 && rowOf(nia.pk).join_hash === 'released:from-the-main-server', `a newer row for a member: written (${JSON.stringify(newerMerge)})`);
+    const nobody = newId();
+    const strangerMerge = oj.writeOpenJoinRecord(undefined, [incoming(nobody.pk, 'hash-of-nobody-here', iso(1_000)), { memberPubkey: 7 }, null]);
+    assert(strangerMerge.skipped === 1 && strangerMerge.invalid === 2 && strangerMerge.written === 0 && !rowOf(nobody.pk),
+        `a row for a member this database lacks is left out, and what is not a row is counted and ignored (${JSON.stringify(strangerMerge)})`);
+    const shortKey = oj.writeOpenJoinRecord('c2hvcnQ', []);
+    const noKey = oj.writeOpenJoinRecord(null, []);
+    assert(!shortKey.saltWritten && !noKey.saltWritten && oj.readOpenJoinSalt() === saltHere,
+        'a key too short to hash with, or none at all, leaves the key here as it was');
+    const newKey = crypto.randomBytes(32).toString('base64url');
+    const keyMerge = oj.writeOpenJoinRecord(newKey, []);
+    assert(keyMerge.saltWritten && oj.readOpenJoinSalt() === newKey && !oj.writeOpenJoinRecord(newKey, []).saltWritten,
+        'the main server\'s key replaces this one, once');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

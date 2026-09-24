@@ -370,7 +370,8 @@ export function completeRekey(
         db.prepare('UPDATE recovery_releases SET released_by = ? WHERE released_by = ?').run(cleanNew, cleanOld);
         // The sign-in account the member joined with through the open door (engine/open-join.ts). Left on the
         // invalidated key, deleting the account would free nothing and a removal would read as still joined.
-        db.prepare('UPDATE open_joins SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
+        // Stamped, so the move replicates (engine/open-join.ts).
+        db.prepare('UPDATE open_joins SET member_pubkey = ?, updated_at = ? WHERE member_pubkey = ?').run(cleanNew, nowIso, cleanOld);
 
         // (q) treasury_operators (Keeperships)
         db.prepare('UPDATE treasury_operators SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);

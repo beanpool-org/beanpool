@@ -8,6 +8,7 @@ import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { readProfileRecord } from '../config/node-profile.js';
+import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import {
     exportSyncState as exportSyncStateEngine,
     type SyncPayload,
@@ -307,6 +308,9 @@ export async function exportSyncState(
     // the community as another kind (config/node-profile.ts). node_config itself is not replicated. Before the
     // signature, so it is signed with the rest.
     payload.nodeProfile = readProfileRecord();
+    // The key the `openJoins` rows are hashed with, or they match nothing on a promoted standby (engine/open-join.ts).
+    // A node_config row, so here rather than in the table export. Signed with the rest.
+    payload.openJoinSalt = readOpenJoinSalt();
     return signSyncPayload(cb, payload);
 }
 
@@ -541,7 +545,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -1290,6 +1294,14 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     );
                     if (res.changes > 0) groupChanges++;
                 }
+            }
+
+            // The open door's record (engine/open-join.ts): who joined with which sign-in account, and the key those
+            // hashes are made with, so a promoted standby refuses an account that already joined. After the members,
+            // because a row is kept only for a member this database has. A primary older than this sends neither and
+            // changes nothing here.
+            if (remote.openJoinSalt !== undefined || remote.openJoins) {
+                writeOpenJoinRecord(remote.openJoinSalt, remote.openJoins);
             }
 
             if (remote.tombstones) {

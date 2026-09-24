@@ -624,8 +624,9 @@ CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases
 -- 14c. The open door (global profile, design §2.2): who joined with a sign-in instead of an invite.
 --
 -- Created on EVERY node whatever its profile, and empty where the door is shut, so every node has one schema
--- (snapshots, restores and a later Postgres move see the same tables). Not in the live replication payload
--- (engine/sync.ts), like node_config which holds its key. `join_hash` UNIQUE is the rule "one sign-in
+-- (snapshots, restores and a later Postgres move see the same tables). Replicated to standbys with its key (the
+-- node_config row) and carried in the take-over bundle, all but `ip_hash`; `updated_at` is the replication
+-- watermark, stamped by a join, a release and a re-key (engine/open-join.ts). `join_hash` UNIQUE is the rule "one sign-in
 -- account, one identity here". It is HMAC-SHA-256 over the provider and the provider's subject, keyed by a
 -- secret per node (node_config `openJoinSalt`): the raw subject and the email are never stored, and two nodes'
 -- hashes for the same person do not match. `ip_hash` (same key, its own domain) feeds the sign-up limit, 5 an
@@ -639,9 +640,11 @@ CREATE TABLE IF NOT EXISTS open_joins (
     provider TEXT NOT NULL,
     join_hash TEXT NOT NULL UNIQUE,
     joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    ip_hash TEXT
+    ip_hash TEXT,
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_open_joins_ip ON open_joins(ip_hash, joined_at) WHERE ip_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_open_joins_updated_at ON open_joins(updated_at);
 
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (

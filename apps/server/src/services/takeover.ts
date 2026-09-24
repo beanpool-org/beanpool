@@ -14,8 +14,8 @@
  * 2. `confirmTakeover(sessionId)`: the session is single use and lives 10 minutes, in memory only. It starts the
  *    promotion, each step written to data/takeover-journal.json before the next begins:
  *
- *      opened → undo-copy → identity-files → admin-settings → roles → public-address → profile → role
- *      → pull-config → restart → audit → announcement → reseal → tunnel → done
+ *      opened → undo-copy → identity-files → admin-settings → roles → public-address → profile → open-door
+ *      → role → pull-config → restart → audit → announcement → reseal → tunnel → done
  *
  *    Every step is safe to run again, so a crash at any point resumes at the first step not recorded: at boot
  *    (`resumeTakeoverAtBoot`, before the node key is loaded and before anything reads the role) and after boot
@@ -72,6 +72,7 @@ import { getReplacedInfo, type ReplacedInfo } from './identity-epoch.js';
 import {
     getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, type NodeProfile,
 } from '../config/node-profile.js';
+import { writeOpenJoinRecord } from '../engine/open-join.js';
 
 export const TAKEOVER_JOURNAL_FILE = 'takeover-journal.json';
 export const TAKEOVER_BUNDLE_FILE = 'takeover-bundle.json';
@@ -122,6 +123,7 @@ export const TAKEOVER_STEPS = [
     ['roles', "Brought back the community's owners and admins"],
     ['public-address', "Brought back the community's web address"],
     ['profile', "Kept the community's node profile and its switches"],
+    ['open-door', 'Kept who joined through the open door'],
     ['role', 'Made this server the main server'],
     ['pull-config', 'Stopped copying from the old main server'],
     ['restart', 'Restarted as the main server'],
@@ -132,7 +134,7 @@ export const TAKEOVER_STEPS = [
     ['done', 'Finished'],
 ] as const;
 export type TakeoverStep = (typeof TAKEOVER_STEPS)[number][0];
-const PRE_RESTART: TakeoverStep[] = ['undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'role', 'pull-config'];
+const PRE_RESTART: TakeoverStep[] = ['undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'open-door', 'role', 'pull-config'];
 const AFTER_BOOT: TakeoverStep[] = ['announcement', 'reseal', 'tunnel', 'done'];
 
 /**
@@ -691,6 +693,20 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             }
             const n = Object.keys(record!.overrides).length;
             return `${record!.profile ?? 'no profile recorded'}${n ? `; ${n} switch override(s)` : ''}`;
+        }
+        case 'open-door': {
+            // Who joined through the open door, and the key their records are hashed with (engine/open-join.ts), so
+            // the promoted server refuses a sign-in account that already joined. Merged over what this standby
+            // copied: per member the newer row stands, and a row for a member this standby never copied is left
+            // out, so that account can join again rather than be locked out of an identity that is not here.
+            const record = bundle.openJoins;
+            if (!record) return 'the keys were sealed before the open door\'s record travelled with them; kept what this standby copied';
+            const merged = writeOpenJoinRecord(record.salt ?? undefined, record.joins);
+            const held = (db.prepare('SELECT COUNT(*) AS n FROM open_joins').get() as { n: number }).n;
+            return `${held} sign-in account(s) on record here (the main server had ${Number(record.total) || 0} when it sealed); `
+                + `${merged.written} brought from the keys, ${merged.kept} already copied`
+                + `${merged.skipped ? `, ${merged.skipped} for members this standby never copied (they can join again)` : ''}`
+                + `${merged.saltWritten ? '; the key for their hashes brought from the keys' : ''}`;
         }
         case 'role': {
             // The split-brain guard (identity-epoch.ts): one more take-over than the keys were sealed at. Computed

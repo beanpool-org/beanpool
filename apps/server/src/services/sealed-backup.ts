@@ -216,8 +216,15 @@ export interface InBucket {
  */
 export const IN_BUCKET_MEMBER = 'images-in-bucket.json';
 
-/** The {@link IN_BUCKET_MEMBER} of an extracted archive, or null when it has none (a disk node's backup). */
-export function readInBucketMember(dir: string, name: string = IN_BUCKET_MEMBER): { bucket: string; endpoint: string; referenced: number | null } | null {
+/**
+ * The {@link IN_BUCKET_MEMBER} of an extracted archive, or null when it has none (a disk node's backup).
+ *
+ * `checked` is true only when the label says the bucket WAS listed; a label that does not say, or cannot be
+ * read, is not a check anybody made. `missingFromBucket` is the node's own count, null unless it gave one.
+ */
+export function readInBucketMember(dir: string, name: string = IN_BUCKET_MEMBER): {
+    bucket: string; endpoint: string; referenced: number | null; checked: boolean; missingFromBucket: number | null;
+} | null {
     const file = path.join(dir, name);
     try {
         if (!fs.lstatSync(file).isFile()) return null;
@@ -234,14 +241,17 @@ export function readInBucketMember(dir: string, name: string = IN_BUCKET_MEMBER)
             const u = new URL(String(parsed?.endpoint ?? ''));
             if (u.protocol === 'https:' || u.protocol === 'http:') endpoint = u.origin;
         } catch { /* not a URL: left out */ }
+        const count = (v: unknown): number | null => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : null);
         return {
             bucket,
             endpoint,
             referenced: Number.isFinite(parsed?.referenced) ? Number(parsed.referenced) : null,
+            checked: parsed?.checked === true,
+            missingFromBucket: count(parsed?.missingFromBucket),
         };
     } catch {
         // Present but unreadable: still the label that says the photos are elsewhere.
-        return { bucket: '', endpoint: '', referenced: null };
+        return { bucket: '', endpoint: '', referenced: null, checked: false, missingFromBucket: null };
     }
 }
 

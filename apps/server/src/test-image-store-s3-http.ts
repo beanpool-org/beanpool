@@ -450,6 +450,22 @@ async function main(): Promise<void> {
         const x = untar(file);
         assert(fs.existsSync(path.join(x, 'images-in-bucket.json')), 'and the archive it serves carries the label');
         fs.rmSync(x, { recursive: true, force: true });
+        // The same headers the node's own download sends, so the manager's notice names the bucket, counts
+        // against what the database references, and never drops "the bucket could not be checked".
+        const h = res.headers;
+        assert(h.get('x-backup-images-bucket') === fake.bucket && h.get('x-backup-images-referenced') === String(referenced)
+            && h.get('x-backup-images-checked') === 'yes' && h.get('x-backup-missing-images') === '1',
+            `the manager's download names the bucket, the ${referenced} referenced object(s), that it was checked, and the 1 missing`);
+        const labelPath = inBucketLabelFor(kept);
+        const keptLabel = JSON.parse(fs.readFileSync(labelPath, 'utf8'));
+        fs.writeFileSync(labelPath, JSON.stringify({ ...keptLabel, checked: false, missingFromBucket: null, bucket: 'not a bucket\r\nX-Injected: 1' }));
+        const unchecked = await adminFetch('/api/manager/backups/download-db?nodeId=local-node');
+        await unchecked.arrayBuffer();
+        assert(unchecked.status === 200 && unchecked.headers.get('x-backup-images-checked') === 'no',
+            'a copy whose bucket could not be listed when it was taken says so: X-Backup-Images-Checked: no');
+        assert(!unchecked.headers.get('x-backup-images-bucket') && !unchecked.headers.get('x-injected'),
+            'and a label naming something that is not a bucket name puts no bucket (and nothing else) in the headers');
+        fs.writeFileSync(labelPath, JSON.stringify(keptLabel));
     }
 
     // ── 10. restore ────────────────────────────────────────────────────────────────────────────

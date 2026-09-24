@@ -13,7 +13,7 @@ import {
     loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, listSealedBackups, listPlainHistory,
     imagesDirFor, missingManifestFor, inBucketLabelFor, type FleetNodeConfig,
 } from '../services/harvester.js';
-import { IN_BUCKET_MEMBER, MISSING_MEMBER } from '../services/sealed-backup.js';
+import { IN_BUCKET_MEMBER, MISSING_MEMBER, readInBucketMember } from '../services/sealed-backup.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import { assertSafeKey } from '../storage/image-store.js';
 import type { RouteDeps } from './types.js';
@@ -256,9 +256,13 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             // A copy of an s3 node: its objects are in that node's bucket and were never in the backup. There is
             // nothing here to measure them against, so the label goes out as the node wrote it — `in-bucket` —
             // with the node's own count of what the bucket did not hold, and never as "short by every photo".
+            // The same headers the node's own download sends (routes/backup.ts markContents), read off the label
+            // kept beside the copy: without `Checked: no` a backup taken while the bucket could not be listed
+            // would reach the operator as a verified one.
             const inBucketLabel = inBucketLabelFor(dbPath);
             if (fs.existsSync(inBucketLabel)) {
                 fs.copyFileSync(inBucketLabel, path.join(stage, IN_BUCKET_MEMBER));
+                const label = readInBucketMember(stage);
                 const tarPath = path.join(work, 'backup.tar.gz');
                 await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
                 ctx.set('Cache-Control', 'no-store');
@@ -267,7 +271,12 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                 ctx.set('X-Backup-Contents', 'database+images-in-bucket');
                 ctx.set('X-Backup-Images', 'in-bucket');
                 ctx.set('X-Backup-Image-Bytes', '0');
-                if (labelled && labelled.length > 0) ctx.set('X-Backup-Missing-Images', String(labelled.length));
+                // `bucket` is only ever a validated bucket name (readInBucketMember), so it is safe as a header.
+                if (label?.bucket) ctx.set('X-Backup-Images-Bucket', label.bucket);
+                if (label?.referenced != null) ctx.set('X-Backup-Images-Referenced', String(label.referenced));
+                ctx.set('X-Backup-Images-Checked', label?.checked ? 'yes' : 'no');
+                const missing = labelled && labelled.length > 0 ? labelled.length : (label?.missingFromBucket ?? 0);
+                if (missing > 0) ctx.set('X-Backup-Missing-Images', String(missing));
                 // eslint-disable-next-line no-control-regex
                 ctx.set('Content-Disposition', `attachment; filename="${`${base}.tar.gz`.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);
                 const body = fs.createReadStream(tarPath);

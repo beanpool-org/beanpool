@@ -92,9 +92,12 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
         served = await openPhotoOf(photo, getImageStore());
     } catch (e) {
         // The read is async, so the row can have been deleted while it was in flight — and the delete paths
-        // remove the object right after the row. That is a photo that no longer exists, not an outage.
+        // remove the object right after the row. That is a photo that no longer exists, not an outage. So is
+        // one REPLACED in flight: an edit writes a new row at the same (post, order) with a new key and removes
+        // the old object, so the question is whether the row still names the object this request read.
         if (e instanceof MissingObjectError) {
-            const still = db.prepare(`SELECT 1 FROM post_photos WHERE post_id = ? AND order_num = ?`).get(id, Number(orderNum));
+            const still = db.prepare(`SELECT 1 FROM post_photos WHERE post_id = ? AND order_num = ? AND storage_key = ?`)
+                .get(id, Number(orderNum), photo.storage_key);
             if (!still) {
                 ctx.status = 404;
                 ctx.body = { error: 'Photo not found' };

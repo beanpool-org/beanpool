@@ -10,7 +10,8 @@
  *   2. A new post's photo goes to the bucket — not the database, not the local disk — and is served on the
  *      same URL with the same bytes, type and immutable caching; the row is read first.
  *   3. A replaced photo takes a new key and the old object leaves the bucket after the commit; a removed
- *      photo 404s; a row gone while its object remains 404s; an object gone while its row remains is a 503.
+ *      photo 404s; a row gone while its object remains 404s; a photo replaced while it is being read 404s;
+ *      an object gone while its row remains is a 503.
  *   4. A message attachment's ciphertext goes to the bucket and comes back exactly.
  *   5. The sync export rebuilds each photo from the bucket byte for byte, and omits (and names) one it
  *      cannot read, so a replica keeps its own copy.
@@ -269,6 +270,28 @@ async function main(): Promise<void> {
     assert((await fake.objects()).has(rowE.storage_key), 'setup: the object is still in the bucket with its row gone');
     assert((await fetch(`${BASE}/api/marketplace/posts/${post3.id}/photos/0`)).status === 404,
         'a photo whose row is gone is a 404 even though the bucket still has it');
+
+    // Replaced WHILE it is being read. The read is async; an edit writes a new row at the same (post, order)
+    // with a new key and removes the old object after its commit. The request asked for a photo that no longer
+    // exists — a 404 — and not an outage: the row there now names a different object.
+    const photoF = makePhoto('f');
+    const post4 = createPost('offer', 'food', 'Figs', 'A bag', 2, 'fixed', author, undefined, undefined, [dataUrl(photoF)], true)!;
+    const rowF = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post4.id) as any;
+    await fake.clearLog();
+    await fake.fault({ method: 'GET', prefix: `/${fake.bucket}/${rowF.storage_key}`, delayMs: 1_500, count: 1 });
+    const raced = fetch(`${BASE}/api/marketplace/posts/${post4.id}/photos/0`);
+    // The bucket has the read (and is holding it) before the photo is replaced under it.
+    for (let i = 0; i < 200; i++) {
+        if ((await fake.log()).some((e) => e.method === 'GET' && e.path.endsWith(rowF.storage_key))) break;
+        await new Promise((r) => setTimeout(r, 10));
+    }
+    updatePost(post4.id, author, { photos: [dataUrl(makePhoto('g'))] } as any);
+    const rowG = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post4.id) as any;
+    assert(rowG.storage_key !== rowF.storage_key && !(await fake.objects()).has(rowF.storage_key),
+        'setup: the photo was replaced, and its old object removed, while the read was in flight');
+    const racedStatus = (await raced).status;
+    await fake.clearFaults();
+    assert(racedStatus === 404, `a photo replaced while it was being read is a 404, not a 503 (got ${racedStatus})`);
 
     // ── 4. an attachment ───────────────────────────────────────────────────────────────────────
     console.log('\n--- 4. An attachment ---');

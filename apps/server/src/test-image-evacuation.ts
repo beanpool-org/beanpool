@@ -23,6 +23,8 @@
  *   8. A backup carries images/ beside state.db, and a backup taken BEFORE this change still restores.
  *   9. storage-health counts the store, and sweeps objects no row points at.
  *  10. The database is measurably smaller afterwards.
+ *  11. An import writes a peer's photos to disk BEFORE it opens its write transaction, so a big resync
+ *      never holds the write lock across one fsync per photo.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-evacuation.ts
  */
@@ -438,6 +440,67 @@ async function main(): Promise<void> {
         assert(dropErr === null, 'and an edit that simply DELETES the broken photo succeeds too');
         assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos WHERE post_id = ?').get(lonely.id) as any).c === 0,
             'the post is left with no photos');
+    }
+
+    // ── 11. an import puts the bytes on disk BEFORE it opens the write transaction ──────────────
+    // `store.put` is a mkdir, a temp write, an fsyncSync and a rename. Doing that per photo while the
+    // import's write transaction is open would, on a force-resync or a first full snapshot, stall a
+    // 1 vCPU node for one fsync per photo with nothing else able to run. The create and update paths
+    // already put before their transaction (`storedPhotoColumns`); this is the same rule on the way in.
+    {
+        const { signSyncPayload, importRemoteState, setNodeRole } = await import('./state-engine.js');
+        const { startP2P } = await import('./p2p.js');
+        const { addConnector } = await import('./connector-manager.js');
+        const p2pNode = await startP2P(4072, 4073);
+        addConnector(`/ip4/127.0.0.1/tcp/4073/p2p/${p2pNode.peerId.toString()}`, 'mirror', 'imgstore-self-test-peer');
+
+        // Watch every put the import makes and record whether a transaction was open at the time.
+        const realPut = store.put.bind(store);
+        const putsInsideTransaction: string[] = [];
+        let putCount = 0;
+        (store as any).put = (key: string, bytes: Buffer, meta: any) => {
+            putCount++;
+            if (db.inTransaction) putsInsideTransaction.push(key);
+            return realPut(key, bytes, meta);
+        };
+
+        const incomingId = crypto.randomUUID();
+        db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+                    VALUES (?, 'offer', 'food', 'Imported', 'from a peer', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')`)
+            .run(incomingId, authorKey);
+        const incomingBytes = [makePhoto('import-a'), makePhoto('import-b'), makePhoto('import-c')];
+        const base = await exportSyncState('test-node');
+        const { signature: _sig, publicKey: _pk, ...unsigned } = base as any;
+        const payload = await signSyncPayload({
+            ...unsigned,
+            posts: [], members: [], photos: incomingBytes.map((b, i) => ({
+                post_id: incomingId, order_num: i, photo_data: dataUrl(b),
+            })),
+        } as any);
+
+        setNodeRole('backup');
+        let importErr: unknown = null;
+        try { await importRemoteState(payload as any); } catch (e) { importErr = e; }
+        setNodeRole('primary');
+        (store as any).put = realPut;
+        try { await p2pNode.stop(); } catch { /* the suite is finishing anyway */ }
+
+        assert(importErr === null, `an import carrying photos does not throw${importErr ? ': ' + String(importErr) : ''}`);
+        assert(putCount >= incomingBytes.length, 'the import put every photo it was given through the store');
+        assert(putsInsideTransaction.length === 0,
+            `no photo is written to disk while the import transaction is open (${putsInsideTransaction.length} were)`);
+
+        // And the rows still land exactly as before the puts were hoisted out.
+        for (let i = 0; i < incomingBytes.length; i++) {
+            const row = db.prepare('SELECT photo_data, storage_key, sha256, bytes, mime FROM post_photos WHERE post_id = ? AND order_num = ?')
+                .get(incomingId, i) as any;
+            assert(row?.photo_data === null && typeof row?.storage_key === 'string',
+                `imported photo ${i} is in the store, not in the database`);
+            assert(store.get(row.storage_key)?.equals(incomingBytes[i]) === true,
+                `imported photo ${i} holds exactly the bytes the peer sent`);
+            assert(row.sha256 === sha256Hex(incomingBytes[i]) && row.bytes === incomingBytes[i].length,
+                `imported photo ${i} records its digest and size`);
+        }
     }
 
     // ── 9. storage-health ──────────────────────────────────────────────────────────────────────

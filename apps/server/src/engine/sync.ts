@@ -5,7 +5,7 @@
 import { db, afterTransactionCommit } from '../db/db.js';
 import crypto from 'node:crypto';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
-import { deleteStoredObjects, photoDataOf, storePhotoColumns } from '../storage/image-columns.js';
+import { deleteStoredObjects, photoDataOf, storePhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { getLocalConfig } from '../config/local-config.js';
 import {
     exportSyncState as exportSyncStateEngine,
@@ -181,6 +181,37 @@ export async function signSyncPayload(cb: SyncCallbacks, payload: SyncPayload): 
  * receive it keeps. This is the one case where the backup copy is the only good one left, and the export's
  * job is to not destroy it.
  */
+/**
+ * Put every photo in an incoming payload through the image store, keyed `post_id|order_num`.
+ *
+ * A peer still sends bytes inline (the payload is frozen this phase), and they go straight through the store
+ * on the way in — so an importing node's database does not re-grow by everything its peers hold. A value the
+ * store cannot reproduce exactly stays in the row, as it would have before.
+ *
+ * Runs before the import transaction opens, so the write lock is never held across an fsync. See the call
+ * site for why that matters on a small node.
+ */
+function storeImportedPhotos(photos: any[]): Map<string, PhotoColumns> {
+    const store = getImageStore();
+    const out = new Map<string, PhotoColumns>();
+    for (const ph of photos) {
+        // The other half of the rule `restoreInlinePhotos` keeps on the way out, enforced here on the way
+        // in — because the peer sending this payload may be a node that has not been upgraded yet, and
+        // during a rolling upgrade it usually is. A photo row with no bytes carries no information, and
+        // applying one can only destroy: INSERT OR REPLACE would overwrite an intact local photo with a row
+        // the evacuation job skips and the photo route serves as a 404, and the peer's unchanged
+        // `updated_at` means no later delta pull ever corrects it. Nothing to apply, so apply nothing.
+        if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
+        // Last one wins, exactly as the INSERT OR REPLACE loop did when a payload named the same slot twice.
+        out.set(`${ph.post_id}|${ph.order_num}`, storePhotoColumns(
+            store,
+            sb => postPhotoKey(ph.post_id, ph.order_num, sb.sha256, sb.mime),
+            ph.photo_data,
+        ));
+    }
+    return out;
+}
+
 function restoreInlinePhotos(payload: SyncPayload): SyncPayload {
     const photos = (payload as any).photos as any[] | undefined;
     if (!Array.isArray(photos) || photos.length === 0) return payload;
@@ -458,6 +489,17 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     let tombstonesApplied = 0, conflictsSkipped = 0, recoverySharesImported = 0;
     let groupChanges = 0;
 
+    // Photos go through the store BEFORE the transaction opens, never inside it — the same rule the create
+    // and update paths keep (`storedPhotoColumns` in engine/posts.ts). Each `store.put` is a mkdir, a temp
+    // write, an `fsyncSync` and a rename; doing that per photo while holding the write lock would, on a
+    // force-resync or a first full snapshot, stall a 1 vCPU node for one fsync per photo — thousands of them
+    // on a mature node — with nothing else able to run.
+    //
+    // It also keeps a failed import honest. If the transaction rolls back after the puts, the objects it
+    // wrote are orphans, but they are content-addressed: the retry re-derives the same keys and re-uses
+    // them, and the storage-health sweep reclaims whatever is genuinely left over.
+    const importedPhotoColumns = remote.photos ? storeImportedPhotos(remote.photos) : null;
+
     currentImportOrigin = remote.nodeId;
     db.pragma('foreign_keys = OFF');
 
@@ -627,37 +669,24 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
-            if (remote.photos) {
-                // A peer still sends bytes inline (the payload is frozen this phase), and they go straight
-                // through the store on the way in — so an importing node's database does not re-grow by
-                // everything its peers hold. A value the store cannot reproduce exactly stays in the row,
-                // as it would have before.
-                //
+            if (importedPhotoColumns) {
                 // INSERT OR REPLACE over a row that already named an object leaves that object with
                 // nothing pointing at it. Deliberately not deleted here: the import is a hot loop over a
                 // whole payload, an unlink per row is a syscall per row, and the object is harmless where
                 // it is. The storage-health orphan sweep reclaims it. Re-importing the SAME photo costs
                 // nothing at all — the key is content-addressed, so it is the same key.
-                const store = getImageStore();
+                //
+                // The bytes are already on disk: `storeImportedPhotos` put them there before this
+                // transaction opened. All that is left in here is the row.
                 const insertPhoto = db.prepare(
                     `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime)
                      VALUES (?, ?, ?, ?, ?, ?, ?)`
                 );
-                for (const ph of remote.photos) {
-                    // The other half of the rule `restoreInlinePhotos` keeps on the way out, enforced here
-                    // on the way in — because the peer sending this payload may be a node that has not been
-                    // upgraded yet, and during a rolling upgrade it usually is. A photo row with no bytes
-                    // carries no information, and applying one can only destroy: INSERT OR REPLACE would
-                    // overwrite an intact local photo with a row the evacuation job skips and the photo
-                    // route serves as a 404, and the peer's unchanged `updated_at` means no later delta
-                    // pull ever corrects it. Nothing to apply, so apply nothing.
-                    if (typeof ph.photo_data !== 'string' || ph.photo_data.length === 0) continue;
-                    const cols = storePhotoColumns(
-                        store,
-                        sb => postPhotoKey(ph.post_id, ph.order_num, sb.sha256, sb.mime),
-                        ph.photo_data,
-                    );
-                    insertPhoto.run(ph.post_id, cols.photo_data, ph.order_num, cols.storage_key, cols.sha256, cols.bytes, cols.mime);
+                for (const [key, cols] of importedPhotoColumns) {
+                    const sep = key.lastIndexOf('|');
+                    const postId = key.slice(0, sep);
+                    const orderNum = Number(key.slice(sep + 1));
+                    insertPhoto.run(postId, cols.photo_data, orderNum, cols.storage_key, cols.sha256, cols.bytes, cols.mime);
                 }
             }
 

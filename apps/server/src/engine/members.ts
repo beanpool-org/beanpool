@@ -2,7 +2,7 @@
 //
 // Bridges the database storage layer with server singletons and broadcasts.
 
-import { db, seedNodeRolesFromGenesis } from '../db/db.js';
+import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
 import { ledger } from './ledger.js';
 import { getMember, getProfile, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
@@ -21,12 +21,20 @@ export function recordActivity(publicKey: string): void {
         ).all(publicKey) as any[];
         if (activeProps.length > 0) {
             db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE lead_pubkey = ? AND status = 'active'").run(publicKey);
+            // Tell clients only once the UPDATE is durable. recordActivity is called from inside
+            // transactions (transfer() has wrapped its writes in one since #1096), and a later statement
+            // in that transaction can still throw: the UPDATE rolls back with it, but a broadcast already
+            // sent cannot be recalled, and every client would have retired a proposal the node still holds
+            // as active. afterTransactionCommit fires straight away outside a transaction, and defers to
+            // the outermost commit inside one — dropping the queued hooks if it rolls back instead.
             for (const p of activeProps) {
-                (globalThis as any).broadcast?.({
-                    type: 'enterprise_succession_cancelled',
-                    proposalId: p.id,
-                    enterprisePubkey: p.enterprise_pubkey,
-                    leadPubkey: publicKey
+                afterTransactionCommit(() => {
+                    (globalThis as any).broadcast?.({
+                        type: 'enterprise_succession_cancelled',
+                        proposalId: p.id,
+                        enterprisePubkey: p.enterprise_pubkey,
+                        leadPubkey: publicKey
+                    });
                 });
             }
         }

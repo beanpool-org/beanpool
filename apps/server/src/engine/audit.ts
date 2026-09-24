@@ -62,12 +62,35 @@ export function persistDecayEvents(): void {
 }
 
 /**
+ * Flush the demurrage PAIR — the account debits and the matching Commons credit — in ONE commit.
+ *
+ * Demurrage is a transfer, not a deduction: `applyDecay` debits the account and does
+ * `COMMONS_BALANCE += decayed` together, and the two halves are persisted by different functions.
+ * `persistDecayEvents()` writes the debits (its own `db.transaction`) and `persistCommonsBalance()`
+ * writes the credit (a bare `INSERT OR REPLACE`, i.e. its own autocommit). Called one after the other
+ * they are TWO commits, and a crash in the gap leaves the debits durable with the credit gone — boot then
+ * restores the pot from the stale `COMMONS_POOL` row (`initStateEngine`) and the beans are destroyed.
+ * Measured on a 5,000-bean account 60 days stale: 208.5825 Beans missing from the rows (review finding).
+ *
+ * So every caller that flushes the pair on its own goes through here instead. Callers that already hold a
+ * `conservingTransaction` write both halves inside it and do NOT need this — there the surrounding
+ * transaction is what makes them one commit, and this is a harmless savepoint if used anyway.
+ */
+export function persistDecayAndCommons(): void {
+    db.transaction(() => {
+        persistDecayEvents();
+        persistCommonsBalance();
+    })();
+}
+
+/**
  * Server wrapper for the ledger conservation audit.
  * Persists decay events and commons balance first, then executes the conservation check.
  */
 export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
-    persistDecayEvents();
-    persistCommonsBalance();
+    // ONE commit for the pair — the audit runs at boot and on a timer, and a flush that tore here would
+    // destroy exactly what the audit exists to detect.
+    persistDecayAndCommons();
     return runConservationCheck(db);
 }
 

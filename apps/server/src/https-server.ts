@@ -15,6 +15,7 @@
  */
 
 import https from 'node:https';
+import type { AddressInfo } from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -680,7 +681,15 @@ export function getKoaApp(): Koa | null { return _koaApp; }
 let _upgradeHandler: UpgradeHandler | null = null;
 export function getUpgradeHandler(): UpgradeHandler | null { return _upgradeHandler; }
 
-export async function startHttpsServer(port: number): Promise<void> {
+/**
+ * Starts the HTTPS listener and resolves with the port it actually bound.
+ *
+ * Pass 0 to let the OS pick a free one and read it back from the resolved value. Tests used to pick
+ * ports for themselves with a probe that binds port 0, closes, and hands the number on — two probes in
+ * a row could be handed the same port, and the second server then died with EADDRINUSE. Binding once
+ * and reporting the result has no such gap.
+ */
+export async function startHttpsServer(port: number): Promise<number> {
     const app = new Koa();
     app.proxy = true;
     _koaApp = app;
@@ -1294,7 +1303,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         key: getServerKeyPem(),
     };
 
-    return new Promise((resolve) => {
+    return new Promise<number>((resolve) => {
         const server = https.createServer(serverOptions, app.callback());
 
         // WebSocket upgrade handler (shared with the plain HTTP server — see createUpgradeHandler)
@@ -1323,8 +1332,9 @@ export async function startHttpsServer(port: number): Promise<void> {
         });
 
         server.listen(port, () => {
-            console.log(`🔒 PWA + Settings + API (HTTPS) listening on https://0.0.0.0:${port}`);
-            resolve();
+            const bound = (server.address() as AddressInfo).port;
+            console.log(`🔒 PWA + Settings + API (HTTPS) listening on https://0.0.0.0:${bound}`);
+            resolve(bound);
         });
     });
 }

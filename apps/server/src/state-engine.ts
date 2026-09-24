@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, SYNONYM_MAP } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope } from '@beanpool/core';
+export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
@@ -130,6 +131,7 @@ import {
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
     persistDecayEvents as persistDecayEventsEngine,
+    persistDecayAndCommons as persistDecayAndCommonsEngine,
     runLedgerAudit as runLedgerAuditEngine,
     promotionSanityCheck as promotionSanityCheckEngine,
     type ReplicaConsistency
@@ -254,7 +256,8 @@ import {
     closePoll as closePollEngine,
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
-    adminDeletePost as adminDeletePostEngine
+    adminDeletePost as adminDeletePostEngine,
+    type EscrowRefundShortfall
 } from './engine/posts.js';
 import {
     requestPost as requestPostEngine,
@@ -580,9 +583,13 @@ export function initStateEngine(): void {
     // there — it is the sixth instance of this feature shipping code that nothing ever executed.
 
     // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes)
+    //
+    // ONE commit, not two (review finding). These used to be separate autocommits under separate catches,
+    // so a crash — or just the first one succeeding and the second throwing — left the decay debits durable
+    // with their matching Commons credit missing, which boot then rebuilds from as the truth. The pair is
+    // the unit; half of it is worse than none of it.
     setInterval(() => {
-        try { persistDecayEvents(); } catch (e) { console.warn('[Ledger] Failed to persist decay events:', e); }
-        try { persistCommonsBalance(); } catch (e) { console.warn('[Ledger] Failed to persist commons balance:', e); }
+        try { persistDecayAndCommons(); } catch (e) { console.warn('[Ledger] Failed to persist the demurrage flush:', e); }
     }, 5 * 60 * 1000);
 
     // #129: Run the ledger conservation audit IMMEDIATELY at startup so drift
@@ -1602,65 +1609,96 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // negative IS the credit extended to the peer. It is not unbounded in effect: settlementCapacity()
     // bounds it upstream against the operator-set per-peer cap, which is the only place that limit
     // belongs (docs/federation-economics.md Rule 5). A floor here would make settlement impossible.
-    const isSystemFrom = from.startsWith('escrow_') || from === 'COMMONS_POOL' || from === 'genesis'
-        || from.startsWith('bridge_');
-    const senderFloor = isSystemFrom ? -Infinity
+    //
+    // ESCROW IS NOT UNBOUNDED. It used to be lumped in with the other system wallets on the line below
+    // and given a `-Infinity` floor, which meant any debit from an escrow succeeded regardless of what
+    // the escrow actually held — the bug that let a post removal refund 15 Beans out of two escrows that
+    // had never been funded (see `ESCROW_FLOOR` in @beanpool/core for the measurement). An escrow holds
+    // beans somebody already paid in; it can only ever pay out what it holds. `ledger.transfer` clamps
+    // this again as a primitive, so no caller can re-open the hole by passing its own floor.
+    const isUnboundedFrom = from === 'COMMONS_POOL' || from === 'genesis' || from.startsWith('bridge_');
+    const senderFloor = isEscrowAccount(from) ? ESCROW_FLOOR
+        : isUnboundedFrom ? -Infinity
         : isEscrow ? usableFloor(from)   // v3: marketplace spends bounded by the offer-banded floor
         : 0;
     // Fee policy: the 1.5% community fee applies ONLY to marketplace/escrow settlements. Direct
     // peer "send credits" gifts are fee-free — gifting a friend beans you hold shouldn't be taxed.
     // System moves (escrow holds, refunds, admin) stay exempt via the caller's isFeeExempt.
     const feeExempt = isFeeExempt || !isEscrow;
-    const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
-    if (!success) return null;
 
-    if (!isSyntheticAccount(from) && from !== 'genesis') {
-        recordActivity(from);
-    }
+    // ATOMICITY (money). Everything from the in-memory `ledger.transfer` through the last persisted row is
+    // ONE unit. It used to be five autocommitted statements, and every gap between them was a way to destroy
+    // beans on disk: a crash after the sender's row was written but before the recipient's left the debit
+    // durable with no matching credit, and boot rebuilds memory from those rows (`initStateEngine`). The
+    // other gaps are the same shape — history written with no balance moved, or balances moved with the
+    // decay rows that justify them missing. `runLedgerAudit` only WARNS on the resulting drift, and
+    // `reconcileLedgerFromDb` faithfully reloads whichever torn state the crash left.
+    //
+    // It must be `conservingTransaction`, NOT a bare `db.transaction`: the in-memory mutation is inside the
+    // block, and a bare transaction rolls back only the rows — leaving memory ahead of the DB, which is the
+    // hazard that wrapper's docblock describes at length.
+    //
+    // Every other caller already runs transfer() inside a conservingTransaction of its own (escrow,
+    // settlement, wizards, admin deletes), so for them this is a SAVEPOINT nested in their transaction and
+    // the outer commit is still what makes anything durable. The two callers that did NOT wrap — the
+    // member-to-member send route and `migrateEscrowWalletKeys` — are the ones this closes.
+    const txn = conservingTransaction<Transaction | null>(() => {
+        const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
+        if (!success) return null;
 
-    const taxFee = feeExempt ? 0 : amount * TRANSACTION_FEE_RATE;
+        if (!isSyntheticAccount(from) && from !== 'genesis') {
+            recordActivity(from);
+        }
 
-    const txn: Transaction = {
-        id: crypto.randomUUID(),
-        from, to, amount,
-        taxFee,
-        memo: memo || '',
-        timestamp: new Date().toISOString(),
-    };
-    if (amount > 0) {
-        // SRV-20: persist the caller's request signature (if supplied) so this
-        // transaction's authorship is re-verifiable on import. NULL for
-        // system/internal transfers (those become node-signed in a later step).
-        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            txn.id, txn.from, txn.to, txn.amount, txn.taxFee, txn.memo, txn.timestamp,
-            auth?.signer ?? null, auth?.signature ?? null, auth?.payload ?? null,
-        );
-    }
+        const taxFee = feeExempt ? 0 : amount * TRANSACTION_FEE_RATE;
 
-    // Sync ledger account balances to DB
-    const fromAcc = ledger.getAccount(from);
-    const toAcc = ledger.getAccount(to);
-    // UPSERT, not UPDATE. ledger.getAccount() auto-creates an account in memory on first touch, but a
-    // bare `UPDATE ... WHERE public_key=?` matches 0 rows when SQLite has never seen it — silently, so
-    // the in-memory balance and the DB diverge permanently and every later read returns 0. Synthetic
-    // accounts are the exposed case, since transfer() skips registerVisitor() for them: escrow_* happens
-    // to be safe only because escrow.ts INSERT OR IGNOREs first. This closes the class rather than one
-    // instance of it.
-    const persistAccount = db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
-            last_demurrage_epoch = excluded.last_demurrage_epoch,
-            last_updated_at = excluded.last_updated_at
-    `);
-    const nowIso = new Date().toISOString();
-    persistAccount.run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, nowIso);
-    persistAccount.run(to, toAcc.balance, toAcc.lastDemurrageEpoch, nowIso);
+        const built: Transaction = {
+            id: crypto.randomUUID(),
+            from, to, amount,
+            taxFee,
+            memo: memo || '',
+            timestamp: new Date().toISOString(),
+        };
+        if (amount > 0) {
+            // SRV-20: persist the caller's request signature (if supplied) so this
+            // transaction's authorship is re-verifiable on import. NULL for
+            // system/internal transfers (those become node-signed in a later step).
+            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                built.id, built.from, built.to, built.amount, built.taxFee, built.memo, built.timestamp,
+                auth?.signer ?? null, auth?.signature ?? null, auth?.payload ?? null,
+            );
+        }
 
-    // Persist demurrage decay rows + commons balance (transfers trigger decay on both accounts)
-    persistDecayEvents();
-    persistCommonsBalance();
+        // Sync ledger account balances to DB
+        const fromAcc = ledger.getAccount(from);
+        const toAcc = ledger.getAccount(to);
+        // UPSERT, not UPDATE. ledger.getAccount() auto-creates an account in memory on first touch, but a
+        // bare `UPDATE ... WHERE public_key=?` matches 0 rows when SQLite has never seen it — silently, so
+        // the in-memory balance and the DB diverge permanently and every later read returns 0. Synthetic
+        // accounts are the exposed case, since transfer() skips registerVisitor() for them: escrow_* happens
+        // to be safe only because escrow.ts INSERT OR IGNOREs first. This closes the class rather than one
+        // instance of it.
+        const persistAccount = db.prepare(`
+            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(public_key) DO UPDATE SET
+                balance = excluded.balance,
+                last_demurrage_epoch = excluded.last_demurrage_epoch,
+                last_updated_at = excluded.last_updated_at
+        `);
+        const nowIso = new Date().toISOString();
+        persistAccount.run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, nowIso);
+        persistAccount.run(to, toAcc.balance, toAcc.lastDemurrageEpoch, nowIso);
+
+        // Persist demurrage decay rows + commons balance (transfers trigger decay on both accounts)
+        persistDecayEvents();
+        persistCommonsBalance();
+
+        return built;
+    });
+    // A refused transfer (over the sender's floor) is not a failure to roll back — nothing was written, so
+    // the empty transaction commits and we return null exactly as before.
+    if (!txn) return null;
 
     afterTransactionCommit(() => {
         const toMember = getMember(to);
@@ -1773,41 +1811,107 @@ export function settleDemurrage(publicKeys: string[]): void {
  * the next flush mints it. Flushing first makes memory and rows agree before there is anything to restore,
  * which is the only version of this wrapper that is safe to use.
  *
- * Assumes it is the OUTERMOST transaction: the pre-flush commits, so nesting this inside another
- * `db.transaction` would put that commit at risk of the outer rollback. No caller nests it today.
+ * AND THE PRE-FLUSH IS ITSELF ONE COMMIT (deciding-pass finding). `persistDecayEvents()` opens its own
+ * `db.transaction`, so when this is the OUTERMOST caller — a bare `transfer()` from the member-to-member
+ * send route — flushing it alone AUTOCOMMITTED the account debits and the `Circulation fee` rows, while the
+ * matching Commons credit was only written by `persistCommonsBalance()` inside the block. Consistent, but
+ * not durable: a crash in that gap left the debit on disk with its credit gone, and boot restores the pot
+ * from the stale `COMMONS_POOL` row. Measured at 208.5825 Beans destroyed on one 5,000-bean account 60 days
+ * stale, with the decay queued by nothing more exotic than a `getBalance()` before the send. Both halves now
+ * go in one transaction, so the snapshot pair is durable as well as consistent.
+ *
+ * If THAT flush fails, memory has to be resynced before rethrowing: `drainDecayEvents()` has already emptied
+ * the queue, so a rolled-back flush would leave memory holding decay that no row records — the account debit
+ * reverted, its Commons credit still in the global, which is the minting direction. The restore point is the
+ * ROWS, both halves: accounts pre-decay, and the pot from the `COMMONS_POOL` row. A snapshot of the global
+ * taken on entry is no use here and was measured wrong — the decay credit is already in it, because the
+ * `getBalance()` that queued the decay ran before this function was ever called.
+ *
+ * NESTING. `transfer()` now wraps its own writes in this, so every caller that already held a
+ * `conservingTransaction` (escrow, settlement, the wizards, admin deletes) nests one inside it, and the
+ * inner call becomes a SAVEPOINT. That is safe, but ONLY because the pre-flush above is unconditional.
+ *
+ * It used to be skipped when nested (`if (!db.inTransaction)`), on the reasoning that the pre-flush
+ * commits and nesting would put that commit at risk of the outer rollback. Measured, that reasoning cost
+ * beans. Lazy demurrage applied between the outer BEGIN and the inner call sits queued and unflushed: the
+ * account's debit is in memory only, the Commons credit is in the global, and `commonsBefore` snapshots the
+ * credit. The inner block's own `persistDecayEvents()` then drains the queue and writes the debit INSIDE
+ * the savepoint, so a later throw rolls the debit back, leaves the queue empty for `loadState` to unwind,
+ * and `setCommonsBalance(commonsBefore)` restores a Commons credit with no debit anywhere. A probe against
+ * a 5,000-bean account 60 days stale minted **208.58 beans** on one failed send.
+ *
+ * Flushing unconditionally makes the pair consistent at every level. When nested, the flush is a savepoint
+ * inside the OUTER transaction, opened and released before this call's own savepoint — so an inner rollback
+ * keeps it, and `reconcileLedgerFromDb` reads rows that already carry the debit. If the outer later rolls
+ * back too, both halves of the flush go with it and the outer's own catch restores its own (earlier)
+ * snapshot over the top, which is consistent as well; the only cost is that the decay is recomputed on the
+ * next read, which is exactly what `loadState`'s docblock says happens anyway.
  *
  * Lives here rather than beside a caller because the hazard belongs to the primitives, not to any one
  * feature: #104's settlement writes, `adminPruneUser` and the treasury sweep hit it identically, and
  * anything else that composes several ledger moves under one transaction will too.
  */
 export function conservingTransaction<T>(fn: () => T): T {
-    // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair.
-    if (!(db as any).inTransaction) {
-        persistDecayEvents();
+    // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair — and a
+    // DURABLE one: the decay debits and the Commons credit land in the same commit, or neither does.
+    // Unconditional, including when nested — see NESTING above; skipping it here minted beans.
+    try {
+        persistDecayAndCommons();
+    } catch (e) {
+        // The flush rolled back, but the queue it drained is gone from memory, so memory now holds decay no
+        // row records. Restore BOTH halves from the rows — `null` means "take the pot from its row too",
+        // which is the whole point here and not what the failure path below wants. See the docblock.
+        resyncMemoryToRows(null, e);
+        throw e;
     }
     const commonsBefore = getCommonsBalanceExact();
     try {
         return db.transaction(fn)();
     } catch (e) {
         // The DB has rolled back; resync memory to it rather than leaving the two disagreeing.
-        try {
-            reconcileLedgerFromDb();
-            setCommonsBalance(commonsBefore);
-        } catch (resyncError: any) {
-            // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
-            // read would be served from the wrong number — a mutual-credit ledger silently minting is worse
-            // than an outage. Halting is also self-healing here: the fleet runs under a restart policy, and
-            // boot rebuilds the ledger from the rows, which are the truth after a rollback.
-            //
-            // Genuinely pathological rather than transient. This is a plain SELECT, the database is in WAL
-            // mode, and WAL readers do not block on writers — so a failure here means SQLite itself is
-            // failing, not that something held a lock.
-            console.error('[Ledger] FATAL: resync after a failed write FAILED. Halting to protect ledger '
-                + 'consistency — restart rebuilds from the rows.', resyncError?.message || resyncError);
-            console.error('[Ledger] The write that triggered it:', (e as any)?.message || e);
-            process.exit(1);
-        }
+        resyncMemoryToRows(commonsBefore, e);
         throw e;
+    }
+}
+
+/**
+ * Put the in-memory ledger back to what the rows say, or halt.
+ *
+ * Shared by both of `conservingTransaction`'s failure paths because they need almost the same thing:
+ * accounts rebuilt from the rows, and the Commons global — which `reconcileLedgerFromDb` deliberately does
+ * not touch — put back alongside them.
+ *
+ * They differ only in WHERE the pot comes from, which is why it is a parameter rather than assumed. After
+ * the block fails, the snapshot taken once the pre-flush had made rows and memory agree is the restore
+ * point. After the PRE-FLUSH itself fails there is no such snapshot — the global already carries the decay
+ * credit whose debit just rolled back — so `null` says to read the `COMMONS_POOL` row, which is the pot as
+ * a restart would load it and the only half that matches the accounts being reloaded.
+ *
+ * The row read is inside the try on purpose: if SQLite is failing badly enough to break it, that is the
+ * halt case below, not an exception thrown out of a catch block.
+ */
+function resyncMemoryToRows(commonsSnapshot: number | null, cause: unknown): void {
+    try {
+        reconcileLedgerFromDb();
+        if (commonsSnapshot !== null) {
+            setCommonsBalance(commonsSnapshot);
+        } else {
+            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
+            if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
+        }
+    } catch (resyncError: any) {
+        // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
+        // read would be served from the wrong number — a mutual-credit ledger silently minting is worse
+        // than an outage. Halting is also self-healing here: the fleet runs under a restart policy, and
+        // boot rebuilds the ledger from the rows, which are the truth after a rollback.
+        //
+        // Genuinely pathological rather than transient. This is a plain SELECT, the database is in WAL
+        // mode, and WAL readers do not block on writers — so a failure here means SQLite itself is
+        // failing, not that something held a lock.
+        console.error('[Ledger] FATAL: resync after a failed write FAILED. Halting to protect ledger '
+            + 'consistency — restart rebuilds from the rows.', resyncError?.message || resyncError);
+        console.error('[Ledger] The write that triggered it:', (cause as any)?.message || cause);
+        process.exit(1);
     }
 }
 
@@ -1859,9 +1963,13 @@ export function moveToCommons(
     if (amount <= 0) return null;
 
     return conservingTransaction(() => {
-        // Synthetic senders are unbounded (escrow drains to zero by design; a bridge must be able to go
-        // negative). A treasury or a member is floored at 0 — neither may be driven into debt by this path.
-        if (!ledger.moveToCommons(from, amount, synthetic ? -Infinity : 0)) return null;
+        // A bridge must be able to go negative (that negative IS the credit extended to a peer), so the
+        // other synthetic senders stay unbounded. An ESCROW does not: it drains to zero by design, and
+        // "by design" has to be enforced rather than assumed — #104 moves the cross-node fee to the
+        // Commons straight out of the settlement's escrow account through this very path.
+        // A treasury or a member is floored at 0 — neither may be driven into debt by this path.
+        const fromFloor = isEscrowAccount(from) ? ESCROW_FLOOR : synthetic ? -Infinity : 0;
+        if (!ledger.moveToCommons(from, amount, fromFloor)) return null;
 
         const txn: Transaction = {
             id: crypto.randomUUID(),
@@ -1936,8 +2044,19 @@ export function payFromCommons(
     // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this
     // they are stranded and the transactions table drifts from account balances — `moveToCommons` persists
     // them and this must too (review finding).
-    persistDecayEvents();
-    persistCommonsBalance();
+    //
+    // ONE commit for the PAIR: the decay debits and the Commons credit that matches them are never allowed
+    // to land separately, or a crash between them destroys beans on disk.
+    //
+    // NOT THE WHOLE FUNCTION, and the gap that leaves is real rather than theoretical. The history row and
+    // the recipient's account row above are still separate autocommits, so a crash after the recipient is
+    // credited but before `persistCommonsBalance` writes the drawn-down pot leaves the credit durable with
+    // the pot's debit missing — beans MINTED, the opposite direction to the pair's failure and the one this
+    // function is exposed to. Every caller but one already runs inside a `conservingTransaction`
+    // (`adminPruneUser`, the settlement reversals via `settlementTransaction`), which closes it for them;
+    // `fundCommission` (federation-commission.ts) does not. Wrapping this function changes rollback
+    // semantics for all of them, so it is a deliberate follow-up rather than something to smuggle in here.
+    persistDecayAndCommons();
 
     afterTransactionCommit(() => {
         const toMember = getMember(to);
@@ -5241,9 +5360,20 @@ export function dismissReport(reportId: string): boolean {
     return res.changes > 0;
 }
 
-export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false, removePulseItem: boolean = false, opts?: { reasonCategory?: string | null }): boolean {
+export function actionReport(
+    reportId: string,
+    deletePost: boolean = false,
+    suspendUser: boolean = false,
+    removePulseItem: boolean = false,
+    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void },
+): boolean {
     // Notices go out after the commit, never from inside it: a rollback must not leave a member told of a removal.
     let takedown: { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null = null;
+    // Refund shortfalls are held back for the same reason. This is the report flow — the path a moderator
+    // actually uses — so a buyer refunded less than the trade row said has to reach the moderator here too,
+    // not just the two direct removal routes; a shortfall only `console.warn` knows about is how the
+    // rows-vs-ledger discrepancy stays invisible. Reported only once the removal has actually committed.
+    const shortfalls: EscrowRefundShortfall[] = [];
     const ok = db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
@@ -5252,7 +5382,7 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
         
         if (deletePost && report.target_post_id) {
-            const removed = removePostByAdmin(report.target_post_id);
+            const removed = removePostByAdmin(report.target_post_id, s => shortfalls.push(s));
             if (removed) {
                 const reporters = closeOpenReportsOnPost(report.target_post_id);
                 if (wasOpen) reporters.push(report.reporter_pubkey);
@@ -5280,6 +5410,7 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
     })();
     const done = takedown as { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null;
     if (ok && done) notifyPostTakedown(moderationNoticeCb, done.post, done.reporters, normaliseRemovalReason(opts?.reasonCategory));
+    if (ok) for (const shortfall of shortfalls) opts?.onRefundShortfall?.(shortfall);
     return ok;
 }
 
@@ -5287,11 +5418,11 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
  * Prune Stale Posts. Each removal closes its open reports, as a single removal does, but nobody is told per
  * post: each author hears once, with the count, that this was routine tidying, not a takedown.
  */
-export function adminBulkDeletePosts(postIds: string[]): number {
+export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfall?: (s: EscrowRefundShortfall) => void }): number {
     const removed: NonNullable<ReturnType<typeof removePostByAdmin>>[] = [];
     const reportersByPost = new Map<string, string[]>();
     for (const postId of postIds) {
-        const r = removePostByAdmin(postId);
+        const r = removePostByAdmin(postId, opts?.onRefundShortfall);
         if (!r) continue;
         removed.push(r);
         reportersByPost.set(postId, closeOpenReportsOnPost(postId));
@@ -5938,12 +6069,23 @@ function postBeforeTakedown(postId: string): PostBeforeTakedown | null {
     return { id: row.id, title: row.title ?? null, authorPubkey: row.author_pubkey ?? null, wasLive: row.active === 1 && row.status !== 'cancelled', createdAt: row.created_at ?? null };
 }
 
-/** Remove the post, without telling anyone yet. Returns what the notices need, or null when nothing was removed. */
-function removePostByAdmin(postId: string): PostBeforeTakedown | null {
+/**
+ * Remove the post, without telling anyone yet. Returns what the notices need, or null when nothing was removed.
+ *
+ * `onRefundShortfall` is how a removal reports that a pending trade's escrow held less than the trade row
+ * said, so its buyer could not be made whole. The engine refunds what the escrow actually holds and calls
+ * this; it never tops the difference up out of nothing.
+ */
+function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundShortfall) => void): PostBeforeTakedown | null {
     const before = postBeforeTakedown(postId);
     // The push dispatcher is passed so an admin removing a reported EVENT tells everyone marked Going
     // that it is off (docs/events-on-the-map.md §2.5); it is a no-op for every other post type.
-    const ok = adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction, dispatchPushNotification);
+    const ok = adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction, dispatchPushNotification, {
+        // Straight off the in-memory ledger, which is what `transfer()` checks its floor against — a
+        // refund capped by any other reading of the balance could still be refused, or still overdraw.
+        balanceOf: (escrowAccount: string) => ledger.getAccount(escrowAccount).balance,
+        onRefundShortfall,
+    });
     return ok && before ? before : null;
 }
 
@@ -5952,8 +6094,11 @@ function removePostByAdmin(postId: string): PostBeforeTakedown | null {
  * report on it is closed and its reporter told the post was removed. `reasonCategory` is one of
  * REMOVAL_REASON_LABELS' keys, or ignored.
  */
-export function adminDeletePost(postId: string, opts?: { reasonCategory?: string | null }): boolean {
-    const removed = removePostByAdmin(postId);
+export function adminDeletePost(
+    postId: string,
+    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void },
+): boolean {
+    const removed = removePostByAdmin(postId, opts?.onRefundShortfall);
     if (!removed) return false;
     const reporters = closeOpenReportsOnPost(postId);
     notifyPostTakedown(moderationNoticeCb, removed, reporters, normaliseRemovalReason(opts?.reasonCategory));
@@ -6052,8 +6197,13 @@ export function adminPruneUser(publicKey: string, actor: string) {
             const D = Math.abs(balance);
             payFromCommons(publicKey, D, `Settle bad debt for pruned user: ${who}`, { allowDeficit: true });
         } else if (balance > 0) {
-            moveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${who}`,
+            // THROW on refusal. The prune below marks the member 'pruned' and anonymises the row; if the
+            // confiscation quietly returned null the account would keep its balance with nobody able to
+            // reach it, and the network would stop summing to zero — the precise invariant the comment
+            // above says a prune must always preserve. We are inside a conservingTransaction.
+            const confiscated = moveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${who}`,
                 { allowMemberDebit: true });
+            if (!confiscated) throw new Error(`Could not confiscate the balance of ${who} — prune aborted`);
         }
 
         // `setUserStatusRow`, not `adminSetUserStatus` — the latter broadcasts, and a broadcast cannot be
@@ -6143,7 +6293,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             const D = Math.abs(balance);
             payFromCommons(publicKey, D, `Settle bad debt for self-purged user: ${who}`, { allowDeficit: true });
         } else if (balance > 0) {
-            moveToCommons(publicKey, balance, `Return balance to Commons for self-purged user: ${who}`, { allowMemberDebit: true });
+            // Same as adminPruneUser: an ignored refusal strands the balance on an anonymised account.
+            const returned = moveToCommons(publicKey, balance, `Return balance to Commons for self-purged user: ${who}`, { allowMemberDebit: true });
+            if (!returned) throw new Error('Could not return your balance to the Commons — account deletion aborted');
         }
 
         const now = new Date().toISOString();
@@ -6622,6 +6774,14 @@ export function persistCommonsBalance(): void {
  */
 export function persistDecayEvents(): void {
     persistDecayEventsEngine();
+}
+
+/**
+ * Persist the demurrage PAIR — the decay debits and the matching Commons credit — in ONE commit.
+ * Use this anywhere the two would otherwise be flushed as separate autocommits; see engine/audit.ts.
+ */
+export function persistDecayAndCommons(): void {
+    persistDecayAndCommonsEngine();
 }
 
 /**

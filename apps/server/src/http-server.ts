@@ -11,12 +11,17 @@
  */
 
 import Koa from 'koa';
+import type { AddressInfo } from 'node:net';
 import Router from '@koa/router';
 import { getCaCertPem, isUsingLetsEncrypt } from './services/tls.js';
 import { getKoaApp, getUpgradeHandler } from './https-server.js';
 import QRCode from 'qrcode';
 
-export async function startHttpServer(port: number): Promise<void> {
+/**
+ * Starts the plain-HTTP listener and resolves with the port it actually bound.
+ * Pass 0 to let the OS pick one — see startHttpsServer for why tests should not pick their own.
+ */
+export async function startHttpServer(port: number): Promise<number> {
     const app = new Koa();
     const router = new Router();
 
@@ -189,10 +194,11 @@ export async function startHttpServer(port: number): Promise<void> {
     app.use(router.routes());
     app.use(router.allowedMethods());
 
-    return new Promise((resolve) => {
+    return new Promise<number>((resolve) => {
         const server = app.listen(port, () => {
-            console.log(`🔓 HTTP → HTTPS redirect listening on http://0.0.0.0:${port}`);
-            resolve();
+            const bound = (server.address() as AddressInfo).port;
+            console.log(`🔓 HTTP → HTTPS redirect listening on http://0.0.0.0:${bound}`);
+            resolve(bound);
         });
 
         // The Cloudflare tunnel's origin is this port, so live-update sockets arrive here. Without a

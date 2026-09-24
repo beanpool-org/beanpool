@@ -16,7 +16,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
-import net from 'node:net';
 import os from 'node:os';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
@@ -31,17 +30,6 @@ let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
-}
-
-function freePort(): Promise<number> {
-    return new Promise((resolve, reject) => {
-        const s = net.createServer();
-        s.once('error', reject);
-        s.listen(0, '127.0.0.1', () => {
-            const { port } = s.address() as net.AddressInfo;
-            s.close(() => resolve(port));
-        });
-    });
 }
 
 function makeMember(callsign: string) {
@@ -118,10 +106,11 @@ function part1Resolver() {
 async function part2Http() {
     await initTls();
     initStateEngine();
-    const httpPort = await freePort();
-    const httpsPort = await freePort();
-    await startHttpServer(httpPort);
-    await startHttpsServer(httpsPort);
+    // Bind once and read the port back, rather than probing for two free ports and handing them on:
+    // the probe closed its listener before returning, so the second probe could be given the port the
+    // first had just released and the second server died with EADDRINUSE.
+    const httpPort = await startHttpServer(0);
+    const httpsPort = await startHttpsServer(0);
     BASE = `http://127.0.0.1:${httpPort}`; // the tunnel origin cloudflared talks to
 
     const limited = { ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: true, maxRequestsPerMinute: LIMIT } };

@@ -272,6 +272,21 @@ export function isSyntheticAccount(accountId: string | null | undefined): boolea
     return SYNTHETIC_ACCOUNT_PREFIXES.some(p => accountId.startsWith(p));
 }
 
+/** The prefix of a per-deal escrow holding wallet: `escrow_<transaction id>`. */
+export const ESCROW_ACCOUNT_PREFIX = 'escrow_';
+
+/**
+ * Is this account id an escrow holding wallet?
+ *
+ * Escrow is the ONE synthetic kind that is not a credit line. `bridge_<peer>` must be able to go
+ * negative (that negative IS the credit extended to the peer) and COMMONS_POOL may run a deficit
+ * (the documented Solvency Rule). An escrow holds beans somebody already paid in, so it can only
+ * ever pay out what it holds — see `ESCROW_FLOOR`.
+ */
+export function isEscrowAccount(accountId: string | null | undefined): boolean {
+    return typeof accountId === 'string' && accountId.startsWith(ESCROW_ACCOUNT_PREFIX);
+}
+
 /**
  * The per-peer bridge account holding this node's energy balance toward `peerId` (#104).
  *

@@ -32,7 +32,6 @@ delete process.env.ENFORCE_WS_AUTH;
 
 import crypto from 'node:crypto';
 import http from 'node:http';
-import net from 'node:net';
 import Koa from 'koa';
 import WebSocket from 'ws';
 
@@ -43,17 +42,6 @@ function assert(cond: boolean, msg: string): void {
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const HEX_KEY = /[0-9a-f]{64}/i;
-
-function freePort(): Promise<number> {
-    return new Promise((resolve, reject) => {
-        const s = net.createServer();
-        s.once('error', reject);
-        s.listen(0, '127.0.0.1', () => {
-            const { port } = s.address() as net.AddressInfo;
-            s.close(() => resolve(port));
-        });
-    });
-}
 
 type Id = { pubKeyHex: string; privateKey: crypto.KeyObject; callsign: string };
 function keypair(callsign: string): Id {
@@ -92,8 +80,9 @@ async function main() {
 
     await initTls();
     se.initStateEngine();
-    const port = await freePort();
-    await startHttpsServer(port);
+    // Bind once and read the port back: probing for a port binds, closes and hands the number on, so
+    // the port can be taken again before the server gets to it (see startHttpsServer).
+    const port = await startHttpsServer(0);
     const base = `wss://localhost:${port}`;
 
     const member = (callsign: string): Id => {

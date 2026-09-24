@@ -13,6 +13,7 @@ import {
     getReports, getReportCount,
     adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier,
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
+    type EscrowRefundShortfall,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
     getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, type MemberNodeRole,
@@ -859,13 +860,25 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     try {
         // Optional: why, as one of the removal reason categories; the author reads it. Anything else is ignored.
         const { reasonCategory } = (ctx as any).requestBody || {};
-        const ok = adminDeletePost(ctx.params.id, { reasonCategory });
+        // A removal refunds each pending trade's escrow to its buyer, but only ever what the escrow
+        // actually holds. If a trade row claimed more than was ever held, the buyer gets what is there and
+        // the moderator is TOLD — a silent short refund is how a discrepancy between the deal rows and the
+        // ledger stays invisible until it is old data nobody can explain.
+        const refundShortfalls: EscrowRefundShortfall[] = [];
+        const ok = adminDeletePost(ctx.params.id, { reasonCategory, onRefundShortfall: s => refundShortfalls.push(s) });
         if (!ok) {
             ctx.status = 404;
             ctx.body = { success: false, error: 'Post not found' };
             return;
         }
-        ctx.body = { success: true };
+        ctx.body = refundShortfalls.length > 0
+            ? {
+                success: true,
+                refundShortfalls,
+                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) were short: `
+                    + refundShortfalls.map(s => `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`).join('; '),
+            }
+            : { success: true };
     } catch (e: any) {
         console.error('Error deleting post:', e);
         ctx.status = 500;
@@ -1115,7 +1128,14 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
                 return;
             }
         }
-        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, { reasonCategory });
+        // Same as posts/:id/delete: a removal refunds each pending trade's escrow to its buyer, but only
+        // ever what the escrow actually holds, and a short refund is told to the moderator rather than
+        // left in the log. This is the flow moderators work through, so it must not be the quiet one.
+        const refundShortfalls: EscrowRefundShortfall[] = [];
+        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, {
+            reasonCategory,
+            onRefundShortfall: s => refundShortfalls.push(s),
+        });
         if (!ok) {
             ctx.status = 404;
             ctx.body = { success: false, error: 'Abuse report not found' };
@@ -1129,7 +1149,15 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             const by = ctx.state?.auth_signer ? String(ctx.state.auth_signer).substring(0, 12) : 'owner:password';
             logger.info('ADMIN', `Removed Pulse item ${pulseItemId} (report ${ctx.params.id}) by ${by}${suspendUser ? ', owner suspended' : ''}`);
         }
-        ctx.body = { success: true, message: 'Report actioned successfully' };
+        ctx.body = refundShortfalls.length > 0
+            ? {
+                success: true,
+                message: 'Report actioned successfully',
+                refundShortfalls,
+                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) were short: `
+                    + refundShortfalls.map(s => `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`).join('; '),
+            }
+            : { success: true, message: 'Report actioned successfully' };
     } catch (e: any) {
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to action report' };
@@ -1144,8 +1172,11 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
         ctx.body = { error: 'postIds array required' };
         return;
     }
-    const deleted = adminBulkDeletePosts(postIds);
-    ctx.body = { success: true, deleted, deletedCount: deleted };
+    const refundShortfalls: EscrowRefundShortfall[] = [];
+    const deleted = adminBulkDeletePosts(postIds, { onRefundShortfall: s => refundShortfalls.push(s) });
+    ctx.body = refundShortfalls.length > 0
+        ? { success: true, deleted, deletedCount: deleted, refundShortfalls }
+        : { success: true, deleted, deletedCount: deleted };
 });
 
 

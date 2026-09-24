@@ -28,6 +28,9 @@
  *  12. A FORCE-RESYNC does not destroy the replica's only good copy. The export omits a row whose object the
  *      primary cannot read, and names it in the payload; `clearReplicatedTables` keeps exactly those rows, so
  *      the row and its object survive the wipe that used to delete both. LAST, because it empties the tables.
+ *  13. And it holds at the size that actually happens: a lost images directory omits EVERY evacuated photo,
+ *      so a keep list of thousands spares exactly those rows rather than hitting SQLite's expression-depth
+ *      limit — and a failure there aborts the resync instead of committing a table that was never cleared.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-evacuation.ts
  */
@@ -631,6 +634,62 @@ async function main(): Promise<void> {
     clearReplicatedTables();
     assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === 0,
         'with nothing named, a resync clears post_photos outright — the exception is only for omitted rows');
+
+    // ── 13. the keep list has no ceiling, and a failure aborts instead of committing half a clear ──
+    //
+    // §12 spares ONE row, which is the comfortable case. The case this argument exists for is not: a primary
+    // whose images directory is lost or unmounted can read none of its evacuated photos, so it omits every
+    // one of them — thousands of rows on a live node. Built as one `OR`-ed predicate per spared pair, that
+    // statement is parsed left-deep and throws "Expression tree is too large (maximum depth 1000)" from about
+    // 999 pairs on; the catch beside it logged and let the transaction COMMIT, so `post_photos` was not
+    // cleared at all — every orphan row survived, not only the spared ones — and the log said "KEEPING 0 of
+    // N". Self-contained: §12 left both tables empty, so this seeds its own rows.
+    const BULK = 5000;
+    const insertBulk = db.prepare(
+        `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
+    const bulkKeep: string[] = [];
+    db.transaction(() => {
+        for (let i = 0; i < BULK * 2; i++) {
+            const postId = `bulk-post-${String(i).padStart(6, '0')}`;
+            insertBulk.run(postId, dataUrl(Buffer.from([0xff, 0xd8, 0xff, 0xd9])), 0);
+            if (i % 2 === 0) bulkKeep.push(`${postId}|0`); // spare every other row, so position proves identity
+        }
+    })();
+    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === BULK * 2,
+        `setup: ${BULK * 2} photo rows, of which the payload names ${BULK} it could not carry`);
+
+    // Throwing here is the FIXED behaviour for a statement that fails; on the unfixed tree it returns
+    // quietly. Either way the assertions below are what report, rather than the run dying.
+    try { clearReplicatedTables(bulkKeep); } catch (e: any) { console.error(`  (threw: ${e?.message})`); }
+    const survivors = (db.prepare('SELECT post_id FROM post_photos').all() as { post_id: string }[])
+        .map(r => Number(r.post_id.slice('bulk-post-'.length)));
+    const unnamedSurvivor = survivors.find(n => !Number.isInteger(n) || n % 2 !== 0);
+    assert(survivors.length === BULK,
+        `a keep list of ${BULK} rows spares exactly that many — the spared-rows filter has no depth ceiling `
+        + `(${survivors.length} survived)`);
+    assert(unnamedSurvivor === undefined,
+        'and the survivors are the NAMED rows, not merely the right number of them'
+        + (unnamedSurvivor === undefined ? '' : ` (bulk-post-${String(unnamedSurvivor).padStart(6, '0')} survived)`));
+
+    // A failure in that statement must abort the WHOLE resync. Committing past it is worse than failing:
+    // the replica would be left with a table half-cleared of the very rows the payload cannot replace.
+    // The trigger fires on the DELETE, so there have to be rows for it to delete: the 5,000 spared ones
+    // above are all the table holds now, and a clear that matches nothing would never reach the trigger.
+    const DOOMED = 10;
+    for (let i = 0; i < DOOMED; i++) {
+        insertBulk.run(`abort-extra-${i}`, dataUrl(Buffer.from([0xff, 0xd8, 0xff, 0xd9])), 0);
+    }
+    db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('abort-canary', 'AbortCanary')`).run();
+    db.exec(`CREATE TRIGGER zz_block_photo_delete BEFORE DELETE ON post_photos
+             BEGIN SELECT RAISE(ABORT, 'forced failure in the spared-rows clear'); END;`);
+    let aborted = false;
+    try { clearReplicatedTables(bulkKeep); } catch { aborted = true; }
+    db.exec('DROP TRIGGER zz_block_photo_delete');
+    assert(aborted, 'a failure clearing the spared rows THROWS, so the caller fails the resync');
+    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === BULK + DOOMED,
+        'and rolls back: post_photos is exactly as it was, neither cleared nor half-cleared');
+    assert((db.prepare(`SELECT COUNT(*) AS c FROM members WHERE public_key = 'abort-canary'`).get() as any).c === 1,
+        'along with the tables cleared before it — the whole resync aborted, not just this one table');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

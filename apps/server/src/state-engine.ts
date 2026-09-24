@@ -6742,7 +6742,10 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
  * referenced and the daily orphan sweep leaves the object alone too.
  *
  * Rows named here are kept AS THEY ARE. Any of them the payload turns out to carry after all is upserted by
- * the import that follows, exactly as it would have been.
+ * the import that follows, exactly as it would have been. The list has no length limit.
+ *
+ * THROWS if it cannot spare them, leaving every table as it found them: a committed half-clear would strand
+ * the replica without the rows this argument exists to protect, so the caller must fail the resync instead.
  */
 export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): void {
     const tables = [
@@ -6770,18 +6773,28 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
             try { db.prepare(`DELETE FROM ${t}`).run(); }
             catch (e) { console.warn(`[Resync] could not clear ${t}:`, e); }
         }
-        try {
-            if (keep.length === 0) {
-                db.prepare(`DELETE FROM post_photos`).run();
-                return;
-            }
-            // One `OR`-ed predicate over every spared pair, negated: a statement per row would delete the
-            // other spared rows along with everything else. Values stay bound, never interpolated.
-            const pairs = keep.map(() => '(post_id = ? AND order_num = ?)').join(' OR ');
-            const params = keep.flatMap(k => [k.postId, k.orderNum]);
-            kept = (db.prepare(`SELECT COUNT(*) AS n FROM post_photos WHERE ${pairs}`).get(...params) as any)?.n || 0;
-            db.prepare(`DELETE FROM post_photos WHERE NOT (${pairs})`).run(...params);
-        } catch (e) { console.warn('[Resync] could not clear post_photos:', e); }
+        if (keep.length === 0) {
+            db.prepare(`DELETE FROM post_photos`).run();
+            return;
+        }
+        // The spared keys travel as ONE bound JSON array, matched through `json_each`, so the statement is
+        // the same size whether a single row is spared or fifty thousand. An `OR`-ed predicate per pair is
+        // the obvious spelling and a trap: SQLite parses it left-deep and throws "Expression tree is too
+        // large (maximum depth 1000)" from about 999 pairs on — and the case this argument exists for, a
+        // primary whose images directory is lost or unmounted, omits EVERY evacuated photo, which on a live
+        // node is thousands of rows. Values stay bound, never interpolated, exactly as before.
+        //
+        // Nothing here is caught. A clear that half-happened is the one outcome worse than a resync that
+        // failed: swallowing this let the transaction commit with `post_photos` not cleared at all, which
+        // left the orphan rows a resync exists to remove and reported "KEEPING 0" while doing it. Throwing
+        // rolls the whole clear back, so the replica keeps the data it had and the caller retries.
+        const keepJson = JSON.stringify(keep.map(k => `${k.postId}|${k.orderNum}`));
+        kept = (db.prepare(
+            `SELECT COUNT(*) AS n FROM post_photos WHERE (post_id || '|' || order_num) IN (SELECT value FROM json_each(?))`,
+        ).get(keepJson) as any)?.n || 0;
+        db.prepare(
+            `DELETE FROM post_photos WHERE (post_id || '|' || order_num) NOT IN (SELECT value FROM json_each(?))`,
+        ).run(keepJson);
     })();
     if (keep.length > 0) {
         console.log(

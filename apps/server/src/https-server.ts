@@ -117,6 +117,7 @@ import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createKeeperRoutes } from './routes/keepers.js';
+import { createOpenJoinRoutes } from './routes/open-join.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
@@ -1202,6 +1203,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createPublicAddressRoutes(deps),
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
+        createOpenJoinRoutes(deps),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
         createSettingsSigninRoutes(deps),

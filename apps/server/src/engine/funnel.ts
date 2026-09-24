@@ -31,6 +31,10 @@ export type CountedEvent =
     | 'invite_reentry'      // ...or the submitter was already a member (not a rejection,
                             // and not a signup — kept off invite_failed so the dashboard's
                             // failure rate means what it says)
+    | 'open_join_attempt'   // a signed join with a sign-in reached the open door (global
+                            // profile) — variant is the provider it claims
+    | 'open_join_failed'    // ...and was refused — variant carries the reason. A join that
+                            // succeeds needs no counter: its member row is `member_created`.
     | 'avatar_published'    // step 2 done — first avatar only, not later edits
     | 'protection_shown'    // step 3 drawn
     | 'protection_choice'   // step 3 answered — sub-type is sso|words|skip

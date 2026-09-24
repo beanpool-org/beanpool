@@ -8,9 +8,10 @@
  *   3. boot over a database restored from a global node, with NODE_PROFILE unset: the node runs local, the mirror is
  *      rewritten, the boot log says so; a mirror changed at runtime changes nothing either
  *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the six
- *      `features` exactly, and every field it had before
- *   5. node_config overrides change the configured switch (and the boot log reports them), bad ones are ignored with
- *      a log line, and a switch this build doesn't have yet stays pinned, so the API never advertises it
+ *      `features` exactly (open join on the global profile only, since G2), and every field it had before
+ *   5. node_config overrides change the configured switch (and the boot log reports them), an override of a built
+ *      switch (openJoin) reaches the API, bad ones are ignored with a log line, and a switch this build doesn't have
+ *      yet (knocks) stays pinned, so the API never advertises it
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-node-profile.ts
  */
@@ -56,9 +57,13 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
     return { status: res.status, body: await res.json() };
 }
 
-// What this build does on EVERY profile until G1 (Beans off), G2 (open join), G4 (distance search) and G6 (knocks)
-// land. The PR that builds one of these changes its line here, with the test that proves it.
-const BUILT_TODAY = { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: false };
+// What this build does on each profile. G2 built open join: on for the global profile, off for local. Until G1 (Beans
+// off), G4 (distance search) and G6 (knocks) land the rest is the same on both. The PR that builds one of these
+// changes its line here, with the test that proves it.
+const BUILT_TODAY = {
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: false },
+    global: { beans: true, escrow: true, enterprises: true, openJoin: true, knocks: false, distanceSearch: false },
+};
 
 async function main() {
     const profile = await import('./config/node-profile.js');
@@ -139,8 +144,8 @@ async function main() {
             const r = await getInfo(id);
             assert(r.status === 200, `${label}, ${who}: 200 (got ${r.status})`);
             assert(r.body.profile === want, `${label}, ${who}: profile is ${want} (got ${JSON.stringify(r.body.profile)})`);
-            assert(JSON.stringify(r.body.features) === JSON.stringify(BUILT_TODAY),
-                `${label}, ${who}: features are exactly what this build does (got ${JSON.stringify(r.body.features)})`);
+            assert(JSON.stringify(r.body.features) === JSON.stringify(BUILT_TODAY[want]),
+                `${label}, ${who}: features are exactly what this build does on ${want} (got ${JSON.stringify(r.body.features)})`);
             const b = r.body;
             assert(typeof b.memberCount === 'number' && typeof b.postCount === 'number' && typeof b.transactionCount === 'number'
                 && typeof b.commonsBalance === 'number' && typeof b.currency?.type === 'string' && typeof b.currency?.value === 'string',
@@ -171,9 +176,19 @@ async function main() {
     setOverride('openJoin', 'true');
     assert(getConfiguredSwitches().openJoin === true, 'local + nodeProfile.openJoin=true: the configured switch is on');
     assert(profileDefaults('local').openJoin === false, 'the override does not change the profile table itself');
-    assert(getProfileSwitches().openJoin === false, 'open join is not built yet (G2), so the switch the code reads stays off');
-    assert(getNodeFeatures().openJoin === false && (await getInfo()).body.features.openJoin === false,
-        '/api/community/info does not advertise open join because an override asked for it');
+    assert(getProfileSwitches().openJoin === true, 'open join is built (G2), so the switch the code reads follows the override');
+    assert(getNodeFeatures().openJoin === true && (await getInfo()).body.features.openJoin === true,
+        '/api/community/info advertises open join on a local node whose operator opened the door');
+
+    setOverride('knocks', 'true');
+    assert(getConfiguredSwitches().knocks === true, 'local + nodeProfile.knocks=true: the configured switch is on');
+    assert(getProfileSwitches().knocks === false, 'knocks are not built yet (G6), so the switch the code reads stays off');
+    assert(getNodeFeatures().knocks === false && (await getInfo()).body.features.knocks === false,
+        '/api/community/info does not advertise knocks because an override asked for them');
+    setOverride('ssoRequiredForJoin', 'false');
+    assert(getProfileSwitches().ssoRequiredForJoin === true,
+        'the door without a sign-in (D1 b) is not built, so nodeProfile.ssoRequiredForJoin=false changes nothing');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.ssoRequiredForJoin`);
 
     process.env.NODE_PROFILE = 'global';
     setOverride('probation', 'false');
@@ -189,7 +204,7 @@ async function main() {
     assert(reported.logs.some(l => l.includes('Not built yet') && l.includes('knocks=true')),
         'the boot log says which overrides ask for something this build does not have yet');
     assert(mirror() === 'global', 'the mirror follows NODE_PROFILE=global at boot');
-    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify(BUILT_TODAY),
+    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify(BUILT_TODAY.global),
         'global with overrides: /api/community/info still reports only what this build does');
 
     setOverride('beans', 'maybe');

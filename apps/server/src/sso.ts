@@ -122,6 +122,11 @@ export function isSsoProvider(value: unknown): value is SsoProvider {
     return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PROVIDERS, value);
 }
 
+/** The provider's name as a member reads it ("Google"), for messages about their account. */
+export function ssoProviderLabel(provider: SsoProvider): string {
+    return providerConfig(provider).label;
+}
+
 /**
  * The providers this node can verify, in the order they are offered.
  *

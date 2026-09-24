@@ -87,7 +87,7 @@ export function startForgettingJoinAddresses(everyMs = 60_000): void {
     addressSweep.unref?.();
 }
 
-/** Which window, if any, an address has used up. */
+/** Which window, if any, an address has used up. The day first: when both are, it is the one to wait out. */
 export function openJoinLimitReached(ipHash: string, now = Date.now()): 'hour' | 'day' | null {
     const row = db.prepare(`
         SELECT COUNT(*) AS day,
@@ -95,8 +95,8 @@ export function openJoinLimitReached(ipHash: string, now = Date.now()): 'hour' |
         FROM open_joins
         WHERE ip_hash = ? AND joined_at >= ?
     `).get(new Date(now - HOUR_MS).toISOString(), ipHash, new Date(now - DAY_MS).toISOString()) as { day: number; hour: number };
-    if (row.hour >= OPEN_JOIN_LIMITS.perHour) return 'hour';
     if (row.day >= OPEN_JOIN_LIMITS.perDay) return 'day';
+    if (row.hour >= OPEN_JOIN_LIMITS.perHour) return 'hour';
     return null;
 }
 

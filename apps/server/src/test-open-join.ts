@@ -372,6 +372,12 @@ async function main(): Promise<void> {
     const daily = await join(fay, { callsign: 'Fay', provider: 'google', idToken: fayToken, nonce: fayNonce });
     assert(daily.status === 429 && /today/.test(String(daily.body?.error)),
         `one join over ${OPEN_JOIN_LIMITS.perDay} from one address in a day → 429 (got ${daily.status} ${JSON.stringify(daily.body)})`);
+    // Both windows full at once: the day is the one to wait out, so that is the one named. Told "the last hour",
+    // they would retry in an hour and be refused again for the day.
+    addFakes(OPEN_JOIN_LIMITS.perHour, new Date());
+    const hourAndDay = await join(fay, { callsign: 'Fay', provider: 'google', idToken: fayToken, nonce: fayNonce });
+    assert(hourAndDay.status === 429 && /today/.test(String(hourAndDay.body?.error)) && !/last hour/.test(String(hourAndDay.body?.error)),
+        `the hour and the day both used up → the refusal names the day (got ${hourAndDay.status} ${JSON.stringify(hourAndDay.body)})`);
 
     const dayAndAHourAgo = new Date(Date.now() - 25 * 3600_000).toISOString();
     db.prepare('UPDATE open_joins SET joined_at = ? WHERE ip_hash = ?').run(dayAndAHourAgo, ipHash);

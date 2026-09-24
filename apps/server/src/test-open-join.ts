@@ -179,7 +179,7 @@ async function main(): Promise<void> {
     const ada = newId();
     const GOOGLE_SUB = '110169484474386276334';
     const GOOGLE_EMAIL = 'open-join-ada@example.com';
-    let n = await joinNonce(ada);
+    const n = await joinNonce(ada);
     const nonceBody = await call(ada, '/api/join/sso-nonce', {});
     assert(nonceBody.status === 200 && nonceBody.body.expiresInSeconds === 600
         && JSON.stringify(nonceBody.body.providers) === JSON.stringify(['google', 'apple', 'facebook', 'github']),

@@ -145,6 +145,18 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
         // Non-blocking: on an S3 node this is a round trip to the bucket, and the event loop is not held for it.
         data = await attachmentDataOfAsync(row, getImageStore());
     } catch (e) {
+        // As on the photo route: a message deleted for everyone while this read was in flight removes the row,
+        // then the object — an attachment that no longer exists, not an outage. One per message, never
+        // replaced, but the key is still what says the row is the one this request read.
+        if (e instanceof MissingObjectError) {
+            const still = db.prepare(`SELECT 1 FROM message_attachments WHERE message_id = ? AND storage_key = ?`)
+                .get(id, row.storage_key);
+            if (!still) {
+                ctx.status = 404;
+                ctx.body = { error: 'Attachment not found' };
+                return;
+            }
+        }
         console.error(`[Attachments] ${id}:`, e);
         ctx.status = 503;
         ctx.body = { error: 'This attachment is temporarily unavailable' };

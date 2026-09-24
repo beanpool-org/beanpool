@@ -12,7 +12,8 @@
  *   3. A replaced photo takes a new key and the old object leaves the bucket after the commit; a removed
  *      photo 404s; a row gone while its object remains 404s; a photo replaced while it is being read 404s;
  *      an object gone while its row remains is a 503.
- *   4. A message attachment's ciphertext goes to the bucket and comes back exactly.
+ *   4. A message attachment's ciphertext goes to the bucket and comes back exactly; one deleted while it is
+ *      being read 404s.
  *   5. The sync export rebuilds each photo from the bucket byte for byte, and omits (and names) one it
  *      cannot read, so a replica keeps its own copy.
  *   6. The orphan sweep judges the BUCKET: an aged orphan goes, a fresh one and a referenced one stay, and an
@@ -299,7 +300,7 @@ async function main(): Promise<void> {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Bob', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(bob);
     const conv = createConversation('dm', [author, bob], author);
     if (!conv) throw new Error('setup: no conversation');
-    const { sendMessage } = await import('./state-engine.js');
+    const { sendMessage, deleteOwnMessage } = await import('./state-engine.js');
     const cipher = crypto.randomBytes(900).toString('base64');
     const msg = sendMessage(conv.id, author, 'encrypted-text', 'text-nonce', 'image', { data: cipher, nonce: 'att-nonce', mime: 'image/png' })!;
     const attRow = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(msg?.id) as any;
@@ -310,6 +311,27 @@ async function main(): Promise<void> {
     const attJson = await attRes.json() as any;
     assert(attRes.status === 200 && attJson.data === cipher && attJson.nonce === 'att-nonce' && attJson.mime === 'image/png',
         'the attachment route returns the ciphertext, nonce and mime unchanged');
+
+    // Deleted for everyone WHILE it is being read. The read is async; the tombstone removes the row, then the
+    // object after its commit. An attachment that no longer exists is a 404, not an outage.
+    const msg2 = sendMessage(conv.id, author, 'encrypted-text-2', 'text-nonce-2', 'image',
+        { data: crypto.randomBytes(900).toString('base64'), nonce: 'att-nonce-2', mime: 'image/png' })!;
+    const att2Row = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(msg2.id) as any;
+    await fake.clearLog();
+    await fake.fault({ method: 'GET', prefix: `/${fake.bucket}/${att2Row.storage_key}`, delayMs: 1_500, count: 1 });
+    const racedAtt = fetch(`${BASE}/api/messages/${msg2.id}/attachment`);
+    // The bucket has the read (and is holding it) before the message is deleted under it.
+    for (let i = 0; i < 200; i++) {
+        if ((await fake.log()).some((e) => e.method === 'GET' && e.path.endsWith(att2Row.storage_key))) break;
+        await new Promise((r) => setTimeout(r, 10));
+    }
+    deleteOwnMessage(msg2.id, author);
+    assert(!db.prepare('SELECT 1 FROM message_attachments WHERE message_id = ?').get(msg2.id)
+        && !(await fake.objects()).has(att2Row.storage_key),
+        'setup: the message was deleted, and its attachment\'s object removed, while the read was in flight');
+    const racedAttStatus = (await racedAtt).status;
+    await fake.clearFaults();
+    assert(racedAttStatus === 404, `an attachment deleted while it was being read is a 404, not a 503 (got ${racedAttStatus})`);
 
     // ── 5. the sync export ─────────────────────────────────────────────────────────────────────
     console.log('\n--- 5. The sync export ---');

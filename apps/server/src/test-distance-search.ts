@@ -41,7 +41,6 @@ import {
     initStateEngine, seedGenesisMember, createPost, removePost, createGroup, getPosts,
     exportSyncState, importRemoteState, setNodeRole, adminPruneUser, bumpPostsVersion,
 } from './state-engine.js';
-import { NEAREST_FIRST_MATCHES_PROBE } from '@beanpool/engine';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -575,17 +574,16 @@ async function main(): Promise<void> {
     assert(withRemoved.length === 0, `the removed post is on nobody's first page, its author's included (${withRemoved.join(', ') || 'nobody'})`);
     delete process.env.NODE_PROFILE;
 
-    // ── 13. a filter, on either side of the count ────────────────────────────────────────────────
-    // With a filter, the circles read up to NEAREST_FIRST_MATCHES_PROBE posts near the reader, and before reading more
-    // ask how many posts the listing matches (engine posts.ts, the second deciding review of #1140): fewer than asked
-    // for, and that read is the page; as many, and the circles or one pass give it. 1,100 gardens lie within 600 m of
-    // Mullumbimby, so its first circle holds more than that and the count is asked there, for one more match than the
-    // circle holds. Through the route, each reader's pages are the brute-force pages of what that reader may see, on both
-    // sides of that: 'bikes' is 1,060 posts to Bea, and 1,120 to Eve (her 60 hidden by reports) and to Cal (his club's
-    // 60); 'garden' is 1,200 to everyone; 40 events are still to come; and what the count finds is what the route shows.
-    console.log('\n── 13. global, a point and a filter: each page is the brute-force page, on either side of the count ──');
+    // ── 13. a filter: circles or one pass, and the same pages ────────────────────────────────────
+    // Nearest first searches circles only with no filter or with offers or needs; every other filter is one pass (engine
+    // posts.ts CIRCLE_FIELDS, the third deciding review of #1140). Through the route, each reader's pages are the
+    // brute-force pages of what that reader may see, on both paths, deep into the list (1,100 gardens lie within 600 m of
+    // Mullumbimby): 'bikes' is 1,060 posts to Bea, and 1,120 to Eve (her 60 hidden by reports) and to Cal (his club's 60);
+    // 'garden' is 1,200 to everyone; 40 events are still to come. And each read takes the path its kind of filter says,
+    // with the fields the route really sets.
+    console.log('\n── 13. global, a point and a filter: circles or one pass, and each page is the brute-force page ──');
     process.env.NODE_PROFILE = 'global';
-    const K = NEAREST_FIRST_MATCHES_PROBE;
+    const DEEP = 1000;
     let seedState = 13;
     const rand13 = () => { seedState = (seedState * 1664525 + 1013904223) >>> 0; return seedState / 4294967296; };
     /** `km` from a point on a random bearing, on the sphere. */
@@ -616,11 +614,13 @@ async function main(): Promise<void> {
         for (let i = 0; i < 10; i++) seedFiltered(ann, 'event', 'community', toward(hLat, hLng, rand13() * 40), { ended: true });
     })();
     bumpPostsVersion();
-    const filteredFor = (viewer: Id, filter: { type?: string; category?: string }, lat: number, lng: number) =>
-        getPosts({ viewerPubkey: viewer.pk, excludeEvents: filter.type !== 'event', ...filter })
+    const filteredFor = (viewer: Id, filter: { type?: string; types?: string[]; category?: string }, lat: number, lng: number) =>
+        getPosts({ viewerPubkey: viewer.pk, excludeEvents: filter.type !== 'event' && !filter.types?.includes('event'), ...filter })
             .map(p => ({ id: p.id, u: p.updatedAt ?? '', c: p.createdAt, d: typeof p.lat === 'number' && typeof p.lng === 'number' ? haversine(lat, lng, p.lat, p.lng) : null }))
             .sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
-    const filters: Array<[string, { type?: string; category?: string }, string]> = [
+    const filters: Array<[string, { type?: string; types?: string[]; category?: string }, string]> = [
+        ['offers', { type: 'offer' }, 'type=offer'],
+        ["the apps' feed", { types: ['offer', 'need', 'poll', 'event'] }, 'types=offer,need,poll,event'],
         ['garden', { category: 'garden' }, 'category=garden'],
         ['bikes', { category: 'bikes' }, 'category=bikes'],
         ['events', { type: 'event' }, 'type=event'],
@@ -636,8 +636,8 @@ async function main(): Promise<void> {
             for (const [name, filter, query] of filters) {
                 const ref = filteredFor(viewer, filter, lat, lng);
                 const pages: Array<[number, number]> = [[50, 0], [7, 0], [7, 7], [7, 49], [7, ref.length - 3], [7, ref.length + 2]];
-                for (const o of [K - 56, K - 7, K - 1, K, 1053, 1059, 1060, 1113]) pages.push([7, o]);
-                pages.push([50, K - 50], [50, 1055]);
+                for (const o of [DEEP - 56, DEEP - 7, DEEP - 1, DEEP, 1053, 1059, 1060, 1113]) pages.push([7, o]);
+                pages.push([50, DEEP - 50], [50, 1055]);
                 const wrong: string[] = [];
                 for (const [limit, offset] of pages) {
                     if (offset < 0) continue;
@@ -650,39 +650,39 @@ async function main(): Promise<void> {
             }
         }
     }
-    // What the count found, read by read, from Mullumbimby.
-    const counted = async (viewer: Id, query: string) => {
+    // The reads each route request made: circles (a box joined to the listing), and passes over the listing.
+    const paths = async (viewer: Id, query: string) => {
         const prepare = db.prepare.bind(db);
-        const found: Array<{ cap: number; matched: number | undefined }> = [];
+        const steps: string[] = [];
         (db as any).prepare = (sql: string) => {
             const st = prepare(sql);
-            if (/WITH matches AS MATERIALIZED/.test(sql)) {
+            const kind = /CROSS JOIN posts p/.test(sql) ? 'circle' : /haversine_km/.test(sql) ? 'pass' : undefined;
+            if (kind) {
                 const all = st.all.bind(st);
-                (st as any).all = (...params: unknown[]) => {
-                    const out = all(...params) as Array<{ matched: number }>;
-                    found.push({ cap: params[params.length - 5] as number, matched: out[0]?.matched });
-                    return out;
-                };
+                (st as any).all = (...params: unknown[]) => { steps.push(kind); return all(...params); };
             }
             return st;
         };
         try { await list(viewer, `${hub}&${query}&limit=50`); } finally { delete (db as any).prepare; }
-        return found;
+        return steps.join(' → ') || 'nothing read';
     };
-    const told = (f: Array<{ cap: number; matched: number | undefined }>) => f.map(c => `asked for ${c.cap}, found ${c.matched === undefined ? 'none' : c.matched === c.cap ? `${c.cap} (as many)` : c.matched}`).join('; ') || 'not asked';
-    const beaBikes = await counted(bea, 'category=bikes'), eveBikes = await counted(eve, 'category=bikes'), calBikes = await counted(cal, 'category=bikes');
-    const cap = beaBikes[0]?.cap ?? 0;
-    assert(beaBikes.length === 1 && cap > K && beaBikes[0].matched === 1060,
-        `the count sees what the route shows Bea: all 1,060 bikes, fewer than the ${cap} it asked for, so that read is her page (${told(beaBikes)})`);
-    assert([eveBikes, calBikes].every(f => f.length === 1 && f[0].cap === cap && f[0].matched === cap) && cap <= 1120,
-        `and Eve's hidden posts and Cal's club posts are in theirs: it stops at ${cap} (Eve: ${told(eveBikes)}; Cal: ${told(calBikes)})`);
-    const garden = await counted(bea, 'category=garden'), events = await counted(bea, 'type=event'), nothing = await counted(bea, 'category=nothing');
-    assert(garden.length === 1 && garden[0].matched === cap && events.length === 1 && events[0].matched === 40 && nothing.length === 1 && nothing[0].matched === undefined,
-        `garden stops at ${cap}, the events still to come are 40, and the empty category is none (${told(garden)}; ${told(events)}; ${told(nothing)})`);
+    const circlesOnly: string[] = [];
+    for (const query of ['sort=distance', 'type=offer', 'types=offer,need,poll,event']) {
+        const steps = await paths(bea, query);
+        if (!/^circle( → circle)*$/.test(steps)) circlesOnly.push(`${query}: ${steps}`);
+    }
+    assert(circlesOnly.length === 0, `no filter, offers and the apps' feed search circles, and one holds the page (${circlesOnly.join('; ') || 'all as said'})`);
+    const onePass: string[] = [];
+    for (const query of ['category=garden', 'category=bikes', 'type=event', 'type=poll', 'category=nothing', `author=${ann.pk}`, 'audienceScope=public',
+        'audienceScope=group', `targetGroupId=${group.id}`, 'beansOnly=true', 'q=Filtered', 'types=poll,event', 'radiusKm=50', 'sort=recent']) {
+        const steps = await paths(cal, query);
+        if (steps !== 'pass') onePass.push(`${query}: ${steps}`);
+    }
+    assert(onePass.length === 0, `every other read is one pass: a category, events, polls, an author, a scope, a group, beans only, a search, a radius, today's order (${onePass.join('; ') || 'all as said'})`);
     const bikesFor = (viewer: Id) => filteredFor(viewer, { category: 'bikes' }, hLat, hLng).length;
     const gardens = filteredFor(bea, { category: 'garden' }, hLat, hLng).length;
-    assert(bikesFor(bea) < cap && bikesFor(eve) >= cap && bikesFor(cal) >= cap && gardens >= cap,
-        `the reads fall on both sides of the count's ${cap} (and of ${K}): bikes is ${bikesFor(bea)} to Bea, ${bikesFor(eve)} to Eve and ${bikesFor(cal)} to Cal; garden is ${gardens}; events 40`);
+    assert(bikesFor(bea) === 1060 && bikesFor(eve) === 1120 && bikesFor(cal) === 1120 && gardens === 1200,
+        `the pages ran past ${DEEP}: bikes is ${bikesFor(bea)} to Bea, ${bikesFor(eve)} to Eve and ${bikesFor(cal)} to Cal; garden is ${gardens}`);
     const eventsSeen = filteredFor(bea, { type: 'event' }, hLat, hLng).length;
     assert(eventsSeen === 40, `the events that have ended are in no page (${eventsSeen} of the 50 seeded)`);
     delete process.env.NODE_PROFILE;

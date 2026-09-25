@@ -22,11 +22,14 @@ const COOLOFF = 30 * DAY;
 
 // D1's prepare/bind/first/all/run over node:sqlite (run() reports meta.changes, as D1 does). `afterRead(re, run)`:
 // once, just after the first first() whose SQL matches `re` has read its row, `run` runs to completion before the
-// caller gets that row — a request landing between another request's read and its first write.
-function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql']) {
+// caller gets that row — a request landing between another request's read and its first write. `beforeRun(re, run)`:
+// once, just before the first run() whose SQL matches `re` writes, `run` runs to completion — a request landing
+// between another request's last Cloudflare call and its write.
+function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql']) {
     const sqlite = new DatabaseSync(':memory:');
     for (const m of migrations) sqlite.exec(migration(m));
     const readHooks = [];
+    const runHooks = [];
     const d1 = {
         prepare(sql) {
             const stmt = sqlite.prepare(sql);
@@ -40,13 +43,19 @@ function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decisi
                     return r ? { ...r } : null;
                 },
                 async all() { return { results: stmt.all(...args).map((r) => ({ ...r })) }; },
-                async run() { const r = stmt.run(...args); return { success: true, meta: { changes: Number(r.changes) } }; },
+                async run() {
+                    const h = runHooks.findIndex((x) => x.re.test(sql));
+                    if (h >= 0) await runHooks.splice(h, 1)[0].run();
+                    const r = stmt.run(...args);
+                    return { success: true, meta: { changes: Number(r.changes) } };
+                },
             };
         },
     };
     const all = (sql, ...a) => sqlite.prepare(sql).all(...a).map((r) => ({ ...r }));
     const afterRead = (re, run) => readHooks.push({ re, run });
-    return { sqlite, d1, all, afterRead };
+    const beforeRun = (re, run) => runHooks.push({ re, run });
+    return { sqlite, d1, all, afterRead, beforeRun };
 }
 
 // Cloudflare as far as the registrar uses it. A duplicate live tunnel name and a second record at a hostname are
@@ -56,7 +65,7 @@ function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decisi
 // the same, just before Cloudflare answers the n-th call from now.
 function fakeCloudflare() {
     const calls = [];
-    const tunnels = new Map();   // id → { id, name, deleted_at, ingress }
+    const tunnels = new Map();   // id → { id, name, created_at, deleted_at, ingress }
     const dns = new Map();       // id → { id, type, name (fqdn), content, proxied }
     const fail = { deleteTunnel: false, ingress: false, deleteDns: false };
     const hooks = [];
@@ -71,9 +80,14 @@ function fakeCloudflare() {
         let m;
         if (method === 'POST' && p === '/accounts/acct/cfd_tunnel') {
             if ([...tunnels.values()].some((t) => !t.deleted_at && t.name === body.name)) return err(409, 1013, 'tunnel name already in use');
-            const t = { id: `tun-${++seq}`, name: body.name, deleted_at: null };
+            const t = { id: `tun-${++seq}`, name: body.name, created_at: new Date().toISOString(), deleted_at: null };
             tunnels.set(t.id, t);
             return ok(t);
+        }
+        if (method === 'GET' && p === '/accounts/acct/cfd_tunnel') {
+            const name = url.searchParams.get('name');
+            const live = url.searchParams.get('is_deleted') === 'false';
+            return ok([...tunnels.values()].filter((t) => (!name || t.name === name) && (!live || !t.deleted_at)));
         }
         if ((m = p.match(/^\/accounts\/acct\/cfd_tunnel\/([^/]+)$/))) {
             const t = tunnels.get(m[1]);
@@ -142,7 +156,7 @@ const attestsAs = (key) => async (nonce) => {
 // One world per test: D1, fake Cloudflare, and nodes answering at hostnames — but only while Cloudflare routes the
 // hostname (a DNS record exists), so an edge attest can only pass once the registrar has routing back up.
 async function world({ migrations, env: extra } = {}) {
-    const { sqlite, d1, all, afterRead } = sqliteD1(migrations);
+    const { sqlite, d1, all, afterRead, beforeRun } = sqliteD1(migrations);
     const cf = fakeCloudflare();
     const nodes = {};
     const env = {
@@ -171,7 +185,7 @@ async function world({ migrations, env: extra } = {}) {
     };
     const call = async (req) => { const res = await worker.fetch(req, env); return { status: res.status, body: await res.json() }; };
     const w = {
-        env, cf, nodes, sqlite, afterRead,
+        env, cf, nodes, sqlite, afterRead, beforeRun,
         restore: () => { globalThis.fetch = original; },
         row: async (name) => db.getAllocation(env, name),
         events: (name) => all('SELECT event, detail FROM name_events WHERE name=? ORDER BY id', name),
@@ -1444,7 +1458,7 @@ test('race: a record the new owner adopted, re-pointed by the old key\'s heal ju
     } finally { w.restore(); }
 });
 
-test('race: a record the old key\'s heal put up that the new owner\'s row doesn\'t know goes; the new owner\'s heal routes it', async () => {
+test('race: a record the old key\'s heal put up that the new owner\'s row doesn\'t know goes; the new owner is routed again at once', async () => {
     const w = await world();
     try {
         const name = 'unknown-record';
@@ -1465,9 +1479,12 @@ test('race: a record the old key\'s heal put up that the new owner\'s row doesn\
         assert.equal(claimed.body.status, 'live', JSON.stringify(claimed.body));
         assert.equal(r.status, 409, JSON.stringify(r.body));
         assert.equal((await w.row(name)).node_pubkey, newKey.pubHex);
-        assert.deepEqual(routing(w, name), { dns: null, tunnels: [] }, 'nothing routes the name to the old key');
+        // Nothing routes the name to the old key — and, the new owner being live, its own record is back at once
+        // (PR 1b: this asserted `dns: null` before, i.e. a live name left dark, which nothing re-made).
+        assert.deepEqual(routing(w, name), { dns: NEW_IP, tunnels: [] }, 'nothing routes the name to the old key; the new owner is routed');
+        await routedAsRow(w, name, 'after the old key\'s heal');
 
-        // The new owner's next heal puts its record back, and the row knows it.
+        // The new owner's next heal finds it routed, and the row knows it.
         w.nodes[host] = attestsAs(newKey);
         const h = await w.heal(newKey, modeBody('direct', NEW_IP));
         assert.equal(h.body.status, 'live', JSON.stringify(h.body));
@@ -1555,6 +1572,7 @@ test('migration 0002: incident victims go back to their original key, paused; a 
         assert.throws(() => w.sqlite.exec(migration('0002_states.sql')), /duplicate column/);
         assert.equal(snapshot(), before);
         w.sqlite.exec(migration('0003_decision_seq.sql'));   // the Worker below reads 0003's column
+        w.sqlite.exec(migration('0004_teardown.sql'));       // … and may write 0004's table
 
         // And the Worker on top: the victim's own node heals it (today's nodes do so with a claim) on a fresh
         // tunnel; the taker's key cannot have it; the taker keeps `test`.
@@ -1567,5 +1585,302 @@ test('migration 0002: incident victims go back to their original key, paused; a 
         assert.equal(healed.body.tunnelToken, `token-${now.tunnel_id}`);
         assert.equal(w.cf.recordAt('yarravalley.beanpool.org').content, `${now.tunnel_id}.cfargotunnel.com`);
         assert.equal((await w.row('test')).node_pubkey, taker.pubHex);
+    } finally { w.restore(); }
+});
+
+// ── No name left dark, no tunnel orphaned (registrar PR 1b) ──────────────────────────────────────────────────────
+// PR 1's last confirmation (on f806687c) found orderings that end with a live name whose hostname routes nothing —
+// which nothing re-makes today: a node never heals a name /status calls live — or with a bp-<name> tunnel no row
+// records, which makes Cloudflare refuse every later tunnel for the name. Each is replayed below; `routedAsRow` is
+// the invariant they broke.
+
+// A live row's hostname routes exactly what the row says: the record it records, pointing at its tunnel (alive) or
+// its address. A row that isn't live has no record at its hostname. And no bp-<name> tunnel is alive but the row's.
+async function routedAsRow(w, name, why) {
+    const row = await w.row(name);
+    const rec = w.cf.recordAt(`${name}.beanpool.org`);
+    const stray = routing(w, name).tunnels.filter((id) => id !== row?.tunnel_id);
+    assert.deepEqual(stray, [], `${why}: no tunnel for the name but the row's`);
+    if (row?.status !== 'live') { assert.equal(rec, null, `${why}: ${row?.status ?? 'no'} row, nothing at its hostname`); return row; }
+    assert.ok(rec, `${why}: live, so its hostname has a record`);
+    assert.equal(rec.id, row.dns_record_id, `${why}: the record is the one the row records`);
+    assert.equal(rec.content, row.mode === 'direct' ? row.public_ip : `${row.tunnel_id}.cfargotunnel.com`, `${why}: pointing where the row says`);
+    if (row.mode === 'tunnel') assert.ok(w.cf.liveTunnel(row.tunnel_id), `${why}: its tunnel is alive`);
+    return row;
+}
+
+const unreachableTunnel = async () => new Response('no connector on this tunnel', { status: 530 });
+
+test('race: an admin resume landing during the owner\'s heal re-attest: the name ends live, with its record', async () => {
+    const w = await world();
+    try {
+        const name = 'resumeheal';
+        const { owner, row: before } = await impostorPaused(w, name, { keptTunnel: true });
+        // The owner's heal re-attests through the kept tunnel. Meanwhile the admin resumes: that deletes the kept
+        // tunnel, makes a fresh one, re-points the same record and goes live at once — so the heal's re-attest,
+        // through the tunnel just deleted, fails.
+        let resumed;
+        w.nodes[`${name}.beanpool.org`] = async () => { resumed = await w.admin(name, 'resume'); return unreachableTunnel(); };
+        const r = await w.heal(owner);
+        assert.equal(resumed?.body.status, 'live', JSON.stringify(resumed?.body));
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'live', 'the heal answers the row as it now is');
+        const row = await routedAsRow(w, name, 'after the heal');
+        assert.notEqual(row.tunnel_id, before.tunnel_id);
+        assert.equal((await w.status(owner)).body.tunnelToken, `token-${row.tunnel_id}`);
+    } finally { w.restore(); }
+});
+
+test('race: two heals from one key, the second landing just before the first goes live: the row and Cloudflare agree', async () => {
+    const w = await world();
+    try {
+        const name = 'twoheals';
+        const owner = await makeKey();
+        await liveName(w, name, owner);
+        // Paused with its tunnel and record gone (as the 09-24 incident left its victims), so a heal makes a fresh tunnel.
+        const old = await w.row(name);
+        w.cf.dns.delete(old.dns_record_id);
+        w.cf.tunnels.get(old.tunnel_id).deleted_at = new Date().toISOString();
+        await w.backdate(name, { status: 'paused', pause_reason: 'incident-2026-09-24', paused_at: nowS() });
+        // A second heal (the node's UI claiming beside its agent) lands just before the first one's go-live write.
+        // The node has no token for the fresh tunnel yet, so the second heal's re-attest fails.
+        w.nodes[`${name}.beanpool.org`] = unreachableTunnel;
+        let second;
+        w.beforeRun(/^UPDATE name_allocations SET status=\?, pause_reason=\?, paused_at=\?, attest_fails=\? WHERE/, async () => { second = await w.heal(owner); });
+        const first = await w.claim(owner, { name });
+        assert.ok(second, 'the second heal landed');
+        const why = `first ${first.status} ${JSON.stringify(first.body)}; second ${second.status} ${JSON.stringify(second.body)}`;
+        const row = await routedAsRow(w, name, why);
+        // Either way, the node's next claim routes it.
+        if (row.status !== 'live') {
+            w.nodes[`${name}.beanpool.org`] = attestsAs(owner);
+            const again = await w.claim(owner, { name });
+            assert.equal(again.body.status, 'live', `${why}; then ${JSON.stringify(again.body)}`);
+            await routedAsRow(w, name, `${why}; then the next claim`);
+        }
+    } finally { w.restore(); }
+});
+
+test('race: a bare heal overtaken by the same key\'s heal to a tunnel: the row and Cloudflare agree, nothing stray', async () => {
+    const w = await world();
+    try {
+        const name = 'modeswitch';
+        const owner = await makeKey();
+        assert.equal((await w.claim(owner, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+        // The bare heal has read the row (direct); before it goes on, the same key's heal moves the name to a tunnel.
+        let moved;
+        w.afterRead(/FROM name_allocations WHERE node_pubkey=\?/, async () => { moved = await w.heal(owner, { mode: 'tunnel' }); });
+        const bare = await w.heal(owner);
+        assert.equal(moved?.body.status, 'live', JSON.stringify(moved?.body));
+        const row = await routedAsRow(w, name, `the bare heal answered ${bare.status} ${JSON.stringify(bare.body)}`);
+        assert.deepEqual([row.status, row.mode], ['live', 'tunnel']);
+    } finally { w.restore(); }
+});
+
+test('the sweep puts back a live name\'s missing record, and its tunnel, whatever left it dark; a node merely asleep is only looked at', async () => {
+    const w = await world();
+    try {
+        const [owner, sleeper, n1] = await Promise.all([makeKey(), makeKey(), makeKey()]);
+        await liveName(w, 'darkname', owner);
+        await liveName(w, 'sleepy', sleeper);
+        await liveName(w, 'darkname-a', n1);
+        const before = await w.row('darkname');
+        const asleep = await w.row('sleepy');
+        w.nodes['sleepy.beanpool.org'] = unreachableTunnel;   // routed, but its node's connector is down
+        // The record goes, with no request or decision behind it: the end state of every ordering above.
+        w.cf.dns.delete(before.dns_record_id);
+        const mark = w.cf.calls.length;
+        const s = await attestSweep(w.env);
+        assert.equal(s.unverifiable, 2);
+        let row = await routedAsRow(w, 'darkname', 'after the sweep');
+        assert.equal(row.tunnel_id, before.tunnel_id, 'its tunnel was still there: kept');
+        assert.ok(w.events('darkname').some((e) => e.event === 'repaired'), JSON.stringify(w.events('darkname')));
+        assert.deepEqual(await w.row('sleepy'), asleep, 'the sleeping node\'s row is untouched');
+        assert.deepEqual(w.cf.calls.slice(mark).filter((c) => c.includes(asleep.tunnel_id) || c.includes(asleep.dns_record_id)),
+            [`GET /accounts/acct/cfd_tunnel/${asleep.tunnel_id}`], 'the sleeping node\'s routing was only looked at');
+        assert.equal((await attestSweep(w.env)).ok, 2, 'the next sweep reaches it');
+
+        // Record and tunnel both gone: a fresh tunnel, whose token its owner's node gets from /status.
+        w.cf.dns.delete(row.dns_record_id);
+        w.cf.tunnels.get(row.tunnel_id).deleted_at = new Date().toISOString();
+        await attestSweep(w.env);
+        row = await routedAsRow(w, 'darkname', 'after the second sweep');
+        assert.notEqual(row.tunnel_id, before.tunnel_id);
+        assert.equal((await w.status(owner)).body.tunnelToken, `token-${row.tunnel_id}`);
+    } finally { w.restore(); }
+});
+
+test('the sweep puts back every dark live name even when so many are dark that it suspends its verdicts', async () => {
+    const w = await world();
+    try {
+        const names = ['one', 'two', 'three'];
+        for (const n of names) await liveName(w, `dark-${n}`, await makeKey());
+        for (const n of names) w.cf.dns.delete((await w.row(`dark-${n}`)).dns_record_id);
+        const s = await attestSweep(w.env);
+        assert.equal(s.action, 'suspended:unverifiable');
+        for (const n of names) await routedAsRow(w, `dark-${n}`, `dark-${n} after the suspended sweep`);
+        assert.equal((await attestSweep(w.env)).ok, 3);
+    } finally { w.restore(); }
+});
+
+for (const action of ['pause', 'block']) {
+    test(`race: an admin ${action}'s clean-up racing the admin's release and a new key's claim: the new owner keeps its record`, async () => {
+        const w = await world();
+        try {
+            const name = `taken-${action}`;
+            const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
+            await liveName(w, name, oldKey);
+            // As Cloudflare takes the decision's record delete, the admin releases the name and a new key claims it.
+            let released, claimed;
+            w.cf.during(/^DELETE \/zones\/zone\/dns_records\//, async () => {
+                released = await w.admin(name, 'release');
+                claimed = await w.claim(newKey, { name });
+            });
+            const d = await w.admin(name, action);
+            assert.equal(d.status, 200, JSON.stringify(d.body));
+            assert.equal(released?.body.status, 'released');
+            assert.equal(claimed.body.status, 'live', JSON.stringify(claimed.body));
+            const row = await routedAsRow(w, name, `after the ${action}`);
+            assert.deepEqual([row.node_pubkey, row.status], [newKey.pubHex, 'live']);
+            assert.equal((await w.status(newKey)).body.tunnelToken, `token-${row.tunnel_id}`);
+        } finally { w.restore(); }
+    });
+
+    test(`race: an admin ${action}'s clean-up racing an admin resume: the resumed name keeps its record`, async () => {
+        const w = await world();
+        try {
+            const name = `resumed-${action}`;
+            const owner = await makeKey();
+            await liveName(w, name, owner);
+            // Another tab resumes as Cloudflare takes the decision's record delete: it finds the name routed, re-attests
+            // (a pause's kept tunnel) or makes a fresh tunnel (after a block), and goes live.
+            let resumed;
+            w.cf.during(/^DELETE \/zones\/zone\/dns_records\//, async () => { resumed = await w.admin(name, 'resume'); });
+            const d = await w.admin(name, action);
+            assert.equal(d.status, 200, JSON.stringify(d.body));
+            assert.equal(resumed?.body.status, 'live', JSON.stringify(resumed?.body));
+            const row = await routedAsRow(w, name, `after the ${action}`);
+            assert.equal(row.status, 'live');
+            assert.equal((await w.status(owner)).body.tunnelToken, `token-${row.tunnel_id}`);
+        } finally { w.restore(); }
+    });
+}
+
+test('a take-over whose tunnel delete Cloudflare refused: the sweep retries it, and once Cloudflare recovers the new key\'s claim goes live', async () => {
+    const w = await world();
+    try {
+        const name = 'refusedtunnel';
+        const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
+        await liveName(w, name, oldKey);
+        const old = (await w.row(name)).tunnel_id;
+        w.cf.fail.deleteTunnel = true;
+        assert.equal((await w.admin(name, 'release')).body.status, 'released');
+        assert.equal((await w.row(name)).tunnel_id, old, 'the released row keeps the tunnel Cloudflare would not delete');
+
+        // The new key's claim wins the name, but Cloudflare still refuses to delete the old bp-<name> tunnel, so no
+        // tunnel can be made for it: no token, the name pending for the new key.
+        const during = await w.claim(newKey, { name });
+        assert.notEqual(during.status, 200, JSON.stringify(during.body));
+        assert.equal(during.body.tunnelToken, undefined);
+        let row = await w.row(name);
+        assert.deepEqual([row.node_pubkey, row.status], [newKey.pubHex, 'pending']);
+        await attestSweep(w.env);
+        assert.ok(w.cf.liveTunnel(old), 'still refused');
+
+        // Cloudflare recovers: the next sweep deletes the old tunnel, before anyone claims again.
+        w.cf.fail.deleteTunnel = false;
+        await attestSweep(w.env);
+        assert.equal(w.cf.liveTunnel(old), null, 'the sweep retried the delete');
+
+        const after = await w.claim(newKey, { name });
+        assert.equal(after.status, 200, JSON.stringify(after.body));
+        assert.equal(after.body.status, 'live');
+        row = await routedAsRow(w, name, 'after the claim');
+        assert.equal(after.body.tunnelToken, `token-${row.tunnel_id}`);
+    } finally { w.restore(); }
+});
+
+test('a take-over whose tunnel delete was refused, claimed again once Cloudflare recovers but before a sweep: the claim deletes it itself', async () => {
+    const w = await world();
+    try {
+        const name = 'claimclears';
+        const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
+        await liveName(w, name, oldKey);
+        const old = (await w.row(name)).tunnel_id;
+        w.cf.fail.deleteTunnel = true;
+        await w.admin(name, 'release');
+        assert.notEqual((await w.claim(newKey, { name })).status, 200);
+        w.cf.fail.deleteTunnel = false;
+        const after = await w.claim(newKey, { name });
+        assert.equal(after.body.status, 'live', JSON.stringify(after.body));
+        assert.equal(w.cf.liveTunnel(old), null);
+        await routedAsRow(w, name, 'after the claim');
+    } finally { w.restore(); }
+});
+
+test('a bp-<name> tunnel no row records: a claim deletes it when provably stale, else answers 503 and leaves it', async () => {
+    const w = await world();
+    try {
+        // Older than the claiming tenure (lost track of before this fix): deleted, and the claim goes live.
+        const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
+        await liveName(w, 'strayed', oldKey);
+        const stray = (await w.row('strayed')).tunnel_id;
+        await w.backdate('strayed', { tunnel_id: null });
+        w.cf.tunnels.get(stray).created_at = new Date(Date.now() - 3600_000).toISOString();
+        await w.admin('strayed', 'release');
+        const r = await w.claim(newKey, { name: 'strayed' });
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'live');
+        assert.equal(w.cf.liveTunnel(stray), null, 'the stray tunnel went');
+        await routedAsRow(w, 'strayed', 'after the take-over');
+
+        // Made moments ago in this tenure and not recorded yet — maybe a request in flight: left alone, 503.
+        const owner = await makeKey();
+        await liveName(w, 'inflight', owner);
+        const mine = await w.row('inflight');
+        w.cf.tunnels.get(mine.tunnel_id).deleted_at = new Date().toISOString();    // its own tunnel is gone …
+        w.cf.tunnels.set('tun-young', { id: 'tun-young', name: 'bp-inflight', created_at: new Date().toISOString(), deleted_at: null });
+        const busy = await w.heal(owner);
+        assert.equal(busy.status, 503, JSON.stringify(busy.body));
+        assert.match(busy.body.error, /try again/);
+        assert.ok(w.cf.liveTunnel('tun-young'), 'a tunnel that may be a request\'s in flight is not deleted');
+        assert.deepEqual(await w.row('inflight'), mine, 'nothing written');
+        // … ten minutes on, nobody has recorded it: it is nobody's, and goes.
+        w.cf.tunnels.get('tun-young').created_at = new Date(Date.now() - 11 * 60_000).toISOString();
+        const healed = await w.heal(owner);
+        assert.equal(healed.body.status, 'live', JSON.stringify(healed.body));
+        assert.equal(w.cf.liveTunnel('tun-young'), null);
+        const row = await routedAsRow(w, 'inflight', 'after the heal');
+        assert.equal(healed.body.tunnelToken, `token-${row.tunnel_id}`);
+    } finally { w.restore(); }
+});
+
+test('a take-over that changes mode, the old record\'s delete refused: the old key\'s node is never the new key\'s live name, and the sweep removes its record once Cloudflare recovers', async () => {
+    const w = await world();
+    try {
+        const name = 'oldaddress';
+        const host = `${name}.beanpool.org`;
+        const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
+        assert.equal((await w.claim(oldKey, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+        w.cf.fail.deleteDns = true;
+        await w.admin(name, 'release');
+        assert.equal(routing(w, name).dns, OLD_IP, 'Cloudflare refused the release\'s delete');
+
+        // The new key claims it for a tunnel: its CNAME must replace the old key's A record, whose delete is refused.
+        const during = await w.claim(newKey, { name });
+        assert.notEqual(during.body.status, 'live', JSON.stringify(during.body));
+        assert.equal(during.body.tunnelToken, undefined);
+        assert.deepEqual([(await w.row(name)).node_pubkey, (await w.row(name)).status], [newKey.pubHex, 'pending']);
+        assert.deepEqual(routing(w, name).tunnels, [], 'no tunnel of the failed claim is left');
+
+        // Cloudflare recovers: the next sweep deletes the old key's record, before the new key claims again.
+        w.cf.fail.deleteDns = false;
+        await attestSweep(w.env);
+        assert.equal(w.cf.recordAt(host), null, 'the old key\'s node is no longer reachable at the name');
+
+        const after = await w.claim(newKey, { name });
+        assert.equal(after.body.status, 'live', JSON.stringify(after.body));
+        const row = await routedAsRow(w, name, 'after the claim');
+        assert.equal(routing(w, name).dns, `${row.tunnel_id}.cfargotunnel.com`);
     } finally { w.restore(); }
 });

@@ -20,7 +20,19 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   verdicts **pause** the name (tunnel and DNS deleted, the name kept for its key); an `ok` or
   `unverifiable` verdict in an applied sweep ends the run (a suspended sweep changes nothing). Every
   sweep writes one `sweep_log` row, including a count of content-swaps (a 2xx that is no attest at all),
-  which are counted only, never acted on yet.
+  which are counted only, never acted on yet. Then, applied or suspended alike, **upkeep** (not a verdict: it
+  never takes routing away from a live name or routes one that isn't live): a live name whose attest reached no
+  node at all (unreachable, or Cloudflare's 530) is checked at Cloudflare, and if its record or tunnel is gone
+  or points elsewhere it is re-made as its row says (event `repaired`; a new tunnel's token reaches the node
+  through `/status`). Nodes never heal a name `/status` calls live, so this is what keeps any ordering of
+  requests from leaving a live name dark. A node merely asleep costs one or two reads; one that answered
+  anything costs none. Deletions Cloudflare refused earlier (`teardown`) are retried.
+
+A tunnel or record the registrar lets go of that Cloudflare refuses to delete (another key's take-over of a
+name, a failed request's tunnel) is recorded in `teardown`, never dropped. A live `bp-<name>` tunnel no row
+records would make Cloudflare refuse every later tunnel for the name (1013), so a claim that meets one deletes
+it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10
+minutes ago. Otherwise the claim answers **503** "cleaning up … try again shortly".
 
 ## Ownership: a name belongs to its node's key
 
@@ -78,6 +90,8 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    `paused` row is just "not revoked" to it). A second run stops at its first ALTER and changes nothing.
    Then `--file migrations/0003_decision_seq.sql` (one column, `decision_seq`: the count of decisions a
    request in flight must not overwrite). Same rule: before the Worker; a rerun stops at the ALTER.
+   Then `--file migrations/0004_teardown.sql` (one table, `teardown`: deletions Cloudflare refused, which the
+   sweep retries). Before the Worker; a rerun changes nothing.
 3. Deploy the Worker. Until the migrations table is bootstrapped with 0001 marked applied (design PR 4),
    don't use `wrangler d1 migrations apply --remote` — it would run 0001.
 

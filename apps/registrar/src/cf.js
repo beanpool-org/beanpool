@@ -1,7 +1,8 @@
 // Cloudflare API client. createTunnel / getTunnelToken / setTunnelIngress / POST dns_records / the two DELETEs
 // are the calls validated live in Phase 0 (scratchpad/cf-phase0.sh, 2026-07-27). getTunnel, findDnsRecord and
-// patchDnsRecord (idempotent `ensure`, 2026-09-25) follow the documented v4 shapes but were NOT exercised live
-// when written — validate them with a scratch name before relying on them (design §10).
+// patchDnsRecord (idempotent `ensure`, 2026-09-25) and listTunnelsNamed (registrar PR 1b) follow the documented v4
+// shapes but were NOT exercised live when written — validate them with a scratch name before relying on them
+// (design §10). So is the code a duplicate tunnel name is refused with (1013, tunnelNameTaken).
 // Auth: a scoped token (Account·Cloudflare Tunnel·Edit + Zone·DNS·Edit) as env.CF_API_TOKEN.
 
 const API = 'https://api.cloudflare.com/client/v4';
@@ -20,6 +21,7 @@ async function cf(env, method, path, body) {
     if (!data.success) {
         const err = new Error(`CF ${method} ${path} → ${JSON.stringify(data.errors)}`);
         err.status = res.status;
+        err.codes = (Array.isArray(data.errors) ? data.errors : []).map((x) => x?.code).filter((c) => c !== undefined);
         throw err;
     }
     return data.result;
@@ -28,6 +30,15 @@ async function cf(env, method, path, body) {
 // --- Tunnel mode (Case A) ---
 export const createTunnel = (env, name) =>
     cf(env, 'POST', `/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel`, { name, config_src: 'cloudflare' });
+
+// Cloudflare refused createTunnel because a live tunnel already has that name.
+export const tunnelNameTaken = (e) => !!e && (e.codes?.includes(1013) || e.status === 409);
+
+// The live (not deleted) tunnels named `name`: { id, name, created_at, … }.
+export async function listTunnelsNamed(env, name) {
+    const list = await cf(env, 'GET', `/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel?name=${encodeURIComponent(name)}&is_deleted=false`);
+    return (Array.isArray(list) ? list : []).filter((t) => t && t.name === name && !t.deleted_at);
+}
 
 // The tunnel, or null if Cloudflare no longer has it (404, or deleted — a deleted tunnel is still listed with
 // `deleted_at`). Any other failure throws: "can't tell" must never read as "gone" and mint a second tunnel.

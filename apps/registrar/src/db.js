@@ -57,11 +57,14 @@ export const updateAllocation = async (env, name, fields) => {
 const STATE = ['node_pubkey', 'requested_at', 'status', 'pause_reason', 'decision_seq'];
 const IDS = ['tunnel_id', 'dns_record_id'];
 
-// Is the row still `expected` (tenure, state, decisions)? Asked before touching a record found by hostname, which
-// is another tenure's once the row has changed.
-export const isUnchanged = async (env, name, expected) =>
-    !!(await env.DB.prepare(`SELECT 1 AS yes FROM name_allocations WHERE name=? AND ${STATE.map((c) => `${c} IS ?`).join(' AND ')}`)
-        .bind(name, ...STATE.map((c) => expected[c] ?? null)).first());
+// Is the row still `expected` (tenure, state, decisions — and, `withIds`, the tunnel and DNS ids it recorded)? Asked
+// before touching a record found by hostname, which is another tenure's once the row has changed, and before a clean-up
+// removes routing a later request may have put up.
+export const isUnchanged = async (env, name, expected, { withIds = false } = {}) => {
+    const cols = withIds ? [...STATE, ...IDS] : STATE;
+    return !!(await env.DB.prepare(`SELECT 1 AS yes FROM name_allocations WHERE name=? AND ${cols.map((c) => `${c} IS ?`).join(' AND ')}`)
+        .bind(name, ...cols.map((c) => expected[c] ?? null)).first());
+};
 
 // Write `fields` over `expected` — the row as this request read it, or last wrote it — only if its tenure and
 // state are unchanged (and, `withIds`, the tunnel and DNS ids it recorded): a request that worked at Cloudflare
@@ -107,6 +110,24 @@ export const listEvents = async (env, name, limit = 200) =>
         ? await env.DB.prepare('SELECT * FROM name_events WHERE name=? ORDER BY at DESC, id DESC LIMIT ?').bind(name, limit).all()
         : await env.DB.prepare('SELECT * FROM name_events ORDER BY at DESC, id DESC LIMIT ?').bind(limit).all()
     ).results || [];
+
+// Owed deletions (migration 0004): a Cloudflare tunnel or DNS record the registrar let go of but Cloudflare refused
+// to delete. Recorded once (the first refusal's time stands); the sweep retries them.
+export const oweTeardown = (env, name, kind, cfId, since) =>
+    env.DB.prepare('INSERT OR IGNORE INTO teardown (kind, cf_id, name, since) VALUES (?,?,?,?)').bind(kind, cfId, name, since).run();
+
+// The name's owed deletions, or (no name) the oldest `limit` of all of them.
+export const listTeardown = async (env, name, limit = 100) =>
+    (name
+        ? await env.DB.prepare('SELECT * FROM teardown WHERE name=? ORDER BY since').bind(name).all()
+        : await env.DB.prepare('SELECT * FROM teardown ORDER BY since LIMIT ?').bind(limit).all()
+    ).results || [];
+
+export const dropTeardown = (env, kind, cfId) =>
+    env.DB.prepare('DELETE FROM teardown WHERE kind=? AND cf_id=?').bind(kind, cfId).run();
+
+export const teardownRefused = (env, kind, cfId, error) =>
+    env.DB.prepare('UPDATE teardown SET tries = tries + 1, last_error=? WHERE kind=? AND cf_id=?').bind(error, kind, cfId).run();
 
 // One row per sweep; rows older than 90 days go (288 sweeps a day).
 export const insertSweepLog = async (env, s, now) => {

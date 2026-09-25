@@ -95,3 +95,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-10-28 - Add loading indicator for NodeRolesPanel
 **Learning:** `NodeRolesPanel.tsx` did not show visual loading feedback while initial roles were fetching, leaving the list section blank before data arrived.
 **Action:** Render an explicit loading indicator and spinner when `loading && roles === null`.
+
+## 2026-11-12 - Add loading state and remove any assertion in PostModerationPanel
+**Learning:** `PostModerationPanel.tsx` rendered "No marketplace posts match..." when `posts` was `null` (loading state), misleading operators into thinking 0 posts existed.
+**Action:** Render an explicit loading state (`Loading marketplace posts...` with spinner) when `posts == null` and replace `as any` filter type assertion with a strict union type.

@@ -338,7 +338,8 @@ export interface SyncPlaceWatch {
  * Replicated so a server that takes over still has every open knock, the answer to every closed one (a decline's
  * 30-day block, an approval's invite, which the standby makes again from this row since invite codes do not travel),
  * and who answered. `pubkey` is the applicant's key, not a member's. The address hash the knock limiter keeps for a day
- * is NOT here. Watermarked on `updatedAt`; never deleted, so no tombstones.
+ * is NOT here. Watermarked on `updatedAt`. The main server's tidy-up clears what the applicant sent once no member
+ * will read it again (stamped, so it travels here) and deletes a row past its windows, with a `join_requests` tombstone.
  */
 export interface SyncJoinRequest {
     id: string;
@@ -411,7 +412,7 @@ export interface SyncPayload {
     placeWatches?: SyncPlaceWatch[];
     /** Watermarked on `updated_at`, which the mirror stamps only on a row it changed. Empty on a local node. */
     directoryCache?: SyncDirectoryCommunity[];
-    /** Watermarked on `updated_at`, which a knock, a reopened knock, an answer and a scrub all stamp. Empty on the global node. */
+    /** Watermarked on `updated_at`, which a knock, a reopened knock, an answer, a scrub and the tidy-up all stamp. Empty on the global node. */
     joinRequests?: SyncJoinRequest[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     /**

@@ -37,6 +37,13 @@
  *      after a re-key wipe what they wrote, on the main server and a standby; an approver's and then the applicant's
  *      re-key keep the applicant's status approved through a take-over; and a knock on a replaced key is refused at
  *      every step (list, count, approve, decline, status, redeem, knock)
+ *  15. the tidy-up (the main server's, every minute): a declined, lapsed, approved or joined knock loses the name,
+ *      message, picture and node it carried (a declined one, who declined it too), and an open one keeps them; a declined knock in its 30 days still blocks
+ *      and still looks like waiting, an approved one's invite still admits only its key; a standby copy loses them
+ *      too; a row past every window is deleted, with its tombstone, on the main server and the standby, and neither a
+ *      stale copy nor a full snapshot brings it back; a standby doesn't tidy by itself
+ *  16. node-wide ceilings: the 31st knock in 24 hours, from a new address and a new key, and the 51st open knock each
+ *      get the per-address limit's own 429; a reopened knock counts as a new one; answering one frees a slot
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-knock.ts
  */
@@ -55,7 +62,7 @@ import { db } from './db/db.js';
 import { registerMemberInternal } from './engine/members.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { forgetOldJoinAddresses } from './engine/open-join.js';
-import { mergeReplicatedKnocks } from './engine/knocks.js';
+import * as knockEngine from './engine/knocks.js';
 import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -134,6 +141,16 @@ function freshAddress(): void {
 }
 const sameAnswer = (a: Res, b: Res) => a.status === b.status && JSON.stringify(a.body) === JSON.stringify(b.body);
 
+// The main server's tidy-up and its timer (engine/knocks.ts), read without assuming they exist, so this suite fails,
+// not crashes, on a build without them.
+const { mergeReplicatedKnocks } = knockEngine;
+const knockTidy = knockEngine as unknown as { tidyKnocks?: () => { cleared: number; deleted: number }; startTidyingKnocks?: (everyMs: number) => void };
+const tidy = () => knockTidy.tidyKnocks?.() ?? { cleared: 0, deleted: 0 };
+const tidyEvery = (ms: number) => knockTidy.startTidyingKnocks?.(ms);
+/** Nothing of what the applicant sent is left on the row. */
+const blank = (r: any) => !!r && r.callsign === '' && r.message === '' && r.avatar === null && r.from_node === null;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function makeMember(id: Id, inviter: string): void {
     registerMemberInternal(broadcast, id.pk, id.name, inviter, null);
 }
@@ -152,6 +169,9 @@ async function main(): Promise<void> {
     const { hash, salt } = hashPassword(ADMIN_PW);
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
     await startHttpsServer(PORT);
+    // The tidy-up runs every minute by itself. Here it runs only when section 15 calls it: the sections before set a
+    // knock's times by hand and read the row straight after.
+    tidyEvery(DAY_MS);
 
     // The community: Mia (its first member), Max, a pruned member, a suspended member, one who will delete their account.
     const mia = newId('Mia');
@@ -707,6 +727,208 @@ async function main(): Promise<void> {
     assert(!memberRow(rekeyed.pk) && !staleUsed, 'the old key is no member, and the invite is not used');
     const staleKnock = await knock(rekeyed);
     assert(staleKnock.status === 403 && staleKnock.body?.code === 'key_invalidated', 'and it can\'t knock again (403 key_invalidated)');
+
+    console.log('\n── 15. what no member will read again leaves the disk ──');
+    /** A new day for the whole node: every knock so far moves two days back, so none counts as made in the last 24 hours. */
+    const newDay = () => {
+        for (const r of db.prepare('SELECT id, created_at FROM join_requests').all() as { id: string; created_at: string }[]) {
+            setKnock(r.id, { created_at: new Date(Date.parse(r.created_at) - 2 * DAY_MS).toISOString() });
+        }
+    };
+    newDay();
+    // The knocks the sections above left behind get their tidy-up first, so the counts below are this section's own.
+    const settled = tidy();
+    console.log(`  (the knocks left by the sections above: ${JSON.stringify(settled)})`);
+    // Six applicants, each sending a name, a message with an address in it, a photo and the node they came from.
+    const nia = newId('Nia');   // declined
+    const oto = newId('Oto');   // lapses
+    const pia = newId('Pia');   // approved, not redeemed yet
+    const rex = newId('Rex');   // approved, and joins
+    const sol = newId('Sol');   // still waiting
+    const tam = newId('Tam');   // joins through an ordinary invite while the knock waits
+    const tidied = [nia, oto, pia, rex, tam];
+    const idOf = new Map<string, string>();
+    for (const group of [[nia, oto, pia], [rex, sol, tam]]) {
+        freshAddress();
+        for (const a of group) {
+            const r = await knock(a, { message: `${a.name} here, 1 Tidy Lane`, avatar: jpegWithXmp(a.name) });
+            idOf.set(a.pk, rowsFor(a.pk)[0]?.id);
+            assert(r.status === 201 && rowsFor(a.pk)[0]?.avatar?.startsWith('data:image/'), `${a.name} knocks, with a photo (${r.status})`);
+        }
+    }
+    freshAddress();
+    /** Whose knock, of the six, still holds anything they sent, and whose words are anywhere in the table. */
+    const tidyWords = () => (db.prepare(`SELECT DISTINCT pubkey FROM join_requests WHERE message LIKE '%Tidy Lane%'
+            OR (pubkey IN (${[...idOf.keys()].map(() => '?').join(', ')}) AND (callsign != '' OR avatar IS NOT NULL OR from_node IS NOT NULL))`)
+        .all(...idOf.keys()) as { pubkey: string }[]).map((r) => r.pubkey);
+    assert((await decline(mia, idOf.get(nia.pk)!)).status === 200, 'Mia declines Nia');
+    setKnock(idOf.get(oto.pk)!, { created_at: ago(31 * DAY_MS) });
+    const piaCode = (await approve(max, idOf.get(pia.pk)!)).body?.invite?.code as string;
+    const rexCode = (await approve(mia, idOf.get(rex.pk)!)).body?.invite?.code as string;
+    const rexJoins = await redeem(rexCode, rex);
+    const tamInvite = (await call(max, 'POST', '/api/invite/generate', { publicKey: max.pk })).body?.invite?.code as string;
+    const tamJoins = await redeem(tamInvite, tam);
+    assert(!!piaCode && rexJoins.status === 200 && tamJoins.status === 200 && tidyWords().length === 6,
+        'Oto\'s knock lapses, Pia and Rex are approved, Rex and Tam join; all six rows still hold what they sent');
+    const beforeTidy: any = await exportSyncState(nodeId);
+
+    const firstTidy = tidy();
+    assert(firstTidy.cleared === 5 && firstTidy.deleted === 0, `the tidy-up clears five knocks and deletes none of them yet (${JSON.stringify(firstTidy)})`);
+    const niaRow = knockById(idOf.get(nia.pk)!);
+    assert(blank(niaRow) && niaRow?.status === 'declined' && niaRow?.decided_by === null && typeof niaRow?.decided_at === 'string',
+        'the declined knock: no name, message, photo or node left, nor who declined it; still declined, and when');
+    assert(blank(knockById(idOf.get(oto.pk)!)) && knockById(idOf.get(oto.pk)!)?.status === 'pending', 'the lapsed knock: nothing of it left');
+    const piaRow = knockById(idOf.get(pia.pk)!);
+    assert(blank(piaRow) && piaRow?.status === 'approved' && piaRow?.invite_code === piaCode && piaRow?.decided_by === max.pk,
+        'the approved knock: nothing of it left, the invite and who made it kept');
+    assert(blank(knockById(idOf.get(rex.pk)!)) && blank(knockById(idOf.get(tam.pk)!)), 'the knocks of the two who joined: nothing left');
+    const solRow = knockById(idOf.get(sol.pk)!);
+    const solListed = (await list(mia)).body?.knocks?.find((k: any) => k.pubkey === sol.pk);
+    assert(solRow?.message === 'Sol here, 1 Tidy Lane' && solRow?.callsign === 'Sol' && solListed?.avatar === solRow?.avatar && solRow?.avatar?.startsWith('data:image/'),
+        'the open knock keeps everything, and the members\' list still shows it with the photo');
+    assert(JSON.stringify(tidyWords()) === JSON.stringify([sol.pk]), 'the words "Tidy Lane" and the photos are nowhere else in the table');
+    assert(sameAnswer(await knock(nia), bobDupe) && sameAnswer(await status(nia), bobPending),
+        'Nia, in her 30 days: a knock gets exactly a duplicate\'s answer, and her status is exactly a waiting knock\'s');
+    const otoLate = await approve(mia, idOf.get(oto.pk)!);
+    assert(otoLate.status === 409 && otoLate.body?.code === 'lapsed' && (await status(oto)).body?.status === 'none', 'a late answer to Oto\'s still reads lapsed, and his status none');
+    const piaStatus = await status(pia);
+    assert(piaStatus.body?.status === 'approved' && piaStatus.body?.invite === piaCode, `Pia's status still has her invite (${piaStatus.text})`);
+    const piaByEve = await redeem(piaCode, eve);
+    assert(piaByEve.status === 400 && /someone else/.test(piaByEve.body?.error ?? '') && !memberRow(eve.pk), 'and it still admits only her key');
+    const secondTidy = tidy();
+    assert(secondTidy.cleared === 0 && secondTidy.deleted === 0, `a second tidy-up changes nothing (${JSON.stringify(secondTidy)})`);
+
+    // A standby holding the copy from before the tidy-up takes the clearing from the next copy.
+    const afterTidy: any = await exportSyncState(nodeId);
+    await becomeCopyOf(beforeTidy, [piaCode, rexCode]);
+    assert(knockById(idOf.get(nia.pk)!)?.message === 'Nia here, 1 Tidy Lane' && tidyWords().length === 6, 'a standby with the copy from before the tidy-up has their words');
+    setNodeRole('backup');
+    await importRemoteState(afterTidy);
+    setNodeRole('primary');
+    assert(tidied.every((a) => blank(knockById(idOf.get(a.pk)!))) && JSON.stringify(tidyWords()) === JSON.stringify([sol.pk]),
+        'the next copy clears them there too: the tidy-up stamps what it clears, so it travels');
+    assert(knockById(idOf.get(pia.pk)!)?.invite_code === piaCode && !!db.prepare('SELECT 1 FROM invite_codes WHERE code = ?').get(piaCode),
+        'the standby still has the approval, and makes its invite');
+
+    // A declined knock stays while its block runs, and every row goes once past each of its windows.
+    setKnock(idOf.get(nia.pk)!, { decided_at: ago(29 * DAY_MS) });
+    const blockTidy = tidy();
+    assert(blockTidy.deleted === 0 && !!knockById(idOf.get(nia.pk)!) && sameAnswer(await knock(nia), bobDupe) && sameAnswer(await status(nia), bobPending),
+        '29 days after the decline the row stays, and still blocks her the same way');
+    setKnock(idOf.get(nia.pk)!, { decided_at: ago(31 * DAY_MS), created_at: ago(35 * DAY_MS) });
+    setKnock(idOf.get(oto.pk)!, { created_at: ago(61 * DAY_MS) });
+    setKnock(idOf.get(tam.pk)!, { created_at: ago(61 * DAY_MS) });
+    for (const [a, c] of [[pia, piaCode], [rex, rexCode]] as const) {
+        setKnock(idOf.get(a.pk)!, { decided_at: ago(31 * DAY_MS), created_at: ago(32 * DAY_MS) });
+        db.prepare('UPDATE invite_codes SET created_at = ? WHERE code = ?').run(ago(31 * DAY_MS), c);
+    }
+    const beforeDelete: any = await exportSyncState(nodeId);
+    const deleteTidy = tidy();
+    const doomedIds = tidied.map((a) => idOf.get(a.pk)!);
+    const tombstoned = new Set((db.prepare("SELECT row_key FROM tombstones WHERE table_name = 'join_requests'").all() as { row_key: string }[]).map((r) => r.row_key));
+    assert(deleteTidy.deleted === 5 && doomedIds.every((id) => !knockById(id)) && doomedIds.every((id) => tombstoned.has(id)),
+        `past their windows (31 days after the decline, 30 after the lapse, the invite's 30 days over, used or not) all five rows are deleted, each with a tombstone (${JSON.stringify(deleteTidy)})`);
+    assert(!!knockById(idOf.get(sol.pk)!) && !!knockById(idOf.get(sol.pk)!)?.avatar, 'the open knock is still there, whole');
+    assert((await status(nia)).body?.status === 'none' && (await status(pia)).body?.status === 'none', 'Nia\'s and Pia\'s status is none');
+    const piaExpired = await redeem(piaCode, pia);
+    assert(piaExpired.status === 400 && /expired/.test(piaExpired.body?.error ?? '') && !memberRow(pia.pk), `Pia's invite admits nobody: it has expired (${piaExpired.body?.error})`);
+    const rexAgain = await knock(rex);
+    assert(rexAgain.status === 409 && rexAgain.body?.code === 'already_member', 'Rex is a member: he can\'t knock');
+    const niaAgain = await knock(nia);
+    assert(niaAgain.status === 201 && rowsFor(nia.pk).length === 1 && rowsFor(nia.pk)[0].id !== idOf.get(nia.pk), `Nia may ask again: a new row (${niaAgain.status})`);
+    freshAddress();
+
+    // On a standby: the next copy's tombstones delete them, and neither a stale copy nor a full snapshot brings them back.
+    const afterDelete: any = await exportSyncState(nodeId);
+    await becomeCopyOf(beforeDelete, [piaCode, rexCode]);
+    assert(doomedIds.every((id) => !!knockById(id)), 'a standby with the copy from before has the five rows');
+    setNodeRole('backup');
+    await importRemoteState(afterDelete);
+    setNodeRole('primary');
+    assert(doomedIds.every((id) => !knockById(id)) && !!knockById(idOf.get(sol.pk)!), 'the next copy deletes them there too; the open knock stays');
+    const staleMerge = mergeReplicatedKnocks(beforeDelete.joinRequests);
+    assert(doomedIds.every((id) => !knockById(id)), `a stale copy that still carries them doesn't bring them back (${JSON.stringify(staleMerge)})`);
+    setNodeRole('backup');
+    await importRemoteState(beforeDelete);
+    setNodeRole('primary');
+    assert(doomedIds.every((id) => !knockById(id)), 'nor does that stale copy as a whole import');
+    await becomeCopyOf(afterDelete);
+    assert(doomedIds.every((id) => !knockById(id)) && !!knockById(idOf.get(sol.pk)!) && rowsFor(nia.pk).length === 1,
+        'a standby built fresh from a full snapshot has none of them, and has the rest');
+
+    // The timer: on the main server it tidies by itself; a standby leaves it to the main server's copy.
+    const uma = newId('Uma');
+    await knock(uma, { message: 'Uma here, 1 Tidy Lane' });
+    const umaId = rowsFor(uma.pk)[0]?.id as string;
+    await decline(max, umaId);
+    tidyEvery(20);
+    setNodeRole('backup');
+    await sleep(150);
+    const umaOnStandby = knockById(umaId);
+    setNodeRole('primary');
+    await sleep(150);
+    tidyEvery(DAY_MS);
+    assert(umaOnStandby?.message === 'Uma here, 1 Tidy Lane' && blank(knockById(umaId)),
+        'the timer clears a declined knock on the main server, and a standby\'s timer touches nothing');
+    freshAddress();
+
+    console.log('\n── 16. node-wide ceilings ──');
+    newDay();
+    const madeToday = () => (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE created_at >= ?').get(ago(DAY_MS)) as { n: number }).n;
+    const listedNow = async () => (await list(mia)).body?.total as number;
+    let lastAddress = 0;
+    /** A knock from an address nobody has knocked from (the tunnel's header names it; loopback is a trusted proxy). */
+    const knockFromNew = (id: Id) => call(id, 'POST', '/api/join/knock', { callsign: id.name, message: `Hello from ${id.name}.` },
+        { headers: { 'CF-Connecting-IP': `198.51.${100 + Math.floor(++lastAddress / 250)}.${lastAddress % 250 + 1}` } });
+    const open0 = await listedNow();
+    assert(madeToday() === 0 && open0 + 30 < 50, `a fresh day: nothing made in 24 hours, ${open0} open`);
+    const flood: Id[] = [];
+    let taken = 0;
+    for (let i = 0; i < 30; i++) {
+        const f = newId(`Flood${i}`);
+        flood.push(f);
+        if ((await knockFromNew(f)).status === 201) taken++;
+    }
+    assert(taken === 30 && madeToday() === 30, `30 knocks in a day from 30 addresses and 30 keys are taken (${taken})`);
+    const thirtyFirstKey = newId('Flood30');
+    const thirtyFirst = await knockFromNew(thirtyFirstKey);
+    assert(sameAnswer(thirtyFirst, fourth), `the 31st in 24 hours, from a new address and a new key → the per-address limit's own 429 (${thirtyFirst.status} ${thirtyFirst.text})`);
+    assert(rowsFor(thirtyFirstKey.pk).length === 0 && madeToday() === 30, 'and no row');
+    // A lapsed knock reopened is a new knock.
+    const bobKnockId = rowsFor(bob.pk)[0]?.id as string;
+    setKnock(bobKnockId, { created_at: ago(31 * DAY_MS) });
+    const bobReopen = await knockFromNew(bob);
+    assert(sameAnswer(bobReopen, fourth) && Date.now() - Date.parse(rowsFor(bob.pk)[0]?.created_at) > 30 * DAY_MS,
+        `reopening a lapsed knock is a new knock: refused too, and the row stays lapsed (${bobReopen.status})`);
+
+    // A day later the node takes knocks again, until 50 are open.
+    for (const f of flood) setKnock(rowsFor(f.pk)[0]?.id, { created_at: ago(DAY_MS + 60 * 60_000) });
+    assert(madeToday() === 0, 'a day on, none of the 30 counts');
+    const nextDay = await knockFromNew(thirtyFirstKey);
+    assert(nextDay.status === 201, `the next knock is taken (${nextDay.status})`);
+    const bobReopened = await knockFromNew(bob);
+    assert(bobReopened.status === 201 && rowsFor(bob.pk).length === 1 && rowsFor(bob.pk)[0].id === bobKnockId && madeToday() === 2,
+        `Bob's lapsed knock reopens, and counts as a knock made today (${bobReopened.status}, ${madeToday()} today)`);
+    const crowd: Id[] = [];
+    while ((await listedNow()) < 50) {
+        const c = newId(`Crowd${crowd.length}`);
+        crowd.push(c);
+        const r = await knockFromNew(c);
+        if (r.status !== 201 || crowd.length > 50) break;
+    }
+    assert((await listedNow()) === 50 && madeToday() < 30, `50 knocks are open (${madeToday()} made today, under 30)`);
+    const fiftyFirstKey = newId('Crowded');
+    const fiftyFirst = await knockFromNew(fiftyFirstKey);
+    assert(sameAnswer(fiftyFirst, fourth) && rowsFor(fiftyFirstKey.pk).length === 0 && (await listedNow()) === 50,
+        `the 51st open knock → the same 429, and no row (${fiftyFirst.status} ${fiftyFirst.text})`);
+    assert((await decline(mia, rowsFor(flood[0].pk)[0]?.id)).status === 200 && (await listedNow()) === 49, 'a member declines one: 49 open');
+    const intoSlot = await knockFromNew(fiftyFirstKey);
+    assert(intoSlot.status === 201 && (await listedNow()) === 50, `and the slot it freed is taken (${intoSlot.status})`);
+    const overAgain = await knockFromNew(newId('Crowded2'));
+    assert(sameAnswer(overAgain, fourth), 'full again: 429');
+    assert((await approve(max, rowsFor(flood[1].pk)[0]?.id)).status === 200 && (await listedNow()) === 49, 'a member approves one: 49 open');
+    const intoSlot2 = await knockFromNew(newId('Crowded3'));
+    assert(intoSlot2.status === 201, `and that slot is taken too (${intoSlot2.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

@@ -22,6 +22,14 @@
  *     message ("people are kinder when a no isn't a message").
  *   - KNOCK_RULES.perAddressPerDay knocks from one address in any 24 hours (429), counted over `ip_hash`, which is
  *     the open door's keyed hash with its own domain (engine/open-join.ts) and is cleared once a day old.
+ *   - Node-wide, from every address together: KNOCK_RULES.perNodePerDay knocks made in any 24 hours, and
+ *     KNOCK_RULES.openAtOnce open at once (what the members' list shows). A key costs nothing to make and neither does
+ *     an address (a free IPv6 /48 is 65,536 /64s), so without these one machine could fill the disk. Over either, the
+ *     answer is the address limit's own 429, word for word, so a flood can't tell which one it hit. A reopened knock
+ *     counts as a new one. The design's other brake, knocks from SSO-verified accounts only, can't be checked here: a
+ *     local node gets a bare signed key. These ceilings and the tidy-up below stand in for it. What is left: a flood
+ *     can fill both and crowd out genuine knocks for up to a day. Members can still decline, and the operator can
+ *     switch knocks off.
  *
  * ## A knock lapses
  *
@@ -55,19 +63,45 @@
  * knock's status and, once approved, the invite. Nobody else, and nothing about knocks is in a public read or on the
  * global node. `fromNode` is what the applicant's app says it came from; the node does not check it.
  *
+ * ## What is kept, and for how long
+ *
+ * The members' list is the only thing that reads what an applicant sent (the name, message, picture and node), and it
+ * shows open knocks only: the applicant's status read returns the status and the invite, the operator's Settings a
+ * count. So once a knock is off the list (answered either way, lapsed, or from a key that has since joined some other
+ * way or been replaced), the tidy-up (`tidyKnocks`) clears those four, and who declined it. What stays is what the
+ * rules still read: the key, the times, the status, and an approval's invite code and who made it.
+ *
+ * A row is deleted once it can change no answer:
+ *   - declined: when its block is over (declineBlockDays after the decline);
+ *   - approved: when its invite can be redeemed nowhere, 30 days after the approval, used or not. A standby's copy of
+ *     the invite is never marked used (`mergeReplicatedKnocks`), so until then it is this row that keeps it to the
+ *     applicant's key. A key that joined with it is a member: a knock from it is refused as one;
+ *   - lapsed: KNOCK_RULES.lapsedKeptDays after it lapsed. Until then a late answer reads "lapsed" and the applicant's
+ *     next knock reopens the row; after, the answer is "no such request", and a knock makes a new row.
+ * So no row outlives 60 days from when it was made or reopened, and with the ceilings above the table holds at most
+ * openAtOnce rows with what was sent in them and 60 × perNodePerDay cleared ones, whatever a flood sends.
+ *
+ * It is housekeeping, not a request's job: no rule reads whether a row has been cleared (every answer comes from its
+ * times and status), so no request needs it done first, and a node nobody knocks on must tidy too. So it runs on a
+ * timer (`startTidyingKnocks`, every minute), beside the sweep that already clears these rows' address hashes
+ * (engine/open-join.ts), and only on the main server: a standby takes the clearing and the deletions from the copy.
+ *
  * ## What travels
  *
  * File and sealed backups carry the table. A standby gets every row (SyncPayload.joinRequests), watermarked on
- * `updated_at`, which every write here stamps; rows are never deleted, so there are no tombstones. `ip_hash` never
- * leaves this database. Invite codes do not replicate, so a standby that merges an approved row makes that invite
- * too (the same code, by the same member, for the same key), or a server that takes over would tell the applicant
- * about an invite it cannot redeem (`mergeReplicatedKnocks`).
+ * `updated_at`, which every write here stamps, the tidy-up's clearing included. The tidy-up's deletions travel as
+ * `join_requests` tombstones keyed by the row's id, which is never used again, so a copied row this database has a
+ * tombstone for stays deleted: a stale copy can't bring it back. `ip_hash` never leaves this database. Invite codes do
+ * not replicate, so a standby that merges an approved row makes that invite too (the same code, by the same member,
+ * for the same key), or a server that takes over would tell the applicant about an invite it cannot redeem
+ * (`mergeReplicatedKnocks`).
  */
 import crypto from 'node:crypto';
-import { db } from '../db/db.js';
+import { db, writeTombstone } from '../db/db.js';
 import { getMember, type SyncJoinRequest } from '@beanpool/engine';
 import { generateInvite } from './invites.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
+import { getNodeRole } from './sync.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -78,6 +112,12 @@ export const KNOCK_RULES = {
     declineBlockDays: 30,
     /** Knocks from one address in any 24 hours. */
     perAddressPerDay: 3,
+    /** Knocks made on this node in any 24 hours, from every address together. A reopened knock counts. */
+    perNodePerDay: 30,
+    /** Knocks open at once on this node: what the members' list shows. */
+    openAtOnce: 50,
+    /** A lapsed knock is kept this long after it lapsed, what was sent in it cleared, then deleted. */
+    lapsedKeptDays: 30,
     /** The applicant's introduction, in characters (code points). */
     messageChars: 280,
     /** The name the applicant gives, as `/api/invite/redeem` caps a joining name. */
@@ -126,6 +166,19 @@ function inviteExpiry(code: string | null): number | null {
 /** Whether a pending knock is still open to members (it lapses `openDays` after it was made). */
 function isOpen(row: Pick<KnockRow, 'status' | 'created_at'>, now: number): boolean {
     return row.status === 'pending' && ageMs(row.created_at, now) < KNOCK_RULES.openDays * DAY_MS;
+}
+
+/**
+ * What the members' list shows, as SQL: open knocks from keys that are neither members here nor replaced by a re-key.
+ * Its one parameter is the oldest `created_at` still open (`openSince`).
+ */
+const LISTED = `status = 'pending' AND created_at >= ?
+    AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey)
+    AND NOT EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = join_requests.pubkey)`;
+const openSince = (now: number) => iso(now - KNOCK_RULES.openDays * DAY_MS);
+
+function listedCount(now: number): number {
+    return (db.prepare(`SELECT COUNT(*) AS n FROM join_requests WHERE ${LISTED}`).get(openSince(now)) as { n: number }).n;
 }
 
 /**
@@ -201,6 +254,9 @@ export function submitKnock(input: KnockInput, now = Date.now()): KnockOutcome {
             const fromAddress = (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE ip_hash = ? AND created_at >= ?')
                 .get(ipHash, iso(now - DAY_MS)) as { n: number }).n;
             if (fromAddress >= KNOCK_RULES.perAddressPerDay) return { ok: false, reason: 'rate_limited' };
+            // The node-wide ceilings, refused with the same answer. A reopened knock is dated now, so it counts.
+            const madeToday = (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE created_at >= ?').get(iso(now - DAY_MS)) as { n: number }).n;
+            if (madeToday >= KNOCK_RULES.perNodePerDay || listedCount(now) >= KNOCK_RULES.openAtOnce) return { ok: false, reason: 'rate_limited' };
 
             const at = iso(now);
             if (standing.kind === 'lapsed') {
@@ -257,13 +313,9 @@ export interface OpenKnock {
 
 /** Open knocks from keys that are neither members here nor replaced by a re-key: newest first, and how many in all. */
 export function listOpenKnocks(limit: number, offset: number, now = Date.now()): { knocks: OpenKnock[]; total: number } {
-    const since = iso(now - KNOCK_RULES.openDays * DAY_MS);
-    const where = `status = 'pending' AND created_at >= ?
-        AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey)
-        AND NOT EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = join_requests.pubkey)`;
-    const total = (db.prepare(`SELECT COUNT(*) AS n FROM join_requests WHERE ${where}`).get(since) as { n: number }).n;
-    const rows = db.prepare(`SELECT * FROM join_requests WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`)
-        .all(since, limit, offset) as KnockRow[];
+    const total = listedCount(now);
+    const rows = db.prepare(`SELECT * FROM join_requests WHERE ${LISTED} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`)
+        .all(openSince(now), limit, offset) as KnockRow[];
     return {
         knocks: rows.map((r) => ({
             id: r.id, pubkey: r.pubkey, callsign: r.callsign, message: r.message, avatar: r.avatar, fromNode: r.from_node, createdAt: r.created_at,
@@ -359,9 +411,67 @@ export function moveKnocks(oldKey: string, newKey: string, at: string): void {
     })();
 }
 
+// ── The tidy-up ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Something on a row that no screen and no rule will read again: anything the applicant sent (a prune's scrub leaves
+ * the name 'Deleted Member', which is not theirs), and who declined it. Who approved one is read again: a standby
+ * makes the invite in that member's name.
+ */
+const UNREAD = `(callsign NOT IN ('', 'Deleted Member') OR message != '' OR avatar IS NOT NULL OR from_node IS NOT NULL
+    OR (status = 'declined' AND decided_by IS NOT NULL))`;
+
+/**
+ * See "What is kept", above: clear what was sent in every knock the members' list no longer shows, and delete every
+ * row past each of its windows, with its tombstone, in one transaction. On the main server only (`startTidyingKnocks`).
+ */
+export function tidyKnocks(now = Date.now()): { cleared: number; deleted: number } {
+    const daysAgo = (days: number) => iso(now - days * DAY_MS);
+    return db.transaction(() => {
+        const past = db.prepare(`SELECT id FROM join_requests
+                                 WHERE (status = 'pending' AND created_at < ?)
+                                    OR (status = 'declined' AND decided_at < ?)
+                                    OR (status = 'approved' AND decided_at < ?)`)
+            .all(daysAgo(KNOCK_RULES.openDays + KNOCK_RULES.lapsedKeptDays), daysAgo(KNOCK_RULES.declineBlockDays), iso(now - INVITE_LIFETIME_MS)) as { id: string }[];
+        const remove = db.prepare('DELETE FROM join_requests WHERE id = ?');
+        for (const { id } of past) {
+            remove.run(id);
+            writeTombstone('join_requests', id);
+        }
+        const unread = db.prepare(`SELECT id, updated_at FROM join_requests WHERE ${UNREAD} AND NOT (${LISTED})`)
+            .all(openSince(now)) as { id: string; updated_at: string }[];
+        const clear = db.prepare(`UPDATE join_requests SET callsign = '', message = '', avatar = NULL, from_node = NULL,
+                                      decided_by = CASE WHEN status = 'approved' THEN decided_by END, updated_at = ?
+                                  WHERE id = ?`);
+        for (const row of unread) {
+            // Stamped later than the row's own stamp, even in the millisecond it was answered: a standby keeps its copy
+            // on a tie, and would keep the words.
+            const stamped = Date.parse(row.updated_at);
+            clear.run(iso(Number.isFinite(stamped) && stamped >= now ? stamped + 1 : now), row.id);
+        }
+        return { cleared: unread.length, deleted: past.length };
+    })();
+}
+
+let tidyTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * The tidy-up on a timer, on the main server only: a standby takes the clearing and the deletions from its copy, and
+ * one that takes over starts tidying at the next tick. Started by the HTTPS server beside the address sweep; calling it
+ * again restarts it with the new period, which is how the test drives it.
+ */
+export function startTidyingKnocks(everyMs = 60_000): void {
+    if (tidyTimer) clearInterval(tidyTimer);
+    tidyTimer = setInterval(() => {
+        if (getNodeRole() !== 'primary') return;
+        try { tidyKnocks(); } catch (e) { console.warn('[Knocks] could not tidy the requests to join:', (e as Error)?.message || e); }
+    }, everyMs);
+    tidyTimer.unref?.();
+}
+
 // ── What travels ─────────────────────────────────────────────────────────────────────────────────────────────────
 
-export interface KnockMerge { written: number; kept: number; invitesMade: number; invalid: number }
+export interface KnockMerge { written: number; kept: number; removed: number; invitesMade: number; invalid: number }
 
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
 const isNullableText = (v: unknown, max: number) => v === null || v === undefined || isText(v, max);
@@ -373,13 +483,16 @@ const STATUSES = new Set<string>(['pending', 'approved', 'declined']);
  * which the one-open-knock index needs). A row is written when it is new here or newer than the copy here. For an
  * approved row the standby also makes the invite it names, when it has no such code: the same code, by the member who
  * approved it, for the applicant's key, dated at the approval. Invite codes do not replicate, and a server that takes
- * over must not tell the applicant about an invite it cannot redeem. A malformed row, or one this database refuses, is
- * left out and counted; it never fails the copy it came in.
+ * over must not tell the applicant about an invite it cannot redeem. A row this database has a tombstone for was
+ * deleted by the main server's tidy-up, and ids are never used again, so a copy that still carries it is older: it stays
+ * deleted (`removed`). A malformed row, or one this database refuses, is left out and counted; it never fails the copy
+ * it came in.
  */
 export function mergeReplicatedKnocks(rows: unknown): KnockMerge {
-    const merge: KnockMerge = { written: 0, kept: 0, invitesMade: 0, invalid: 0 };
+    const merge: KnockMerge = { written: 0, kept: 0, removed: 0, invitesMade: 0, invalid: 0 };
     if (!Array.isArray(rows) || rows.length === 0) return merge;
     const current = db.prepare('SELECT updated_at FROM join_requests WHERE id = ?');
+    const deleted = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'join_requests' AND row_key = ?");
     const upsert = db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, avatar, from_node, status, created_at, decided_by, invite_code, decided_at, updated_at)
                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                ON CONFLICT(id) DO UPDATE SET
@@ -408,6 +521,7 @@ export function mergeReplicatedKnocks(rows: unknown): KnockMerge {
     });
     db.transaction(() => {
         for (const r of valid) {
+            if (deleted.get(r.id)) { merge.removed++; continue; }
             const here = current.get(r.id) as { updated_at: string } | undefined;
             if (here && here.updated_at >= r.updatedAt) { merge.kept++; continue; }
             try {

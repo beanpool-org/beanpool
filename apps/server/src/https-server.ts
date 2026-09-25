@@ -123,6 +123,7 @@ import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
 import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
+import { startTidyingKnocks } from './engine/knocks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
@@ -963,6 +964,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once
     // a day old on this timer too, not only when somebody joins (engine/open-join.ts).
     startForgettingJoinAddresses();
+    // Requests to join (G6): on the main server, what no member will read again is cleared from them, and a row past
+    // its windows is deleted, on the same kind of timer (engine/knocks.ts, "What is kept").
+    startTidyingKnocks();
 
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.

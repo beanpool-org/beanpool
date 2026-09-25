@@ -31,8 +31,9 @@
  * ## Limits
  *
  * The auth limiter (15 a minute per address) on a knock, and the knock rules: one open knock per key, 3 an address a
- * day, 30 days after a decline (engine/knocks.ts). The gateway's `invites` switch covers these routes too
- * (https-server.ts): a node that takes no invites takes no knocks.
+ * day, 30 a day and 50 open on the whole node (the same 429 as the address limit, so a flood can't tell which), 30 days
+ * after a decline (engine/knocks.ts). The gateway's `invites` switch covers these routes too (https-server.ts): a node
+ * that takes no invites takes no knocks.
  */
 import Router from '@koa/router';
 import { isNodeMember, assertMemberActive } from '../state-engine.js';

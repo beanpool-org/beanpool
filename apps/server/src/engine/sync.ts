@@ -392,6 +392,12 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             const r = db.prepare(`DELETE FROM place_watches WHERE id=?`).run(rowKey);
             return r.changes > 0;
         }
+        // A request to join past every window it has, deleted by the main server's tidy-up (engine/knocks.ts). Keyed by
+        // its id, which is never used again: no newer row to protect, and no lookup below.
+        case 'join_requests': {
+            const r = db.prepare(`DELETE FROM join_requests WHERE id=?`).run(rowKey);
+            return r.changes > 0;
+        }
         default:
             console.warn(`[Sync] Ignoring tombstone for unknown table: ${tableName}`);
             return false;
@@ -1359,8 +1365,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
             // Requests to join (G6, engine/knocks.ts): every knock and every answer, so a server that takes over still
             // has them. After the members, because an approved row's invite is made again here only by a member this
-            // database has. Never deleted, so the tombstones below never touch them. A main server older than this
-            // sends none and changes nothing here.
+            // database has. The main server's tidy-up clears rows (stamped, so they come in here) and deletes them
+            // (the tombstones below); a row this database already has a tombstone for is not written again. A main
+            // server older than this sends none and changes nothing here.
             if (remote.joinRequests) mergeReplicatedKnocks(remote.joinRequests);
 
             if (remote.tombstones) {

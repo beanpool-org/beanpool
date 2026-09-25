@@ -1009,7 +1009,8 @@ export default function WelcomeScreen() {
             // 'unknown' (couldn't tell) goes ahead; the node makes a taken name unique anyway.
             const availability = await checkCallsignAvailable(name, key.createdHere ? undefined : key.identity.publicKey, GLOBAL_NODE_URL);
             if (availability === 'taken') {
-                setCallsignSuggestions(await suggestCallsigns(name, undefined, 3, GLOBAL_NODE_URL));
+                // No longer than the join keeps: a suggestion is sent exactly as it was checked and shown.
+                setCallsignSuggestions(await suggestCallsigns(name, undefined, 3, GLOBAL_NODE_URL, MAX_JOIN_NAME));
                 setError(`"${name}" is already taken in the global community. Pick one of the suggestions below, or choose another name.`);
                 return;
             }

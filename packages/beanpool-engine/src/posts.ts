@@ -404,7 +404,7 @@ const NEAREST_ORDER = " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, 
  * gives it: over every post (the posts with no place last), or over the radius the reader gave.
  * About three times wider each time, so where posts are evenly spread the circle that holds the page holds about ten
  * pages at most, and the circles before it cost a tenth of it. None wider than 3,000 km: past that a box holds much of
- * the world's posts, and one pass over every post costs about the same (measured: a 10,000 km circle cost more).
+ * the world's posts, and one pass over every post costs about the same.
  */
 export const NEAREST_FIRST_CIRCLES_KM: readonly number[] = [1, 3, 10, 30, 100, 300, 1000, 3000];
 

@@ -109,7 +109,9 @@ const page = (extra: Record<string, unknown> = {}) => getPosts({ limit: 50, offs
 const nearestFirst = { near: HUB, sortByDistance: true };
 const radius500 = { near: { ...HUB, radiusKm: 500 }, sortByDistance: true };
 
-interface Row { size: string; recent: number; nearest: number; radius: number; radiusRecent: number }
+interface Row { size: string; recent: number; nearest: number; radius: number; radiusRecent: number; far: number }
+// No town is south of 50°S, so no post is within 3,000 km of here: the one reader whose page takes a pass over every post.
+const FAR = { lat: -80, lng: 0 };
 function measure(size: string): Row {
     return {
         size,
@@ -117,6 +119,7 @@ function measure(size: string): Row {
         nearest: median(() => page(nearestFirst)),
         radius: median(() => page(radius500)),
         radiusRecent: median(() => page({ near: { ...HUB, radiusKm: 500 } })),
+        far: median(() => page({ near: FAR, sortByDistance: true }), 7),
     };
 }
 /** A small multiple, with room for a timer's noise on a fast machine. */
@@ -137,9 +140,11 @@ async function main(): Promise<void> {
     console.log(`seeded to 100,000 posts / 200,000 transactions in ${Math.round(performance.now() - t)} ms`);
     rows.push(measure('100k / 200k'));
 
-    console.log('\n| posts / transactions | today\'s order | nearest first (a point, no radius) | radius 500 km, nearest first | radius 500 km, today\'s order |');
-    console.log('|---|---|---|---|---|');
-    for (const r of rows) console.log(`| ${r.size} | ${r.recent.toFixed(1)} ms | ${r.nearest.toFixed(1)} ms | ${r.radius.toFixed(1)} ms | ${r.radiusRecent.toFixed(1)} ms |`);
+    // The last two columns are printed, not held to a bound: sort=recent with a radius is the planner's one pass, and a
+    // reader 3,000 km from every post needs one pass over every post.
+    console.log('\n| posts / transactions | today\'s order | nearest first (a point, no radius) | radius 500 km, nearest first | radius 500 km, today\'s order | nearest first, 3,000 km from every post |');
+    console.log('|---|---|---|---|---|---|');
+    for (const r of rows) console.log(`| ${r.size} | ${r.recent.toFixed(1)} ms | ${r.nearest.toFixed(1)} ms | ${r.radius.toFixed(1)} ms | ${r.radiusRecent.toFixed(1)} ms | ${r.far.toFixed(1)} ms |`);
     console.log('');
 
     // ── 1–3. the default page, and a radius ──────────────────────────────────────────────────────

@@ -72,8 +72,8 @@ function walkImage(bytes: Buffer): Walked {
         const walked = stripByFormat(bytes);
         // Every block the strip writes is shorter than the one it replaces except a JPEG's orientation: a 36-byte
         // Exif segment in place of the one it was read from, which needs only 32 bytes to hold it. So a longer result
-        // means everything removed came to less than 36 bytes: an orientation, and no room for anything else (a GPS
-        // pointer is another 12-byte entry, a segment of its own at least 4). Nothing to take off: stored as given.
+        // means everything removed came to less than 36 bytes: an orientation and at most three bytes beside it, no room
+        // for anything else (a GPS pointer is another 12-byte entry, a segment of its own at least 4). Stored as given.
         if (Buffer.isBuffer(walked) && walked.length > bytes.length) return 'clean';
         return walked;
     } catch {
@@ -197,7 +197,13 @@ function stripJpeg(buf: Buffer): Walked {
     let pos = 2;
     for (;;) {
         const start = nextJpegMarker(buf, pos);
-        if (start < 0) break; // the end of the data: the end of the image
+        // Skipped bytes are left out, so they are something removed even when nothing else is: they can hold anything.
+        // Except fill (a run of 0xFF at the very end, whose next byte never came), which holds nothing to remove.
+        if (start < 0) { // the end of the data: the end of the image
+            if (buf.subarray(pos).some(b => b !== 0xff)) changed = true;
+            break;
+        }
+        if (start > pos) changed = true;
         let at = start;
         while (buf[at + 1] === 0xff) at++; // fill bytes before the marker, kept with it
         const marker = buf[at + 1];

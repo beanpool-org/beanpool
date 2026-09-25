@@ -208,6 +208,8 @@ const CAMERA_JPEG_NO_EOI = Buffer.concat([
 ]);
 /** Stripped, a file with no EOI still has none: its scan is kept to the last byte and nothing is added. */
 const CAMERA_JPEG_NO_EOI_STRIPPED = CAMERA_JPEG_STRIPPED.subarray(0, -2);
+/** Extraneous bytes that say something (no 0xFF in them, so the walk skips them whole), in a file with no metadata block. */
+const EXTRANEOUS = Buffer.from(`${CANARY}-EXTRANEOUS taken at 12 Example St`, 'latin1');
 /** A camera JPEG whose structure no decoder reads (a second SOI after its EXIF): the node cannot strip it, so refuses it. */
 const UNWALKABLE_CAMERA_JPEG = Buffer.concat([SOI, exifApp1(true, 6), SOI, CLEAN_JPEG.subarray(2)]);
 
@@ -527,7 +529,22 @@ async function partOne(m: StripModule): Promise<void> {
         const at = tables + dht.length;
         const junky = Buffer.concat([SOI, exifApp1(false, 1), CLEAN_PROGRESSIVE_JPEG.subarray(2, at), Buffer.from([0, 0, 0]), CLEAN_PROGRESSIVE_JPEG.subarray(at)]);
         assert(strip(junky).equals(CLEAN_PROGRESSIVE_JPEG), 'progressive JPEG: extraneous bytes after a table between two scans are skipped, every scan byte kept');
+        // With nothing else in the file to strip, they are still something removed (#1153 review).
+        const between = Buffer.concat([CLEAN_PROGRESSIVE_JPEG.subarray(0, at), EXTRANEOUS, CLEAN_PROGRESSIVE_JPEG.subarray(at)]);
+        assert(strip(between).equals(CLEAN_PROGRESSIVE_JPEG), 'progressive JPEG with no metadata block: extraneous bytes between two scans go on their own');
+        const atEnd = Buffer.concat([CLEAN_PROGRESSIVE_JPEG.subarray(0, at), EXTRANEOUS]);
+        assert(strip(atEnd).equals(CLEAN_PROGRESSIVE_JPEG.subarray(0, at)),
+            'progressive JPEG with no metadata block, cut after a table: the extraneous bytes where the next segment should be go');
     }
+    const afterIcc = 4 + CLEAN_JPEG.readUInt16BE(4); // SOI, then the APP2 ICC profile's marker and length-counted body
+    const extraneousOnly = Buffer.concat([CLEAN_JPEG.subarray(0, afterIcc), EXTRANEOUS, CLEAN_JPEG.subarray(afterIcc)]);
+    assert(strip(extraneousOnly).equals(CLEAN_JPEG) && leak(strip(extraneousOnly)) === null,
+        'JPEG with no metadata block, extraneous bytes after its ICC profile: they go on their own, and every picture byte stays');
+    assert(stripImageValue(dataUrl('image/jpeg', extraneousOnly)) === dataUrl('image/jpeg', CLEAN_JPEG)
+        && stripImageValue(extraneousOnly.toString('base64')) === CLEAN_JPEG.toString('base64'), 'the same, as a data URL and as bare base64');
+    // Fill (a run of 0xFF whose next byte never came) holds nothing: with nothing else to remove, the file is as given.
+    const filledEnd = Buffer.concat([CLEAN_JPEG.subarray(0, -2), Buffer.from([0xff, 0xff])]);
+    assert(strip(filledEnd) === filledEnd, 'JPEG with no metadata block and no EOI, ending in fill: returned as the very same Buffer');
 
     console.log('\n── 1i. What a node refuses rather than store with its metadata ──');
     // Absent before this check existed, when every value was stored: read as "storable" so the suite still runs there.
@@ -539,6 +556,7 @@ async function partOne(m: StripModule): Promise<void> {
         ['JPEG: a reserved marker code after its Exif', Buffer.concat([SOI, exifApp1(true, 6), Buffer.from([0xff, 0xf7, 0x00, 0x04, 0x00, 0x00]), CLEAN_JPEG.subarray(2)])],
         ['JPEG: no scan at all, nothing but metadata', Buffer.concat([SOI, exifApp1(true, 6), COMMENT, EOI])],
         ['JPEG: cut short before its scan, Exif and all', cutInsideIcc],
+        ['JPEG: no scan, extraneous bytes after its JFIF header', Buffer.concat([SOI, JFIF_PLAIN, EXTRANEOUS, EOI])],
         ['PNG: no IEND, a tEXt inside', Buffer.concat([PNG_SIGNATURE, IHDR, chunk('tEXt', Buffer.from(CANARY)), IDAT])],
         ['PNG: no IDAT before IEND, nothing but metadata', Buffer.concat([PNG_SIGNATURE, IHDR, chunk('tEXt', Buffer.from(`Comment\0${CANARY}-TEXT`, 'latin1')), IEND])],
         ['PNG: cut short inside a chunk', CLEAN_PNG.subarray(0, CLEAN_PNG.length - 20)],

@@ -16,27 +16,30 @@
  *      edit of it reaches only the author in full; a vote in a hidden poll or an RSVP to a hidden event is refused to
  *      anyone but its author, and hands nothing back. A moderator restore un-hides it and its author hears, the same
  *      reporters can't hide it again, new ones can; dismissing reports un-hides once they no longer add up; a
- *      moderator can still remove it. A moderator can't restore their own post or dismiss a report on it (another
- *      can), and restoring a post its author took down tells them nothing
+ *      moderator can still remove it. A moderator can't restore their own post or dismiss a report on it, nor one by
+ *      an enterprise they keep, or lift that enterprise's mute (another moderator can), and restoring a post its
+ *      author took down tells them nothing. A hidden event's unread lines leave totalUnread with its chat
  *   4. probation: the 4th post in 24 hours → 429 with the limit and when it resets; the window rolls after 24 hours;
  *      photos past 5 → 429, on a new post and on an edit; after 72 hours with 3 kept posts no limits; an old account
- *      with no posts is on probation until it has 3; DMs to an 11th new person → 429 (start and send), a reply to
- *      someone who wrote first and a known contact → allowed, and the window rolls; /api/community/me reports it all
+ *      with no posts is on probation until it has 3; opening a conversation with an 11th new person → 429 even with
+ *      no message, a first line to an 11th → 429, a reply to someone who wrote or opened first and a known contact
+ *      → allowed, and the window rolls; /api/community/me reports it all; the knock limit says "in any 24 hours"
  *   5. auto-mute: 3 moderator removals in 30 days → posting, editing, starting and sending messages refused 403; still
  *      reads and edits the profile; the moderators' muted list names them; a moderator lifts it and both come back,
- *      and one more removal after the lift does not re-mute; removals 31+ days apart never mute; a keeper can't edit
- *      a muted enterprise's post through the marketplace route
+ *      and one more removal after the lift does not re-mute; removals 31+ days apart never mute; the count reads its
+ *      index; a keeper can't edit a muted enterprise's post through the marketplace route, nor its event as a host
  *   6. replication: the export carries hidden_by_reports_at, removed_by_moderator_at and moderation_muted_until, and
- *      a standby importing it (insert and update) holds all three
+ *      a standby importing it (insert and update) holds all three; a write of the mute alone moves updated_at
  *   7. with Beans, escrow and enterprises on (a live community switched to global keeps them; forced on here with the
  *      overrides): a request or an accept on a hidden offer is answered as for an id nobody has, writes no trade and
  *      moves no Beans; its author can't approve a request into a new escrow while it is hidden, but can decline one,
  *      and an escrow opened before the hide can still finish or be called off; a hidden listing can't be commissioned;
- *      after a restore it all works again. A muted member writes nothing anyone else reads: the enterprise thread,
- *      groups (start, rename, invite, chat), event chat, reactions, Decisions, Commons projects, crowdfunds,
- *      enterprises, ratings, putting a post back up, a note with Beans or a pledge, and the Pulse (submit, ingest,
- *      add or change a channel), each 403 moderation_muted with nothing stored; they still read, pause a post, join
- *      and leave, and send Beans without a note; after a lift the thread takes their line again
+ *      after a restore it all works again. A trade's chat is nobody's opening for probation. A muted member writes
+ *      nothing anyone else reads: the enterprise thread, groups (start, rename, invite, chat), event chat, reactions,
+ *      Decisions, Commons projects, crowdfunds, enterprises, ratings, putting a post back up, a note with Beans or a
+ *      pledge (a number included), and the Pulse (submit, ingest, add or change a channel), each 403 moderation_muted
+ *      with nothing stored; they still read, pause a post, join and leave, and send Beans without a note; after a
+ *      lift the thread takes their line again
  *
  * Section 1 also shows a request on a reported local post, an enterprise thread line and a new group from a member
  * with 3 removals all going through on the local profile; section 3 shows a hidden event's chat closed to everyone

@@ -99,7 +99,8 @@ export function recoveryWordsMatchPublicKey(
     } catch {
         return false;
     }
-    if (expected.length !== 32) return false;
+    // Not only the typed shapes: a stored identity is parsed JSON, and one without a public key must not throw.
+    if (!expected || expected.length !== 32) return false;
     const seed = seedFromWords(normaliseRecoveryWords(input));
     try {
         return constantTimeEqual(ed25519.getPublicKey(seed), expected);

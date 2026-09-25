@@ -117,6 +117,15 @@ describe('whose words these are', () => {
         expect(recoveryWordsMatchPublicKey(VALID, '')).toBe(false);
     });
 
+    it('is false, never a throw, for a public key that is missing (an identity read back without one)', () => {
+        // The type says string or bytes; a stored identity is parsed JSON and may not hold one (CR #1150).
+        const missing = [null, undefined, {}, 32] as unknown as (string | Uint8Array)[];
+        for (const publicKey of missing) {
+            expect(() => recoveryWordsMatchPublicKey(VALID, publicKey)).not.toThrow();
+            expect(recoveryWordsMatchPublicKey(VALID, publicKey)).toBe(false);
+        }
+    });
+
     it('matches a stored private key in either format, by its public key', () => {
         const account = accountFrom(VALID);
         expect(recoveryWordsMatchSeed(VALID, account.seed)).toBe(true);

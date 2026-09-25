@@ -47,6 +47,11 @@ export function providerLabel(provider: JoinProvider): string {
     return PROVIDER_LABELS[provider];
 }
 
+/** One of the four sign-ins by its own name: not `toString` or `constructor`, which `in` would find on any object. */
+function isJoinProvider(value: unknown): value is JoinProvider {
+    return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PROVIDER_LABELS, value);
+}
+
 /** The door's cap on a joining name (apps/server/src/routes/open-join.ts MAX_JOIN_CALLSIGN). */
 export const MAX_JOIN_CALLSIGN = 20;
 
@@ -334,8 +339,7 @@ export async function requestJoinNonce(identity: BeanPoolIdentity): Promise<{ no
         nonce: {
             nonce: b.nonce,
             expiresInSeconds: typeof b.expiresInSeconds === 'number' ? b.expiresInSeconds : 600,
-            providers: Array.isArray(b.providers) ? b.providers.filter((p: unknown): p is JoinProvider =>
-                typeof p === 'string' && p in PROVIDER_LABELS) : [],
+            providers: Array.isArray(b.providers) ? b.providers.filter(isJoinProvider) : [],
             githubFlow: typeof b.githubFlow === 'string' ? b.githubFlow : undefined,
             clientIds: b.clientIds && typeof b.clientIds === 'object' ? b.clientIds : {},
         },

@@ -429,6 +429,16 @@ describe('the door calls are signed by the joining key', () => {
         expect(init.method).toBe('POST');
     });
 
+    it('only the four sign-ins are read from the answer: not a name every object has, which would draw a function as a button', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+            nonce: NONCE, expiresInSeconds: 600, providers: ['google', 'toString', 'constructor', '__proto__', 'hasOwnProperty', 7, 'github'],
+            githubFlow: 'node', clientIds: { google: 'g', toString: 'x', constructor: 'x' },
+        }), { status: 200 })));
+        const got = await requestJoinNonce(identity);
+        expect(got).toMatchObject({ nonce: { providers: ['google', 'github'] } });
+        expect(offeredProviders((got as { nonce: JoinNonce }).nonce)).toEqual(['google', 'github']);
+    });
+
     it('no answer at all is DoorUnreachableError, never a guess', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
         await expect(requestJoinNonce(identity)).rejects.toBeInstanceOf(DoorUnreachableError);

@@ -4,16 +4,21 @@
  * New users:  Enter invite code + callsign → create → show seed phrase → joined
  * Existing:   Import identity from another device
  * Recovery:   Enter 12-word phrase to recover identity
+ * Open door:  On a node whose door is open (the global community), no invite: a name and one sign-in
+ *             (components/WebJoin.tsx), then the same photo, 12 words and tour
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
+import { clearUnsentPendingJoin, createIdentity, createIdentityFromMnemonic, identityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership,
     recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl,
+    getCommunityInfo, isRouteMissing,
 } from '../lib/api';
+import { WebJoin, type JoinedResult } from '../components/WebJoin';
+import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey } from '../lib/web-join';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
@@ -128,8 +133,8 @@ const BUNDLED_AVATARS = [
  * 4.5rem with unwrappable labels — 18rem plus connectors, which at 1.3x text pushed the first
  * screen a new member sees out to 376px on a 320px phone.
  */
-export function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
-    const steps = ['Your Name', 'Your Photo', 'Safety Backup', 'How it Works'];
+export function OnboardingStepper({ step, firstLabel = 'Your Name' }: { step: 1 | 2 | 3 | 4; firstLabel?: string }) {
+    const steps = [firstLabel, 'Your Photo', 'Safety Backup', 'How it Works'];
     return (
         <div data-testid="onboarding-stepper" style={{
             display: 'grid',
@@ -196,7 +201,34 @@ export function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
     );
 }
 
+/**
+ * Whether this node takes members without an invite, from `/api/community/info` (a public read): `open` only when it
+ * says so (the global profile with its door open); `invite` for every other answer, an older node's included, which
+ * is today's page unchanged; `unreachable` when there was no answer at all.
+ */
+type Door = 'checking' | 'open' | 'invite' | 'unreachable';
+
 export function WelcomePage({ onComplete }: Props) {
+    // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
+    const [authReturn] = useState(() => captureAuthReturn());
+    const [door, setDoor] = useState<Door>('checking');
+    const [doorCheck, setDoorCheck] = useState(0);
+    useEffect(() => {
+        let cancelled = false;
+        setDoor('checking');
+        getCommunityInfo()
+            .then((info) => { if (!cancelled) setDoor(info?.profile === 'global' && info.features?.openJoin === true ? 'open' : 'invite'); })
+            .catch((e) => { if (!cancelled) setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); });
+        return () => { cancelled = true; };
+    }, [doorCheck]);
+    // Joined through the open door: the member exists on the node, so the steps after it have nothing to redeem, and
+    // there is no going back to a name screen.
+    const [joinedByDoor, setJoinedByDoor] = useState(false);
+    const [joinedAsNote, setJoinedAsNote] = useState<string | null>(null);
+    // A key restored here (phone or 12 words) that is not a member of this open community yet: it joins as it is.
+    const [restoredForDoor, setRestoredForDoor] = useState<BeanPoolIdentity | null>(null);
+    const doorOpen = door === 'open';
+
     const [callsign, setCallsign] = useState('');
     const [inviteCode, setInviteCode] = useState(() => {
         const params = new URLSearchParams(window.location.search);
@@ -302,6 +334,11 @@ export function WelcomePage({ onComplete }: Props) {
                             throw new Error('Received incomplete identity payload');
                         }
 
+                        if (doorOpen) {
+                            setPairingStatus('success');
+                            await finishRestoreAtDoor(decrypted);
+                            return;
+                        }
                         await importIdentity(decrypted);
                         setPairingStatus('success');
                         setTimeout(() => {
@@ -326,7 +363,8 @@ export function WelcomePage({ onComplete }: Props) {
             clearInterval(timer);
             clearInterval(poller);
         };
-    }, [showQrPairing, pairingSession, pairingStatus, onComplete]);
+        // finishRestoreAtDoor reads only state that is fixed while the QR is up.
+    }, [showQrPairing, pairingSession, pairingStatus, onComplete, doorOpen]);
 
     // Count the backup step being drawn. The ref holds it to once per mount;
     // recordOnboardingEvent holds it to once per person per node, which is what a reload or
@@ -544,10 +582,65 @@ export function WelcomePage({ onComplete }: Props) {
             if ('geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
             }
+            // A browser member's key lives only in this site's storage: ask the browser to keep it (design G11 §4.2).
+            // Nothing waits on the answer, and the words warning stays either way.
+            if (joinedByDoor) void askPersistentStorage();
             onComplete(pendingIdentity);
         } finally {
             setLoading(false);
         }
+    }
+
+    /**
+     * The open door took this browser in: the node has the member and the identity is saved (WebJoin). A key restored
+     * here has an account already, so it goes straight in; a new one gets the steps every new member has.
+     */
+    function handleJoined(joined: JoinedResult) {
+        setRestoredForDoor(null);
+        if (joined.restored) {
+            onComplete(joined.identity);
+            return;
+        }
+        setJoinedByDoor(true);
+        setInviteRedeemed(true);
+        setJoinedAsNote(joined.requestedCallsign
+            ? `You're ${joined.identity.callsign} here: ${joined.requestedCallsign} was taken. You can change it in Settings.`
+            : null);
+        setPendingIdentity(joined.identity);
+        setShowAvatarSetup(true);
+        setError(null);
+    }
+
+    /**
+     * A key restored here (the phone's QR or the 12 words) on a node whose door is open. A member of this community
+     * goes in, as anywhere; one that is not goes through the door with the same key, never a new one (design G11 §2,
+     * screen 1). Nothing is saved until the node has said which: asked with the key itself, which is not stored yet.
+     */
+    async function finishRestoreAtDoor(identity: BeanPoolIdentity) {
+        setError(null);
+        let membership: { isMember: boolean; callsign: string | null };
+        try {
+            membership = await checkMembershipWithKey(identity);
+        } catch {
+            setShowQrPairing(false);
+            setError("Can't reach the community right now. Try again in a minute.");
+            return;
+        }
+        if (membership.isMember) {
+            const member = { ...identity, callsign: membership.callsign || identity.callsign };
+            await importIdentity(member);
+            // A join started here and never sent is not needed now. One that went out stays (identity.ts
+            // pendingJoinSent): the node may have that key as a member, and this browser its only copy.
+            await clearUnsentPendingJoin().catch((e) => console.warn('[Welcome] leftover pending join not cleared:', e));
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(() => {}, () => {});
+            }
+            onComplete(member);
+            return;
+        }
+        setShowQrPairing(false);
+        setShowRecovery(false);
+        setRestoredForDoor(identity);
     }
 
     async function handleRecover() {
@@ -558,6 +651,16 @@ export function WelcomePage({ onComplete }: Props) {
         }
         setLoading(true);
         setError(null);
+        if (doorOpen) {
+            try {
+                await finishRestoreAtDoor(await identityFromMnemonic(words, ''));
+            } catch {
+                setError('Recovery failed. Check your words and try again.');
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
         try {
             // The 12 words ARE the identity. The callsign and avatar are just
             // node-held profile data that travel with the key, so we pull the
@@ -625,17 +728,31 @@ export function WelcomePage({ onComplete }: Props) {
                     borderRadius: '16px',
                     padding: '2rem',
                 }}>
+                    {door === 'unreachable' && !hasMnemonic(pendingIdentity) && (
+                        <div role="alert" data-testid="door-unreachable" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                            Can't reach the community right now. Try again in a minute.{' '}
+                            <button type="button" onClick={() => setDoorCheck((n) => n + 1)}
+                                style={{ background: 'none', border: 'none', color: '#2563eb', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>
+                                Try again
+                            </button>
+                        </div>
+                    )}
                     {/* ===== SEED PHRASE DISPLAY (after create, before confirm) ===== */}
                     {hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
                         <>
-                            <OnboardingStepper step={2} />
+                            <OnboardingStepper step={2} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
                                 📸 Choose your look
                             </h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
                                 Pick a profile picture so your community knows you.
                             </p>
+                            {joinedAsNote && (
+                                <p role="status" data-testid="joined-as-note" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    {joinedAsNote}
+                                </p>
+                            )}
 
                             {/* Circular Preview */}
                             <div style={{
@@ -840,6 +957,9 @@ export function WelcomePage({ onComplete }: Props) {
                                 Next →
                             </button>
 
+                            {/* Not after the open door: that member exists on the node and is saved here, so there is no
+                                name screen to go back to, and discarding the identity would strand the account. */}
+                            {!joinedByDoor && (
                             <button
                                 onClick={() => {
                                     setPendingIdentity(null);
@@ -863,11 +983,12 @@ export function WelcomePage({ onComplete }: Props) {
                             >
                                 ← Back
                             </button>
+                            )}
                         </>
                     ) : hasMnemonic(pendingIdentity) && showOnboardingGuide ? (
                         /* ===== ONBOARDING GUIDE (Step 4) ===== */
                         <>
-                            <OnboardingStepper step={4} />
+                            <OnboardingStepper step={4} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
                             <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">🫘 Welcome to BeanPool</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
                                 Let's look at how this community economy works.
@@ -1010,7 +1131,7 @@ export function WelcomePage({ onComplete }: Props) {
                     ) : hasMnemonic(pendingIdentity) ? (
                         /* ===== SAFETY BACKUP (Step 3) ===== */
                         <>
-                            <OnboardingStepper step={3} />
+                            <OnboardingStepper step={3} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>🔑 Your Safety Backup</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                                 Write these 12 words down on paper and keep them safe.
@@ -1032,8 +1153,13 @@ export function WelcomePage({ onComplete }: Props) {
                                 </p>
                             </div>
 
-                            <div style={{
-                                display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+                            {/*
+                              As many columns as whole words fit: three on a laptop, as before, one on a 320px phone at
+                              1.3x text, where three fixed columns left each word about 29px and pushed the page 50px
+                              sideways. A word someone copies onto paper is never broken across lines to fit.
+                            */}
+                            <div data-testid="backup-words" style={{
+                                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
                                 gap: '0.4rem', marginBottom: '1rem',
                             }}>
                                 {pendingWords?.map((word, i) => (
@@ -1041,7 +1167,7 @@ export function WelcomePage({ onComplete }: Props) {
                                         background: 'var(--bg-secondary, #1e293b)',
                                         borderRadius: 8, padding: '0.5rem 0.4rem',
                                         fontSize: '0.8rem', fontFamily: 'monospace',
-                                        textAlign: 'center',
+                                        textAlign: 'center', minWidth: 0,
                                     }}>
                                         <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{i + 1}. </span>
                                         <strong>{word}</strong>
@@ -1397,6 +1523,31 @@ export function WelcomePage({ onComplete }: Props) {
                                 ← Back to Options
                             </button>
                         </>
+                    ) : doorOpen || restoredForDoor || (authReturn && door !== 'invite') ? (
+                        /* A sign-in coming back is met at once, before the node has said what it is; on a node that
+                           turns out to be invite-only it is dropped, and the invite page shows as always. */
+                        /* ===== THE OPEN DOOR: join with a sign-in, no invite (design G11) ===== */
+                        <>
+                            {error && (
+                                <div role="alert"
+                                    className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-300 p-2.5 rounded-xl text-xs mb-4 text-center leading-relaxed font-medium">
+                                    {error}
+                                </div>
+                            )}
+                            <WebJoin
+                                key={restoredForDoor?.publicKey ?? 'new'}
+                                restored={restoredForDoor}
+                                onJoined={handleJoined}
+                                onRestore={(how) => {
+                                    setError(null);
+                                    setRestoredForDoor(null);
+                                    if (how === 'words') setShowRecovery(true);
+                                    else void handleStartQrPairing();
+                                }}
+                            />
+                        </>
+                    ) : door === 'checking' ? (
+                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>One moment…</p>
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */
                         <>

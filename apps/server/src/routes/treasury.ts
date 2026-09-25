@@ -34,6 +34,7 @@ import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { createEventFromBody } from './event-post.js';
 import { stripImageValue } from '../storage/image-metadata.js';
+import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
@@ -521,7 +522,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         let photoUrl = avatar;
         if (!photoUrl && Array.isArray(photos) && photos.length > 0) photoUrl = photos[0];
-        photoUrl = stripImageValue(photoUrl); // G9a-3: the projects row below stores it too, not only createTreasury
+        // G9a-3: the projects row below stores it too, not only createTreasury, and the crowdfund listing hands it out
+        // as stored, so it is held to the photo rule (bare base64 included) as crowdfund photos are.
+        if (!isAcceptablePhotoValue(photoUrl)) {
+            ctx.status = 400;
+            ctx.body = { error: AVATAR_FORMAT_ERROR };
+            return;
+        }
+        photoUrl = stripImageValue(photoUrl);
         const enterprisePurpose = String(purpose || description || enterpriseName).trim();
         const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || deadlineAt) ? 'bounded' : 'ongoing';
         const parsedGoal = goalAmount != null ? Number(goalAmount) : null;

@@ -22,7 +22,7 @@ import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys'
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { releaseOpenJoin } from './engine/open-join.js';
-import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
+import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
@@ -7441,11 +7441,12 @@ function getGroupActiveMemberRecipients(groupId: string, extraPubkeys: string[] 
 
 /**
  * A group's picture as it is stored: it rides in every group listing, so without its metadata (G9a-3). Held to the
- * avatar rule first (a JPEG, PNG, WebP or GIF whose bytes really are one), because a format the strip does not
- * know — HEIC, AVIF, TIFF — would keep its GPS, and no app sends one. Anything that is not a data URL is unchanged.
+ * photo rule first (a JPEG, PNG, WebP or GIF whose bytes really are one, as a data URL or bare base64), because a
+ * format the strip does not know — HEIC, AVIF, TIFF — would keep its GPS, and no app sends one. Any other string
+ * (a URL, a `bundled://` name) is unchanged.
  */
 function storableGroupPicture(avatarUrl: string | undefined): string | undefined {
-    if (!isAcceptableAvatarValue(avatarUrl)) throw new Error(AVATAR_FORMAT_ERROR);
+    if (!isAcceptablePhotoValue(avatarUrl)) throw new Error(AVATAR_FORMAT_ERROR);
     return stripImageValue(avatarUrl);
 }
 

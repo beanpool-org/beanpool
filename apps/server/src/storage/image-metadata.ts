@@ -27,7 +27,8 @@
  *
  * JPEG, PNG, WebP and GIF are stripped: between them they are every format a node accepts where it checks the
  * bytes (avatars, enterprise and crowdfund photos, group pictures: `isAcceptableAvatarValue`, a JPEG, PNG, WebP or
- * GIF whose bytes really are one) and every format a post may declare (JPEG, PNG, WebP). Anything else passes
+ * GIF whose bytes really are one; where a photo is also handed out as stored, `isAcceptablePhotoValue` holds a bare
+ * base64 value to the same rule) and every format a post may declare (JPEG, PNG, WebP). Anything else passes
  * through untouched. It can only arrive where a node does not look at the bytes: a post photo whose declared type
  * does not match what it holds (the post check reads the data URL's type, not the bytes, and the existing suites
  * post placeholder bytes that must keep working), and an operator's pricing-guide thumbnail. Neither is anything
@@ -62,7 +63,8 @@ export function stripImageMetadata(bytes: Buffer): Buffer {
 
 /**
  * The same, for an image the way a node stores it: a base64 data URL, or (a legacy avatar value the avatar route
- * still serves) bare base64.
+ * still serves) bare base64. A bare value is read exactly as the avatar route reads one: `Buffer.from(…, 'base64')`,
+ * which takes standard and URL-safe base64 and skips any character outside the alphabet.
  *
  * Returns the value exactly as given when nothing was removed, so a photo that carries no metadata — every photo
  * the phone and the web app send — is stored character for character as it always was. When something was
@@ -70,8 +72,8 @@ export function stripImageMetadata(bytes: Buffer): Buffer {
  * `bundled://` name, a URL, text that does not decode to an image) comes back untouched.
  *
  * The data-URL match is the avatar route's (`engine/avatar.ts`): case-insensitive, base64 that may be wrapped
- * across lines. It is the most lenient reader of a stored image anywhere in the server, so whatever any route
- * would decode and serve, this decodes and strips.
+ * across lines. It and the bare-value read are the most lenient readers of a stored image anywhere in the server,
+ * so whatever any route would decode and serve, this decodes and strips.
  */
 export function stripImageValue<T>(value: T): T {
     if (typeof value !== 'string') return value;
@@ -83,15 +85,14 @@ export function stripImageValue<T>(value: T): T {
         if (stripped === bytes) return value;
         return `data:${m[1]};base64,${stripped.toString('base64')}` as T;
     }
-    if (/^data:/i.test(trimmed) || !BARE_BASE64.test(trimmed)) return value;
-    const bytes = Buffer.from(trimmed, 'base64');
+    if (/^data:/i.test(trimmed)) return value;
+    const bytes = Buffer.from(trimmed, 'base64'); // a URL or a name decodes to bytes that are no image: returned as given
     const stripped = stripImageMetadata(bytes);
     if (stripped === bytes) return value;
     return stripped.toString('base64') as T;
 }
 
 const DATA_URL = /^data:([^;,]+);base64,([\s\S]*)$/i;
-const BARE_BASE64 = /^[A-Za-z0-9+/=\s]+$/;
 
 function stripByFormat(buf: Buffer): Buffer | null {
     if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return stripJpeg(buf);

@@ -464,6 +464,10 @@ async function partOne(m: StripModule): Promise<void> {
     assert(stripImageValue(`  DATA:image/jpg;base64,${CAMERA_JPEG.toString('base64')}  `) === `data:image/jpg;base64,${CAMERA_JPEG_STRIPPED.toString('base64')}`,
         'the avatar route\'s case-insensitive, whitespace-tolerant form is stripped');
     assert(stripImageValue(CAMERA_JPEG.toString('base64')) === CAMERA_JPEG_STRIPPED.toString('base64'), 'a legacy bare-base64 avatar (still served) is stripped and stays bare');
+    assert(stripImageValue(CAMERA_JPEG.toString('base64url')) === CAMERA_JPEG_STRIPPED.toString('base64'),
+        'bare URL-safe base64 (the avatar route decodes it) is stripped');
+    assert(stripImageValue(CAMERA_JPEG.toString('base64').replace(/(.{60})/g, '$1.')) === CAMERA_JPEG_STRIPPED.toString('base64'),
+        'bare base64 with characters outside the alphabet (the avatar route skips them) is stripped');
     const lying = `data:image/png;base64,${CAMERA_JPEG.toString('base64')}`;
     assert(stripImageValue(lying) === `data:image/png;base64,${CAMERA_JPEG_STRIPPED.toString('base64')}`, 'the bytes decide the format, not the declared MIME type');
     for (const v of [null, undefined, '', 'bundled://avatar-3', '/api/avatar/abcdef', 'https://example.org/me.jpg', 'data:image/svg+xml,%3Csvg%3E', 'data:image/jpeg;base64,', 'bm90IGFuIGltYWdl']) {
@@ -599,6 +603,11 @@ async function partTwo(): Promise<void> {
         assert(page.status === 200 && leak(Buffer.from(JSON.stringify(page.json ?? {}), 'latin1')) === null,
             `GET /api/enterprise/:id carries no metadata (${page.status})`);
     }
+    const bareHeicEnt = await signed('POST', '/api/treasury', {
+        name: 'Seed Bank Co-op', purpose: 'We keep seeds', lifecycle: 'bounded', goalAmount: 500,
+        photos: [CAMERA_HEIC.toString('base64')],
+    }, member);
+    assert(bareHeicEnt.status === 400, `an enterprise photo sent as bare base64 of a HEIC (GPS inside) is refused, not stored (${bareHeicEnt.status})`);
 
     console.log('\n── 2f. A crowdfund project: POST /api/crowdfund/projects (+ /update) → GET /api/crowdfund/projects/:id and /api/avatar ──');
     const projectId = crypto.randomUUID();
@@ -637,6 +646,29 @@ async function partTwo(): Promise<void> {
     assert(heicEdit.status === 400, `the same HEIC is refused on an edit (${heicEdit.status})`);
     listed = await projectPhotos();
     assert(listed.length === 1 && leak(Buffer.from(JSON.stringify(listed), 'latin1')) === null, 'the refused edit left the project as it was');
+    const bareHeicProject = await signed('POST', '/api/crowdfund/projects', {
+        id: crypto.randomUUID(), title: 'Seed library', description: 'Shared seeds', goalAmount: 200,
+        photos: [dataUrl('image/jpeg', CLEAN_JPEG), CAMERA_HEIC.toString('base64')],
+    }, member);
+    assert(bareHeicProject.status === 400, `a HEIC sent as bare base64, no data: prefix, is refused too (${bareHeicProject.status})`);
+    const bareHeicEdit = await signed('POST', '/api/crowdfund/projects/update', {
+        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
+        photos: [dataUrl('image/webp', CAMERA_WEBP), CAMERA_HEIC.toString('base64url')],
+    }, member);
+    assert(bareHeicEdit.status === 400, `and on an edit, in URL-safe base64 (${bareHeicEdit.status})`);
+    listed = await projectPhotos();
+    assert(listed.length === 1 && leak(Buffer.from(JSON.stringify(listed), 'latin1')) === null, 'the refused bare edit left the project as it was');
+    // What an editor that loaded the project sends back: this node's own avatar address as photos[0], which means
+    // "unchanged". Not image bytes, so still accepted, beside a bare photo that is stripped.
+    const selfUrlEdit = await signed('POST', '/api/crowdfund/projects/update', {
+        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
+        photos: [`/api/avatar/${projectId}`, CAMERA_JPEG.toString('base64url')],
+    }, member);
+    assert(selfUrlEdit.status === 200, `an edit sending back the node's own avatar address and a bare photo is saved (${selfUrlEdit.status} ${selfUrlEdit.json?.error ?? ''})`);
+    listed = await projectPhotos();
+    assert(listed[0] === `/api/avatar/${projectId}`, 'the avatar address is kept as sent');
+    await served('crowdfund photo sent as bare URL-safe base64', typeof listed[1] === 'string' ? Buffer.from(listed[1], 'base64') : null, CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
+    await served('crowdfund project avatar after the address edit (unchanged)', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED, CLEAN_WEBP);
 
     console.log('\n── 2g. A group\'s picture: POST /api/groups, PATCH /api/groups/:id → GET /api/groups/:id ──');
     const group = await signed('POST', '/api/groups', {
@@ -655,11 +687,19 @@ async function partTwo(): Promise<void> {
         assert(heicPatch.status === 400, `a group picture the node cannot strip (a HEIC, GPS inside) is refused (${heicPatch.status})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
         await served('group picture after the refused edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG, CLEAN_PNG);
+        const bareHeicPatch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: CAMERA_HEIC.toString('base64') }, member);
+        assert(bareHeicPatch.status === 400, `a group picture sent as bare base64 of a HEIC is refused (${bareHeicPatch.status})`);
+        read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
+        await served('group picture after the refused bare edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG, CLEAN_PNG);
     }
     const heicGroup = await signed('POST', '/api/groups', {
         name: 'Bike Kitchen', description: 'We fix bikes', joinPolicy: 'open', avatarUrl: dataUrl('image/heic', CAMERA_HEIC),
     }, member);
     assert(heicGroup.status === 400, `a new group with a HEIC picture is refused (${heicGroup.status})`);
+    const bareHeicGroup = await signed('POST', '/api/groups', {
+        name: 'Repair Cafe', description: 'We mend things', joinPolicy: 'open', avatarUrl: CAMERA_HEIC.toString('base64'),
+    }, member);
+    assert(bareHeicGroup.status === 400, `and one whose HEIC picture is bare base64 (${bareHeicGroup.status})`);
 
     console.log('\n── 2h. The operator\'s pricing-guide thumbnail: POST /api/pricing-guide/admin/item → GET /api/pricing-guide ──');
     const saved = await fetch(`${BASE}/api/pricing-guide/admin/item`, {

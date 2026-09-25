@@ -1844,6 +1844,44 @@ test('race: a bare heal overtaken by the same key\'s heal to a new address: Clou
     } finally { w.restore(); }
 });
 
+// A heal moving a live name to a new address PATCHes its record (the id stays), then writes its row. A request that
+// read the row before that write, at the old address, finds the record pointing "elsewhere" and points it back; if its
+// own row write changed nothing, the moving heal's write still matched, and Cloudflare routed the old address for good
+// (a recycled address answering there isn't dark, so nothing repaired it). A write that records Cloudflare work now
+// counts a decision (PR 1c, r4101264972).
+test('race: the same key\'s bare heal landing between its heal\'s PATCH to a new address and that heal\'s row write: Cloudflare routes the address the row records', async () => {
+    const w = await world();
+    try {
+        const name = 'movedback';
+        const owner = await makeKey();
+        assert.equal((await w.claim(owner, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+        w.nodes[`${name}.beanpool.org`] = attestsAs(owner);
+        // The moving heal has PATCHed the record to NEW_IP; just before its row write, the same key's bare heal runs.
+        w.beforeRun(/SET mode=\?, public_ip=\?, tunnel_id=\?/, async () => { await w.heal(owner, { name }); });
+        assert.equal((await w.heal(owner, { name, ...modeBody('direct', NEW_IP) })).body.status, 'live');
+        assert.equal(routing(w, name).dns, (await w.row(name)).public_ip);
+        await routedAsRow(w, name, 'after both heals');
+    } finally { w.restore(); }
+});
+
+test('race: the sweep repairing a direct name between its owner\'s heal to a new address and that heal\'s row write: Cloudflare routes the address the row records, for good', async () => {
+    const w = await world();
+    try {
+        const name = 'movednode';
+        const owner = await makeKey();
+        assert.equal((await w.claim(owner, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+        // The node has moved: nothing answers at its hostname when the sweep attests (Cloudflare's 522), so upkeep looks.
+        w.nodes[`${name}.beanpool.org`] = async () => new Response('origin unreachable', { status: 522 });
+        w.beforeRun(/SET mode=\?, public_ip=\?, tunnel_id=\?/, async () => { await attestSweep(w.env); });
+        assert.equal((await w.heal(owner, { name, ...modeBody('direct', NEW_IP) })).body.status, 'live');
+        // Something that isn't a BeanPool node answers at the old address (a recycled IP): not dark, so no repair.
+        w.nodes[`${name}.beanpool.org`] = async () => new Response('<html>router login</html>', { status: 200 });
+        await attestSweep(w.env); await attestSweep(w.env);
+        assert.equal(routing(w, name).dns, (await w.row(name)).public_ip);
+        await routedAsRow(w, name, 'after the sweeps');
+    } finally { w.restore(); }
+});
+
 // The admin's pause is the admin's to lift, but the owner's heal still records where its node now is (heal's
 // admin-pause branch). That write, too, holds only while the row is as the heal read it.
 for (const [was, next] of [['tunnel', 'direct'], ['direct', 'tunnel']]) {

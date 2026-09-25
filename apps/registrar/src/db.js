@@ -53,7 +53,8 @@ export const updateAllocation = async (env, name, fields) => {
 };
 
 // A row's tenure (key, claim time), state (status, pause reason) and the decisions taken on it (decision_seq,
-// migration 0003 — a repeat pause or block changes nothing else): what a request that read it acted on.
+// migration 0003 — a repeat pause or block changes nothing else, nor does a write recording Cloudflare work that points
+// the record back at the address the row already records): what a request that read it acted on.
 const STATE = ['node_pubkey', 'requested_at', 'status', 'pause_reason', 'decision_seq'];
 // The routing a row records: its tunnel and DNS record ids, and the target they route to. A move to a new address
 // keeps the record's id (a PATCH), so the ids alone can't tell a request that it is acting on an address, mode or

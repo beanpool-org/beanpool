@@ -254,7 +254,11 @@ async function settleOwed(env, t) {
 //     target they route to (db.updateIfUnchanged withIds) — and ensure() changes the record at the hostname only
 //     while it is. So does taking back routing a failed re-attest put up. On a miss the request undoes what it did
 //     (undo: a record it changed that is now another tenure's is put back to that tenure) and answers with the row as
-//     it now is.
+//     it now is. A write that records Cloudflare work that changed anything also counts a decision (recorded), even
+//     when it writes the values the row already has: a PATCH keeps the record's id, so a request pointing the record
+//     back at the target the row records — the sweep's repair, a bare heal — writes nothing new, and a heal that had
+//     moved the name to a new address and read the row before it would still match, and record an address Cloudflare
+//     no longer routes (r4101264972).
 //   - taking routing down (the admin's pause and block, a release, the sweep's pause): the row is written FIRST,
 //     then Cloudflare (stopRouting), so a request that read the row earlier misses its own write. That write always
 //     counts a decision (decision_seq), so one that changes no status — blocking a blocked name, pausing a paused
@@ -266,6 +270,10 @@ async function settleOwed(env, t) {
 
 // The decision counter a write carries: the row's, plus one. NULL (a row no decision has touched) counts as 0.
 const decision = (a) => ({ decision_seq: (a.decision_seq ?? 0) + 1 });
+
+// What a write over `a` records of ensure()'s work: the ids it routes on, and a decision when Cloudflare changed
+// anything, so that no request that read the row before this write can match its own afterwards (see Races).
+const recorded = (ids, a) => ({ tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id, ...(ids.changed.length ? decision(a) : {}) });
 
 // What ensure() made at Cloudflare when it made nothing (it threw `raced`): there is nothing to undo.
 const NOTHING = { tunnel_id: null, dns_record_id: null, changed: [] };
@@ -334,7 +342,7 @@ async function repairLive(env, name) {
             console.error('[REPAIR_FAILED]', name, e.message || e);
             return row;
         }
-        const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+        const made = recorded(ids, row);
         if (!ids.changed.length && made.tunnel_id === (row.tunnel_id ?? null) && made.dns_record_id === (row.dns_record_id ?? null)) return row;
         if (await db.updateIfUnchanged(env, name, row, made, { withIds: true })) {
             const what = ids.changed.length ? `${ids.changed.join(', ')} re-made` : 'the record at its hostname recorded';
@@ -471,7 +479,7 @@ async function heal(env, cur, b, now) {
     }
 
     try { ids = await ensure(env, a, cur); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
-    const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+    const made = recorded(ids, cur);
     if (!(await db.updateIfUnchanged(env, cur.name, cur, { ...fields, ...made }, { withIds: true }))) return missed();
     const res = { ...a, ...made };
     const newTunnel = ids.changed.includes('tunnel');
@@ -554,7 +562,7 @@ async function takeName(env, existing, pubkey, b, now) {
     let ids = NOTHING;
     const missed = async () => claimReply(env, asNow(await undo(env, name, ids), pubkey));
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
-    const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+    const made = recorded(ids, a);
     const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
     if (takeBack) {
         if (!(await db.updateIfUnchanged(env, name, a, made, { withIds: true }))) return missed();
@@ -785,7 +793,7 @@ async function adminResume(env, a, was, now) {
     }
     let ids;
     try { ids = await ensure(env, cur, cur); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
-    const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+    const made = recorded(ids, cur);
     if (!(await db.updateIfUnchanged(env, a.name, cur, made, { withIds: true }))) return adminMissed(env, a.name, ids);
     const res = { ...cur, ...made };
     const g = await routeIfOnlyOwner(env, res, ids, now);
@@ -805,7 +813,7 @@ async function adminResume(env, a, was, now) {
 async function adminGoLive(env, a, event, detail, extra = {}) {
     let ids;
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
-    const live = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id, ...LIVE, ...extra };
+    const live = { ...recorded(ids, a), ...LIVE, ...extra };
     if (!(await db.updateIfUnchanged(env, a.name, a, live, { withIds: true }))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, event, detail);
     return json({ status: 'live', name: a.name, changed: ids.changed });

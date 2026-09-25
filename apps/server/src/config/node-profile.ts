@@ -86,6 +86,11 @@ export interface ProfileSwitches {
     /** A member with repeated posts removed by a moderator can't post or DM until a moderator lifts it
      *  (engine/auto-moderation.ts). */
     autoMute: boolean;
+    /** A reader who is not a member here (unsigned, or signed by a key that isn't a member) sees the listings and
+     *  their rough area, and not the people: no author, name, face, trade, voter or exact place (routes/viewer.ts,
+     *  the engine's guestPost). The Commons decisions, pool balance and Pulse feed are members-only, and the membership
+     *  probe names only the signer. */
+    guestListingsOnly: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -110,6 +115,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         probation: false,
         autoHideReports: false,
         autoMute: false,
+        guestListingsOnly: false,
     },
     global: {
         openJoin: true,
@@ -128,6 +134,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         probation: true,
         autoHideReports: true,
         autoMute: true,
+        // The listings, not the people (Marty, 2026-09-25): a stranger sees what is on offer and roughly where.
+        guestListingsOnly: true,
     },
 };
 
@@ -164,6 +172,9 @@ export interface NodeFeatures {
     autoHideReports: boolean;
     /** 3 posts removed by a moderator in 30 days stop a member posting and messaging until a moderator lifts it. */
     autoMute: boolean;
+    /** A visitor gets the listings and their rough area, not the people (the posts answer says which in
+     *  `X-BeanPool-View`), so the web app can draw its lobby. */
+    guestListingsOnly: boolean;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -252,6 +263,7 @@ export function getNodeFeatures(): NodeFeatures {
         probation: s.probation,
         autoHideReports: s.autoHideReports,
         autoMute: s.autoMute,
+        guestListingsOnly: s.guestListingsOnly,
     };
 }
 

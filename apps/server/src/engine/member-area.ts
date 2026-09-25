@@ -19,18 +19,17 @@
  * profiles, federation, the public directory, the map or the activity feed.
  */
 import { db } from '../db/db.js';
-import { haversineKm } from '@beanpool/engine';
+import { haversineKm, roundToArea } from '@beanpool/engine';
 import { bumpMembersVersion } from './versions.js';
+
+// The 0.1° rounding lives in the engine (geo.ts), beside the SQL `area_km` that measures posts the same way for a
+// visitor on the global node: one rule and one implementation for a person's area and a post's.
+export { roundToArea };
 
 export interface MemberArea {
     lat: number;
     lng: number;
     updatedAt: string | null;
-}
-
-/** 0.1°, to the nearest step. Never -0, which would read back as a different number from 0. */
-export function roundToArea(deg: number): number {
-    return Math.round(deg * 10) / 10 + 0;
 }
 
 /** A place on the Earth: two finite numbers, latitude within ±90 and longitude within ±180. */

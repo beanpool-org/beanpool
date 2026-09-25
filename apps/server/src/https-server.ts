@@ -114,6 +114,7 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { profileFeatureGate } from './routes/profile-feature-gate.js';
+import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
@@ -254,7 +255,7 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
 //     request cannot carry signature headers. Message attachments are E2E
 //     ciphertext (NAT-1), so serving them unauthenticated leaks no plaintext.
 //     (A token-in-URL scheme for these is tracked as follow-up.)
-const PUBLIC_READ_EXACT = new Set<string>([
+export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/version',
     '/api/community/info',
     '/api/community/health',
@@ -287,7 +288,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
 // accidentally expose a sensitive neighbour — e.g. the DM-content reads
 // (/api/messages/conversations/:pk, /api/messages/:conversationId) must stay
 // GATED; only the E2E-ciphertext attachment binary is public.
-const PUBLIC_READ_PATTERNS: RegExp[] = [
+export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member?
     /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
     /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
@@ -301,9 +302,28 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
 ];
 
+// Public reads that name members, on a node that shows visitors the listings and not the people (the global profile's
+// `guestListingsOnly`, G9a): off the allowlist there, so the ordinary gate answers them for members only. Each names
+// people: a decision carries its author's key and can name a member in its params (a suspension), the pool balance
+// belongs to a ledger a visitor has no part in, and the Pulse feed carries each member's key, name, face and their
+// own pages elsewhere. The lobby has nothing of them to be transparent about. Everywhere else they stay public.
+export const MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/commons/decisions',
+    '/api/commons/balance',
+    '/api/pulse/feed',
+]);
+export const MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
+    /^\/api\/commons\/decisions\/[^/]+$/,
+];
+
+function namesMembers(path: string): boolean {
+    return MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(path) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(path));
+}
+
 function isPublicRead(path: string): boolean {
-    if (PUBLIC_READ_EXACT.has(path)) return true;
-    return PUBLIC_READ_PATTERNS.some(re => re.test(path));
+    if (!PUBLIC_READ_EXACT.has(path) && !PUBLIC_READ_PATTERNS.some(re => re.test(path))) return false;
+    // The switch is read only for these few paths, so no other request pays for it.
+    return !namesMembers(path) || !getProfileSwitches().guestListingsOnly;
 }
 
 // A2-22: clamp client-supplied pagination. An unclamped `?limit=` (e.g. limit=-1,
@@ -1129,8 +1149,10 @@ export async function startHttpsServer(port: number): Promise<number> {
             // of a member being re-keyed (a lost or stolen phone), which this node
             // has invalidated (isLiveMemberKey). (Writes keep their own per-route
             // authorization; membership isn't required there — e.g. first-time
-            // registration.)
-            if (isGatedRead && !isLiveMemberKey(pubKeyHex)) {
+            // registration.) The reads that are gated only because this node shows
+            // visitors the listings and not the people (G9a) take the member test
+            // itself (isNodeMember): a pruned account reads them as a visitor would.
+            if (isGatedRead && !(namesMembers(ctx.path) ? isNodeMember(pubKeyHex) : isLiveMemberKey(pubKeyHex))) {
                 ctx.status = 403;
                 ctx.body = { error: 'Read access requires a member identity' };
                 return;

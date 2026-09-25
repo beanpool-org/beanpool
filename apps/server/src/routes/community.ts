@@ -805,7 +805,10 @@ router.get('/api/community/health', async (ctx) => {
 router.get('/api/community/membership/:publicKey', async (ctx) => {
     const member = getMember(ctx.params.publicKey);
     if (member) {
-        ctx.body = { isMember: true, callsign: member.callsign };
+        // On a node that shows visitors the listings and not the people (G9a), a key is not turned into a name for
+        // anyone but its holder: the web app adopting its own name and the phone's probe both sign as that key.
+        const named = !getProfileSwitches().guestListingsOnly || ctx.state.actor === ctx.params.publicKey;
+        ctx.body = { isMember: true, callsign: named ? member.callsign : null };
     } else {
         ctx.body = {
             isMember: false,

@@ -9,9 +9,10 @@
  *      a global node would switch Beans on for strangers) and the record stays global; started once with
  *      NODE_PROFILE_ALLOW_CHANGE_FROM=global it runs local, the record is rewritten, the boot log says so; a record
  *      changed at runtime changes nothing either
- *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the nine
+ *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the ten
  *      `features` exactly (open join on the global profile only, since G2; probation, auto-hide and auto-mute since
- *      G3; distance search on both since G4), and every field it had before
+ *      G3; distance search on both since G4; the visitors' view of the listings on global only since G9a), and every
+ *      field it had before
  *   5. node_config overrides change the configured switch (and the boot log reports them), an override of a built
  *      switch (openJoin, distanceSortDefault) reaches the code, bad ones are ignored with a log line, and a switch
  *      this build doesn't have yet (knocks) stays pinned, so the API never advertises it
@@ -63,11 +64,12 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
 // What this build does on each profile. G2 built open join: on for the global profile, off for local. G1 built Beans
 // off: on global, Beans, escrow and enterprises are off (this database's ledger has never moved; test-global-no-beans
 // covers one that has). G3 built probation, auto-hide and auto-mute: on for global only (test-global-moderation).
-// G4 built distance search: every profile answers it (test-distance-search). Until G6 (knocks) lands the rest is the
-// same on both. The PR that builds one of these changes its line here, with the test that proves it.
+// G4 built distance search: every profile answers it (test-distance-search). G9a built the visitors' view of the
+// listings: global only (test-guest-view). Until G6 (knocks) lands the rest is the same on both. The PR that builds
+// one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true },
 };
 
 async function main() {
@@ -117,6 +119,7 @@ async function main() {
     assert(!local.probation && !local.autoHideReports && !local.autoMute, 'local: no probation, auto-hide or auto-mute');
     assert(global.probation && global.autoHideReports && global.autoMute, 'global: probation, auto-hide and auto-mute on');
     assert(local.ssoRequiredForJoin && global.ssoRequiredForJoin, 'the open door needs a sign-in (D1 = a)');
+    assert(!local.guestListingsOnly && global.guestListingsOnly, 'a visitor sees the listings, not the people: global only (G9a)');
     profileDefaults('local').openJoin = true;
     assert(profileDefaults('local').openJoin === false, 'profileDefaults hands out a copy: a caller cannot change the table');
 
@@ -207,6 +210,10 @@ async function main() {
     assert(getProfileSwitches().distanceSortDefault === true,
         'distance sort is built (G4), so local + nodeProfile.distanceSortDefault=true reaches the code: nearest first by default');
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.distanceSortDefault`);
+    setOverride('guestListingsOnly', 'true');
+    assert(getProfileSwitches().guestListingsOnly === true && (await getInfo()).body.features.guestListingsOnly === true,
+        'the visitors\' view is built (G9a), so local + nodeProfile.guestListingsOnly=true reaches the code and the API says so');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.guestListingsOnly`);
     setOverride('ssoRequiredForJoin', 'false');
     assert(getProfileSwitches().ssoRequiredForJoin === true,
         'the door without a sign-in (D1 b) is not built, so nodeProfile.ssoRequiredForJoin=false changes nothing');

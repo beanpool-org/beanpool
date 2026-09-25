@@ -1855,6 +1855,54 @@ test('a bp-<name> tunnel no row records: a claim deletes it when provably stale,
     } finally { w.restore(); }
 });
 
+for (const action of ['pause', 'block', 'release']) {
+    test(`an admin ${action} whose record delete Cloudflare refused: the sweep removes the record once Cloudflare recovers`, async () => {
+        const w = await world();
+        try {
+            const name = `refused-${action}`;
+            const owner = await makeKey();
+            await liveName(w, name, owner);
+            w.cf.fail.deleteDns = true;
+            assert.equal((await w.admin(name, action)).status, 200);
+            assert.ok(w.cf.recordAt(`${name}.beanpool.org`), `Cloudflare refused the ${action}'s record delete`);
+            await attestSweep(w.env);
+            assert.ok(w.cf.recordAt(`${name}.beanpool.org`), 'still refused');
+
+            w.cf.fail.deleteDns = false;
+            await attestSweep(w.env);
+            await routedAsRow(w, name, `after the ${action}, Cloudflare recovered, and a sweep`);
+        } finally { w.restore(); }
+    });
+}
+
+test('a heal moving a name from its tunnel to a direct address never takes the tunnel down first; a tunnel it can\'t delete after is owed', async () => {
+    const w = await world();
+    try {
+        const name = 'movesdirect';
+        const owner = await makeKey();
+        await liveName(w, name, owner);
+        const tunnel = (await w.row(name)).tunnel_id;
+        // The CNAME must give way to an A record, and Cloudflare refuses the delete: the move fails — and the name is
+        // still routed on its tunnel.
+        w.cf.fail.deleteDns = true;
+        assert.equal((await w.heal(owner, modeBody('direct', NEW_IP))).status, 502);
+        w.cf.fail.deleteDns = false;
+        let row = await routedAsRow(w, name, 'after the refused move');
+        assert.deepEqual([row.status, row.mode, row.tunnel_id], ['live', 'tunnel', tunnel]);
+
+        // Moved; the old tunnel's delete refused: owed, and the sweep deletes it once Cloudflare recovers.
+        w.cf.fail.deleteTunnel = true;
+        const moved = await w.heal(owner, modeBody('direct', NEW_IP));
+        assert.equal(moved.body.status, 'live', JSON.stringify(moved.body));
+        w.cf.fail.deleteTunnel = false;
+        assert.ok(w.cf.liveTunnel(tunnel), 'refused');
+        await attestSweep(w.env);
+        assert.equal(w.cf.liveTunnel(tunnel), null, 'the sweep deleted the old tunnel');
+        row = await routedAsRow(w, name, 'after the move');
+        assert.deepEqual([row.mode, row.public_ip, row.tunnel_id], ['direct', NEW_IP, null]);
+    } finally { w.restore(); }
+});
+
 test('a take-over that changes mode, the old record\'s delete refused: the old key\'s node is never the new key\'s live name, and the sweep removes its record once Cloudflare recovers', async () => {
     const w = await world();
     try {

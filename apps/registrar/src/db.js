@@ -116,11 +116,12 @@ export const listEvents = async (env, name, limit = 200) =>
 export const oweTeardown = (env, name, kind, cfId, since) =>
     env.DB.prepare('INSERT OR IGNORE INTO teardown (kind, cf_id, name, since) VALUES (?,?,?,?)').bind(kind, cfId, name, since).run();
 
-// The name's owed deletions, or (no name) the oldest `limit` of all of them.
-export const listTeardown = async (env, name, limit = 100) =>
+// The name's owed deletions, or (no name) all of them — only refused deletes land here, so it stays small, and one the
+// sweep leaves for now (a tunnel a row still keeps) must not crowd out the rest.
+export const listTeardown = async (env, name) =>
     (name
         ? await env.DB.prepare('SELECT * FROM teardown WHERE name=? ORDER BY since').bind(name).all()
-        : await env.DB.prepare('SELECT * FROM teardown ORDER BY since LIMIT ?').bind(limit).all()
+        : await env.DB.prepare('SELECT * FROM teardown ORDER BY since').all()
     ).results || [];
 
 export const dropTeardown = (env, kind, cfId) =>

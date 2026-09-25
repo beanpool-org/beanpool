@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 39,
-  "hash": "d93771fff07f6e3a6f1ce8b618dddefe433c9f4c519ed49db059492c712bffa0",
+  "version": 40,
+  "hash": "5565ac6b6218f1cdb5eb0b770aab4f24366edcfeec3a7b88e079ee67989a7d04",
   "sections": [
     {
       "id": "about",
@@ -1565,7 +1565,11 @@
         },
         {
           "type": "p",
-          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, that only that sign-in account can open, and the join hands it to the community. Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
+          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account together with your community's server can open it, as with a sign-in account linked on the phone app. Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
+        },
+        {
+          "type": "p",
+          "text": "If you would rather the community did not keep that copy, the web app can't remove it yet. The phone app can, if your account is on your phone too: with the global community open, go to **Settings**, tap **Account Protection**, then **Disconnect** next to the sign-in. Either way, keep your 12 words safe: they are the way back that is yours alone."
         },
         {
           "type": "p",

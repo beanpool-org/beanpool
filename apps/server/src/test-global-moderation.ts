@@ -491,33 +491,48 @@ async function main(): Promise<void> {
     const editSame = await call('POST', pia, '/api/marketplace/posts/update', { id: piaPostB.id, authorPublicKey: pia.pk, title: 'Renamed', photos: piaPostB.photos });
     assert(editSame.status === 200, `an edit that keeps the same photos is fine (got ${editSame.status})`);
 
+    // Opening a conversation reaches someone whether or not a message follows: it is a line in their inbox.
     const dee = member('Dee', 0);
+    const open = (from: Id, to: Id) => call('POST', from, '/api/messages/conversation', { type: 'dm', participants: [from.pk, to.pk], createdBy: from.pk });
+    const line = (from: Id, conversationId: string) => call('POST', from, '/api/messages/send', { conversationId, authorPubkey: from.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
     const convs: string[] = [];
-    for (const t of targets.slice(0, 11)) {
-        const c = await call('POST', dee, '/api/messages/conversation', { type: 'dm', participants: [dee.pk, t.pk], createdBy: dee.pk });
-        convs.push(c.body?.conversation?.id);
-    }
-    assert(convs.every(Boolean), 'a new member opens conversations with 11 people');
+    for (const t of targets.slice(0, 10)) convs.push((await open(dee, t)).body?.conversation?.id);
+    assert(convs.every(Boolean), 'a new member opens conversations with 10 new people, writing nothing');
+    const eleventhOpen = await open(dee, targets[10]);
+    const openedWith = (a: Id, b: Id) => (db.prepare(`SELECT COUNT(*) AS c FROM conversations c
+        JOIN conversation_participants x ON x.conversation_id = c.id AND x.public_key = ?
+        JOIN conversation_participants y ON y.conversation_id = c.id AND y.public_key = ? WHERE c.type = 'dm'`).get(a.pk, b.pk) as any).c;
+    assert(eleventhOpen.status === 429 && eleventhOpen.body?.limit === 'new_dm_recipients' && /10 new people/.test(eleventhOpen.body?.error ?? '')
+        && openedWith(dee, targets[10]) === 0,
+        `opening one with an 11th → 429, limit new_dm_recipients, and none is opened (got ${eleventhOpen.status} ${eleventhOpen.body?.error})`);
     const sends: number[] = [];
-    for (const c of convs.slice(0, 10)) sends.push((await call('POST', dee, '/api/messages/send', { conversationId: c, authorPubkey: dee.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' })).status);
-    assert(sends.every(s => s === 200), `and messages 10 of them (${sends.join(',')})`);
-    const eleventh = await call('POST', dee, '/api/messages/send', { conversationId: convs[10], authorPubkey: dee.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    for (const c of convs) sends.push((await line(dee, c)).status);
+    assert(sends.every(s => s === 200), `they write in all 10 they opened: nobody new there (${sends.join(',')})`);
+    // A line is checked as well as an opening: in a DM nobody is recorded as opening (a row from before created_by
+    // was kept), the first line is what reaches the other person.
+    const unopened = crypto.randomUUID();
+    db.prepare(`INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, 'dm', NULL, ?)`).run(unopened, ago(2 * DAY));
+    for (const pk of [dee.pk, targets[11].pk]) db.prepare('INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(unopened, pk);
+    const eleventh = await line(dee, unopened);
     assert(eleventh.status === 429 && eleventh.body?.limit === 'new_dm_recipients' && /10 new people/.test(eleventh.body?.error ?? ''),
         `a DM to an 11th new person → 429, limit new_dm_recipients (got ${eleventh.status} ${eleventh.body?.error})`);
-    const twelfth = await call('POST', dee, '/api/messages/conversation', { type: 'dm', participants: [dee.pk, targets[11].pk], createdBy: dee.pk });
-    assert(twelfth.status === 429, `starting a conversation with a 12th → 429 too (got ${twelfth.status})`);
     const zed = member('Zed', 40);
     const zedWrites = await dm(zed, dee);
-    const reply = await call('POST', dee, '/api/messages/send', { conversationId: zedWrites.conv.body.conversation.id, authorPubkey: dee.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    const reply = await line(dee, zedWrites.conv.body.conversation.id);
     assert(zedWrites.send?.status === 200 && reply.status === 200, `a reply to someone who wrote first is allowed (${reply.status})`);
-    const known = await call('POST', dee, '/api/messages/send', { conversationId: convs[0], authorPubkey: dee.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    const yan = member('Yan', 40);
+    const yanOpens = await open(yan, dee);
+    const replyToOpen = await line(dee, yanOpens.body?.conversation?.id);
+    assert(yanOpens.status === 200 && replyToOpen.status === 200, `and to someone who only opened one with them, writing nothing (${replyToOpen.status} ${replyToOpen.body?.error ?? ''})`);
+    const known = await line(dee, convs[0]);
     assert(known.status === 200, 'so is another message to someone already written to');
     const deeMe = await me(dee);
     assert(deeMe?.probation?.limits?.new_dm_recipients?.used === 10 && deeMe?.probation?.limits?.new_dm_recipients?.limit === 10,
         `/api/community/me: 10 of 10 new people (got ${JSON.stringify(deeMe?.probation?.limits?.new_dm_recipients)})`);
     db.prepare('UPDATE messages SET timestamp = ? WHERE author_pubkey = ?').run(ago(25 * HOUR), dee.pk);
-    const rolled = await call('POST', dee, '/api/messages/send', { conversationId: convs[10], authorPubkey: dee.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
-    assert(rolled.status === 200, `the window rolls: 25 hours later the 11th goes through (${rolled.status})`);
+    db.prepare('UPDATE conversations SET created_at = ? WHERE created_by = ?').run(ago(25 * HOUR), dee.pk);
+    const rolled = await open(dee, targets[10]);
+    assert(rolled.status === 200, `the window rolls: 25 hours later the 11th opens (${rolled.status} ${rolled.body?.error ?? ''})`);
 
     // ── 5. auto-mute ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── 5. auto-mute ──');
@@ -734,6 +749,24 @@ async function main(): Promise<void> {
     const bobTakesKettleAgain = await call('POST', bob, '/api/marketplace/posts/accept', { postId: kettle, buyerPublicKey: bob.pk });
     assert(bobTakesKettleAgain.status === 200 && trades(kettle).some(t => t.buyer_pubkey === bob.pk && t.status === 'pending'),
         `and Bob's accept opens an escrow (${bobTakesKettleAgain.status} ${bobTakesKettleAgain.body?.error ?? ''})`);
+
+    // Probation's new people and a trade (engine/probation.ts dmContacts): escrow opens the trade's chat in the buyer's
+    // name without the new-people check, so it is nobody's opening. It uses none of a new buyer's allowance, and it
+    // doesn't let them write to the seller freely either: their first line there counts, as it always has.
+    const tess = member('Tess', 0);
+    oldPost(tess, 'Tess listing'); // a listed offer: the contribution rule
+    payFromCommons(tess.pk, 100, 'Test: Beans to trade with', { allowDeficit: true });
+    const tessTakes = await call('POST', tess, '/api/marketplace/posts/accept', { postId: offer('Vase for Beans'), buyerPublicKey: tess.pk });
+    const tradeChat = (db.prepare(`SELECT c.id, c.created_by FROM conversations c
+        JOIN conversation_participants x ON x.conversation_id = c.id AND x.public_key = ?
+        JOIN conversation_participants y ON y.conversation_id = c.id AND y.public_key = ? WHERE c.type = 'dm'`).get(tess.pk, ava.pk) as { id: string; created_by: string } | undefined);
+    const tessOpens: number[] = [];
+    for (const t of targets.slice(0, 10)) tessOpens.push((await call('POST', tess, '/api/messages/conversation', { type: 'dm', participants: [tess.pk, t.pk], createdBy: tess.pk })).status);
+    assert(tessTakes.status === 200 && tradeChat?.created_by === tess.pk && tessOpens.every(s => s === 200),
+        `a new member takes an offer into escrow, which opens a chat with the seller in their name, and still opens conversations with 10 new people (${tessTakes.status} ${tessTakes.body?.error ?? ''}; ${tessOpens.join(',')})`);
+    const tessLine = await call('POST', tess, '/api/messages/send', { conversationId: tradeChat?.id, authorPubkey: tess.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    assert(tessLine.status === 429 && tessLine.body?.limit === 'new_dm_recipients',
+        `their first line in the trade's chat is an 11th new person: 429, as before (got ${tessLine.status} ${tessLine.body?.error ?? ''})`);
 
     // 7b. A muted member writes nothing anyone else reads.
     console.log('\n── 7b. a muted member writes nothing anyone else reads ──');

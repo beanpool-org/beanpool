@@ -191,9 +191,10 @@ router.post('/api/messages/send', async (ctx) => {
     }
     let msg;
     try {
-        // G3, global profile: a muted member sends nothing (403). A new account writes to at most 10 new people a
-        // day in DMs (429); a reply, or anyone they have written to before, is never limited. An old conversation
-        // id the engine remaps is a DM between two people who have talked already, so it is not checked here.
+        // G3, global profile: a muted member sends nothing (403). A new account reaches at most 10 new people a
+        // day in DMs (429); a reply, or anyone they have reached before (a conversation they opened included), is
+        // never limited. An old conversation id the engine remaps is a DM between two people who have talked
+        // already, so it is not checked here.
         assertNotMuted(authorPubkey);
         if (target?.type === 'dm' && target.participants.includes(authorPubkey)) {
             for (const other of target.participants) if (other !== authorPubkey) assertMayMessage(authorPubkey, other);

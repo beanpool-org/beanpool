@@ -15,8 +15,10 @@
  *   - 3 new posts (any type; one taken down since still counts, or delete-and-repost would reset it)
  *   - 5 photos on posts: the photos now on their posts written in the last 24 hours, the new post's included. An
  *     edit that brings in a photo the post did not have counts it against what is left.
- *   - 10 NEW people messaged: someone they have never written to in a DM, and who has never written to them. A
- *     reply to someone who wrote first is never limited, and neither is anyone they have written to before.
+ *   - 10 NEW people reached in DMs, by opening a conversation with them (message or not: it is a line in their
+ *     inbox) or by writing to them, when neither has reached the other before. A reply to someone who wrote or
+ *     opened first is never limited, and neither is anyone they have reached before. A trade's conversation is
+ *     nobody's opening (`dmContacts`).
  *   - 1 knock (asking a community to let them in). Knocks are G6: `knockRefusal` is the check it calls.
  *
  * Over a limit: `ProbationLimitError`, which the routes answer 429 with a plain message naming the limit and when
@@ -180,32 +182,42 @@ export function assertMayEditPhotos(pubkey: string, postId: string, photoSetSize
 }
 
 /**
- * Who the member has written to in DMs, and who has written to them: per other person, the first line each way.
- * Read from the member's own conversations (indexed), a handful for anyone on probation.
+ * Who the member has reached in DMs, and who has reached them: per other person, the first time each way. Reaching
+ * someone is opening a conversation with them or writing them a line, whichever came first: an opened conversation
+ * is a line in the other person's inbox, message or not. Read from the member's own conversations (indexed), a
+ * handful for anyone on probation.
+ *
+ * A conversation a trade opened is nobody's opening. Escrow opens it in the buyer's name without asking this limit,
+ * so counting it would let a buyer write freely to everyone they accepted an offer from; between two people with a
+ * trade (any row in marketplace_transactions, either way round) only a line counts, as it always has.
  */
 function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; theirsFirst: string | null }> {
     const rows = db.prepare(
-        `SELECT other.public_key AS other,
+        `SELECT other.public_key AS other, c.created_by, c.created_at,
                 (SELECT MIN(m.timestamp) FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = mine.public_key) AS mine_first,
-                (SELECT MIN(m.timestamp) FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = other.public_key) AS theirs_first
+                (SELECT MIN(m.timestamp) FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = other.public_key) AS theirs_first,
+                EXISTS (SELECT 1 FROM marketplace_transactions t
+                         WHERE (t.buyer_pubkey = mine.public_key AND t.seller_pubkey = other.public_key)
+                            OR (t.buyer_pubkey = other.public_key AND t.seller_pubkey = mine.public_key)) AS traded
            FROM conversation_participants mine
            JOIN conversations c ON c.id = mine.conversation_id AND c.type = 'dm'
            JOIN conversation_participants other ON other.conversation_id = mine.conversation_id AND other.public_key != mine.public_key
           WHERE mine.public_key = ?`
-    ).all(pubkey) as { other: string; mine_first: string | null; theirs_first: string | null }[];
+    ).all(pubkey) as { other: string; created_by: string | null; created_at: string | null; mine_first: string | null; theirs_first: string | null; traded: number }[];
     const earliest = (a: string | null, b: string | null) => (!a ? b : !b ? a : a < b ? a : b);
     const byOther = new Map<string, { mineFirst: string | null; theirsFirst: string | null }>();
     for (const r of rows) {
+        const opened = r.traded ? null : r.created_at;
         const had = byOther.get(r.other);
         byOther.set(r.other, {
-            mineFirst: earliest(had?.mineFirst ?? null, r.mine_first),
-            theirsFirst: earliest(had?.theirsFirst ?? null, r.theirs_first),
+            mineFirst: earliest(had?.mineFirst ?? null, earliest(r.mine_first, r.created_by === pubkey ? opened : null)),
+            theirsFirst: earliest(had?.theirsFirst ?? null, earliest(r.theirs_first, r.created_by === r.other ? opened : null)),
         });
     }
     return byOther;
 }
 
-/** When the member first wrote to each person they started a conversation with (they wrote before the other did). */
+/** When the member first reached each person they reached before that person reached them. */
 function newRecipientTimes(contacts: Map<string, { mineFirst: string | null; theirsFirst: string | null }>): string[] {
     const out: string[] = [];
     for (const { mineFirst, theirsFirst } of contacts.values()) {
@@ -215,9 +227,9 @@ function newRecipientTimes(contacts: Map<string, { mineFirst: string | null; the
 }
 
 /**
- * Before a DM line from `sender` to `recipient`: throws ProbationLimitError when `recipient` would be the 11th new
- * person the sender on probation messages in 24 hours. Someone the sender has written to before, or who wrote
- * first, is never limited.
+ * Before a DM line from `sender` to `recipient`, or a conversation opened with them: throws ProbationLimitError when
+ * `recipient` would be the 11th new person the sender on probation reaches in 24 hours. Someone the sender has
+ * reached before, or who reached them first, is never limited.
  */
 export function assertMayMessage(sender: string, recipient: string, now: number = Date.now()): void {
     if (!onProbation(sender, now)) return;

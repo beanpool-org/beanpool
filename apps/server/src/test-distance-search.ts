@@ -475,6 +475,10 @@ async function main(): Promise<void> {
     attempt(() => adminPruneUser(hal.pk, owner.pk));
     const halRow = areaOf(hal);
     assert(halRow?.area_lat === null && halRow?.area_lng === null && halRow?.area_updated_at === null, 'nor does a member an owner prunes');
+    const halAgain = await setArea(hal, { lat: 30.3, lng: 40.4 });
+    const gusAgain = await setArea(gus, { lat: 10.1, lng: 20.2 });
+    assert(halAgain.status === 403 && gusAgain.status === 403 && areaOf(hal)?.area_lat === null && areaOf(gus)?.area_lat === null,
+        `and neither key can set one again afterwards (${halAgain.status}, ${gusAgain.status})`);
 
     // ── 11. replication, and nowhere else ────────────────────────────────────────────────────────
     console.log('\n── 11. a standby keeps the area, and nothing else carries it ──');

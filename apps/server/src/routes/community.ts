@@ -737,13 +737,16 @@ router.post('/api/community/me/area', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (!getMember(actor)) {
+    const { lat, lng } = (ctx as any).requestBody || {};
+    const clear = lat === null && lng === null;
+    // A pruned account is no longer in the community (its area was cleared with it), so it can't set a new one; clearing
+    // is never refused to anyone with a row here.
+    const member = getMember(actor);
+    if (!member || (member.status === 'pruned' && !clear)) {
         ctx.status = 403;
         ctx.body = { error: 'Only a member of this community can set an area here' };
         return;
     }
-    const { lat, lng } = (ctx as any).requestBody || {};
-    const clear = lat === null && lng === null;
     if (!clear && !isPoint(lat, lng)) {
         ctx.status = 400;
         ctx.body = { error: 'Send lat (-90 to 90) and lng (-180 to 180) as numbers to set your area, or both as null to clear it.' };

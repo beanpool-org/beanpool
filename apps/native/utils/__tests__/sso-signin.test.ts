@@ -177,12 +177,16 @@ describe('SsoSignInError', () => {
 
 describe('Facebook WebBrowser OAuth flow', () => {
     it('handles Facebook OAuth token redirect', async () => {
+        // A JWT carrying this attempt's nonce: the app refuses an id_token without it (A2b), as the node does.
+        // sso-facebook-idtoken.test.ts covers the refusals.
+        const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+        const fbJwt = `${b64({ alg: 'RS256' })}.${b64({ sub: '1234', nonce: 'test-nonce-fb' })}.c2ln`;
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
             type: 'success',
-            url: 'beanpool://auth/facebook#id_token=fb.fake.jwt&access_token=fb_token_123&state=test-nonce-fb',
+            url: `beanpool://auth/facebook#id_token=${fbJwt}&access_token=fb_token_123&state=test-nonce-fb`,
         });
         const res = await signInWithFacebook('test-nonce-fb');
-        expect(res.idToken).toBe('fb.fake.jwt');
+        expect(res.idToken).toBe(fbJwt);
         expect(res.nonce).toBe('test-nonce-fb');
     });
 

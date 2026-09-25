@@ -20,11 +20,10 @@ import { enrolSsoKeeper, type KeeperEnrolmentResult } from './keeper-enrolment';
 import type { BeanPoolIdentity } from './identity';
 
 /**
- * Decode the `sub` claim from a JWT id_token without signature verification,
- * or use the directly-resolved `fallbackSub` (Facebook, when its token is not a JWT).
+ * Decode the `sub` claim from a JWT id_token without signature verification. The node files the piece under the
+ * same claim once it has verified the token (`ssoLookupHash`), and recovery reads it again from a fresh token.
  */
-function extractSub(idToken: string, fallbackSub?: string): string {
-    if (fallbackSub) return fallbackSub;
+function extractSub(idToken: string): string {
     const parts = idToken?.split('.');
     if (!parts || parts.length < 2 || !parts[1]) {
         throw new Error('Could not determine user identifier for this sign-in.');
@@ -60,7 +59,7 @@ export async function connectAndDeposit(options: {
         : {
             identity,
             provider: signin.provider,
-            sub: extractSub(signin.idToken, signin.sub),
+            sub: extractSub(signin.idToken),
             idToken: signin.idToken,
             nonce: signin.nonce,
         });

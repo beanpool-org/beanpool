@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
 import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
+import { assertNotMuted } from './auto-moderation.js';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOf, storePhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
@@ -601,6 +602,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     } else if (existingPost.authorPublicKey !== authorPublicKey) {
         return null;
     }
+    // G3: an edit goes out under the author's name, so a muted author's post takes none, whoever makes it: a keeper
+    // or convenor editing a muted enterprise's or member's event is refused as the author would be. The route checks
+    // the actor's own mute.
+    assertNotMuted(authorPublicKey);
 
     if (existingPost.audienceScope !== 'public') {
         delete updates.reach;
@@ -864,8 +869,10 @@ export function rsvpEvent(
         throw new Error('Only active members can RSVP to events');
     }
 
-    const row = db.prepare("SELECT id, type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id FROM posts WHERE id = ?").get(postId) as any;
-    if (!row || row.type !== 'event') {
+    const row = db.prepare("SELECT id, type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id, hidden_by_reports_at FROM posts WHERE id = ?").get(postId) as any;
+    // An event hidden by reports (G3) is not there for anyone but its author, here as when read by id: an RSVP
+    // would hand back the whole event.
+    if (!row || row.type !== 'event' || (row.hidden_by_reports_at && row.author_pubkey !== memberPublicKey)) {
         throw new Error('Event not found');
     }
     if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') {
@@ -988,7 +995,9 @@ export function votePoll(
     }
 
     const post = getPosts(db, { id: postId, includeAllScopes: true })[0];
-    if (!post || post.type !== 'poll') {
+    // A poll hidden by reports (G3) is not there for anyone but its author, here as when read by id: a vote would
+    // hand back the whole poll.
+    if (!post || post.type !== 'poll' || (post.hiddenByReportsAt && post.authorPublicKey !== voterPublicKey)) {
         throw new Error('Poll not found');
     }
     if (post.status !== 'active') {

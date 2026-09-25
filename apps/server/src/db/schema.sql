@@ -70,6 +70,11 @@ CREATE TABLE IF NOT EXISTS members (
     auth_signer TEXT,
     location_updated_at DATETIME,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Auto-mute (global profile G3, engine/auto-moderation.ts). NULL: never muted. Later than now: muted (the
+    -- far-future MUTED_UNTIL_LIFTED, until a moderator lifts it). Earlier than now: lifted at that time, and only
+    -- removals after it count towards the next mute. Its writers set updated_at themselves, and it is in
+    -- members_touch_updated_at's list for any that doesn't, so delta sync always carries a mute and its lift.
+    moderation_muted_until TEXT,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -193,8 +198,18 @@ CREATE TABLE IF NOT EXISTS posts (
     event_private_note TEXT,
     event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled')),
     event_conversation_id TEXT,
+    -- Moderation (global profile G3, engine/auto-moderation.ts). On every node, NULL where unused.
+    -- hidden_by_reports_at: enough established members reported it, so it is out of every listing and search for
+    -- everyone but its author and the moderators until a moderator looks. Not a removal: active/status are untouched.
+    -- removed_by_moderator_at: a moderator took it down (one post at a time, never the stale-post prune); what
+    -- auto-mute counts.
+    hidden_by_reports_at TEXT,
+    removed_by_moderator_at TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
+CREATE INDEX IF NOT EXISTS idx_posts_hidden_by_reports ON posts(hidden_by_reports_at) WHERE hidden_by_reports_at IS NOT NULL;
+-- Auto-mute's count of one author's recent moderator removals (engine/auto-moderation.ts REMOVALS_SINCE_SQL).
+CREATE INDEX IF NOT EXISTS idx_posts_author_removed ON posts(author_pubkey, removed_by_moderator_at) WHERE removed_by_moderator_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_audience_scope ON posts(audience_scope);
 CREATE INDEX IF NOT EXISTS idx_posts_target_group ON posts(target_group_id) WHERE target_group_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_target_pubkey ON posts(target_pubkey) WHERE target_pubkey IS NOT NULL;
@@ -408,6 +423,8 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated_at);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC);
+-- The reports on one post: auto-hide counts them on every new report (engine/auto-moderation.ts).
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_target_post ON abuse_reports(target_post_id) WHERE target_post_id IS NOT NULL;
 
 -- 8. Config
 CREATE TABLE IF NOT EXISTS node_config (
@@ -698,7 +715,8 @@ AFTER UPDATE OF
     legacy_credit_floor,
     purpose, goal_amount, deadline_at, lifecycle, paused,
     paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
-    lat, lng, location_auth_signer, auth_signer, location_updated_at
+    lat, lng, location_auth_signer, auth_signer, location_updated_at,
+    moderation_muted_until
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

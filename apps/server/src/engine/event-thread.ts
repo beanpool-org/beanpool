@@ -33,6 +33,8 @@ export const EVENT_THREAD_NOTICE = "Visible to the host, everyone going, and thi
 export const EVENT_NOT_FOUND = 'Event not found';
 export const EVENT_CHAT_FORBIDDEN = 'Only the host and people going can open this event chat';
 export const EVENT_CHAT_GONE = 'This event is no longer available';
+/** The host of an event hidden by reports (G3): its chat takes no new line until a moderator restores it. */
+export const EVENT_CHAT_HIDDEN = 'This event is hidden while a moderator looks at reports about it, so its chat is paused until it is restored.';
 
 export interface EventThreadMessage {
     id: string;
@@ -77,10 +79,11 @@ interface EventRow {
     audience_scope: string | null;
     target_group_id: string | null;
     event_private_note: string | null;
+    hidden_by_reports_at: string | null;
 }
 
 const EVENT_COLUMNS = `id, title, active, status, event_state, event_end_at, author_pubkey, created_by,
-                       audience_scope, target_group_id, event_private_note, type`;
+                       audience_scope, target_group_id, event_private_note, hidden_by_reports_at, type`;
 
 /** The event row behind a chat, or a refusal. The chat id IS the post id (§2.1). */
 export function loadEventForThread(postId: string): EventRow {
@@ -123,9 +126,19 @@ export function eventRsvpStatusOf(postId: string, pubkey: string | undefined): E
     }
 }
 
+/**
+ * An event hidden by reports (G3) is not there for anyone but its author, here as when read by id (getPosts): its
+ * chat is the event's own, and it carries the title and the private note. So the chat routes answer as for an id
+ * nobody has, and it drops out of everyone else's chat list, until a moderator restores it.
+ */
+export function eventHiddenFrom(row: EventRow, pubkey: string | undefined): boolean {
+    return !!row.hidden_by_reports_at && row.author_pubkey !== pubkey;
+}
+
 /** Host or Going — checked on every read and every post, never trusted from the participants mirror. */
 export function canReadEventThread(row: EventRow, pubkey: string | undefined): boolean {
     if (!pubkey) return false;
+    if (eventHiddenFrom(row, pubkey)) return false;
     if (isEventHost(db, row, pubkey)) return true;
     return eventRsvpStatusOf(row.id, pubkey) === 'going';
 }
@@ -262,6 +275,7 @@ export function getEventThread(
     offset = 0,
 ): EventThreadView {
     const row = loadEventForThread(postId);
+    if (eventHiddenFrom(row, viewerPubkey)) throw new Error(EVENT_NOT_FOUND);
     if (isEventThreadExpired(row)) throw new Error(EVENT_CHAT_GONE);
     if (!canReadEventThread(row, viewerPubkey)) throw new Error(EVENT_CHAT_FORBIDDEN);
 
@@ -292,6 +306,9 @@ export function postEventThreadMessage(
     clientId?: string,
 ): EventThreadMessage {
     const row = loadEventForThread(postId);
+    if (eventHiddenFrom(row, authorPubkey)) throw new Error(EVENT_NOT_FOUND);
+    // Its author still reads it, but a line now would reach the people Going, whom the event is hidden from.
+    if (row.hidden_by_reports_at) throw new Error(EVENT_CHAT_HIDDEN);
     if (isEventThreadExpired(row)) throw new Error(EVENT_CHAT_GONE);
     if (!canReadEventThread(row, authorPubkey)) throw new Error(EVENT_CHAT_FORBIDDEN);
     const readOnlyReason = eventThreadReadOnlyReason(row);
@@ -358,6 +375,7 @@ export function removeEventThreadMessage(
     actorPubkey: string,
 ): EventThreadMessage {
     const row = loadEventForThread(postId);
+    if (eventHiddenFrom(row, actorPubkey)) throw new Error(EVENT_NOT_FOUND);
     if (!isEventHost(db, row, actorPubkey)) {
         throw new Error('Only the host can remove messages from this event chat');
     }

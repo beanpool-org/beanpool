@@ -29,7 +29,9 @@ import {
     runLedgerAudit,
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
     lastActiveForViewer,
+    restoreHiddenPost, liftModerationMute,
 } from '../state-engine.js';
+import { listMutedMembers } from '../engine/auto-moderation.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
     getGatewayConfig, updateGatewayConfig,
@@ -636,7 +638,8 @@ router.post('/api/local/admin/data', async (ctx) => {
             };
         }),
         profiles: getAllProfiles(),
-        posts: getPosts().filter(p => p.status !== 'cancelled'),
+        // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt.
+        posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled'),
         health: getCommunityHealth(),
         reports: getReports().reports,
         reportCount: getReportCount(),
@@ -932,6 +935,91 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
 });
 
 /**
+ * Is `pubkey` the moderator making this request, or an enterprise they keep? Then what members did about it is
+ * theirs, and someone else decides (G3). The moderator's key comes from their signed session; any keeper row counts,
+ * whatever it lets them spend, since the stake is the same.
+ */
+function isModeratorsOwn(ctx: any, pubkey: string | null | undefined): boolean {
+    const actor = ctx.state?.actor as string | undefined;
+    if (ctx.state?.adminRole !== 'moderator' || !actor || !pubkey) return false;
+    if (pubkey.toLowerCase() === actor.toLowerCase()) return true;
+    return !!db.prepare('SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?').get(actor, pubkey);
+}
+
+/**
+ * A moderator can't undo what members did about their own post, or one by an enterprise they keep, by restoring it or
+ * by dismissing a report on it (a dismissal un-hides it once the rest no longer add up), as they can't lift their own
+ * mute: that is for another moderator, an admin or an owner. Refuses 403 and returns true when so.
+ */
+function refuseModeratorsOwnPost(ctx: any, postId: string | null | undefined, doing: string): boolean {
+    if (!postId) return false;
+    const post = db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(postId) as { author_pubkey: string | null } | undefined;
+    if (!isModeratorsOwn(ctx, post?.author_pubkey)) return false;
+    ctx.status = 403;
+    ctx.body = { success: false, error: `A moderator cannot ${doing} their own post, or one by an enterprise they keep. Ask another moderator, an admin or an owner.` };
+    return true;
+}
+
+/**
+ * Restore a post hidden by reports (G3, engine/auto-moderation.ts). Owners, admins and moderators: every open report
+ * on it is dismissed (its reporters hear it was kept, and cannot hide it again), and everyone sees it again. A
+ * moderator can't restore their own.
+ */
+router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (refuseModeratorsOwnPost(ctx, ctx.params.id, 'restore')) return;
+    const result = restoreHiddenPost(ctx.params.id);
+    if (result === 'not_found') {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'Post not found' };
+        return;
+    }
+    if (result === 'not_hidden') {
+        ctx.status = 409;
+        ctx.body = { success: false, error: 'This post is not hidden, so there is nothing to restore' };
+        return;
+    }
+    const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
+    logger.info('ADMIN', `Restored post ${ctx.params.id}, hidden by reports, by ${by} (${(ctx.state as any)?.adminRole})`);
+    ctx.body = { success: true };
+});
+
+/**
+ * Members muted after 3 posts were removed in 30 days (G3), for the moderators who lift it.
+ */
+router.get('/api/local/admin/members/muted', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, members: listMutedMembers() };
+});
+
+/**
+ * Lift a member's mute (G3). Owners, admins and moderators, the actor from their signed session, never the body. A
+ * moderator can't lift their own, or one on an enterprise they keep: someone else decides.
+ */
+router.post('/api/local/admin/members/:pubkey/unmute', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    const pubkey = ctx.params.pubkey;
+    if (isModeratorsOwn(ctx, pubkey)) {
+        ctx.status = 403;
+        ctx.body = { success: false, error: 'A moderator cannot lift their own mute, or one on an enterprise they keep. Ask another moderator, an admin or an owner.' };
+        return;
+    }
+    if (!getMember(pubkey)) {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'Member not found' };
+        return;
+    }
+    if (!liftModerationMute(pubkey)) {
+        ctx.status = 409;
+        ctx.body = { success: false, error: 'This member is not muted' };
+        return;
+    }
+    logger.info('ADMIN', `Lifted the mute on ${pubkey.substring(0, 12)} by ${actor ? actor.substring(0, 12) : 'owner:password'} (${(ctx.state as any)?.adminRole})`);
+    ctx.body = { success: true };
+});
+
+/**
  * The admin acting on a Decision or a suspension. A key session carries its member's pubkey, which must
  * still hold an admin or owner node role; a password session is owner-level ('owner:password' — only owners
  * hold the password). Never read from the request body.
@@ -1139,6 +1227,8 @@ router.get('/api/local/admin/reports', async (ctx) => {
 router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
+        const reported = db.prepare('SELECT target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
+        if (refuseModeratorsOwnPost(ctx, reported?.target_post_id, 'dismiss a report on')) return;
         const ok = dismissReport(ctx.params.id);
         if (!ok) {
             ctx.status = 404;

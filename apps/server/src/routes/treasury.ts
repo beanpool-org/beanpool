@@ -33,6 +33,8 @@ import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { createEventFromBody } from './event-post.js';
+import { assertNotMuted } from '../engine/auto-moderation.js';
+import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor } from '@beanpool/core';
 
@@ -331,7 +333,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
 
         const posts = db.prepare(
-            "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' ORDER BY created_at DESC"
+            // Never a post hidden by reports (G3): that is for its author and the moderators, in the listing.
+            "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' AND hidden_by_reports_at IS NULL ORDER BY created_at DESC"
         ).all(treasury) as any[];
         const flow = (db.prepare(
             'SELECT from_pubkey, to_pubkey, amount, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
@@ -471,6 +474,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'A positive amount is required' };
             return;
         }
+        // A note with a pledge is words the keepers read: a muted member (G3) pledges without one.
+        if (isNote(memo) && respondIfMuted(ctx, actor)) return;
         try {
             const txId = crypto.randomUUID();
             pledgeToProject(txId, treasury, actor, parsedAmount, memo || 'Enterprise Pledge', (ctx.state as any)?.authSig);
@@ -502,6 +507,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };
             return;
         }
+        // A muted member (G3) starts nothing other members read, and an enterprise's name and purpose are its page.
+        if (respondIfMuted(ctx, actor)) return;
 
         const body = (ctx as any).requestBody || {};
         const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt, lat, lng } = body;
@@ -696,10 +703,16 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
+            // A muted keeper (G3) posts nothing, and nobody posts for a muted enterprise.
+            assertNotMuted(actor);
+            assertNotMuted(treasury);
             const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
+            ctx.status = 400; ctx.body = { error: e.message };
+        }
     });
 
     // Post the treasury's Need (e.g. "tend the chickens"). Requires the treasury to already hold a
@@ -711,10 +724,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
+            assertNotMuted(actor);
+            assertNotMuted(treasury);
             const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
+            ctx.status = 400; ctx.body = { error: e.message };
+        }
     });
 
     // Host an event AS the enterprise (events §3, "Post as"). Shaped like the Offer and Need above, and for
@@ -737,10 +755,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title) { ctx.status = 400; ctx.body = { error: 'title is required' }; return; }
         try {
+            assertNotMuted(actor);
+            assertNotMuted(treasury);
             const post = createEventFromBody(b, treasury, actor);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
+            ctx.status = 400; ctx.body = { error: e.message };
+        }
     });
 
     // Approve a bid on the treasury's Need — funds escrow from the treasury (its credit line).
@@ -1566,6 +1589,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
 
         try {
+            // A muted member (G3) writes nothing anyone else reads, here as in a group or event chat.
+            assertNotMuted(actor);
             const message = postEnterpriseThreadMessage(treasury, actor, text, clientId);
             ctx.status = 201;
             ctx.body = {
@@ -1573,6 +1598,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 message,
             };
         } catch (e: any) {
+            // Before the matching below, which would answer a mute as a plain 400.
+            if (respondProfileRefusal(ctx, e)) return;
             const msg = e?.message || 'Failed to post message';
             if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
                 ctx.status = 409;

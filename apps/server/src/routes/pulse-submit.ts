@@ -35,6 +35,7 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import { URL } from 'node:url';
 import { db } from '../db/db.js';
+import { respondIfMuted } from './profile-feature-gate.js';
 import {
     ssrfSafeFetch,
     extractYouTubeVideoId,
@@ -696,6 +697,8 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             ctx.body = { error: 'Signed request required' };
             return;
         }
+        // A Pulse item is on everyone's feed, so a muted member (G3) submits none.
+        if (respondIfMuted(ctx, actor)) return;
 
         const body = (ctx as any).requestBody || {};
         const rawUrl = typeof body.url === 'string' ? body.url.trim() : '';
@@ -1006,6 +1009,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             ctx.body = { error: 'Signed request required' };
             return;
         }
+        if (respondIfMuted(ctx, actor)) return;
 
         const body = (ctx as any).requestBody || {};
 

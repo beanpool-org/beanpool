@@ -507,6 +507,38 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 9. members_touch_updated_at gains moderation_muted_until (G3) ───────────────────────────────
+    // A write that sets only the mute has to move updated_at, or delta sync never carries it to a standby.
+    // `CREATE TRIGGER IF NOT EXISTS` can't widen a live node's whitelist, so db.ts drops the trigger before the
+    // exec on every boot. The fixture is a booted node rolled back to the whitelist without the column.
+    console.log('\n--- 9. Legacy members_touch_updated_at without moderation_muted_until ---');
+    {
+        const touchSql = (d: Database.Database): string =>
+            (d.prepare(`SELECT sql FROM sqlite_master WHERE type='trigger' AND name='members_touch_updated_at'`).get() as any)?.sql ?? '';
+        const dir = tmp('legacy-members-touch');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const current = touchSql(d);
+        const old = current.replace(/,\s*moderation_muted_until\b/, '');
+        assert(/\bmoderation_muted_until\b/.test(current) && !/\bmoderation_muted_until\b/.test(old),
+            'a fresh install lists moderation_muted_until in members_touch_updated_at, and the fixture takes it out');
+        d.exec(`DROP TRIGGER members_touch_updated_at; ${old};`);
+        const pk = 'cc'.repeat(32);
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at, updated_at) VALUES (?, 'Legacy', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')`).run(pk);
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the legacy node boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(/\bmoderation_muted_until\b/.test(touchSql(after)), 'and its trigger lists moderation_muted_until again');
+        after.prepare(`UPDATE members SET moderation_muted_until = '9999-12-31T23:59:59.999Z' WHERE public_key = ?`).run(pk);
+        const touched = (after.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(pk) as any)?.updated_at;
+        assert(touched > '2025-01-01T00:00:00.000Z', `an UPDATE that sets only moderation_muted_until moves updated_at (${touched})`);
+        after.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

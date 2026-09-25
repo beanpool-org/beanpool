@@ -33,6 +33,11 @@ export interface Member {
     isTreasury?: boolean;
     archetype?: string | null;
     nodeRole?: 'owner' | 'admin' | null;
+    /**
+     * Auto-mute (global profile, G3): muted while later than now, lifted then while earlier. Carried by the
+     * replication export only (a standby and a take-over keep it); never in the member directory.
+     */
+    moderationMutedUntil?: string | null;
 }
 
 export interface InviteCode {

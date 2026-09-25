@@ -20,9 +20,10 @@ import {
     isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, isMemberActive, INACTIVE_MEMBER_CREATE_ERROR,
 } from '../db/db.js';
 import { getThresholds } from '../config/local-config.js';
+import { assertNotMuted } from '../engine/auto-moderation.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
-import { respondProfileRefusal } from './profile-feature-gate.js';
+import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
@@ -61,6 +62,8 @@ router.post('/api/commons/projects', async (ctx) => {
         ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };
         return;
     }
+    // A muted member (G3) proposes nothing other members read.
+    if (respondIfMuted(ctx, actor)) return;
     const project = createProject(actor, title, description || '', Number(requestedAmount));
     if (!project) {
         ctx.status = 400;
@@ -79,7 +82,8 @@ router.post('/api/commons/projects/update', async (ctx) => {
         return;
     }
     if (!projectId || !title || !requestedAmount) return ctx.throw(400, 'Missing fields');
-    
+    if (respondIfMuted(ctx, actor)) return;
+
     const success = updateProject(actor, projectId, title, description || '', Number(requestedAmount));
     if (!success) {
         return ctx.throw(400, 'Failed to update project. It might not exist, you might not own it, or it is no longer in a proposed state.');
@@ -169,6 +173,8 @@ router.post('/api/commons/decisions', async (ctx) => {
     }
     const closesAtOverride = process.env.NODE_ENV === 'test' ? closesAt : undefined;
     try {
+        // A muted member (G3) proposes nothing other members read; a vote carries no words and stays open.
+        assertNotMuted(actor);
         const decision = createDecision({
             authorPubkey: actor,
             title,
@@ -287,6 +293,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };
         return;
     }
+    if (respondIfMuted(ctx, actor)) return;
     createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
     const project = getCrowdfundProject(projectId);
     deps.broadcast?.({ type: 'project_created', project });
@@ -337,6 +344,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         }
     }
 
+    if (respondIfMuted(ctx, actor)) return;
     try {
         updateCrowdfundProject(id, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt);
         const project = getCrowdfundProject(id);
@@ -396,6 +404,8 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     // pledger's home balance and then pledged locally, so a visitor's pledge was minted
     // on this node. Refuse until charge-home settlement exists (#104).
     if (blockCrossNodeSettlement(ctx, actor)) return;
+    // A note with a pledge is words the project's creator reads: a muted member (G3) pledges without one.
+    if (isNote(memo) && respondIfMuted(ctx, actor)) return;
 
     try {
         const txId = crypto.randomUUID();

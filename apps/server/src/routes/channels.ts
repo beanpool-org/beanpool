@@ -30,6 +30,7 @@ import {
     otherVideoChannels, ChannelError, CHANNEL_PLATFORMS, CHANNEL_CATEGORIES,
 } from '../engine/creator-channels.js';
 import type { RouteDeps } from './types.js';
+import { respondIfMuted } from './profile-feature-gate.js';
 
 export function getPulseOAuthConfig(): {
     tiktok: { enabled: boolean; clientKey: string | null };
@@ -114,6 +115,9 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: 'Signed request required' };
             return;
         }
+        // A channel's items reach everyone's Pulse feed, so a muted member (G3) adds or changes none. Deleting one,
+        // or disconnecting it, stays open.
+        if (respondIfMuted(ctx, actor)) return;
         const { platform, url, handle, category, syndicateToNode, isPrimaryVideo } =
             (ctx as any).requestBody || {};
 
@@ -156,6 +160,7 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: 'Signed request required' };
             return;
         }
+        if (respondIfMuted(ctx, actor)) return;
         const { category, syndicateToNode, isPrimaryVideo, autopublish } = (ctx as any).requestBody || {};
         try {
             const channel = updateChannel(actor, ctx.params.id, {

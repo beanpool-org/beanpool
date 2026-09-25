@@ -20,6 +20,8 @@ import {
     getProfileSwitches, featureOffMessage, BeansOffError, FeatureOffError, FEATURE_OFF,
     type ProfileSwitch, type ProfileSwitches,
 } from '../config/node-profile.js';
+import { ProbationLimitError } from '../engine/probation.js';
+import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 
 interface GatedRoutes {
     /** On only while every one of these switches is on. */
@@ -87,8 +89,11 @@ export async function profileFeatureGate(ctx: Context, next: Next): Promise<void
     ctx.body = { error: featureOffMessage(off), code: FEATURE_OFF, feature: off };
 }
 
-/** For a route's catch: answers a Beans-off or feature-off refusal with its own status and code. True when it did. */
-export function respondProfileRefusal(ctx: { status: number; body: unknown }, e: unknown): boolean {
+/**
+ * For a route's catch: answers a Beans-off or feature-off refusal, a probation limit (429, with `Retry-After`) or a
+ * moderation mute (403) with its own status and code. True when it did.
+ */
+export function respondProfileRefusal(ctx: { status: number; body: unknown; set?: (field: string, value: string) => void }, e: unknown): boolean {
     if (e instanceof BeansOffError || e instanceof FeatureOffError) {
         ctx.status = e.status;
         ctx.body = e instanceof FeatureOffError
@@ -96,5 +101,40 @@ export function respondProfileRefusal(ctx: { status: number; body: unknown }, e:
             : { error: e.message, code: e.code };
         return true;
     }
+    if (e instanceof ProbationLimitError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code, limit: e.limit, resetsAt: e.resetsAt };
+        const seconds = Math.max(1, Math.ceil((Date.parse(e.resetsAt) - Date.now()) / 1000));
+        ctx.set?.('Retry-After', String(seconds));
+        return true;
+    }
+    if (e instanceof MutedError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code, mutedUntil: e.until };
+        return true;
+    }
     return false;
+}
+
+/**
+ * For a route that writes something other members read and has no catch of its own for it: answers 403
+ * `moderation_muted` while this member is muted (G3), with the body respondProfileRefusal gives. True when it did.
+ */
+export function respondIfMuted(ctx: { status: number; body: unknown }, pubkey: string | null | undefined): boolean {
+    try {
+        assertNotMuted(pubkey);
+        return false;
+    } catch (e) {
+        if (respondProfileRefusal(ctx, e)) return true;
+        throw e;
+    }
+}
+
+/**
+ * Is this memo, sent with Beans or a pledge, a note the other side will read? Anything non-empty, whatever its JSON
+ * type: the ledger stores a number as text, so `412345678` is a phone number like `'412345678'` is. For the mute
+ * check (G3) on the three routes that take one; a memo of any type is still accepted from everyone else.
+ */
+export function isNote(memo: unknown): boolean {
+    return memo != null && String(memo).trim() !== '';
 }

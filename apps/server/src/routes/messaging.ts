@@ -12,7 +12,7 @@ import {
     getMember,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage } from '../engine/messaging.js';
-import { canReadEventThread, loadEventForThread, isEventThreadExpired, EVENT_CHAT_GONE } from '../engine/event-thread.js';
+import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
@@ -21,6 +21,9 @@ import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
+import { assertNotMuted } from '../engine/auto-moderation.js';
+import { assertMayMessage } from '../engine/probation.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
@@ -48,6 +51,10 @@ function refuseGroupChat(ctx: any, groupId: string, actor: string | undefined, n
     ctx.status = refusal.status === 404 ? notFound.status : refusal.status;
     ctx.body = { error: refusal.status === 404 ? notFound.error : refusal.error };
     return true;
+}
+
+function eventChatHiddenFrom(conversationId: string, pubkey: string | undefined): boolean {
+    try { return eventHiddenFrom(loadEventForThread(conversationId), pubkey); } catch { return false; }
 }
 
 const CONVERSATION_NOT_FOUND = { status: 404, error: 'Conversation not found' };
@@ -132,6 +139,10 @@ router.post('/api/messages/conversation', async (ctx) => {
         return;
     }
     try {
+        // G3, global profile: a muted member starts no conversations (403); a new account starts them with at most
+        // 10 new people a day (429). Starting one is a line in the other person's inbox, even before a message.
+        assertNotMuted(createdBy);
+        for (const other of uniqueParticipants) if (other !== createdBy) assertMayMessage(createdBy, other);
         const conv = createConversation('dm', uniqueParticipants, createdBy, name);
         if (!conv) {
             ctx.status = 400;
@@ -140,6 +151,7 @@ router.post('/api/messages/conversation', async (ctx) => {
         }
         ctx.body = { success: true, conversation: conv };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         respondToMessagingError(ctx, e, 'create the conversation');
     }
 });
@@ -179,8 +191,17 @@ router.post('/api/messages/send', async (ctx) => {
     }
     let msg;
     try {
+        // G3, global profile: a muted member sends nothing (403). A new account reaches at most 10 new people a
+        // day in DMs (429); a reply, or anyone they have reached before (a conversation they opened included), is
+        // never limited. An old conversation id the engine remaps is a DM between two people who have talked
+        // already, so it is not checked here.
+        assertNotMuted(authorPubkey);
+        if (target?.type === 'dm' && target.participants.includes(authorPubkey)) {
+            for (const other of target.participants) if (other !== authorPubkey) assertMayMessage(authorPubkey, other);
+        }
         msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId);
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         respondToMessagingError(ctx, e, 'send the message');
         return;
     }
@@ -256,9 +277,12 @@ router.post('/api/messages/edit', async (ctx) => {
     // share (PR #1048 review). A DM keeps the DM rules — its fan-out is the other phone.
     if (isGroupChatMessage(messageId) && !chatRateLimit(ctx, actor)) return;
     try {
+        // An edit is new words in someone else's chat: a muted member (G3) can't make one.
+        assertNotMuted(actor);
         const msg = editMessage(messageId, actor, ciphertext, nonce);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         // Thread and removed messages are refused outright (403) so the client can say why.
         respondToMessagingError(ctx, e, 'edit the message');
     }
@@ -305,13 +329,13 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
         ctx.body = { error: 'You may only read your own conversations' };
         return;
     }
-    const convs = getConversationsByMember(publicKey);
+    // An event hidden by reports (G3) is not there for anyone but its author, and its chat is named after it.
+    const convs = getConversationsByMember(publicKey).filter(c => c.type !== 'event_thread' || !eventChatHiddenFrom(c.id, publicKey));
     const unreadCounts = getUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
-    ctx.body = {
-        conversations: convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null })),
-        totalUnread: Object.values(unreadCounts).reduce((a, b) => a + b, 0),
-    };
+    const conversations = convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null }));
+    // Over the listed chats only, as listYourChats does: a badge for a chat that isn't there can't be cleared.
+    ctx.body = { conversations, totalUnread: conversations.reduce((n, c) => n + c.unreadCount, 0) };
 });
 
 router.post('/api/messages/mark-read', async (ctx) => {
@@ -432,6 +456,12 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         let gone = false;
         try {
             const eventRow = loadEventForThread(conversationId);
+            // Hidden by reports (G3): not there for anyone but its author, as the event chat route answers.
+            if (eventHiddenFrom(eventRow, ctx.state.actor as string | undefined)) {
+                ctx.status = CONVERSATION_NOT_FOUND.status;
+                ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+                return;
+            }
             // The 30-day window is the chat's, not the event-chat route's: past it the event chat route
             // answers 410 and this one has to agree, or a host or a Going member could keep reading a
             // chat the scrub is about to take — and, between the window closing and the next scheduler
@@ -477,6 +507,8 @@ router.post('/api/messages/react', async (ctx) => {
     // share (PR #1048 review). A DM keeps the DM rules — its fan-out is the other phone.
     if (isGroupChatMessage(messageId) && !chatRateLimit(ctx, actor)) return;
     try {
+        // A reaction is up to 32 characters of anything, shown to everyone in the chat: a muted member (G3) adds none.
+        assertNotMuted(actor);
         const result = toggleMessageReaction(messageId, actor, emoji.trim());
         if (!result) {
             ctx.status = 404;
@@ -485,6 +517,7 @@ router.post('/api/messages/react', async (ctx) => {
         }
         ctx.body = { success: true, metadata: result.metadata };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         respondToMessagingError(ctx, e, 'update the reaction');
     }
 });

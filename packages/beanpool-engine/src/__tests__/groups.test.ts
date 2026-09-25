@@ -100,7 +100,9 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 event_place_name TEXT,
                 event_private_note TEXT,
                 event_state TEXT,
-                event_conversation_id TEXT
+                event_conversation_id TEXT,
+                hidden_by_reports_at TEXT,
+                removed_by_moderator_at TEXT
             );
 
             CREATE TABLE tombstones (

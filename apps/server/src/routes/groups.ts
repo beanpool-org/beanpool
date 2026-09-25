@@ -37,6 +37,8 @@ import {
     listYourChats,
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
+import { assertNotMuted } from '../engine/auto-moderation.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
 
@@ -168,6 +170,8 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         }
 
         try {
+            // A muted member (G3) starts nothing other members read: a group's name and description are listed.
+            assertNotMuted(actor);
             const group = createGroup({
                 name: name.trim(),
                 slug: slug?.trim(),
@@ -180,6 +184,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.status = 201;
             ctx.body = group;
         } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
             ctx.status = 400;
             ctx.body = { error: e.message || 'Failed to create group' };
         }
@@ -253,11 +258,15 @@ export function createGroupRoutes(deps: RouteDeps): Router {
                 ctx.status = 200;
                 ctx.body = { success: true, member };
             } else {
+                // An invitation reaches someone new, as starting a DM does, so a muted convenor (G3) sends none.
+                // Approving someone who asked to join writes nothing anyone reads, and stays open.
+                assertNotMuted(actor);
                 const member = inviteGroupMember(ctx.params.id, actor, memberPubkey, role || 'member');
                 ctx.status = 200;
                 ctx.body = { success: true, member };
             }
         } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
             ctx.body = { error: e.message || 'Failed to update member' };
@@ -347,11 +356,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (joinPolicy && !name && !description && !avatarUrl && !category) {
                 group = updateGroupPolicy(ctx.params.id, actor, joinPolicy);
             } else {
+                // New words or a new picture on the group's card (G3); a join-policy change alone writes neither.
+                assertNotMuted(actor);
                 group = updateGroup(ctx.params.id, actor, { name, description, avatarUrl, category, joinPolicy });
             }
             ctx.status = 200;
             ctx.body = { success: true, group };
         } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
             ctx.body = { error: e.message || 'Failed to update group' };
@@ -409,10 +421,13 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             return;
         }
         try {
+            // A muted member (G3) sends nothing anyone else reads.
+            assertNotMuted(actor);
             const message = postGroupThreadMessage(ctx.params.id, actor, text, clientId, replyToId);
             ctx.status = 201;
             ctx.body = { success: true, message };
         } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
             const msg = e?.message || 'Could not post the message';
             ctx.status = e?.code === 'ID_CONFLICT' ? 409 : groupChatStatus(msg);
             ctx.body = { error: msg };

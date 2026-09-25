@@ -175,3 +175,53 @@ export function notifyPostsCleared(
         tell(cb, [reporter], REPORT_OUTCOME_TITLE, reportedPostsRemovedBody(n), { kind: 'report_outcome', outcome: 'removed' });
     }
 }
+
+// ── Auto-moderation on the global profile (engine/auto-moderation.ts) ────────────────────────────
+
+export const POST_HIDDEN_TITLE = '🛡️ Your post is hidden for review';
+export const POST_BACK_TITLE = '🛡️ Your post is back';
+export const MUTED_TITLE = '🛡️ Posting paused';
+export const UNMUTED_TITLE = '🛡️ You can post again';
+
+/** Hidden pending review, not removed: the author can still see it, and nobody else can until a moderator looks. */
+export function postHiddenBody(title: string | null | undefined): string {
+    const what = title && title.trim() ? `Your post ${quoted(title)}` : 'Your post';
+    return `${what} is hidden while the community's moderators look at reports about it. It has not been removed, and you can still see it.`;
+}
+
+export function postBackBody(title: string | null | undefined): string {
+    const what = title && title.trim() ? `your post ${quoted(title)}` : 'your post';
+    return `The community's moderators looked at ${what}, and everyone can see it again.`;
+}
+
+/** The mute, in the words both its notice and every refusal it causes use. */
+export function mutedBody(): string {
+    return "Three of your posts were removed by the community's moderators in the last 30 days, so you can't post or send messages here until a moderator lifts this. You can still read, edit your profile and leave.";
+}
+
+export function unmutedBody(): string {
+    return 'A moderator lifted the pause, so you can post and send messages again.';
+}
+
+/**
+ * Enough established members reported a post, so it is hidden until a moderator looks. Its author hears, as they
+ * would of a removal, with the reason "reports". Never who reported it.
+ */
+export function notifyPostHidden(cb: ModerationNoticeCallbacks, post: { id: string; title: string | null; authorPubkey: string | null }): void {
+    if (!post.authorPubkey) return;
+    tell(cb, [post.authorPubkey], POST_HIDDEN_TITLE, postHiddenBody(post.title), { kind: 'post_hidden', reason: 'reports', screen: 'post', postId: post.id });
+}
+
+/** A hidden post is visible again: a moderator restored it, or the reports that hid it were dismissed. */
+export function notifyPostBack(cb: ModerationNoticeCallbacks, post: { id: string; title: string | null; authorPubkey: string | null }): void {
+    if (!post.authorPubkey) return;
+    tell(cb, [post.authorPubkey], POST_BACK_TITLE, postBackBody(post.title), { kind: 'post_restored', screen: 'post', postId: post.id });
+}
+
+export function notifyMuted(cb: ModerationNoticeCallbacks, memberPubkey: string): void {
+    tell(cb, [memberPubkey], MUTED_TITLE, mutedBody(), { kind: 'moderation_muted' });
+}
+
+export function notifyUnmuted(cb: ModerationNoticeCallbacks, memberPubkey: string): void {
+    tell(cb, [memberPubkey], UNMUTED_TITLE, unmutedBody(), { kind: 'moderation_unmuted' });
+}

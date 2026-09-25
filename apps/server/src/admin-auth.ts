@@ -304,6 +304,10 @@ export const MODERATOR_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: str
     { method: 'POST', path: '/api/local/admin/reports/:id/dismiss' },
     { method: 'POST', path: '/api/local/admin/reports/:id/action' },
     { method: 'POST', path: '/api/local/admin/posts/:id/delete' },
+    // The global profile's auto-moderation (G3, D3 = a): restoring a post hidden by reports, and lifting a mute.
+    { method: 'POST', path: '/api/local/admin/posts/:id/restore' },
+    { method: 'GET', path: '/api/local/admin/members/muted' },
+    { method: 'POST', path: '/api/local/admin/members/:pubkey/unmute' },
     { method: 'POST', path: '/api/local/admin/csrf-token' },
     { method: 'POST', path: '/api/local/admin/auth/revoke-all' },
 ];

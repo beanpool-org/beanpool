@@ -31,6 +31,8 @@ import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference';
 import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../utils/LocalAuth';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
+import { AddWordsForm } from '../../components/AddWordsForm';
+import { ADD_WORDS_COPY } from '../../utils/add-words';
 import { NO_WORDS_CHECK_FIRST, NO_WORDS_CONNECT, NO_WORDS_MENU, NO_WORDS_SIGN_OUT_ALERT, noWordsBeforeWipe } from '../../utils/no-words-copy';
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
@@ -801,6 +803,9 @@ export default function SettingsScreen() {
     const [seedConfirm, setSeedConfirm] = useState('');
     const [seedVisible, setSeedVisible] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
+    // "Add your 12 words to this phone", on a phone that has none: the form is open, and the words were just added.
+    const [addingWords, setAddingWords] = useState(false);
+    const [wordsJustAdded, setWordsJustAdded] = useState(false);
     // Loaded at the moment of reveal, not when the screen mounts — the words should only be
     // read once the user has typed CONFIRM and passed the biometric check, which is also
     // exactly where the vault read belongs once there is a vault to read from.
@@ -1554,7 +1559,7 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
-                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => { setMode('seed'); setSeedConfirm(''); setSeedVisible(false); }} accessibilityRole="button">
+                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => { setMode('seed'); setSeedConfirm(''); setSeedVisible(false); setAddingWords(false); setWordsJustAdded(false); }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔑</Text></View>
                         {/* A phone restored with a sign-in has no words to view; the row says so and still opens the explanation. */}
                         <View style={{ flex: 1 }}>
@@ -1895,7 +1900,19 @@ export default function SettingsScreen() {
                                 onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
                             />
 
-                            {/* No words on a phone restored with a sign-in: the panel above says so, and there is nothing to show. */}
+                            {/* No words on a phone restored with a sign-in: the panel above says so, and there is nothing
+                                to show — but a member with them on paper can put them back. */}
+                            {!hasMnemonic(identity) && (
+                                <Pressable
+                                    style={{ marginTop: 8, minHeight: 44, justifyContent: 'center', paddingVertical: 8 }}
+                                    onPress={() => { setSeedConfirm(''); setSeedVisible(false); setWordsJustAdded(false); setAddingWords(true); setMode('seed'); }}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={{ color: colors.brand.dark, fontSize: 14, fontWeight: '600', lineHeight: 20 }}>
+                                        🔑 {ADD_WORDS_COPY.fromProtection} ›
+                                    </Text>
+                                </Pressable>
+                            )}
                             {hasMnemonic(identity) && (
                             <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
                                 <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
@@ -2470,13 +2487,45 @@ export default function SettingsScreen() {
                 <View style={styles.card}>
                     <Text style={styles.sectionTitle}>🔑 Recovery Phrase</Text>
                     {!hasMnemonic(identity) ? (
-                        <NoWordsNotice
-                            kind="way-back"
-                            colors={colors}
-                            action={{ label: NO_WORDS_CONNECT, onPress: () => setMode('protection') }}
-                        />
+                        <>
+                            <NoWordsNotice
+                                kind="way-back"
+                                colors={colors}
+                                action={{ label: NO_WORDS_CONNECT, onPress: () => setMode('protection') }}
+                            />
+                            {/* The member who has the words on paper can put them back. Checked on the phone, sent nowhere. */}
+                            {addingWords ? (
+                                <AddWordsForm
+                                    colors={colors}
+                                    onCancel={() => setAddingWords(false)}
+                                    onAdded={(updated) => {
+                                        setIdentity(updated);
+                                        setAddingWords(false);
+                                        setWordsJustAdded(true);
+                                    }}
+                                />
+                            ) : (
+                                <View style={{ marginTop: 16 }}>
+                                    <Text style={[styles.infoText, { marginBottom: 8 }]}>{ADD_WORDS_COPY.intro}</Text>
+                                    <Pressable
+                                        style={[styles.primaryBtn, { marginTop: 0 }]}
+                                        onPress={() => setAddingWords(true)}
+                                        accessibilityRole="button"
+                                    >
+                                        <Text style={[styles.primaryBtnText, { textAlign: 'center' }]}>{ADD_WORDS_COPY.title}</Text>
+                                    </Pressable>
+                                </View>
+                            )}
+                        </>
                     ) : (
                         <>
+                            {wordsJustAdded && (
+                                <View style={{ backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16 }}>
+                                    <Text style={{ color: colors.feedback.success.fg, fontSize: 13, lineHeight: 18, fontWeight: '600' }} accessibilityLiveRegion="polite">
+                                        ✅ {ADD_WORDS_COPY.done}
+                                    </Text>
+                                </View>
+                            )}
                             {!seedVisible ? (
                                 <>
                                     <Text style={styles.infoText}>

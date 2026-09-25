@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 30,
-  "hash": "3badf1c5f944ae0737f2c9b1efe254443a884e3fa9efddb7155e9112119420dc",
+  "version": 31,
+  "hash": "5a48756575d035cc53579c241e55f4c72bef5560c50ce463acfac9b9e0189657",
   "sections": [
     {
       "id": "about",
@@ -943,7 +943,28 @@
         },
         {
           "type": "p",
-          "text": "A phone restored with a sign-in account has no 12 words: they can't be rebuilt from a sign-in. Settings says so instead of showing them. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**."
+          "text": "A phone restored with a sign-in account gets your 12 words back only if that sign-in account was linked from a phone that had them, on an up-to-date app. Otherwise it has no 12 words: they can't be rebuilt from a sign-in, and Settings says so instead of showing them. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**."
+        },
+        {
+          "type": "h2",
+          "text": "Put your 12 words back on this phone"
+        },
+        {
+          "type": "p",
+          "text": "If Settings says this phone has no 12 words, and you have them written down, you can add them:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open **Settings**. Under **Account & Identity**, tap **Recovery Phrase**. (Or, in **Account Protection**, tap **Have your 12 words written down? Add them to this phone**.)",
+            "Tap **Add your 12 words to this phone**.",
+            "Type the 12 words in order, or tap **Paste**. Capitals and extra spaces don't matter. A word that is not on the list of recovery words is marked as you type.",
+            "Tap **Add these words**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Your phone checks that the words belong to your account. They are not sent anywhere. If they belong to a different account, nothing changes and the app says so. Once they are added, **View Recovery Phrase** shows them again, in every community on this phone."
         },
         {
           "type": "h2",
@@ -955,7 +976,7 @@
         },
         {
           "type": "p",
-          "text": "A linked sign-in account does not give you your 12 words back. Keep the paper as well."
+          "text": "A sign-in account you link from a phone that has your 12 words keeps them too, so restoring with it gives them back. One you linked on an older version of the app brings your account back without them: under **Account Protection**, tap **Connect again** next to it to include them. Keep the paper as well."
         },
         {
           "type": "h2",
@@ -4456,7 +4477,7 @@
         },
         {
           "type": "p",
-          "text": "A phone restored with a sign-in account has no 12 words. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there."
+          "text": "A phone restored with a sign-in account may have no 12 words. Settings says so. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there. If you have the words written down, add them to the phone first (see \"Your 12 words\")."
         },
         {
           "type": "h2",
@@ -4546,7 +4567,7 @@
         },
         {
           "type": "p",
-          "text": "A phone restored this way has no 12 words: they can't be rebuilt from a sign-in. A linked sign-in account is its way back, so keep one linked, and link a second one if you can (see below)."
+          "text": "If the sign-in account was linked from a phone that had your 12 words, on an up-to-date app, your 12 words come back too. Otherwise the phone has no 12 words: they can't be rebuilt from a sign-in. If you have them written down, you can add them (see \"Your 12 words\"). Until then a linked sign-in account is that phone's way back, so keep one linked, and link a second one if you can (see below)."
         },
         {
           "type": "h2",
@@ -4563,7 +4584,11 @@
         },
         {
           "type": "p",
-          "text": "This works on a phone restored with a sign-in account too, which has no 12 words."
+          "text": "This works on a phone with no 12 words too."
+        },
+        {
+          "type": "p",
+          "text": "If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown."
         },
         {
           "type": "p",
@@ -4591,7 +4616,7 @@
         },
         {
           "type": "p",
-          "text": "Restoring a different account replaces the one on this phone. The app asks you to type **WIPE** first. Make sure you have the 12 words for the account you are replacing. If this phone was restored with a sign-in account, it has no 12 words for that account: without a linked sign-in account, you cannot get it back."
+          "text": "Restoring a different account replaces the one on this phone. The app asks you to type **WIPE** first. Make sure you have the 12 words for the account you are replacing. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back."
         },
         {
           "type": "h2",

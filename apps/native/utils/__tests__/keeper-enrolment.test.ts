@@ -24,12 +24,21 @@ vi.mock('../node-post', () => ({
     signedDelete: vi.fn(),
 }));
 
+// The words are read through the identity module (getMnemonic), which imports these at load.
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('expo-secure-store', () => ({
+    getItemAsync: vi.fn(),
+    setItemAsync: vi.fn(),
+    deleteItemAsync: vi.fn(),
+}));
+
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import {
     enrolKeepers, enrolSsoKeeper, disconnectSsoKeeper,
 } from '../keeper-enrolment';
 import { signedPost, signedDelete, anchorUrl } from '../node-post';
-import { openShareFromSso, isSingleBlobSso, toEd25519Pkcs8 } from '@beanpool/core';
+import { openShareFromSso, openSeedFromSso, isSingleBlobSso, toEd25519Pkcs8 } from '@beanpool/core';
 
 /**
  * Route the `signedPost` mock.
@@ -188,6 +197,91 @@ describe('keeper-enrolment.ts', () => {
                 expect(result.error).toContain('could not read the private key');
                 expect(signedPost).not.toHaveBeenCalled();
             });
+        });
+
+        // A phone that has the 12 words seals them with the seed, so a sign-in restore gives them back
+        // (keeper-crypto.ts sealSeedToSso). Test phrase only, never a real account's.
+        describe('an identity with its 12 words', () => {
+            const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+            const WORDS = PHRASE.split(' ');
+            const WORDS_SEED = sha256(sha256(Buffer.from(PHRASE, 'utf8')));
+            const WORDED = {
+                callsign: 'HasWords',
+                publicKey: Buffer.from(ed25519.getPublicKey(WORDS_SEED)).toString('hex'),
+                privateKey: Buffer.from(WORDS_SEED).toString('hex'),
+                createdAt: '2026-09-25T00:00:00.000Z',
+                mnemonic: WORDS,
+            } as any;
+
+            it.each([
+                ['a raw seed', WORDED],
+                ['a PKCS8 key (the PWA\'s format)', { ...WORDED, privateKey: Buffer.from(toEd25519Pkcs8(WORDS_SEED)).toString('hex') }],
+            ])('with %s, seals the words, and the copy opens to this key and these words', async (_label, identity) => {
+                mockNode();
+
+                const result = await enrolSsoKeeper({
+                    identity, provider: 'google', sub: 'google-sub-words', idToken: 'mock-jwt-token', nonce: 'mock-nonce',
+                });
+
+                expect(result.error).toBeUndefined();
+                expect(result.wordsSealed).toBe(true);
+                const opened = await openSeedFromSso(depositedSsoShare(), 'google', 'google-sub-words');
+                expect(Buffer.from(ed25519.getPublicKey(opened.seed)).toString('hex')).toBe(WORDED.publicKey);
+                expect(opened.words).toEqual(WORDS);
+                expect(opened.wordsStatus).toBe('carried');
+            });
+
+            it('seals them for GitHub too', async () => {
+                mockNode();
+                const result = await enrolSsoKeeper({ identity: WORDED, provider: 'github', sub: '13579', proof: { sessionId: 's' } });
+                expect(result.wordsSealed).toBe(true);
+                expect((await openSeedFromSso(depositedSsoShare(), 'github', '13579')).words).toEqual(WORDS);
+            });
+
+            it('seals the key alone when the phone\'s words make a different key, and never logs the words', async () => {
+                mockNode();
+                const log = vi.spyOn(console, 'log');
+
+                const result = await enrolSsoKeeper({
+                    identity: { ...WORDED, mnemonic: IDENTITY.mnemonic },
+                    provider: 'google', sub: 'google-sub-words', idToken: 'mock-jwt-token', nonce: 'mock-nonce',
+                });
+
+                expect(result.error).toBeUndefined();
+                expect(result.enrolled).toEqual(['sso']);
+                expect(result.wordsSealed).toBe(false);
+                const opened = await openSeedFromSso(depositedSsoShare(), 'google', 'google-sub-words');
+                expect(Buffer.from(ed25519.getPublicKey(opened.seed)).toString('hex')).toBe(WORDED.publicKey);
+                expect(opened.wordsStatus).toBe('absent');
+                expect(Object.keys(JSON.parse(depositedSsoShare().kdfParams))).not.toContain('words');
+                const logged = log.mock.calls.flat().join('\n');
+                expect(logged).toContain('do not make its key');
+                for (const w of [...IDENTITY.mnemonic, ...WORDS]) expect(logged).not.toMatch(new RegExp(`\\b${w}\\b`));
+                log.mockRestore();
+            });
+        });
+
+        it('a phone with no words deposits the seed alone, as #1147 made it (no words box, words absent on open)', async () => {
+            for (const mnemonic of [undefined, []]) {
+                vi.clearAllMocks();
+                mockNode();
+                const seed = new Uint8Array(32).map((_, i) => (i * 11 + 5) & 0xff);
+                const result = await enrolSsoKeeper({
+                    identity: {
+                        callsign: 'Restored', createdAt: '2026-09-25T00:00:00.000Z', mnemonic,
+                        publicKey: Buffer.from(ed25519.getPublicKey(seed)).toString('hex'),
+                        privateKey: Buffer.from(seed).toString('hex'),
+                    } as any,
+                    provider: 'google', sub: 'google-sub-restored', idToken: 'mock-jwt-token', nonce: 'mock-nonce',
+                });
+                expect(result.error).toBeUndefined();
+                expect(result.wordsSealed).toBe(false);
+                expect(Object.keys(JSON.parse(depositedSsoShare().kdfParams))).toEqual(['alg', 'salt', 'N', 'r', 'p']);
+                const opened = await openSeedFromSso(depositedSsoShare(), 'google', 'google-sub-restored');
+                expect(opened.seed).toEqual(seed);
+                expect(opened.words).toBeNull();
+                expect(opened.wordsStatus).toBe('absent');
+            }
         });
 
         it('successfully seals and deposits single-blob SSO share', async () => {

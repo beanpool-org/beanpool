@@ -26,13 +26,24 @@ Open **Settings** with the sliders button at the top of the screen. Then either:
 - Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.
 - Or tap **Account Protection**, then **Show My 12 Recovery Words**. Tap **Hide** when you are done.
 
-A phone restored with a sign-in account has no 12 words: they can't be rebuilt from a sign-in. Settings says so instead of showing them. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**.
+A phone restored with a sign-in account gets your 12 words back only if that sign-in account was linked from a phone that had them, on an up-to-date app. Otherwise it has no 12 words: they can't be rebuilt from a sign-in, and Settings says so instead of showing them. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**.
+
+## Put your 12 words back on this phone
+
+If Settings says this phone has no 12 words, and you have them written down, you can add them:
+
+- Open **Settings**. Under **Account & Identity**, tap **Recovery Phrase**. (Or, in **Account Protection**, tap **Have your 12 words written down? Add them to this phone**.)
+- Tap **Add your 12 words to this phone**.
+- Type the 12 words in order, or tap **Paste**. Capitals and extra spaces don't matter. A word that is not on the list of recovery words is marked as you type.
+- Tap **Add these words**.
+
+Your phone checks that the words belong to your account. They are not sent anywhere. If they belong to a different account, nothing changes and the app says so. Once they are added, **View Recovery Phrase** shows them again, in every community on this phone.
 
 ## A second way back: a sign-in account
 
 On the phone app you can also link a Google, Facebook or GitHub account (and Apple on an iPhone). If you lose your phone, that account together with your community's server can restore your account on a new phone. See "Getting your account back".
 
-A linked sign-in account does not give you your 12 words back. Keep the paper as well.
+A sign-in account you link from a phone that has your 12 words keeps them too, so restoring with it gives them back. One you linked on an older version of the app brings your account back without them: under **Account Protection**, tap **Connect again** next to it to include them. Keep the paper as well.
 
 ## In a web browser
 

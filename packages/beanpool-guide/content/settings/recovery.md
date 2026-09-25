@@ -27,7 +27,7 @@ This works only if you linked one before (see below), and only while your commun
 - With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.
 - With GitHub, the app shows a code and opens GitHub's page, github.com/login/device. The code is already copied: on GitHub, press and hold the first box and choose **Paste**, then approve. Tap **Copy** to copy it again, or **Open GitHub** to get back to the page. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the code and **Cancel** go away and the app finishes getting your account back.
 
-A phone restored this way has no 12 words: they can't be rebuilt from a sign-in. A linked sign-in account is its way back, so keep one linked, and link a second one if you can (see below).
+If the sign-in account was linked from a phone that had your 12 words, on an up-to-date app, your 12 words come back too. Otherwise the phone has no 12 words: they can't be rebuilt from a sign-in. If you have them written down, you can add them (see "Your 12 words"). Until then a linked sign-in account is that phone's way back, so keep one linked, and link a second one if you can (see below).
 
 ## Protecting your account now
 
@@ -36,7 +36,9 @@ A phone restored this way has no 12 words: they can't be rebuilt from a sign-in.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.
 - With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the app links your account by itself.
 
-This works on a phone restored with a sign-in account too, which has no 12 words.
+This works on a phone with no 12 words too.
+
+If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown.
 
 GitHub works only once your community's server has been updated for it. Until then the app says so. Use Google, Apple or your 12 words instead.
 
@@ -50,7 +52,7 @@ If someone starts recovering your account, you get an alert, and Settings shows 
 
 ## If the phone already has an account
 
-Restoring a different account replaces the one on this phone. The app asks you to type **WIPE** first. Make sure you have the 12 words for the account you are replacing. If this phone was restored with a sign-in account, it has no 12 words for that account: without a linked sign-in account, you cannot get it back.
+Restoring a different account replaces the one on this phone. The app asks you to type **WIPE** first. Make sure you have the 12 words for the account you are replacing. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back.
 
 ## Lost everything?
 

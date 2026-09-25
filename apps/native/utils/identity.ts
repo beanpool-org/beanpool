@@ -1,4 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
+import {
+    isWellFormedRecoveryPhrase,
+    normaliseRecoveryWords,
+    recoveryWordsMatchPublicKey,
+} from '@beanpool/core';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { Platform } from 'react-native';
 
@@ -126,6 +131,33 @@ export async function createIdentityFromMnemonic(words: string[], callsign: stri
  */
 export async function importIdentity(identity: BeanPoolIdentity): Promise<void> {
     await saveIdentity(identity);
+}
+
+export type AddMnemonicResult =
+    | { ok: true; identity: BeanPoolIdentity }
+    | { ok: false; reason: 'no-identity' | 'has-words' | 'malformed' | 'mismatch' };
+
+/**
+ * Put the 12 words back on a phone that has the key but not the words ("Add your 12 words", Settings).
+ *
+ * A phone restored with a sign-in before the sign-in copy carried the words has none, and they can't be
+ * rebuilt from the key. The member who has them written down types them; they are kept only if they are
+ * 12 listed words that make THIS account's public key (compared by public key: the stored private key may
+ * be raw or PKCS8). Otherwise nothing is written. Nothing is sent anywhere, and the words are never logged.
+ *
+ * Refuses a phone that already has words: this adds words that are missing, it never replaces any.
+ */
+export async function addMnemonicToIdentity(typed: string | readonly string[]): Promise<AddMnemonicResult> {
+    const identity = await loadIdentity();
+    if (!identity) return { ok: false, reason: 'no-identity' };
+    // Through a plain boolean: hasMnemonic is a type guard, and its false branch would narrow `identity` to never.
+    const alreadyHasWords: boolean = hasMnemonic(identity);
+    if (alreadyHasWords) return { ok: false, reason: 'has-words' };
+    if (!isWellFormedRecoveryPhrase(typed)) return { ok: false, reason: 'malformed' };
+    if (!recoveryWordsMatchPublicKey(typed, identity.publicKey)) return { ok: false, reason: 'mismatch' };
+    const updated: BeanPoolIdentity = { ...identity, mnemonic: normaliseRecoveryWords(typed) };
+    await saveIdentity(updated);
+    return { ok: true, identity: updated };
 }
 
 /**

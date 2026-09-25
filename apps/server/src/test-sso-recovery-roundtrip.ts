@@ -21,6 +21,7 @@ import {
     sealSeedToSso,
     recordShareForHub,
     openShareFromSso,
+    openSeedFromSso,
     readHubShare,
     isSingleBlobSso,
     KeeperCryptoError,
@@ -288,6 +289,67 @@ async function main() {
     });
 
     // =========================================================================
+    // 1c. A copy that carries the 12 words, through this node's code unchanged
+    // =========================================================================
+    // The app seals the words in a second box inside kdfParams (keeper-crypto.ts sealSeedToSso). No
+    // server code changed for it: this is the node as it runs today, accepting, storing and releasing
+    // the copy verbatim, and the recovering app getting the words back out of what it released.
+    console.log('\n--- 1c. A Single Blob Carrying the 12 Words ---');
+    // A test phrase, not an account. seed = SHA256(SHA256(words)), as both apps derive it.
+    const WORDS_1C = 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' ');
+    const seed1c = crypto.createHash('sha256').update(crypto.createHash('sha256').update(WORDS_1C.join(' ')).digest()).digest();
+    const m1c = { seed: seed1c, pubHex: derivePubHex(seed1c), callsign: '' };
+    m1c.callsign = `WordsBlob-${m1c.pubHex.slice(0, 6)}`;
+    db.prepare(`
+        INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+        VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'genesis', 'genesis')
+    `).run(m1c.pubHex, m1c.callsign);
+    const sealed1c = await sealSeedToSso(new Uint8Array(seed1c), 'google', GOOGLE_SUB, { words: WORDS_1C });
+    const nonceRes1c = await signedCall('/api/recovery/sso-nonce', m1c.pubHex, {});
+    const deposit1c = await signedCall('/api/recovery/shares/sso', m1c.pubHex, {
+        provider: 'google',
+        idToken: mintGoogleToken(GOOGLE_SUB, nonceRes1c.body.nonce),
+        nonce: nonceRes1c.body.nonce,
+        shares: [{ holderType: 'sso', holderRef: 'google', shareIndex: 1, ...sealed1c }],
+    });
+    await test('1c.1 the node accepts the copy as a single blob, and stores its kdfParams verbatim', () => {
+        assert.strictEqual(deposit1c.status, 200, JSON.stringify(deposit1c.body));
+        assert.strictEqual(deposit1c.body.threshold, 1);
+        const stored = getCurrentShares(m1c.pubHex);
+        assert.strictEqual(stored.length, 1);
+        assert.strictEqual(stored[0].kdfParams, sealed1c.kdfParams);
+        assert.strictEqual(stored[0].encryptedShare, sealed1c.encryptedShare);
+    });
+
+    const eph1c = crypto.randomBytes(32).toString('hex');
+    const open1c = await signedCall('/api/recovery/collect', eph1c, { callsign: m1c.callsign });
+    const collectNonce1c = await signedCall('/api/recovery/collect/sso-nonce', eph1c, { collectionId: open1c.body.collectionId });
+    await signedCall('/api/recovery/collect/sso', eph1c, {
+        collectionId: open1c.body.collectionId,
+        provider: 'google',
+        idToken: mintGoogleToken(GOOGLE_SUB, collectNonce1c.body.nonce),
+        nonce: collectNonce1c.body.nonce,
+    });
+    const frags1c = await signedCall('/api/recovery/collect/fragments', eph1c, { collectionId: open1c.body.collectionId });
+    const frag1c = frags1c.body.fragments?.[0];
+    const released1c = {
+        encryptedShare: frag1c?.payload, shareIv: frag1c?.payloadIv, shareTag: frag1c?.payloadTag, kdfParams: frag1c?.kdfParams,
+    };
+    await test('1c.2 the release hands back the same copy, and it opens to the seed and the words', async () => {
+        assert.strictEqual(frags1c.status, 200);
+        assert.strictEqual(frag1c.kdfParams, sealed1c.kdfParams);
+        const opened = await openSeedFromSso(released1c, 'google', GOOGLE_SUB);
+        assert.strictEqual(derivePubHex(opened.seed), m1c.pubHex);
+        assert.deepStrictEqual(opened.words, WORDS_1C);
+        assert.strictEqual(opened.wordsStatus, 'carried');
+    });
+    await test('1c.3 the opener apps on older code run gets exactly the 32-byte seed from it', async () => {
+        const seed = await openShareFromSso(released1c, 'google', GOOGLE_SUB);
+        assert.strictEqual(seed.length, 32);
+        assert.strictEqual(derivePubHex(seed), m1c.pubHex);
+    });
+
+    // =========================================================================
     // 1b. Enrolments sealed by earlier code still open
     // =========================================================================
     // The sign-in hardening (S1 onwards) changes how the node convinces itself of `sub`, never `sub`
@@ -330,6 +392,12 @@ async function main() {
         });
         await test(`1b.2 ${old.provider}: the lookup hash for that sub and salt is unchanged`, async () => {
             assert.strictEqual(await ssoLookupHash(old.provider, old.sub, OLD_LOOKUP_SALT), old.lookupHash);
+        });
+        await test(`1b.3 ${old.provider}: the opener that reads the 12 words opens it to the seed alone`, async () => {
+            const opened = await openSeedFromSso(old.sealed, old.provider, old.sub);
+            assert.strictEqual(Buffer.from(opened.seed).toString('hex'), OLD_SEED_HEX);
+            assert.strictEqual(opened.words, null);
+            assert.strictEqual(opened.wordsStatus, 'absent');
         });
     }
 

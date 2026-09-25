@@ -35,13 +35,14 @@
  */
 
 import {
+    recoveryWordsMatchSeed,
     sealSeedToSso,
     toEd25519Seed,
     type SealedShare,
 } from '@beanpool/core';
 import { anchorUrl, signedPost, signedDelete } from './node-post';
 import { hexToBytes } from './crypto';
-import type { BeanPoolIdentity } from './identity';
+import { getMnemonic, type BeanPoolIdentity } from './identity';
 import type { SsoProvider } from './sso-signin';
 
 // ---------------------------------------------------------------------------
@@ -76,6 +77,8 @@ export interface KeeperEnrolmentResult {
     threshold?: number;
     /** Whether single-blob SSO format is in use. */
     isSingleBlob?: boolean;
+    /** Whether this deposit carries the 12 words, so a sign-in restore from it gives them back. */
+    wordsSealed?: boolean;
     /** Set when enrolment did not happen at all. For logs, never for a member. */
     error?: string;
 }
@@ -126,9 +129,9 @@ export type SsoEnrolmentInput =
     | SsoEnrolmentBase & { provider: 'github'; proof: { sessionId: string } };
 
 /**
- * Seal the member's entire seed into a single device-encrypted AEAD blob under
- * scrypt(provider:sub), then deposit through `POST /api/recovery/shares/sso`
- * which verifies the token server-side.
+ * Seal the member's entire seed (and the 12 words, when this phone has them) into a single
+ * device-encrypted AEAD blob under scrypt(provider:sub), then deposit through
+ * `POST /api/recovery/shares/sso` which verifies the token server-side.
  *
  * This is NOT called at signup. It is called when the member signs in with Google or
  * Apple for the first time, which is a separate user-initiated flow.
@@ -159,9 +162,9 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         credential = { idToken: input.idToken, nonce: input.nonce };
     }
 
-    // No check for the 12 words: the deposit seals the private key, never the words. A phone restored
-    // with a sign-in holds no words (sso-recovery.ts can't rebuild them from the seed), and it belongs
-    // to exactly the member who most needs a connected sign-in.
+    // The 12 words are never required: a phone restored from a sign-in copy made before copies carried
+    // them holds none (they can't be rebuilt from the seed), and it belongs to exactly the member who
+    // most needs a connected sign-in. Such a phone deposits the seed alone.
     const url = await anchorUrl();
     if (!url) return nothing('no node configured yet');
 
@@ -174,11 +177,20 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         return nothing(`could not read the private key: ${(e as Error).message}`);
     }
 
+    // When this phone has the 12 words, they travel with the seed, so a sign-in restore gives them back
+    // (keeper-crypto.ts sealSeedToSso). Only words that make this seed's key: anything else would be
+    // thrown away at restore, so it is left out here and the seed goes alone. Never the words in a log.
+    const words = await getMnemonic(identity);
+    const sealWords = words && recoveryWordsMatchSeed(words, seed) ? words : null;
+    if (words && !sealWords) {
+        console.log(`[KEEPER] ${provider}: this phone's 12 words do not make its key; sealing the key alone`);
+    }
+
     // Seal the entire 32-byte Ed25519 seed to the SSO provider under scrypt(provider:sub).
     // The server will independently verify the token and derive the same key during recovery.
     let ssoSealed: SealedShare;
     try {
-        ssoSealed = await sealSeedToSso(seed, provider, sub);
+        ssoSealed = await sealSeedToSso(seed, provider, sub, { words: sealWords });
     } catch (e) {
         return nothing(`could not seal the SSO fragment: ${(e as Error).message}`);
     }
@@ -211,6 +223,7 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
             enrolledSso,
             threshold: body.threshold ?? 1,
             isSingleBlob: true,
+            wordsSealed: !!sealWords,
         };
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);

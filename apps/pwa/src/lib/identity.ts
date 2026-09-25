@@ -140,6 +140,17 @@ export const PENDING_JOIN_TTL_MS = 10 * 60 * 1000;
 /** How long it is kept after the node said too many accounts joined from this network, so a retry keeps the same key. */
 export const PENDING_JOIN_RATE_LIMITED_TTL_MS = 60 * 60 * 1000;
 
+/** The node's sign-in nonce life (apps/server/src/sso.ts NONCE_TTL_MS). */
+const NODE_NONCE_LIFE_MS = 10 * 60 * 1000;
+
+/**
+ * How long after a join went out it can still land. The node writes the member only as it spends the sign-in the
+ * join carried, and it spends none older than its nonce life. The nonce was issued before the join went, and a
+ * GitHub result lives as long from before it (engine/github-device.ts), so ten minutes after `sentAt` nothing that
+ * join carried can be spent. A minute more, for good measure.
+ */
+export const SENT_JOIN_CAN_LAND_MS = NODE_NONCE_LIFE_MS + 60 * 1000;
+
 /** The sign-ins the open door takes (apps/server/src/routes/open-join.ts). */
 export type JoinProvider = 'google' | 'apple' | 'facebook' | 'github';
 
@@ -156,9 +167,8 @@ export type JoinProvider = 'google' | 'apple' | 'facebook' | 'github';
  * never shows it the new member's steps.
  *
  * `sentAt`: a join with this key has gone to the node. From then on the node may hold the key as a member while this
- * record is the only copy of it and of its 12 words (the answer can be lost on the way back), so a sent join is never
- * dropped on its `expiresAt`, and no other key takes its place (savePendingJoin): only the node's word lets it go
- * (WebJoin asks it, web-join.ts checkSentJoin).
+ * record is the only copy of it and of its 12 words (the answer can be lost on the way back). See "A sent key's
+ * fate" below: nothing but releaseSentPendingJoin deletes such a record or takes its mark off.
  */
 export interface PendingJoin {
     identity: BeanPoolIdentity;
@@ -171,6 +181,11 @@ export interface PendingJoin {
     retriedExpired?: boolean;
     /** When a join with this key last went to the node (Date.now()); absent until one has. */
     sentAt?: number;
+    /**
+     * When the join before that one went, if it went while this key was still marked sent: that one may land too, so
+     * a refusal of the later join settles nothing until the earlier one can no longer land (releaseSentPendingJoin).
+     */
+    earlierSentAt?: number;
 }
 
 /** A join with this pending key has gone to the node, and the node has not said it did not land. */
@@ -178,99 +193,234 @@ export function pendingJoinSent(pending: PendingJoin): boolean {
     return typeof pending.sentAt === 'number';
 }
 
+/** When the latest join with this key went, of every one still unsettled (NaN when a time cannot be read). */
+export function lastSentAt(pending: PendingJoin): number {
+    return typeof pending.earlierSentAt === 'number' ? Math.max(pending.sentAt ?? Number.NaN, pending.earlierSentAt) : pending.sentAt ?? Number.NaN;
+}
+
+/** A record that holds a key and is marked sent: the node may have that key as a member. */
+function isSent(record: PendingJoin | undefined): record is PendingJoin & { sentAt: number } {
+    return !!record?.identity?.privateKey && pendingJoinSent(record);
+}
+
 /** A sent pending join holding one key, which another key was about to replace. */
 export class PendingJoinHeldError extends Error {
-    constructor() {
+    /** The sent pending join as it is stored, for the page to settle first. */
+    readonly held: PendingJoin;
+    constructor(held: PendingJoin) {
         super('A join with another key has gone to the node and has not been settled; it is kept.');
         this.name = 'PendingJoinHeldError';
+        this.held = held;
     }
+}
+
+/*
+ * ---------- A sent key's fate: decided here, and only here ----------
+ *
+ * Once a join has gone, only two things let this browser drop that key or take its sent mark off:
+ *
+ *   - the node's word, twice over: the door refused the LATEST join with it definitely (a parsed refusal it gives
+ *     before it writes a member, NodeRefusedJoin), the node then said the key is not a member (its membership probe,
+ *     signed by the key, NodeSaidNotMember), and no earlier join with the key can still land;
+ *   - the member letting it go, on the record they were shown, after being told what that means.
+ *
+ * Both are releaseSentPendingJoin. Every other write reads the STORED record in its own transaction (never a tab's
+ * copy of it) and keeps a sent mark it finds there: savePendingJoin writes the same key back with the stored mark,
+ * clearUnsentPendingJoin and loadPendingJoin's clock never delete a sent record, and completePendingJoin removes the
+ * pending join only when it holds the key that joined. The one exception is wipeIdentity, the member's own "delete
+ * everything on this device".
+ */
+
+/** The node's membership probe, signed by the pending key, answered `isMember: false` (web-join.ts probeMembership). */
+export interface NodeSaidNotMember {
+    publicKey: string;
+    /** When the probe was asked (taken before it went): the key was not a member then. */
+    askedAt: number;
+}
+
+/**
+ * The refusals the door gives a join before it writes a member (apps/server/src/routes/open-join.ts), each with the
+ * one status it comes with. Only one of these, read from the answer's body with its matching status, is a definite
+ * "that join did not land".
+ */
+export const DEFINITE_JOIN_REFUSALS = {
+    invite_only: 404,
+    bad_request: 400,
+    bad_key: 400,
+    recovery_invalid: 400,
+    sign_in: 401,
+    key_invalidated: 403,
+    removed: 403,
+    already_joined: 409,
+    rate_limited: 429,
+} as const;
+export type DefiniteJoinRefusalCode = keyof typeof DEFINITE_JOIN_REFUSALS;
+
+export function isDefiniteJoinRefusal(code: unknown, status: number): code is DefiniteJoinRefusalCode {
+    return typeof code === 'string' && Object.prototype.hasOwnProperty.call(DEFINITE_JOIN_REFUSALS, code)
+        && DEFINITE_JOIN_REFUSALS[code as DefiniteJoinRefusalCode] === status;
+}
+
+/** The door refused one join with this key, definitely (web-join.ts joinVerdict). */
+export interface NodeRefusedJoin {
+    publicKey: string;
+    /** The `sentAt` of the join it answered. */
+    sentAt: number;
+    /** When its answer arrived. */
+    answeredAt: number;
+    status: number;
+    code: DefiniteJoinRefusalCode;
+}
+
+export type SentJoinRelease =
+    /** The door refused the latest join definitely, and the node said afterwards that the key is not a member. */
+    | { kind: 'refused'; refusal: NodeRefusedJoin; notMember: NodeSaidNotMember }
+    /** The member chose to let this record go (the one with this key and this sentAt), told what that means. */
+    | { kind: 'abandoned'; publicKey: string; sentAt: number | undefined };
+
+/**
+ * Read the stored pending join and decide what to write, in one readwrite transaction: `decide` sees what is stored
+ * at that moment, never a tab's copy, and nothing else can write between its reading and its writing.
+ */
+async function withStoredPendingJoin<T>(
+    decide: (current: PendingJoin | undefined) => { write?: PendingJoin | 'delete'; result: T },
+): Promise<T> {
+    const db = await openDb();
+    let result: T | undefined;
+    await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.get(PENDING_JOIN_ID);
+        req.onsuccess = () => {
+            const decision = decide(req.result as PendingJoin | undefined);
+            if (decision.write === 'delete') store.delete(PENDING_JOIN_ID);
+            else if (decision.write) store.put(decision.write, PENDING_JOIN_ID);
+            result = decision.result;
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    });
+    return result as T;
+}
+
+/** `pending` without any sent mark: what a write may put in the slot when the store holds none for its key. */
+function withoutSentMark(pending: PendingJoin): PendingJoin {
+    const next = { ...pending };
+    delete next.sentAt;
+    delete next.earlierSentAt;
+    return next;
 }
 
 /**
  * Keep `pending` as the one pending join, in place of any other, except a sent one holding another key: that one may
- * be a member's only copy, so the write is refused (PendingJoinHeldError) and nothing changes. Once the node has
- * said that key is not a member, clearPendingJoin makes room.
+ * be a member's only copy, so the write is refused (PendingJoinHeldError) and nothing changes. When the store has
+ * THIS key marked sent, the stored mark stays, whatever `pending` says: a tab whose copy is older than the join
+ * another tab sent must not undo it. Returns what was stored.
  */
-export async function savePendingJoin(pending: PendingJoin): Promise<void> {
-    const db = await openDb();
-    let held = false;
-    await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.get(PENDING_JOIN_ID);
-        req.onsuccess = () => {
-            const current = req.result as PendingJoin | undefined;
-            held = !!current?.identity?.privateKey && pendingJoinSent(current)
-                && current.identity.publicKey !== pending.identity.publicKey;
-            if (!held) store.put(pending, PENDING_JOIN_ID);
-        };
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+export async function savePendingJoin(pending: PendingJoin): Promise<PendingJoin> {
+    const out = await withStoredPendingJoin<{ saved: PendingJoin } | { held: PendingJoin }>((current) => {
+        if (isSent(current)) {
+            if (current.identity.publicKey !== pending.identity.publicKey) return { result: { held: current } };
+            const next: PendingJoin = { ...withoutSentMark(pending), sentAt: current.sentAt };
+            if (current.earlierSentAt !== undefined) next.earlierSentAt = current.earlierSentAt;
+            return { write: next, result: { saved: next } };
+        }
+        // Nothing sent is stored: a copy that says sent is kept as it says (the safe way round).
+        return { write: pending, result: { saved: pending } };
     });
-    if (held) throw new PendingJoinHeldError();
+    if ('held' in out) throw new PendingJoinHeldError(out.held);
+    return out.saved;
+}
+
+/**
+ * Mark `pending` sent at `at`, before its join goes. If a join with this key was already out and unsettled (in the
+ * store, or in this copy), that one may still land, and is remembered as `earlierSentAt`. Refused like
+ * savePendingJoin when another key's sent join holds the slot. Returns what was stored.
+ */
+export async function markPendingJoinSent(pending: PendingJoin, at: number = Date.now()): Promise<PendingJoin> {
+    const out = await withStoredPendingJoin<{ saved: PendingJoin } | { held: PendingJoin }>((current) => {
+        if (isSent(current) && current.identity.publicKey !== pending.identity.publicKey) return { result: { held: current } };
+        const earlier = [current && isSent(current) ? lastSentAt(current) : null, pendingJoinSent(pending) ? lastSentAt(pending) : null]
+            .filter((t): t is number => t !== null);
+        const next: PendingJoin = { ...withoutSentMark(pending), sentAt: at };
+        // NaN (a time that cannot be read) wins, so such a join is never judged unable to land.
+        if (earlier.length) next.earlierSentAt = earlier.some(Number.isNaN) ? Number.NaN : Math.max(...earlier);
+        return { write: next, result: { saved: next } };
+    });
+    if ('held' in out) throw new PendingJoinHeldError(out.held);
+    return out.saved;
 }
 
 /**
  * The pending join, or null. An unsent one past its `expiresAt` is dropped on sight and never returned; a sent one
- * is returned whatever its age, for the page to ask the node about.
+ * is returned whatever its age, for the page to ask the node about. The drop is decided on the record as stored in
+ * the same transaction, so a join another tab has just sent is never dropped on this tab's clock.
  */
 export async function loadPendingJoin(now: number = Date.now()): Promise<PendingJoin | null> {
-    const db = await openDb();
-    const pending = await new Promise<PendingJoin | null>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readonly');
-        const req = tx.objectStore(STORE_NAME).get(PENDING_JOIN_ID);
-        req.onsuccess = () => resolve((req.result as PendingJoin | undefined) ?? null);
-        req.onerror = () => reject(req.error);
+    return withStoredPendingJoin<PendingJoin | null>((current) => {
+        if (!current) return { result: null };
+        // No key in it: nothing to lose.
+        if (!current.identity?.privateKey) return { write: 'delete', result: null };
+        if (pendingJoinSent(current)) return { result: current };
+        if (!(typeof current.expiresAt === 'number' && current.expiresAt > now)) return { write: 'delete', result: null };
+        return { result: current };
     });
-    if (!pending) return null;
-    // No key in it: nothing to lose.
-    if (!pending.identity?.privateKey) {
-        await clearPendingJoin();
-        return null;
-    }
-    if (pendingJoinSent(pending)) return pending;
-    if (!(typeof pending.expiresAt === 'number' && pending.expiresAt > now)) {
-        await clearPendingJoin();
-        return null;
-    }
-    return pending;
 }
 
 /**
- * Clear a pending join nobody needs any more, unless a join with its key has gone to the node: that one is kept
- * (pendingJoinSent). For a browser that has just taken another identity.
+ * Clear a pending join nobody needs any more (the member went back past the name, or restored another identity),
+ * unless a join with its key has gone to the node: that one is kept, and returned for the page to settle. With
+ * `publicKey`, only a pending join holding that key is cleared; another key's is left alone. Null when nothing sent
+ * was found.
  */
-export async function clearUnsentPendingJoin(): Promise<void> {
-    const db = await openDb();
-    await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.get(PENDING_JOIN_ID);
-        req.onsuccess = () => {
-            const current = req.result as PendingJoin | undefined;
-            if (current && !(current.identity?.privateKey && pendingJoinSent(current))) store.delete(PENDING_JOIN_ID);
-        };
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
-    });
-}
-
-export async function clearPendingJoin(): Promise<void> {
-    const db = await openDb();
-    await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        tx.objectStore(STORE_NAME).delete(PENDING_JOIN_ID);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+export async function clearUnsentPendingJoin(publicKey?: string): Promise<PendingJoin | null> {
+    return withStoredPendingJoin<PendingJoin | null>((current) => {
+        if (!current) return { result: null };
+        if (publicKey !== undefined && current.identity?.publicKey !== publicKey) return { result: null };
+        if (isSent(current)) return { result: current };
+        return { write: 'delete', result: null };
     });
 }
 
 /**
- * The node said yes: `identity` becomes this browser's identity and the pending join goes, in one transaction, so
- * there is never a moment with both or neither.
+ * The one way a sent pending join is let go: made unsent again after the node's definite refusal and its "not a
+ * member" (then its own clock applies, and clearUnsentPendingJoin may clear it), or deleted when the member abandons
+ * it. Everything is checked against the record as stored, in the same transaction. A refusal releases only:
+ *   - the key the refusal and the probe were both about;
+ *   - when the refused join is the latest one sent with it (another tab may have sent it again since);
+ *   - when the probe was asked after the refusal came back;
+ *   - when no earlier join with the key can still land.
+ * An abandon deletes only the record the member was shown (the same key and sentAt). Anything else changes nothing:
+ * `released` is false and `pending` is what is stored.
+ */
+export async function releaseSentPendingJoin(release: SentJoinRelease): Promise<{ released: boolean; pending: PendingJoin | null }> {
+    return withStoredPendingJoin((current) => {
+        const kept = { result: { released: false, pending: current ?? null } };
+        if (release.kind === 'abandoned') {
+            if (!current) return { result: { released: true, pending: null } };
+            if (current.identity?.publicKey !== release.publicKey) return kept;
+            if (isSent(current) && current.sentAt !== release.sentAt) return kept;
+            return { write: 'delete', result: { released: true, pending: null } };
+        }
+        const { refusal, notMember } = release;
+        if (!isSent(current)) return kept;
+        const key = current.identity.publicKey;
+        const confirmed = refusal.publicKey === key && notMember.publicKey === key
+            && isDefiniteJoinRefusal(refusal.code, refusal.status)
+            && current.sentAt === refusal.sentAt
+            && refusal.answeredAt >= refusal.sentAt
+            && notMember.askedAt >= refusal.answeredAt
+            && (current.earlierSentAt === undefined || notMember.askedAt >= current.earlierSentAt + SENT_JOIN_CAN_LAND_MS);
+        if (!confirmed) return kept;
+        const next = withoutSentMark(current);
+        return { write: next, result: { released: true, pending: next } };
+    });
+}
+
+/**
+ * The node said yes: `identity` becomes this browser's identity and the pending join holding its key goes, in one
+ * transaction, so there is never a moment with both or neither. A pending join holding another key stays.
  */
 export async function completePendingJoin(identity: BeanPoolIdentity): Promise<void> {
     const db = await openDb();
@@ -278,7 +428,11 @@ export async function completePendingJoin(identity: BeanPoolIdentity): Promise<v
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
         store.put(identity, KEY_ID);
-        store.delete(PENDING_JOIN_ID);
+        const req = store.get(PENDING_JOIN_ID);
+        req.onsuccess = () => {
+            const current = req.result as PendingJoin | undefined;
+            if (current && (!current.identity?.privateKey || current.identity.publicKey === identity.publicKey)) store.delete(PENDING_JOIN_ID);
+        };
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
@@ -296,7 +450,8 @@ export async function importIdentity(identity: BeanPoolIdentity): Promise<void> 
 /**
  * Permanently delete the identity (private key included) from IndexedDB.
  * Used by the "Wipe Identity" flow so the key cannot linger in the secure store
- * after the user asks for it to be destroyed. A pending join goes with it: it holds a key and 12 words too.
+ * after the user asks for it to be destroyed. A pending join goes with it, sent or not: it holds a key and 12 words
+ * too, and this is the member's own "delete everything on this device" (the one way past releaseSentPendingJoin).
  */
 export async function wipeIdentity(): Promise<void> {
     const db = await openDb();

@@ -25,9 +25,15 @@
  *
  * Once `POST /api/join` has gone, the node may have the member even if its answer never arrives, and the pending join
  * is then the only copy of that key and its 12 words. So it is marked sent (`sentAt`, identity.ts) before it goes,
- * and from then on only the node's word lets it go: `checkSentJoin` asks whether the key is a member. A member is
- * saved and carries on as any join would; a key the node says is not a member, once the sign-in that join carried can
- * no longer be spent, goes as it did before; no answer, or one this page cannot read, keeps it.
+ * and from then on identity.ts's releaseSentPendingJoin is the only thing that lets it go. What this file gives it:
+ *
+ *   - `joinVerdict`: an answer is definite only when its body parsed and names the outcome (a 2xx with `success`, a
+ *     409 `already_member`, or one of the refusals the door gives before it writes a member, with its own status).
+ *     Anything else (a 2xx or 3xx without `success`, a 409 without a code, a 4xx the door did not word, any 5xx) is
+ *     unknown, as is no answer or a timeout: the page asks the node before anything else.
+ *   - `probeMembership`: the node's own "is this key a member?", signed by the key. Only a 200 saying `isMember` as a
+ *     boolean counts; its "not a member" is the evidence a release needs.
+ *   - `checkSentJoin`: for a join that went out before this page opened, whether it is in, can still land, or cannot.
  *
  * ## The seam for sign-in recovery (G11-c)
  *
@@ -39,7 +45,18 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNodeApiUrl, signedFetchWithKey } from './api';
-import type { BeanPoolIdentity, JoinProvider, PendingJoin } from './identity';
+import {
+    isDefiniteJoinRefusal,
+    lastSentAt,
+    SENT_JOIN_CAN_LAND_MS,
+    type BeanPoolIdentity,
+    type JoinProvider,
+    type NodeRefusedJoin,
+    type NodeSaidNotMember,
+    type PendingJoin,
+} from './identity';
+
+export { SENT_JOIN_CAN_LAND_MS };
 
 /** The sign-ins the browser leaves the page for. GitHub is the node's own device flow. */
 export type RedirectProvider = 'google' | 'apple' | 'facebook';
@@ -314,20 +331,33 @@ export function parseRetryAfter(value: string | null): number | null {
     return Number.isFinite(at) ? Math.max(0, Math.ceil((at - Date.now()) / 1000)) : null;
 }
 
+/**
+ * How long a door request may take, its body included, before the page stops waiting. Past it the request is
+ * aborted: no answer (DoorUnreachableError), or, when the headers came and the body stopped, an answer with no body.
+ * Either way nothing is read into it, and a join is asked about (joinVerdict). The node gives a provider 10 s.
+ */
+export const DOOR_TIMEOUT_MS = 45_000;
+
 /** A door call signed by the joining key (never the stored identity: there is none yet). */
 async function door(method: string, path: string, body: unknown, identity: BeanPoolIdentity): Promise<DoorAnswer> {
-    let res: Response;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new DOMException('The community took too long to answer.', 'TimeoutError')), DOOR_TIMEOUT_MS);
     try {
-        res = await signedFetchWithKey(method, path, body, identity.privateKey, identity.publicKey);
-    } catch (e) {
-        throw new DoorUnreachableError(e);
+        let res: Response;
+        try {
+            res = await signedFetchWithKey(method, path, body, identity.privateKey, identity.publicKey, controller.signal);
+        } catch (e) {
+            throw new DoorUnreachableError(e);
+        }
+        const parsed = await res.json().catch(() => null);
+        return {
+            status: res.status,
+            body: parsed && typeof parsed === 'object' ? parsed : {},
+            retryAfterSeconds: parseRetryAfter(res.headers.get('Retry-After')),
+        };
+    } finally {
+        clearTimeout(timer);
     }
-    const parsed = await res.json().catch(() => null);
-    return {
-        status: res.status,
-        body: parsed && typeof parsed === 'object' ? parsed : {},
-        retryAfterSeconds: parseRetryAfter(res.headers.get('Retry-After')),
-    };
 }
 
 /** The node's answer to a nonce request (`POST /api/join/sso-nonce`). */
@@ -524,42 +554,49 @@ export async function checkMembershipWithKey(identity: BeanPoolIdentity): Promis
     };
 }
 
-/** The node's sign-in nonce life (apps/server/src/sso.ts NONCE_TTL_MS). */
-const NODE_NONCE_LIFE_MS = 10 * 60 * 1000;
+/** The node's answer to "is this key a member?" (probeMembership). */
+export type MembershipProbe =
+    | { kind: 'member'; callsign: string | null }
+    /** It said no: the evidence identity.ts releaseSentPendingJoin needs, with when it was asked. */
+    | { kind: 'not_member'; answer: NodeSaidNotMember }
+    /** No answer, or not one this page can read: nothing is known. */
+    | { kind: 'unknown' };
 
-/**
- * How long after a join went out it can still land. The node writes the member only as it spends the sign-in the
- * join carried, and it spends none older than its nonce life. The nonce was issued before the join went, and a
- * GitHub result lives as long from before it (engine/github-device.ts), so ten minutes after `sentAt` nothing that
- * join carried can be spent. A minute more, for good measure.
- */
-export const SENT_JOIN_CAN_LAND_MS = NODE_NONCE_LIFE_MS + 60 * 1000;
+/** Ask the node, signed by the key itself, whether it is a member. Never throws. */
+export async function probeMembership(identity: BeanPoolIdentity): Promise<MembershipProbe> {
+    // Taken before asking: the node answers later than this, so every window is judged on the safe side.
+    const askedAt = Date.now();
+    try {
+        const m = await checkMembershipWithKey(identity);
+        return m.isMember
+            ? { kind: 'member', callsign: m.callsign }
+            : { kind: 'not_member', answer: { publicKey: identity.publicKey, askedAt } };
+    } catch (e) {
+        if (!(e instanceof DoorUnreachableError)) console.error('[WebJoin] membership check failed:', e);
+        return { kind: 'unknown' };
+    }
+}
 
 /** What the node says about a pending join that went out (checkSentJoin). */
 export type SentJoinCheck =
     /** The key is a member: the join landed. */
     | { kind: 'member'; callsign: string | null }
-    /** Not a member, and the join it sent can no longer land: it may go. */
+    /**
+     * Not a member, and no join it sent can land any more. The key is still kept: only a definite refusal of a new
+     * join, or the member choosing to let it go, releases it (identity.ts releaseSentPendingJoin).
+     */
     | { kind: 'not_member' }
-    /** Not a member yet, but the join it sent could still land: keep the key. */
+    /** Not a member yet, but a join it sent could still land: keep the key. */
     | { kind: 'may_still_land' }
     /** No answer, or not one this page can read: keep the key. */
     | { kind: 'unknown' };
 
-/** Ask the node whether a sent pending join's key is a member, and so whether the pending join may go. */
+/** Ask the node whether a sent pending join's key is a member, and whether a join it sent could still land. */
 export async function checkSentJoin(p: PendingJoin): Promise<SentJoinCheck> {
-    // Taken before asking: the node answers later than this, so "past the window" is judged on the safe side.
-    const askedAt = Date.now();
-    let m: { isMember: boolean; callsign: string | null };
-    try {
-        m = await checkMembershipWithKey(p.identity);
-    } catch (e) {
-        if (!(e instanceof DoorUnreachableError)) console.error('[WebJoin] membership check failed:', e);
-        return { kind: 'unknown' };
-    }
-    if (m.isMember) return { kind: 'member', callsign: m.callsign };
-    const sentAt = p.sentAt;
-    return typeof sentAt === 'number' && Number.isFinite(sentAt) && askedAt >= sentAt + SENT_JOIN_CAN_LAND_MS
+    const probe = await probeMembership(p.identity);
+    if (probe.kind !== 'not_member') return probe;
+    const sentAt = lastSentAt(p);
+    return Number.isFinite(sentAt) && probe.answer.askedAt >= sentAt + SENT_JOIN_CAN_LAND_MS
         ? { kind: 'not_member' }
         : { kind: 'may_still_land' };
 }
@@ -596,6 +633,43 @@ export function doorOutcome(answer: DoorAnswer, provider: JoinProvider): DoorOut
     if (status === 503) return { kind: 'unavailable', message: said ?? `${providerLabel(provider)} sign-in could not be checked right now. Please try again in a minute.` };
     if (status === 404) return { kind: 'door_closed', message: DOOR_CLOSED };
     return { kind: 'refused', message: said ?? `The community could not add you (${status}). Please try again.` };
+}
+
+/**
+ * What an answer to `POST /api/join` says for sure (see the file's head).
+ *   - `joined` / `already_member`: the node has the member.
+ *   - `refused`: a refusal the door gives before it writes a member, parsed with its own status. It is the evidence
+ *     identity.ts releaseSentPendingJoin needs, together with the node's "not a member" asked afterwards.
+ *   - `unknown`: nothing sure. `outcome` is what to show once the node has been asked and has not said "member": by
+ *     status for a 4xx (not 409) or a 5xx, and null (the "we can't tell" screen) for the rest.
+ */
+export type JoinVerdict =
+    | { kind: 'joined'; callsign: string | null; recovery: { enrolled?: boolean } | null }
+    | { kind: 'already_member' }
+    | { kind: 'refused'; refusal: NodeRefusedJoin; outcome: DoorOutcome }
+    | { kind: 'unknown'; outcome: DoorOutcome | null };
+
+export function joinVerdict(
+    answer: DoorAnswer,
+    sent: { identity: BeanPoolIdentity; sentAt?: number },
+    provider: JoinProvider,
+    answeredAt: number = Date.now(),
+): JoinVerdict {
+    const { status, body } = answer;
+    if (status >= 200 && status < 300 && body.success === true) {
+        const callsign = typeof body.member?.callsign === 'string' && body.member.callsign ? body.member.callsign : null;
+        const recovery = body.recovery && typeof body.recovery === 'object' ? body.recovery : null;
+        return { kind: 'joined', callsign, recovery };
+    }
+    if (status === 409 && body.code === 'already_member') return { kind: 'already_member' };
+    if (isDefiniteJoinRefusal(body.code, status) && typeof sent.sentAt === 'number') {
+        return {
+            kind: 'refused',
+            refusal: { publicKey: sent.identity.publicKey, sentAt: sent.sentAt, answeredAt, status, code: body.code },
+            outcome: doorOutcome(answer, provider),
+        };
+    }
+    return { kind: 'unknown', outcome: status >= 400 && status < 600 && status !== 409 ? doorOutcome(answer, provider) : null };
 }
 
 /** The same judgement for a refused nonce request or GitHub start, before any sign-in. */

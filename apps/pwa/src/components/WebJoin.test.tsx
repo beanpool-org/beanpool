@@ -226,7 +226,11 @@ describe('screen 4: the return, and each door answer → its screen', () => {
 
     it('409 already_joined: the restore buttons, and the new key is thrown away', async () => {
         await seedPending();
-        stubNode({ '/api/join': () => json(409, { code: 'already_joined', error: 'node text' }) });
+        stubNode({
+            '/api/join': () => json(409, { code: 'already_joined', error: 'node text' }),
+            // Asked before the key goes (review round 2): a refusal alone never lets a sent key go.
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
+        });
         const { onRestore, onJoined } = renderJoin({ authReturn: googleReturn() });
         expect(await screen.findByTestId('join-already-joined')).toHaveTextContent('This Google account already has a BeanPool identity here. Restore it instead.');
         fireEvent.click(screen.getByTestId('join-restore-words'));
@@ -288,6 +292,8 @@ describe('screen 4: the return, and each door answer → its screen', () => {
             '/api/join': () => (++n === 1
                 ? json(503, { code: 'sign_in_unavailable', error: 'Google sign-in could not be checked right now. Please try again in a minute.' })
                 : json(200, { success: true, member: { callsign: 'Alice' } })),
+            // Try again asks the node first (review 4106400810); not a member, so the same sign-in goes again.
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
         });
         const { onJoined } = renderJoin({ authReturn: googleReturn() });
         expect(await screen.findByTestId('join-unavailable')).toHaveTextContent('Google sign-in could not be checked right now.');
@@ -541,16 +547,21 @@ describe('a join that went out is never dropped until the node says its key is n
         }
     });
 
-    it('the node says not a member, once that join can no longer land: dropped as before, and the lobby', async () => {
+    // Changed in review round 2: this used to drop the key here, on "not a member" and this browser's clock alone.
+    // Only a definite refusal of a join (with "not a member" after it) or the member's own choice lets it go now.
+    it('the node says not a member, once that join can no longer land: still kept, and signing in again goes on with the same key', async () => {
         const t0 = Date.now();
         await seedPending({ nonce: null, startedAt: t0 - 4 * MIN, expiresAt: t0 + 6 * MIN, sentAt: t0 });
         vi.spyOn(Date, 'now').mockReturnValue(t0 + 12 * MIN);
-        const node = stubNode({ '/api/community/membership/': () => json(200, { isMember: false, callsign: null }) });
+        const node = stubNode({
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
+            '/api/join/sso-nonce': () => nonceAnswer('fresh'),
+        });
         const { onJoined } = renderJoin();
-        await screen.findByTestId('join-screen-lobby');
-        expect(peekPending()).toBeUndefined();
-        expect(await loadPendingJoin()).toBeNull();
-        // Dropped on the node's word, not the clock's.
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent("Your join didn't reach the community. Sign in again to finish.");
+        expect(screen.getByTestId('join-as')).toHaveTextContent('Alice');
+        await screen.findByTestId('join-provider-google');
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey, mnemonic: identity.mnemonic }, sentAt: t0 });
         expect(node.calls.some((c) => c.path === `/api/community/membership/${identity.publicKey}`)).toBe(true);
         expect(onJoined).not.toHaveBeenCalled();
     });
@@ -661,7 +672,9 @@ describe('a join that went out is never dropped until the node says its key is n
         expect(peekPending()).toBeUndefined();
     });
 
-    it('a key restored here while a sent join waits: the sent join is not replaced until the node has said its key is not a member', async () => {
+    // Changed in review round 2: "not a member" past the window used to hand the slot to the restored key by itself.
+    // Now the member is shown what letting it go means and chooses to (review 4106401183), and only then does it go.
+    it('a key restored here while a sent join waits: the sent join is not replaced until the node has said its key is not a member and the member lets it go', async () => {
         const t0 = Date.now();
         await seedPending({ nonce: null, startedAt: t0 - 30 * MIN, expiresAt: t0 - 20 * MIN, sentAt: t0 - 25 * MIN });
         const other = await generateIdentity('Phoebe');
@@ -676,6 +689,10 @@ describe('a join that went out is never dropped until the node says its key is n
 
         reachable = true;
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await screen.findByTestId('join-screen-held');
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: t0 - 25 * MIN });
+        fireEvent.click(screen.getByRole('button', { name: 'Use Phoebe instead' }));
+        fireEvent.click(await screen.findByTestId('join-abandon-confirm'));
         await screen.findByTestId('join-provider-google');
         expect(screen.getByTestId('join-as')).toHaveTextContent('Phoebe');
         expect(peekPending()).toMatchObject({ restored: true, identity: { publicKey: other.publicKey } });
@@ -696,17 +713,30 @@ describe('a join that went out is never dropped until the node says its key is n
         expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: expect.any(Number) });
     });
 
-    it('an outright refusal (403) means that join did not land: the key is unsent again, on its own clock', async () => {
+    it('an outright refusal (403) means that join did not land: once the node says not a member, the key is unsent again, on its own clock', async () => {
         await seedPending();
         stubNode({
             '/api/join/sso-nonce': () => nonceAnswer(),
             '/api/join': () => json(403, { code: 'removed', error: 'was removed from this community' }),
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
         });
         renderJoin({ authReturn: googleReturn() });
         await screen.findByTestId('join-screen-providers');
         await waitFor(() => expect(peekPending()?.nonce).toBeNull());
         expect(peekPending()?.identity.publicKey).toBe(identity.publicKey);
         expect(peekPending()?.sentAt).toBeUndefined();
+    });
+
+    it('the same refusal while the node cannot be asked: the key stays marked sent', async () => {
+        await seedPending();
+        stubNode({
+            '/api/join/sso-nonce': () => nonceAnswer(),
+            '/api/join': () => json(403, { code: 'removed', error: 'was removed from this community' }),
+            '/api/community/membership/': unreachable,
+        });
+        renderJoin({ authReturn: googleReturn() });
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent('was removed from this community');
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: expect.any(Number) });
     });
 
     it('a gateway 5xx may come after the node took the member: the key stays marked sent', async () => {

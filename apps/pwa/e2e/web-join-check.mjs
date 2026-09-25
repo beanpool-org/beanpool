@@ -9,6 +9,8 @@
  *     with a redirect to /app/auth/<provider> carrying a fixture token (Apple: a form POST to the return URL, answered
  *     303 as the node's apple-return route does), and a reload on the way through
  *   - the rate-limit and expired-sign-in paths, 409 already_joined → the restore buttons
+ *   - a 200 whose body is cut off (asked about, never read as a refusal), and a key restored while a sent join holds
+ *     the slot: its own screen with the time left and a way back, and letting that join go only when the member says
  * and fails on any horizontal scroll, any policy violation, a token left in the address bar, or a join the stub node
  * did not expect (wrong key, wrong nonce, an access token sent).
  *
@@ -160,6 +162,8 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
             const r = await join(body, key, seen);
             if (r.status === 200) seen.members.add(key);
             if (r.hang) return; // never answered: the page is reloaded under it
+            // A body cut off on the way back: the node's headers arrive, its JSON does not.
+            if (r.rawBody !== undefined) return route.fulfill({ status: r.status, contentType: 'application/json', body: r.rawBody });
             return reply(r.status, r.body);
         }
         if (p.startsWith('/api/community/membership/')) {
@@ -216,6 +220,23 @@ async function pendingKey(page) {
     }));
 }
 
+/** The pending join as stored (its key and 12 words included: this is a test page with a fixture key). */
+async function pendingJoin(page) {
+    return page.evaluate(() => new Promise((resolve, reject) => {
+        const open = indexedDB.open('beanpool-identity', 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('keys');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const req = open.result.transaction('keys', 'readonly').objectStore('keys').get('pending-join');
+            req.onsuccess = () => resolve(req.result ?? null);
+            req.onerror = () => reject(req.error);
+        };
+    }));
+}
+
+/** Twelve words from the BIP-39 list, for a key restored at the door. A fixture: no account anywhere holds them. */
+const RESTORED_WORDS = 'abandon ability able about above absent absorb abstract absurd abuse access accident';
+
 /** Move the pending join `minutes` into the past, as if the tab had been closed that long ago. */
 async function agePendingJoin(page, minutes) {
     return page.evaluate((ms) => new Promise((resolve, reject) => {
@@ -228,7 +249,7 @@ async function agePendingJoin(page, minutes) {
             req.onsuccess = () => {
                 const p = req.result;
                 if (!p) return;
-                for (const k of ['startedAt', 'expiresAt', 'sentAt']) if (typeof p[k] === 'number') p[k] -= ms;
+                for (const k of ['startedAt', 'expiresAt', 'sentAt', 'earlierSentAt']) if (typeof p[k] === 'number') p[k] -= ms;
                 store.put(p, 'pending-join');
             };
             tx.oncomplete = () => resolve(req.result ?? null);
@@ -441,6 +462,84 @@ const SCENARIOS = [
         join: joinOk(),
         // First poll pending (the code is being typed), then ok.
         github: (() => { let n = 0; return () => (++n === 1 ? { status: 200, body: { status: 'pending', intervalSeconds: 1 } } : { status: 200, body: { status: 'ok', sub: 'github-sub-1' } }); })(),
+    },
+    {
+        name: 'a 200 whose body is cut off: the key stays marked sent, the page says it cannot tell, and asking the node lets the member in',
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Alice');
+            const key = await pendingKey(page);
+            seen.membershipDown = true;
+            await page.getByTestId('join-provider-google').click();
+            await page.getByText("We can't tell if that worked, and you're not in yet.", { exact: false }).waitFor({ timeout: 20_000 });
+            await screenIs(page, 'unknown', 'a 200 with its body cut off');
+            if (/could not add you/.test(await page.locator('body').innerText())) throw new Failure('a cut-off 200 was read as a refusal');
+            const kept = await pendingJoin(page);
+            if (kept?.identity?.publicKey !== key || typeof kept.sentAt !== 'number') throw new Failure('the key the node took is no longer marked sent');
+            await noSideScroll(page, 'cannot tell');
+            await shot(page, view, 'cannot-tell');
+            seen.membershipDown = false;
+            await page.getByRole('button', { name: 'Try again' }).click();
+            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            if ((await storedIdentityKey(page)) !== key) throw new Failure('the identity is not the key that joined');
+            if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
+        },
+        // The node takes the member; its answer is cut off after the headers.
+        join: async () => ({ status: 200, rawBody: '{"success":tr' }),
+    },
+    {
+        name: 'a key restored while a sent join may still land: its own screen, the time left, a way back; let go only when the member says',
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Alice');
+            const first = await pendingKey(page);
+            await page.getByTestId('join-provider-google').click();
+            await page.getByTestId('join-joining').waitFor({ timeout: 20_000 });
+            // The join never answers, and the node has not taken it (yet). The page is reloaded under it.
+            await page.reload({ waitUntil: 'load' });
+            await page.getByText("Your join hasn't reached the community yet.", { exact: false }).waitFor({ timeout: 20_000 });
+            await page.getByRole('button', { name: '← Change name' }).click();
+            await page.getByRole('button', { name: '← Back' }).click();
+            await screenIs(page, 'guard', 'back past the name with a sent join');
+            if ((await pendingKey(page)) !== first) throw new Failure('going back dropped a sent join');
+
+            const restore = async () => {
+                await page.getByLabel('Recovery word 1', { exact: true }).fill(RESTORED_WORDS);
+                await page.getByRole('button', { name: 'Recover Identity' }).click();
+            };
+            await page.getByRole('button', { name: 'I have my 12 words' }).click();
+            await restore();
+            await screenIs(page, 'held', 'restored while the sent join may still land');
+            const text = await page.getByTestId('join-held').innerText();
+            if (!/may still go through/.test(text) || !/about \d+ minutes?/.test(text)) throw new Failure(`the held screen says "${text}"`);
+            await page.getByRole('button', { name: 'Check again' }).waitFor();
+            await page.getByRole('button', { name: 'Finish joining as Alice' }).waitFor();
+            await noSideScroll(page, 'held');
+            await shot(page, view, 'held');
+            await page.getByRole('button', { name: '← Back' }).click();
+            await screenIs(page, 'lobby', '← Back from the held screen');
+            if ((await pendingKey(page)) !== first) throw new Failure('the held screen dropped the sent join');
+
+            // Half an hour on, that join can no longer land and the node says it is not a member.
+            await agePendingJoin(page, 30);
+            await page.getByRole('button', { name: 'Already have BeanPool?' }).click();
+            await page.getByRole('button', { name: 'Use my 12 words' }).click();
+            await restore();
+            await screenIs(page, 'held', 'restored after that join could no longer land');
+            await page.getByText("isn't a member", { exact: false }).waitFor();
+            await page.getByRole('button', { name: 'Use the account I brought here' }).click();
+            await screenIs(page, 'abandon', 'asked before letting go');
+            await noSideScroll(page, 'abandon');
+            await shot(page, view, 'abandon');
+            if ((await pendingKey(page)) !== first) throw new Failure('the sent join went before the member said so');
+            await page.getByTestId('join-abandon-confirm').click();
+            // The 12 words carry no name: the door asks for one, for the restored key.
+            await screenIs(page, 'name', 'after letting go');
+            const now = await pendingJoin(page);
+            if (!now || now.identity.publicKey === first || !now.restored || typeof now.sentAt === 'number') {
+                throw new Failure(`after letting go the pending join is ${JSON.stringify(now && { key: now.identity.publicKey, restored: now.restored, sentAt: now.sentAt })}`);
+            }
+            if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
+        },
+        join: async () => ({ hang: true }),
     },
     {
         name: "rate limited: the node's sentence, and the same key kept for later",

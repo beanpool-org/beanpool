@@ -10,33 +10,38 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    clearPendingJoin,
+    clearUnsentPendingJoin,
     completePendingJoin,
     generateIdentity,
+    lastSentAt,
     loadPendingJoin,
+    markPendingJoinSent,
     pendingJoinSent,
+    releaseSentPendingJoin,
     savePendingJoin,
     PendingJoinHeldError,
     PENDING_JOIN_RATE_LIMITED_TTL_MS,
     PENDING_JOIN_TTL_MS,
+    SENT_JOIN_CAN_LAND_MS,
     type BeanPoolIdentity,
     type JoinProvider,
+    type NodeRefusedJoin,
     type PendingJoin,
 } from '../lib/identity';
 import {
     browserCanHoldKey,
     captureAuthReturn,
     checkCallsign,
-    checkMembershipWithKey,
     checkSentJoin,
     consumeCapturedAuthReturn,
-    doorOutcome,
     doorRefusalMessage,
     DoorUnreachableError,
     joinBody,
+    joinVerdict,
     matchAuthReturn,
     offeredProviders,
     pollGithubJoin,
+    probeMembership,
     providerAuthUrl,
     providerLabel,
     refusalMessage,
@@ -92,6 +97,13 @@ type Screen =
     | { name: 'joining' }
     | { name: 'unknown'; checking: boolean }
     | { name: 'checking'; checking: boolean }
+    /**
+     * A key restored here while a sent join holds the one pending slot: `canLand`, that join may still go through
+     * (until `until`); otherwise the node says it is not a member and it can no longer land, and the member may let it
+     * go ('abandon') for the restored key.
+     */
+    | { name: 'held'; canLand: boolean; until: number }
+    | { name: 'abandon'; until: number }
     | { name: 'unavailable'; message: string }
     | { name: 'already_joined'; message: string };
 
@@ -101,17 +113,6 @@ const UNREACHABLE = "Can't reach the community right now. Try again in a minute.
 /** A nonce lives ten minutes on the node; one older than this is fetched again before it is sent to a provider. */
 const NONCE_FRESH_MS = 5 * 60 * 1000;
 const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
-
-/**
- * The node refused a join outright: a 4xx, which it answers before it writes a member. That join did not land, so
- * the key is an unsent one again and the pending join's own clock applies. A 5xx keeps it sent: a gateway can answer
- * 5xx after the node has taken the member.
- */
-function unsent(p: PendingJoin): PendingJoin {
-    const next = { ...p };
-    delete next.sentAt;
-    return next;
-}
 
 /** A key restored just now, as a pending join of its own. */
 function restoredPending(r: BeanPoolIdentity): PendingJoin {
@@ -169,7 +170,11 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
     // The last join sent, kept in memory only: a 503 is retried with the same sign-in (the node did not spend it).
     const lastJoin = useRef<{ pending: PendingJoin; proof: SignInProof } | null>(null);
     const mounted = useRef(true);
-    useEffect(() => () => { mounted.current = false; }, []);
+    // Set on every mount: React's StrictMode (main.tsx) runs this effect, its cleanup, and the effect again.
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
     // Held in a ref so every callback below stays the same function for the life of the screens: a parent re-render
     // must not restart the GitHub wait or ask for another nonce.
     const onJoinedRef = useRef(onJoined);
@@ -190,7 +195,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
             // told "a member". One that was not marked yet (a restored key the nonce request found a member) is
             // marked now, if this browser can still write at all.
             console.error('[WebJoin] joined, but the identity could not be saved:', e);
-            if (!pendingJoinSent(p)) await savePendingJoin({ ...p, sentAt: Date.now() }).catch(() => {});
+            if (!pendingJoinSent(p)) await markPendingJoinSent(p).catch(() => {});
             setNotice({ tone: 'error', text: "You're in, but this browser couldn't save your account. Reload the page to finish." });
             setScreen({ name: 'lobby' });
             return;
@@ -214,67 +219,94 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
     // Declared before use through a ref, because an expired sign-in retries itself through the same path a tap takes.
     const signInRef = useRef<(p: PendingJoin, provider: JoinProvider, fresh?: JoinNonce | null) => Promise<void>>(async () => {});
 
-    const handleOutcome = useCallback(async (outcome: DoorOutcome, p: PendingJoin, proof: SignInProof, status: number) => {
+    /**
+     * Keep `p` and show it. identity.ts keeps a sent mark it finds stored for this key, whatever `p` says, and this
+     * page shows what was stored.
+     */
+    const keep = useCallback(async (p: PendingJoin): Promise<PendingJoin> => {
+        const stored = await savePendingJoin(p);
+        setPending(stored);
+        return stored;
+    }, []);
+
+    /**
+     * What the member sees after an answer that did not let them in. `p` is the pending join as it now stands: unsent
+     * only when the node has confirmed it (settleAnswer), and otherwise still sent. Nothing here can change that:
+     * `keep` keeps a stored mark, and clearUnsentPendingJoin never deletes a sent pending join.
+     */
+    const showOutcome = useCallback(async (outcome: DoorOutcome, p: PendingJoin, proof: SignInProof) => {
         switch (outcome.kind) {
             case 'joined':
-                return finish(p, outcome.callsign, outcome.recovery);
             case 'already_member':
-                return finish(p, null, null);
-            case 'already_joined':
+                // joinVerdict takes these as a yes before they get here.
+                setScreen({ name: 'unknown', checking: false });
+                return;
+            case 'already_joined': {
                 // One sign-in account, one identity: this key is not needed, and must not linger as a second one. The
                 // node answers this only for a key that is not a member (a member's gets already_member).
-                await clearPendingJoin();
-                setPending(null);
+                const kept = await clearUnsentPendingJoin(p.identity.publicKey);
+                setPending(kept);
                 setScreen({ name: 'already_joined', message: outcome.message });
                 return;
+            }
             case 'expired': {
                 if (!p.retriedExpired) {
                     // Once, by itself, with a fresh nonce: most often somebody took longer than ten minutes.
-                    const next = { ...unsent(p), retriedExpired: true };
-                    await savePendingJoin(next);
+                    const next = await keep({ ...p, retriedExpired: true });
                     setNotice({ tone: 'info', text: outcome.message });
                     return signInRef.current(next, proof.provider, null);
                 }
-                const next = { ...unsent(p), nonce: null };
-                await savePendingJoin(next);
+                const next = await keep({ ...p, nonce: null });
                 return toProviders(next, { tone: 'error', text: outcome.message });
             }
             case 'rate_limited': {
                 // Kept for an hour, so trying again later uses this key rather than making a second one.
-                const next = { ...unsent(p), nonce: null, expiresAt: Date.now() + PENDING_JOIN_RATE_LIMITED_TTL_MS };
-                await savePendingJoin(next);
+                const next = await keep({ ...p, nonce: null, expiresAt: Date.now() + PENDING_JOIN_RATE_LIMITED_TTL_MS });
                 return toProviders(next, { tone: 'error', text: outcome.message });
             }
             case 'unavailable':
+                setPending(p);
                 setScreen({ name: 'unavailable', message: outcome.message });
                 return;
-            case 'door_closed':
-                await clearPendingJoin();
-                setPending(null);
+            case 'door_closed': {
+                const kept = await clearUnsentPendingJoin(p.identity.publicKey);
+                setPending(kept);
                 setNotice({ tone: 'error', text: outcome.message });
                 setScreen({ name: 'lobby' });
                 return;
+            }
             case 'refused': {
-                const next = { ...(status < 500 ? unsent(p) : p), nonce: null };
-                await savePendingJoin(next);
+                const next = await keep({ ...p, nonce: null });
                 return toProviders(next, { tone: 'error', text: outcome.message });
             }
         }
-    }, [finish, toProviders]);
+    }, [keep, toProviders]);
 
-    /** "We can't tell if that worked": ask whether this key is a member now, and never claim it is when it is not. */
-    const settleUnknown = useCallback(async (p: PendingJoin, proof: SignInProof) => {
-        setScreen({ name: 'unknown', checking: true });
-        try {
-            const m = await checkMembershipWithKey(p.identity);
-            if (m.isMember) return finish(p, m.callsign, null);
-            lastJoin.current = { pending: p, proof };
-            setScreen({ name: 'unknown', checking: false });
-        } catch {
-            lastJoin.current = { pending: p, proof };
-            setScreen({ name: 'unknown', checking: false });
+    /**
+     * Any answer but a yes: the node is asked, signed by this key, before anything else happens to it (a 5xx, a lost
+     * or garbled answer, or a refusal from something in front of the node can all come after it took the member). A
+     * member is in. Otherwise the key keeps its sent mark unless the door refused this join definitely (`refusal`) and
+     * the node now says the key is not a member: releaseSentPendingJoin checks both against what is stored.
+     */
+    const settleAnswer = useCallback(async (p: PendingJoin, proof: SignInProof, refusal: NodeRefusedJoin | null, outcome: DoorOutcome | null) => {
+        lastJoin.current = { pending: p, proof };
+        setScreen(refusal ? { name: 'joining' } : { name: 'unknown', checking: true });
+        const probe = await probeMembership(p.identity);
+        if (probe.kind === 'member') return finish(p, probe.callsign, null);
+        let now = p;
+        if (refusal && probe.kind === 'not_member') {
+            const r = await releaseSentPendingJoin({ kind: 'refused', refusal, notMember: probe.answer });
+            if (r.pending?.identity.publicKey === p.identity.publicKey) now = r.pending;
         }
-    }, [finish]);
+        lastJoin.current = { pending: now, proof };
+        if (!mounted.current) return;
+        if (!outcome) {
+            setPending(now);
+            setScreen({ name: 'unknown', checking: false });
+            return;
+        }
+        return showOutcome(outcome, now, proof);
+    }, [finish, showOutcome]);
 
     const submit = useCallback(async (p: PendingJoin, proof: SignInProof) => {
         setNotice(null);
@@ -282,12 +314,17 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
         // Marked sent BEFORE it goes, and not sent if that cannot be written: once the node has the join, the answer
         // can be lost, and this record may be the only copy of a member's key. The nonce is on its way to the node;
         // the page never offers it again.
-        const sent: PendingJoin = { ...p, nonce: null, sentAt: Date.now() };
+        let sent: PendingJoin;
         try {
-            await savePendingJoin(sent);
+            sent = await markPendingJoinSent({ ...p, nonce: null });
         } catch (e) {
             console.error('[WebJoin] the join could not be marked sent, so it was not sent:', e);
-            return toProviders(p, { tone: 'error', text: "This browser couldn't save your account, so nothing was sent. Try again, or try another browser." });
+            return toProviders(p, {
+                tone: 'error',
+                text: e instanceof PendingJoinHeldError
+                    ? 'An earlier join from this browser is still being checked. Reload the page to finish it.'
+                    : "This browser couldn't save your account, so nothing was sent. Try again, or try another browser.",
+            });
         }
         setPending(sent);
         lastJoin.current = { pending: sent, proof };
@@ -297,11 +334,17 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
         try {
             answer = await submitJoin(sent.identity, body);
         } catch (e) {
-            if (e instanceof DoorUnreachableError) return settleUnknown(sent, proof);
+            if (e instanceof DoorUnreachableError) return settleAnswer(sent, proof, null, null);
             throw e;
         }
-        return handleOutcome(doorOutcome(answer, proof.provider), sent, proof, answer.status);
-    }, [handleOutcome, settleUnknown, toProviders]);
+        const verdict = joinVerdict(answer, sent, proof.provider);
+        switch (verdict.kind) {
+            case 'joined': return finish(sent, verdict.callsign, verdict.recovery);
+            case 'already_member': return finish(sent, null, null);
+            case 'refused': return settleAnswer(sent, proof, verdict.refusal, verdict.outcome);
+            case 'unknown': return settleAnswer(sent, proof, null, verdict.outcome);
+        }
+    }, [finish, settleAnswer, toProviders]);
 
     /** Carry on with this pending join's key and name: the sign-in, or the name first when it has none. */
     const resume = useCallback((p: PendingJoin, n: Notice = null) => {
@@ -314,9 +357,9 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
     /**
      * A join that went out before this page opened: only the node's word decides what becomes of its key (the
      * answer may have been lost after the node took the member). A member is in, and gets every step a new member
-     * gets. A key the node says is not a member, once that join can no longer land, is an unsent one again: dropped
-     * if its time is up, as always, or making room for a key restored just now. A join that could still land keeps
-     * its key, and signing in again carries on with it. No answer keeps it and says so, with Try again.
+     * gets. Otherwise the key is kept, still marked sent, and signing in again carries on with it: a definite refusal
+     * of that new join is what can let it go. A key restored just now cannot take the one pending slot from it: the
+     * 'held' screen says whether it may still land, and once it cannot, lets the member choose to let it go.
      */
     const settleSent = useCallback(async (p: PendingJoin) => {
         setPending(p);
@@ -329,27 +372,18 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
         switch (check.kind) {
             case 'member':
                 return finish(p, check.callsign, null);
-            case 'not_member': {
-                if (replacing) {
-                    await clearPendingJoin();
-                    const next = restoredPending(replacing);
-                    await savePendingJoin(next);
-                    return resume(next);
-                }
-                const next = unsent(p);
-                if (next.expiresAt > Date.now()) {
-                    await savePendingJoin(next);
-                    return resume(next);
-                }
-                await clearPendingJoin();
-                setPending(null);
-                setScreen({ name: 'lobby' });
-                return;
-            }
+            case 'not_member':
             case 'may_still_land':
-                // A key restored just now cannot take the one pending slot from a join that may yet land.
-                if (replacing) return setScreen({ name: 'checking', checking: false });
-                return resume(p, { tone: 'info', text: "Your join hasn't reached the community yet. Sign in again to finish." });
+                if (replacing) {
+                    setScreen({ name: 'held', canLand: check.kind === 'may_still_land', until: lastSentAt(p) + SENT_JOIN_CAN_LAND_MS });
+                    return;
+                }
+                return resume(p, {
+                    tone: 'info',
+                    text: check.kind === 'may_still_land'
+                        ? "Your join hasn't reached the community yet. Sign in again to finish."
+                        : "Your join didn't reach the community. Sign in again to finish.",
+                });
             case 'unknown':
                 setScreen({ name: 'checking', checking: false });
                 return;
@@ -395,9 +429,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
                     return toProviders(p, { tone: 'error', text: UNREACHABLE });
                 }
                 if ('answer' in got) return toProviders(p, { tone: 'error', text: doorRefusalMessage(got.answer) });
-                const next: PendingJoin = { ...p, provider: 'github', nonce: null };
-                await savePendingJoin(next);
-                setPending(next);
+                await keep({ ...p, provider: 'github', nonce: null });
                 setCopied(false);
                 setScreen({ name: 'github', start: got.start });
                 return;
@@ -425,7 +457,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
         } finally {
             if (mounted.current) setBusy(false);
         }
-    }, [nonceHeld, fetchNonce, toProviders, go, here]);
+    }, [nonceHeld, fetchNonce, toProviders, keep, go, here]);
     signInRef.current = signIn;
 
     // ---------- where the page starts ----------
@@ -463,8 +495,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
             if (p && pendingJoinSent(p)) return settleSent(p);
             if (restored && p?.identity.publicKey !== restored.publicKey) {
                 // A key restored just now wins over an older join left pending here that never went out.
-                p = restoredPending(restored);
-                await savePendingJoin(p);
+                p = await savePendingJoin(restoredPending(restored));
                 if (cancelled) return;
             }
             if (p) {
@@ -474,6 +505,11 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
             }
             setScreen({ name: 'lobby' });
         })().catch((e) => {
+            // Another tab sent a join with another key while this one was starting: that one is settled first.
+            if (e instanceof PendingJoinHeldError) {
+                if (!cancelled) void settleSent(e.held);
+                return;
+            }
             console.error('[WebJoin] could not start:', e);
             if (!cancelled) {
                 setNotice({ tone: 'error', text: 'Something went wrong on this page. Reload it to try again.' });
@@ -538,17 +574,16 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
             const next: PendingJoin = pending
                 ? { ...pending, identity }
                 : { identity, provider: null, nonce: null, startedAt: now, expiresAt: now + PENDING_JOIN_TTL_MS, restored: false };
-            await savePendingJoin(next);
-            setPending(next);
+            await keep(next);
             setScreen({ name: 'providers' });
         } catch (e) {
+            if (e instanceof PendingJoinHeldError) {
+                // A join with another key went out from this browser (another tab, say): that one comes first.
+                setBusy(false);
+                return settleSent(e.held);
+            }
             console.error('[WebJoin] could not make a key:', e);
-            setNotice({
-                tone: 'error',
-                text: e instanceof PendingJoinHeldError
-                    ? 'An earlier join from this browser is still being checked. Reload the page to finish it.'
-                    : 'This browser could not make your key. Try again, or try another browser.',
-            });
+            setNotice({ tone: 'error', text: 'This browser could not make your key. Try again, or try another browser.' });
         } finally {
             setBusy(false);
         }
@@ -569,27 +604,62 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
 
     async function startOver() {
         const p = pending;
-        if (p && pendingJoinSent(p)) {
-            // A join with this key went out, and the node may have it as a member: asked before the key can go.
-            setBusy(true);
-            const check = await checkSentJoin(p);
+        setBusy(true);
+        try {
+            // Back past the name, before any sign-in worked: the key made for this join is dropped, never kept as a
+            // spare. Unless a join with it has gone (from this tab or another: the store says, not this tab's copy),
+            // in which case it is kept, and the node is asked whether it is in.
+            const kept = p ? await clearUnsentPendingJoin(p.identity.publicKey) : null;
             if (!mounted.current) return;
-            setBusy(false);
-            if (check.kind === 'member') return finish(p, check.callsign, null);
-            if (check.kind !== 'not_member') {
+            if (kept) {
+                const check = await checkSentJoin(kept);
+                if (!mounted.current) return;
+                if (check.kind === 'member') return finish(kept, check.callsign, null);
                 // Kept, and joining from here carries on with the same key.
+                setPending(kept);
+                setName(kept.identity.callsign);
                 setNotice(null);
                 setScreen({ name: 'guard' });
                 return;
             }
+            setPending(null);
+            setNonceHeld(null);
+            setName('');
+            setNotice(null);
+            setScreen({ name: 'guard' });
+        } catch (e) {
+            console.error('[WebJoin] could not go back:', e);
+            setNotice({ tone: 'error', text: 'Something went wrong on this page. Reload it to try again.' });
+        } finally {
+            if (mounted.current) setBusy(false);
         }
-        // Back past the name, before any sign-in worked: the key made for this join is dropped, never kept as a spare.
-        await clearPendingJoin();
-        setPending(null);
-        setNonceHeld(null);
-        setName('');
-        setNotice(null);
-        setScreen({ name: 'guard' });
+    }
+
+    /**
+     * The member chose, on the 'abandon' screen, to let go of a sent join the node says it never took, for the key they
+     * restored. Only that record goes (the key and sentAt they were shown); if another tab has sent it again since, it
+     * is checked again instead.
+     */
+    async function abandonHeld() {
+        const p = pending;
+        if (!p || !restored) return;
+        setBusy(true);
+        try {
+            const out = await releaseSentPendingJoin({ kind: 'abandoned', publicKey: p.identity.publicKey, sentAt: p.sentAt });
+            if (!mounted.current) return;
+            if (!out.released) {
+                if (out.pending) return settleSent(out.pending);
+                setScreen({ name: 'lobby' });
+                return;
+            }
+            resume(await savePendingJoin(restoredPending(restored)));
+        } catch (e) {
+            if (e instanceof PendingJoinHeldError) return settleSent(e.held);
+            console.error('[WebJoin] could not let the earlier join go:', e);
+            setNotice({ tone: 'error', text: 'Something went wrong on this page. Reload it to try again.' });
+        } finally {
+            if (mounted.current) setBusy(false);
+        }
     }
 
     async function copyCode(code: string) {
@@ -601,20 +671,20 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
         }
     }
 
-    function retryLastJoin() {
-        const last = lastJoin.current;
-        if (last) void submit(last.pending, last.proof);
-    }
-
-    async function retryUnknown() {
+    /**
+     * "Try again" after no answer, an answer that said nothing sure, or a 5xx: ask the node first. The last join may
+     * have landed after all, and a join sent again would be answered about the door and the rate limit before the
+     * member table (open-join.ts), which says nothing about the last one. Only a node that says "not a member" is sent
+     * the same sign-in again; one that cannot be asked is not.
+     */
+    async function retryLastJoin() {
         const last = lastJoin.current;
         if (!last) return;
-        // Ask first: the last one may have landed after all, and a second join with a spent sign-in would only fail.
         setScreen({ name: 'unknown', checking: true });
-        try {
-            const m = await checkMembershipWithKey(last.pending.identity);
-            if (m.isMember) return finish(last.pending, m.callsign, null);
-        } catch {
+        const probe = await probeMembership(last.pending.identity);
+        if (!mounted.current) return;
+        if (probe.kind === 'member') return finish(last.pending, probe.callsign, null);
+        if (probe.kind === 'unknown') {
             setScreen({ name: 'unknown', checking: false });
             return;
         }
@@ -817,7 +887,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
                     <p role="alert" data-testid="join-unknown" style={{ ...lede, color: 'var(--text-primary)' }}>
                         We can't tell if that worked, and you're not in yet. Check your connection, then try again.
                     </p>
-                    <button type="button" style={primaryButton} onClick={() => void retryUnknown()}>Try again</button>
+                    <button type="button" style={primaryButton} onClick={() => void retryLastJoin()}>Try again</button>
                     {/* The same key, kept: if the join did land, the next nonce request answers "already a member". */}
                     <button type="button" style={quietButton} onClick={() => pending && toProviders(pending, null)}>← Choose another way</button>
                 </>
@@ -834,6 +904,62 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
                         connection, then try again.
                     </p>
                     <button type="button" style={primaryButton} onClick={() => pending && void settleSent(pending)}>Try again</button>
+                    {/* Kept either way: from the lobby, joining again carries on with this same key. */}
+                    <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'lobby' }); }}>← Back</button>
+                </>
+            );
+            break;
+
+        case 'held': {
+            const minutes = Math.max(1, Math.ceil((screen.until - Date.now()) / 60_000));
+            const brought = restored?.callsign.trim() || null;
+            body = (
+                <>
+                    <h3 style={heading}>{screen.canLand ? 'Your earlier join may still go through' : "Your earlier join didn't go through"}</h3>
+                    {screen.canLand ? (
+                        <p role="alert" data-testid="join-held" style={{ ...lede, color: 'var(--text-primary)' }}>
+                            This browser started joining as {callsign}, and that join may still go through, so its account is
+                            kept here for now. Wait about {minutes} {minutes === 1 ? 'minute' : 'minutes'}, then check again,
+                            or go back and finish joining as {callsign}.
+                        </p>
+                    ) : (
+                        <p role="alert" data-testid="join-held" style={{ ...lede, color: 'var(--text-primary)' }}>
+                            The community says {callsign} isn't a member, and that earlier join can no longer go through. To
+                            join as {brought ?? 'the account you brought here'}, this browser has to let go of it first. Or
+                            finish joining as {callsign} instead.
+                        </p>
+                    )}
+                    {screen.canLand ? (
+                        <button type="button" style={primaryButton} onClick={() => pending && void settleSent(pending)}>Check again</button>
+                    ) : (
+                        <button type="button" style={primaryButton} onClick={() => setScreen({ name: 'abandon', until: screen.until })}>
+                            {brought ? `Use ${brought} instead` : 'Use the account I brought here'}
+                        </button>
+                    )}
+                    <button type="button" style={secondaryButton} onClick={() => pending && resume(pending)}>Finish joining as {callsign}</button>
+                    <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'lobby' }); }}>← Back</button>
+                </>
+            );
+            break;
+        }
+
+        case 'abandon':
+            body = (
+                <>
+                    <h3 style={heading}>Let go of {callsign}?</h3>
+                    <p role="alert" data-testid="join-abandon" style={{ ...lede, color: 'var(--text-primary)' }}>
+                        This deletes {callsign}'s key and its 12 words from this browser for good. The community says it
+                        never took that join, so no account there is lost, but this can't be undone.
+                    </p>
+                    <NoticeLine notice={notice} />
+                    <button type="button" data-testid="join-abandon-confirm" disabled={busy} onClick={() => void abandonHeld()}
+                        style={{ ...primaryButton, background: '#b91c1c' }}>
+                        Let go of {callsign}
+                    </button>
+                    <button type="button" style={quietButton} disabled={busy}
+                        onClick={() => setScreen({ name: 'held', canLand: false, until: screen.until })}>
+                        ← Keep it
+                    </button>
                 </>
             );
             break;
@@ -842,7 +968,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
             body = (
                 <>
                     <p role="alert" data-testid="join-unavailable" style={{ ...lede, color: 'var(--text-primary)' }}>{screen.message}</p>
-                    <button type="button" style={primaryButton} onClick={retryLastJoin}>Try again</button>
+                    <button type="button" style={primaryButton} onClick={() => void retryLastJoin()}>Try again</button>
                     <button type="button" style={quietButton} onClick={() => pending && toProviders({ ...pending }, null)}>← Choose another way</button>
                 </>
             );

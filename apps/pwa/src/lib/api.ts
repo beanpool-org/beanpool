@@ -196,10 +196,12 @@ export async function signedFetchWithKey(
     body: any,
     privateKeyHex: string,
     publicKeyHex: string,
+    signal?: AbortSignal,
 ): Promise<Response> {
     const opts: RequestInit = {
         method,
         cache: 'no-cache',
+        ...(signal ? { signal } : {}),
         headers: {
             'Content-Type': 'application/json',
         } as Record<string, string>,

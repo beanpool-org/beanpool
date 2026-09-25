@@ -12,20 +12,24 @@ import {
     checkSentJoin,
     consumeCapturedAuthReturn,
     doorOutcome,
+    DOOR_TIMEOUT_MS,
     DoorUnreachableError,
     facebookAuthUrl,
     googleAuthUrl,
     joinBody,
+    joinVerdict,
     jwtClaims,
     matchAuthReturn,
     offeredProviders,
     parseRetryAfter,
+    probeMembership,
     readAuthReturn,
     refusalMessage,
     requestJoinNonce,
     resetCapturedAuthReturn,
     runGithubPoll,
     startGithubJoin,
+    submitJoin,
     SENT_JOIN_CAN_LAND_MS,
     type DoorAnswer,
     type JoinNonce,
@@ -511,7 +515,7 @@ describe('a join that went out: only the node says whether its key may go (check
         expect((init.headers as Record<string, string>)['X-Public-Key']).toBe(identity.publicKey);
     });
 
-    it('not a member, asked once the join can no longer land: it may go', async () => {
+    it('not a member, asked once the join can no longer land: no join it sent can land any more', async () => {
         vi.spyOn(Date, 'now').mockReturnValue(SENT_AT + SENT_JOIN_CAN_LAND_MS);
         membershipAnswers(answer(200, { isMember: false, callsign: null }));
         expect(await checkSentJoin(sent())).toEqual({ kind: 'not_member' });
@@ -553,5 +557,122 @@ describe('a join that went out: only the node says whether its key may go (check
         expect(await checkMembershipWithKey(identity)).toEqual({ isMember: false, callsign: null });
         membershipAnswers(answer(200, {}));
         await expect(checkMembershipWithKey(identity)).rejects.toBeInstanceOf(DoorUnreachableError);
+    });
+});
+
+describe('what an answer to a join says for sure (joinVerdict, review round 2)', () => {
+    const KEY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Alice', createdAt: '2026-09-26T00:00:00.000Z' };
+    const SENT = { identity: KEY, sentAt: 1_800_000_000_000 };
+    const at = (status: number, body: Record<string, unknown> = {}): DoorAnswer => ({ status, body, retryAfterSeconds: null });
+
+    it('a yes only from a 2xx that parsed with success, or a 409 that parsed with already_member', () => {
+        expect(joinVerdict(at(200, { success: true, member: { callsign: 'Alice2' } }), SENT, 'google')).toEqual({ kind: 'joined', callsign: 'Alice2', recovery: null });
+        expect(joinVerdict(at(409, { code: 'already_member' }), SENT, 'google')).toEqual({ kind: 'already_member' });
+    });
+
+    it('a refusal the door gives before it writes a member, with its own status, is definite, and carries what the release needs', () => {
+        const cases: Array<[number, string]> = [
+            [404, 'invite_only'], [400, 'bad_request'], [400, 'bad_key'], [400, 'recovery_invalid'], [401, 'sign_in'],
+            [403, 'key_invalidated'], [403, 'removed'], [409, 'already_joined'], [429, 'rate_limited'],
+        ];
+        for (const [status, code] of cases) {
+            const v = joinVerdict(at(status, { code, error: 'x' }), SENT, 'google', SENT.sentAt + 5);
+            expect(v, `${status} ${code}`).toMatchObject({
+                kind: 'refused',
+                refusal: { publicKey: KEY.publicKey, sentAt: SENT.sentAt, answeredAt: SENT.sentAt + 5, status, code },
+            });
+        }
+    });
+
+    it('everything else is unknown, and the page asks the node first (review 4106400570)', () => {
+        const unknownThenCantTell: DoorAnswer[] = [
+            at(200), at(200, { success: 'true' }), at(201, {}), at(204), at(302), at(304),
+            // A 409 whose body was lost, or names no code the door sends with it.
+            at(409), at(409, { error: 'x' }), at(409, { code: 'already_' }),
+        ];
+        for (const a of unknownThenCantTell) expect(joinVerdict(a, SENT, 'google'), `${a.status} ${JSON.stringify(a.body)}`).toEqual({ kind: 'unknown', outcome: null });
+
+        const unknownThenByStatus: DoorAnswer[] = [
+            at(400), at(400, { code: 'already_joined' }), at(401, { error: 'Request timestamp is stale or invalid' }), at(403),
+            at(404), at(429, { error: 'Too many attempts. Try again in 42s' }), at(418, { code: 'teapot' }), at(403, { code: 'toString' }),
+            at(500, { error: 'boom' }), at(502), at(503, { code: 'sign_in_unavailable', error: 'x' }), at(503, { code: 'join_failed' }), at(504),
+        ];
+        for (const a of unknownThenByStatus) {
+            const v = joinVerdict(a, SENT, 'google');
+            expect(v.kind, `${a.status} ${JSON.stringify(a.body)}`).toBe('unknown');
+            expect((v as { outcome: unknown }).outcome).toEqual(doorOutcome(a, 'google'));
+        }
+    });
+
+    it('a refusal for a join this page never marked sent is not evidence for anything', () => {
+        expect(joinVerdict(at(403, { code: 'removed' }), { identity: KEY }, 'google').kind).toBe('unknown');
+    });
+});
+
+describe('asking the node (probeMembership) and waiting for it (DOOR_TIMEOUT_MS)', () => {
+    let identity: BeanPoolIdentity;
+    beforeEach(async () => {
+        const { generateIdentity } = await import('./identity');
+        identity = await generateIdentity('Alice');
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+    });
+
+    it('"not a member" comes with the key and when it was asked (taken before the request went)', async () => {
+        vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ isMember: false, callsign: null }), { status: 200 })));
+        expect(await probeMembership(identity)).toEqual({ kind: 'not_member', answer: { publicKey: identity.publicKey, askedAt: 1_800_000_000_000 } });
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ isMember: true, callsign: 'Al' }), { status: 200 })));
+        expect(await probeMembership(identity)).toEqual({ kind: 'member', callsign: 'Al' });
+        for (const reply of [() => { throw new TypeError('Failed to fetch'); }, () => new Response('{}', { status: 200 }), () => new Response('{"isMember":false}', { status: 429 })]) {
+            vi.stubGlobal('fetch', vi.fn(async () => reply()));
+            expect(await probeMembership(identity)).toEqual({ kind: 'unknown' });
+        }
+    });
+
+    it('a join that never answers is given up after DOOR_TIMEOUT_MS: no answer, never a guess', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+            const signal = init.signal!;
+            if (signal.aborted) return reject(signal.reason);
+            signal.addEventListener('abort', () => reject(signal.reason));
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        const result = submitJoin(identity, { callsign: 'Alice' }).then(() => 'answered', (e) => e);
+        // The request is signed first (WebCrypto, no timers); the clock runs from before that.
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+        await vi.advanceTimersByTimeAsync(DOOR_TIMEOUT_MS - 1_000);
+        let settled = false;
+        void result.then(() => { settled = true; });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1_000);
+        const err = await result;
+        expect(err).toBeInstanceOf(DoorUnreachableError);
+        expect(String(err.message)).toContain('took too long');
+    });
+
+    it('a 200 whose body stops arriving is cut off by the same clock, and read as a 200 with no body: unknown', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn(async (_path: string, init: RequestInit) => {
+            const signal = init.signal!;
+            const stream = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(new TextEncoder().encode('{"success":tr'));
+                    signal.addEventListener('abort', () => controller.error(signal.reason));
+                },
+            });
+            return new Response(stream, { status: 200, headers: { 'Content-Type': 'application/json' } });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const answer = submitJoin(identity, { callsign: 'Alice' });
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+        await vi.advanceTimersByTimeAsync(DOOR_TIMEOUT_MS);
+        const got = await answer;
+        expect(got).toMatchObject({ status: 200, body: {} });
+        expect(joinVerdict(got, { identity, sentAt: 1 }, 'google')).toEqual({ kind: 'unknown', outcome: null });
     });
 });

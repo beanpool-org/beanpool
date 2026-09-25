@@ -264,7 +264,12 @@ async function main(): Promise<void> {
         ...placed.flatMap(p => [String(p.lat), String(p.lng), p.lat.toFixed(3), p.lng.toFixed(3)])
             .filter(s => !/^-?\d+\.\d?0*$/.test(s)),
     ];
-    const leaks = (text: string, allowed: string[] = []) => sentinels.filter(s => !allowed.includes(s) && text.includes(s));
+    // Times are left out of the search for places: 03:58:26.135Z holds "26.135", and a time is nobody's place.
+    const withoutTimes = (text: string) => text.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, 'T');
+    const leaks = (text: string, allowed: string[] = []) => {
+        const t = withoutTimes(text);
+        return sentinels.filter(s => !allowed.includes(s) && t.includes(s));
+    };
 
     // ── 1. the allowlists, and what the node says it is ────────────────────────────────────────
     console.log('── 1. the public-read allowlists, and features.guestListingsOnly ──');
@@ -504,7 +509,7 @@ async function main(): Promise<void> {
     const problems: string[] = [];
     let byCirclesAlone = 0;
     const teeth = { order: 0, radius: 0, distance: 0 };
-    const placeText = (text: string) => placed.find(p => text.includes(String(p.lat)) || text.includes(String(p.lng)));
+    const placeText = (text: string) => { const t = withoutTimes(text); return placed.find(p => t.includes(String(p.lat)) || t.includes(String(p.lng))); };
     /** Checks one guest page: each place is its area, each distance the whole km from it, in the areas' order. */
     const checkPage = (label: string, q: { lat: number; lng: number }, r: Res): any[] => {
         const page: any[] = Array.isArray(r.body) ? r.body : [];

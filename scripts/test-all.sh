@@ -378,6 +378,7 @@ run_federation_suites() {
       test-vouch-covenant
       test-wash-sybil-defense
       test-apple-probe
+      test-apple-return
       test-recovery-backup-durability
       test-public-address
       test-invite-trampoline

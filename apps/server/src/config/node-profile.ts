@@ -75,11 +75,14 @@ export interface ProfileSwitches {
     directoryMirror: boolean;
     /** On: the operator's directory settings decide whether this node is listed, as today. Off: never listed. */
     publishToDirectory: boolean;
-    /** New accounts are rate-limited for their first days (posts, photos, new DM recipients, knocks). */
+    /** New accounts are rate-limited for their first days: posts, photos, new DM recipients, knocks
+     *  (engine/probation.ts). */
     probation: boolean;
-    /** A post reported by enough established members is hidden until a moderator looks. */
+    /** A post reported by enough established members is hidden until a moderator looks
+     *  (engine/auto-moderation.ts). Off: reports go to the queue only, as on every node before G3. */
     autoHideReports: boolean;
-    /** A member with repeated actioned posts can't post or DM until a moderator lifts it. */
+    /** A member with repeated posts removed by a moderator can't post or DM until a moderator lifts it
+     *  (engine/auto-moderation.ts). */
     autoMute: boolean;
 }
 
@@ -138,9 +141,6 @@ const NOT_BUILT_YET: Readonly<Partial<ProfileSwitches>> = {
     distanceSortDefault: false, // G4
     directoryMirror: false, // G5
     publishToDirectory: true, // G5 (the operator's directory settings decide, as they always have)
-    probation: false, // G3
-    autoHideReports: false, // G3
-    autoMute: false, // G3
 };
 
 /** The switches that hold or move Beans. None of them can be off on a node whose ledger has ever moved. */
@@ -155,6 +155,12 @@ export interface NodeFeatures {
     knocks: boolean;
     /** The listing answers `?lat&lng&radiusKm&sort=distance`, on every profile (design §3.2). G4 builds it. */
     distanceSearch: boolean;
+    /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
+    probation: boolean;
+    /** A post reported by 3 established members is hidden until a moderator looks. */
+    autoHideReports: boolean;
+    /** 3 posts removed by a moderator in 30 days stop a member posting and messaging until a moderator lifts it. */
+    autoMute: boolean;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -240,6 +246,9 @@ export function getNodeFeatures(): NodeFeatures {
         knocks: s.knocks,
         // A capability of the build, not a profile switch: once built, a local node answers distance queries too.
         distanceSearch: false, // G4
+        probation: s.probation,
+        autoHideReports: s.autoHideReports,
+        autoMute: s.autoMute,
     };
 }
 

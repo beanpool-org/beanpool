@@ -29,6 +29,10 @@ import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
+import {
+    evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
+    evaluateAutoMute, liftMute as liftMuteEngine,
+} from './engine/auto-moderation.js';
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
@@ -451,6 +455,8 @@ export interface AbuseReport {
     postAuthorCallsign?: string | null;
     postDescription?: string | null;
     postRemoved?: boolean | null;
+    /** The reported post is hidden by reports, waiting for a moderator (global profile, G3). */
+    postHiddenByReports?: boolean | null;
     /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
 }
@@ -1012,6 +1018,19 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 // nothing but the type of these events, so the doorbell refreshes them exactly as the payload did.
 export interface BroadcastOptions { othersGetDoorbell?: boolean }
 export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): void {
+    // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
+    // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
+    // catch-up sync gets what it may see: the moderators the post, everyone else a removal.
+    if ((event?.type === 'new_post' || event?.type === 'post_updated') && event.post?.hiddenByReportsAt) {
+        const author = event.post.authorPublicKey;
+        if (typeof author === 'string' && (!recipients || recipients.includes(author))) deliverBroadcast(event, [author]);
+        deliverBroadcast({ type: 'post_updated', id: event.post.id }, recipients);
+        return;
+    }
+    deliverBroadcast(event, recipients, opts);
+}
+
+function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): void {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
             case 'new_post':
@@ -5240,6 +5259,9 @@ export function submitReport(reporterPubkey: string, targetPubkey: string, reaso
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, safeReason, createdAt);
+    // On the global profile, enough established reporters hide the post until a moderator looks (G3). A report of
+    // a member or a Pulse item never hides anything.
+    if (targetPostId && !targetPulseItemId) evaluateAutoHide(moderationNoticeCb, targetPostId);
     return { id, reporterPubkey, targetPubkey, targetPostId, targetPulseItemId, reason: safeReason, createdAt, status: 'pending' };
 }
 
@@ -5276,6 +5298,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                mt.callsign as target_callsign,
                p.title as post_title, substr(p.description, 1, 500) as post_description,
                p.id as post_row_id, p.active as post_active, p.status as post_status,
+               p.hidden_by_reports_at as post_hidden_at,
                mp.callsign as post_author_callsign,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at
@@ -5317,6 +5340,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         postDescription: r.post_row_id ? (r.post_description ?? null) : null,
         // A post the admins or its author already took down.
         postRemoved: r.post_row_id ? (r.post_active !== 1 || r.post_status === 'cancelled') : null,
+        // Hidden by reports, waiting for a moderator (G3): restore it or remove it.
+        postHiddenByReports: r.post_row_id ? !!r.post_hidden_at : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,
         pulseItem: r.target_pulse_item_id
             ? {
@@ -5395,10 +5420,26 @@ export function dismissReport(reportId: string): boolean {
     // Its reporter hears the post was reviewed and kept — once, when an open report is dismissed. If the
     // author had already taken it down, "kept" would be untrue: they hear it is no longer up.
     const post = report?.target_post_id ? db.prepare('SELECT active, status FROM posts WHERE id = ?').get(report.target_post_id) as any : null;
+    // A hidden post whose remaining reports no longer add up to a hide is visible again (G3), before the reporter
+    // is told it was kept.
+    if (res.changes > 0 && report?.target_post_id) recheckHiddenPost(moderationNoticeCb, report.target_post_id);
     if (res.changes > 0 && post && (report.status === 'pending' || report.status == null)) {
         notifyReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_post_id, post.active === 1 && post.status !== 'cancelled');
     }
     return res.changes > 0;
+}
+
+/**
+ * A moderator restores a post hidden by reports (G3): visible to everyone again, and every open report on it
+ * dismissed, so those reporters hear it was kept and cannot hide it again.
+ */
+export function restoreHiddenPost(postId: string): 'restored' | 'not_hidden' | 'not_found' {
+    return restoreHiddenPostEngine(moderationNoticeCb, postId);
+}
+
+/** A moderator lifts a member's mute (G3). False when they were not muted. */
+export function liftModerationMute(pubkey: string): boolean {
+    return liftMuteEngine(moderationNoticeCb, pubkey);
 }
 
 export function actionReport(
@@ -5423,7 +5464,7 @@ export function actionReport(
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
         
         if (deletePost && report.target_post_id) {
-            const removed = removePostByAdmin(report.target_post_id, s => shortfalls.push(s));
+            const removed = removePostByAdmin(report.target_post_id, s => shortfalls.push(s), true);
             if (removed) {
                 const reporters = closeOpenReportsOnPost(report.target_post_id);
                 if (wasOpen) reporters.push(report.reporter_pubkey);
@@ -5450,7 +5491,11 @@ export function actionReport(
         return true;
     })();
     const done = takedown as { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null;
-    if (ok && done) notifyPostTakedown(moderationNoticeCb, done.post, done.reporters, normaliseRemovalReason(opts?.reasonCategory));
+    if (ok && done) {
+        notifyPostTakedown(moderationNoticeCb, done.post, done.reporters, normaliseRemovalReason(opts?.reasonCategory));
+        // The third removal in 30 days mutes its author on the global profile (G3).
+        if (done.post.wasLive) evaluateAutoMute(moderationNoticeCb, done.post.authorPubkey);
+    }
     if (ok) for (const shortfall of shortfalls) opts?.onRefundShortfall?.(shortfall);
     return ok;
 }
@@ -6116,8 +6161,11 @@ function postBeforeTakedown(postId: string): PostBeforeTakedown | null {
  * `onRefundShortfall` is how a removal reports that a pending trade's escrow held less than the trade row
  * said, so its buyer could not be made whole. The engine refunds what the escrow actually holds and calls
  * this; it never tops the difference up out of nothing.
+ *
+ * `takedown`: a moderator removed this one post, as opposed to the stale-post prune. A takedown of a live post is
+ * recorded on it (`removed_by_moderator_at`), which is what auto-mute counts and what makes it not a kept post.
  */
-function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundShortfall) => void): PostBeforeTakedown | null {
+function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundShortfall) => void, takedown = false): PostBeforeTakedown | null {
     const before = postBeforeTakedown(postId);
     // The push dispatcher is passed so an admin removing a reported EVENT tells everyone marked Going
     // that it is off (docs/events-on-the-map.md §2.5); it is a no-op for every other post type.
@@ -6127,6 +6175,7 @@ function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundS
         balanceOf: (escrowAccount: string) => ledger.getAccount(escrowAccount).balance,
         onRefundShortfall,
     });
+    if (ok && before && takedown && before.wasLive) recordModeratorRemoval(postId);
     return ok && before ? before : null;
 }
 
@@ -6139,10 +6188,12 @@ export function adminDeletePost(
     postId: string,
     opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void },
 ): boolean {
-    const removed = removePostByAdmin(postId, opts?.onRefundShortfall);
+    const removed = removePostByAdmin(postId, opts?.onRefundShortfall, true);
     if (!removed) return false;
     const reporters = closeOpenReportsOnPost(postId);
     notifyPostTakedown(moderationNoticeCb, removed, reporters, normaliseRemovalReason(opts?.reasonCategory));
+    // The third removal in 30 days mutes its author on the global profile (G3).
+    if (removed.wasLive) evaluateAutoMute(moderationNoticeCb, removed.authorPubkey);
     return true;
 }
 

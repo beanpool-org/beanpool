@@ -37,6 +37,8 @@ import {
     listYourChats,
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
+import { assertNotMuted } from '../engine/auto-moderation.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
 
@@ -409,10 +411,13 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             return;
         }
         try {
+            // A muted member (G3) sends nothing anyone else reads.
+            assertNotMuted(actor);
             const message = postGroupThreadMessage(ctx.params.id, actor, text, clientId, replyToId);
             ctx.status = 201;
             ctx.body = { success: true, message };
         } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
             const msg = e?.message || 'Could not post the message';
             ctx.status = e?.code === 'ID_CONFLICT' ? 409 : groupChatStatus(msg);
             ctx.body = { error: msg };

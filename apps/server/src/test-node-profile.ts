@@ -9,8 +9,9 @@
  *      a global node would switch Beans on for strangers) and the record stays global; started once with
  *      NODE_PROFILE_ALLOW_CHANGE_FROM=global it runs local, the record is rewritten, the boot log says so; a record
  *      changed at runtime changes nothing either
- *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the six
- *      `features` exactly (open join on the global profile only, since G2), and every field it had before
+ *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the nine
+ *      `features` exactly (open join on the global profile only, since G2; probation, auto-hide and auto-mute since
+ *      G3), and every field it had before
  *   5. node_config overrides change the configured switch (and the boot log reports them), an override of a built
  *      switch (openJoin) reaches the API, bad ones are ignored with a log line, and a switch this build doesn't have
  *      yet (knocks) stays pinned, so the API never advertises it
@@ -61,11 +62,12 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
 
 // What this build does on each profile. G2 built open join: on for the global profile, off for local. G1 built Beans
 // off: on global, Beans, escrow and enterprises are off (this database's ledger has never moved; test-global-no-beans
-// covers one that has). Until G4 (distance search) and G6 (knocks) land the rest is the same on both. The PR that
-// builds one of these changes its line here, with the test that proves it.
+// covers one that has). G3 built probation, auto-hide and auto-mute: on for global only (test-global-moderation).
+// Until G4 (distance search) and G6 (knocks) land the rest is the same on both. The PR that builds one of these
+// changes its line here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: false },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: false },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: false, probation: false, autoHideReports: false, autoMute: false },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: false, probation: true, autoHideReports: true, autoMute: true },
 };
 
 async function main() {
@@ -219,8 +221,11 @@ async function main() {
     assert(reported.logs.some(l => l.includes('Not built yet') && l.includes('knocks=true')),
         'the boot log says which overrides ask for something this build does not have yet');
     assert(mirror() === 'global', 'the mirror follows NODE_PROFILE=global at boot');
-    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify(BUILT_TODAY.global),
-        'global with overrides: /api/community/info still reports only what this build does');
+    // Probation is built (G3), so the operator's nodeProfile.probation=false reaches the API; knocks=true does not (G6).
+    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify({ ...BUILT_TODAY.global, probation: false }),
+        'global with overrides: /api/community/info reports what this build does, the built override (probation off) included and the unbuilt one (knocks) not');
+    assert(getProfileSwitches().probation === false && getProfileSwitches().autoHideReports === true,
+        'probation is built (G3), so nodeProfile.probation=false turns it off; auto-hide keeps the global default');
 
     setOverride('beans', 'maybe');
     setOverride('openjoin', 'true');

@@ -49,7 +49,9 @@ import {
 } from '../federation-link.js';
 import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
-import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
+import { getProfileSwitches, getNodeProfile, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
+import { probationSummary } from '../engine/probation.js';
+import { muteOf } from '../engine/auto-moderation.js';
 import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
@@ -697,6 +699,27 @@ router.get('/api/community/info', async (ctx) => {
     // The per-member transaction count is only for the verified signer. An unverified X-Public-Key header
     // or ?publicKey= gets the node-wide figures, like any anonymous caller.
     ctx.body = getCommunityInfo(ctx.state.actor as string | undefined);
+});
+
+/**
+ * The signed member's own standing here (G3): whether they are on probation, until when and what is left of today's
+ * limits, and whether they are muted, so the app can explain a limit before the member meets it. Not on the public
+ * allowlist: it is one member's own state, for them only.
+ */
+router.get('/api/community/me', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!getMember(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Read access requires a member identity' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = { publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor) };
 });
 
 router.get('/api/community/health', async (ctx) => {

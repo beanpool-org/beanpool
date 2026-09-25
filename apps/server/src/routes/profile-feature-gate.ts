@@ -20,6 +20,8 @@ import {
     getProfileSwitches, featureOffMessage, BeansOffError, FeatureOffError, FEATURE_OFF,
     type ProfileSwitch, type ProfileSwitches,
 } from '../config/node-profile.js';
+import { ProbationLimitError } from '../engine/probation.js';
+import { MutedError } from '../engine/auto-moderation.js';
 
 interface GatedRoutes {
     /** On only while every one of these switches is on. */
@@ -87,13 +89,28 @@ export async function profileFeatureGate(ctx: Context, next: Next): Promise<void
     ctx.body = { error: featureOffMessage(off), code: FEATURE_OFF, feature: off };
 }
 
-/** For a route's catch: answers a Beans-off or feature-off refusal with its own status and code. True when it did. */
-export function respondProfileRefusal(ctx: { status: number; body: unknown }, e: unknown): boolean {
+/**
+ * For a route's catch: answers a Beans-off or feature-off refusal, a probation limit (429, with `Retry-After`) or a
+ * moderation mute (403) with its own status and code. True when it did.
+ */
+export function respondProfileRefusal(ctx: { status: number; body: unknown; set?: (field: string, value: string) => void }, e: unknown): boolean {
     if (e instanceof BeansOffError || e instanceof FeatureOffError) {
         ctx.status = e.status;
         ctx.body = e instanceof FeatureOffError
             ? { error: e.message, code: e.code, feature: e.feature }
             : { error: e.message, code: e.code };
+        return true;
+    }
+    if (e instanceof ProbationLimitError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code, limit: e.limit, resetsAt: e.resetsAt };
+        const seconds = Math.max(1, Math.ceil((Date.parse(e.resetsAt) - Date.now()) / 1000));
+        ctx.set?.('Retry-After', String(seconds));
+        return true;
+    }
+    if (e instanceof MutedError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code, mutedUntil: e.until };
         return true;
     }
     return false;

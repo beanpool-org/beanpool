@@ -66,6 +66,8 @@ export const LISTINGS_PER_PULL = 200;
  *                          field the buyer's node charges against. Federation here is bilateral by design.
  *   reachAdmitsPeer(...)   what the author actually asked for.
  *
+ * And never a post hidden by reports (G3): hidden from this community's own members, it is not sent to another's.
+ *
  * The reach test runs in JS rather than SQL because `reach_peers` is a JSON array and the predicate lives in
  * @beanpool/core, shared with the client. Filtering peers in SQL would mean a second definition of the rule.
  */
@@ -83,6 +85,7 @@ export function listingsForPeer(peerId: string, limit = LISTINGS_PER_PULL): Remo
           AND p.origin_node IS NULL
           AND p.reach != 'local'
           AND (p.audience_scope IS NULL OR p.audience_scope = 'public')
+          AND p.hidden_by_reports_at IS NULL
         ORDER BY p.created_at DESC
     `).all() as any[];
 

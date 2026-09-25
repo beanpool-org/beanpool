@@ -37,6 +37,9 @@
  *  12. The open door's record travels too: `open_joins` and the node key its hashes are made with
  *      (node_config `openJoinSalt`). Without both, a restored global node would let every sign-in account
  *      join a second time.
+ *  13. So does the global node's moderation (G3): a post hidden by reports stays hidden
+ *      (`posts.hidden_by_reports_at`), a moderator's takedown still counts (`posts.removed_by_moderator_at`),
+ *      and a muted member stays muted (`members.moderation_muted_until`).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -248,6 +251,13 @@ async function main(): Promise<void> {
     const openJoinKeyAtT = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as any)?.value as string;
     assert(!!openJoinKeyAtT, 'setup: an open join, and the node key its hash was made with');
 
+    // The global node's moderation state (G3), as engine/auto-moderation.ts writes it.
+    const hiddenAtT = new Date(Date.now() - 60_000).toISOString();
+    const removedAtT = new Date(Date.now() - 120_000).toISOString();
+    const mutedAtT = '9999-12-31T23:59:59.999Z';
+    db.prepare('UPDATE posts SET hidden_by_reports_at = ?, removed_by_moderator_at = ? WHERE id = ?').run(hiddenAtT, removedAtT, kept!.id);
+    db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(mutedAtT, author);
+
     /** What every referenced object held at T. The whole suite is about reproducing this map. */
     const atT = new Map<string, Buffer>([
         [keptKey, keptPhoto],
@@ -325,6 +335,11 @@ async function main(): Promise<void> {
             const key = (archived.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as any)?.value;
             assert(row?.join_hash === openJoinHashAtT, 'the archive carries open_joins, so a restored node still knows who joined');
             assert(key === openJoinKeyAtT, 'and the node key those hashes were made with, so the same account still matches');
+            const moderated = archived.prepare('SELECT hidden_by_reports_at, removed_by_moderator_at FROM posts WHERE id = ?').get(kept!.id) as any;
+            const muted = archived.prepare('SELECT moderation_muted_until FROM members WHERE public_key = ?').get(author) as any;
+            assert(moderated?.hidden_by_reports_at === hiddenAtT && moderated?.removed_by_moderator_at === removedAtT,
+                'the archive carries a post hidden by reports, and a moderator\'s takedown, so a restored node keeps both');
+            assert(muted?.moderation_muted_until === mutedAtT, 'and a member\'s mute, so a restored node keeps them muted');
         } finally {
             archived.close();
         }

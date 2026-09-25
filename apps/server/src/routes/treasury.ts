@@ -331,7 +331,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
 
         const posts = db.prepare(
-            "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' ORDER BY created_at DESC"
+            // Never a post hidden by reports (G3): that is for its author and the moderators, in the listing.
+            "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' AND hidden_by_reports_at IS NULL ORDER BY created_at DESC"
         ).all(treasury) as any[];
         const flow = (db.prepare(
             'SELECT from_pubkey, to_pubkey, amount, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'

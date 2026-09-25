@@ -29,7 +29,9 @@ import {
     runLedgerAudit,
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
     lastActiveForViewer,
+    restoreHiddenPost, liftModerationMute,
 } from '../state-engine.js';
+import { listMutedMembers } from '../engine/auto-moderation.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
     getGatewayConfig, updateGatewayConfig,
@@ -636,7 +638,8 @@ router.post('/api/local/admin/data', async (ctx) => {
             };
         }),
         profiles: getAllProfiles(),
-        posts: getPosts().filter(p => p.status !== 'cancelled'),
+        // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt.
+        posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled'),
         health: getCommunityHealth(),
         reports: getReports().reports,
         reportCount: getReportCount(),
@@ -929,6 +932,63 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
         ctx.status = 500;
         ctx.body = { error: e.message };
     }
+});
+
+/**
+ * Restore a post hidden by reports (G3, engine/auto-moderation.ts). Owners, admins and moderators: every open report
+ * on it is dismissed (its reporters hear it was kept, and cannot hide it again), and everyone sees it again.
+ */
+router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const result = restoreHiddenPost(ctx.params.id);
+    if (result === 'not_found') {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'Post not found' };
+        return;
+    }
+    if (result === 'not_hidden') {
+        ctx.status = 409;
+        ctx.body = { success: false, error: 'This post is not hidden, so there is nothing to restore' };
+        return;
+    }
+    const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
+    logger.info('ADMIN', `Restored post ${ctx.params.id}, hidden by reports, by ${by} (${(ctx.state as any)?.adminRole})`);
+    ctx.body = { success: true };
+});
+
+/**
+ * Members muted after 3 posts were removed in 30 days (G3), for the moderators who lift it.
+ */
+router.get('/api/local/admin/members/muted', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, members: listMutedMembers() };
+});
+
+/**
+ * Lift a member's mute (G3). Owners, admins and moderators, the actor from their signed session, never the body. A
+ * moderator can't lift their own: that is for an owner or admin.
+ */
+router.post('/api/local/admin/members/:pubkey/unmute', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    const pubkey = ctx.params.pubkey;
+    if ((ctx.state as any)?.adminRole === 'moderator' && actor && actor.toLowerCase() === pubkey.toLowerCase()) {
+        ctx.status = 403;
+        ctx.body = { success: false, error: 'A moderator cannot lift their own mute. Ask an owner or admin.' };
+        return;
+    }
+    if (!getMember(pubkey)) {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'Member not found' };
+        return;
+    }
+    if (!liftModerationMute(pubkey)) {
+        ctx.status = 409;
+        ctx.body = { success: false, error: 'This member is not muted' };
+        return;
+    }
+    logger.info('ADMIN', `Lifted the mute on ${pubkey.substring(0, 12)} by ${actor ? actor.substring(0, 12) : 'owner:password'} (${(ctx.state as any)?.adminRole})`);
+    ctx.body = { success: true };
 });
 
 /**

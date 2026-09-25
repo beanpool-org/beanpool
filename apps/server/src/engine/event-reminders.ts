@@ -194,8 +194,9 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
            AND p.status = 'active'
            AND COALESCE(p.event_state, '') != 'cancelled'
            AND p.event_end_at > ?
+           AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)
          ORDER BY p.event_start_at ASC
-    `).all(memberPubkey, nowIso) as any[];
+    `).all(memberPubkey, nowIso, memberPubkey) as any[];
 
     return rows.map(r => ({
         postId: r.id,
@@ -279,6 +280,7 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
                AND p.active = 1
                AND p.status = 'active'
                AND COALESCE(p.event_state, '') != 'cancelled'
+               AND p.hidden_by_reports_at IS NULL
                AND p.event_start_at > ?
                AND p.event_start_at <= ?
              ORDER BY p.event_start_at ASC

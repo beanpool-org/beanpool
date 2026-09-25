@@ -21,6 +21,9 @@ import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
+import { assertNotMuted } from '../engine/auto-moderation.js';
+import { assertMayMessage } from '../engine/probation.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
@@ -132,6 +135,10 @@ router.post('/api/messages/conversation', async (ctx) => {
         return;
     }
     try {
+        // G3, global profile: a muted member starts no conversations (403); a new account starts them with at most
+        // 10 new people a day (429). Starting one is a line in the other person's inbox, even before a message.
+        assertNotMuted(createdBy);
+        for (const other of uniqueParticipants) if (other !== createdBy) assertMayMessage(createdBy, other);
         const conv = createConversation('dm', uniqueParticipants, createdBy, name);
         if (!conv) {
             ctx.status = 400;
@@ -140,6 +147,7 @@ router.post('/api/messages/conversation', async (ctx) => {
         }
         ctx.body = { success: true, conversation: conv };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         respondToMessagingError(ctx, e, 'create the conversation');
     }
 });
@@ -179,8 +187,16 @@ router.post('/api/messages/send', async (ctx) => {
     }
     let msg;
     try {
+        // G3, global profile: a muted member sends nothing (403). A new account writes to at most 10 new people a
+        // day in DMs (429); a reply, or anyone they have written to before, is never limited. An old conversation
+        // id the engine remaps is a DM between two people who have talked already, so it is not checked here.
+        assertNotMuted(authorPubkey);
+        if (target?.type === 'dm' && target.participants.includes(authorPubkey)) {
+            for (const other of target.participants) if (other !== authorPubkey) assertMayMessage(authorPubkey, other);
+        }
         msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId);
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         respondToMessagingError(ctx, e, 'send the message');
         return;
     }
@@ -256,9 +272,12 @@ router.post('/api/messages/edit', async (ctx) => {
     // share (PR #1048 review). A DM keeps the DM rules — its fan-out is the other phone.
     if (isGroupChatMessage(messageId) && !chatRateLimit(ctx, actor)) return;
     try {
+        // An edit is new words in someone else's chat: a muted member (G3) can't make one.
+        assertNotMuted(actor);
         const msg = editMessage(messageId, actor, ciphertext, nonce);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         // Thread and removed messages are refused outright (403) so the client can say why.
         respondToMessagingError(ctx, e, 'edit the message');
     }

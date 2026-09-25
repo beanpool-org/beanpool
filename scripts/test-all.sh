@@ -371,6 +371,7 @@ run_federation_suites() {
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility
+      test-contact-trade-partners
       test-sync-signature
       test-trust-value-curve
       test-trust-tiers-one-source
@@ -423,6 +424,7 @@ run_federation_suites() {
       test-live-post-payloads
       test-moderation-notifications
       test-polls
+      test-poll-voters-members-only
       test-events
       test-enterprise-event-http
       test-event-chat

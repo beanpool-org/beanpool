@@ -17,6 +17,8 @@
  *   - each owner (who always sees their own),
  *   - a signed non-member,
  *   - nobody (unsigned — refused on every gated route).
+ * None of these viewers has a trade with the Trade Partners owner, so only that owner sees it here; who does see it
+ * (a member with a trade in any state) is test-contact-trade-partners.ts, which also reads with read auth off.
  * The check is a search of the raw response text for each secret, so a contact that rides along under any
  * field name is caught, not only under the names the routes use today.
  *
@@ -163,7 +165,8 @@ async function main() {
     ];
 
     console.log('── the member lists ──');
-    const everyone = new Set(['community', 'tradePartners']);
+    // Every member sees Community. Trade Partners is for members with a trade with its owner, and nobody here has one.
+    const everyone = new Set(['community']);
     const expectFor = (viewer: Id): Set<string> => {
         const s = new Set(everyone);
         if (viewer === friend) s.add('friends');
@@ -242,7 +245,7 @@ async function main() {
         const asStranger = secretsIn((await get(path, stranger)).text).has(key);
         const asFriend = secretsIn((await get(path, friend)).text).has(key);
         const asSelf = secretsIn((await get(path, o)).text).has(key);
-        const public_ = k === 'community' || k === 'tradePartners';
+        const public_ = k === 'community';
         assert(asStranger === public_, `the stranger ${public_ ? 'sees' : 'does not see'} the ${k} owner's contact on the profile page`);
         assert(asFriend === (public_ || k === 'friends'), `the friend ${public_ || k === 'friends' ? 'sees' : 'does not see'} the ${k} owner's contact on the profile page`);
         assert(asSelf, `the ${k} owner sees their own contact on their profile page`);
@@ -298,8 +301,9 @@ async function main() {
     {
         const r = await post('/api/local/admin/data', { password: ADMIN_PW });
         assert(r.status === 200, `the admin reads /api/local/admin/data (got ${r.status})`);
+        // The password proves no member, and Community, Trade Partners and Friends all need a member viewer.
         const seen = secretsIn(r.text);
-        assert(same(seen, everyone), `an admin sees exactly ${fmt(everyone)}, the same as any member (saw ${fmt(seen)})`);
+        assert(seen.size === 0, `an admin, signed in with the password and no member key, is sent no contact details (saw ${fmt(seen)})`);
         const row = (r.body?.members || []).find((m: any) => m.publicKey === owners.hidden.pubKeyHex);
         assert(!!row && !('contactValue' in row) && !('contactVisibility' in row), 'the admin member rows carry no contact fields');
         assert(!!row && row.invitedBy === 'seed' && typeof row.status === 'string', 'the admin rows still carry what the manager draws from (invitedBy, status)');

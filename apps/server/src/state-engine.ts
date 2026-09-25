@@ -173,8 +173,10 @@ import {
     getProfile as getProfileEngine,
     getAllProfiles as getAllProfilesEngine,
     contactVisibleTo,
-    ownersWhoAddedAsFriend as ownersWhoAddedAsFriendEngine,
+    contactViewer as contactViewerEngine,
+    isNodeMember as isNodeMemberEngine,
     publicMemberCard,
+    type ContactViewer,
     rowToMember,
     rowToProfile,
     type Member,
@@ -189,6 +191,7 @@ import {
     type Rating,
     type FriendEntry,
     getPosts as getPostsEngine,
+    withoutPollVoters,
     getPostCount as getPostCountEngine,
     getActivePostCount as getActivePostCountEngine,
     hasListedOffer as hasListedOfferEngine,
@@ -1084,6 +1087,12 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     const joinedPubkey = event?.type === 'member_joined' && typeof event.member?.publicKey === 'string'
         ? event.member.publicKey.toLowerCase() : null;
     let doorbell: string | null = null;
+    // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
+    // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
+    // leaves the voters off and keeps the counts.
+    const carriesVoters = (event?.type === 'new_post' || event?.type === 'post_updated')
+        && !!event.post && typeof event.post === 'object' && 'pollVotes' in event.post;
+    let withoutVoters: string | null = null;
     for (const ws of wsClients) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now.
         if (joinedPubkey && !ws._memberPubkey && ws._pendingMemberPubkey === joinedPubkey) {
@@ -1098,6 +1107,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         } else if (!ws._memberPubkey && !ws._openFeed) {
             if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
+        } else if (!ws._memberPubkey && carriesVoters) {
+            out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });
         }
         try { ws.send(out); } catch { wsClients.delete(ws); }
     }
@@ -1204,10 +1215,16 @@ export function getAllProfiles(requesterPubkey?: string): MemberProfile[] {
 
 // Who may see a member's contact details: THE rule, shared by the profile page and every list that sends member
 // rows (see contactVisibleTo in the engine). A route never decides it itself.
-export { contactVisibleTo, publicMemberCard };
+export { contactVisibleTo, publicMemberCard, type ContactViewer };
 
-export function ownersWhoAddedAsFriend(viewerPubkey: string | null | undefined): Set<string> {
-    return ownersWhoAddedAsFriendEngine(db, viewerPubkey);
+/** What contactVisibleTo needs to know about the verified signer: member or not, who added them, who they trade with. */
+export function contactViewer(viewerPubkey: string | null | undefined): ContactViewer {
+    return contactViewerEngine(db, viewerPubkey);
+}
+
+/** A member of this node: a row that exists and isn't pruned (the engine's isNodeMember). Pass the verified signer. */
+export function isNodeMember(pubkey: string | null | undefined): boolean {
+    return isNodeMemberEngine(db, pubkey);
 }
 
 export function updateProfile(publicKey: string, update: any): MemberProfile | null {

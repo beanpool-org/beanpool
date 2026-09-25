@@ -230,9 +230,13 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
         if (!consumeNonce(nonce, now)) return { kind: 'invalid' };
 
         // A valid signature only proves key possession — only a known member gets the
-        // member feed, so an anonymous keypair can't subscribe to it.
+        // member feed, so an anonymous keypair can't subscribe to it. A pruned account keeps its
+        // row and can still sign, but it is no longer in the community: its socket gets what a
+        // stranger's gets, as an open one does once the member is pruned (state-engine deliverBroadcast).
         const member = getMember(pubKeyHex);
-        return member ? { kind: 'member', pubkey: member.publicKey } : { kind: 'non_member', pubkey: pubKeyHex.toLowerCase() };
+        return member && member.status !== 'pruned'
+            ? { kind: 'member', pubkey: member.publicKey }
+            : { kind: 'non_member', pubkey: pubKeyHex.toLowerCase() };
     } catch {
         return { kind: 'invalid' };
     }

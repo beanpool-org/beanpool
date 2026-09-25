@@ -349,6 +349,18 @@ function namesMembers(path: string): boolean {
         && (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed)));
 }
 
+/**
+ * Who may make a gated read, once signed. A member of this node always (isNodeMember). A pruned account keeps its row and
+ * can still sign: it passes on a node without the visitors' view (isLiveMemberKey, #1156's separate call), except the
+ * reads gated only because of that view (namesMembers). On a node with the view (`guestListingsOnly`) it reads as a
+ * visitor would, everywhere: nothing a gated read holds is for a visitor (G9a round 3). The switch is read only for a key
+ * that is live but no member, so a member's read pays nothing for it.
+ */
+function mayMakeGatedRead(pubKeyHex: string, path: string): boolean {
+    if (isNodeMember(pubKeyHex)) return true;
+    return !namesMembers(path) && isLiveMemberKey(pubKeyHex) && !getProfileSwitches().guestListingsOnly;
+}
+
 function isPublicRead(path: string): boolean {
     if (!isAllowlisted(path)) return false;
     // The switches are read only for these few paths, so no other request pays for them.
@@ -741,6 +753,13 @@ function isSignatureBypassed(p: string): boolean {
         p === '/api/invite/redeem-offline';
 }
 
+// The administrative rate limiter's buckets (its middleware is in startHttpsServer): each client's requests in the last minute.
+const adminRateLimits = new Map<string, number[]>();
+/** Tests only: forget every administrative bucket. */
+export function resetAdminRateLimit(): void {
+    adminRateLimits.clear();
+}
+
 // Module-level reference so the HTTP server can reuse the same Koa app for
 // plain-HTTP tunnel ingress (avoids TLS handshake overhead from cloudflared).
 let _koaApp: Koa | null = null;
@@ -961,7 +980,6 @@ export async function startHttpsServer(port: number): Promise<number> {
     });
 
     // Administrative In-Memory Rate Limiter Middleware
-    const adminRateLimits = new Map<string, number[]>();
     app.use(async (ctx, next) => {
         const lowerPath = ctx.path.toLowerCase();
         if (lowerPath.startsWith('/api/local/') || lowerPath.startsWith('/api/admin/')) {
@@ -1088,8 +1106,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         const isMutatingApi = MUTATING_METHODS.has(ctx.method) && isApiPath;
         // SRV-2/SRV-4: gated reads require the same signature as writes when
         // ENFORCE_READ_AUTH is on. Deny-by-default — every GET /api/* is gated
-        // unless it is on the public allowlist.
-        const isGatedRead = ENFORCE_READ_AUTH && ctx.method === 'GET' && isApiPath && !isPublicRead(ctx.path);
+        // unless it is on the public allowlist. A HEAD too: the router answers it with the GET handler, so an ungated
+        // HEAD ran any gated read for anyone and its Content-Length told them what the GET would not (4108354205).
+        const isGatedRead = ENFORCE_READ_AUTH && (ctx.method === 'GET' || ctx.method === 'HEAD') && isApiPath && !isPublicRead(ctx.path);
         if (isSignatureBypassed(ctx.path)) {
             return await next();
         }
@@ -1182,10 +1201,10 @@ export async function startHttpsServer(port: number): Promise<number> {
             // of a member being re-keyed (a lost or stolen phone), which this node
             // has invalidated (isLiveMemberKey). (Writes keep their own per-route
             // authorization; membership isn't required there — e.g. first-time
-            // registration.) The reads that are gated only because this node shows
-            // visitors the listings and not the people (G9a) take the member test
-            // itself (isNodeMember): a pruned account reads them as a visitor would.
-            if (isGatedRead && !(namesMembers(ctx.path) ? isNodeMember(pubKeyHex) : isLiveMemberKey(pubKeyHex))) {
+            // registration.) Where this node shows visitors the listings and not the
+            // people (G9a), every gated read takes the member test itself
+            // (mayMakeGatedRead): a pruned account reads as a visitor would.
+            if (isGatedRead && !mayMakeGatedRead(pubKeyHex, ctx.path)) {
                 ctx.status = 403;
                 ctx.body = { error: 'Read access requires a member identity' };
                 return;

@@ -31,3 +31,17 @@ export function seesGuestView(ctx: Pick<Context, 'state'>): boolean {
 /** Says which view a response is, on a node that has two (`X-BeanPool-View`; the phone keeps only the one it expects,
  *  apps/native utils/posts-view.ts). Elsewhere nothing is said, as before G9a. */
 export const VIEW_HEADER = 'X-BeanPool-View';
+
+/**
+ * For a route that hands its caller other members (a name, a face, their standing, who reacted), on a node that shows
+ * guests the listings and not the people: only a member of this node gets an answer. Anyone else is answered 403
+ * `members_only` and the route stops (false). A route's own test of its caller does not stand in for this one: a pruned
+ * account keeps its member row, its group roles, its friends and its conversations, and can still sign, and a POST is
+ * seen by neither the read gate nor the public-read sweep. For a member, and on every other node, this changes nothing.
+ */
+export function membersOnlyHere(ctx: Context): boolean {
+    if (viewerTier(ctx) === 'member' || !getProfileSwitches().guestListingsOnly) return true;
+    ctx.status = 403;
+    ctx.body = { error: 'This is for members of this community', code: 'members_only' };
+    return false;
+}

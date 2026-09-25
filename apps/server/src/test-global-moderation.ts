@@ -13,7 +13,8 @@
  *      listing, search, read by id, the map read (events and pins) and the activity feed for other members and
  *      strangers; its photos 404 unless the author or a moderator signs; a sync read gives others a removal; the
  *      author and moderators still see it, marked; only the author's socket gets the notice (reason "reports"), and an
- *      edit of it reaches only the author in full. A moderator restore un-hides it, the same reporters can't hide it
+ *      edit of it reaches only the author in full; a vote in a hidden poll or an RSVP to a hidden event is refused to
+ *      anyone but its author, and hands nothing back. A moderator restore un-hides it, the same reporters can't hide it
  *      again, new ones can; dismissing reports un-hides once they no longer add up; a moderator can still remove it
  *   4. probation: the 4th post in 24 hours → 429 with the limit and when it resets; the window rolls after 24 hours;
  *      photos past 5 → 429, on a new post and on an edit; after 72 hours with 3 kept posts no limits; an old account
@@ -289,6 +290,25 @@ async function main(): Promise<void> {
         'and every other socket only as a doorbell: the edit never publishes a hidden post');
     const q = (await admin('GET', '/api/local/admin/reports?status=pending')).body?.reports ?? [];
     assert(q.some((r: any) => r.postId === target && r.postHiddenByReports === true), 'the moderators\' queue marks the reports as on a hidden post');
+
+    // A hidden poll or event is not there for anyone but its author to vote in or RSVP to either: the answer would
+    // hand the whole post back. Reporters of their own, so the ones above stay under the hourly report limit.
+    const S = [1, 2, 3].map(i => member(`Sam${i}`, 20));
+    const poll = createPost('poll', 'other', `Hidden poll ${word}`, `Which ${word}?`, 0, 'fixed', ava.pk, undefined, undefined, [], false, undefined, false,
+        { pollOptions: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }] })!.id;
+    for (const r of S) await report(r, poll, ava);
+    assert(!!hiddenAt(poll), 'setup: a poll hidden by reports');
+    const vote = await call('POST', viewer, `/api/marketplace/posts/${poll}/vote`, { optionId: 'a' });
+    assert(vote.status === 400 && !vote.body?.post && !JSON.stringify(vote.body ?? '').includes(word),
+        `another member's vote in a hidden poll is refused, and hands nothing of it back (got ${vote.status} ${JSON.stringify(vote.body)?.slice(0, 120)})`);
+    const rsvp = await call('POST', viewer, `/api/marketplace/posts/${ev}/rsvp`, { status: 'interested' });
+    assert(rsvp.status === 400 && !rsvp.body?.post,
+        `so is an RSVP to a hidden event, even from someone who said they were going (got ${rsvp.status} ${JSON.stringify(rsvp.body)?.slice(0, 120)})`);
+    const votes = (db.prepare('SELECT COUNT(*) AS c FROM poll_votes WHERE post_id = ?').get(poll) as any).c;
+    const viewerRsvp = db.prepare('SELECT status FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(ev, viewer.pk) as any;
+    assert(votes === 0 && viewerRsvp?.status === 'going', 'and neither is recorded');
+    const ownVote = await call('POST', ava, `/api/marketplace/posts/${poll}/vote`, { optionId: 'b' });
+    assert(ownVote.status === 200 && ownVote.body?.post?.id === poll, `its author can still vote in it (${ownVote.status})`);
 
     const restored = await admin('POST', `/api/local/admin/posts/${target}/restore`);
     assert(restored.status === 200 && hiddenAt(target) === null, `a moderator restores it (${restored.status})`);

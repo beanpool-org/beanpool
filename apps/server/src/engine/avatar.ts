@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db } from '../db/db.js';
 import { isSelfAvatarUrl } from '@beanpool/core';
+import { isStorableImageValue } from '../storage/image-metadata.js';
 
 
 /**
@@ -42,18 +43,22 @@ export function sniffRasterImageType(buf: Buffer): string | null {
 export const AVATAR_FORMAT_ERROR = 'Avatar must be a JPEG, PNG, WebP or GIF image';
 
 /**
- * Write-side check for a member/enterprise avatar value. Only `data:` values are judged: they must be
- * a base64 JPEG/PNG/WebP/GIF whose bytes really are that image. Other strings (`bundled://…`, empty or
- * null to clear) keep their existing handling — the serving route refuses anything it cannot turn into
- * image bytes.
+ * Write-side check for a member/enterprise avatar value. A `data:` value must be a base64 JPEG/PNG/WebP/GIF
+ * whose bytes really are that image. Other strings (`bundled://…`, empty or null to clear) keep their
+ * existing handling — the serving route refuses anything it cannot turn into image bytes.
+ *
+ * And whatever form it comes in, a picture the metadata strip cannot vouch for — a JPEG, PNG, WebP or GIF whose
+ * structure it cannot walk, or one with metadata and no picture to keep — is refused: it would be stored with its
+ * GPS (G9a-3, `isStorableImageValue`). Every photo check on the node starts here, so every route refuses it.
  */
 export function isAcceptableAvatarValue(value: unknown): boolean {
     if (typeof value !== 'string') return true;
     const trimmed = value.trim();
-    if (!/^data:/i.test(trimmed)) return true;
-    const m = trimmed.match(/^data:image\/(jpeg|jpg|png|webp|gif);base64,([A-Za-z0-9+/=\s]+)$/i);
-    if (!m) return false;
-    return sniffRasterImageType(Buffer.from(m[2], 'base64')) !== null;
+    if (/^data:/i.test(trimmed)) {
+        const m = trimmed.match(/^data:image\/(jpeg|jpg|png|webp|gif);base64,([A-Za-z0-9+/=\s]+)$/i);
+        if (!m || sniffRasterImageType(Buffer.from(m[2], 'base64')) === null) return false;
+    }
+    return isStorableImageValue(trimmed);
 }
 
 /**
@@ -62,19 +67,30 @@ export function isAcceptableAvatarValue(value: unknown): boolean {
  * serves nothing it cannot sniff as a raster image; those do not look. So a value written in base64 without a
  * `data:` prefix (the legacy bare form) is judged as well: its bytes must be a JPEG, PNG, WebP or GIF, the
  * formats the metadata strip handles (G9a-3). A bare HEIC, GPS inside, would otherwise be stored and served as
- * sent. Any other string (a URL, a `bundled://` name, this node's own `/api/avatar/…` address sent back by an
- * editor) is not image bytes and passes as before.
+ * sent. Any other string (a URL, a `bundled://` name, this node's own `/api/avatar/…` or post-photo address sent
+ * back by an editor) is not image bytes and passes as before.
  */
 export function isAcceptablePhotoValue(value: unknown): boolean {
     if (!isAcceptableAvatarValue(value)) return false;
     if (typeof value !== 'string') return true;
     const trimmed = value.trim();
-    if (/^data:/i.test(trimmed) || isSelfAvatarUrl(trimmed) || !BASE64_TEXT.test(trimmed)) return true;
+    if (/^data:/i.test(trimmed) || isSelfAvatarUrl(trimmed) || isSelfPostPhotoUrl(trimmed) || !BASE64_TEXT.test(trimmed)) return true;
     return sniffRasterImageType(Buffer.from(trimmed, 'base64')) !== null;
 }
 
 /** Standard or URL-safe base64, wrapped or not: text that Buffer.from(…, 'base64') reads whole. */
 const BASE64_TEXT = /^[A-Za-z0-9+/=_\-\s]+$/;
+
+/**
+ * Is this string one of this node's own post-photo addresses, `/api/marketplace/posts/<id>/photos/<n>` (relative,
+ * or absolute on any host, with or without its `?v=`)? The node writes one into a row itself — the pricing
+ * aggregator's thumbnail — and hands the others out with every post, so an editor may send any of them back. The
+ * shape `updatePost` maps back to a stored photo, held to the whole string. Without its `?v=`, every character of it
+ * is base64-legal, so the bare-base64 rule above would read it as a picture that is not one, and refuse it.
+ */
+export function isSelfPostPhotoUrl(value: string): boolean {
+    return /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/marketplace\/posts\/[^/?#\s]+\/photos\/\d+(?:\?\S*)?$/i.test(value.trim());
+}
 
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 export const DEFAULT_MAX_AVATAR_CACHE_TOTAL_BYTES = 10 * 1024 * 1024; // 10 MB RAM

@@ -6,7 +6,9 @@
  * the response, so any member who could read the list got every other member's phone number or email,
  * including the ones marked Hidden or Friends. On a global node, where anyone becomes a member by signing
  * in, that was the whole node's contact list one request away (found by #1140's deciding review,
- * 2026-09-25).
+ * 2026-09-25). The sweep behind this test found the same whole row going out in three more places: the
+ * unsigned invite-redeem routes (for ANY existing member's key, to anyone holding a recent invite code),
+ * the member_joined broadcast, and the admin dashboard's member list.
  *
  * Boots the real server with every ENFORCE_* variable REMOVED (the fresh-download default, read auth ON),
  * seeds one member per visibility, and reads every route that sends member rows as:
@@ -26,16 +28,19 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
+process.env.ADMIN_PASSWORD = 'ContactTest123!'; // read by initAdminPassword
 
 import crypto from 'node:crypto';
+import WebSocket from 'ws';
 
-const PORT = 8613;
-const BASE = `https://localhost:${PORT}`;
+const ADMIN_PW = 'ContactTest123!';
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 type Id = { pubKeyHex: string; privateKey: crypto.KeyObject };
 
@@ -61,16 +66,37 @@ async function get(path: string, id?: Id): Promise<{ status: number; text: strin
     return { status: res.status, text: await res.text(), etag: res.headers.get('etag'), cacheControl: res.headers.get('cache-control') };
 }
 
-async function post(path: string, payload: unknown, id: Id): Promise<{ status: number; body: any }> {
+/** A POST, signed by `id` when given. */
+async function post(path: string, payload: unknown, id?: Id): Promise<{ status: number; text: string; body: any }> {
     const body = JSON.stringify(payload);
     const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', path, body, id) },
+        headers: { 'Content-Type': 'application/json', ...(id ? signedHeaders('POST', path, body, id) : {}) },
         body,
     });
+    const text = await res.text();
     let json: any;
-    try { json = await res.json(); } catch { /* empty */ }
-    return { status: res.status, body: json };
+    try { json = JSON.parse(text); } catch { /* empty */ }
+    return { status: res.status, text, body: json };
+}
+
+function signedWsQuery(id: Id): string {
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
+    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+}
+
+function openSocket(url: string): Promise<{ ws: WebSocket; events: any[]; raw: string[] }> {
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(url, { rejectUnauthorized: false });
+        const events: any[] = [];
+        const raw: string[] = [];
+        ws.on('message', (d) => { raw.push(d.toString()); try { events.push(JSON.parse(d.toString())); } catch { /* */ } });
+        ws.on('open', () => resolve({ ws, events, raw }));
+        ws.on('error', reject);
+        setTimeout(() => reject(new Error('socket did not open')), 3000);
+    });
 }
 
 async function main() {
@@ -78,11 +104,14 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
+    const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
 
+    initAdminPassword();
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    const port = await startHttpsServer(0);
+    BASE = `https://localhost:${port}`;
 
     const member = (callsign: string, contact?: { value: string; visibility: string | null }): Id => {
         const id = keypair();
@@ -122,12 +151,15 @@ async function main() {
     const secretsIn = (text: string) => new Set(Object.entries(SECRET).filter(([, v]) => text.includes(v)).map(([k]) => k));
     const fmt = (s: Set<string>) => `[${[...s].sort().join(', ')}]`;
     const same = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every(x => b.has(x));
+    const ownerInviteCodes = Object.keys(owners).map(k => `INV-${({ community: 'COMMOWNER', tradePartners: 'TRADEOWNER', friends: 'FRIENDSOWNER', hidden: 'HIDDENOWNER', unset: 'UNSETOWNER' } as Record<string, string>)[k]}`);
+    const anyInviteCode = (text: string) => ownerInviteCodes.some(c => text.includes(c)) || text.includes('INV-STRANGER');
 
     // Every route that sends member rows to a member's app. Each one is read by every viewer below.
     const LIST_ROUTES = [
         '/api/community/members',
         '/api/members',
         '/api/members?updatedAfter=2000-01-01T00:00:00.000Z',
+        '/api/invite/tree',
     ];
 
     console.log('── the member lists ──');
@@ -139,7 +171,8 @@ async function main() {
         return s;
     };
     for (const path of LIST_ROUTES) {
-        // `/api/members` is the app's directory sync and never carried contact details; it must stay that way.
+        // Only the community list carries contact details; the app's directory sync and the invite tree never did,
+        // and must stay that way.
         const carriesContact = path === '/api/community/members';
         const viewers: [string, Id][] = [
             ['stranger', stranger],
@@ -152,13 +185,14 @@ async function main() {
             const want = carriesContact ? expectFor(viewer) : new Set<string>();
             assert(r.status === 200, `${label}, signed, GET ${path} → 200 (got ${r.status})`);
             assert(same(seen, want), `${label} sees exactly ${fmt(want)} on ${path} (saw ${fmt(seen)})`);
+            assert(!anyInviteCode(r.text), `${label} is sent no member's invite code on ${path}`);
         }
         const unsigned = await get(path);
         assert(unsigned.status === 401, `unsigned GET ${path} is refused with 401 (got ${unsigned.status})`);
         assert(secretsIn(unsigned.text).size === 0, `the unsigned refusal of ${path} carries no contact`);
         const asGuest = await get(path, guest);
-        assert(!['friends', 'hidden', 'unset'].some(k => secretsIn(asGuest.text).has(k)),
-            `a signed non-member sees no Friends-only, Hidden or unset contact on ${path} (status ${asGuest.status}, saw ${fmt(secretsIn(asGuest.text))})`);
+        assert(asGuest.status === 403, `a signed non-member is refused ${path} with 403 (got ${asGuest.status})`);
+        assert(secretsIn(asGuest.text).size === 0, `the non-member's refusal of ${path} carries no contact (saw ${fmt(secretsIn(asGuest.text))})`);
     }
 
     console.log('\n── the member list carries no other private field ──');
@@ -169,10 +203,11 @@ async function main() {
         assert(!!other, 'the hidden owner is still listed for the stranger');
         assert(other && other.contactValue == null && other.contactVisibility == null && other.contact == null,
             `the hidden owner's row has no contact fields at all for the stranger (got ${JSON.stringify({ v: other?.contactValue, vis: other?.contactVisibility, c: other?.contact })})`);
-        assert(!r.text.includes('INV-HIDDENOWNER'), 'no invite code rides along in the list');
-        assert(other && !('inviteCode' in other), 'the list row has no inviteCode field');
-        const own = rows.find(m => m.publicKey === stranger.pubKeyHex);
-        assert(!!own, 'the stranger is in their own list');
+        assert(other && !('inviteCode' in other) && !('updatedAt' in other),
+            `the list row has no inviteCode or updatedAt field (keys: ${other ? Object.keys(other).sort().join(', ') : '-'})`);
+        for (const field of ['publicKey', 'callsign', 'avatarUrl', 'joinedAt', 'status', 'nodeRole']) {
+            assert(other && field in other, `the list row still has ${field}, which the apps read`);
+        }
         const mine = JSON.parse((await get('/api/community/members', owners.hidden)).text).find((m: any) => m.publicKey === owners.hidden.pubKeyHex);
         assert(mine?.contactValue === SECRET.hidden && mine?.contactVisibility === 'hidden',
             `the hidden owner still sees their own contact and choice in the list (got ${JSON.stringify({ v: mine?.contactValue, vis: mine?.contactVisibility })})`);
@@ -213,6 +248,61 @@ async function main() {
         assert(asSelf, `the ${k} owner sees their own contact on their profile page`);
         const unsigned = await get(path);
         assert(unsigned.status === 401, `unsigned GET /api/profile/:publicKey is refused with 401 (got ${unsigned.status})`);
+        const asGuest = await get(path, guest);
+        assert(asGuest.status === 403 && !secretsIn(asGuest.text).has(key),
+            `a signed non-member is refused the ${k} owner's profile page with 403 and no contact (got ${asGuest.status})`);
+    }
+
+    console.log('\n── the unsigned invite-redeem routes, named with an existing member\'s key ──');
+    {
+        // Any recent invite code will do: the "already a member" answer comes before the code is checked as used.
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('INV-PROBE-0001', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(stranger.pubKeyHex);
+        const payload = JSON.stringify({ i: stranger.pubKeyHex, t: Date.now() });
+        const sig = crypto.sign(null, Buffer.from(payload), stranger.privateKey).toString('base64');
+        const ticketB64 = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64');
+        const CARD = ['avatarUrl', 'callsign', 'joinedAt', 'publicKey'].join(',');
+        for (const [k, o] of Object.entries(owners)) {
+            for (const [route, body] of [
+                ['/api/invite/redeem', { code: 'INV-PROBE-0001', publicKey: o.pubKeyHex, callsign: 'probe' }],
+                ['/api/invite/redeem-offline', { ticketB64, publicKey: o.pubKeyHex, callsign: 'probe' }],
+            ] as const) {
+                const r = await post(route, body);
+                assert(r.status === 200 && r.body?.alreadyMember === true, `unsigned ${route} for the ${k} owner's key answers alreadyMember (got ${r.status})`);
+                assert(secretsIn(r.text).size === 0, `…and carries no contact (saw ${fmt(secretsIn(r.text))})`);
+                assert(!anyInviteCode(r.text), '…and no invite code');
+                assert(Object.keys(r.body?.member || {}).sort().join(',') === CARD,
+                    `…and only the public card (keys: ${Object.keys(r.body?.member || {}).sort().join(', ')})`);
+            }
+        }
+    }
+
+    console.log('\n── the member_joined broadcast ──');
+    {
+        const sock = await openSocket(`${BASE.replace('https', 'wss')}/ws?${signedWsQuery(stranger)}`);
+        await sleep(200);
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('INV-JOIN-0001', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(stranger.pubKeyHex);
+        const joiner = keypair();
+        const joined = await post('/api/invite/redeem', { code: 'INV-JOIN-0001', publicKey: joiner.pubKeyHex, callsign: 'newcomer' });
+        assert(joined.status === 200 && joined.body?.success === true && !joined.body?.alreadyMember, `a newcomer joins with a fresh code (got ${joined.status})`);
+        assert(!joined.text.includes('INV-JOIN-0001'), 'the join response does not echo the invite code back in the member');
+        await sleep(400);
+        const ev = sock.events.find(e => e.type === 'member_joined' && e.member?.publicKey === joiner.pubKeyHex);
+        assert(!!ev, 'a member socket gets member_joined for the newcomer');
+        assert(ev && Object.keys(ev.member).sort().join(',') === 'avatarUrl,callsign,joinedAt,publicKey',
+            `member_joined carries only the public card (keys: ${ev ? Object.keys(ev.member).sort().join(', ') : '-'})`);
+        assert(!sock.raw.some(r => r.includes('INV-JOIN-0001')), 'no socket message carries the newcomer\'s invite code');
+        sock.ws.close();
+    }
+
+    console.log('\n── the admin dashboard\'s member list ──');
+    {
+        const r = await post('/api/local/admin/data', { password: ADMIN_PW });
+        assert(r.status === 200, `the admin reads /api/local/admin/data (got ${r.status})`);
+        const seen = secretsIn(r.text);
+        assert(same(seen, everyone), `an admin sees exactly ${fmt(everyone)}, the same as any member (saw ${fmt(seen)})`);
+        const row = (r.body?.members || []).find((m: any) => m.publicKey === owners.hidden.pubKeyHex);
+        assert(!!row && !('contactValue' in row) && !('contactVisibility' in row), 'the admin member rows carry no contact fields');
+        assert(!!row && row.invitedBy === 'seed' && typeof row.status === 'string', 'the admin rows still carry what the manager draws from (invitedBy, status)');
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

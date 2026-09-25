@@ -65,12 +65,12 @@ export interface MemberProfile {
     archetype?: string | null;
 }
 
+/** One member in the invite tree any member can read — who invited whom, never the invite code itself. */
 export interface InviteTreeNode {
     publicKey: string;
     callsign: string;
     joinedAt: string;
     invitedBy: string;
-    inviteCode: string;
     status: string;
     children: InviteTreeNode[];
 }
@@ -123,6 +123,24 @@ export function rowToProfile(row: any): MemberProfile {
         elderVouchedByCallsign: row.elder_vouched_by_callsign || null,
         archetype: row.archetype || null,
     };
+}
+
+/**
+ * What anyone may be told about a member without knowing who is asking: the name, the join date and the photo
+ * (the photo is public at /api/avatar/:publicKey anyway). For a response that can reach someone other than the
+ * member, e.g. the unsigned invite-redeem routes, which answer for whatever publicKey is in the body, and the
+ * member_joined broadcast. Never the whole Member: that carries their contact details whatever they chose, and
+ * the invite code they joined with.
+ */
+export interface PublicMemberCard {
+    publicKey: string;
+    callsign: string;
+    joinedAt: string;
+    avatarUrl: string | null;
+}
+
+export function publicMemberCard(m: Member): PublicMemberCard {
+    return { publicKey: m.publicKey, callsign: m.callsign, joinedAt: m.joinedAt, avatarUrl: m.avatarUrl ?? null };
 }
 
 export function getMember(db: Db, publicKey: string): Member | undefined {
@@ -265,7 +283,6 @@ export function getInviteTree(db: Db, rootPubkey?: string): InviteTreeNode[] {
             callsign: m.callsign,
             joinedAt: m.joinedAt,
             invitedBy: m.invitedBy,
-            inviteCode: m.inviteCode,
             status: m.status || 'active',
             children: children.map(buildNode).sort((a, b) => a.callsign.localeCompare(b.callsign))
         };

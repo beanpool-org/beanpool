@@ -31,7 +31,7 @@ import {
     purgeMemberSelf,
     getMembersVersion,
     lastActiveForViewer,
-    contactVisibleTo, ownersWhoAddedAsFriend,
+    contactVisibleTo, ownersWhoAddedAsFriend, publicMemberCard,
 } from '../state-engine.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
@@ -858,7 +858,10 @@ router.post('/api/invite/redeem', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
-    ctx.body = { success: true, member: result.member, alreadyMember: result.alreadyMember };
+    // Unsigned (the joiner is not a member yet), and for a publicKey that is already a member this answers before
+    // the code is checked as used, so ANYONE holding a recent code could name any member's key here. The public
+    // card only: the whole row carried that member's contact details whatever they chose. The apps read avatarUrl.
+    ctx.body = { success: true, member: result.member ? publicMemberCard(result.member) : undefined, alreadyMember: result.alreadyMember };
 });
 
 router.post('/api/invite/redeem-offline', async (ctx) => {
@@ -874,7 +877,8 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
-    ctx.body = { success: true, member: result.member, alreadyMember: result.alreadyMember };
+    // The public card only, as /api/invite/redeem above: unsigned, and answers for any existing member's key.
+    ctx.body = { success: true, member: result.member ? publicMemberCard(result.member) : undefined, alreadyMember: result.alreadyMember };
 });
 
 // Read-only pre-flight: lets onboarding reject a dud invite at Step 1 (before

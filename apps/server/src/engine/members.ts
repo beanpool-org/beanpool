@@ -4,7 +4,7 @@
 
 import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
 import { ledger } from './ledger.js';
-import { getMember, getProfile, type Member, type MemberProfile } from '@beanpool/engine';
+import { getMember, getProfile, publicMemberCard, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptableAvatarValue } from './avatar.js';
@@ -267,7 +267,9 @@ export function registerMemberInternal(
 
     ledger.initializeGenesisAccount(publicKey);
     const member = getMember(db, publicKey)!;
-    broadcast({ type: 'member_joined', member });
+    // Every member socket gets this, so it carries the public card, not the row (which holds the invite code the
+    // member joined with). The apps only use the event as a doorbell; the server reads member.publicKey.
+    broadcast({ type: 'member_joined', member: publicMemberCard(member) });
     try {
         recordFeedActivity('member_joined', publicKey, null, { callsign });
     } catch (e) {

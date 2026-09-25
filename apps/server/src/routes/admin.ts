@@ -626,8 +626,14 @@ router.post('/api/local/admin/data', async (ctx) => {
             // the granted lane (it leaves out earned trade and vouches), and vouching is a capability
             // shown by canVouch, not a tier.
             const tier = getMemberTrustProfile(m.publicKey).tier.name;
+            // An admin sees no more of a member's contact details than any member does: the choice reads "Hidden —
+            // only you can see it", and the manager never shows them. `profiles` below carries them by the same rule
+            // as the profile page (contactVisibleTo, no viewer). The rest of the row stays: the manager draws the
+            // invite tree, pruning and roles from it.
+            const { contactValue, contactVisibility, ...row } = m;
+            void contactValue; void contactVisibility;
             return {
-                ...m,
+                ...row,
                 // Admins see the day too: a node admin could otherwise match secret-ballot votes to voters.
                 lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
                 tier,

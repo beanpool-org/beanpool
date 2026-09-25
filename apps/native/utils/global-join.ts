@@ -60,8 +60,11 @@ export const GITHUB_JOIN_ROUTES: GithubNodeRoutes = {
 /** The name the server keeps: `/api/join` cuts a longer one at 20 characters. */
 export const MAX_JOIN_NAME = 20;
 
-/** Give up on the join request rather than hold a spinner with no answer. */
-const JOIN_TIMEOUT_MS = 30_000;
+/**
+ * Give up on a door request (the nonce, the join) rather than hold a spinner with no answer. Nothing else
+ * bounds how long a fetch may wait, and the door's screen can't be left while one is out.
+ */
+export const JOIN_TIMEOUT_MS = 30_000;
 
 /** A sign-in done at the door: what the join proves itself with, and the subject the recovery copy is sealed to. */
 export type DoorSignIn =
@@ -217,12 +220,13 @@ export async function signInAtDoor(
     identity: BeanPoolIdentity,
     options: { onGithubPrompt?: (prompt: GithubDevicePrompt) => void; signal?: AbortSignal } = {},
 ): Promise<{ kind: 'signed_in'; signin: DoorSignIn } | { kind: 'answered'; answer: DoorAnswer }> {
-    let res: Response;
+    let res: Response | null;
     try {
-        res = await signedPost(url, JOIN_NONCE_PATH, {}, identity);
+        res = await withTimeout(signedPost(url, JOIN_NONCE_PATH, {}, identity), JOIN_TIMEOUT_MS);
     } catch {
-        return { kind: 'answered', answer: { kind: 'unreachable', message: DOOR_MESSAGES.unreachable } };
+        res = null;
     }
+    if (!res) return { kind: 'answered', answer: { kind: 'unreachable', message: DOOR_MESSAGES.unreachable } };
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return { kind: 'answered', answer: readDoorAnswer(res.status, body, retryAfterSeconds(res)) };
 

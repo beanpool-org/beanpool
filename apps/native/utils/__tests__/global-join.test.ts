@@ -84,6 +84,7 @@ import {
     commitJoinKey,
     keepJoinedIdentity,
     releaseJoinKey,
+    JOIN_TIMEOUT_MS,
     type DoorAnswer,
 } from '../global-join';
 
@@ -324,6 +325,22 @@ describe('the door answering before any sign-in', () => {
         const result = await signInAtDoor('facebook', NODE, joiner);
         expect(result).toMatchObject({ kind: 'answered', answer: { kind: 'joined' } });
         expect(signInWithFacebook).not.toHaveBeenCalled();
+    });
+
+    it('a door that never answers the nonce: unreachable once the wait runs out, never a spinner for good', async () => {
+        vi.useFakeTimers();
+        try {
+            globalThis.fetch = vi.fn(() => new Promise<Response>(() => {})) as any;
+            let settled = false;
+            const pending = signInAtDoor('google', NODE, joiner).finally(() => { settled = true; });
+            await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await pending).toMatchObject({ kind: 'answered', answer: { kind: 'unreachable' } });
+            expect(signInWithGoogle).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('the limiter (429) and no answer', async () => {

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState, Animated } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
@@ -12,6 +12,7 @@ import {
     type OnboardingFlow,
 } from '../utils/onboarding-state';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile } from '../utils/node-profile';
+import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
     keepJoinedIdentity, nameCheckMessage, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin,
@@ -20,7 +21,7 @@ import {
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
-import { useGlobalSearchParams, router } from 'expo-router';
+import { useGlobalSearchParams, router, useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
@@ -216,6 +217,33 @@ export default function WelcomeScreen() {
     useEffect(() => () => nameCheckRef.current?.abort(), []);
     /** From the key going onto the phone until the join's answer: the door's screen is not left mid-join. */
     const joinSendingRef = useRef(false);
+
+    // Whether home offers the door at all (utils/global-door-offer.ts): only once the node has said, this app start,
+    // that it is the global community with its door open. Drawn from what is already known and asked after drawing,
+    // never before. Asked again when home comes back into view or the app to the front: free once there is an answer
+    // (it is kept for the session), a new ask after a failure. Once shown it stays; the door itself asks again anyway.
+    const [globalOffer, setGlobalOffer] = useState(globalDoorOffered);
+    useFocusEffect(useCallback(() => {
+        if (mode !== 'home') return;
+        let cancelled = false;
+        const ask = () => {
+            askGlobalDoorOffer().then(open => { if (!cancelled && open) setGlobalOffer(true); });
+        };
+        ask();
+        const sub = AppState.addEventListener('change', (state) => {
+            if (state === 'active') ask();
+        });
+        return () => { cancelled = true; sub.remove(); };
+    }, [mode]));
+    /** Where home's content was drawn, centred, while there was no offer: an offer that arrives later keeps it there. */
+    const [homeTop, setHomeTop] = useState<number | null>(null);
+    useEffect(() => { if (mode !== 'home') setHomeTop(null); }, [mode]);
+    /** The offer fades in the first time it is drawn. */
+    const offerFade = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+        if (mode !== 'home' || !globalOffer) return;
+        Animated.timing(offerFade, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    }, [mode, globalOffer, offerFade]);
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone
     // that already holds one). Rare, but destructive: the phone can only hold one
@@ -2629,60 +2657,74 @@ export default function WelcomeScreen() {
 
 
 
-    // --- MAIN WELCOME SCREEN (two choices like the PWA) ---
+    // --- MAIN WELCOME SCREEN ---
+    // Centred as it always was. The door's offer goes below everything else, and only once the node has said it is
+    // open; nothing is kept for it, so a shut door leaves no gap. When it arrives after home is drawn (the usual case:
+    // the ask starts once home is on screen), the content is pinned where it was drawn (`homeTop`) and the offer fades
+    // in underneath, so nothing on screen moves under a thumb. On a small phone that is below the fold.
+    const pinnedTop = globalOffer ? homeTop : null;
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style="dark" />
-            {/* Scrolls: at 320dp and 1.3x text, two buttons, the hint and the paste offer are taller than a small phone. */}
-            <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, alignItems: 'center' }}>
-                <Text style={styles.headerTitle}>Welcome to BeanPool</Text>
-                <Text style={styles.headerSubtitle}>
-                    Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.
-                </Text>
+            {/* Scrolls: at 320dp and 1.3x text, the button, the hint and the paste offer are taller than a small phone. */}
+            <ScrollView contentContainerStyle={pinnedTop !== null ? [styles.homeContent, { paddingTop: pinnedTop }] : [styles.homeContent, styles.homeCentred]}>
+                <View style={styles.homeMain} onLayout={(e) => { if (!globalOffer) setHomeTop(e.nativeEvent.layout.y); }}>
+                    <Text style={styles.headerTitle}>Welcome to BeanPool</Text>
+                    <Text style={styles.headerSubtitle}>
+                        Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.
+                    </Text>
 
-                {/* Nearly every first launch is a new user, so joining is THE primary action, and there are two
-                    doors: a community, with an invite from a member, or the global community, with one sign-in.
-                    Restoring an account on a new phone is the rare case and lives as a quiet link below.
-                    One line each at 320dp and 1.3x text: the label shrinks rather than wraps. */}
-                <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button" accessibilityLabel="Join with an invite">
-                    <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>🎟️ Join with an invite</Text>
-                </Pressable>
-                <Pressable style={styles.memberBtn} onPress={openGlobalDoor} accessibilityRole="button" accessibilityLabel="Explore BeanPool worldwide">
-                    <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>🌍 Explore BeanPool worldwide</Text>
-                </Pressable>
-
-                <Text style={styles.inviteOnlyHint}>
-                    Have an invite? Join your community.{'\n'}
-                    No invite? Explore BeanPool worldwide and find a community near you.
-                </Text>
-
-                {clipboardMayHaveInvite && (Clipboard.isPasteButtonAvailable ? (
-                    <View style={styles.clipboardHintBox}>
-                        <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap Paste to open it</Text>
-                        <Clipboard.ClipboardPasteButton
-                            onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'home'); }}
-                            acceptedContentTypes={['plain-text', 'url']}
-                            displayMode="iconAndLabel"
-                            backgroundColor={palette.blue600}
-                            foregroundColor={colors.text.inverse}
-                            cornerStyle="capsule"
-                            style={styles.homePasteSystemBtn}
-                        />
-                    </View>
-                ) : (
-                    <Pressable style={styles.clipboardHintBtn} onPress={handleCheckClipboardInvite} accessibilityRole="button">
-                        <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap to check your clipboard</Text>
+                    {/* Nearly every first launch is a new user, so joining is THE primary action. Restoring an account on
+                        a new phone is the rare case and lives as a quiet link below. One line at 320dp and 1.3x text: the
+                        label shrinks rather than wraps. The hint reads true with or without the offer below it. */}
+                    <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button" accessibilityLabel="Join with an invite">
+                        <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>🎟️ Join with an invite</Text>
                     </Pressable>
-                ))}
 
-                <Pressable
-                    style={styles.restoreSecondaryBtn}
-                    onPress={() => setMode('member')}
-                    accessibilityRole="button"
-                    accessibilityLabel="Already a Member? Restore Account"
-                >
-                    <Text style={styles.restoreSecondaryBtnText}>🔑 Already a Member? Restore Account →</Text>
-                </Pressable>
+                    <Text style={styles.inviteOnlyHint}>
+                        You join a local community with an invite from one of its members.{'\n'}
+                        No invite yet? Ask a friend on BeanPool, or find a community near you at{' '}
+                        <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org')}>beanpool.org</Text>.
+                    </Text>
+
+                    {clipboardMayHaveInvite && (Clipboard.isPasteButtonAvailable ? (
+                        <View style={styles.clipboardHintBox}>
+                            <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap Paste to open it</Text>
+                            <Clipboard.ClipboardPasteButton
+                                onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'home'); }}
+                                acceptedContentTypes={['plain-text', 'url']}
+                                displayMode="iconAndLabel"
+                                backgroundColor={palette.blue600}
+                                foregroundColor={colors.text.inverse}
+                                cornerStyle="capsule"
+                                style={styles.homePasteSystemBtn}
+                            />
+                        </View>
+                    ) : (
+                        <Pressable style={styles.clipboardHintBtn} onPress={handleCheckClipboardInvite} accessibilityRole="button">
+                            <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap to check your clipboard</Text>
+                        </Pressable>
+                    ))}
+
+                    <Pressable
+                        style={styles.restoreSecondaryBtn}
+                        onPress={() => setMode('member')}
+                        accessibilityRole="button"
+                        accessibilityLabel="Already a Member? Restore Account"
+                    >
+                        <Text style={styles.restoreSecondaryBtnText}>🔑 Already a Member? Restore Account →</Text>
+                    </Pressable>
+                </View>
+
+                {/* The door's offer (utils/global-door-offer.ts). The door asks the node again when it is tapped. */}
+                {globalOffer && (
+                    <Animated.View style={[styles.homeOffer, { opacity: offerFade }]}>
+                        <Text style={styles.inviteOnlyHint}>No invite? Explore BeanPool worldwide and find a community near you.</Text>
+                        <Pressable style={[styles.memberBtn, styles.homeOfferBtn]} onPress={openGlobalDoor} accessibilityRole="button" accessibilityLabel="Explore BeanPool worldwide">
+                            <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>🌍 Explore BeanPool worldwide</Text>
+                        </Pressable>
+                    </Animated.View>
+                )}
             </ScrollView>
         </SafeAreaView>
     );
@@ -2690,6 +2732,11 @@ export default function WelcomeScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
+    homeContent: { flexGrow: 1, padding: 24, alignItems: 'center' },
+    homeCentred: { justifyContent: 'center' },
+    homeMain: { width: '100%', alignItems: 'center' },
+    homeOffer: { width: '100%', alignItems: 'center', marginTop: 28 },
+    homeOfferBtn: { marginTop: 12 },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
     headerSubtitle: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', marginBottom: 32, lineHeight: 24 },

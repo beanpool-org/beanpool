@@ -38,7 +38,7 @@
  * when there is a measurement for every provider we ship, not before.
  */
 
-import { Platform, DeviceEventEmitter } from 'react-native';
+import { Platform, DeviceEventEmitter, AppState } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
@@ -847,17 +847,35 @@ function generatePkcePair(): { verifier: string; challenge: string } {
     return { verifier, challenge };
 }
 
-/** Sleep that gives up early when the caller cancels, so a close is felt at once. */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+/**
+ * Sleep that gives up early when the caller cancels, so a close is felt at once, and with `orForeground` when the
+ * app comes back to the front.
+ *
+ * Why the foreground: Android runs JS timers off the Choreographer and stops them while the app's activity is
+ * paused (React Native 0.83 JavaTimerManager.onHostPause removes its frame callback; nothing fires until
+ * onHostResume). The app is paused the whole time GitHub's Custom Tab is in front of it, so a GitHub wait cannot
+ * end, and no poll can learn the member finished, until they come back. Asking the moment they do shows them the
+ * answer at once rather than after what is left of the interval (up to 120 s once GitHub has slowed the node
+ * down). On iOS the in-app browser leaves the app active and its timers running, and nothing changes.
+ */
+function sleep(ms: number, signal?: AbortSignal, orForeground = false): Promise<void> {
     return new Promise((resolve) => {
         if (signal?.aborted) return resolve();
+        let settled = false;
+        let foreground: { remove(): void } | null = null;
         const t = setTimeout(done, ms);
         function done() {
+            if (settled) return;
+            settled = true;
             clearTimeout(t);
+            foreground?.remove();
             signal?.removeEventListener('abort', done);
             resolve();
         }
         signal?.addEventListener('abort', done, { once: true });
+        if (orForeground) {
+            foreground = AppState.addEventListener('change', (state) => { if (state === 'active') done(); });
+        }
     });
 }
 
@@ -875,6 +893,14 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
  *
  * `beanpool://foreground` is a no-op route: `+native-intent.ts` returns null for it, so the app
  * comes forward without navigating the member off whatever screen they were on.
+ *
+ * What it cannot do on Android (Marty's phone, 2026-09-25): run while GitHub's tab is in front. The
+ * app is paused there and its JS timers with it (see `sleep`), so the poll that calls this only
+ * learns GitHub said yes once the member is already back. Nothing reliable brings the app forward
+ * from behind the tab without the member: no timer runs, and Android 10+ refuses an activity start
+ * from an app in the background. So the member is told to tap ✕ (components/GithubCodeSteps.tsx),
+ * and the poll asks the moment the app is in front again. This stays for iOS, where it closes the
+ * page, and for an app that is not paused behind the tab (split screen).
  */
 export async function returnToApp(): Promise<void> {
     if (Platform.OS === 'ios') {
@@ -1062,7 +1088,15 @@ function finishedGithubSignIn(sessionId: string, body: Record<string, unknown>):
  * The node's three GitHub poll routes share one bucket per address, 60 a minute
  * (github-poll-rate-limit.ts), and answer 429 with `Retry-After` past it. Six phones on one wifi must
  * each simply wait longer, so a 429 waits `Retry-After` (or the interval) and asks again. It is never
- * a failed sign-in.
+ * a failed sign-in, and the app coming to the front does not cut that wait short.
+ *
+ * ## Coming back from GitHub asks at once
+ *
+ * On Android the wait between polls does not run while GitHub's tab is in front (see {@link sleep}), so
+ * the poll that would bring the app back never happens there: the member has to tap ✕, and the panel
+ * says so (components/GithubCodeSteps.tsx). When the app comes to the front, the wait ends and the node
+ * is asked straight away. The node answers `pending` without asking GitHub again inside the interval
+ * (github-device.ts), so an early poll costs it nothing.
  *
  * Cancelling stops the polling at once. Nothing tells the node: an unfinished session proves nothing,
  * and it expires there.
@@ -1100,15 +1134,19 @@ export async function signInWithGithubViaNode(options: {
     onPrompt(start.prompt);
 
     let waitMs = intervalMs;
+    /** The node said 429: its Retry-After is waited out whatever the app does meanwhile. */
+    let backingOff = false;
     for (;;) {
         // Checked around the wait, not just before it: the sheet can close mid-interval, and a loop
         // nobody is watching would otherwise keep polling the node until the code ran out.
-        await sleep(waitMs, signal);
+        await sleep(waitMs, signal, !backingOff);
         if (signal?.aborted) throw cancelledSignIn();
         const res = await askNode(() => post(routes.poll, { ...extra, sessionId }), signal);
         waitMs = intervalMs;
+        backingOff = false;
         if (res?.status === 429) {
             waitMs = retryAfterMs(res) ?? intervalMs;
+            backingOff = true;
         } else if (res) {
             const body = await nodeAnswer(res);
             if (isGithubOutage(res.status, body)) {

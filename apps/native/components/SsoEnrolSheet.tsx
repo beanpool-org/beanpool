@@ -11,6 +11,7 @@ import { connectAndDeposit } from '../utils/sso-sheet-connect';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
 import { useIdentity } from '../app/IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
+import { GithubCodeSteps } from './GithubCodeSteps';
 
 export function SsoEnrolSheet({
     visible,
@@ -112,9 +113,10 @@ export function SsoEnrolSheet({
                 onSignedIn: async () => {
                     setDevicePrompt(null);
                     setStep('saving');
-                    // Get them back here. GitHub's success page says nothing about returning, and
-                    // `dismissBrowser` is iOS-only — on Android the tab sat on "you're all set" while the
-                    // account was already connected behind it. `returnToApp` handles both platforms.
+                    // Get them back here. GitHub's success page says nothing about returning. On iOS this
+                    // closes the page. On Android it only runs once the member is back (the app is paused
+                    // behind GitHub's tab, and the poll with it: sso-signin.ts `sleep`), which is why the
+                    // panel tells them to tap ✕.
                     await returnToApp();
                 },
                 signal: abort.signal,
@@ -198,6 +200,10 @@ export function SsoEnrolSheet({
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             {devicePrompt ? (
                                 <>
+                                    {/* What to do on GitHub, first: Paste, then how to come back. At the top, well
+                                        clear of the clipboard chip Android floats over the bottom-left after a copy,
+                                        which covered the Paste line when it sat below. MEASURED 2026-08-28, Pixel 9 Pro. */}
+                                    <GithubCodeSteps />
                                     {/* The code and the address both come from the node's answer. */}
                                     <Text style={styles.processingText}>
                                         Enter this code at{' '}
@@ -231,16 +237,8 @@ export function SsoEnrolSheet({
                                             <Text style={styles.copyButtonText}>{codeCopied ? '✓ Copied' : 'Copy'}</Text>
                                         </Pressable>
                                     </View>
-                                    {/* The member taps when they have read the code, rather than the
-                                        browser covering it the instant it appears. */}
-                                    {/* Above the button, not below it. Android floats a clipboard
-                                        preview chip over the bottom-left after a copy, which covered
-                                        this entirely. MEASURED 2026-08-28 on a Pixel 9 Pro. */}
-                                    <Text style={styles.deviceCodeSub}>
-                                        On GitHub, <Text style={styles.deviceCodeEmphasis}>press and hold the first box
-                                        and choose Paste</Text> — tapping the clipboard chip above the keyboard fills
-                                        only one box. Typing the 8 characters works too.
-                                    </Text>
+                                    {/* The member taps when they have read the code and the steps, rather than the
+                                        browser covering them the instant they appear. */}
                                     <TouchableOpacity
                                         style={[styles.primaryButton, { marginTop: 18, alignSelf: 'stretch' }]}
                                         onPress={() => {
@@ -256,9 +254,8 @@ export function SsoEnrolSheet({
                                         <Text style={styles.primaryButtonText}>Open GitHub →</Text>
                                     </TouchableOpacity>
                                     <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 14 }} />
-                                    <Text style={styles.deviceCodeSub}>
-                                        Waiting for GitHub… this closes itself.
-                                    </Text>
+                                    {/* It used to promise the tab would close on its own. On Android it cannot: GithubCodeSteps says what to do. */}
+                                    <Text style={styles.deviceCodeSub}>Waiting for GitHub…</Text>
                                 </>
                             ) : (
                                 <>

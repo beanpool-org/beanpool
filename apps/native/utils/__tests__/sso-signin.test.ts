@@ -24,6 +24,8 @@ vi.mock('react-native', () => ({
         addListener: vi.fn(() => ({ remove: vi.fn() })),
         emit: vi.fn(),
     },
+    // The GitHub wait listens for the app coming to the front (sso-github-node.test.ts drives it).
+    AppState: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
 }));
 vi.mock('expo-linking', () => ({
     addEventListener: vi.fn(() => ({ remove: vi.fn() })),

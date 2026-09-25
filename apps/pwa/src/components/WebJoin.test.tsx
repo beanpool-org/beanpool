@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { WebJoin, type JoinedResult } from './WebJoin';
 import {
+    completePendingJoin,
     generateIdentity,
     loadIdentity,
     loadPendingJoin,
@@ -748,5 +749,190 @@ describe('a join that went out is never dropped until the node says its key is n
         renderJoin({ authReturn: googleReturn() });
         await screen.findByTestId('join-screen-providers');
         expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: expect.any(Number) });
+    });
+});
+
+describe('one browser, one account: a join in a second tab never replaces the account the first one saved (review 4106962020)', () => {
+    const peekPending = () => idb.peek('beanpool-identity', 'keys', 'pending-join') as PendingJoin | undefined;
+    const githubStart = () => json(200, { sessionId: 'sess-1', userCode: 'WDJB-MJHT', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 1 });
+
+    /** Lobby → I'm new → the name → Next, as a member does. */
+    async function startJoiningAs(name: string) {
+        const join = await screen.findByTestId('join-start');
+        await waitFor(() => expect(join).not.toBeDisabled());
+        fireEvent.click(join);
+        fireEvent.click(await screen.findByTestId('join-new'));
+        fireEvent.change(await screen.findByTestId('join-callsign'), { target: { value: name } });
+        fireEvent.click(screen.getByTestId('join-name-next'));
+    }
+
+    it('tab A saves its account, then tab B (still on the lobby) starts a join: B says so before a key is made or sent, and opens A', async () => {
+        const node = stubNode({
+            '/api/members/callsign-available/': () => json(200, { available: true }),
+            '/api/join/sso-nonce': () => nonceAnswer(),
+            '/api/join/github/start': githubStart,
+            '/api/join/github/poll': () => json(200, { status: 'ok', sub: 'gh-77' }),
+            '/api/join': () => json(200, { success: true, member: { callsign: 'Bea' } }),
+        });
+        const onExisting = vi.fn();
+        const { onJoined } = renderJoin({ onExisting });
+        await screen.findByTestId('join-screen-lobby');
+        await completePendingJoin(identity); // tab A's finish
+
+        await startJoiningAs('Bea');
+        expect(await screen.findByTestId('join-taken')).toHaveTextContent('Alice');
+        expect(screen.getByTestId('join-screen-taken')).toHaveTextContent('Nothing was sent from this page');
+        expect(await loadIdentity()).toMatchObject({ publicKey: identity.publicKey, mnemonic: identity.mnemonic });
+        expect(peekPending()).toBeUndefined();
+        expect(node.joins()).toHaveLength(0);
+        expect(onJoined).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open Alice' }));
+        expect(onExisting).toHaveBeenCalledTimes(1);
+        expect(onExisting.mock.calls[0][0]).toMatchObject({ publicKey: identity.publicKey });
+    });
+
+    it('tab A saves its account while tab B waits on GitHub: B sends nothing, drops the key it made, and says so', async () => {
+        const node = stubNode({
+            '/api/members/callsign-available/': () => json(200, { available: true }),
+            '/api/join/sso-nonce': () => nonceAnswer(),
+            '/api/join/github/start': githubStart,
+            '/api/join/github/poll': async () => { await completePendingJoin(identity); return json(200, { status: 'ok', sub: 'gh-77' }); },
+            '/api/join': () => json(200, { success: true, member: { callsign: 'Bea' } }),
+        });
+        const { onJoined } = renderJoin();
+        await startJoiningAs('Bea');
+        fireEvent.click(await screen.findByTestId('join-provider-github'));
+        await screen.findByTestId('join-screen-taken', {}, { timeout: 5000 });
+        expect(screen.getByTestId('join-screen-taken')).toHaveTextContent('Nothing was sent from this page');
+        expect(node.joins()).toHaveLength(0);
+        expect((await loadIdentity())?.publicKey).toBe(identity.publicKey);
+        expect(peekPending()).toBeUndefined();
+        expect(onJoined).not.toHaveBeenCalled();
+    });
+
+    it("the reviewer's race: tab A saves its account while tab B's GitHub join is at the node, which takes it: A's account stays, B's key is kept marked sent, and B shows its 12 words", async () => {
+        let bea: PendingJoin | undefined;
+        const node = stubNode({
+            '/api/members/callsign-available/': () => json(200, { available: true }),
+            '/api/join/sso-nonce': () => nonceAnswer(),
+            '/api/join/github/start': githubStart,
+            '/api/join/github/poll': () => json(200, { status: 'ok', sub: 'gh-77' }),
+            '/api/join': async () => {
+                bea = peekPending();
+                await completePendingJoin(identity); // tab A's finish, just before the node answers tab B
+                return json(200, { success: true, member: { callsign: 'Bea' } });
+            },
+        });
+        const onExisting = vi.fn();
+        const { onJoined } = renderJoin({ onExisting });
+        await startJoiningAs('Bea');
+        fireEvent.click(await screen.findByTestId('join-provider-github'));
+        await waitFor(() => expect(node.joins()).toHaveLength(1), { timeout: 5000 });
+
+        // Once the page has acted on the node's yes, one way or the other: this browser's account is still tab A's.
+        await waitFor(() => expect(onJoined.mock.calls.length + screen.queryAllByTestId('join-screen-taken').length).toBeGreaterThan(0));
+        expect(await loadIdentity()).toMatchObject({ publicKey: identity.publicKey, mnemonic: identity.mnemonic });
+        await screen.findByTestId('join-screen-taken');
+        // Bea's key, a member now, is kept here marked sent: nothing lets it go but the node or the member.
+        expect(bea!.identity.publicKey).not.toBe(identity.publicKey);
+        expect(peekPending()).toMatchObject({ identity: { publicKey: bea!.identity.publicKey, mnemonic: bea!.identity.mnemonic }, sentAt: bea!.sentAt });
+        expect(onJoined).not.toHaveBeenCalled();
+
+        // Told plainly, with Bea's 12 words one tap away.
+        const taken = screen.getByTestId('join-screen-taken');
+        expect(screen.getByTestId('join-taken')).toHaveTextContent('Alice');
+        expect(taken).toHaveTextContent('The community took Bea too');
+        expect(screen.queryByTestId('join-taken-words')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: "Show Bea's 12 words" }));
+        const words = screen.getByTestId('join-taken-words');
+        for (const w of bea!.identity.mnemonic!) expect(words).toHaveTextContent(w);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open Alice' }));
+        expect(onExisting.mock.calls[0][0]).toMatchObject({ publicKey: identity.publicKey });
+        expect(peekPending()?.identity.publicKey).toBe(bea!.identity.publicKey);
+    });
+
+    it('a sign-in coming back after another tab saved an account: nothing is sent, and the key that never went is let go', async () => {
+        const other = await generateIdentity('Bea');
+        await seedPending({ identity: other });
+        await completePendingJoin(identity); // another tab's join
+        const node = stubNode({ '/api/join': () => json(200, { success: true, member: { callsign: 'Bea' } }) });
+        renderJoin({ authReturn: googleReturn() });
+        expect(await screen.findByTestId('join-taken')).toHaveTextContent('Alice');
+        expect(node.joins()).toHaveLength(0);
+        expect((await loadIdentity())?.publicKey).toBe(identity.publicKey);
+        expect(peekPending()).toBeUndefined();
+    });
+});
+
+describe('no screen without a way out: a write that fails after the join has gone (review 4106962149)', () => {
+    const peekPending = () => idb.peek('beanpool-identity', 'keys', 'pending-join') as PendingJoin | undefined;
+    const githubStart = () => json(200, { sessionId: 'sess-1', userCode: 'WDJB-MJHT', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 1 });
+    const notMember = () => json(200, { isMember: false, callsign: null });
+
+    it('GitHub, answered 404 invite_only, and the write after it fails: a screen that says so with Reload, and the key still marked sent', async () => {
+        await seedPending({ provider: null, nonce: null });
+        stubNode({
+            '/api/join/sso-nonce': () => nonceAnswer(),
+            '/api/join/github/start': githubStart,
+            '/api/join/github/poll': () => json(200, { status: 'ok', sub: 'gh-77' }),
+            '/api/join': () => { idb.failNextCommit(); return json(404, { code: 'invite_only', error: 'This community is invite-only.' }); },
+            '/api/community/membership/': notMember,
+        });
+        const reload = vi.fn();
+        renderJoin({ reload });
+        fireEvent.click(await screen.findByTestId('join-provider-github'));
+        await screen.findByTestId('join-screen-failed', {}, { timeout: 5000 });
+        expect(screen.getByTestId('join-notice')).toHaveTextContent('Your join is kept on this device');
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: expect.any(Number) });
+        fireEvent.click(screen.getByRole('button', { name: 'Reload page' }));
+        expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('"Try again" after a 503, answered 429 rate_limited, and the write after it fails: the same screen, nothing left unhandled', async () => {
+        await seedPending();
+        let n = 0;
+        const node = stubNode({
+            '/api/join': () => {
+                if (++n === 1) return json(503, { code: 'sign_in_unavailable', error: 'Google sign-in could not be checked right now. Please try again in a minute.' });
+                idb.failNextCommit();
+                return json(429, { code: 'rate_limited', error: 'Too many new accounts have joined from this network in the last hour (5). Please try again later.' });
+            },
+            '/api/community/membership/': notMember,
+        });
+        const reload = vi.fn();
+        renderJoin({ authReturn: googleReturn(), reload });
+        await screen.findByTestId('join-unavailable');
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await screen.findByTestId('join-screen-failed', {}, { timeout: 5000 });
+        expect(node.joins()).toHaveLength(2);
+        expect(screen.getByTestId('join-notice')).toHaveTextContent('Your join is kept on this device');
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: expect.any(Number) });
+        fireEvent.click(screen.getByRole('button', { name: 'Reload page' }));
+        expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('the return from Google, answered 404, and the write after it fails: the same screen', async () => {
+        await seedPending();
+        stubNode({
+            '/api/join': () => { idb.failNextCommit(); return json(404, { code: 'invite_only', error: 'This community is invite-only.' }); },
+            '/api/community/membership/': notMember,
+        });
+        renderJoin({ authReturn: googleReturn(), reload: vi.fn() });
+        await screen.findByTestId('join-screen-failed');
+        expect(screen.getByTestId('join-notice')).toHaveTextContent('Your join is kept on this device');
+        expect(screen.getByRole('button', { name: 'Reload page' })).toBeInTheDocument();
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: expect.any(Number) });
+    });
+
+    it("a yes this browser couldn't save: Reload is offered, not only the words", async () => {
+        await seedPending();
+        stubNode({ '/api/join': () => { idb.failNextCommit(); return json(200, { success: true, member: { callsign: 'Alice' } }); } });
+        const reload = vi.fn();
+        renderJoin({ authReturn: googleReturn(), reload });
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent("You're in, but this browser couldn't save your account.");
+        fireEvent.click(screen.getByRole('button', { name: 'Reload page' }));
+        expect(reload).toHaveBeenCalledTimes(1);
     });
 });

@@ -6,18 +6,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     clearUnsentPendingJoin,
     completePendingJoin,
+    createIdentity,
+    createIdentityFromMnemonic,
     loadIdentity,
     loadPendingJoin,
     markPendingJoinSent,
     releaseSentPendingJoin,
     savePendingJoin,
+    updateCallsign,
     wipeIdentity,
     importIdentity,
+    IdentityHeldError,
     PENDING_JOIN_TTL_MS,
     type BeanPoolIdentity,
     type NodeRefusedJoin,
     type PendingJoin,
 } from './identity';
+import { generateMnemonic } from './mnemonic';
 import { memoryIndexedDB, type MemoryIndexedDB } from './memory-indexeddb';
 
 const IDENTITY: BeanPoolIdentity = {
@@ -309,4 +314,55 @@ describe("a sent key's fate is decided in one place, on the stored record (PR #1
         expect((await loadIdentity())?.publicKey).toBe(IDENTITY.publicKey);
         expect(peek()).toMatchObject({ identity: { publicKey: OTHER.publicKey }, sentAt: T });
     });
+});
+
+describe('one browser, one identity: nothing writes a different key over the one stored (review 4106962020)', () => {
+    const OTHER: BeanPoolIdentity = { ...IDENTITY, publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(96), callsign: 'Bea' };
+    const peek = () => idb.peek('beanpool-identity', 'keys', 'pending-join') as PendingJoin | undefined;
+    const T = 1_800_000_000_000;
+
+    it('completing a join for another key is refused: the stored identity stays, and so does that join, sent mark and all', async () => {
+        await importIdentity(IDENTITY);
+        await markPendingJoinSent(pending({ identity: OTHER }), T);
+        const refused = await completePendingJoin(OTHER).then(() => null, (e: unknown) => e);
+        expect(refused).toBeInstanceOf(IdentityHeldError);
+        expect((refused as IdentityHeldError).held).toMatchObject({ publicKey: IDENTITY.publicKey, callsign: 'Alice' });
+        expect(await loadIdentity()).toEqual(IDENTITY);
+        expect(peek()).toMatchObject({ identity: { publicKey: OTHER.publicKey, mnemonic: OTHER.mnemonic }, sentAt: T });
+    });
+
+    it('making, restoring and importing another key are refused too, and change nothing', async () => {
+        await importIdentity(IDENTITY);
+        await expect(createIdentity('Rowan')).rejects.toBeInstanceOf(IdentityHeldError);
+        await expect(createIdentityFromMnemonic(generateMnemonic(), '')).rejects.toBeInstanceOf(IdentityHeldError);
+        await expect(importIdentity(OTHER)).rejects.toBeInstanceOf(IdentityHeldError);
+        expect(await loadIdentity()).toEqual(IDENTITY);
+    });
+
+    it('the same key may be written again (a new name), and keeps the words stored with it when the new copy has none', async () => {
+        await importIdentity(IDENTITY);
+        await importIdentity({ ...IDENTITY, callsign: 'Alice2', mnemonic: undefined });
+        expect(await loadIdentity()).toMatchObject({ publicKey: IDENTITY.publicKey, callsign: 'Alice2', mnemonic: IDENTITY.mnemonic });
+        await savePendingJoin(pending());
+        await completePendingJoin({ ...IDENTITY, callsign: 'Alice3' });
+        expect(await loadIdentity()).toMatchObject({ publicKey: IDENTITY.publicKey, callsign: 'Alice3', mnemonic: IDENTITY.mnemonic });
+        expect(peek()).toBeUndefined();
+    });
+
+    it('a name change renames the stored identity, and makes none where there is none', async () => {
+        expect(await updateCallsign('Nobody')).toBeNull();
+        expect(await loadIdentity()).toBeNull();
+        await importIdentity(IDENTITY);
+        expect(await updateCallsign('Alicia')).toMatchObject({ publicKey: IDENTITY.publicKey, callsign: 'Alicia', mnemonic: IDENTITY.mnemonic });
+        expect(await loadIdentity()).toMatchObject({ callsign: 'Alicia' });
+    });
+
+    it('a refused write still answers when the disk is full, and a full disk still rejects', async () => {
+        await importIdentity(IDENTITY);
+        idb.failNextCommit();
+        await expect(completePendingJoin(OTHER)).rejects.toMatchObject({ name: 'QuotaExceededError' });
+        idb.failNextCommit();
+        await expect(updateCallsign('Alicia')).rejects.toMatchObject({ name: 'QuotaExceededError' });
+        expect(await loadIdentity()).toEqual(IDENTITY);
+    }, 2000);
 });

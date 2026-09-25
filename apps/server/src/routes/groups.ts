@@ -40,6 +40,7 @@ import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } fr
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { db } from '../db/db.js';
+import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -55,6 +56,10 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Authentication required' };
             return null;
         }
+        // A group names its people: its members and convenors by name and face, who said what in its chat. The group
+        // tests read group_members only, and a pruned account keeps those rows, a convenor's too. On a node that shows
+        // guests the listings and not the people, only a member of this node acts in a group.
+        if (!membersOnlyHere(ctx)) return null;
         return actor;
     }
 

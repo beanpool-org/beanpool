@@ -11,7 +11,7 @@ import {
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
 import { avatarUrlFor } from '@beanpool/core';
-import { boundingBox } from './geo.js';
+import { areaBox, boundingBox, roundToArea } from './geo.js';
 
 type Db = Database.Database;
 
@@ -165,6 +165,13 @@ export interface PostFilter {
      * it, the usual most-recently-updated order.
      */
     sortByDistance?: boolean;
+    /**
+     * Every place read as its coarse area (geo.ts roundToArea, 0.1°), for a visitor on a node that shows them the
+     * listings but not the people (guestPost). Inside the query, not on the way out: the distance, the nearest-first
+     * order, the radius and so the paging are all worked out from the area, so nothing read from many points can
+     * place a post better than its area. Each post carries its area as `lat`/`lng`, and `distanceKm` in whole km.
+     */
+    coarse?: boolean;
 }
 
 /** An ended event stays readable by id to its host and Going for this long; after that, to nobody. */
@@ -415,6 +422,14 @@ const NEAREST_ORDER = " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, 
 export const NEAREST_FIRST_CIRCLES_KM: readonly number[] = [1, 3, 10, 30, 100, 300, 1000, 3000];
 
 /**
+ * The circles for a coarse read (`coarse`), which measures from each post's area. An area is 0.1° across, about 11 km,
+ * and every post in it is the same distance away, so a page near the reader is the areas nearest them, whole. A circle
+ * under 5 km seldom holds an area's centre, and 10 km holds several at once: at a busy spot that read thousands of posts
+ * for a page of fifty (test-distance-search-perf). From 5 km, the area nearest the reader is often all the page needs.
+ */
+export const NEAREST_FIRST_CIRCLES_KM_BY_AREA: readonly number[] = [5, 10, 30, 100, 300, 1000, 3000];
+
+/**
  * Deeper into the list than this, the circles are skipped for one pass over every post: each circle would hand back up
  * to this many ids only for most of them to be passed over.
  */
@@ -452,6 +467,8 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     type: f => f.type === 'all' || f.type === 'offer' || f.type === 'need',
     types: f => f.types!.includes('offer') || f.types!.includes('need'),
     category: f => f.category === 'all',
+    // The area is read for every post in a box as the place is: which posts a circle holds doesn't change.
+    coarse: () => true,
     id: null, status: null, updatedAfter: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
     includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
@@ -477,12 +494,16 @@ function circlesMayRead(filter: PostFilter): boolean {
 function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: string, whereParams: unknown[], filter: PostFilter): any[] {
     const byDistance = !!filter.sortByDistance;
     const offset = filter.offset || 0;
+    // How far a post is from the reader's point (the two `?`): from its place, or for a coarse read from its area
+    // (geo.ts area_km, haversine_km from the roundToArea of each). Every distance, radius and order below reads it through
+    // this, so a coarse read is worked out from the area alone.
+    const km = (t: string) => filter.coarse ? `area_km(?, ?, ${t}.lat, ${t}.lng)` : `haversine_km(?, ?, ${t}.lat, ${t}.lng)`;
 
     // `m` is joined for the author's filters in `where` (paused, winding up); it is one row at most, as are the joins
     // POST_ROW_SELECT adds, so no join changes which posts there are.
     const rank = (withinKm: number | undefined, limit: number | undefined, skip: number, circle: boolean) => {
         let sql = `
-        SELECT p.id, haversine_km(?, ?, p.lat, p.lng) AS distance_km`;
+        SELECT p.id, ${km('p')} AS distance_km`;
         const params: unknown[] = [near.lat, near.lng];
         if (withinKm === undefined) {
             sql += `
@@ -497,7 +518,10 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             // SQLite never reorders a CROSS JOIN, so the box always drives: left to itself, the planner takes
             // idx_posts_category for a category filter, and every circle would read every post in that category. One
             // pass (a radius, or everything) is left to the planner.
-            const box = boundingBox(near.lat, near.lng, withinKm);
+            // For a coarse read the box holds every post whose AREA is in the circle's box: still the true columns, so
+            // the index still answers it (geo.ts areaBox).
+            const exact = boundingBox(near.lat, near.lng, withinKm);
+            const box = filter.coarse ? areaBox(exact) : exact;
             const t = circle ? 'b' : 'p';
             sql += circle ? `
         FROM posts b
@@ -507,7 +531,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         LEFT JOIN members m ON p.author_pubkey = m.public_key`;
             sql += `
         WHERE ${t}.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => `${t}.lng BETWEEN ? AND ?`).join(' OR ')})
-          AND haversine_km(?, ?, ${t}.lat, ${t}.lng) <= ?${circle ? `
+          AND ${km(t)} <= ?${circle ? `
           AND p.id = b.id` : ''}`;
             params.push(box.latMin, box.latMax, ...box.lngRanges.flat(), near.lat, near.lng, withinKm);
         }
@@ -524,7 +548,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     let ranked: Array<{ id: string; distance_km: number | null }> | undefined;
     if (circlesMayRead(filter)) {
         const depth = offset + filter.limit!;
-        for (const km of NEAREST_FIRST_CIRCLES_KM) {
+        for (const km of filter.coarse ? NEAREST_FIRST_CIRCLES_KM_BY_AREA : NEAREST_FIRST_CIRCLES_KM) {
             const inside = rank(km, depth, 0, true);
             if (inside.length === depth) { ranked = inside.slice(offset); break; }
         }
@@ -767,7 +791,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             continue;
         }
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
-        if (near) post.distanceKm = typeof r.distance_km === 'number' ? Math.round(r.distance_km * 10) / 10 : null;
+        if (filter?.coarse) {
+            // The area, never the place: the rounding the query measured from (geo.ts area_km).
+            post.lat = typeof r.lat === 'number' ? roundToArea(r.lat) : r.lat;
+            post.lng = typeof r.lng === 'number' ? roundToArea(r.lng) : r.lng;
+        }
+        if (near) {
+            post.distanceKm = typeof r.distance_km !== 'number' ? null
+                : filter?.coarse ? Math.round(r.distance_km) : Math.round(r.distance_km * 10) / 10;
+        }
 
         if (post.type === 'event') {
             const rsvps = rsvpsByPost.get(post.id) || [];
@@ -844,6 +876,66 @@ export function withoutPollVoters(post: MarketplacePost): MarketplacePost {
     if (!('pollVotes' in post)) return post;
     const { pollVotes: _voters, ...rest } = post;
     return rest;
+}
+
+/**
+ * The author every post names to a visitor (guestPost): one constant, never a per-post token, which would link one
+ * person's listings together. Not empty, so an app that writes it into a NOT NULL column (the phone's local posts
+ * table) still can. The phone knows it (apps/native utils/posts-view.ts HIDDEN_AUTHOR) and opens no profile for it.
+ */
+export const HIDDEN_AUTHOR = 'hidden';
+
+/** What a visitor gets of each field: the field as it is, nothing, or a neutral value in its place. */
+type GuestRule<K extends keyof MarketplacePost> = 'keep' | 'drop' | ((post: MarketplacePost) => MarketplacePost[K]);
+
+/**
+ * Every field of a post, and what a visitor gets of it (guestPost). The type names every field, so a field added to
+ * MarketplacePost doesn't compile until it is decided here, and a field this table doesn't know never reaches a visitor.
+ * The listing stays: what it is, its words, photos, price text, dates, counts, and its area. The people go: who posted it
+ * (key, name, face, standing), who took it and when, who voted, who is going, who it was for, and where exactly.
+ */
+const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = {
+    id: 'keep', type: 'keep', category: 'keep', title: 'keep', description: 'keep', credits: 'keep', priceType: 'keep',
+    createdAt: 'keep', updatedAt: 'keep', active: 'keep',
+    // 'pending' stays: "spoken for", without saying by whom.
+    status: 'keep',
+    repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
+    pollOptions: 'keep', pollClosesAt: 'keep', totalVotes: 'keep',
+    eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
+    // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
+    // "nobody" (an empty name reads as Anonymous / Unknown in both apps).
+    authorPublicKey: () => HIDDEN_AUTHOR,
+    authorCallsign: () => '',
+    acceptedByCallsign: () => '',
+    authorAvatarUrl: () => null,
+    authorEnergyCycled: () => 0,
+    authorFoundingNeeded: () => false,
+    // The area, and a whole-km distance from it. A read made with `coarse` has both already; rounding again changes
+    // nothing there, and keeps a read that forgot it from sending the place.
+    lat: p => typeof p.lat === 'number' ? roundToArea(p.lat) : p.lat,
+    lng: p => typeof p.lng === 'number' ? roundToArea(p.lng) : p.lng,
+    distanceKm: p => typeof p.distanceKm === 'number' ? Math.round(p.distanceKm) : p.distanceKm,
+    // The trade, the keeper behind an enterprise's post, the voters, the reader's own vote and RSVP, the host's lists and
+    // note, the peers named, who a direct or group post was for, the typed place (often an address), and moderation.
+    acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop',
+    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop',
+    reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
+    eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
+};
+
+/**
+ * A post as a visitor sees it on a node that shows them the listings but not the people (the global profile's
+ * `guestListingsOnly`, apps/server routes/marketplace.ts): the listing and its rough area, and nobody. Every field is
+ * decided in GUEST_FIELDS; a field only replaced where the post has it, so a removal stays a removal. Read the post
+ * with `coarse` first: this rounds the place too, but only the query can make the order and the radius the area's.
+ */
+export function guestPost(post: MarketplacePost): MarketplacePost {
+    const out: Record<string, unknown> = {};
+    for (const [field, rule] of Object.entries(GUEST_FIELDS) as Array<[keyof MarketplacePost, GuestRule<keyof MarketplacePost>]>) {
+        if (!(field in post) || rule === 'drop') continue;
+        out[field] = rule === 'keep' ? post[field] : rule(post);
+    }
+    return out as unknown as MarketplacePost;
 }
 
 /**

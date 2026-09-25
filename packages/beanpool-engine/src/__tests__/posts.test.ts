@@ -2,10 +2,10 @@ import { afterEach, describe, it } from 'vitest';
 import assert from 'node:assert';
 import Database from 'better-sqlite3';
 import {
-    generateSearchKeywords, getPosts, publicBroadcastPost, NEAREST_FIRST_CIRCLES_KM, NEAREST_FIRST_CIRCLES_MAX_DEPTH,
-    type MarketplacePost, type PostFilter,
+    generateSearchKeywords, getPosts, guestPost, publicBroadcastPost, NEAREST_FIRST_CIRCLES_KM, NEAREST_FIRST_CIRCLES_MAX_DEPTH,
+    HIDDEN_AUTHOR, type MarketplacePost, type PostFilter,
 } from '../posts.js';
-import { boundingBox, haversineKm, registerGeoFunctions, MAX_RADIUS_KM } from '../geo.js';
+import { areaBox, boundingBox, haversineKm, registerGeoFunctions, roundToArea, MAX_RADIUS_KM } from '../geo.js';
 
 describe('Posts Search Keyword Expansion', () => {
     const synonymMap: Record<string, string[]> = {
@@ -280,6 +280,95 @@ describe('Distance search (G4)', () => {
                 assert.ok(pLat >= box.latMin && pLat <= box.latMax && inLng, `(${pLat}, ${pLng}) is ${haversineKm(lat, lng, pLat, pLng)} km from (${lat}, ${lng}) but outside its box`);
             }
         }
+    });
+});
+
+// A visitor on the global node (G9a): the listing and its area, and nobody. The node's HTTP suite (apps/server
+// test-guest-view) walks every public read and 200 query points; these pin the engine's own contract.
+describe('The listings, not the people (G9a)', () => {
+    it('roundToArea: 0.1° to the nearest step, halves up, never -0', () => {
+        assert.strictEqual(roundToArea(-28.53417), -28.5);
+        assert.strictEqual(roundToArea(153.45), 153.5);
+        assert.strictEqual(roundToArea(-0.04), 0);
+        assert.ok(!Object.is(roundToArea(-0.04), -0));
+        assert.strictEqual(roundToArea(179.97), 180);
+        assert.strictEqual(roundToArea(-179.97), -180);
+        for (const x of [-89.96, 0.3, 12.34, -45.55]) assert.strictEqual(roundToArea(roundToArea(x)), roundToArea(x));
+    });
+
+    it('area_km is haversine_km from the area of the place, and NULL for a missing place', () => {
+        const db = new Database(':memory:');
+        registerGeoFunctions(db);
+        const d = (db.prepare('SELECT area_km(-28.55, 153.51, -28.53417, 153.49871) AS d').get() as { d: number }).d;
+        assert.strictEqual(d, haversineKm(-28.55, 153.51, -28.5, 153.5));
+        assert.strictEqual((db.prepare('SELECT area_km(1, 2, NULL, 4) AS d').get() as { d: number | null }).d, null);
+    });
+
+    it('areaBox holds every place whose area is inside the box, and a box holding no area holds nothing', () => {
+        let seed = 11;
+        const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+        const inBox = (b: ReturnType<typeof boundingBox>, lat: number, lng: number) =>
+            lat >= b.latMin && lat <= b.latMax && b.lngRanges.some(([lo, hi]) => lng >= lo && lng <= hi);
+        for (const [lat, lng, r] of [[-28.55, 153.5, 1], [-28.55, 153.5, 5], [-33.87, 151.21, 10], [-17.7, 179.97, 30], [-16, -179.98, 8],
+            [89.97, 45, 4], [-89.99, 170, 20], [0, 180, 12], [0.02, -0.03, 6], [60, 179.9, 50]]) {
+            const box = boundingBox(lat, lng, r);
+            const area = areaBox(box);
+            for (let i = 0; i < 4000; i++) {
+                const pLat = Math.max(-90, Math.min(90, lat + (rand() - 0.5) * 2));
+                const pLng = ((lng + (rand() - 0.5) * 4 + 540) % 360) - 180;
+                if (!inBox(box, roundToArea(pLat), roundToArea(pLng))) continue;
+                assert.ok(inBox(area, pLat, pLng), `(${pLat}, ${pLng}) has its area (${roundToArea(pLat)}, ${roundToArea(pLng)}) in the box of ${r} km from (${lat}, ${lng}), but is outside areaBox`);
+            }
+            // The areas on the antimeridian go by two names: a place rounding to -180 is inside a box that holds 180.
+            if (box.lngRanges.some(([, hi]) => hi >= 180)) assert.ok(inBox(area, lat, -179.99) || !inBox(box, roundToArea(lat), 180));
+        }
+        // 1 km around a point 3 km from the nearest area's centre: no area, so nothing to read.
+        const none = areaBox(boundingBox(-33.87, 151.21, 1));
+        assert.ok(none.latMin > none.latMax, `an empty box (got ${JSON.stringify(none)})`);
+    });
+
+    const member = {
+        id: 'p1', type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 0, priceType: 'fixed',
+        authorPublicKey: 'a'.repeat(64), authorCallsign: 'Ann', createdAt: '2026-09-24T01:00:00.000Z', updatedAt: '2026-09-24T01:00:00.000Z',
+        active: true, status: 'pending', repeatable: false, cashAlsoNeeded: false, acceptedBy: 'b'.repeat(64), acceptedByCallsign: 'Bo',
+        acceptedAt: '2026-09-24T02:00:00.000Z', pendingTransactionId: 'tx1', lat: -28.53417, lng: 153.49871, photos: ['/api/marketplace/posts/p1/photos/0?v=1'],
+        originNode: 'node1', reach: 'local', reachPeers: ['12D3KooWPeer'], authorEnergyCycled: 250, authorFoundingNeeded: true,
+        authorAvatarUrl: `/api/avatar/${'a'.repeat(64)}?size=thumb&v=abc`, createdBy: 'c'.repeat(64), audienceScope: 'public',
+        distanceKm: 3.7,
+    } as MarketplacePost;
+
+    it('guestPost keeps the listing and its area, and names nobody', () => {
+        const out = guestPost(member);
+        assert.deepStrictEqual(out, {
+            id: 'p1', type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 0, priceType: 'fixed',
+            createdAt: member.createdAt, updatedAt: member.updatedAt, active: true, status: 'pending', repeatable: false, cashAlsoNeeded: false,
+            photos: member.photos, originNode: 'node1', reach: 'local', audienceScope: 'public',
+            authorPublicKey: HIDDEN_AUTHOR, authorCallsign: '', acceptedByCallsign: '', authorAvatarUrl: null, authorEnergyCycled: 0,
+            authorFoundingNeeded: false, lat: -28.5, lng: 153.5, distanceKm: 4,
+        });
+        assert.strictEqual(member.authorPublicKey, 'a'.repeat(64), "the caller's copy is untouched");
+    });
+
+    it('guestPost drops the voters, the RSVPs, the typed place and the scope; keeps the counts', () => {
+        const poll = guestPost({ ...member, type: 'poll', pollOptions: [{ id: 'o', text: 'Yes', votes: 1, percentage: 100 }], totalVotes: 1,
+            userVotedOptionId: 'o', pollVotes: [{ voterPubkey: 'b'.repeat(64), voterCallsign: 'Bo', optionId: 'o', createdAt: member.createdAt }] });
+        assert.ok(!('pollVotes' in poll) && !('userVotedOptionId' in poll) && poll.totalVotes === 1 && poll.pollOptions?.[0].votes === 1);
+        const event = guestPost({ ...member, type: 'event', eventPlaceName: '42 Crescent St', eventPrivateNote: 'Gate 1234', myRsvp: 'going',
+            eventRsvps: [{ memberPubkey: 'b'.repeat(64), status: 'going', updatedAt: member.createdAt }], goingCount: 1, eventState: 'scheduled',
+            targetPubkey: 'd'.repeat(64), assignedTo: 'd'.repeat(64), targetGroupId: 'g1', targetGroupName: 'Club', hiddenByReportsAt: member.createdAt });
+        for (const f of ['eventPlaceName', 'eventPrivateNote', 'myRsvp', 'eventRsvps', 'targetPubkey', 'assignedTo', 'targetGroupId', 'targetGroupName', 'hiddenByReportsAt']) {
+            assert.ok(!(f in event), `${f} is dropped`);
+        }
+        assert.ok(event.goingCount === 1 && event.eventState === 'scheduled');
+    });
+
+    it('guestPost drops a field it does not know, and a removal stays a removal', () => {
+        const out = guestPost({ ...member, somethingNew: 'e'.repeat(64) } as MarketplacePost);
+        assert.ok(!('somethingNew' in out));
+        const removal = guestPost({ id: 'p2', type: 'offer', category: 'food', title: '', description: '', credits: 0, authorPublicKey: 'a'.repeat(64),
+            authorCallsign: 'Ann', createdAt: member.createdAt, active: false, status: 'cancelled', photos: [] } as MarketplacePost);
+        assert.deepStrictEqual(Object.keys(removal).sort(), ['active', 'authorCallsign', 'authorPublicKey', 'category', 'createdAt', 'credits', 'description', 'id', 'photos', 'status', 'title', 'type']);
+        assert.strictEqual(removal.authorPublicKey, HIDDEN_AUTHOR);
     });
 });
 

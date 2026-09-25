@@ -142,6 +142,26 @@ export function avatarVersionOf(id: string, stored: string): string {
 }
 
 /**
+ * The member-only key a node puts in every avatar URL it emits, or null (every node but the global
+ * one). On a node that shows visitors the listings and not the people (global node G9a), a face is
+ * served only to a URL carrying the key for that photo, and the node hands the URLs to members
+ * alone: every response that carries one is either members-only or has its faces taken off for a
+ * visitor. An `<img>` cannot sign a request; the key rides inside the URL, so every app renders it
+ * as it renders any URL, old builds included.
+ *
+ * The server installs it at boot (its keyed hash needs `node:crypto`, which this package must not
+ * import: see the note on `@noble/hashes` above). It is given the id and the content version, so a
+ * changed photo has a new key as it has a new URL.
+ */
+export type AvatarKeyer = (id: string, version: string) => string;
+let avatarKeyer: AvatarKeyer | null = null;
+
+/** Installs (or, with null, removes) the key every emitted avatar URL carries. */
+export function configureAvatarKeys(keyer: AvatarKeyer | null): void {
+    avatarKeyer = keyer;
+}
+
+/**
  * The avatar URL to emit for a member, enterprise, treasury or group.
  *
  * @param id      the key `/api/avatar/:pubkey` will be looked up by — a member public key, an
@@ -150,11 +170,13 @@ export function avatarVersionOf(id: string, stored: string): string {
  *
  * Returns null when there is nothing servable, `bundled://…` unchanged (it names a shipped
  * asset, so it is already versioned by its name and needs no buster), and otherwise the
- * versioned route URL.
+ * versioned route URL, with its member-only key where the node has one (configureAvatarKeys).
  */
 export function avatarUrlFor(id: string, stored: string | null | undefined): string | null {
     if (!isServableAvatarValue(stored)) return null;
     const trimmed = stored.trim();
     if (trimmed.startsWith('bundled://')) return stored;
-    return `/api/avatar/${id}?size=thumb&v=${avatarVersionOf(id, trimmed)}`;
+    const version = avatarVersionOf(id, trimmed);
+    const url = `/api/avatar/${id}?size=thumb&v=${version}`;
+    return avatarKeyer ? `${url}&k=${avatarKeyer(id, version)}` : url;
 }

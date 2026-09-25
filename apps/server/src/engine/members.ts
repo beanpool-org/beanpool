@@ -151,7 +151,7 @@ export interface RecoveryCandidate {
  * The guardian count is pushed into SQL rather than calling getGuardiansOf() per matched
  * row, which was N+1 queries on that same public endpoint.
  */
-export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
+export function findRecoveryCandidates(callsign: string, options: { exact?: boolean } = {}): RecoveryCandidate[] {
     const norm = callsign.trim().toLowerCase();
     if (!norm) return [];
     // PREFIX, not exact. Callsigns are unique per node, so the member who wanted `paul` and was
@@ -166,6 +166,10 @@ export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
     // The guardian floor moved out of the WHERE clause: it decides which BUTTON to offer, not
     // whether the account exists. Filtering on it hid every SSO-only member from a lookup they are
     // perfectly able to recover through.
+    //
+    // EXACT (`options.exact`), on a node that shows visitors the listings and not the people (the
+    // global node, G9a-2): a stranger there must not list its members by typing a letter. Case is
+    // still forgiven; the same partial index answers it.
     // `%` and `_` are LIKE wildcards. Bound straight in, a caller could send `%` and enumerate the
     // whole node from an unauthenticated endpoint — which is precisely what the rate limit on this
     // route exists to bound, so leaving it would have undone that.
@@ -182,13 +186,13 @@ export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
                        AND s.generation = (SELECT MAX(generation) FROM recovery_shares
                                             WHERE owner_pubkey = m.public_key)) AS sso_count
             FROM members m
-            WHERE lower(m.callsign) LIKE ? ESCAPE '\\'
+            WHERE ${options.exact ? 'lower(m.callsign) = ?' : "lower(m.callsign) LIKE ? ESCAPE '\\'"}
               AND m.status NOT IN ('migrated', 'pruned')
         )
         WHERE sso_count > 0
         ORDER BY length(callsign), callsign
         LIMIT ?
-    `).all(escaped + '%', RECOVERY_CANDIDATE_LIMIT) as any[];
+    `).all(options.exact ? norm : escaped + '%', RECOVERY_CANDIDATE_LIMIT) as any[];
 
     return rows.map(r => ({
         publicKey: r.public_key,

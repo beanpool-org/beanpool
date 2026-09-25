@@ -256,7 +256,6 @@ router.get('/api/node/config', async (ctx) => {
 });
 
 router.post('/api/local/admin/node/config', async (ctx) => {
-    console.log("updateNodeConfig hit!", (ctx as any).requestBody);
     if (!(await checkAdminAuth(ctx as any))) {
         console.log("Auth failed for updateNodeConfig");
         return;

@@ -59,8 +59,7 @@ export function waitingOnGithub(step: SsoRecoveryProgress['step']): boolean {
     return step === 'awaiting-sso';
 }
 
-function parseJwtSub(idToken: string, fallbackSub?: string): string {
-    if (fallbackSub) return fallbackSub;
+function parseJwtSub(idToken: string): string {
     const parts = idToken?.split('.');
     if (!parts || parts.length < 2) {
         throw new Error('Could not determine user identifier for this sign-in.');
@@ -203,7 +202,7 @@ export async function recoverAccountWithSso(options: {
         sub = github.sub;
         credential = { proof: { sessionId: github.sessionId } };
     } else {
-        let signInResult: { idToken: string; nonce: string; email?: string; sub?: string };
+        let signInResult: { idToken: string; nonce: string; email?: string };
         if (options.provider === 'google') {
             signInResult = await signInWithGoogle(nonce);
         } else if (options.provider === 'apple') {
@@ -211,7 +210,7 @@ export async function recoverAccountWithSso(options: {
         } else {
             signInResult = await signInWithFacebook(nonce);
         }
-        sub = parseJwtSub(signInResult.idToken, signInResult.sub);
+        sub = parseJwtSub(signInResult.idToken);
         credential = { idToken: signInResult.idToken, nonce: signInResult.nonce };
     }
 

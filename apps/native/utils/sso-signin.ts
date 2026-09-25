@@ -97,11 +97,6 @@ export interface SsoSignIn {
     /** The raw nonce, to be sent back alongside the token so the node can match its own. */
     nonce: string;
     /**
-     * Subject identifier (user id) if resolved directly by the client (Facebook, when its token is
-     * not a JWT).
-     */
-    sub?: string;
-    /**
      * Apple returns this on the FIRST authorization only, and never again — so it is absent far
      * more often than it is present, and a keeper list that treated its absence as a failure would
      * be wrong for every member after their first sign-in. Display only.
@@ -532,8 +527,8 @@ const GOOGLE_PAGE_TIMEOUT_MS = 9 * 60_000;
  * millisecond of it is paid by someone who pressed Cancel and meant it.
  *
  * It is deliberately NOT long enough to cover the Facebook app hijacking the flow into a separate
- * browser tab, where completion takes however long the member takes. That path is not worth
- * designing around — see the note on `signInWithFacebook`.
+ * browser tab, where completion takes however long the member takes. That path is not designed
+ * around — see the note on `signInWithFacebook`.
  */
 const SPURIOUS_CANCEL_GRACE_MS = Platform.OS === 'ios' ? 0 : 2_000;
 
@@ -755,56 +750,89 @@ async function signInWithGoogleWebPage(nonce: string): Promise<{ idToken: string
     return readGoogleCallback(url, nonce);
 }
 
-export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
-    const redirectUri = 'https://beanpool.org/auth/facebook';
-    const completionUri = 'beanpool://auth/facebook';
-    const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${encodeURIComponent(FACEBOOK_APP_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token,id_token&scope=openid,email&nonce=${encodeURIComponent(nonce)}&state=${encodeURIComponent(nonce)}`;
+/**
+ * Where Facebook's dialog sends the member back. On Android `beanpool.org/auth/` is a verified App Link, handed to
+ * the waiting sign-in without navigating (utils/auth-return.ts). On the iPhone `apps/website/auth/facebook.html`
+ * answers it and bounces to `beanpool://auth/facebook`, which `ASWebAuthenticationSession` catches.
+ */
+const FACEBOOK_REDIRECT_URI = 'https://beanpool.org/auth/facebook';
+const FACEBOOK_COMPLETION_URI = 'beanpool://auth/facebook';
 
-    const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, nonce, 'facebook');
+/** What the member reads when Facebook's return cannot be used. A cancel is not this: it stays quiet. */
+const FACEBOOK_UNFINISHED = "Facebook didn't finish the sign-in. Try again, or use Google, Apple or your 12 words.";
 
+/**
+ * Facebook's dialog, asking for an OIDC id_token for our app with the node's nonce in it. The nonce doubles as
+ * `state`, as for Google.
+ *
+ * `response_type=token,id_token`, not `id_token` alone. MEASURED 2026-09-25 (Marty, desktop Chrome, this exact
+ * request): Facebook returns an id_token signed RS256 with a `kid` in its published keys, iss
+ * `https://www.facebook.com`, aud our app id and the nonce verbatim, beside an access token and a long-lived token.
+ * Facebook's documentation lists `code`, `token` and `code token` for this dialog and nowhere documents `id_token`
+ * alone, so the smaller grant is not asked for until it has been measured. The other two tokens are never read
+ * (`readFacebookCallback`).
+ */
+function facebookAuthUrl(nonce: string): string {
+    return `https://www.facebook.com/v20.0/dialog/oauth?client_id=${encodeURIComponent(FACEBOOK_APP_ID)}`
+        + `&redirect_uri=${encodeURIComponent(FACEBOOK_REDIRECT_URI)}&response_type=token,id_token&scope=openid,email`
+        + `&nonce=${encodeURIComponent(nonce)}&state=${encodeURIComponent(nonce)}`;
+}
+
+/**
+ * Read the id_token out of Facebook's return, or say why there is none. Nothing else in the return is read.
+ *
+ * Only an id_token the node can verify will do (S1). A return without one is refused, never downgraded to the
+ * access token beside it, which only the app secret can check. That token and the long-lived one are in the same
+ * fragment, and are not read, kept, logged or sent. The nonce is compared verbatim, as the node compares it
+ * (`nonceMayBeHashed: false` for Facebook in sso.ts), and `state` again here even though the race already matched
+ * it, so this function is safe on its own.
+ *
+ * Every refusal reads the same to the member: none is anything they can fix except by trying again or choosing
+ * another way back. Why it was refused goes to the log. Only a cancel is quiet.
+ */
+function readFacebookCallback(url: string, nonce: string): { idToken: string; email?: string } {
     const params = new URLSearchParams(callbackParams(url));
-    const idToken = params.get('id_token') || params.get('access_token');
-
-    if (!idToken) {
-        throw new SsoSignInError('no-token', 'Facebook returned no authentication token.');
-    }
-
-    let sub: string | undefined;
-    let email: string | undefined;
-
-    if (idToken.includes('.')) {
-        try {
-            const parts = idToken.split('.');
-            if (parts.length >= 2) {
-                const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-                const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-                const payload = JSON.parse(globalThis.atob(pad));
-                if (payload?.sub) sub = String(payload.sub);
-                if (payload?.email) email = String(payload.email);
-            }
-        } catch {}
-    }
-
-    if (!sub) {
-        try {
-            const userRes = await fetch(`https://graph.facebook.com/v20.0/me?fields=id,email&access_token=${encodeURIComponent(idToken)}`);
-            if (userRes.ok) {
-                const data = await userRes.json() as { id?: string | number; email?: string };
-                if (data.id) sub = String(data.id);
-                if (data.email) email = data.email;
-            }
-        } catch (e) {
-            console.warn('[SSO] Could not fetch Facebook user profile:', e);
-        }
-    }
-
-    console.log(`[SSO] facebook: resolved sub=${sub ? 'yes' : 'MISSING'} email=${email ? 'yes' : 'no'}`);
-    return {
-        idToken,
-        nonce,
-        sub,
-        email,
+    const refuse = (reason: SsoFailure, why: string): SsoSignInError => {
+        console.log(`[SSO] facebook: refused the return (${why})`);
+        return new SsoSignInError(reason, FACEBOOK_UNFINISHED);
     };
+    if (params.get('state') !== nonce) throw refuse('provider', "state is not this attempt's");
+    const error = params.get('error');
+    if (error === 'access_denied') throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    if (error) throw refuse('provider', `Facebook answered ${error.slice(0, 40)}`);
+    const idToken = params.get('id_token');
+    if (!idToken) throw refuse('no-token', 'no id_token');
+    const claims = jwtClaims(idToken);
+    if (!claims) throw refuse('provider', 'the id_token is not a JWT');
+    if (claims.nonce !== nonce) throw refuse('provider', "the id_token does not carry this attempt's nonce");
+    const email = claims.email;
+    return { idToken, email: typeof email === 'string' && email ? email : undefined };
+}
+
+/**
+ * Sign in with Facebook, getting back an id_token that carries the node's nonce.
+ *
+ * The node takes Facebook only as that id_token (S1): it checks it against Facebook's published keys, the issuer,
+ * our app id and its own nonce, with no secret. Nothing else Facebook hands back can be checked without the app
+ * secret, so nothing else is used, and no request goes to Graph. The `sub` the seed is sealed to comes from the
+ * token, which is where the node reads it.
+ *
+ * ## The Facebook app on Android
+ *
+ * An installed Facebook app can claim the dialog out of the Custom Tab and finish in its own time, in another
+ * browser tab, or with only an access token. Those sign-ins are allowed to fail rather than designed around (Marty's
+ * decision, 2026-09-25): a return with only an access token gets the plain message, and one that comes back after
+ * SPURIOUS_CANCEL_GRACE_MS finds the sign-in already ended as a cancel. The native SDK's login would not help: it
+ * yields an access token, which only the app secret can validate, so the web dialog's id_token is the one
+ * secret-less route there is.
+ */
+export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
+    const url = await openAuthSessionWithLinkingFallback(
+        facebookAuthUrl(nonce), FACEBOOK_COMPLETION_URI, nonce, 'facebook',
+    );
+    const { idToken, email } = readFacebookCallback(url, nonce);
+    console.log(`[SSO] facebook: signed in, email=${email ? 'yes' : 'no'}`);
+    return { idToken, nonce, email };
 }
 
 function toBase64Url(bytes: Uint8Array): string {

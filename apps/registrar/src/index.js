@@ -254,7 +254,11 @@ async function settleOwed(env, t) {
 //     target they route to (db.updateIfUnchanged withIds) — and ensure() changes the record at the hostname only
 //     while it is. So does taking back routing a failed re-attest put up. On a miss the request undoes what it did
 //     (undo: a record it changed that is now another tenure's is put back to that tenure) and answers with the row as
-//     it now is.
+//     it now is. A write that records Cloudflare work that changed anything also counts a decision (recorded), even
+//     when it writes the values the row already has: a PATCH keeps the record's id, so a request pointing the record
+//     back at the target the row records — the sweep's repair, a bare heal — writes nothing new, and a heal that had
+//     moved the name to a new address and read the row before it would still match, and record an address Cloudflare
+//     no longer routes (r4101264972).
 //   - taking routing down (the admin's pause and block, a release, the sweep's pause): the row is written FIRST,
 //     then Cloudflare (stopRouting), so a request that read the row earlier misses its own write. That write always
 //     counts a decision (decision_seq), so one that changes no status — blocking a blocked name, pausing a paused
@@ -266,6 +270,10 @@ async function settleOwed(env, t) {
 
 // The decision counter a write carries: the row's, plus one. NULL (a row no decision has touched) counts as 0.
 const decision = (a) => ({ decision_seq: (a.decision_seq ?? 0) + 1 });
+
+// What a write over `a` records of ensure()'s work: the ids it routes on, and a decision when Cloudflare changed
+// anything, so that no request that read the row before this write can match its own afterwards (see Races).
+const recorded = (ids, a) => ({ tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id, ...(ids.changed.length ? decision(a) : {}) });
 
 // What ensure() made at Cloudflare when it made nothing (it threw `raced`): there is nothing to undo.
 const NOTHING = { tunnel_id: null, dns_record_id: null, changed: [] };
@@ -334,7 +342,7 @@ async function repairLive(env, name) {
             console.error('[REPAIR_FAILED]', name, e.message || e);
             return row;
         }
-        const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+        const made = recorded(ids, row);
         if (!ids.changed.length && made.tunnel_id === (row.tunnel_id ?? null) && made.dns_record_id === (row.dns_record_id ?? null)) return row;
         if (await db.updateIfUnchanged(env, name, row, made, { withIds: true })) {
             const what = ids.changed.length ? `${ids.changed.join(', ')} re-made` : 'the record at its hostname recorded';
@@ -449,14 +457,25 @@ async function routeIfOnlyOwner(env, res, ids, now) {
 //   pending → an auto name whose provisioning failed is retried; a gated one keeps waiting for the admin.
 //   paused  → the admin's pause only the admin lifts. Any other pause resumes under routeIfOnlyOwner; otherwise
 //             routing goes back off and the name stays paused — and the owner's.
-async function heal(env, cur, b, now) {
+// A heal whose write missed is undone; if the name is still its key's and live, but its row doesn't record what this
+// heal carries (a new address, mode or origin), the heal is tried again on the row as it now is (`tries` in all): a
+// repair or a bare heal that read the row at the node's old address — the sweep's repair runs just as a node moves,
+// when nothing answers at its old address — would otherwise leave the node answered live where it no longer is.
+async function heal(env, cur, b, now, tries = 3) {
     const fields = bodyFields(b);
     const a = { ...cur, ...fields };
     const reply = (extra) => ({ name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact, ...extra });
     // Every write holds only while the row is as read (`cur`), then as this heal last wrote it (`res`), ids and target
     // and all; if it changed, the heal is undone.
     let ids = NOTHING;
-    const missed = async () => asNow(await undo(env, cur.name, ids), cur.node_pubkey);
+    const missed = async () => {
+        const row = await undo(env, cur.name, ids);
+        if (tries > 1 && row?.status === 'live' && isOwnRow(row, cur.node_pubkey) && Object.entries(fields).some(([k, v]) => row[k] !== v)) {
+            const again = await db.getAllocation(env, cur.name);
+            if (again?.status === 'live' && isOwnRow(again, cur.node_pubkey)) return heal(env, again, b, now, tries - 1);
+        }
+        return asNow(row, cur.node_pubkey);
+    };
 
     // Not routed by a heal: only where its node now is is recorded, and only over the row as read. Written over an
     // approval or the admin's resume that went live meanwhile, it would leave a live row naming a target Cloudflare
@@ -471,13 +490,17 @@ async function heal(env, cur, b, now) {
     }
 
     try { ids = await ensure(env, a, cur); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
-    const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+    const made = recorded(ids, cur);
     if (!(await db.updateIfUnchanged(env, cur.name, cur, { ...fields, ...made }, { withIds: true }))) return missed();
     const res = { ...a, ...made };
     const newTunnel = ids.changed.includes('tunnel');
 
     if (cur.status === 'live') {
         if (ids.changed.length) await logEvent(env, cur.name, 'healed', `repaired by its owner: ${ids.changed.join(', ')} re-made`);
+        // A request whose write missed undoes by pointing the record at the row as it then is, and writes nothing: one
+        // landing between this heal's last Cloudflare call and its write pointed the record back at the target this
+        // heal moved the name off, unseen. So a heal that changed what a live name routes to checks Cloudflare after.
+        if (routeOf(cur) !== routeOf(res)) await routedOrRepaired(env, cur.name);
         return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id });
     }
 
@@ -554,7 +577,7 @@ async function takeName(env, existing, pubkey, b, now) {
     let ids = NOTHING;
     const missed = async () => claimReply(env, asNow(await undo(env, name, ids), pubkey));
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
-    const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+    const made = recorded(ids, a);
     const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
     if (takeBack) {
         if (!(await db.updateIfUnchanged(env, name, a, made, { withIds: true }))) return missed();
@@ -785,7 +808,7 @@ async function adminResume(env, a, was, now) {
     }
     let ids;
     try { ids = await ensure(env, cur, cur); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
-    const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
+    const made = recorded(ids, cur);
     if (!(await db.updateIfUnchanged(env, a.name, cur, made, { withIds: true }))) return adminMissed(env, a.name, ids);
     const res = { ...cur, ...made };
     const g = await routeIfOnlyOwner(env, res, ids, now);
@@ -805,7 +828,7 @@ async function adminResume(env, a, was, now) {
 async function adminGoLive(env, a, event, detail, extra = {}) {
     let ids;
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
-    const live = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id, ...LIVE, ...extra };
+    const live = { ...recorded(ids, a), ...LIVE, ...extra };
     if (!(await db.updateIfUnchanged(env, a.name, a, live, { withIds: true }))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, event, detail);
     return json({ status: 'live', name: a.name, changed: ids.changed });
@@ -1057,21 +1080,16 @@ export async function attestSweep(env) {
 //     no connector, or its 52x for a proxied address it got no answer from (a direct node down, or a record pointing
 //     where no node is; a tunnel name never sees one while it goes through its tunnel) — is looked at: if Cloudflare no
 //     longer routes it as its row says (its record gone or pointing elsewhere, its tunnel gone), it is repaired
-//     (repairLive). Nodes never heal a name /status calls live, so a live name left dark by any ordering of requests
-//     would otherwise stay dark. A node merely asleep costs a read or two; one that answered anything (even a reply
-//     this verifier can't check) costs nothing.
+//     (routedOrRepaired), and its record owed if the repair doesn't take. Nodes never heal a name /status calls live,
+//     so a live name left dark by any ordering of requests would otherwise stay dark. A node merely asleep costs a
+//     read or two; one that answered anything (even a reply this verifier can't check) costs nothing.
 //   - Owed deletions (teardown) are retried.
 const dark = (r) => r.verdict === 'unverifiable' && (r.why === 'unreachable' || /^http 5(2\d|30)$/.test(r.why));
 
 async function upkeep(env, results, batch) {
     const look = results.filter(dark);
     for (let i = 0; i < look.length; i += batch) {
-        await Promise.all(look.slice(i, i + batch).map(async (r) => {
-            try {
-                const row = await db.getAllocation(env, r.a.name);
-                if (row?.status === 'live' && !(await routesAsRow(env, row))) await repairLive(env, row.name);
-            } catch (e) { console.error('[REPAIR_CHECK]', r.a.name, e.message || e); }
-        }));
+        await Promise.all(look.slice(i, i + batch).map((r) => routedOrRepaired(env, r.a.name)));
     }
     try {
         for (const t of await db.listTeardown(env, null)) {
@@ -1088,6 +1106,21 @@ async function routesAsRow(env, row) {
     if (!rec || rec.id !== row.dns_record_id || rec.type !== want.type || rec.content !== want.content || rec.proxied !== want.proxied)
         return false;
     return row.mode !== 'tunnel' || !!(await cf.getTunnel(env, row.tunnel_id));
+}
+
+// A live name Cloudflare doesn't route as its row says is repaired (repairLive). If it still isn't — Cloudflare refused
+// the repair, or can't say — its record is owed, so the sweep keeps at it (settleOwed repairs a live row's owed record
+// until it routes as the row says) even once something answers there: upkeep looks only at a name nothing answers at,
+// and a record left pointing at an old address a stranger now serves is not dark. Never throws.
+async function routedOrRepaired(env, name) {
+    let row;
+    try {
+        row = await db.getAllocation(env, name);
+        if (row?.status !== 'live' || await routesAsRow(env, row)) return;
+        row = await repairLive(env, name);
+        if (row?.status !== 'live' || await routesAsRow(env, row)) return;
+    } catch (e) { console.error('[REPAIR_CHECK]', name, e.message || e); }
+    if (row?.status === 'live') await owe(env, '[REPAIR_OWED]', name, 'dns', row.dns_record_id, 'Cloudflare does not route it as its row says');
 }
 
 export default {

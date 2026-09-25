@@ -93,7 +93,8 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    deploying the Worker that reads the new columns. The old Worker keeps working on the new schema (a
    `paused` row is just "not revoked" to it). A second run stops at its first ALTER and changes nothing.
    Then `--file migrations/0003_decision_seq.sql` (one column, `decision_seq`: the count of decisions a
-   request in flight must not overwrite). Same rule: before the Worker; a rerun stops at the ALTER.
+   request in flight must not overwrite, and of writes recording Cloudflare work that changed routing). Same rule:
+   before the Worker; a rerun stops at the ALTER.
    Then `--file migrations/0004_teardown.sql` (one table, `teardown`: deletions Cloudflare refused, which the
    sweep retries). Before the Worker; a rerun changes nothing.
 3. Deploy the Worker. Until the migrations table is bootstrapped with 0001 marked applied (design PR 4),

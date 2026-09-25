@@ -57,6 +57,9 @@ function postRow(postId: string): PostForModeration | undefined {
 
 const forNotice = (p: PostForModeration) => ({ id: p.id, title: p.title, authorPubkey: p.author_pubkey });
 
+/** Still up: not taken down by its author or a moderator. Only then is "your post is back" true. */
+const isLive = (p: PostForModeration) => p.active === 1 && p.status !== 'cancelled';
+
 export function isHiddenByReports(postId: string): boolean {
     return !!postRow(postId)?.hidden_by_reports_at;
 }
@@ -125,7 +128,7 @@ function unhide(cb: ModerationNoticeCallbacks, post: PostForModeration, now: num
         .run(at, post.id);
     if (res.changes === 0) return false;
     announceVisibilityChange(cb, post.id);
-    notifyPostBack(cb, forNotice(post));
+    if (isLive(post)) notifyPostBack(cb, forNotice(post));
     return true;
 }
 
@@ -154,9 +157,11 @@ export function restoreHiddenPost(cb: ModerationNoticeCallbacks, postId: string,
     })();
     if (!restored) return 'not_hidden';
     console.log(`🛡️ Post ${postId} restored by a moderator; ${reporters.length} open report(s) on it dismissed.`);
+    // The doorbell rings either way (the author's and the moderators' copies drop the hidden mark); the author hears
+    // "it's back" only when it is still up, not after they or a moderator took it down.
     announceVisibilityChange(cb, postId);
-    notifyPostBack(cb, forNotice(post));
-    for (const r of reporters) if (r !== post.author_pubkey) notifyReportDismissed(cb, r, postId, post.active === 1 && post.status !== 'cancelled');
+    if (isLive(post)) notifyPostBack(cb, forNotice(post));
+    for (const r of reporters) if (r !== post.author_pubkey) notifyReportDismissed(cb, r, postId, isLive(post));
     return 'restored';
 }
 

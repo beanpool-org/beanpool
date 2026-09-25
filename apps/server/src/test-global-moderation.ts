@@ -14,9 +14,10 @@
  *      strangers; its photos 404 unless the author or a moderator signs; a sync read gives others a removal; the
  *      author and moderators still see it, marked; only the author's socket gets the notice (reason "reports"), and an
  *      edit of it reaches only the author in full; a vote in a hidden poll or an RSVP to a hidden event is refused to
- *      anyone but its author, and hands nothing back. A moderator restore un-hides it, the same reporters can't hide it
- *      again, new ones can; dismissing reports un-hides once they no longer add up; a moderator can still remove it. A
- *      moderator can't restore their own post or dismiss a report on it (another can)
+ *      anyone but its author, and hands nothing back. A moderator restore un-hides it and its author hears, the same
+ *      reporters can't hide it again, new ones can; dismissing reports un-hides once they no longer add up; a
+ *      moderator can still remove it. A moderator can't restore their own post or dismiss a report on it (another
+ *      can), and restoring a post its author took down tells them nothing
  *   4. probation: the 4th post in 24 hours → 429 with the limit and when it resets; the window rolls after 24 hours;
  *      photos past 5 → 429, on a new post and on an edit; after 72 hours with 3 kept posts no limits; an old account
  *      with no posts is on probation until it has 3; DMs to an 11th new person → 429 (start and send), a reply to
@@ -314,6 +315,8 @@ async function main(): Promise<void> {
     const restored = await admin('POST', `/api/local/admin/posts/${target}/restore`);
     assert(restored.status === 200 && hiddenAt(target) === null, `a moderator restores it (${restored.status})`);
     assert((await listIds(viewer)).includes(target) && (await call('GET', null, photoUrl)).status === 200, 'everyone sees it again, photo included');
+    await sleep(200);
+    assert(avaSock.events.some(e => e.type === 'system_announcement' && e.kind === 'post_restored' && e.postId === target), 'and its author hears it is back');
     const openLeft = (db.prepare(`SELECT COUNT(*) AS c FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).get(target) as any).c;
     assert(openLeft === 0, 'the restore dismissed the reports that hid it');
     assert((await admin('POST', `/api/local/admin/posts/${target}/restore`)).status === 409, 'restoring a post that is not hidden → 409');
@@ -359,6 +362,17 @@ async function main(): Promise<void> {
     grantNodeRole(moe.pk, 'moderator', owner.pk);
     const moeRestore = await call('POST', null, `/api/local/admin/posts/${moOwn}/restore`, undefined, { 'x-admin-session': keySession(moe) });
     assert(moeRestore.status === 200 && hiddenAt(moOwn) === null, `another moderator restores it (${moeRestore.status})`);
+
+    // A hidden post its author then took down, restored later: the author is not told it is back, because it isn't.
+    const takenDown = oldPost(ava, 'Hidden, then taken down');
+    for (const r of S) await report(r, takenDown, ava);
+    const takeDown = await call('POST', ava, '/api/marketplace/posts/remove', { id: takenDown, authorPublicKey: ava.pk });
+    assert(!!hiddenAt(takenDown) && takeDown.status === 200, `setup: hidden, then its author takes it down (${takeDown.status})`);
+    avaSock.events.length = 0;
+    const restoreDown = await admin('POST', `/api/local/admin/posts/${takenDown}/restore`);
+    await sleep(200);
+    assert(restoreDown.status === 200 && !avaSock.events.some(e => e.type === 'system_announcement' && e.kind === 'post_restored'),
+        `restoring it tells its author nothing (${restoreDown.status}, ${JSON.stringify(avaSock.events.filter(e => e.type === 'system_announcement'))?.slice(0, 160)})`);
     avaSock.ws.close(); vicSock.ws.close();
 
     // ── 4. probation ─────────────────────────────────────────────────────────────────────────────

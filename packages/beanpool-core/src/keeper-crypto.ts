@@ -63,6 +63,12 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Seed } from './ed25519-key.js';
 import { assertRecoveryCsprngAvailable } from './recovery-split.js';
+import {
+    isWellFormedRecoveryPhrase,
+    packRecoveryWords,
+    recoveryWordsMatchSeed,
+    unpackRecoveryWords,
+} from './recovery-words.js';
 
 /** XChaCha20 nonce width. */
 const NONCE_LEN = 24;
@@ -76,6 +82,11 @@ export const KEEPER_ALG_MEMBER = 'x25519-xc20p-v1';
 export const KEEPER_ALG_SSO = 'scrypt-xc20p-v1';
 /** New-format single device-encrypted blob containing the whole seed. */
 export const KEEPER_ALG_SSO_SINGLE = 'scrypt-xc20p-single-v1';
+/**
+ * The 12 words riding alongside a single-blob seed, in `kdfParams.words`. See {@link sealSeedToSso}.
+ * The name says what is inside (the words' 132 bits) and how (XChaCha20-Poly1305).
+ */
+export const KEEPER_ALG_SSO_WORDS = 'bip39-bits-xc20p-v1';
 
 /** Checks whether a kdfParams string explicitly specifies the single-blob SSO algorithm. */
 export function isSingleBlobSso(kdfParams: string | null | undefined): boolean {
@@ -126,9 +137,11 @@ const AAD_MEMBER = utf8ToBytes('beanpool-keeper-member-v1');
 const AAD_SSO = utf8ToBytes('beanpool-keeper-sso-v1');
 const AAD_SSO_SINGLE = utf8ToBytes('beanpool-keeper-sso-single-v1');
 const AAD_REWRAP = utf8ToBytes('beanpool-keeper-rewrap-v1');
+const AAD_SSO_WORDS = utf8ToBytes('beanpool-keeper-sso-words-v1');
 
 const HKDF_INFO_MEMBER = utf8ToBytes('beanpool-keeper-share');
 const HKDF_INFO_REWRAP = utf8ToBytes('beanpool-keeper-rewrap');
+const HKDF_INFO_SSO_WORDS = utf8ToBytes('beanpool-keeper-sso-words');
 
 /**
  * Raised when a fragment cannot be sealed or opened.
@@ -404,11 +417,21 @@ export async function sealShareToSso(
     share: Uint8Array, provider: string, sub: string,
     options?: SealSsoOptions,
 ): Promise<SealedShare> {
+    return sealSso(share, provider, sub, options?.alg ?? KEEPER_ALG_SSO, options?.checksum);
+}
+
+/**
+ * The one sign-in sealer. `words`, when given, is the 17 packed bytes of {@link packRecoveryWords},
+ * sealed under the same scrypt output as the share (see {@link sealSeedToSso}).
+ */
+async function sealSso(
+    share: Uint8Array, provider: string, sub: string,
+    alg: string, checksum?: Uint8Array | string, words?: Uint8Array,
+): Promise<SealedShare> {
     if (!provider || !sub) {
         throw new KeeperCryptoError('A sign-in fragment needs both a provider and a subject claim.');
     }
     assertRecoveryCsprngAvailable();
-    const alg = options?.alg ?? KEEPER_ALG_SSO;
     const salt = randomBytes(KEY_LEN);
     const key = await deriveSsoKey(provider, sub, salt, SSO_SCRYPT.N);
     const aad = alg === KEEPER_ALG_SSO_SINGLE ? AAD_SSO_SINGLE : AAD_SSO;
@@ -416,10 +439,16 @@ export async function sealShareToSso(
         alg, salt: b64(salt),
         N: SSO_SCRYPT.N, r: SSO_SCRYPT.r, p: SSO_SCRYPT.p,
     };
-    if (options?.checksum) {
-        kdfParamsObj.checksum = typeof options.checksum === 'string'
-            ? options.checksum
-            : b64(options.checksum);
+    if (checksum) {
+        kdfParamsObj.checksum = typeof checksum === 'string'
+            ? checksum
+            : b64(checksum);
+    }
+    if (words) {
+        const box = seal(ssoWordsKey(key), words, AAD_SSO_WORDS);
+        kdfParamsObj.words = {
+            alg: KEEPER_ALG_SSO_WORDS, iv: box.shareIv, ct: box.encryptedShare, tag: box.shareTag,
+        } satisfies SealedSsoWords;
     }
     return {
         ...seal(key, share, aad),
@@ -429,32 +458,174 @@ export async function sealShareToSso(
     };
 }
 
+/** The 12 words' box inside a single-blob sign-in fragment's `kdfParams`. All three byte fields base64. */
+interface SealedSsoWords {
+    alg: typeof KEEPER_ALG_SSO_WORDS;
+    /** The 24-byte XChaCha nonce, drawn at random like every other nonce in this module. */
+    iv: string;
+    /** The 17 packed bytes, encrypted, without the tag. */
+    ct: string;
+    /** The 16-byte Poly1305 tag. */
+    tag: string;
+}
+
+/**
+ * The words' own key: HKDF over the fragment's scrypt output, so the words and the seed are never
+ * encrypted under the same key, and adding the words costs no second scrypt (a second on an API-26
+ * phone, at enrolment and again at recovery).
+ */
+function ssoWordsKey(ssoKey: Uint8Array): Uint8Array {
+    return hkdf(sha256, ssoKey, undefined, HKDF_INFO_SSO_WORDS, 32);
+}
+
+export interface SealSeedToSsoOptions {
+    /**
+     * The account's 12 words, to travel with the seed so a sign-in restore can give them back. They must
+     * be 12 words from the BIP-39 English list that make THIS seed's key; anything else is refused with
+     * a {@link KeeperCryptoError} rather than sealed, because a restore would only have to throw them away.
+     * Null, undefined or empty: the seed alone, exactly as before.
+     */
+    words?: readonly string[] | null;
+}
+
 /**
  * Seal the entire 32-byte Ed25519 seed into a single device-encrypted AEAD blob under
  * scrypt(provider:sub). New-format single-blob SSO recovery.
+ *
+ * ## The 12 words ride in `kdfParams`, not next to the seed
+ *
+ * The key is made from the words one way only, so a restore that gets back only the seed saves an
+ * account with no words, and every community on that phone loses them. So when the phone has the
+ * words they are sealed too. Where they go is decided by who else reads this fragment:
+ *
+ * - **Nodes on older code** refuse a single-blob fragment whose `encryptedShare` is not exactly 32
+ *   bytes (`validateShares`), and treat `kdfParams` as an opaque string up to 4,096 characters.
+ * - **Apps on older code** open `encryptedShare` and refuse anything that is not 32 bytes
+ *   ("Decrypted recovery seed has invalid length"), and read only `alg`, `salt` and `N` from
+ *   `kdfParams`.
+ *
+ * So the seed box is byte-for-byte what it always was — same scheme name, same AAD, same scrypt — and
+ * the words are a SECOND box, `kdfParams.words`, under a key derived from the same scrypt output
+ * ({@link ssoWordsKey}) with its own AAD and its own random nonce. An older node stores it without
+ * looking; an older app opens the seed and never reads it; this app reads both. The words box is 17
+ * bytes of plaintext whatever the words are ({@link packRecoveryWords}), about 150 characters of
+ * `kdfParams` in all.
  */
 export async function sealSeedToSso(
     seed: Uint8Array, provider: string, sub: string,
+    options?: SealSeedToSsoOptions,
 ): Promise<SealedShare> {
     if (!(seed instanceof Uint8Array) || seed.length !== KEY_LEN) {
         throw new KeeperCryptoError(
             `Single-blob SSO seed must be exactly ${KEY_LEN} bytes, got ${seed instanceof Uint8Array ? seed.length : typeof seed}.`,
         );
     }
-    return sealShareToSso(seed, provider, sub, { alg: KEEPER_ALG_SSO_SINGLE });
+    const words = options?.words;
+    if (!words || words.length === 0) {
+        return sealSso(seed, provider, sub, KEEPER_ALG_SSO_SINGLE);
+    }
+    if (!isWellFormedRecoveryPhrase(words)) {
+        throw new KeeperCryptoError('The words to seal with this seed are not 12 words from the BIP-39 English list.');
+    }
+    if (!recoveryWordsMatchSeed(words, seed)) {
+        throw new KeeperCryptoError('The words to seal with this seed make a different account\'s key.');
+    }
+    const packed = packRecoveryWords(words);
+    try {
+        return await sealSso(seed, provider, sub, KEEPER_ALG_SSO_SINGLE, undefined, packed);
+    } finally {
+        packed.fill(0);
+    }
+}
+
+/** What opening a single-blob sign-in fragment gives back. */
+export interface OpenedSsoSeed {
+    /** The account's 32-byte Ed25519 seed. */
+    seed: Uint8Array;
+    /**
+     * The account's 12 words — only when the fragment carried them, they opened, and they make this
+     * seed's key. Otherwise null, and {@link wordsStatus} says which.
+     */
+    words: string[] | null;
+    /**
+     * - `carried`: the words came back and make this seed's key.
+     * - `absent`: the fragment carries no words (sealed by an older app, or a phone without them).
+     * - `unreadable`: it has a words box that did not open or decode. The seed is still good.
+     * - `mismatch`: the words opened and make a different key. Never returned as words.
+     */
+    wordsStatus: 'carried' | 'absent' | 'unreadable' | 'mismatch';
+}
+
+/**
+ * Open a single-blob sign-in fragment: the seed, and the 12 words when it carries them.
+ *
+ * The seed decides whether this succeeds. It throws exactly where {@link openShareFromSso} does —
+ * a wrong sub, a tampered seed box, a cost outside the permitted range — and on a seed that is not
+ * 32 bytes. The words never make it fail: a words box that is damaged, of an unknown scheme, or holds
+ * another account's words costs the member their words on this phone, never their account. So the
+ * words are returned only when they make this seed's public key, and a caller has nothing to check
+ * but may check again.
+ *
+ * A two-layer fragment (`scrypt-xc20p-v1`) is refused: it holds half a seed, and never words.
+ */
+export async function openSeedFromSso(
+    sealed: SealedShare, provider: string, sub: string,
+): Promise<OpenedSsoSeed> {
+    const { plaintext: seed, key, params } = await openSso(sealed, provider, sub, [KEEPER_ALG_SSO_SINGLE]);
+    if (seed.length !== KEY_LEN) {
+        throw new KeeperCryptoError(`A single-blob sign-in fragment holds ${seed.length} bytes, not a ${KEY_LEN}-byte seed.`);
+    }
+    if (params.words === undefined || params.words === null) {
+        return { seed, words: null, wordsStatus: 'absent' };
+    }
+    let words: string[];
+    try {
+        words = openSsoWords(key, params.words);
+    } catch {
+        return { seed, words: null, wordsStatus: 'unreadable' };
+    }
+    if (!recoveryWordsMatchSeed(words, seed)) {
+        return { seed, words: null, wordsStatus: 'mismatch' };
+    }
+    return { seed, words, wordsStatus: 'carried' };
+}
+
+function openSsoWords(ssoKey: Uint8Array, box: unknown): string[] {
+    if (!box || typeof box !== 'object') {
+        throw new KeeperCryptoError('A sign-in fragment has an unreadable words box.');
+    }
+    const w = box as Record<string, unknown>;
+    if (w.alg !== KEEPER_ALG_SSO_WORDS) {
+        throw new KeeperCryptoError(`A sign-in fragment's words use scheme '${String(w.alg)}', not '${KEEPER_ALG_SSO_WORDS}'.`);
+    }
+    const packed = open(ssoWordsKey(ssoKey), {
+        encryptedShare: w.ct as string, shareIv: w.iv as string, shareTag: w.tag as string, kdfParams: '',
+    }, AAD_SSO_WORDS);
+    try {
+        return unpackRecoveryWords(packed);
+    } finally {
+        packed.fill(0);
+    }
 }
 
 /** Re-derive the sign-in key from a freshly obtained `sub` and open the fragment. */
 export async function openShareFromSso(
     sealed: SealedShare, provider: string, sub: string,
 ): Promise<Uint8Array> {
+    return (await openSso(sealed, provider, sub, [KEEPER_ALG_SSO, KEEPER_ALG_SSO_SINGLE])).plaintext;
+}
+
+/** The one sign-in opener: checks the parameters, derives the key once, opens the share box. */
+async function openSso(
+    sealed: SealedShare, provider: string, sub: string, algs: readonly string[],
+): Promise<{ plaintext: Uint8Array; key: Uint8Array; params: Record<string, unknown> }> {
     // Checked on the way out as well as the way in (CR): an empty sub would otherwise derive a key
     // from the string ":" and fail on the tag, reporting a corrupt fragment when what actually
     // happened is that the sign-in returned nothing.
     if (!provider || !sub) {
         throw new KeeperCryptoError('A sign-in fragment needs both a provider and a subject claim.');
     }
-    const params = parseAlg(sealed.kdfParams, [KEEPER_ALG_SSO, KEEPER_ALG_SSO_SINGLE]);
+    const params = parseAlg(sealed.kdfParams, algs);
     if (typeof params.salt !== 'string') {
         throw new KeeperCryptoError('A sign-in fragment is missing the salt its key derives from.');
     }
@@ -477,7 +648,7 @@ export async function openShareFromSso(
     }
     const key = await deriveSsoKey(provider, sub, unb64(params.salt, 'salt'), N);
     const aad = params.alg === KEEPER_ALG_SSO_SINGLE ? AAD_SSO_SINGLE : AAD_SSO;
-    return open(key, sealed, aad);
+    return { plaintext: open(key, sealed, aad), key, params };
 }
 
 /**

@@ -12,7 +12,7 @@ import {
 } from '../utils/onboarding-state';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile } from '../utils/node-profile';
 import {
-    MAX_JOIN_NAME, commitJoinKey, doorMessage, joinKeyForThisPhone, nextStepFor, releaseJoinKey,
+    MAX_JOIN_NAME, commitJoinKey, doorMessage, joinKeyForThisPhone, keepJoinedIdentity, nextStepFor, releaseJoinKey,
     signInAtDoor, submitJoin, type DoorAnswer, type DoorSignIn, type JoinKey,
 } from '../utils/global-join';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
@@ -1047,7 +1047,9 @@ export default function WelcomeScreen() {
     }
 
     /** In. From here it is an invite join's steps: photo, Safety Backup, How it Works, then the Market. */
-    async function finishGlobalJoin(identity: BeanPoolIdentity, joinEnrolment: KeeperEnrolmentResult | null) {
+    async function finishGlobalJoin(joined: BeanPoolIdentity, joinEnrolment: KeeperEnrolmentResult | null) {
+        // On the phone first, under the name the node kept: the wizard's record below means nothing without it.
+        const identity = await keepJoinedIdentity(joined);
         await AsyncStorage.setItem('beanpool_anchor_url', GLOBAL_NODE_URL);
         await addSavedNode(GLOBAL_NODE_URL, 'Global community').catch(() => {});
         await clearGuestNode(GLOBAL_NODE_URL);

@@ -82,6 +82,7 @@ import {
     submitJoin,
     joinKeyForThisPhone,
     commitJoinKey,
+    keepJoinedIdentity,
     releaseJoinKey,
     type DoorAnswer,
 } from '../global-join';
@@ -426,6 +427,43 @@ describe('one identity per device', () => {
         expect(await releaseJoinKey(unwritten)).toBe(false);
         expect((await loadIdentity())?.publicKey).toBe(phoneKey.publicKey);
         expect(await getPendingOnboarding()).toEqual(inviteWizard);
+    });
+
+    it('in, with a name the node made unique: the phone keeps the node\'s name, so a restart reads it back', async () => {
+        const key = await joinKeyForThisPhone();
+        const identity = await commitJoinKey(key, 'Sam');
+        const kept = await keepJoinedIdentity({ ...identity, callsign: 'Sam 2' });
+        expect(kept.callsign).toBe('Sam 2');
+        const stored = await loadIdentity();
+        expect(stored).toMatchObject({ publicKey: key.identity.publicKey, callsign: 'Sam 2' });
+        expect(stored?.mnemonic).toEqual(key.identity.mnemonic);
+    });
+
+    it('in from the sign-in (already_member) with a key only in memory: the key goes on the phone before the wizard goes on', async () => {
+        const key = await joinKeyForThisPhone();
+        expect(await loadIdentity()).toBeNull();
+        await keepJoinedIdentity({ ...key.identity, callsign: 'Sam' });
+        const stored = await loadIdentity();
+        expect(stored).toMatchObject({ publicKey: key.identity.publicKey, privateKey: key.identity.privateKey, callsign: 'Sam' });
+        expect(stored?.mnemonic).toEqual(key.identity.mnemonic);
+    });
+
+    it('in with a key the phone already had: only its name changes, and nothing is written when the name is the same', async () => {
+        const phoneKey = await draftIdentity('Kim');
+        await importIdentity(phoneKey);
+        vi.mocked(SecureStore.setItemAsync).mockClear();
+        expect(await keepJoinedIdentity({ ...phoneKey, callsign: 'Kim' })).toEqual(phoneKey);
+        expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+        await keepJoinedIdentity({ ...phoneKey, callsign: 'Kim 2' });
+        expect(await loadIdentity()).toEqual({ ...phoneKey, callsign: 'Kim 2' });
+    });
+
+    it('in, while the phone holds a different account: refuses rather than writing over it', async () => {
+        const other = await draftIdentity('Other');
+        await importIdentity(other);
+        const joined = await draftIdentity('Sam');
+        await expect(keepJoinedIdentity(joined)).rejects.toThrow(/different BeanPool account/);
+        expect(await loadIdentity()).toEqual(other);
     });
 
     it('never takes a key other than the one this join made', async () => {

@@ -329,6 +329,36 @@ export async function commitJoinKey(key: JoinKey, callsign: string): Promise<Bea
 }
 
 /**
+ * In: the key the node has just accepted is this phone's, under the name the node kept. Returns the identity
+ * the phone now holds, which the rest of the wizard carries on with.
+ *
+ * Written here as well as at Join, for two reasons:
+ * - The node may have kept a different name (it makes a taken one unique). The phone must hold that one,
+ *   or a restart reads the old name back and the phone and the node disagree about who this is.
+ * - A phone that learns at the sign-in that it is in already (`already_member`) never passes through
+ *   `commitJoinKey`. Its key has to be on the phone before the wizard's record says it joined: a record
+ *   with no key behind it is dropped on the next launch (onboarding-state.ts `resumePlan`).
+ *
+ * A key the phone already holds keeps everything but its name. Never writes over a different key: one
+ * identity per device, and a phone that somehow holds another account refuses rather than replaces it.
+ */
+export async function keepJoinedIdentity(identity: BeanPoolIdentity): Promise<BeanPoolIdentity> {
+    const stored = await loadIdentity();
+    if (stored && stored.publicKey !== identity.publicKey) {
+        throw new Error('This phone holds a different BeanPool account, so the join was not saved here.');
+    }
+    if (!stored) {
+        await importIdentity(identity);
+        return identity;
+    }
+    const callsign = identity.callsign || stored.callsign;
+    if (stored.callsign === callsign) return stored;
+    const kept = { ...stored, callsign };
+    await importIdentity(kept);
+    return kept;
+}
+
+/**
  * After a refusal for good (restore, or the door shut), put the phone back as it was before the door.
  * Returns whether a key came off it.
  *

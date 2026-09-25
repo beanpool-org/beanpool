@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
+import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 
 
 
@@ -479,7 +480,9 @@ export default function PublicProfileScreen() {
 
     useEffect(() => {
         let cancelled = false;
-        if (!pubKeyStr) {
+        // No key, or a visitors' view's `'hidden'` author (utils/posts-view.ts; the map's callout still links
+        // here for one): nobody to ask the node about.
+        if (!pubKeyStr || isHiddenAuthor(pubKeyStr)) {
             setLoading(false);
             setRatingsLoading(false);
             setTrustLoading(false);
@@ -634,6 +637,27 @@ export default function PublicProfileScreen() {
             ]
         );
     };
+
+    // A listing seen as a visitor names nobody (utils/posts-view.ts): say so, as a state, not an error.
+    if (pubKeyStr === HIDDEN_AUTHOR) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <Pressable
+                        accessibilityRole="button"
+                        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+                        style={styles.backButton}
+                    >
+                        <Text style={styles.backText}>←</Text>
+                        <Text style={styles.backTextLabel}>Back</Text>
+                    </Pressable>
+                </View>
+                <Text style={{ margin: 24, fontSize: 16, lineHeight: 22, textAlign: 'center', color: colors.text.secondary }}>
+                    Who posted this is shown to members of this community. Join it to see their profile.
+                </Text>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>

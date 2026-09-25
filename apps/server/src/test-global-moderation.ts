@@ -138,7 +138,10 @@ const admin = (method: 'GET' | 'POST', path: string, body?: unknown) => call(met
 
 // ── what the member does ────────────────────────────────────────────────────────────────────────
 const photo = (seed: string) => {
-    const bytes = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), crypto.createHash('sha512').update(seed).digest(), Buffer.from([0xff, 0xd9])]);
+    // SOI, a start-of-scan header, a scan with no 0xFF in it, EOI: a JPEG the metadata strip walks and leaves as sent.
+    // The node refuses a JPEG it cannot walk (G9a-3), and SOI + APP0 + random bytes, which this built before, is one.
+    const scan = crypto.createHash('sha512').update(seed).digest().map(b => (b === 0xff ? 0xfe : b));
+    const bytes = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]), scan, Buffer.from([0xff, 0xd9])]);
     return `data:image/jpeg;base64,${bytes.toString('base64')}`;
 };
 let n = 0;

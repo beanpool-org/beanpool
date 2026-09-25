@@ -54,21 +54,40 @@ export async function checkCallsignAvailable(
 }
 
 /**
+ * "<base> <word>" within `maxLength`. When it doesn't fit, the base gives way and the word stays whole:
+ * a cut word ("Sarah Jane Smith Jun") is a name nobody would choose. The base is cut between its words
+ * where it has a space to cut at ("Sarah Jane Juniper", not "Sarah Jane S Juniper").
+ */
+export function suggestionFor(base: string, word: string, maxLength = 32): string {
+    const full = `${base} ${word}`;
+    if (full.length <= maxLength) return full;
+    let head = base.slice(0, Math.max(0, maxLength - word.length - 1));
+    if (base[head.length] !== ' ' && head.includes(' ')) head = head.slice(0, head.lastIndexOf(' '));
+    head = head.trim();
+    return head ? `${head} ${word}` : word.slice(0, maxLength);
+}
+
+/**
  * Build up to `count` available "<base> <word>" suggestions, checked against the
  * node in parallel. Returns [] if the base is empty or nothing free was found in
  * the sampled words (the editable field is the fallback either way).
+ *
+ * `maxLength` is the longest name the caller will send: the global community's join keeps 20
+ * characters, so a longer suggestion would be cut after it was checked, into a name the member
+ * never saw.
  */
 export async function suggestCallsigns(
     base: string,
     excludePublicKey?: string,
     count = 3,
     anchorUrlOverride?: string,
+    maxLength = 32,
 ): Promise<string[]> {
     const clean = base.trim().replace(/\s+/g, ' ');
     if (clean.length < 1) return [];
     const candidates = [...FUN_WORDS]
         .sort(() => Math.random() - 0.5)
-        .map((w) => `${clean} ${w}`.slice(0, 32));
+        .map((w) => suggestionFor(clean, w, maxLength));
     // Check in small chunks rather than one wide burst, and stop as soon as we have
     // enough free names — a single 8-wide Promise.all can trip the node's per-IP
     // rate limiter (429), especially alongside the live typing check.

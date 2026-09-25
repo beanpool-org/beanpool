@@ -10,6 +10,7 @@ import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
+import { postsViewRefusal, viewOf } from './posts-view';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -831,7 +832,11 @@ export async function getPost(id: string) {
     // (the server tombstones deleted posts with active=0).
     if (anchorUrl) {
         fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true`)
-            .then(res => res.json())
+            .then(async res => {
+                // As in the sync: never the visitors' view over a member's row (utils/posts-view.ts).
+                if (viewOf(res) === 'guest' && await postsViewRefusal(res, anchorUrl, (await loadIdentity())?.publicKey)) return null;
+                return res.json();
+            })
             .then(async posts => {
                 if (!Array.isArray(posts) || posts.length === 0) return;
                 const p = posts[0];

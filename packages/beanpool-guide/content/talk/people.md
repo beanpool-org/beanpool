@@ -11,7 +11,7 @@ Tap **Talk**, then **People**. There are three buttons:
 
 - **Friends:** people you have added.
 - **Community:** every member. Search by name, and sort by **Newest**, **Name**, **Friends**, **Trusted** or **Active**.
-- **Invites:** invite someone new. See "Joining with an invite". If you have not joined yet, this button says **Register**.
+- **Invites:** invite someone new. See "Joining BeanPool". If you have not joined yet, this button says **Register**.
 
 Tap a person to see their profile: their trust badge, trades, reviews and posts.
 

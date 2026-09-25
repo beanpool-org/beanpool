@@ -506,6 +506,26 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         }
     }, [finish, resume, restored]);
 
+    /**
+     * "Check again" and "Try again" on a sent join: asked on the pending join as stored now, never this tab's copy.
+     * Another tab may have sent it again since (a later join, which may still land) or settled it.
+     */
+    const checkAgain = useCallback(async () => {
+        const p = await loadPendingJoin();
+        if (!mounted.current) return;
+        if (p && pendingJoinSent(p)) return settleSent(p);
+        // Settled meanwhile, somewhere else: go on from what is stored.
+        if (settleOnlyRef.current) {
+            onSettledRef.current?.(null);
+            return;
+        }
+        const held = await accountHeldElsewhere(p);
+        if (held) return showTaken(held, p, false);
+        if (p) return resume(p);
+        setNotice(null);
+        setScreen({ name: 'lobby' });
+    }, [settleSent, showTaken, resume]);
+
     // ---------- starting a sign-in ----------
 
     const fetchNonce = useCallback(async (p: PendingJoin): Promise<JoinNonce | null> => {
@@ -1042,7 +1062,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                         We can't tell yet whether you joined as {callsign}. Your account is kept on this device. Check your
                         connection, then try again.
                     </p>
-                    <button type="button" style={primaryButton} onClick={() => pending && afterJoin(() => settleSent(pending))}>Try again</button>
+                    <button type="button" style={primaryButton} onClick={() => afterJoin(checkAgain)}>Try again</button>
                     {/* Kept either way: from the lobby, joining again carries on with this same key. Settling only, there is
                         no lobby: the door isn't open, and nothing else here may run until the node has answered. */}
                     {!settleOnly && (
@@ -1072,7 +1092,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                         </p>
                     )}
                     {screen.canLand ? (
-                        <button type="button" style={primaryButton} onClick={() => pending && afterJoin(() => settleSent(pending))}>Check again</button>
+                        <button type="button" style={primaryButton} onClick={() => afterJoin(checkAgain)}>Check again</button>
                     ) : (
                         <button type="button" style={primaryButton} onClick={() => setScreen({ name: 'abandon', until: screen.until })}>
                             {brought ? `Use ${brought} instead` : 'Use the account I brought here'}
@@ -1162,12 +1182,21 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                         </p>
                     )}
                     {words && (showWords ? (
+                        // As the Safety Backup step lays them out: as many columns as whole words fit (one on a 320px
+                        // phone at 1.3x text), and a word someone copies onto paper is never broken across lines.
                         <ol data-testid="join-taken-words" style={{
-                            listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.35rem 0.75rem',
-                            padding: '0.75rem', margin: '0 0 0.75rem', textAlign: 'left', fontFamily: 'monospace', fontSize: '0.9rem',
-                            borderRadius: '10px', border: '1px solid var(--border-primary, #334155)',
+                            listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
+                            gap: '0.4rem', padding: 0, margin: '0 0 0.75rem', overflowWrap: 'normal',
                         }}>
-                            {words.map((w, i) => <li key={i} style={{ minWidth: 0 }}>{i + 1}. {w}</li>)}
+                            {words.map((w, i) => (
+                                <li key={i} style={{
+                                    background: 'var(--bg-secondary, #1e293b)', borderRadius: 8, padding: '0.5rem 0.4rem',
+                                    fontSize: '0.8rem', fontFamily: 'monospace', textAlign: 'center', minWidth: 0,
+                                }}>
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{i + 1}. </span>
+                                    <strong>{w}</strong>
+                                </li>
+                            ))}
                         </ol>
                     ) : (
                         <button type="button" style={secondaryButton} onClick={() => setShowWords(true)}>

@@ -547,20 +547,28 @@ async function main(): Promise<void> {
     await removeByModerator(ray, oldPost(ray, 'Ray new'));
     assert(mutedUntil(ray) === null && (await post(ray)).status === 200, 'removals 31+ days apart never mute');
 
-    // A muted enterprise: its keeper can't edit its posts through the marketplace route either. Today the signature
-    // check refuses it before the route runs (a body authorPublicKey must be the signer; keepers act for an
+    // A muted enterprise: its keeper can't edit its posts through the marketplace route either. For an offer the
+    // signature check refuses it before the route runs (a body authorPublicKey must be the signer; keepers act for an
     // enterprise through /api/treasury/:treasury/..., which checks both mutes); pinned so a change there can't open it.
+    // An event lets every host edit it with their own key, so there updatePost checks its author's mute.
     const shop = member('Shop', 60);
     const kit = member('Kit', 60);
     db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(shop.pk);
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(kit.pk);
     db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'keeper', ?)`).run(shop.pk, kit.pk, owner.pk);
     const shopPost = oldPost(shop, 'Shop listing');
+    const shopEvent = createPost('event', 'other', 'Shop open day', 'Come along', 0, 'fixed', shop.pk, -28.55, 153.5, [], false, undefined, false,
+        { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Shop' })!.id;
     attempt(() => db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run('9999-12-31T23:59:59.999Z', shop.pk));
     const kitEdit = await call('POST', kit, '/api/marketplace/posts/update', { id: shopPost, authorPublicKey: shop.pk, description: 'Buy now' });
     const shopDescription = (db.prepare('SELECT description FROM posts WHERE id = ?').get(shopPost) as any)?.description;
     assert(kitEdit.status === 403 && shopDescription !== 'Buy now',
         `a keeper can't edit a muted enterprise's post through the marketplace route (got ${kitEdit.status} ${kitEdit.body?.error})`);
+    const kitEventEdit = await call('POST', kit, '/api/marketplace/posts/update', { id: shopEvent, authorPublicKey: kit.pk, description: 'Buy now at spam.example' });
+    const shopEventStored = (db.prepare('SELECT description FROM posts WHERE id = ?').get(shopEvent) as any)?.description;
+    const shopEventRead = (await call('GET', viewer, `/api/marketplace/posts?id=${shopEvent}`)).body?.[0]?.description;
+    assert(kitEventEdit.status === 403 && kitEventEdit.body?.code === 'moderation_muted' && shopEventStored === 'Come along' && shopEventRead === 'Come along',
+        `nor its event, which they host, signing as themselves: 403 moderation_muted, and nobody reads the new words (got ${kitEventEdit.status} ${kitEventEdit.body?.error ?? ''}; stored "${shopEventStored}", read "${shopEventRead}")`);
 
     // ── 6. replication ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. replication: a standby holds the hide, the takedowns and the mute ──');

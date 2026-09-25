@@ -251,12 +251,15 @@ async function main(): Promise<void> {
     const openJoinKeyAtT = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as any)?.value as string;
     assert(!!openJoinKeyAtT, 'setup: an open join, and the node key its hash was made with');
 
-    // The global node's moderation state (G3), as engine/auto-moderation.ts writes it.
+    // The global node's moderation state (G3), as engine/auto-moderation.ts writes it. The mute is on a member of its
+    // own, not the author: a muted author's post takes no edits (engine updatePost), and the author edits one at T+1.
     const hiddenAtT = new Date(Date.now() - 60_000).toISOString();
     const removedAtT = new Date(Date.now() - 120_000).toISOString();
     const mutedAtT = '9999-12-31T23:59:59.999Z';
+    const mutedMember = crypto.randomBytes(32).toString('hex');
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status) VALUES (?, 'Muted', ?, 'active')`).run(mutedMember, new Date().toISOString());
     db.prepare('UPDATE posts SET hidden_by_reports_at = ?, removed_by_moderator_at = ? WHERE id = ?').run(hiddenAtT, removedAtT, kept!.id);
-    db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(mutedAtT, author);
+    db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(mutedAtT, mutedMember);
 
     /** What every referenced object held at T. The whole suite is about reproducing this map. */
     const atT = new Map<string, Buffer>([
@@ -336,7 +339,7 @@ async function main(): Promise<void> {
             assert(row?.join_hash === openJoinHashAtT, 'the archive carries open_joins, so a restored node still knows who joined');
             assert(key === openJoinKeyAtT, 'and the node key those hashes were made with, so the same account still matches');
             const moderated = archived.prepare('SELECT hidden_by_reports_at, removed_by_moderator_at FROM posts WHERE id = ?').get(kept!.id) as any;
-            const muted = archived.prepare('SELECT moderation_muted_until FROM members WHERE public_key = ?').get(author) as any;
+            const muted = archived.prepare('SELECT moderation_muted_until FROM members WHERE public_key = ?').get(mutedMember) as any;
             assert(moderated?.hidden_by_reports_at === hiddenAtT && moderated?.removed_by_moderator_at === removedAtT,
                 'the archive carries a post hidden by reports, and a moderator\'s takedown, so a restored node keeps both');
             assert(muted?.moderation_muted_until === mutedAtT, 'and a member\'s mute, so a restored node keeps them muted');

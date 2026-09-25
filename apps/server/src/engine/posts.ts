@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
 import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
+import { assertNotMuted } from './auto-moderation.js';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOf, storePhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
@@ -601,6 +602,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     } else if (existingPost.authorPublicKey !== authorPublicKey) {
         return null;
     }
+    // G3: an edit goes out under the author's name, so a muted author's post takes none, whoever makes it: a keeper
+    // or convenor editing a muted enterprise's or member's event is refused as the author would be. The route checks
+    // the actor's own mute.
+    assertNotMuted(authorPublicKey);
 
     if (existingPost.audienceScope !== 'public') {
         delete updates.reach;

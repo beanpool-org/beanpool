@@ -45,7 +45,7 @@ On the global community a new account has a few daily limits for its first 3 day
 - After you join, a card called **Your account is new** shows how many of each are left and when more come back. Tap **✕** to put it away. It stays in **Settings** until the limits are over.
 - If you reach a limit, **New Post** or the chat says which one and when it lets up, and **New Post** shows the same card.
 - If the moderators have paused your posting, **New Post** and the chat say so.
-- The web app has no alerts while it is closed. If the moderators hide or remove one of your posts, or pause your posting, you see the alert the next time you open it.
+- The web app shows these alerts only while it is open. If your posting is paused, **New Post** and the chat tell you the next time you try. If the moderators hide or remove one of your posts while the web app is closed, it doesn't tell you later, so check your posts now and then, or use the phone app, which does.
 
 Your own local community has none of these limits.
 

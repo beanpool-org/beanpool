@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 41,
-  "hash": "a2a47927793a2e86eaff5c17d830926ce2a799198be22523012bceb7b13e19f4",
+  "version": 42,
+  "hash": "f25b280ba2712ffc2fe2eb1544d666f34b15cbf8a082129e167364f68931256c",
   "sections": [
     {
       "id": "about",
@@ -1613,7 +1613,7 @@
             "After you join, a card called **Your account is new** shows how many of each are left and when more come back. Tap **✕** to put it away. It stays in **Settings** until the limits are over.",
             "If you reach a limit, **New Post** or the chat says which one and when it lets up, and **New Post** shows the same card.",
             "If the moderators have paused your posting, **New Post** and the chat say so.",
-            "The web app has no alerts while it is closed. If the moderators hide or remove one of your posts, or pause your posting, you see the alert the next time you open it."
+            "The web app shows these alerts only while it is open. If your posting is paused, **New Post** and the chat tell you the next time you try. If the moderators hide or remove one of your posts while the web app is closed, it doesn't tell you later, so check your posts now and then, or use the phone app, which does."
           ]
         },
         {

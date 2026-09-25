@@ -15,7 +15,7 @@ import {
     type PendingJoin,
 } from '../lib/identity';
 import { readAuthReturn, resetCapturedAuthReturn } from '../lib/web-join';
-import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 
 const ORIGIN = 'https://global.beanpool.org';
 const NONCE = 'node-nonce-1';
@@ -56,6 +56,7 @@ function nonceAnswer(nonce = NONCE) {
 }
 
 let identity: BeanPoolIdentity;
+let idb: MemoryIndexedDB;
 
 async function seedPending(overrides: Partial<PendingJoin> = {}): Promise<PendingJoin> {
     const now = Date.now();
@@ -77,7 +78,8 @@ function renderJoin(props: Partial<React.ComponentProps<typeof WebJoin>> = {}) {
 }
 
 beforeEach(async () => {
-    vi.stubGlobal('indexedDB', memoryIndexedDB());
+    idb = memoryIndexedDB();
+    vi.stubGlobal('indexedDB', idb);
     resetCapturedAuthReturn();
     identity = await generateIdentity('Alice');
 });
@@ -201,6 +203,17 @@ describe('screen 4: the return, and each door answer → its screen', () => {
         const [sent] = node.joins();
         expect(sent.headers['X-Public-Key']).toBe(identity.publicKey);
         expect(sent.body).toEqual({ callsign: 'Alice', provider: 'google', idToken: expect.stringContaining('.'), nonce: NONCE });
+    });
+
+    it("200, but this browser can't keep the key: it says so rather than hanging, and the pending join is kept to finish from", async () => {
+        await seedPending();
+        // The node has the member; the move into the app slot then fails as it commits, as on a full disk.
+        stubNode({ '/api/join': () => { idb.failNextCommit(); return json(200, { success: true, member: { callsign: 'Alice' } }); } });
+        const { onJoined } = renderJoin({ authReturn: googleReturn() });
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent("You're in, but this browser couldn't save your account.");
+        expect(onJoined).not.toHaveBeenCalled();
+        expect(await loadIdentity()).toBeNull();
+        expect((await loadPendingJoin())?.identity.publicKey).toBe(identity.publicKey);
     });
 
     it('409 already_member: you are in', async () => {

@@ -2,7 +2,7 @@
  * Tests only: an in-memory stand-in for `indexedDB`, as much of it as identity.ts uses (open, one object store,
  * get / put / delete in a transaction, oncomplete once the transaction's requests have answered). jsdom has no
  * IndexedDB. Values are structured-cloned in and out, as the real one does, so a test cannot pass by holding a
- * reference to what it saved.
+ * reference to what it saved. `failNextCommit` makes a write fail as a full disk does.
  *
  *   vi.stubGlobal('indexedDB', memoryIndexedDB());
  */
@@ -25,10 +25,16 @@ export interface MemoryIndexedDB {
     open(name: string, version?: number): FakeRequest;
     /** What is stored: database → store → key → value. For assertions. */
     peek(db: string, store: string, key: IDBValidKey): unknown;
+    /**
+     * The next readwrite transaction fails as it commits, as the real one does when the disk is full: its writes are
+     * undone, `error` is set, and it fires `abort`, never `error` or `complete`.
+     */
+    failNextCommit(error?: unknown): void;
 }
 
 export function memoryIndexedDB(): MemoryIndexedDB {
     const databases = new Map<string, Map<string, Store>>();
+    let failCommit: { error: unknown } | null = null;
 
     function database(stores: Map<string, Store>) {
         return {
@@ -37,12 +43,16 @@ export function memoryIndexedDB(): MemoryIndexedDB {
                 return {};
             },
             close() { /* nothing to release */ },
-            transaction(storeName: string) {
+            transaction(storeName: string, mode: IDBTransactionMode = 'readonly') {
                 const store = stores.get(storeName);
                 if (!store) throw new Error(`NotFoundError: no object store ${storeName}`);
+                const failing = mode === 'readwrite' ? failCommit : null;
+                if (failing) failCommit = null;
+                const before = failing ? new Map(store) : null;
                 const tx = {
                     oncomplete: null as null | (() => void),
                     onerror: null as null | (() => void),
+                    onabort: null as null | (() => void),
                     error: null as unknown,
                     objectStore() {
                         return {
@@ -67,7 +77,16 @@ export function memoryIndexedDB(): MemoryIndexedDB {
                     },
                 };
                 // After the caller has queued its requests (synchronously), and after their answers.
-                queueMicrotask(() => setTimeout(() => tx.oncomplete?.(), 0));
+                queueMicrotask(() => setTimeout(() => {
+                    if (failing && before) {
+                        store.clear();
+                        for (const [k, v] of before) store.set(k, v);
+                        tx.error = failing.error;
+                        tx.onabort?.();
+                        return;
+                    }
+                    tx.oncomplete?.();
+                }, 0));
                 return tx;
             },
         };
@@ -92,6 +111,9 @@ export function memoryIndexedDB(): MemoryIndexedDB {
         },
         peek(db: string, store: string, key: IDBValidKey) {
             return databases.get(db)?.get(store)?.get(key);
+        },
+        failNextCommit(error: unknown = new DOMException('The quota has been exceeded.', 'QuotaExceededError')) {
+            failCommit = { error };
         },
     };
 }

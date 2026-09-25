@@ -22,6 +22,12 @@ export interface BeanPoolIdentity {
     mnemonic?: string[];  // 12-word recovery phrase (optional for legacy identities)
 }
 
+/*
+ * Every write below listens for `abort` as well as `error`. A write the browser cannot commit (its storage full, say)
+ * aborts the transaction with no `error` event, and a promise waiting only for `complete` or `error` would never
+ * settle: a join the node has said yes to would sit on "Joining…" instead of saying it could not be saved.
+ */
+
 function openDb(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
         const req = indexedDB.open(DB_NAME, 1);
@@ -168,6 +174,7 @@ export async function savePendingJoin(pending: PendingJoin): Promise<void> {
         tx.objectStore(STORE_NAME).put(pending, PENDING_JOIN_ID);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
     });
 }
 
@@ -195,6 +202,7 @@ export async function clearPendingJoin(): Promise<void> {
         tx.objectStore(STORE_NAME).delete(PENDING_JOIN_ID);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
     });
 }
 
@@ -211,6 +219,7 @@ export async function completePendingJoin(identity: BeanPoolIdentity): Promise<v
         store.delete(PENDING_JOIN_ID);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
     });
 }
 
@@ -236,6 +245,7 @@ export async function wipeIdentity(): Promise<void> {
         store.delete(PENDING_JOIN_ID);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
     });
 }
 
@@ -259,5 +269,6 @@ async function saveIdentity(identity: BeanPoolIdentity): Promise<void> {
         store.put(identity, KEY_ID);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
     });
 }

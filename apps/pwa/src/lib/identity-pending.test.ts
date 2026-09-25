@@ -89,3 +89,38 @@ describe('the pending join slot', () => {
         expect((await loadIdentity())?.publicKey).toBe(IDENTITY.publicKey);
     });
 });
+
+describe('a write the browser could not commit (a full disk aborts the transaction: `abort` fires, `error` never does)', () => {
+    it('completing the join rejects rather than never answering, and the pending join is still there to finish from', async () => {
+        await savePendingJoin(pending());
+        idb.failNextCommit();
+        await expect(completePendingJoin({ ...IDENTITY, callsign: 'Alice2' })).rejects.toMatchObject({ name: 'QuotaExceededError' });
+        expect(await loadIdentity()).toBeNull();
+        expect((await loadPendingJoin())?.identity.publicKey).toBe(IDENTITY.publicKey);
+    }, 2000);
+
+    it('saving, clearing, wiping and importing reject too', async () => {
+        idb.failNextCommit();
+        await expect(savePendingJoin(pending())).rejects.toMatchObject({ name: 'QuotaExceededError' });
+        expect(await loadPendingJoin()).toBeNull();
+
+        await savePendingJoin(pending());
+        idb.failNextCommit();
+        await expect(clearPendingJoin()).rejects.toMatchObject({ name: 'QuotaExceededError' });
+        expect(await loadPendingJoin()).not.toBeNull();
+
+        await importIdentity(IDENTITY);
+        idb.failNextCommit();
+        await expect(wipeIdentity()).rejects.toMatchObject({ name: 'QuotaExceededError' });
+        expect((await loadIdentity())?.publicKey).toBe(IDENTITY.publicKey);
+
+        idb.failNextCommit();
+        await expect(importIdentity({ ...IDENTITY, callsign: 'Bob' })).rejects.toMatchObject({ name: 'QuotaExceededError' });
+        expect((await loadIdentity())?.callsign).toBe('Alice');
+    }, 2000);
+
+    it('an abort that names no error still rejects', async () => {
+        idb.failNextCommit(null);
+        await expect(clearPendingJoin()).rejects.toBeInstanceOf(Error);
+    }, 2000);
+});

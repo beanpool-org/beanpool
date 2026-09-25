@@ -61,6 +61,14 @@ import {
     type RedirectProvider,
     type SignInProof,
 } from '../lib/web-join';
+import { recoveryStored, sealJoinRecovery, type SealedJoinRecovery } from '../lib/join-recovery';
+
+/** The node's word on the sign-in recovery copy a join carried (lib/join-recovery.ts). */
+export interface JoinRecoveryResult {
+    /** The node stored it: this sign-in also brings the account back. */
+    enrolled: boolean;
+    provider: JoinProvider;
+}
 
 export interface JoinedResult {
     /** The member's identity, now in this browser's identity slot, with the name the node gave it. */
@@ -69,8 +77,12 @@ export interface JoinedResult {
     requestedCallsign: string | null;
     /** The key was brought here (phone or 12 words), not made for this join. */
     restored: boolean;
-    /** What the node said about sign-in recovery enrolled with the join (G11-c), or null when none was asked. */
-    recovery: { enrolled?: boolean } | null;
+    /**
+     * Sign-in recovery enrolled with the join (G11-c): the sign-in it went with, and whether the node stored the copy
+     * sealed to it (`enrolled`). Null when the node said nothing about one: none went, or the answer that let the
+     * member in was not the join's own (the node was asked afterwards).
+     */
+    recovery: JoinRecoveryResult | null;
     /**
      * A key brought here (`restored`) was waiting while a join this browser sent earlier was asked about, and that join
      * had landed: this identity is that join's, and the key brought here was not added.
@@ -113,7 +125,8 @@ type Screen =
     | { name: 'name' }
     | { name: 'providers' }
     | { name: 'github'; start: GithubStart }
-    | { name: 'joining' }
+    /** `securing`: the sign-in recovery copy is being made (lib/join-recovery.ts), before the join goes. */
+    | { name: 'joining'; securing?: boolean }
     | { name: 'unknown'; checking: boolean }
     | { name: 'checking'; checking: boolean }
     /**
@@ -209,6 +222,8 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
     const [copied, setCopied] = useState(false);
     // The last join sent, kept in memory only: a 503 is retried with the same sign-in (the node did not spend it).
     const lastJoin = useRef<{ pending: PendingJoin; proof: SignInProof } | null>(null);
+    // The sign-in recovery copy made for that sign-in and key, so a retry sends the same join without sealing again.
+    const lastSealed = useRef<{ proof: SignInProof; publicKey: string; recovery: SealedJoinRecovery | null } | null>(null);
     const mounted = useRef(true);
     // Set on every mount: React's StrictMode (main.tsx) runs this effect, its cleanup, and the effect again.
     useEffect(() => {
@@ -283,7 +298,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
 
     // ---------- the node's answer to a join ----------
 
-    const finish = useCallback(async (p: PendingJoin, nodeCallsign: string | null, recovery: { enrolled?: boolean } | null, earlierJoinKept = false) => {
+    const finish = useCallback(async (p: PendingJoin, nodeCallsign: string | null, recovery: JoinRecoveryResult | null, earlierJoinKept = false) => {
         const identity = { ...p.identity, callsign: nodeCallsign || p.identity.callsign };
         try {
             await completePendingJoin(identity);
@@ -410,44 +425,70 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
 
     const submit = useCallback(async (p: PendingJoin, proof: SignInProof) => {
         setNotice(null);
-        setScreen({ name: 'joining' });
-        // Another tab saved an account here while this one was at the sign-in: nothing is sent (one browser, one account).
-        const held = await accountHeldElsewhere(p);
-        if (held) return showTaken(held, p, false);
-        // Marked sent BEFORE it goes, and not sent if that cannot be written: once the node has the join, the answer
-        // can be lost, and this record may be the only copy of a member's key. The nonce is on its way to the node;
-        // the page never offers it again.
-        let sent: PendingJoin;
-        try {
-            sent = await markPendingJoinSent({ ...p, nonce: null });
-        } catch (e) {
-            console.error('[WebJoin] the join could not be marked sent, so it was not sent:', e);
-            return toProviders(p, {
-                tone: 'error',
-                text: e instanceof PendingJoinHeldError
-                    ? 'An earlier join from this browser is still being checked. Reload the page to finish it.'
-                    : "This browser couldn't save your account, so nothing was sent. Try again, or try another browser.",
-            });
+        // The sign-in also becomes this account's way back (G11-c, lib/join-recovery.ts): the key and its words sealed
+        // to it, in the join. Made before anything is written or sent, from the key and words `p` already holds, so
+        // nothing about the pending join waits on it; a seal that fails is null, and the join goes without a copy. A
+        // retry of the same sign-in with the same key sends the copy already made.
+        const made = lastSealed.current;
+        let sealed: SealedJoinRecovery | null;
+        if (made && made.proof === proof && made.publicKey === p.identity.publicKey) {
+            sealed = made.recovery;
+            setScreen({ name: 'joining' });
+        } else {
+            setScreen({ name: 'joining', securing: true });
+            sealed = await sealJoinRecovery(p.identity, proof.provider, proof.sub);
+            lastSealed.current = { proof, publicKey: p.identity.publicKey, recovery: sealed };
+            if (mounted.current) setScreen({ name: 'joining' });
         }
-        joinWent.current = true;
-        setPending(sent);
-        lastJoin.current = { pending: sent, proof };
-        // G11-c seals the seed to `proof.sub` here and passes the shares as joinBody's third argument.
-        const body = joinBody(sent.identity.callsign, proof);
-        let answer;
-        try {
-            answer = await submitJoin(sent.identity, body);
-        } catch (e) {
-            if (e instanceof DoorUnreachableError) return settleAnswer(sent, proof, null, null);
-            throw e;
-        }
-        const verdict = joinVerdict(answer, sent, proof.provider);
-        switch (verdict.kind) {
-            case 'joined': return finish(sent, verdict.callsign, verdict.recovery);
-            case 'already_member': return finish(sent, null, null);
-            case 'refused': return settleAnswer(sent, proof, verdict.refusal, verdict.outcome);
-            case 'unknown': return settleAnswer(sent, proof, null, verdict.outcome);
-        }
+
+        /** Send the join once, with the copy or without it. */
+        const send = async (from: PendingJoin, recovery: SealedJoinRecovery | null): Promise<void> => {
+            // Another tab saved an account here while this one was at the sign-in: nothing is sent (one browser, one account).
+            const held = await accountHeldElsewhere(from);
+            if (held) return showTaken(held, from, false);
+            // Marked sent BEFORE it goes, and not sent if that cannot be written: once the node has the join, the answer
+            // can be lost, and this record may be the only copy of a member's key. The nonce is on its way to the node;
+            // the page never offers it again.
+            let sent: PendingJoin;
+            try {
+                sent = await markPendingJoinSent({ ...from, nonce: null });
+            } catch (e) {
+                console.error('[WebJoin] the join could not be marked sent, so it was not sent:', e);
+                return toProviders(from, {
+                    tone: 'error',
+                    text: e instanceof PendingJoinHeldError
+                        ? 'An earlier join from this browser is still being checked. Reload the page to finish it.'
+                        : "This browser couldn't save your account, so nothing was sent. Try again, or try another browser.",
+                });
+            }
+            joinWent.current = true;
+            setPending(sent);
+            lastJoin.current = { pending: sent, proof };
+            const body = joinBody(sent.identity.callsign, proof, recovery ? { shares: recovery.shares } : undefined);
+            let answer;
+            try {
+                answer = await submitJoin(sent.identity, body);
+            } catch (e) {
+                if (e instanceof DoorUnreachableError) return settleAnswer(sent, proof, null, null);
+                throw e;
+            }
+            const verdict = joinVerdict(answer, sent, proof.provider);
+            // The node could not read the copy, and said so before it checked the sign-in or wrote anything (400
+            // `recovery_invalid`: the nonce is not spent). The same join goes again without it, once, through the same
+            // sent mark: a copy is never what keeps somebody out.
+            if (recovery && verdict.kind === 'refused' && verdict.refusal.code === 'recovery_invalid') {
+                console.warn('[WebJoin] the community could not read the sign-in recovery copy; joining without it');
+                lastSealed.current = { proof, publicKey: sent.identity.publicKey, recovery: null };
+                return send(sent, null);
+            }
+            switch (verdict.kind) {
+                case 'joined': return finish(sent, verdict.callsign, verdict.recovery ? { enrolled: recoveryStored(verdict.recovery), provider: proof.provider } : null);
+                case 'already_member': return finish(sent, null, null);
+                case 'refused': return settleAnswer(sent, proof, verdict.refusal, verdict.outcome);
+                case 'unknown': return settleAnswer(sent, proof, null, verdict.outcome);
+            }
+        };
+        return send(p, sealed);
     }, [finish, settleAnswer, toProviders, showTaken]);
 
     /** Carry on with this pending join's key and name: the sign-in, or the name first when it has none. */
@@ -1033,7 +1074,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         case 'joining':
             body = (
                 <p role="status" data-testid="join-joining" style={{ ...lede, color: 'var(--text-primary)', fontWeight: 600 }}>
-                    Joining as {callsign}…
+                    {screen.securing ? 'Securing your account…' : <>Joining as {callsign}…</>}
                 </p>
             );
             break;

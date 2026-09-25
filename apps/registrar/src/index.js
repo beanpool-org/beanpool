@@ -457,14 +457,25 @@ async function routeIfOnlyOwner(env, res, ids, now) {
 //   pending → an auto name whose provisioning failed is retried; a gated one keeps waiting for the admin.
 //   paused  → the admin's pause only the admin lifts. Any other pause resumes under routeIfOnlyOwner; otherwise
 //             routing goes back off and the name stays paused — and the owner's.
-async function heal(env, cur, b, now) {
+// A heal whose write missed is undone; if the name is still its key's and live, but its row doesn't record what this
+// heal carries (a new address, mode or origin), the heal is tried again on the row as it now is (`tries` in all): a
+// repair or a bare heal that read the row at the node's old address — the sweep's repair runs just as a node moves,
+// when nothing answers at its old address — would otherwise leave the node answered live where it no longer is.
+async function heal(env, cur, b, now, tries = 3) {
     const fields = bodyFields(b);
     const a = { ...cur, ...fields };
     const reply = (extra) => ({ name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact, ...extra });
     // Every write holds only while the row is as read (`cur`), then as this heal last wrote it (`res`), ids and target
     // and all; if it changed, the heal is undone.
     let ids = NOTHING;
-    const missed = async () => asNow(await undo(env, cur.name, ids), cur.node_pubkey);
+    const missed = async () => {
+        const row = await undo(env, cur.name, ids);
+        if (tries > 1 && row?.status === 'live' && isOwnRow(row, cur.node_pubkey) && Object.entries(fields).some(([k, v]) => row[k] !== v)) {
+            const again = await db.getAllocation(env, cur.name);
+            if (again?.status === 'live' && isOwnRow(again, cur.node_pubkey)) return heal(env, again, b, now, tries - 1);
+        }
+        return asNow(row, cur.node_pubkey);
+    };
 
     // Not routed by a heal: only where its node now is is recorded, and only over the row as read. Written over an
     // approval or the admin's resume that went live meanwhile, it would leave a live row naming a target Cloudflare

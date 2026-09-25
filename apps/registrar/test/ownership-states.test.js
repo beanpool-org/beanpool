@@ -1882,6 +1882,29 @@ test('race: the sweep repairing a direct name between its owner\'s heal to a new
     } finally { w.restore(); }
 });
 
+// With that alone the moving heal misses and is undone, and is answered live: the name routes the node's old address,
+// the row agreeing. The sweep repairs a direct name just as its node moves (nothing answers at the old address), so a
+// heal that missed while its name stayed its own and live is tried again on the row as it now is.
+for (const by of ['the sweep\'s repair', 'the same key\'s bare heal']) {
+    test(`race: ${by} landing between a heal's PATCH to a new address and that heal's row write: the move is not lost`, async () => {
+        const w = await world();
+        try {
+            const name = by.startsWith('the sweep') ? 'movekept' : 'movekept2';
+            const owner = await makeKey();
+            assert.equal((await w.claim(owner, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+            w.nodes[`${name}.beanpool.org`] = async () => new Response('origin unreachable', { status: 522 });
+            w.beforeRun(/SET mode=\?, public_ip=\?, tunnel_id=\?/, async () => {
+                if (by.startsWith('the sweep')) await attestSweep(w.env); else await w.heal(owner, { name });
+            });
+            const h = await w.heal(owner, { name, ...modeBody('direct', NEW_IP) });
+            assert.equal(h.body.status, 'live', JSON.stringify(h.body));
+            const row = await routedAsRow(w, name, 'after the heal');
+            assert.deepEqual([row.mode, row.public_ip], ['direct', NEW_IP], 'the node\'s new address, which its heal was answered live for');
+            assert.equal(routing(w, name).dns, NEW_IP);
+        } finally { w.restore(); }
+    });
+}
+
 // A request whose write missed writes nothing when it undoes: it points the record back at the row as it now is. Held
 // between another heal's PATCH to a new address and that heal's row write, it undoes that PATCH unseen — so a heal that
 // moved a live name checks, once its row is written, that Cloudflare routes it, and repairs it if not; a repair

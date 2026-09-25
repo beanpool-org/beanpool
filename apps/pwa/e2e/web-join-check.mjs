@@ -63,7 +63,8 @@ class Failure extends Error {}
  * saw is kept for the checks.
  */
 async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, github } = {}) {
-    const seen = { nonces: [], joins: [], providerVisits: [], violations: [], unexpectedHosts: new Set(), members: new Set() };
+    // membershipDown: the membership probe gets no answer, as when the node can't be reached.
+    const seen = { nonces: [], joins: [], providerVisits: [], violations: [], unexpectedHosts: new Set(), members: new Set(), membershipDown: false };
     const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce' });
     await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
     await context.addInitScript(([scale]) => {
@@ -162,6 +163,7 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
             return reply(r.status, r.body);
         }
         if (p.startsWith('/api/community/membership/')) {
+            if (seen.membershipDown) return route.abort('internetdisconnected');
             const k = decodeURIComponent(p.split('/').pop());
             return reply(200, { isMember: seen.members.has(k), callsign: seen.members.has(k) ? 'Alice' : null });
         }
@@ -212,6 +214,28 @@ async function pendingKey(page) {
             req.onerror = () => reject(req.error);
         };
     }));
+}
+
+/** Move the pending join `minutes` into the past, as if the tab had been closed that long ago. */
+async function agePendingJoin(page, minutes) {
+    return page.evaluate((ms) => new Promise((resolve, reject) => {
+        const open = indexedDB.open('beanpool-identity', 1);
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const tx = open.result.transaction('keys', 'readwrite');
+            const store = tx.objectStore('keys');
+            const req = store.get('pending-join');
+            req.onsuccess = () => {
+                const p = req.result;
+                if (!p) return;
+                for (const k of ['startedAt', 'expiresAt', 'sentAt']) if (typeof p[k] === 'number') p[k] -= ms;
+                store.put(p, 'pending-join');
+            };
+            tx.oncomplete = () => resolve(req.result ?? null);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        };
+    }), minutes * 60_000);
 }
 
 async function storedIdentityKey(page) {
@@ -342,6 +366,35 @@ const SCENARIOS = [
             if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
         },
         // The node takes the member and never answers this request.
+        join: async (_b, key, seen) => { seen.members.add(key); return { hang: true }; },
+    },
+    {
+        name: 'the answer was lost and the tab closed; reopened after its time: kept and said so while the node is unreachable, then in',
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Alice');
+            const key = await pendingKey(page);
+            await page.getByTestId('join-provider-google').click();
+            await page.getByTestId('join-joining').waitFor({ timeout: 20_000 });
+            // The node took the member and its answer never came back. Half an hour later the tab is opened again,
+            // long past the pending join's own ten minutes, and the node can't be reached.
+            const aged = await agePendingJoin(page, 30);
+            if (typeof aged?.sentAt !== 'number') throw new Failure(`the join went out unmarked: ${JSON.stringify(aged && { ...aged, identity: undefined })}`);
+            seen.membershipDown = true;
+            await page.reload({ waitUntil: 'load' });
+            await screenIs(page, 'checking', 'reopened with the node unreachable');
+            await page.getByText("We can't tell yet whether you joined as Alice.", { exact: false }).waitFor({ timeout: 20_000 });
+            await noSideScroll(page, 'checking');
+            await shot(page, view, 'checking');
+            if ((await pendingKey(page)) !== key) throw new Failure('the pending join was dropped while the node could not say');
+            if ((await storedIdentityKey(page)) !== null) throw new Failure('an identity was saved before the node said yes');
+            // The node answers again: a member, so the new member's steps follow.
+            seen.membershipDown = false;
+            await page.getByRole('button', { name: 'Try again' }).click();
+            await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            if ((await storedIdentityKey(page)) !== key) throw new Failure('the identity is not the key that joined');
+            if ((await pendingKey(page)) !== null) throw new Failure('the pending join was left behind');
+            if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
+        },
         join: async (_b, key, seen) => { seen.members.add(key); return { hang: true }; },
     },
     {

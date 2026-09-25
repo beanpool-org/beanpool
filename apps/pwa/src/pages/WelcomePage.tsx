@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { createIdentity, createIdentityFromMnemonic, identityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
+import { clearUnsentPendingJoin, createIdentity, createIdentityFromMnemonic, identityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
 import {
@@ -629,6 +629,9 @@ export function WelcomePage({ onComplete }: Props) {
         if (membership.isMember) {
             const member = { ...identity, callsign: membership.callsign || identity.callsign };
             await importIdentity(member);
+            // A join started here and never sent is not needed now. One that went out stays (identity.ts
+            // pendingJoinSent): the node may have that key as a member, and this browser its only copy.
+            await clearUnsentPendingJoin().catch((e) => console.warn('[Welcome] leftover pending join not cleared:', e));
             if ('geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
             }

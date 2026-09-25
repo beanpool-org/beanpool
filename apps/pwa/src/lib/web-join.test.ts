@@ -8,6 +8,8 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import {
     appleAuthUrl,
     captureAuthReturn,
+    checkMembershipWithKey,
+    checkSentJoin,
     consumeCapturedAuthReturn,
     doorOutcome,
     DoorUnreachableError,
@@ -24,11 +26,11 @@ import {
     resetCapturedAuthReturn,
     runGithubPoll,
     startGithubJoin,
-
+    SENT_JOIN_CAN_LAND_MS,
     type DoorAnswer,
     type JoinNonce,
 } from './web-join';
-import type { BeanPoolIdentity } from './identity';
+import { PENDING_JOIN_TTL_MS, type BeanPoolIdentity, type PendingJoin } from './identity';
 
 const NONCE = 'n0nce-Abc_123-xyz';
 const ORIGIN = 'https://global.beanpool.org';
@@ -473,3 +475,83 @@ describe('the door calls are signed by the joining key', () => {
     });
 });
 
+
+describe('a join that went out: only the node says whether its key may go (checkSentJoin)', () => {
+    let identity: BeanPoolIdentity;
+    const SENT_AT = 1_800_000_000_000;
+    beforeEach(async () => {
+        const { generateIdentity } = await import('./identity');
+        identity = await generateIdentity('Alice');
+    });
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+    });
+
+    function sent(overrides: Partial<PendingJoin> = {}): PendingJoin {
+        return { identity, provider: 'google', nonce: null, startedAt: SENT_AT - 60_000, expiresAt: SENT_AT + PENDING_JOIN_TTL_MS, restored: false, sentAt: SENT_AT, ...overrides };
+    }
+    function membershipAnswers(res: () => Response) {
+        const fetchMock = vi.fn(async () => res());
+        vi.stubGlobal('fetch', fetchMock);
+        return fetchMock;
+    }
+    const answer = (status: number, body: unknown) => () => new Response(JSON.stringify(body), { status });
+
+    it('the window is the node\'s nonce life and a minute: nothing the join carried can be spent after it', () => {
+        expect(SENT_JOIN_CAN_LAND_MS).toBe(11 * 60 * 1000);
+    });
+
+    it('a member: the join landed. Asked with the pending key, signed by it', async () => {
+        vi.spyOn(Date, 'now').mockReturnValue(SENT_AT + 60 * 60_000);
+        const fetchMock = membershipAnswers(answer(200, { isMember: true, callsign: 'Alice2' }));
+        expect(await checkSentJoin(sent())).toEqual({ kind: 'member', callsign: 'Alice2' });
+        const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+        expect(path).toBe(`/api/community/membership/${identity.publicKey}`);
+        expect((init.headers as Record<string, string>)['X-Public-Key']).toBe(identity.publicKey);
+    });
+
+    it('not a member, asked once the join can no longer land: it may go', async () => {
+        vi.spyOn(Date, 'now').mockReturnValue(SENT_AT + SENT_JOIN_CAN_LAND_MS);
+        membershipAnswers(answer(200, { isMember: false, callsign: null }));
+        expect(await checkSentJoin(sent())).toEqual({ kind: 'not_member' });
+    });
+
+    it('not a member, asked while the join could still land: keep it', async () => {
+        vi.spyOn(Date, 'now').mockReturnValue(SENT_AT + SENT_JOIN_CAN_LAND_MS - 1);
+        membershipAnswers(answer(200, { isMember: false, callsign: null }));
+        expect(await checkSentJoin(sent())).toEqual({ kind: 'may_still_land' });
+    });
+
+    it('a sent time this page cannot read is never "past the window"', async () => {
+        vi.spyOn(Date, 'now').mockReturnValue(SENT_AT + 24 * 60 * 60_000);
+        membershipAnswers(answer(200, { isMember: false, callsign: null }));
+        expect(await checkSentJoin(sent({ sentAt: Number.NaN }))).toEqual({ kind: 'may_still_land' });
+    });
+
+    it('no answer, another status, or a reply that does not say: unknown, never "not a member"', async () => {
+        vi.spyOn(Date, 'now').mockReturnValue(SENT_AT + 60 * 60_000);
+        const replies: Array<() => Response> = [
+            () => { throw new TypeError('Failed to fetch'); },
+            answer(500, { error: 'boom' }),
+            answer(502, {}),
+            answer(429, { isMember: false }),
+            // A captive portal's page, and bodies that do not say isMember as a boolean.
+            () => new Response('<html>Sign in to the Wi-Fi</html>', { status: 200, headers: { 'Content-Type': 'text/html' } }),
+            answer(200, {}),
+            answer(200, { isMember: 'false' }),
+            answer(200, { isMember: null }),
+        ];
+        for (const reply of replies) {
+            membershipAnswers(reply);
+            expect(await checkSentJoin(sent())).toEqual({ kind: 'unknown' });
+        }
+    });
+
+    it('checkMembershipWithKey reads "not a member" only from a reply that says it', async () => {
+        membershipAnswers(answer(200, { isMember: false, callsign: null }));
+        expect(await checkMembershipWithKey(identity)).toEqual({ isMember: false, callsign: null });
+        membershipAnswers(answer(200, {}));
+        await expect(checkMembershipWithKey(identity)).rejects.toBeInstanceOf(DoorUnreachableError);
+    });
+});

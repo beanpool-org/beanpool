@@ -140,6 +140,31 @@ describe('after the door says yes: the same steps every new member has', () => {
     });
 });
 
+describe('a join whose answer was lost (review 4106075404)', () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('reopened after ten minutes: the node says member, and the same steps follow, the 12 words of that key included', async () => {
+        const t0 = Date.now();
+        await savePendingJoin({ identity, provider: 'google', nonce: null, startedAt: t0 - 4 * 60_000, expiresAt: t0 + 6 * 60_000, restored: false, sentAt: t0 });
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 11 * 60_000);
+        const calls = stubNode(GLOBAL_OPEN, { '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }) });
+        const onComplete = vi.fn();
+        render(<WelcomePage onComplete={onComplete} />);
+
+        // Step 2, the photo, as after any join.
+        await screen.findByTestId('onboarding-stepper');
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        // Step 3: the words the member never saw.
+        await screen.findByText(/Your Safety Backup/);
+        for (const w of identity.mnemonic!) expect(screen.getAllByText(w).length).toBeGreaterThan(0);
+        expect((await loadIdentity())?.publicKey).toBe(identity.publicKey);
+        expect(await loadPendingJoin()).toBeNull();
+        expect(calls.some((c) => c.path.startsWith('/api/join'))).toBe(false);
+        expect(onComplete).not.toHaveBeenCalled();
+    });
+});
+
 describe('a key restored here on the open door', () => {
     async function restoreWithWords(words: string[]) {
         await screen.findByTestId('join-screen-lobby');
@@ -179,6 +204,24 @@ describe('a key restored here on the open door', () => {
         expect(onComplete.mock.calls[0][0]).toMatchObject({ callsign: 'Sam' });
         expect((await loadIdentity())?.callsign).toBe('Sam');
         expect(await loadPendingJoin()).toBeNull();
+    });
+
+    it('already a member here: a join started in this browser and never sent is cleared; one that went out is kept', async () => {
+        for (const sentAt of [undefined, Date.now()]) {
+            stubNode(GLOBAL_OPEN, { '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Sam' }) });
+            const onComplete = vi.fn();
+            render(<WelcomePage onComplete={onComplete} />);
+            await screen.findByTestId('join-screen-lobby');
+            // Left by another tab, say, while this one shows the lobby.
+            await savePendingJoin({ identity, provider: 'google', nonce: null, startedAt: Date.now(), expiresAt: Date.now() + PENDING_JOIN_TTL_MS, restored: false, sentAt });
+            await restoreWithWords(generateMnemonic());
+            await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+            expect((await loadIdentity())?.callsign).toBe('Sam');
+            if (sentAt === undefined) expect(await loadPendingJoin()).toBeNull();
+            else expect(await loadPendingJoin()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt });
+            cleanup();
+            vi.stubGlobal('indexedDB', memoryIndexedDB());
+        }
     });
 
     it("the node can't be reached: says so on the words screen and saves nothing", async () => {

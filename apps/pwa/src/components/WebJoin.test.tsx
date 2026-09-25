@@ -461,3 +461,262 @@ describe('screen 3b: GitHub', () => {
         expect(polls).toBe(2);
     });
 });
+
+describe('a join that went out is never dropped until the node says its key is not a member (review 4106075404)', () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    const MIN = 60_000;
+    const keyOf = (init: RequestInit) => (init.headers as Record<string, string>)['X-Public-Key'];
+    const peekPending = () => idb.peek('beanpool-identity', 'keys', 'pending-join') as PendingJoin | undefined;
+    const unreachable = () => { throw new TypeError('Failed to fetch'); };
+
+    it('the join lands, the answer is lost, the page reopens after ten minutes: the node says member, the identity is saved, and the new member carries on', async () => {
+        const t0 = Date.now();
+        // Four minutes at Google: the pending join's own clock, set before the redirect, has six left.
+        await seedPending({ startedAt: t0 - 4 * MIN, expiresAt: t0 + 6 * MIN });
+        const members = new Set<string>();
+        let atJoin: PendingJoin | undefined;
+        stubNode({
+            // The node takes the member, and its answer never arrives (the connection drops).
+            '/api/join': (_b, init) => { atJoin = peekPending(); members.add(keyOf(init)); return unreachable(); },
+            '/api/community/membership/': unreachable,
+        });
+        renderJoin({ authReturn: googleReturn() });
+        await waitFor(() => expect(screen.getByTestId('join-unknown')).toHaveTextContent("We can't tell if that worked"));
+        expect(members.has(identity.publicKey)).toBe(true);
+        cleanup(); // the tab is closed
+
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 11 * MIN);
+        const node = stubNode({
+            '/api/community/membership/': (_b, init) => json(200, members.has(keyOf(init)) ? { isMember: true, callsign: 'Alice' } : { isMember: false, callsign: null }),
+        });
+        const { onJoined } = renderJoin();
+        await waitFor(() => expect(onJoined).toHaveBeenCalledTimes(1));
+        // Exactly as a join: a new member (the words and the tour follow in WelcomePage), with this key and its words.
+        expect(onJoined.mock.calls[0][0]).toMatchObject({
+            restored: false,
+            requestedCallsign: null,
+            identity: { publicKey: identity.publicKey, callsign: 'Alice', mnemonic: identity.mnemonic },
+        });
+        expect(await loadIdentity()).toMatchObject({ publicKey: identity.publicKey, mnemonic: identity.mnemonic });
+        expect(peekPending()).toBeUndefined();
+        expect(node.calls.find((c) => c.path.startsWith('/api/community/membership/'))?.headers['X-Public-Key']).toBe(identity.publicKey);
+        expect(node.joins()).toHaveLength(0);
+        // It was marked sent before it went.
+        expect(atJoin).toMatchObject({ nonce: null, sentAt: expect.any(Number) });
+    });
+
+    it('reopened after ten minutes with the node unreachable: kept, the page says it is checking, and Try again asks again', async () => {
+        const t0 = Date.now();
+        await seedPending({ nonce: null, startedAt: t0 - 4 * MIN, expiresAt: t0 + 6 * MIN, sentAt: t0 });
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 11 * MIN);
+        let reachable = false;
+        stubNode({ '/api/community/membership/': () => (reachable ? json(200, { isMember: true, callsign: 'Alice' }) : unreachable()) });
+        const { onJoined } = renderJoin();
+        await waitFor(() => expect(screen.getByTestId('join-checking')).toHaveTextContent("We can't tell yet whether you joined as Alice. Your account is kept on this device."));
+        expect(onJoined).not.toHaveBeenCalled();
+        expect(await loadIdentity()).toBeNull();
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey, mnemonic: identity.mnemonic }, sentAt: t0 });
+
+        reachable = true;
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(onJoined).toHaveBeenCalledTimes(1));
+        expect((await loadIdentity())?.publicKey).toBe(identity.publicKey);
+    });
+
+    it('an answer the page cannot read (a Wi-Fi login page, a body without isMember) keeps it too', async () => {
+        const t0 = Date.now();
+        await seedPending({ nonce: null, expiresAt: t0 + 6 * MIN, sentAt: t0 });
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 60 * MIN);
+        for (const reply of [
+            () => new Response('<html>Sign in to the Wi-Fi</html>', { status: 200, headers: { 'Content-Type': 'text/html' } }),
+            () => json(200, {}),
+            () => json(502, { error: 'Bad gateway' }),
+        ]) {
+            stubNode({ '/api/community/membership/': reply });
+            renderJoin();
+            await waitFor(() => expect(screen.getByTestId('join-checking')).toHaveTextContent("We can't tell yet whether you joined"));
+            expect(peekPending()?.identity.publicKey).toBe(identity.publicKey);
+            cleanup();
+        }
+    });
+
+    it('the node says not a member, once that join can no longer land: dropped as before, and the lobby', async () => {
+        const t0 = Date.now();
+        await seedPending({ nonce: null, startedAt: t0 - 4 * MIN, expiresAt: t0 + 6 * MIN, sentAt: t0 });
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 12 * MIN);
+        const node = stubNode({ '/api/community/membership/': () => json(200, { isMember: false, callsign: null }) });
+        const { onJoined } = renderJoin();
+        await screen.findByTestId('join-screen-lobby');
+        expect(peekPending()).toBeUndefined();
+        expect(await loadPendingJoin()).toBeNull();
+        // Dropped on the node's word, not the clock's.
+        expect(node.calls.some((c) => c.path === `/api/community/membership/${identity.publicKey}`)).toBe(true);
+        expect(onJoined).not.toHaveBeenCalled();
+    });
+
+    it('not a member yet, but that join could still land: kept past its own clock, and signing in again goes on with the same key', async () => {
+        const t0 = Date.now();
+        // Eight minutes at Google: the pending join's clock ran out two minutes after its join went.
+        await seedPending({ nonce: null, startedAt: t0 - 8 * MIN, expiresAt: t0 + 2 * MIN, sentAt: t0 });
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 5 * MIN);
+        const node = stubNode({
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
+            '/api/join/sso-nonce': () => nonceAnswer('fresh'),
+        });
+        const { navigate } = renderJoin();
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent("Your join hasn't reached the community yet. Sign in again to finish.");
+        expect(screen.getByTestId('join-as')).toHaveTextContent('Alice');
+        fireEvent.click(await screen.findByTestId('join-provider-google'));
+        await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+        expect(new URL(navigate.mock.calls[0][0]).searchParams.get('state')).toBe('fresh');
+        expect(node.calls.find((c) => c.path === '/api/join/sso-nonce')?.headers['X-Public-Key']).toBe(identity.publicKey);
+        // Still marked sent: the first join may land yet.
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, nonce: 'fresh', sentAt: t0 });
+    });
+
+    it('"← Back" past the name on a sent join while the node is unreachable: nothing is deleted, and joining from there keeps the key', async () => {
+        await seedPending({ nonce: null, sentAt: Date.now() });
+        let reachable = true;
+        stubNode({
+            '/api/community/membership/': () => (reachable ? json(200, { isMember: false, callsign: null }) : unreachable()),
+            '/api/join/sso-nonce': unreachable,
+        });
+        const { onJoined } = renderJoin();
+        await screen.findByTestId('join-nonce-problem');
+        reachable = false;
+        fireEvent.click(screen.getByRole('button', { name: '← Change name' }));
+        fireEvent.click(await screen.findByRole('button', { name: '← Back' }));
+        await screen.findByTestId('join-screen-guard');
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey, mnemonic: identity.mnemonic } });
+        expect(onJoined).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByTestId('join-new'));
+        fireEvent.change(await screen.findByTestId('join-callsign'), { target: { value: 'Bea' } });
+        fireEvent.click(screen.getByTestId('join-name-next'));
+        await screen.findByTestId('join-screen-providers');
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey, callsign: 'Bea' } });
+    });
+
+    it('"← Back" on a sent join the node now says is a member: the member is in', async () => {
+        await seedPending({ nonce: null, sentAt: Date.now() });
+        let isMember = false;
+        stubNode({
+            '/api/community/membership/': () => json(200, { isMember, callsign: isMember ? 'Alice' : null }),
+            '/api/join/sso-nonce': () => nonceAnswer(),
+        });
+        const { onJoined } = renderJoin();
+        await screen.findByTestId('join-provider-google');
+        isMember = true;
+        fireEvent.click(screen.getByRole('button', { name: '← Change name' }));
+        fireEvent.click(await screen.findByRole('button', { name: '← Back' }));
+        await waitFor(() => expect(onJoined).toHaveBeenCalledTimes(1));
+        expect(onJoined.mock.calls[0][0]).toMatchObject({ restored: false, identity: { publicKey: identity.publicKey } });
+        expect((await loadIdentity())?.publicKey).toBe(identity.publicKey);
+    });
+
+    it('GitHub: the pending join is marked sent before the join goes', async () => {
+        await seedPending({ provider: null, nonce: null });
+        let atJoin: PendingJoin | undefined;
+        stubNode({
+            '/api/join/sso-nonce': () => nonceAnswer(),
+            '/api/join/github/start': () => json(200, { sessionId: 'sess-1', userCode: 'WDJB-MJHT', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 1 }),
+            '/api/join/github/poll': () => json(200, { status: 'ok', sub: 'gh-77' }),
+            '/api/join': () => { atJoin = peekPending(); return unreachable(); },
+            '/api/community/membership/': unreachable,
+        });
+        const before = Date.now();
+        renderJoin();
+        fireEvent.click(await screen.findByTestId('join-provider-github'));
+        await waitFor(() => expect(atJoin).toBeDefined(), { timeout: 5000 });
+        expect(atJoin!.identity.publicKey).toBe(identity.publicKey);
+        expect(atJoin!.sentAt).toBeGreaterThanOrEqual(before);
+        // And kept as sent after the answer was lost.
+        await waitFor(() => expect(screen.getByTestId('join-unknown')).toHaveTextContent("We can't tell if that worked"));
+        expect(peekPending()?.sentAt).toBe(atJoin!.sentAt);
+    });
+
+    it('a pending join that never went out still ends on its clock: dropped, the lobby, and the node is not asked', async () => {
+        await seedPending({ nonce: 'n', expiresAt: Date.now() - 1 });
+        const node = stubNode({});
+        renderJoin();
+        await screen.findByTestId('join-screen-lobby');
+        expect(peekPending()).toBeUndefined();
+        expect(node.calls).toHaveLength(0);
+    });
+
+    it('"Reload the page to finish" still finishes after ten minutes: the node is asked, and the identity is saved', async () => {
+        const t0 = Date.now();
+        await seedPending({ startedAt: t0 - 4 * MIN, expiresAt: t0 + 6 * MIN });
+        stubNode({ '/api/join': () => { idb.failNextCommit(); return json(200, { success: true, member: { callsign: 'Alice' } }); } });
+        renderJoin({ authReturn: googleReturn() });
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent("You're in, but this browser couldn't save your account.");
+        cleanup();
+
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 30 * MIN);
+        stubNode({ '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }) });
+        const { onJoined } = renderJoin();
+        await waitFor(() => expect(onJoined).toHaveBeenCalledTimes(1));
+        expect(await loadIdentity()).toMatchObject({ publicKey: identity.publicKey, mnemonic: identity.mnemonic });
+        expect(peekPending()).toBeUndefined();
+    });
+
+    it('a key restored here while a sent join waits: the sent join is not replaced until the node has said its key is not a member', async () => {
+        const t0 = Date.now();
+        await seedPending({ nonce: null, startedAt: t0 - 30 * MIN, expiresAt: t0 - 20 * MIN, sentAt: t0 - 25 * MIN });
+        const other = await generateIdentity('Phoebe');
+        let reachable = false;
+        stubNode({
+            '/api/community/membership/': () => (reachable ? json(200, { isMember: false, callsign: null }) : unreachable()),
+            '/api/join/sso-nonce': () => nonceAnswer(),
+        });
+        renderJoin({ restored: other });
+        await waitFor(() => expect(screen.getByTestId('join-checking')).toHaveTextContent("We can't tell yet whether you joined as Alice."));
+        expect(peekPending()?.identity.publicKey).toBe(identity.publicKey);
+
+        reachable = true;
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await screen.findByTestId('join-provider-google');
+        expect(screen.getByTestId('join-as')).toHaveTextContent('Phoebe');
+        expect(peekPending()).toMatchObject({ restored: true, identity: { publicKey: other.publicKey } });
+        expect(peekPending()?.sentAt).toBeUndefined();
+    });
+
+    it('no answer: "← Choose another way" goes back to the sign-in with the same key, still marked sent', async () => {
+        await seedPending();
+        stubNode({
+            '/api/join/sso-nonce': () => nonceAnswer('fresh'),
+            '/api/join': unreachable,
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
+        });
+        renderJoin({ authReturn: googleReturn() });
+        await waitFor(() => expect(screen.getByTestId('join-unknown')).toHaveTextContent("you're not in yet"));
+        fireEvent.click(screen.getByRole('button', { name: '← Choose another way' }));
+        await screen.findByTestId('join-provider-google');
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: expect.any(Number) });
+    });
+
+    it('an outright refusal (403) means that join did not land: the key is unsent again, on its own clock', async () => {
+        await seedPending();
+        stubNode({
+            '/api/join/sso-nonce': () => nonceAnswer(),
+            '/api/join': () => json(403, { code: 'removed', error: 'was removed from this community' }),
+        });
+        renderJoin({ authReturn: googleReturn() });
+        await screen.findByTestId('join-screen-providers');
+        await waitFor(() => expect(peekPending()?.nonce).toBeNull());
+        expect(peekPending()?.identity.publicKey).toBe(identity.publicKey);
+        expect(peekPending()?.sentAt).toBeUndefined();
+    });
+
+    it('a gateway 5xx may come after the node took the member: the key stays marked sent', async () => {
+        await seedPending();
+        stubNode({
+            '/api/join/sso-nonce': () => nonceAnswer(),
+            '/api/join': () => json(502, { error: 'Bad gateway' }),
+        });
+        renderJoin({ authReturn: googleReturn() });
+        await screen.findByTestId('join-screen-providers');
+        expect(peekPending()).toMatchObject({ identity: { publicKey: identity.publicKey }, sentAt: expect.any(Number) });
+    });
+});

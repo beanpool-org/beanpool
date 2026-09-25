@@ -21,6 +21,14 @@
  * capped. A return whose `state` is not the pending join's nonce, or whose token does not carry that nonce, is
  * refused before a request is spent on the node, which checks all of it again and is the check that decides.
  *
+ * ## A join that went out is never dropped on the clock
+ *
+ * Once `POST /api/join` has gone, the node may have the member even if its answer never arrives, and the pending join
+ * is then the only copy of that key and its 12 words. So it is marked sent (`sentAt`, identity.ts) before it goes,
+ * and from then on only the node's word lets it go: `checkSentJoin` asks whether the key is a member. A member is
+ * saved and carries on as any join would; a key the node says is not a member, once the sign-in that join carried can
+ * no longer be spent, goes as it did before; no answer, or one this page cannot read, keeps it.
+ *
  * ## The seam for sign-in recovery (G11-c)
  *
  * Every sign-in that reaches `submit` carries the provider's `sub` (the token's claim, or GitHub's poll answer), and
@@ -31,7 +39,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNodeApiUrl, signedFetchWithKey } from './api';
-import type { BeanPoolIdentity, JoinProvider } from './identity';
+import type { BeanPoolIdentity, JoinProvider, PendingJoin } from './identity';
 
 /** The sign-ins the browser leaves the page for. GitHub is the node's own device flow. */
 export type RedirectProvider = 'google' | 'apple' | 'facebook';
@@ -500,14 +508,60 @@ export function submitJoin(identity: BeanPoolIdentity, body: Record<string, unkn
     return door('POST', '/api/join', body, identity);
 }
 
-/** Is this key a member here? Signed by the key itself, which is not stored yet. */
+/**
+ * Is this key a member here? Signed by the key itself, which is not stored yet. Only a 200 that says `isMember`
+ * true or false is an answer: anything else (another status, a captive portal's page, a body without it) throws
+ * DoorUnreachableError, so "not a member" is never read into a reply that does not say it.
+ */
 export async function checkMembershipWithKey(identity: BeanPoolIdentity): Promise<{ isMember: boolean; callsign: string | null }> {
     const answer = await door('GET', `/api/community/membership/${encodeURIComponent(identity.publicKey)}`, undefined, identity);
-    if (answer.status !== 200) throw new DoorUnreachableError(new Error(`membership check answered ${answer.status}`));
+    if (answer.status !== 200 || typeof answer.body.isMember !== 'boolean') {
+        throw new DoorUnreachableError(new Error(`membership check answered ${answer.status} without an answer`));
+    }
     return {
-        isMember: answer.body.isMember === true,
+        isMember: answer.body.isMember,
         callsign: typeof answer.body.callsign === 'string' && answer.body.callsign ? answer.body.callsign : null,
     };
+}
+
+/** The node's sign-in nonce life (apps/server/src/sso.ts NONCE_TTL_MS). */
+const NODE_NONCE_LIFE_MS = 10 * 60 * 1000;
+
+/**
+ * How long after a join went out it can still land. The node writes the member only as it spends the sign-in the
+ * join carried, and it spends none older than its nonce life. The nonce was issued before the join went, and a
+ * GitHub result lives as long from before it (engine/github-device.ts), so ten minutes after `sentAt` nothing that
+ * join carried can be spent. A minute more, for good measure.
+ */
+export const SENT_JOIN_CAN_LAND_MS = NODE_NONCE_LIFE_MS + 60 * 1000;
+
+/** What the node says about a pending join that went out (checkSentJoin). */
+export type SentJoinCheck =
+    /** The key is a member: the join landed. */
+    | { kind: 'member'; callsign: string | null }
+    /** Not a member, and the join it sent can no longer land: it may go. */
+    | { kind: 'not_member' }
+    /** Not a member yet, but the join it sent could still land: keep the key. */
+    | { kind: 'may_still_land' }
+    /** No answer, or not one this page can read: keep the key. */
+    | { kind: 'unknown' };
+
+/** Ask the node whether a sent pending join's key is a member, and so whether the pending join may go. */
+export async function checkSentJoin(p: PendingJoin): Promise<SentJoinCheck> {
+    // Taken before asking: the node answers later than this, so "past the window" is judged on the safe side.
+    const askedAt = Date.now();
+    let m: { isMember: boolean; callsign: string | null };
+    try {
+        m = await checkMembershipWithKey(p.identity);
+    } catch (e) {
+        if (!(e instanceof DoorUnreachableError)) console.error('[WebJoin] membership check failed:', e);
+        return { kind: 'unknown' };
+    }
+    if (m.isMember) return { kind: 'member', callsign: m.callsign };
+    const sentAt = p.sentAt;
+    return typeof sentAt === 'number' && Number.isFinite(sentAt) && askedAt >= sentAt + SENT_JOIN_CAN_LAND_MS
+        ? { kind: 'not_member' }
+        : { kind: 'may_still_land' };
 }
 
 /** What the member sees next, for each answer the door can give (design §2, screen 4). */

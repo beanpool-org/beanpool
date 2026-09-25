@@ -302,7 +302,8 @@ describe('screen 4: the return, and each door answer → its screen', () => {
             '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
         });
         const { onJoined } = renderJoin({ authReturn: googleReturn() });
-        expect(await screen.findByTestId('join-unknown')).toHaveTextContent("We can't tell if that worked, and you're not in yet.");
+        // join-unknown first says "Checking…" while the membership check runs; wait for the answer it settles on.
+        await waitFor(() => expect(screen.getByTestId('join-unknown')).toHaveTextContent("We can't tell if that worked, and you're not in yet."));
         expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
         expect(onJoined).not.toHaveBeenCalled();
         expect(await loadIdentity()).toBeNull();

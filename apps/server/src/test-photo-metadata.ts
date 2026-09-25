@@ -326,6 +326,12 @@ async function partOne(m: StripModule): Promise<void> {
     const progressive = strip(CAMERA_PROGRESSIVE_JPEG);
     assert(progressive.equals(CLEAN_PROGRESSIVE_JPEG),
         'progressive JPEG: big-endian Exif with the default orientation, and a comment after the last scan, are gone; the scans are untouched');
+    // Fill bytes (runs of 0xFF) may come before any marker, restart markers inside a scan included (T.81 B.1.1.2).
+    const SOS_ONE_COMPONENT = segment(0xda, Buffer.from([0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]));
+    const FILLED_SCAN = Buffer.from([0x12, 0x34, 0xff, 0xff, 0xd0, 0x56, 0xff, 0x00, 0x78, 0xff, 0xff, 0xff, 0xd1, 0x9a, 0xff, 0xff, 0x00, 0xbc, 0xff]);
+    const filled = strip(Buffer.concat([SOI, exifApp1(true, 1), COMMENT, SOS_ONE_COMPONENT, FILLED_SCAN, EOI]));
+    assert(filled.equals(Buffer.concat([SOI, SOS_ONE_COMPONENT, FILLED_SCAN, EOI])),
+        'JPEG: a scan with fill bytes before its restart markers is walked to EOI, its metadata gone and every scan byte kept');
     const png = strip(CAMERA_PNG);
     assert(png.equals(CLEAN_PNG), 'PNG: tEXt, zTXt, iTXt, eXIf, tIME, a private chunk and bytes after IEND are gone; IHDR, sRGB, gAMA, pHYs, IDAT, IEND stay');
     assert(pngDecodes(png), 'PNG: every CRC checks and the IDAT inflates to the pixels drawn');

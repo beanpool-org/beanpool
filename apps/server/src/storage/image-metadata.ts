@@ -106,7 +106,8 @@ function stripByFormat(buf: Buffer): Buffer | null {
 //
 // SOI, then segments (0xFF, a marker byte, a 2-byte big-endian length that counts itself, the payload) until SOS;
 // after each SOS the entropy-coded scan runs to the next marker that is not a stuffed 0xFF00 or a restart
-// marker; a progressive file has several scans with tables between them; EOI ends the image.
+// marker (either may follow fill bytes, a run of 0xFF); a progressive file has several scans with tables between
+// them; EOI ends the image.
 //
 // Kept: every segment that is not APPn or COM (frame, tables, scans), APP0 JFIF (without the optional thumbnail),
 // APP2 ICC_PROFILE (colour, possibly split over several segments), and APP14 Adobe — twelve bytes that say how
@@ -191,10 +192,15 @@ function stripJpeg(buf: Buffer): Buffer | null {
             let i = pos;
             for (;;) {
                 i = buf.indexOf(0xff, i);
-                if (i < 0 || i + 1 >= buf.length) return null; // the scan runs off the end: truncated
-                const next = buf[i + 1];
-                if (next === 0x00 || (next >= 0xd0 && next <= 0xd7)) { i += 2; continue; }
-                break;
+                if (i < 0) return null; // the scan runs off the end: truncated
+                // Any number of fill bytes (0xFF) may come before a marker, a restart marker inside the scan
+                // included (T.81 B.1.1.2); the byte after them decides what this is.
+                let m = i + 1;
+                while (m < buf.length && buf[m] === 0xff) m++;
+                if (m >= buf.length) return null;
+                const next = buf[m];
+                if (next === 0x00 || (next >= 0xd0 && next <= 0xd7)) { i = m + 1; continue; }
+                break; // i is still at the first 0xFF: the walk above reads the fill bytes and the marker
             }
             parts.push(buf.subarray(pos, i));
             pos = i;

@@ -515,6 +515,9 @@ describe('Nearest first with a filter few posts match (G4)', () => {
     // circle holds 80 posts, its second the city too, past what a guess may read (NEAREST_FIRST_GUESS_MULTIPLE × K).
     const village = { lat: 45.2, lng: 5.7 };
     const city = { lat: 45.2 + 2 / (6371 * Math.PI / 180), lng: 5.7 };
+    // A hamlet where half the posts are 'crop', in a town with a few more, in a wider town with none: a guess reads the
+    // town and misses, and the next circle, which the new share also says holds the page, is counted first.
+    const hamlet = { lat: 60.1, lng: 25.0 };
     const FUTURE = '2099-01-01T00:00:00.000Z', PAST = '2000-01-01T00:00:00.000Z';
     const SHOWN = 1100;                         // 'rare' posts, and events still to come, the listing shows anyone
     const NOT_SHOWN = 110;                      // of each kind it leaves out: past the count's cap on its own
@@ -576,6 +579,12 @@ describe('Nearest first with a filter few posts match (G4)', () => {
         for (let i = 0; i < 40; i++) rows.push({ category: 'other', at: around(rand, village.lat, village.lng, rand() * 0.5) });
         for (let i = 0; i < 4500; i++) rows.push({ category: 'other', at: around(rand, city.lat, city.lng, rand() * 0.8) });
         for (let i = 0; i < 200; i++) rows.push({ category: 'farm', at: around(rand, village.lat, village.lng, 3500 + rand() * 5000) });
+        for (let i = 0; i < 5; i++) rows.push({ category: 'crop', at: around(rand, hamlet.lat, hamlet.lng, rand() * 0.5) });
+        for (let i = 0; i < 5; i++) rows.push({ category: 'other', at: around(rand, hamlet.lat, hamlet.lng, rand() * 0.5) });
+        for (let i = 0; i < 40; i++) rows.push({ category: 'crop', at: around(rand, hamlet.lat, hamlet.lng, 1.5 + rand() * 1.3) });
+        for (let i = 0; i < 1050; i++) rows.push({ category: 'other', at: around(rand, hamlet.lat, hamlet.lng, 1.5 + rand() * 1.3) });
+        for (let i = 0; i < 1500; i++) rows.push({ category: 'other', at: around(rand, hamlet.lat, hamlet.lng, 4.5 + rand() * 4.5) });
+        for (let i = 0; i < 200; i++) rows.push({ category: 'crop', at: around(rand, hamlet.lat, hamlet.lng, 3500 + rand() * 5000) });
         const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
                                                    active, status, hidden_by_reports_at, audience_scope, target_group_id, target_pubkey, event_end_at)
                                 VALUES (?, ?, ?, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -724,6 +733,19 @@ describe('Nearest first with a filter few posts match (G4)', () => {
         assert.deepStrictEqual(common.page.map(p => p.id), bruteForce(db, other, village.lat, village.lng).slice(0, 50).map(r => r.id));
     });
 
+    it('a guess that missed: the next circle is counted before it is read, whatever the share says', () => {
+        // The hamlet's circle (10 posts, 5 'crop') says the town's (1,100, 45 'crop') holds the page: it is read, and
+        // misses. By the town's share the wider town's circle (2,600) holds it, and is within what a guess may read; but
+        // the circles count first, and the count (245 'crop') is the page.
+        const crop = { category: 'crop', excludeEvents: true, viewerPubkey: 'v0' };
+        const { page, steps } = trace(db, { ...crop, near: hamlet, sortByDistance: true, limit: 50 });
+        const probe = steps.find(s => s.kind === 'probe');
+        assert.strictEqual(kinds(steps), 'count → circle → count → circle → count → probe', kinds(steps));
+        assert.ok(probe && probe.cap! <= NEAREST_FIRST_GUESS_MULTIPLE * K && probe.matched === 245,
+            `the count asked for no more than a guess may read, and found the 245 crop posts (${JSON.stringify(probe)})`);
+        assert.deepStrictEqual(page.map(p => p.id), bruteForce(db, crop, hamlet.lat, hamlet.lng).slice(0, 50).map(r => r.id));
+    });
+
     it('a category with no posts: an empty page from the count', () => {
         const { page, steps } = trace(db, { category: 'none', excludeEvents: true, near: hub, sortByDistance: true, limit: 50 });
         assert.strictEqual(kinds(steps), 'count → probe', kinds(steps));
@@ -741,6 +763,7 @@ describe('Nearest first with a filter few posts match (G4)', () => {
             ['common (1,400), from the hub', { category: 'common', excludeEvents: true, viewerPubkey: 'v0' }, hub],
             ['faraway (1,200), from the town', { category: 'faraway', excludeEvents: true, viewerPubkey: 'v0' }, town],
             ['farm (240), from the village', { category: 'farm', excludeEvents: true, viewerPubkey: 'v0' }, village],
+            ['crop (245), from the hamlet', { category: 'crop', excludeEvents: true, viewerPubkey: 'v0' }, hamlet],
             ['no filter, from the quiet place', { excludeEvents: true, viewerPubkey: 'v0' }, quiet],
             ['other, from the village', { category: 'other', excludeEvents: true, viewerPubkey: 'v0' }, village],
         ];

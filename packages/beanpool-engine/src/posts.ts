@@ -549,23 +549,26 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         // A circle reads every post in its box, whatever the filter, so before each the circles weigh what they would
         // have read (`read`, every box so far, plus this one) against what they know. Up to `known` posts, they read on:
         // at first NEAREST_FIRST_MATCHES_PROBE, or a page's worth. Past it, they read on without asking only if the last
-        // circle's share of matches says this circle holds the page, and only within NEAREST_FIRST_GUESS_MULTIPLE times
-        // what they may first read. Otherwise they count the listing's matches, up to one more than they would then have
-        // read (rankMatches): fewer, and those are every match, ranked, and the page; as many, and one pass would read at
-        // least as many posts as the circles, so they read on, and that many is known. So past what they may first read,
-        // the circles never read more posts than the listing matches, but for that bounded guess. Once a page's worth of
-        // posts has been read and the last circle matched none, the matches are elsewhere, and one pass ranks them. Every
-        // read the circles hand to one pass or to the count keeps its page exact, because both rank every match.
+        // circle's share of matches says this circle holds the page, only within NEAREST_FIRST_GUESS_MULTIPLE times what
+        // they may first read, and only until one such guess misses. Otherwise they count the listing's matches, up to
+        // one more than they would then have read (rankMatches): fewer, and those are every match, ranked, and the page;
+        // as many, and one pass would read at least as many posts as the circles, so they read on, and that many is
+        // known. So past what they may first read, the circles never read more posts than the listing matches, but for
+        // that bounded guess. Once a page's worth of posts has been read and the last circle matched none, the matches are
+        // elsewhere, and one pass ranks them. Every read the circles hand to one pass or to the count keeps its page
+        // exact, because both rank every match.
         let read = 0;
         let known = Math.max(depth, NEAREST_FIRST_MATCHES_PROBE);
         const guessLimit = NEAREST_FIRST_GUESS_MULTIPLE * known;
         let matched = 0, lastPosts = 0;
+        let guessedWrong = false;
         for (const km of NEAREST_FIRST_CIRCLES_KM) {
             if (near.radiusKm !== undefined && km >= near.radiusKm) break;
             if (lastPosts > 0 && matched === 0 && read >= depth) break;
             const posts = postsInBox(km);
-            const guess = lastPosts > 0 && matched * posts >= depth * lastPosts && read + posts <= guessLimit;
-            if (read + posts > known && !guess) {
+            const guess = !guessedWrong && lastPosts > 0 && matched * posts >= depth * lastPosts && read + posts <= guessLimit;
+            const pastKnown = read + posts > known;
+            if (pastKnown && !guess) {
                 const cap = read + posts + 1;
                 ranked = rankMatches(cap);
                 if (ranked) break;
@@ -574,6 +577,8 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             read += posts;
             const inside = rank(km, depth, 0, true);
             if (inside.length === depth) { ranked = inside.slice(offset); break; }
+            // A guess that missed: the share held only nearer the reader, so the circles count before they read on.
+            if (pastKnown && guess) guessedWrong = true;
             if (posts > 0) { matched = inside.length; lastPosts = posts; }
         }
     }

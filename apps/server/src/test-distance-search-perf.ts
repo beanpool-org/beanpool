@@ -17,10 +17,11 @@
  *      transactions, and at 100k / 200k; from the biggest town and from a small one
  *   2. it does not grow with the posts on the node: at 100k it costs about what it does at 20k
  *   3. a 500 km radius, nearest first, the same
- *   4. nearest first filtered to events, to polls, to a rare category and to a category with no posts costs about one
- *      pass over what the filter matches: what the same read costs 3,000 km from every post, where the circles find
- *      nothing and one pass ranks every match. From the biggest town, at both sizes. And farming from the rural town:
- *      its share there says the next circle, with the biggest town in it, holds the page, and it holds none of them.
+ *   4. nearest first filtered to events (the first page and the fifth), to polls, to a rare category and to a category
+ *      with no posts costs about one pass over what the filter matches: what the same read costs 3,000 km from every
+ *      post, where the circles find nothing and one pass ranks every match. From the biggest town, at both sizes. And
+ *      farming from the rural town: its share there says the next circle, with the biggest town in it, holds the page,
+ *      and it holds none of them.
  *   5. EXPLAIN QUERY PLAN: the read that found the default page searched idx_posts_lat_lng
  *   6. the first pages are the pages a brute-force haversine over every post gives, with no filter and with filters
  *      that match fewer and more than posts.ts NEAREST_FIRST_MATCHES_PROBE posts (a spot check at this size; the
@@ -183,6 +184,7 @@ const smallMultipleOf = (t: number, base: number) => t <= Math.max(3 * base, bas
 // it can). Today's order is no measure of that pass: it can walk idx_posts_updated_at and stop at the page.
 const FILTERS: Array<[string, Record<string, unknown>, { lat: number; lng: number }]> = [
     ['type=event', { type: 'event', excludeEvents: false }, HUB],
+    ['type=event, the fifth page', { type: 'event', excludeEvents: false, offset: 200 }, HUB],
     ['type=poll', { type: 'poll' }, HUB],
     ['a category holding 0.1% of posts', { category: RARE }, HUB],
     ['a category with no posts', { category: EMPTY }, HUB],

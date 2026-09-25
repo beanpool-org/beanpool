@@ -289,7 +289,7 @@ export function approveKnock(id: string, member: string, now = Date.now()): Answ
         if (!invite) throw new Error('knock approval: the invite could not be made');
         db.prepare(`UPDATE join_requests SET status = 'approved', decided_by = ?, decided_at = ?, invite_code = ?, updated_at = ?
                     WHERE id = ? AND status = 'pending'`)
-            .run(member, invite.createdAt, invite.code, iso(now), id);
+            .run(member, invite.createdAt, invite.code, invite.createdAt, id);
         const expires = Date.parse(invite.createdAt) + INVITE_LIFETIME_MS;
         return { ok: true, knockId: id, status: 'approved', invite: { code: invite.code, expiresAt: iso(expires) } };
     })();

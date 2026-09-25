@@ -302,6 +302,16 @@ On an s3 node a backup is the database only: the photos stay in the bucket, and 
 copy to a second bucket) as part of backing that node up: a photo deleted from the bucket does not come back from
 a backup.
 
+#### Sign-in with your own Google or Apple app (`GOOGLE_CLIENT_IDS`, `APPLE_CLIENT_IDS`)
+Leave these unset: a node accepts BeanPool's own sign-in ids, which the official app uses on every node. Set one only
+to run sign-in through your own Google or Apple app, and then **list BeanPool's ids in it too** (the Google ids in
+`BEANPOOL_GOOGLE_CLIENT_IDS`, and `org.beanpool.pillar,org.beanpool.web` for Apple, in `apps/server/src/sso.ts`). A
+value replaces BeanPool's list rather than adding to it, so without them members who linked Google or Apple in the
+phone app can no longer recover with it on your node. Put your web client first in `GOOGLE_CLIENT_IDS` (the node
+tells browsers to use the first one), and name your Apple Services ID in `APPLE_SERVICES_ID` as well as in the list.
+Comma separated, in the
+`environment:` of your `docker-compose.yml`; `FACEBOOK_CLIENT_IDS` works the same way.
+
 #### Software Updates
 Your node automatically checks GitHub for new releases every 6 hours. When an update is available:
 - A pulsing badge appears in the admin header next to the version number

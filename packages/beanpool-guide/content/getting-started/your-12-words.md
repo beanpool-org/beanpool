@@ -47,4 +47,4 @@ A sign-in account you link from a phone that has your 12 words keeps them too, s
 
 ## In a web browser
 
-The web app has no sign-in recovery. There, your 12 words are the only way back. Browsers can also clear saved data, so write the words down before you rely on the web app.
+The web app has no sign-in recovery yet, even on the global community, where you join with a sign-in. There, your 12 words bring your account back, or linking from the phone app if your account is on your phone too. Browsers can also clear saved data, so write the words down before you rely on the web app.

@@ -1,13 +1,13 @@
 ---
 slug: joining
 title: Joining with an invite
-summary: How to join a community with an invite, and how to invite someone else.
-related: your-12-words, your-profile, communities, how-it-works
+summary: How to join a community with an invite, how to invite someone else, and the global community, which needs no invite.
+related: your-12-words, your-profile, communities, how-it-works, web-app
 ---
 
 ## You need an invite
 
-You join a BeanPool community when a member invites you. An invite is a link, a QR code or a code. A code looks like **INV-** followed by letters, or a long code that starts with **BP-**.
+You join a local BeanPool community when a member invites you. The global community is different: see "The global community" below. An invite is a link, a QR code or a code. A code looks like **INV-** followed by letters, or a long code that starts with **BP-**.
 
 - An invite works **once**.
 - An invite lasts **30 days**. After that, ask for a new one.
@@ -47,3 +47,9 @@ Any member can invite people. Your trust badge does not matter.
 - Invites nobody has used yet are listed under **Pending**, each with **Share** to send it again.
 
 A community's admins can turn invites off for the whole community.
+
+## The global community
+
+The global community at global.beanpool.org needs no invite. Instead, you sign in once with Google, Apple, Facebook or GitHub. That stops one person making many accounts, and one sign-in account can join once. The community keeps only a scrambled reference to it, never your email.
+
+For now you join it in a web browser: open global.beanpool.org and tap **Join**. See "Using BeanPool in a web browser" for the steps.

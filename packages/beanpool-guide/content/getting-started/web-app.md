@@ -1,13 +1,30 @@
 ---
 slug: web-app
 title: Using BeanPool in a web browser
-summary: The web app does most of what the phone app does. Where its buttons have different names.
-related: the-bean, your-12-words, joining, messages
+summary: The web app does most of what the phone app does. Joining the global community in a browser, and where the web app's buttons have different names.
+related: the-bean, your-12-words, joining, messages, reporting
 ---
 
 ## The same account, a different screen
 
 Your community can also be used in a web browser, on a computer or a phone. This guide is written for the phone app. The web app works the same way, but some things are named or placed differently.
+
+## Joining global.beanpool.org in a browser
+
+The global community at global.beanpool.org is open to anyone, and you can join it right there in a web browser. You need no invite and no phone app.
+
+- Tap **Join**, then **I'm new to BeanPool**.
+- Choose the name people will see. It needs at least 2 letters, and at most 20.
+- Sign in once, with one of the accounts the page shows: **Google**, **Apple**, **Facebook** or **GitHub**. The page takes you to that company's own sign-in and brings you back. With GitHub it shows a code instead: tap **Copy code**, then **Open GitHub**, enter the code there and come back.
+- Then the same steps as everyone: a photo, your 12 words and a short tour. The bar at the top says **Sign in**, **Your Photo**, **Safety Backup** and **How it Works**.
+
+The sign-in stops one person making many accounts. The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once. After that, your 12 words are your account.
+
+If someone else here already has the name you chose, you get it with a number added. You can change it in Settings.
+
+**Already use BeanPool?** Don't make a second account. After **Join**, choose **I use BeanPool on my phone** to link from the phone app, or **I have my 12 words**. If that account has not joined the global community yet, the page asks you to sign in once, and it joins as the account you already have.
+
+If you close the page halfway, open it again within 10 minutes and it carries on with the same name.
 
 ## Different names and places
 
@@ -20,7 +37,7 @@ Your community can also be used in a web browser, on a computer or a phone. This
 
 ## What the web app does not have
 
-- Signing in with Google, Facebook, GitHub or Apple to get your account back. On the web, your 12 words are the only way back.
+- Getting your account back with Google, Facebook, GitHub or Apple. The sign-in you join the global community with does not bring the account back yet. On the web, your 12 words bring it back, or linking from the phone app if your account is on your phone too.
 - The Pulse's **Learn** lane.
 - The phone's app lock.
 - Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Sign in on a computer**).

@@ -1520,7 +1520,9 @@ export function WelcomePage({ onComplete }: Props) {
                                 ← Back to Options
                             </button>
                         </>
-                    ) : doorOpen || authReturn || restoredForDoor ? (
+                    ) : doorOpen || restoredForDoor || (authReturn && door !== 'invite') ? (
+                        /* A sign-in coming back is met at once, before the node has said what it is; on a node that
+                           turns out to be invite-only it is dropped, and the invite page shows as always. */
                         /* ===== THE OPEN DOOR: join with a sign-in, no invite (design G11) ===== */
                         <>
                             {error && (

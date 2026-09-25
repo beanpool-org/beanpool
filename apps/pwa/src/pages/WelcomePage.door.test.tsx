@@ -80,6 +80,16 @@ describe('which welcome a visitor gets', () => {
         await screen.findByText(/Join with Invite Code/);
     });
 
+    it('a sign-in return on an invite-only node: the token leaves the address bar, and the invite page shows as always', async () => {
+        window.history.replaceState(null, '', `/app/auth/google#state=x&id_token=${b64url('{}')}.${b64url('{"sub":"s","nonce":"x"}')}.c2ln`);
+        const calls = stubNode({ ...GLOBAL_OPEN, profile: 'local', features: { openJoin: false } });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        expect(window.location.hash).toBe('');
+        await screen.findByText(/Join with Invite Code/);
+        expect(screen.queryByText(/No invite needed/)).toBeNull();
+        expect(calls.some((c) => c.path.startsWith('/api/join'))).toBe(false);
+    });
+
     it("no answer: says so in one line with Try again, and the page still works", async () => {
         stubNode(new TypeError('Failed to fetch'));
         render(<WelcomePage onComplete={vi.fn()} />);

@@ -196,7 +196,7 @@ async function screenIs(page, name, where, timeout = 20_000) {
     try {
         await page.getByTestId(`join-screen-${name}`).waitFor({ timeout });
     } catch {
-        const current = await page.locator('[data-testid^="join-screen-"]').first().getAttribute('data-testid').catch(() => 'none');
+        const current = await page.locator('[data-testid^="join-screen-"]').first().getAttribute('data-testid', { timeout: 1000 }).catch(() => 'none');
         throw new Failure(`${where}: expected the ${name} screen, found ${current}`);
     }
 }

@@ -380,6 +380,7 @@ run_federation_suites() {
       test-apple-probe
       test-recovery-backup-durability
       test-public-address
+      test-registrar-contract
       test-invite-trampoline
       test-request-body
       test-admin-thresholds

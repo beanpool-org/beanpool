@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 35,
-  "hash": "5575b99cab33ed5f60042a86ec66b1d8513435a4f437ecd29bbb2b10234e8ae9",
+  "version": 36,
+  "hash": "9110b069c761ca605cdc47667cc3975bf2835da7f761d3e734a4e277fabda3db",
   "sections": [
     {
       "id": "about",
@@ -906,6 +906,7 @@
           "type": "ul",
           "items": [
             "**Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.",
+            "**The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Use a different sign-in** and **← Back to Home** still work.",
             "**This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.",
             "**Too many new accounts from this network:** there is a limit on new accounts from one internet connection. Try again later.",
             "**Not taking new members right now:** join a community with an invite instead."
@@ -4702,7 +4703,11 @@
         },
         {
           "type": "p",
-          "text": "Restoring a different account replaces the one on this phone. The app asks you to type **WIPE** first. Make sure you have the 12 words for the account you are replacing. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back."
+          "text": "Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once you have signed in). Nothing changes until you type **WIPE** and tap **Replace Account**. Tap **Keep**, then the account's name, **go back** to leave everything as it was."
+        },
+        {
+          "type": "p",
+          "text": "Make sure you have the 12 words for the account you are replacing. If this phone has them, that screen shows them when you tap **Show** (the account's name) **12 words**. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back."
         },
         {
           "type": "h2",

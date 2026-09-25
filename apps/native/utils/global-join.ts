@@ -45,7 +45,8 @@
  */
 
 import { importIdentity, loadIdentity, draftIdentity, discardUnjoinedIdentity, type BeanPoolIdentity } from './identity';
-import { signedPost } from './node-post';
+import { signedGet, signedPost } from './node-post';
+import { checkCallsignAvailable, suggestCallsigns } from './callsign-suggest';
 import {
     readNonceResponse,
     signInWithApple,
@@ -194,6 +195,94 @@ export function doorMessage(answer: Exclude<DoorAnswer, { kind: 'joined' }>): st
         return `${answer.message} (Try again in ${minutes === 1 ? 'a minute' : `${minutes} minutes`}.)`;
     }
     return answer.message;
+}
+
+/** The door's screen, step by step (welcome.tsx). */
+export type DoorPhase = 'checking' | 'unavailable' | 'signIn' | 'name' | 'joining' | 'restore' | 'closed';
+
+/**
+ * Which ways off the door's screen are open: "← Back to Home", and "Use a different sign-in" on the name step.
+ * - The name step never closes them, not even while its check is out: leaving stops the check (`checkNameAtDoor`).
+ * - While the join itself is out, neither is offered. The key is on the phone and the join is counted, and its
+ *   answer, bounded by JOIN_TIMEOUT_MS, decides where the member goes.
+ * - At the sign-in, Back waits for the nonce (bounded too) and the provider's own sheet. GitHub's code has its
+ *   own Cancel, and Back stays open beside it.
+ */
+export function doorWaysOut(phase: DoorPhase, busy: boolean, showingGithubCode: boolean): { back: boolean; otherSignIn: boolean } {
+    if (phase === 'joining') return { back: false, otherSignIn: false };
+    if (phase === 'name') return { back: true, otherSignIn: true };
+    return { back: !busy || showingGithubCode, otherSignIn: !busy };
+}
+
+/** What the door's name step found (`checkNameAtDoor`). */
+export type NameCheck =
+    /** Free, or the node couldn't say (it answered with an error): Join goes ahead, and the node makes a taken name unique. */
+    | { kind: 'free' }
+    /** Taken there. `suggestions` are free ones; none when they didn't come in time (`suggestionsTimedOut`). */
+    | { kind: 'taken'; suggestions: string[]; suggestionsTimedOut: boolean }
+    /** No answer in time. Nothing was stored or sent: the member taps Join again, or goes back. */
+    | { kind: 'timed_out' }
+    /** The member left the name step while it ran. */
+    | { kind: 'cancelled' };
+
+const STOPPED = Symbol('stopped');
+
+/**
+ * Check the chosen name at the door before anything is written or sent, as an invite join does, rather than have
+ * the node quietly rename the member. Writes nothing.
+ *
+ * Bounded, like the door's other requests: the check and its suggestions get JOIN_TIMEOUT_MS between them. Nothing
+ * else limits how long a fetch may wait, and a node that takes the connection and never answers held the name step
+ * with every way out disabled. It also ends at once when `signal` aborts (Back to Home, Use a different sign-in),
+ * and its requests are dropped with it. Either way it settles whatever the requests do.
+ */
+export async function checkNameAtDoor(
+    url: string, name: string, key: JoinKey, options: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<NameCheck> {
+    if (options.signal?.aborted) return { kind: 'cancelled' };
+    const stop = new AbortController();
+    let timedOut = false;
+    const leave = () => stop.abort();
+    options.signal?.addEventListener('abort', leave);
+    const timer = setTimeout(() => { timedOut = true; stop.abort(); }, options.timeoutMs ?? JOIN_TIMEOUT_MS);
+    const stopped = new Promise<typeof STOPPED>((resolve) => stop.signal.addEventListener('abort', () => resolve(STOPPED)));
+    try {
+        // A key the phone already has is left out: its own name there reads as free.
+        const exclude = key.createdHere ? undefined : key.identity.publicKey;
+        const availability = await Promise.race([checkCallsignAvailable(name, exclude, url, { signal: stop.signal }), stopped]);
+        if (availability === STOPPED) return timedOut ? { kind: 'timed_out' } : { kind: 'cancelled' };
+        if (availability !== 'taken') return { kind: 'free' };
+        // No longer than the join keeps: a suggestion is sent exactly as it was checked and shown.
+        const suggestions = await Promise.race([
+            suggestCallsigns(name, undefined, 3, url, MAX_JOIN_NAME, { signal: stop.signal }),
+            stopped,
+        ]);
+        if (suggestions === STOPPED) {
+            return timedOut ? { kind: 'taken', suggestions: [], suggestionsTimedOut: true } : { kind: 'cancelled' };
+        }
+        return { kind: 'taken', suggestions, suggestionsTimedOut: false };
+    } finally {
+        clearTimeout(timer);
+        options.signal?.removeEventListener('abort', leave);
+    }
+}
+
+/** What the name step says when its check doesn't lead to the join. Empty for `free` and `cancelled`. */
+export function nameCheckMessage(name: string, check: NameCheck): string {
+    switch (check.kind) {
+        case 'timed_out':
+            return 'The global community didn\'t answer in time, so your name wasn\'t checked and nothing was sent. '
+                + 'Check your connection, then tap Join to try again, or go back.';
+        case 'taken':
+            if (check.suggestionsTimedOut) {
+                return `"${name}" is already taken in the global community, and suggestions didn't load in time. Choose another name, then tap Join.`;
+            }
+            return check.suggestions.length > 0
+                ? `"${name}" is already taken in the global community. Pick one of the suggestions below, or choose another name.`
+                : `"${name}" is already taken in the global community. Choose another name.`;
+        default:
+            return '';
+    }
 }
 
 /** The key the join signs with, and whether this door made it. */
@@ -462,6 +551,38 @@ export async function keepJoinedIdentity(identity: BeanPoolIdentity): Promise<Be
     const kept = { ...stored, callsign };
     await importIdentity(kept);
     return kept;
+}
+
+/**
+ * The name the node holds for this key, from the member's own profile, read signed by the key: read auth answers a
+ * member, and the key is one now. Null when it can't be read in time, or doesn't say: never a guess.
+ */
+async function nameTheNodeHolds(url: string, identity: BeanPoolIdentity): Promise<string | null> {
+    try {
+        return await withTimeout((async () => {
+            const res = await signedGet(url, `/api/profile/${identity.publicKey}`, identity);
+            if (!res.ok) return null;
+            const name = ((await res.json().catch(() => null)) as { callsign?: unknown } | null)?.callsign;
+            return typeof name === 'string' && name.trim() ? name.trim() : null;
+        })(), JOIN_TIMEOUT_MS);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The identity a join the node took is kept under ({@link keepJoinedIdentity} writes it): the name the node kept,
+ * which may not be the one typed (it makes a taken name unique, "Sam" → "Sam 2").
+ *
+ * A join's own 2xx says the name. `already_member` doesn't: an earlier join landed and its answer was lost, and the
+ * phone hears so at the next sign-in (after a resume, or a restart) or at the join. Then the node is asked. When it
+ * can't be, the typed name stays, as it did before this asked: no screen says the node kept it.
+ */
+export async function joinedUnderNodeName(
+    url: string, answer: Extract<DoorAnswer, { kind: 'joined' }>, identity: BeanPoolIdentity,
+): Promise<BeanPoolIdentity> {
+    const callsign = answer.callsign ?? await nameTheNodeHolds(url, identity);
+    return callsign ? { ...identity, callsign } : identity;
 }
 
 /**

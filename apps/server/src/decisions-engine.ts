@@ -1625,13 +1625,14 @@ export function tickDecisions(asOfTime?: number): {
                 let parsed: any = {};
                 try {
                     parsed = JSON.parse(top.params || '{}');
-                } catch {
+                } catch (e: any) {
+                    console.warn(`[Decisions] Queued decision ${top.id} has unreadable params; handing to preflight:`, e?.message || e);
                     parsed = {};
                 }
-                requiredAmount = Number(parsed?.amount || 0);
+                requiredAmount = Number(parsed?.amount);
             }
 
-            if (requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {
+            if (!Number.isFinite(requiredAmount) || requiredAmount <= 0 || getCommonsBalanceExact() >= requiredAmount) {
                 const res = executeDecision(top.id);
                 if (res.success && res.status === 'executed') {
                     executed++;

@@ -1,4 +1,4 @@
-import { render, screen, act, waitFor, fireEvent, createEvent } from '@testing-library/react';
+import { render, screen, act, waitFor, fireEvent, createEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
@@ -817,5 +817,125 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
         await openChat('conv-1');
 
         expect(await screen.findByText('the back fence')).toBeInTheDocument();
+    });
+});
+
+describe("MessagesPage: the node's refusal in the composer (G11-e, design G11 §6)", () => {
+    const NEW_PEOPLE = 'While your account is new you can message 10 new people in any 24 hours. You can message someone new again in about 3 hours. Replying to someone who wrote to you first is not limited. New accounts have these limits for their first 3 days, and until 3 of their posts have stayed up.';
+    const MUTED = "Three of your posts were removed by the community's moderators in the last 30 days, so you can't post or send messages here until a moderator lifts this. You can still read, edit your profile and leave.";
+    const PEER = 'a'.repeat(64);
+    /** What `request` throws for a refusal: the node's `error` as the message, with its status and code. */
+    const refusal = (status: number, code: string, message: string) => Object.assign(new Error(message), { status, code });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        window.alert = vi.fn();
+        mockConversations = [{
+            id: 'conv-1', type: 'dm', name: null,
+            participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+            peerCallsign: 'Bob', unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+        }];
+        mockConversationDetails = { 'conv-1': mockConversations[0] };
+        mockMessagesByConv = { 'conv-1': [] };
+        vi.mocked(getConversationMessages).mockImplementation(async (convId: string) => ({
+            conversation: mockConversationDetails[convId],
+            messages: mockMessagesByConv[convId] || [],
+        }));
+    });
+
+    async function typeAndSend(text: string) {
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        const composer = await screen.findByPlaceholderText('Message...');
+        await act(async () => {});
+        fireEvent.change(composer, { target: { value: text } });
+        await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
+        return composer as HTMLTextAreaElement;
+    }
+
+    it("429 probation_limit on a send: the node's words above the composer, word for word, and the draft kept", async () => {
+        vi.mocked(sendMessageApi).mockRejectedValue(refusal(429, 'probation_limit', NEW_PEOPLE));
+        const composer = await typeAndSend('hello there');
+        const said = await screen.findByTestId('chat-refusal');
+        expect(said).toHaveAttribute('role', 'alert');
+        expect(said.querySelector('span')!.textContent).toBe(NEW_PEOPLE);
+        expect(window.alert).not.toHaveBeenCalled();
+        expect(composer.value).toBe('hello there');
+    });
+
+    it("403 moderation_muted on a send: the node's words, word for word", async () => {
+        vi.mocked(sendMessageApi).mockRejectedValue(refusal(403, 'moderation_muted', MUTED));
+        await typeAndSend('hello there');
+        expect((await screen.findByTestId('chat-refusal')).querySelector('span')!.textContent).toBe(MUTED);
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
+    it('a send that goes through clears it, and any other failure is left as it was', async () => {
+        vi.mocked(sendMessageApi).mockRejectedValueOnce(refusal(403, 'moderation_muted', MUTED));
+        const composer = await typeAndSend('first');
+        await screen.findByTestId('chat-refusal');
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as any);
+        await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
+        await waitFor(() => expect(screen.queryByTestId('chat-refusal')).toBeNull());
+
+        vi.mocked(sendMessageApi).mockRejectedValueOnce(new Error('Network down'));
+        fireEvent.change(composer, { target: { value: 'second' } });
+        await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
+        expect(window.alert).toHaveBeenCalledWith('Network down');
+        expect(screen.queryByTestId('chat-refusal')).toBeNull();
+    });
+
+    it("opening a conversation with someone new from New DM: the node's refusal in place, not an alert", async () => {
+        vi.mocked(createConversationApi).mockRejectedValue(refusal(429, 'probation_limit', NEW_PEOPLE));
+        render(<MessagesPage identity={mockIdentity} />);
+        await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /New DM/ })); });
+        await act(async () => { fireEvent.click(await screen.findByText('Charlie')); });
+        expect((await screen.findByTestId('chat-refusal')).querySelector('span')!.textContent).toBe(NEW_PEOPLE);
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
+    it("arriving to message someone by their key (a profile's Message): the refusal is shown, where it used to be dropped", async () => {
+        vi.mocked(createConversationApi).mockRejectedValue(refusal(429, 'probation_limit', NEW_PEOPLE));
+        render(<MessagesPage identity={mockIdentity} openConversationId={PEER} />);
+        expect((await screen.findByTestId('chat-refusal')).querySelector('span')!.textContent).toBe(NEW_PEOPLE);
+        // Offline stays quiet, as before.
+        cleanup();
+        vi.mocked(createConversationApi).mockClear();
+        vi.mocked(createConversationApi).mockRejectedValue(new Error('Failed to fetch'));
+        render(<MessagesPage identity={mockIdentity} openConversationId={PEER} />);
+        await waitFor(() => expect(createConversationApi).toHaveBeenCalledTimes(1));
+        await act(async () => {});
+        expect(screen.queryByTestId('chat-refusal')).toBeNull();
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+});
+
+describe('MessagesPage: links in a message stay plain text (G11-e: a new account is not handed clickable links)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockConversations = [{
+            id: 'conv-1', type: 'dm', name: null,
+            participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+            peerCallsign: 'Bob', unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+        }];
+        mockConversationDetails = { 'conv-1': mockConversations[0] };
+        mockMessagesByConv = {
+            'conv-1': [{
+                id: 'msg-link', conversationId: 'conv-1', authorPubkey: 'peer-pubkey',
+                ciphertext: 'Cheap deals at https://phish.example/win and <a href="https://phish.example/x">click</a> www.phish.example',
+                nonce: '00000', timestamp: '2026-09-14T00:00:00.000Z',
+            } as ApiMessage],
+        };
+        vi.mocked(getConversationMessages).mockImplementation(async (convId: string) => ({
+            conversation: mockConversationDetails[convId],
+            messages: mockMessagesByConv[convId] || [],
+        }));
+    });
+
+    it('a URL, a www. address and an <a> tag in a message are shown as text, never as a link', async () => {
+        const { container } = render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        expect(await screen.findByText(/Cheap deals at https:\/\/phish\.example\/win/)).toBeInTheDocument();
+        expect(container.textContent).toContain('<a href="https://phish.example/x">click</a>');
+        expect(container.querySelectorAll('a[href*="phish.example"]')).toHaveLength(0);
+        expect(Array.from(container.querySelectorAll('a')).filter(a => /phish/.test(a.textContent ?? ''))).toHaveLength(0);
     });
 });

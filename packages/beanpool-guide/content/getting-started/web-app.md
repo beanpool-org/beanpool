@@ -32,6 +32,19 @@ If you close the page halfway, open it again within 10 minutes and it carries on
 
 If something goes wrong on the page after your join went out, it says so and offers **Reload page**. Your join is kept on this browser, and the reload checks whether you are in.
 
+**Too many new accounts from this network:** the global community takes only a few new accounts an hour from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later.
+
+## A new account's limits
+
+On the global community a new account has a few daily limits for its first 3 days, and until 3 of its posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. Replying to someone who wrote to you first is never limited. See "Reporting a problem" for why.
+
+- After you join, a card called **Your account is new** shows how many of each are left and when more come back. Tap **✕** to put it away. It stays in **Settings** until the limits are over.
+- If you reach a limit, **New Post** or the chat says which one and when it lets up, and **New Post** shows the same card.
+- If the moderators have paused your posting, **New Post** and the chat say so.
+- The web app has no alerts while it is closed. If the moderators hide or remove one of your posts, or pause your posting, you see the alert the next time you open it.
+
+Your own local community has none of these limits.
+
 ## Different names and places
 
 - **Tabs:** the web app has **Market**, **Pulse**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.

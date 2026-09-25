@@ -23,6 +23,7 @@ import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { NodeAdminLink } from '../components/NodeAdminLink';
 import { OwnerWordsCheck } from '../components/OwnerWordsCheck';
 import { OwnerUnlockCard } from '../components/OwnerUnlockCard';
+import { NewAccountCard } from '../components/NewAccountCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
@@ -528,6 +529,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 {mode === 'menu' && (
                     <div className="space-y-6">
                         <RecoveryAlertBanner identity={identity} />
+                        {/* A new account only, until the node says its limits are over (G11-e). */}
+                        <NewAccountCard />
                         {/* Owners and admins only — the node answers the role. */}
                         <NodeAdminLink />
                         {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}

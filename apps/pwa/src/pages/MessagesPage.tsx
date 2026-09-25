@@ -23,6 +23,7 @@ import { consumeChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
 import { imageFromTransfer, dragCarriesFile, chatImageRefusal } from '../lib/chat-image-transfer';
+import { nodeRefusal } from '../lib/node-refusal';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
 
@@ -184,6 +185,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [pendingImage, setPendingImage] = useState<{ file: File; previewUrl: string | null } | null>(null);
     // Why the last paste or drop went nowhere — shown inline above the composer.
     const [imageNotice, setImageNotice] = useState<string | null>(null);
+    // The node's own words when it refused a message or a new conversation: a new account's limit (429
+    // probation_limit) or a moderation pause (403 moderation_muted). Shown in place, the draft kept.
+    const [chatRefusal, setChatRefusal] = useState<string | null>(null);
+    /** A failed send or opening: the node's refusal in place, anything else as before. */
+    function showChatError(err: any, fallback: string) {
+        const refusal = nodeRefusal(err);
+        if (refusal) setChatRefusal(refusal.message);
+        else alert(err?.message || fallback);
+    }
     const [dragActive, setDragActive] = useState(false);
     // `dragleave` fires for every child the pointer crosses, so count enters and
     // leaves instead of trusting a single leave to mean the drag has gone.
@@ -402,7 +412,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const created = await createConversationApi('dm', [identity.publicKey, openConversationId], identity.publicKey);
                         conv = created.conversation;
                         await loadConversations();
-                    } catch { /* offline or failed */ }
+                    } catch (e) {
+                        // Offline stays quiet; the node refusing to open it (a new account's limit) says why.
+                        const refusal = nodeRefusal(e);
+                        if (refusal) setChatRefusal(refusal.message);
+                    }
                 } else if (!conv) {
                     try {
                         const chat = await getEventChat(openConversationId);
@@ -547,9 +561,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             );
             setActiveConv(result.conversation);
             setShowNewDm(false);
+            setChatRefusal(null);
             await loadConversations();
         } catch (err: any) {
-            alert(err.message || 'Failed to start conversation');
+            showChatError(err, 'Failed to start conversation');
         }
     }
 
@@ -599,10 +614,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
                 setDraft('');
                 setReplyToMessage(null);
+                setChatRefusal(null);
                 await loadMessages(activeConv.id);
             }
         } catch (err: any) {
-            alert(err.message || (wasEditing ? 'Failed to edit message' : 'Failed to send message'));
+            showChatError(err, wasEditing ? 'Failed to edit message' : 'Failed to send message');
         } finally {
             setSending(false);
         }
@@ -630,10 +646,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata);
             setReplyToMessage(null);
+            setChatRefusal(null);
             await loadMessages(activeConv.id);
             return true;
         } catch (err: any) {
-            alert(err.message || 'Failed to send image');
+            showChatError(err, 'Failed to send image');
             return false;
         } finally {
             setSending(false);
@@ -726,6 +743,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => {
         clearPendingImage();
         setImageNotice(null);
+        setChatRefusal(null);
         setDragActive(false);
         dragDepthRef.current = 0;
     }, [activeConv?.id]);
@@ -835,6 +853,29 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         boxSizing: 'border-box',
     };
 
+    const chatRefusalNotice = chatRefusal ? (
+        <div
+            role="alert"
+            data-testid="chat-refusal"
+            style={{
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px',
+                padding: '0.5rem 1rem', background: 'var(--bg-secondary)',
+                borderTop: '1px solid var(--border-primary)',
+                fontSize: '0.85rem', color: 'var(--text-secondary)',
+            }}
+        >
+            <span style={{ minWidth: 0, flex: 1, wordBreak: 'break-word' }}>{chatRefusal}</span>
+            <button
+                type="button"
+                onClick={() => setChatRefusal(null)}
+                aria-label="Dismiss"
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '6px', minWidth: '28px', minHeight: '28px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            >
+                ✕
+            </button>
+        </div>
+    ) : null;
+
     // New DM overlay. (The old "👥 Group" chat was removed on 2026-09-19: a group chat is now the chat every
     // Commons group owns, and the Talk tab's Groups list and "New group" come in the next slice.)
     if (showNewDm) {
@@ -855,6 +896,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
                     Choose someone to message:
                 </p>
+                {chatRefusalNotice && <div style={{ marginBottom: '0.75rem' }}>{chatRefusalNotice}</div>}
                 {members.map(m => (
                     <div
                         key={m.publicKey}
@@ -1623,6 +1665,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     </div>
                 )}
 
+                {chatRefusalNotice}
+
                 {pendingImage && (
                     <div
                         data-testid="chat-image-preview"
@@ -1818,6 +1862,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     style={{ whiteSpace: 'nowrap', background: activeTab === 'direct' ? 'var(--text-primary)' : 'var(--bg-hover)', color: activeTab === 'direct' ? 'var(--bg-primary)' : 'var(--text-primary)', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >Direct</button>
             </div>
+
+            {chatRefusalNotice && <div style={{ marginBottom: '1rem' }}>{chatRefusalNotice}</div>}
 
             {conversations.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-faint)' }}>

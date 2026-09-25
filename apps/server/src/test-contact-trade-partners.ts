@@ -14,8 +14,12 @@
  *
  * Boots the real server and reads the member list and the profile page as a member holding a trade with the Trade
  * Partners owner in each state, a member with no trade, a member whose trade is with someone else, a pruned member who
- * did trade with them, a signed non-member, nobody, and each owner. Then checks the member list's ETag moves when a
- * trade is requested through the real route, which changes no member row.
+ * did trade with them, a signed non-member, nobody, and each owner. Also the old key of a member whose phone was lost
+ * or stolen, who traded with the owner and was added as a friend: once an operator issues a re-key code
+ * (issueRekeyCode) the node has invalidated that key, though the row stays and the key can still sign, so it is
+ * refused like a non-member; the member's NEW key, once the re-key completes (completeRekey), sees all three again.
+ * Then checks the member list's ETag moves when a trade is requested through the real route, which changes no member
+ * row.
  *
  * Runs twice: here with every ENFORCE_* variable REMOVED (the fresh-download default, read auth on), then in a child
  * process with ENFORCE_READ_AUTH=false, where both routes answer an unsigned reader and a non-member.
@@ -92,6 +96,7 @@ async function main() {
     const { initStateEngine } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
+    const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
 
     await initTls();
     initStateEngine();
@@ -156,6 +161,12 @@ async function main() {
     const friend = member('friendOfOwner');
     db.prepare(`INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)`).run(owners.friends.pubKeyHex, friend.pubKeyHex);
     const guest = keypair(); // signs, but is not a member here
+    // A member who traded with the owner and was added as a friend, whose phone is then lost: an operator issues a re-key
+    // code. The old key stays on the phone and can still sign until the new phone binds a new one.
+    const rekeyPending = member('rekeyPendingPartner');
+    trade(ownerOffer, owners.tradePartners, rekeyPending, 'completed');
+    db.prepare(`INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)`).run(owners.friends.pubKeyHex, rekeyPending.pubKeyHex);
+    const rekeyCode = issueRekeyCode(rekeyPending.pubKeyHex, 'owner:password').code;
 
     const secretsIn = (text: string) => new Set(Object.entries(SECRET).filter(([, v]) => text.includes(v)).map(([k]) => k));
     const fmt = (s: Set<string>) => `[${[...s].sort().join(', ')}]`;
@@ -193,7 +204,11 @@ async function main() {
     }
 
     console.log('\n── readers who are not members ──');
-    for (const [label, id] of [['nobody (unsigned)', undefined], ['a signed non-member', guest]] as const) {
+    const notMembers = [
+        ['nobody (unsigned)', undefined], ['a signed non-member', guest],
+        ['a re-key-pending key (a trade partner the Friends-only owner added)', rekeyPending],
+    ] as const;
+    for (const [label, id] of notMembers) {
         const paths = ['/api/community/members', ...Object.values(owners).map(o => `/api/profile/${o.pubKeyHex}`)];
         for (const p of paths) {
             const r = await get(p, id);
@@ -203,6 +218,31 @@ async function main() {
                 assert(r.status === (id ? 403 : 401), `${label} is refused ${p.startsWith('/api/profile') ? 'a profile' : 'the member list'} (got ${r.status})`);
             }
             assert(secretsIn(r.text).size === 0, `${label} is sent no contact on ${p} (saw ${fmt(secretsIn(r.text))})`);
+        }
+    }
+
+    console.log('\n── the re-key completes: the new key sees them all, the old one nothing ──');
+    {
+        // The member's own standing (/api/community/me) checks the signer itself, read auth on or off.
+        const meBefore = await get('/api/community/me', rekeyPending);
+        assert(meBefore.status === 403, `the re-key-pending key is refused /api/community/me (got ${meBefore.status})`);
+        const newKey = keypair();
+        completeRekey(rekeyPending.pubKeyHex, newKey.pubKeyHex, rekeyCode, 'owner:password');
+        const meAfter = await get('/api/community/me', newKey);
+        assert(meAfter.status === 200 && JSON.parse(meAfter.text)?.publicKey === newKey.pubKeyHex,
+            `the new key reads its own standing on /api/community/me (got ${meAfter.status})`);
+        const all = new Set(['community', 'tradePartners', 'friends']);
+        const list = await get('/api/community/members', newKey);
+        assert(list.status === 200 && same(secretsIn(list.text), all),
+            `the new key reads the member list → 200 and sees exactly ${fmt(all)} (got ${list.status}, saw ${fmt(secretsIn(list.text))})`);
+        for (const [k, o] of Object.entries(owners)) {
+            const r = await get(`/api/profile/${o.pubKeyHex}`, newKey);
+            assert(r.status === 200 && secretsIn(r.text).has(k), `the new key sees the ${k} owner's contact on the profile page (got ${r.status})`);
+        }
+        for (const p of ['/api/community/members', ...Object.values(owners).map(o => `/api/profile/${o.pubKeyHex}`)]) {
+            const r = await get(p, rekeyPending);
+            assert(r.status === (READ_AUTH_OFF ? 200 : 403) && secretsIn(r.text).size === 0,
+                `the replaced old key is ${READ_AUTH_OFF ? 'sent' : 'refused'} ${p.startsWith('/api/profile') ? 'a profile' : 'the member list'} with no contact (got ${r.status}, saw ${fmt(secretsIn(r.text))})`);
         }
     }
 

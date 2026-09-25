@@ -48,7 +48,7 @@ import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
 import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
 import {
-    registerMember, getMembers, getAllMembers, getMember,
+    registerMember, getMembers, getAllMembers, isNodeMember, isLiveMemberKey,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
     acceptPost, completePostTransaction, cancelPostTransaction,
@@ -229,13 +229,13 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
         // checks out, so a forged token cannot burn (or fill the cache with) nonces it does not own.
         if (!consumeNonce(nonce, now)) return { kind: 'invalid' };
 
-        // A valid signature only proves key possession — only a known member gets the
-        // member feed, so an anonymous keypair can't subscribe to it. A pruned account keeps its
-        // row and can still sign, but it is no longer in the community: its socket gets what a
-        // stranger's gets, as an open one does once the member is pruned (state-engine deliverBroadcast).
-        const member = getMember(pubKeyHex);
-        return member && member.status !== 'pruned'
-            ? { kind: 'member', pubkey: member.publicKey }
+        // A valid signature only proves key possession — only a member (isNodeMember, the test every
+        // member-only read applies) gets the member feed, so an anonymous keypair can't subscribe to it.
+        // A pruned account, and the old key of a member being re-keyed, keep their row and can still
+        // sign, but neither is a member: its socket gets what a stranger's gets, as an open one does once
+        // that happens (state-engine deliverBroadcast).
+        return isNodeMember(pubKeyHex)
+            ? { kind: 'member', pubkey: pubKeyHex }
             : { kind: 'non_member', pubkey: pubKeyHex.toLowerCase() };
     } catch {
         return { kind: 'invalid' };
@@ -1125,10 +1125,12 @@ export async function startHttpsServer(port: number): Promise<number> {
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
             // keypair — an attacker can mint one. For gated reads, require the
             // signer to be a known member so the directory, balances, ledger and
-            // social graph aren't readable by an anonymous key. (Writes keep
-            // their own per-route authorization; membership isn't required there
-            // — e.g. first-time registration.)
-            if (isGatedRead && !getMember(pubKeyHex)) {
+            // social graph aren't readable by an anonymous key, nor by the old key
+            // of a member being re-keyed (a lost or stolen phone), which this node
+            // has invalidated (isLiveMemberKey). (Writes keep their own per-route
+            // authorization; membership isn't required there — e.g. first-time
+            // registration.)
+            if (isGatedRead && !isLiveMemberKey(pubKeyHex)) {
                 ctx.status = 403;
                 ctx.body = { error: 'Read access requires a member identity' };
                 return;

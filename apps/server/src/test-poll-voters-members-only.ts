@@ -7,13 +7,18 @@
  * answer: members only, on every node. Members seeing the voters is the open ballot the apps promise ("Your vote is
  * visible to members", "View voters"); everyone else gets the counts.
  *
- * A member is a verified signer whose member row exists and isn't pruned: the test the People list applies.
+ * A member is a verified signer whose member row exists, isn't pruned, and whose key the node hasn't invalidated: the
+ * test the People list applies (isNodeMember).
  *
  * Boots the real server and reads every place a poll leaves it — the board, a type filter, a read by id, a sync read and
  * a delta read, the vote and close responses, and the /ws `post_updated` a vote sends — as:
  *   - nobody (unsigned),
  *   - a signed key that is not a member here,
  *   - a pruned member (the row stays and the key can still sign),
+ *   - the old key of a member whose phone was lost or stolen: an operator has issued a re-key code (issueRekeyCode), so the
+ *     node has invalidated that key, though the row stays and the key can still sign until the new phone binds a new one
+ *     (completeRekey). Read on a socket it opened while it was a member, on one it opens after, and over HTTP; then the
+ *     member's NEW key once the re-key completes, which gets the voters again,
  *   - members: a reader, the voter and the author.
  * Only the members get `pollVotes`; everyone gets `totalVotes` and each option's `votes` and `percentage`. The check on
  * the non-members is a search of the raw text for the voter's key and name, so a voter riding along under any field
@@ -117,6 +122,7 @@ async function main() {
     const { initStateEngine, createPost } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
+    const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
 
     await initTls();
     initStateEngine();
@@ -135,6 +141,7 @@ async function main() {
     const voter = seed('VoterBob');
     const reader = seed('ReaderCarol');
     const pruned = seed('PrunedPat', 'pruned');
+    const rekeyed = seed('RekeyRon'); // a member until the re-key code below invalidates this key
     const guest = keypair(); // signs, but is not a member here
 
     const poll = createPost('poll', 'community', 'Where should the tool library go?', '', 0, 'fixed', author.pubKeyHex,
@@ -153,7 +160,13 @@ async function main() {
         pruned: await openSocket(`${wsBase}?${signedWsQuery(pruned)}`),
         guest: await openSocket(`${wsBase}?${signedWsQuery(guest)}`),
         unsigned: await openSocket(wsBase),
+        // Opened while RekeyRon is still a member: the re-key must stop it being a member socket, as a prune does.
+        rekeyOpenBefore: await openSocket(`${wsBase}?${signedWsQuery(rekeyed)}`),
     };
+    await sleep(200);
+    // RekeyRon's phone is lost: an operator issues a re-key code. The old key stays on the phone and can still sign.
+    const rekeyCode = issueRekeyCode(rekeyed.pubKeyHex, 'owner:password').code;
+    const rekeyAfter = await openSocket(`${wsBase}?${signedWsQuery(rekeyed)}`);
     await sleep(200);
 
     const voted = await post(`/api/marketplace/posts/${pollId}/vote`, { optionId: 'opt_shed' }, voter);
@@ -167,7 +180,13 @@ async function main() {
         const ev = updatesFor(sockets.member).find(e => e.post?.id === pollId);
         assert(!!ev && Array.isArray(ev.post.pollVotes) && ev.post.pollVotes.some((v: any) => v.voterPubkey === voter.pubKeyHex && v.optionId === 'opt_shed'),
             "a member's socket gets post_updated with the voter list");
-        for (const [label, s] of [['a pruned member', sockets.pruned], ['a signed non-member', sockets.guest], ['an unsigned', sockets.unsigned]] as const) {
+        const nonMemberSockets = [
+            ['a pruned member', sockets.pruned], ['a signed non-member', sockets.guest], ['an unsigned', sockets.unsigned],
+            // "…'s already-open socket": opened while a member; "…'s newly opened socket": opened after the re-key code.
+            ["a re-key-pending key's already-open", sockets.rekeyOpenBefore],
+            ["a re-key-pending key's newly opened", rekeyAfter],
+        ] as const;
+        for (const [label, s] of nonMemberSockets) {
             const updates = updatesFor(s);
             assert(updates.length > 0, `${label} socket still hears that the poll changed (${updates.length} post_updated)`);
             assert(!s.raw.some(namesVoter), `${label} socket is sent nothing that names the voter`);
@@ -180,7 +199,8 @@ async function main() {
             }
         }
     }
-    for (const s of Object.values(sockets)) s.ws.close();
+    // The re-key sockets stay open for the close below, after the re-key completes.
+    for (const s of [sockets.member, sockets.pruned, sockets.guest, sockets.unsigned]) s.ws.close();
 
     console.log('\n── every read of the poll ──');
     const PATHS = [
@@ -194,6 +214,7 @@ async function main() {
         ['nobody (unsigned)', undefined, false],
         ['a signed non-member', guest, false],
         ['a pruned member', pruned, false],
+        ['a re-key-pending key', rekeyed, false],
         ['a member', reader, true],
         ['the voter', voter, true],
         ['the author', author, true],
@@ -221,6 +242,28 @@ async function main() {
         }
     }
 
+    console.log('\n── the re-key completes: the new key is a member, the old one never again ──');
+    const newKey = keypair();
+    completeRekey(rekeyed.pubKeyHex, newKey.pubKeyHex, rekeyCode, 'owner:password');
+    for (const path of PATHS) {
+        for (const [label, id, isMember] of [['the new key', newKey, true], ['the replaced old key', rekeyed, false]] as const) {
+            const r = await get(path, id);
+            let rows: any[] = [];
+            try { rows = JSON.parse(r.text); } catch { /* */ }
+            const p = rows.find(x => x.id === pollId);
+            if (isMember) {
+                assert(r.status === 200 && Array.isArray(p?.pollVotes) && p.pollVotes.some((v: any) => v.voterPubkey === voter.pubKeyHex),
+                    `${label} gets the voter list on ${path} (got ${r.status})`);
+            } else {
+                assert(r.status === 200 && !!p && !('pollVotes' in p) && !namesVoter(r.text),
+                    `${label} gets the poll with no voters on ${path} (got ${r.status})`);
+            }
+        }
+    }
+    const newKeySocket = await openSocket(`${wsBase}?${signedWsQuery(newKey)}`);
+    const oldKeySocket = await openSocket(`${wsBase}?${signedWsQuery(rekeyed)}`);
+    await sleep(200);
+
     console.log('\n── a cached copy is not confirmed across joining ──');
     {
         // Membership changes what the board holds without changing any post, so the ETag carries it: a copy fetched
@@ -241,6 +284,22 @@ async function main() {
         assert(closed.status === 200 && closed.body?.post?.status === 'completed', `the author closes the poll (got ${closed.status})`);
         assert(Array.isArray(closed.body?.post?.pollVotes) && closed.body.post.pollVotes.length === 1,
             'the close response gives the author, a member, the voter list');
+        await sleep(400);
+        const closedEv = (s: { events: any[] }) => updatesFor(s).find(e => e.post?.id === pollId && e.post?.status === 'completed');
+        const mine = closedEv(newKeySocket);
+        assert(!!mine && Array.isArray(mine.post.pollVotes) && mine.post.pollVotes.some((v: any) => v.voterPubkey === voter.pubKeyHex),
+            "the new key's socket gets the close's post_updated with the voter list");
+        for (const [label, s] of [
+            ['the old key\'s socket opened while a member', sockets.rekeyOpenBefore],
+            ['the old key\'s socket opened while the re-key was pending', rekeyAfter],
+            ['the old key\'s socket opened after the re-key completed', oldKeySocket],
+        ] as const) {
+            const updates = updatesFor(s);
+            assert(updates.length > 0, `${label} still hears that the poll changed (${updates.length} post_updated)`);
+            assert(!s.raw.some(namesVoter), `${label} is sent nothing that names the voter`);
+            assert(updates.every(e => e.post === undefined || !('pollVotes' in e.post)), `${label} gets no pollVotes field`);
+        }
+        for (const s of [sockets.rekeyOpenBefore, rekeyAfter, newKeySocket, oldKeySocket]) s.ws.close();
     }
 
     console.log(`\n${passed}/${run} checks passed ${MODE}.`);

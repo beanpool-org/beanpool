@@ -31,7 +31,7 @@ import {
     purgeMemberSelf,
     getMembersVersion,
     lastActiveForViewer,
-    contactVisibleTo, contactViewer, isNodeMember, publicMemberCard,
+    contactVisibleTo, contactViewer, isNodeMember, isLiveMemberKey, publicMemberCard,
 } from '../state-engine.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
@@ -717,7 +717,8 @@ router.get('/api/community/me', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (!getMember(actor)) {
+    // The gated-read test, whatever ENFORCE_READ_AUTH says: the old key of a member being re-keyed reads nothing here.
+    if (!isLiveMemberKey(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'Read access requires a member identity' };
         return;

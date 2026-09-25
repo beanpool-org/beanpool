@@ -306,16 +306,43 @@ export function getInviteTree(db: Db, rootPubkey?: string): InviteTreeNode[] {
 }
 
 /**
- * Whether `pubkey` is a member of this node: a member row that exists and isn't pruned. A pruned or self-deleted account
- * keeps its row and can still sign, but it is no longer in the community.
+ * Whether this node has invalidated `pubkey`: a re-key has started (issueRekeyCode, for a lost or stolen phone) or
+ * finished (completeRekey). The key can still sign, but the server's write guards refuse it (assertMemberActive), it is
+ * no member here (isNodeMember) and it makes no gated read (isLiveMemberKey). Both writers of invalidated_keys lowercase.
+ */
+export function isInvalidatedKey(db: Db, pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    return !!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ?").get(pubkey.toLowerCase());
+}
+
+/**
+ * Whether `pubkey` is a member of this node: a member row that exists and isn't pruned, for a key this node hasn't
+ * invalidated. A pruned or self-deleted account keeps its row and can still sign, but it is no longer in the community.
+ * Nor is the old key of a member being re-keyed: its row stays, set to 'suspended', and the key can still sign until
+ * the new phone binds a new one, however long that takes (an expired code leaves both as they are).
  *
- * THE test for what only members may read — the People list's distances (G4), poll voters, contact details — so they
- * cannot drift apart. Pass the verified signer (the route's ctx.state.actor), never a key from the request.
+ * Every other status counts, 'suspended' and 'disabled' included. The re-key is caught by its invalidated key, not by
+ * 'suspended', because a report suspension writes the same status, and whether a suspended member counts is a separate
+ * call.
+ *
+ * THE test for what only members may read — the People list's distances (G4), poll voters, contact details, the /ws
+ * member feed — so they cannot drift apart. Pass the verified signer (the route's ctx.state.actor), never a key from the
+ * request.
  */
 export function isNodeMember(db: Db, pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
     const row = db.prepare("SELECT status FROM members WHERE public_key = ?").get(pubkey) as { status: string | null } | undefined;
-    return !!row && row.status !== 'pruned';
+    return !!row && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
+}
+
+/**
+ * Whether `pubkey` may make a gated read (ENFORCE_READ_AUTH): it has a member row here and this node hasn't invalidated
+ * it. Looser than isNodeMember on one point only: a pruned account still passes, as it always has, and whether it
+ * should is a separate call. Pass the verified signer.
+ */
+export function isLiveMemberKey(db: Db, pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    return !!db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(pubkey) && !isInvalidatedKey(db, pubkey);
 }
 
 /** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade.ts). */

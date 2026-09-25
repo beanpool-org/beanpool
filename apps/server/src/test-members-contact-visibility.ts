@@ -16,6 +16,9 @@
  *   - a signed friend (a member the Friends-only owner has added),
  *   - each owner (who always sees their own),
  *   - a signed non-member,
+ *   - the old key of a member whose phone was lost or stolen, whom the Friends-only owner had added: an operator has
+ *     issued a re-key code (issueRekeyCode), so the node has invalidated that key, though the row stays and the key can
+ *     still sign. Refused like a non-member,
  *   - nobody (unsigned — refused on every gated route).
  * None of these viewers has a trade with the Trade Partners owner, so only that owner sees it here; who does see it
  * (a member with a trade in any state) is test-contact-trade-partners.ts, which also reads with read auth off.
@@ -108,6 +111,7 @@ async function main() {
     const { startHttpsServer } = await import('./https-server.js');
     const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
+    const { issueRekeyCode } = await import('./engine/member-wizards.js');
 
     initAdminPassword();
     await initTls();
@@ -149,6 +153,11 @@ async function main() {
     assert(added.status === 200 && added.body?.success === true, `friendsOwner adds friendOfOwner as a friend (got ${added.status})`);
     const reverse = await post('/api/friends/add', { friendPubkey: owners.friends.pubKeyHex }, stranger);
     assert(reverse.status === 200 && reverse.body?.success === true, `stranger adds friendsOwner as a friend — one-way, reveals nothing (got ${reverse.status})`);
+    // The Friends-only owner adds rekeyPending too; then rekeyPending's phone is lost and an operator issues a re-key code.
+    const rekeyPending = member('rekeyPending');
+    const addedRekey = await post('/api/friends/add', { friendPubkey: rekeyPending.pubKeyHex }, owners.friends);
+    assert(addedRekey.status === 200 && addedRekey.body?.success === true, `friendsOwner adds rekeyPending as a friend (got ${addedRekey.status})`);
+    issueRekeyCode(rekeyPending.pubKeyHex, 'owner:password');
 
     const secretsIn = (text: string) => new Set(Object.entries(SECRET).filter(([, v]) => text.includes(v)).map(([k]) => k));
     const fmt = (s: Set<string>) => `[${[...s].sort().join(', ')}]`;
@@ -196,6 +205,9 @@ async function main() {
         const asGuest = await get(path, guest);
         assert(asGuest.status === 403, `a signed non-member is refused ${path} with 403 (got ${asGuest.status})`);
         assert(secretsIn(asGuest.text).size === 0, `the non-member's refusal of ${path} carries no contact (saw ${fmt(secretsIn(asGuest.text))})`);
+        const asRekeyPending = await get(path, rekeyPending);
+        assert(asRekeyPending.status === 403 && secretsIn(asRekeyPending.text).size === 0,
+            `a re-key-pending key is refused ${path} with 403 and no contact (got ${asRekeyPending.status}, saw ${fmt(secretsIn(asRekeyPending.text))})`);
     }
 
     console.log('\n── the member list carries no other private field ──');
@@ -254,6 +266,9 @@ async function main() {
         const asGuest = await get(path, guest);
         assert(asGuest.status === 403 && !secretsIn(asGuest.text).has(key),
             `a signed non-member is refused the ${k} owner's profile page with 403 and no contact (got ${asGuest.status})`);
+        const asRekeyPending = await get(path, rekeyPending);
+        assert(asRekeyPending.status === 403 && !secretsIn(asRekeyPending.text).has(key),
+            `a re-key-pending key is refused the ${k} owner's profile page with 403 and no contact (got ${asRekeyPending.status})`);
     }
 
     console.log('\n── the unsigned invite-redeem routes, named with an existing member\'s key ──');

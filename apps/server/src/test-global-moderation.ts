@@ -639,6 +639,13 @@ async function main(): Promise<void> {
     assert(!!hideInsertAt && back(hideInsert)?.hidden_by_reports_at === hideInsertAt, 'and the hide on a post it never had (insert)');
     assert(mutedUntil(max) === muteMax, 'and the mute');
     await p2p.stop();
+    // Every writer of the mute stamps updated_at itself; the members trigger lists the column too, so a write that
+    // doesn't (a script, a future path) still reaches delta sync.
+    const quinn = member('Quinn', 30);
+    db.prepare(`UPDATE members SET updated_at = '2000-01-01T00:00:00.000Z' WHERE public_key = ?`).run(quinn.pk);
+    attempt(() => db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run('9999-12-31T23:59:59.999Z', quinn.pk));
+    const quinnTouched = (db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(quinn.pk) as any)?.updated_at;
+    assert(quinnTouched > '2000-01-01T00:00:00.000Z', `an UPDATE that sets only moderation_muted_until moves updated_at (${quinnTouched})`);
 
     // ── 7. Beans, escrow and enterprises on ──────────────────────────────────────────────────────
     // A live community switched to global keeps them (the ledger lock), and an operator can override them on. Forced

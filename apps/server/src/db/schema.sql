@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS members (
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- Auto-mute (global profile G3, engine/auto-moderation.ts). NULL: never muted. Later than now: muted (the
     -- far-future MUTED_UNTIL_LIFTED, until a moderator lifts it). Earlier than now: lifted at that time, and only
-    -- removals after it count towards the next mute. Its writers set updated_at themselves.
+    -- removals after it count towards the next mute. Its writers set updated_at themselves, and it is in
+    -- members_touch_updated_at's list for any that doesn't, so delta sync always carries a mute and its lift.
     moderation_muted_until TEXT,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
@@ -712,7 +713,8 @@ AFTER UPDATE OF
     legacy_credit_floor,
     purpose, goal_amount, deadline_at, lifecycle, paused,
     paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
-    lat, lng, location_auth_signer, auth_signer, location_updated_at
+    lat, lng, location_auth_signer, auth_signer, location_updated_at,
+    moderation_muted_until
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

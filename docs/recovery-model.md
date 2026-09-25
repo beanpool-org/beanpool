@@ -116,6 +116,20 @@ strict provider constraints (e.g. Apple Services ID domain association restricti
 PWA members are strictly **sovereign tier**: 12 words, nothing stored on the node, no exceptions.
 SSO recovery is native-only.
 
+**Except on the global community (G11-c, decided 2026-09-25, D-1 = a).** A browser member of
+`global.beanpool.org` joins with a sign-in (Google, Apple, GitHub or Facebook), and the same join
+enrols that sign-in as their recovery: the page seals the account's seed and its 12 words to the
+sign-in's `sub` with `sealSeedToSso`, and the door stores the copy from the sign-in it has just
+verified, exactly as the phone's global join does (the two clients build the same bytes; see
+`@beanpool/core/sso-share-vectors`). Neither reason above holds for that one node. The web app
+there is shipped by us, on a domain we run, so "a hostile operator can ship JavaScript" is the
+custodial trade-off every SSO member already accepts on a phone (the operator holds the hub
+fragment and receives `sub` on every sign-in), not a new one. And it is one fixed domain, not a
+dynamic community domain, so the providers' redirect and Services ID rules are met once, in their
+consoles. Local communities' web apps stay 12-words only. A seal that fails, or a copy the node
+cannot store, never blocks the join; the member then has the 12 words, and Settings says the
+sign-in is not connected. Restoring with the sign-in in a browser is G11-d.
+
 ---
 
 ## Recovery flows

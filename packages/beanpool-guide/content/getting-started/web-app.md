@@ -18,7 +18,9 @@ The global community at global.beanpool.org is open to anyone, and you can join 
 - Sign in once, with one of the accounts the page shows: **Google**, **Apple**, **Facebook** or **GitHub**. The page takes you to that company's own sign-in and brings you back. With GitHub it shows a code instead: tap **Copy code**, then **Open GitHub**, enter the code there and come back.
 - Then the same steps as everyone: a photo, your 12 words and a short tour. The bar at the top says **Sign in**, **Your Photo**, **Safety Backup** and **How it Works**.
 
-The sign-in stops one person making many accounts. The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once. After that, your 12 words are your account.
+The sign-in stops one person making many accounts. The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once.
+
+The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, that only that sign-in account can open, and the join hands it to the community. Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back.
 
 If someone else here already has the name you chose, you get it with a number added. You can change it in Settings.
 
@@ -43,7 +45,7 @@ If something goes wrong on the page after your join went out, it says so and off
 
 ## What the web app does not have
 
-- Getting your account back with Google, Facebook, GitHub or Apple. The sign-in you join the global community with does not bring the account back yet. On the web, your 12 words bring it back, or linking from the phone app if your account is on your phone too.
+- Getting your account back with Google, Facebook, GitHub or Apple, in the browser. The sign-in you join the global community with is kept as a way back (see above), but getting your account back with it in a browser comes in a later update. Until then, on the web, your 12 words bring it back, or linking from the phone app if your account is on your phone too.
 - The Pulse's **Learn** lane.
 - The phone's app lock.
 - Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Sign in on a computer**).

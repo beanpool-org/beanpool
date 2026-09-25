@@ -21,7 +21,7 @@ import { consumeHandshakeToken, validateAdminSession } from '../admin-key-auth.j
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, type AdminRole } from '../admin-auth.js';
 import qrcode from 'qrcode';
-import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
+import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import type { RouteDeps } from './types.js';
@@ -257,7 +257,8 @@ router.post('/api/local/admin/directory/push', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const result = await pushDirectoryNow();
     if (!result.success) {
-        ctx.status = 500;
+        // Not listed by the profile's switch (the global node) is the node's setting, not a failure.
+        ctx.status = result.error === NOT_LISTED_MESSAGE ? 409 : 500;
     }
     ctx.body = result;
 });

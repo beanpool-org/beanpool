@@ -67,6 +67,12 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         needs: ['beans'],
         paths: [/^\/api\/federation\/(purchase|commission)(\/|$)/],
     },
+    // The communities directory, place watches and the landing card (G5, routes/global-directory.ts) stand on the
+    // mirror: a node that doesn't keep one (every local community) has none of them.
+    {
+        needs: ['directoryMirror'],
+        paths: [/^\/api\/global(\/|$)/],
+    },
 ];
 
 /** The switch that has this path off right now, or null when it is served. Reads the switches only for a gated path. */

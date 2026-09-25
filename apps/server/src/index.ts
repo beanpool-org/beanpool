@@ -65,6 +65,7 @@ import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury } from './state-engine.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
+import { initDirectoryMirror } from './services/directory-mirror.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
@@ -270,6 +271,9 @@ async function main() {
     // public listing of its own; it mirrors the primary, it isn't a joinable node).
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
+        // Step 10.1: The communities directory mirror (G5): hourly on a node whose `directoryMirror` switch is on
+        // (the global profile's default), for "communities near you" and place watches. A no-op tick elsewhere.
+        initDirectoryMirror();
         // Step 10.5: Auto public-address (opt-in via PUBLIC_ADDRESS_* env). Claims <name>.beanpool.org
         // from the registrar on boot and writes the tunnel token for the cloudflared sidecar. No-op unless enabled.
         initPublicAddress();

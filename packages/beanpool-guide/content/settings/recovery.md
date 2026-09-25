@@ -25,7 +25,7 @@ This works only if you linked one before (see below), and only while your commun
 - Type your community's name or address.
 - Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.
-- With GitHub, the app shows a code and opens GitHub's page, github.com/login/device. The code is already copied: on GitHub, press and hold the first box and choose **Paste**, then approve. Tap **Copy** to copy it again, or **Open GitHub** to get back to the page. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the code and **Cancel** go away and the app finishes getting your account back.
+- With GitHub, the app shows a code, already copied, and what to do on GitHub. Tap **Open GitHub** (on an iPhone, GitHub's page opens by itself). On GitHub, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back (an iPhone comes back by itself). Tap **Copy** to copy the code again, or **Open GitHub** to get back to the page. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the code and **Cancel** go away and the app finishes getting your account back.
 
 If the sign-in account was linked from a phone that had your 12 words, on an up-to-date app, your 12 words come back too. Otherwise the phone has no 12 words: they can't be rebuilt from a sign-in. If you have them written down, you can add them (see "Your 12 words"). Until then a linked sign-in account is that phone's way back, so keep one linked, and link a second one if you can (see below).
 
@@ -34,7 +34,7 @@ If the sign-in account was linked from a phone that had your 12 words, on an up-
 - Open **Settings** and tap **Account Protection**.
 - Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.
-- With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the app links your account by itself.
+- With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back to BeanPool (an iPhone comes back by itself). The app links your account as soon as you are back. While the app is waiting for GitHub, **Cancel** stops it.
 
 This works on a phone with no 12 words too.
 

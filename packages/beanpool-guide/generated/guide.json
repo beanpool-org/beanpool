@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 25,
-  "hash": "e8927248d7d034f57008942bdf0c3105a8731d7c5ed742d4ae324fedb9f635b1",
+  "version": 26,
+  "hash": "12529c8f08cf8bc2543ea52c7ea3f6e0cd0f538031c12b5ab2f62dcf5368af09",
   "sections": [
     {
       "id": "about",
@@ -4219,6 +4219,26 @@
         {
           "type": "p",
           "text": "Now and then the admins clear out old listings to keep the Market tidy. If some of yours are cleared, you get one alert saying how many. That is routine tidying, not a report."
+        },
+        {
+          "type": "h2",
+          "text": "On global.beanpool.org"
+        },
+        {
+          "type": "p",
+          "text": "The global community at global.beanpool.org is open to anyone who signs in, so it looks after itself a little more:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A post reported by three members** who have been there at least a week is hidden at once, until a moderator looks at it. Its author can still see it, and gets an alert that it is hidden, not removed. If the moderators keep it, everyone can see it again.",
+            "**New accounts have daily limits** for their first 3 days, and until 3 of their posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. Replying to someone who wrote to you first is never limited. If you reach a limit, the app says which one and when it lets up.",
+            "**If the moderators remove three of your posts within 30 days,** you can't post or send messages there until a moderator lifts it. You can still read, edit your profile and leave."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "None of this happens in your own local community: there, every report waits for the moderators."
         },
         {
           "type": "p",

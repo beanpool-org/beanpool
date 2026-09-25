@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 40,
-  "hash": "5565ac6b6218f1cdb5eb0b770aab4f24366edcfeec3a7b88e079ee67989a7d04",
+  "version": 41,
+  "hash": "55458669796fd6f89dc914556cb914d84282bb81c28c617664cf23337e4c84d8",
   "sections": [
     {
       "id": "about",
@@ -1034,7 +1034,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community you join in a browser with a sign-in, and that sign-in is kept as a second way back: Settings shows **Sign-in recovery: connected**. Getting your account back with it in a browser comes in a later update. Until then your 12 words bring it back, or linking from the phone app if your account is on your phone too. On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app."
+          "text": "On the global community you join in a browser with a sign-in, and that sign-in is kept as a second way back: Settings shows **Sign-in recovery: connected**. In a cleared or new browser, tap **Already have BeanPool?**, then **Use my sign-in**, and it brings your account back, with its 12 words (see \"Using BeanPool in a web browser\"). On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app."
         }
       ]
     },
@@ -1524,7 +1524,7 @@
     {
       "slug": "web-app",
       "title": "Using BeanPool in a web browser",
-      "summary": "The web app does most of what the phone app does. Joining the global community in a browser, and where the web app's buttons have different names.",
+      "summary": "The web app does most of what the phone app does. Joining the global community in a browser, getting your account back there with your sign-in, and where the web app's buttons have different names.",
       "section": "getting-started",
       "related": [
         "the-bean",
@@ -1577,7 +1577,7 @@
         },
         {
           "type": "p",
-          "text": "**Already use BeanPool?** Don't make a second account. After **Join**, choose **I use BeanPool on my phone** to link from the phone app, or **I have my 12 words**. If that account has not joined the global community yet, the page asks you to sign in once, and it joins as the account you already have."
+          "text": "**Already use BeanPool?** Don't make a second account. After **Join**, choose **I use BeanPool on my phone** to link from the phone app, or **I have my 12 words**. If that account has not joined the global community yet, the page asks you to sign in once, and it joins as the account you already have. If you joined the global community before with a sign-in, choose **I joined with a sign-in before** (see below)."
         },
         {
           "type": "p",
@@ -1594,6 +1594,36 @@
         {
           "type": "p",
           "text": "If something goes wrong on the page after your join went out, it says so and offers **Reload page**. Your join is kept on this browser, and the reload checks whether you are in."
+        },
+        {
+          "type": "h2",
+          "text": "Getting your account back with your sign-in"
+        },
+        {
+          "type": "p",
+          "text": "On the global community, the sign-in you joined with brings your account back to a browser: one whose saved data was cleared, or a new one on another computer. You get the same account, never a second one."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.)",
+            "Type your name here. Tap your account when it shows.",
+            "Choose the sign-in you joined with: **Google**, **Apple**, **Facebook** or **GitHub**. As when joining, the page takes you to that company's own sign-in and brings you back, and GitHub shows a code instead.",
+            "The page opens your account's locked copy in the browser, and checks that it really is the account you tapped. If it isn't, it says **That isn't** (the name) and saves nothing.",
+            "You're in, with your 12 words when the copy kept them: an account that joined in a browser always has them."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Your account's devices are told that it is being brought back, in case it isn't you."
+        },
+        {
+          "type": "p",
+          "text": "If you sign in with an account that isn't the one you joined with, the page says so and lets you choose again. If you tap **Join** and sign in with an account that has already joined, the page says **You're already here** and offers **Restore with** (that sign-in)."
+        },
+        {
+          "type": "p",
+          "text": "**One account per browser** holds here too. If this browser already has another account, nothing replaces it: the page says **This browser already has an account** and offers to open it. To bring yours here instead, sign out of that one first. If this browser already has your account, the page says it is already here."
         },
         {
           "type": "h2",
@@ -1617,7 +1647,7 @@
         {
           "type": "ul",
           "items": [
-            "Getting your account back with Google, Facebook, GitHub or Apple, in the browser. The sign-in you join the global community with is kept as a way back (see above), but getting your account back with it in a browser comes in a later update. Until then, on the web, your 12 words bring it back, or linking from the phone app if your account is on your phone too.",
+            "Getting your account back with a sign-in on a community other than the global one. There, your 12 words bring it back, or linking from the phone app if your account is on your phone too.",
             "The Pulse's **Learn** lane.",
             "The phone's app lock.",
             "Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Sign in on a computer**)."

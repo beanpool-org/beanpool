@@ -1938,6 +1938,7 @@ export default function SettingsScreen() {
                                         disabled={revealLoading}
                                         accessibilityRole="button"
                                         accessibilityLabel="Show my 12 recovery words"
+                                        accessibilityHint={hasMnemonic(identity) ? undefined : NO_WORDS_MENU.sub}
                                     >
                                         <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
                                             👁️ Show My 12 Recovery Words

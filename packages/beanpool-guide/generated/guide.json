@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 33,
-  "hash": "c223b2fa5b8dbe4d0574219a7ef81c685bf56c1411270998aee59025f797a791",
+  "version": 35,
+  "hash": "5575b99cab33ed5f60042a86ec66b1d8513435a4f437ecd29bbb2b10234e8ae9",
   "sections": [
     {
       "id": "about",
@@ -791,8 +791,8 @@
     },
     {
       "slug": "joining",
-      "title": "Joining with an invite",
-      "summary": "How to join a community with an invite, how to invite someone else, and the global community, which needs no invite.",
+      "title": "Joining BeanPool",
+      "summary": "Two ways in: a community, with an invite from a member, or the global community, with one sign-in. And how to invite someone else.",
       "section": "getting-started",
       "related": [
         "your-12-words",
@@ -804,11 +804,26 @@
       "blocks": [
         {
           "type": "h2",
-          "text": "You need an invite"
+          "text": "Two ways in"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.",
+            "**Without an invite**, you can join the **global community**: people from everywhere, where you can post, message people and find a community near you. There are no Beans there. Beans, credit and the Commons live in local communities."
+          ]
         },
         {
           "type": "p",
-          "text": "You join a local BeanPool community when a member invites you. The global community is different: see \"The global community\" below. An invite is a link, a QR code or a code. A code looks like **INV-** followed by letters, or a long code that starts with **BP-**."
+          "text": "Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password."
+        },
+        {
+          "type": "h2",
+          "text": "Joining with an invite"
+        },
+        {
+          "type": "p",
+          "text": "An invite is a link, a QR code or a code. A code looks like **INV-** followed by letters, or a long code that starts with **BP-**."
         },
         {
           "type": "ul",
@@ -818,18 +833,38 @@
           ]
         },
         {
-          "type": "h2",
-          "text": "Joining"
+          "type": "p",
+          "text": "To join:"
         },
         {
           "type": "ul",
           "items": [
             "Install BeanPool and open it. If you tap an invite link first, the app picks up the invite by itself, even straight after installing it from Google Play.",
-            "On the first screen, tap **I'm New Here**. If the invite is on your clipboard, you can tap **Paste** instead.",
+            "On the first screen, tap **Join with an invite**. If the invite is on your clipboard, you can tap **Paste** instead. In the web app, the button says **I'm New Here**.",
             "Paste the invite link or code. If you only have a code, also type the community's name or address. The person who invited you can tell you.",
             "Choose the name people will see. It needs at least 2 letters. Keep it short: when you join, names longer than 20 characters are cut short.",
             "Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Joining the global community"
+        },
+        {
+          "type": "p",
+          "text": "You can join in the phone app or in a web browser. In a browser, open global.beanpool.org and tap **Join**: see \"Using BeanPool in a web browser\" for the steps. In the phone app:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "On the first screen, tap **Explore BeanPool worldwide**.",
+            "Sign in once with Google, Apple (on an iPhone), Facebook or GitHub. This keeps out fake accounts: one sign-in account makes one BeanPool account. BeanPool never sees your password and never posts anything for you.",
+            "Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The community keeps only a scrambled reference to your sign-in account, never your email. The sign-in you used also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. After joining you don't sign in to open the app: your account is the key on your phone, like any other."
         },
         {
           "type": "h2",
@@ -843,7 +878,7 @@
           "type": "ul",
           "items": [
             "**Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.",
-            "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon.",
+            "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community, this step also shows your sign-in protecting your account.",
             "**How it Works:** a short tour. Tap **Let's Begin!** to start."
           ]
         },
@@ -861,6 +896,19 @@
             "**Already used:** each invite works exactly once. Ask for a new one. If it was yours and you are already a member, use **Recover an existing account** instead.",
             "**Expired:** invites last 30 days. Ask for a new one.",
             "**Not recognised:** check you copied all of it, and that the community name or address is right."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "If joining the global community does not work"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.",
+            "**This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.",
+            "**Too many new accounts from this network:** there is a limit on new accounts from one internet connection. Try again later.",
+            "**Not taking new members right now:** join a community with an invite instead."
           ]
         },
         {
@@ -884,18 +932,6 @@
         {
           "type": "p",
           "text": "A community's admins can turn invites off for the whole community."
-        },
-        {
-          "type": "h2",
-          "text": "The global community"
-        },
-        {
-          "type": "p",
-          "text": "The global community at global.beanpool.org needs no invite. Instead, you sign in once with Google, Apple, Facebook or GitHub. That stops one person making many accounts, and one sign-in account can join once. The community keeps only a scrambled reference to it, never your email."
-        },
-        {
-          "type": "p",
-          "text": "For now you join it in a web browser: open global.beanpool.org and tap **Join**. See \"Using BeanPool in a web browser\" for the steps."
         }
       ]
     },
@@ -1056,7 +1092,7 @@
           "type": "ul",
           "items": [
             "**Hidden:** nobody.",
-            "**Trade Partners:** meant for people you trade with. For now it works like Community: every member can see it. To keep it private, choose Hidden or Friends.",
+            "**Trade Partners:** members you have a deal with. It counts from the moment one of you taps **Accept Offer** or **Offer to Fulfill** on the other's post, even if the deal is later cancelled or turned down. Sending beans on their own is not a deal.",
             "**Friends:** people you have added as friends.",
             "**Community:** every member of your community."
           ]
@@ -1229,7 +1265,7 @@
         {
           "type": "ul",
           "items": [
-            "**The invite icon** (a person with a plus): opens **Invites**, to invite someone or join another community. See \"Joining with an invite\".",
+            "**The invite icon** (a person with a plus): opens **Invites**, to invite someone or join another community. See \"Joining BeanPool\".",
             "**Settings** (the sliders): opens **Settings**. Tap it again to go back to where you were.",
             "**Your picture:** opens your own profile, as others see it."
           ]
@@ -1433,11 +1469,15 @@
         {
           "type": "ul",
           "items": [
-            "You need an invite from a member of that community.",
+            "A community needs an invite from one of its members.",
             "Tap the invite icon (a person with a plus) at the top right of the screen to open **Invites**.",
             "Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.",
             "Tap **Join Community**."
           ]
+        },
+        {
+          "type": "p",
+          "text": "The global community needs no invite, but for now it is joined from the app's first screen, before you have an account: tap **Explore BeanPool worldwide** there. See \"Joining BeanPool\". Joining it from an account you already have is not possible yet."
         },
         {
           "type": "h2",
@@ -2647,7 +2687,7 @@
           "items": [
             "**Friends:** people you have added.",
             "**Community:** every member. Search by name, and sort by **Newest**, **Name**, **Friends**, **Trusted** or **Active**.",
-            "**Invites:** invite someone new. See \"Joining with an invite\". If you have not joined yet, this button says **Register**."
+            "**Invites:** invite someone new. See \"Joining BeanPool\". If you have not joined yet, this button says **Register**."
           ]
         },
         {

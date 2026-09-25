@@ -127,12 +127,13 @@ async function main() {
     const boot2 = await capture(() => mirrorNodeProfileAtBoot());
     assert(!boot2.error, `the global node boots (${String(boot2.error ?? 'ok')})`);
     const pinnedLine = boot2.logs.find(l => l.includes('Not built yet, so these run as on any node today')) ?? '';
-    assert(['knocks=false', 'distanceSortDefault=false (global wants true)', 'directoryMirror=false (global wants true)',
+    assert(['knocks=false', 'directoryMirror=false (global wants true)',
         'publishToDirectory=true (global wants false)', 'ssoRequiredForJoin=true'].every(p => pinnedLine.includes(p)),
         `the boot log lists every switch still pinned, and what the profile wants (${pinnedLine})`);
     assert(!/\bbeans=|\bescrow=|enterprises=|treasuries=|crowdfund=/.test(pinnedLine), 'and the money switches are no longer among them');
     assert(!/\bopenJoin=/.test(pinnedLine), 'nor open join, which G2 built');
     assert(!/\bprobation=|autoHideReports=|autoMute=/.test(pinnedLine), 'nor probation, auto-hide or auto-mute, which G3 built');
+    assert(!/\bdistanceSortDefault=/.test(pinnedLine), 'nor distanceSortDefault, which G4 built');
 
     const info = await call('GET', '/api/community/info', null, alice);
     assert(info.status === 200 && info.body.profile === 'global', `info says global (${info.status} ${info.body?.profile})`);

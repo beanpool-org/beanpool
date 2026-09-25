@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { MemberAvatar } from './MemberAvatar';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { getTrustTier } from '../utils/trust-tier';
+import { isHiddenAuthor } from '../utils/posts-view';
 
 // Re-exported for the screens that import them from here (Market feed Elder cards).
 export { getTrustTier, isElder } from '../utils/trust-tier';
@@ -33,24 +34,27 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
     const styles = useStyles(makeStyles);
     const tierColors = colors.trust[tier.token];
 
+    // A visitors' view hides who posted (utils/posts-view.ts): nothing to rate, nobody to open.
+    const canOpen = navigable && !isHiddenAuthor(pubkey);
+
     useEffect(() => {
-        if (!pubkey) return;
+        if (isHiddenAuthor(pubkey)) return;
         getMemberRatings(pubkey)
             .then(r => setRatingInfo({ average: r.average, count: r.count }))
             .catch(() => {});
     }, [pubkey]);
 
     const handlePress = () => {
-        if (navigable && pubkey) {
+        if (canOpen) {
             router.push({ pathname: '/public-profile', params: { publicKey: pubkey, callsign } });
         }
     };
 
-    const Wrapper = navigable ? Pressable : View;
+    const Wrapper = canOpen ? Pressable : View;
 
     if (mode === 'compact') {
         return (
-            <Wrapper {...(navigable ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: `View ${callsign}'s profile` } : {})} style={styles.compactContainer}>
+            <Wrapper {...(canOpen ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: `View ${callsign}'s profile` } : {})} style={styles.compactContainer}>
                 {/* Avatar */}
                 <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={18} />
                 {/* Tier badge */}
@@ -75,7 +79,7 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
 
     // Full mode (list cards)
     return (
-        <Wrapper {...(navigable ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: `View ${callsign}'s profile` } : {})} style={styles.fullContainer}>
+        <Wrapper {...(canOpen ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: `View ${callsign}'s profile` } : {})} style={styles.fullContainer}>
             {/* Avatar */}
             <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={24} />
             {/* Tier badge with label */}

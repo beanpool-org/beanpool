@@ -392,5 +392,6 @@ export function updateProfile(
       .run(avatar, bio, contact_value, contact_visibility, callsign, profileUpdatedAt, archetype, publicKey);
 
     broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt });
-    return getProfile(db, publicKey);
+    // Read as the owner: POST /api/profile/update answers the signer, who always sees their own contact details.
+    return getProfile(db, publicKey, publicKey);
 }

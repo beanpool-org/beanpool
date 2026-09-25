@@ -18,6 +18,7 @@ import { applyDelta, fetchFriendsFromServer, getDb, localPostTies } from '../uti
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { postsViewRefusal } from '../utils/posts-view';
 
 const SYNC_TIMEOUT_MS = 20_000;
 const MAX_STORED_TRANSACTIONS = 1000;
@@ -243,20 +244,17 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const expectedDbName = getDatabaseFilenameForNode(anchorUrl);
 
         // Step 2: Fetch Posts and Balance directly via standard REST APIs
-        let identityRaw = null;
+        // Through the identity module, the one reader of the stored key (and a seam a test can stand in for).
+        let pubKey = '';
         try {
-            const SecureStore = require('expo-secure-store');
-            identityRaw = await SecureStore.getItemAsync('sovereign-identity');
+            const { loadIdentity } = await import('../utils/identity');
+            pubKey = (await loadIdentity())?.publicKey || '';
         } catch (e) {
             console.error('[Pillar Sync] Failed to get identity from SecureStore', e);
         }
 
-        let pubKey = '';
-        if (identityRaw) {
+        if (pubKey) {
             try {
-                const id = JSON.parse(identityRaw);
-                pubKey = id.publicKey;
-                
                 // Heal offline profile edits BEFORE downloading old state from server.
                 // This is the recovery path behind the "saved locally, will publish when you
                 // reconnect" promise, so failures are logged loudly (not silently swallowed)
@@ -353,6 +351,15 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 timeouts.clear();
                 result.durationMs = Date.now() - startTime;
                 result.errorMessage = `Posts fetch failed with status: ${postsRes.status}`;
+                return result;
+            }
+            // The visitors' view reaching a member (G9c, utils/posts-view.ts) goes the same way as a failed
+            // fetch: nothing written, the cursor not moved, and the next sync asks again.
+            const viewRefusal = await postsViewRefusal(postsRes, anchorUrl, pubKey);
+            if (viewRefusal) {
+                timeouts.clear();
+                result.durationMs = Date.now() - startTime;
+                result.errorMessage = viewRefusal;
                 return result;
             }
             postsData = await parseIfChanged(postsRes, anchorUrl, 'posts', rawGated);

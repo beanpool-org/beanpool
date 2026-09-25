@@ -21,12 +21,14 @@ import {
     deleteGroupPost
 } from '../groups.js';
 import { getPosts, getPostCount, getActivePostCount } from '../posts.js';
+import { registerGeoFunctions } from '../geo.js';
 
 describe('Groups Engine & Convenor Moderation (§9)', () => {
     let db: Database.Database;
 
     beforeEach(() => {
         db = new Database(':memory:');
+        registerGeoFunctions(db);
         db.exec(`
             CREATE TABLE members (
                 public_key TEXT PRIMARY KEY,

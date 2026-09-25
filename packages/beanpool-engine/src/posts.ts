@@ -11,6 +11,7 @@ import {
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
 import { avatarUrlFor } from '@beanpool/core';
+import { boundingBox } from './geo.js';
 
 type Db = Database.Database;
 
@@ -109,6 +110,11 @@ export interface MarketplacePost {
     hiddenByReportsAt?: string | null;
     /** A moderator took it down (G3). Carried by the replication export only. */
     removedByModeratorAt?: string | null;
+    /**
+     * Great-circle km from the point the reader gave (`PostFilter.near`), to 0.1 km; null for a post with no place.
+     * Absent when no point was given (G4).
+     */
+    distanceKm?: number | null;
 }
 
 export interface PostFilter {
@@ -142,6 +148,23 @@ export interface PostFilter {
      * marked `hiddenByReportsAt`. Without it only their author gets them. `includeAllScopes` includes them too.
      */
     includeHidden?: boolean;
+    /**
+     * Who voted for what in each poll (`pollVotes`), for a reader who is a member of this node (isNodeMember) only:
+     * the open ballot is open to members. Without it a poll carries its counts (`totalVotes`, each option's `votes`
+     * and `percentage`) and no voters, so a read nobody vouched for can never leak them.
+     */
+    includeVoters?: boolean;
+    /**
+     * Distance search (global node G4, design §3.2). Every post read carries `distanceKm` from this point. With
+     * `radiusKm`, only posts within it (great-circle) are read, and a post with no place is left out. Every other filter
+     * applies as without it.
+     */
+    near?: { lat: number; lng: number; radiusKm?: number };
+    /**
+     * Nearest first (needs `near`): posts with no place last, then most recently updated first among equals. Without
+     * it, the usual most-recently-updated order.
+     */
+    sortByDistance?: boolean;
 }
 
 /** An ended event stays readable by id to its host and Going for this long; after that, to nobody. */
@@ -356,8 +379,8 @@ export function liveOfferCount(db: Db, publicKey: string): number {
     return row?.c || 0;
 }
 
-export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
-    let query = `
+/** A listed post's row: the post, its author, who took it, its group, and the author's trade count. */
+const POST_ROW_SELECT = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
                g.name as target_group_name,
                COALESCE(m.earned_credit, 0) as author_earned_credit,
@@ -374,26 +397,183 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
-        LEFT JOIN groups g ON p.target_group_id = g.id
-        WHERE 1=1
-    `;
+        LEFT JOIN groups g ON p.target_group_id = g.id`;
+
+const RECENT_ORDER = " ORDER BY p.updated_at DESC, p.created_at DESC";
+// Nearest first ends on p.id, so the order is total and limit/offset pages it without repeats or gaps.
+const NEAREST_ORDER = " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, p.created_at DESC, p.id ASC";
+
+/**
+ * The circles a nearest-first page is searched in, widening from the reader's point (km). The first that holds the page
+ * gives it, and exactly: every post outside a circle is farther than every post inside it. Each is a box on
+ * idx_posts_lat_lng, so the posts near the reader are read and the rest of the world is not. If none holds it, one pass
+ * over every post gives it (the posts with no place last).
+ * About three times wider each time, so where posts are evenly spread the circle that holds the page holds about ten
+ * pages at most, and the circles before it cost a tenth of it. None wider than 3,000 km: past that a box holds much of
+ * the world's posts, and one pass over every post costs about the same (measured: a 10,000 km circle cost more).
+ */
+export const NEAREST_FIRST_CIRCLES_KM: readonly number[] = [1, 3, 10, 30, 100, 300, 1000, 3000];
+
+/**
+ * Deeper into the list than this, the circles are skipped for one pass over every post: each circle would hand back up
+ * to this many ids only for most of them to be passed over.
+ */
+export const NEAREST_FIRST_CIRCLES_MAX_DEPTH = 5000;
+
+/**
+ * The fields a read searched in circles may carry, and what each may hold. A circle reads every post in its box, whatever
+ * the filter, so it is quick only when a good share of the posts near the reader are posts the listing shows. For a
+ * filter that few of them match (the Events or Polls tab, a category, one author), circles read out to 3,000 km for a
+ * few posts, and then one pass runs anyway; no count or guess made before the circles can tell that cheaply (the second
+ * and third deciding reviews of #1140). So circles are only for the reads where that can't happen, decided by the kind of
+ * filter alone:
+ * - nearest first, with a page size, and no radius (a radius's one pass reads its box and no further);
+ * - the listing's own rules only: who is reading (`viewerPubkey`), a moderator's hidden posts (`includeHidden`), events
+ *   left out (`excludeEvents`), or `type` / `category` 'all', which getPosts reads as no filter. Every visible post near
+ *   the reader is a match;
+ * - `type` offer or need, or a `types` list with offer or need in it (the apps send `types=offer,need,poll,event` for
+ *   their whole feed): offers and needs are each a large share of the posts, so a box fills a page about as fast as with
+ *   no filter. circlesMayRead also checks that `type` and `types` together still keep offers or needs.
+ * Every other field that is set sends the read to the one exact pass, where the planner may use the type, category or
+ * author index: events or polls alone, a category, one author, a group, an audience scope, an assignee, beans only, a
+ * search, a status, inactive posts, a sync or by-id read, and any field added to PostFilter later: the type below names
+ * every field, so a new one doesn't compile until it is named here, and a field it doesn't know is refused too. So a new
+ * filter is never slower than the one pass, and can be let in here once it is shown to match most posts everywhere.
+ */
+const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter) => boolean) | null } = {
+    near: f => f.near!.radiusKm === undefined,
+    sortByDistance: () => true,
+    limit: () => true,
+    offset: () => true,
+    viewerPubkey: () => true,
+    includeHidden: () => true,
+    includeVoters: () => true,
+    excludeEvents: () => true,
+    type: f => f.type === 'all' || f.type === 'offer' || f.type === 'need',
+    types: f => f.types!.includes('offer') || f.types!.includes('need'),
+    category: f => f.category === 'all',
+    id: null, status: null, updatedAfter: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
+    includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
+};
+
+/** Whether a nearest-first read may search circles before its one pass (CIRCLE_FIELDS). */
+function circlesMayRead(filter: PostFilter): boolean {
+    if (!filter.sortByDistance || !filter.limit || (filter.offset || 0) + filter.limit > NEAREST_FIRST_CIRCLES_MAX_DEPTH) return false;
+    for (const [field, value] of Object.entries(filter)) {
+        if (value === undefined || value === null || value === false || value === '') continue;
+        const allowed = CIRCLE_FIELDS[field as keyof PostFilter];
+        if (!allowed || !allowed(filter)) return false;
+    }
+    // `type` and `types` both apply: type=offer with types=need,poll keeps nothing.
+    return (['offer', 'need'] as const).some(t =>
+        (!filter.type || filter.type === 'all' || filter.type === t) && (!filter.types?.length || filter.types.includes(t)));
+}
+
+/**
+ * A read with a point (G4): the order first, on ids and distances alone, then the rows of that page in full. The trade
+ * counts, the joins and everything after them run for the page, not for every post the order had to look at.
+ * Returns the page's rows in order, each with its `distance_km`.
+ */
+function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: string, whereParams: unknown[], filter: PostFilter): any[] {
+    const byDistance = !!filter.sortByDistance;
+    const offset = filter.offset || 0;
+
+    // `m` is joined for the author's filters in `where` (paused, winding up); it is one row at most, as are the joins
+    // POST_ROW_SELECT adds, so no join changes which posts there are.
+    const rank = (withinKm: number | undefined, limit: number | undefined, skip: number, circle: boolean) => {
+        let sql = `
+        SELECT p.id, haversine_km(?, ?, p.lat, p.lng) AS distance_km`;
+        const params: unknown[] = [near.lat, near.lng];
+        if (withinKm === undefined) {
+            sql += `
+        FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE 1=1`;
+        } else {
+            // Within a radius: a box on posts(lat, lng) that idx_posts_lat_lng answers, split in two across the
+            // antimeridian and every longitude around a pole (geo.ts boundingBox), then the exact great-circle distance. A
+            // post with no place fails BETWEEN, so it is never inside one.
+            // In a circle, the box is `b` and each post in it is joined to itself (`p`) for the listing's own conditions.
+            // SQLite never reorders a CROSS JOIN, so the box always drives: left to itself, the planner takes
+            // idx_posts_category for a category filter, and every circle would read every post in that category. One
+            // pass (a radius, or everything) is left to the planner.
+            const box = boundingBox(near.lat, near.lng, withinKm);
+            const t = circle ? 'b' : 'p';
+            sql += circle ? `
+        FROM posts b
+        CROSS JOIN posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key` : `
+        FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key`;
+            sql += `
+        WHERE ${t}.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => `${t}.lng BETWEEN ? AND ?`).join(' OR ')})
+          AND haversine_km(?, ?, ${t}.lat, ${t}.lng) <= ?${circle ? `
+          AND p.id = b.id` : ''}`;
+            params.push(box.latMin, box.latMax, ...box.lngRanges.flat(), near.lat, near.lng, withinKm);
+        }
+        sql += where;
+        params.push(...whereParams);
+        sql += byDistance ? NEAREST_ORDER : RECENT_ORDER;
+        if (limit) {
+            sql += " LIMIT ? OFFSET ?";
+            params.push(limit, skip);
+        }
+        return db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
+    };
+
+    let ranked: Array<{ id: string; distance_km: number | null }> | undefined;
+    if (circlesMayRead(filter)) {
+        const depth = offset + filter.limit!;
+        for (const km of NEAREST_FIRST_CIRCLES_KM) {
+            const inside = rank(km, depth, 0, true);
+            if (inside.length === depth) { ranked = inside.slice(offset); break; }
+        }
+    }
+    ranked ??= rank(near.radiusKm, filter.limit, offset, false);
+
+    const full = selectInChunks(db, ranked.map(r => r.id), ph => `${POST_ROW_SELECT}\n        WHERE p.id IN (${ph})`);
+    const byId = new Map(full.map(row => [row.id as string, row]));
+    return ranked.flatMap(r => {
+        const row = byId.get(r.id);
+        return row ? [{ ...row, distance_km: r.distance_km }] : [];
+    });
+}
+
+export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
+    return getPostsRankedBy(db, filter, postRowsNear);
+}
+
+/** How a read with a point finds its page's rows, in order, each with its `distance_km` (postRowsNear). */
+export type RowsNear = (db: Db, near: NonNullable<PostFilter['near']>, where: string, whereParams: unknown[], filter: PostFilter) => any[];
+
+/**
+ * getPosts, with a read with a point ranked by `rowsNear` in place of postRowsNear. Only the perf suite
+ * (apps/server test-distance-search-perf.ts) passes another: the one query nearest first was before the circles, so the
+ * two are timed through the same conditions and the same code after them, on one database, in one run.
+ */
+export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNear: RowsNear): MarketplacePost[] {
+    // `haversine_km` is registered on the connection (geo.ts registerGeoFunctions); asked only when a point is given, so
+    // every read without one runs exactly the query it always has.
+    const near = filter?.near;
+    // The listing's conditions, each " AND …", read with `params`.
+    let where = '';
     const params: any[] = [];
 
     if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
         if (!filter?.includeInactive) {
-            query += selfView
+            where += selfView
                 ? " AND p.active = 1 AND (p.status IN ('active', 'pending', 'paused') OR (p.type = 'poll' AND p.status = 'completed'))"
                 : " AND p.active = 1 AND (p.status IN ('active', 'pending') OR (p.type = 'poll' AND p.status = 'completed'))";
         }
         // Events drop off the feed and map when they end — a filter, not a sweep (§2.2).
-        query += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
+        where += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
         params.push(new Date().toISOString());
         if (!filter?.authorPubkey) {
-            query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
-            query += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+            where += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
+            where += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
         } else if (!selfView && !filter?.includeInactive) {
-            query += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+            where += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
         }
     } else if (filter?.updatedAfter || filter?.sync) {
         // Include completed/cancelled/deleted states for sync
@@ -401,22 +581,22 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         // By id, a cancelled event stays readable (to its host and the people going, checked below) until the
         // 30-day scrub marks it completed: the host has to be able to open the page and see it CANCELLED,
         // not just its chat (events §1, "host and attendees can still see it for 30 days").
-        query += " AND (p.active = 1 OR (p.type = 'event' AND p.status = 'cancelled' AND p.event_state = 'cancelled'))";
+        where += " AND (p.active = 1 OR (p.type = 'event' AND p.status = 'cancelled' AND p.event_state = 'cancelled'))";
     }
 
-    if (filter?.id) { query += " AND p.id = ?"; params.push(filter.id); }
-    if (filter?.type && filter.type !== 'all') { query += " AND p.type = ?"; params.push(filter.type); }
+    if (filter?.id) { where += " AND p.id = ?"; params.push(filter.id); }
+    if (filter?.type && filter.type !== 'all') { where += " AND p.type = ?"; params.push(filter.type); }
     if (filter?.types && filter.types.length > 0) {
-        query += ` AND p.type IN (${filter.types.map(() => '?').join(',')})`;
+        where += ` AND p.type IN (${filter.types.map(() => '?').join(',')})`;
         params.push(...filter.types);
     }
-    if (filter?.excludeEvents) { query += " AND p.type != 'event'"; }
-    if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
-    if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
-    if (filter?.authorPubkey) { query += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
+    if (filter?.excludeEvents) { where += " AND p.type != 'event'"; }
+    if (filter?.category && filter.category !== 'all') { where += " AND p.category = ?"; params.push(filter.category); }
+    if (filter?.status) { where += " AND p.status = ?"; params.push(filter.status); }
+    if (filter?.authorPubkey) { where += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
     // #108: beans-only browse. COALESCE so rows predating the column are treated as beans-only
     // rather than vanishing from the filtered view.
-    if (filter?.beansOnly) { query += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
+    if (filter?.beansOnly) { where += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
 
     // Audience scoping (docs/the-commons.md §9, Item 10)
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
@@ -424,28 +604,28 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     if (filter?.includeAllScopes) {
         // Internal engine lookup bypasses feed scoping
     } else if (filter?.audienceScope === 'public') {
-        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+        where += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
     } else if (filter?.audienceScope === 'group') {
-        query += " AND p.audience_scope = 'group'";
+        where += " AND p.audience_scope = 'group'";
         if (!viewer) {
-            query += " AND 1=0";
+            where += " AND 1=0";
         } else {
-            query += " AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))";
+            where += " AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))";
             params.push(viewer, viewer);
         }
     } else if (filter?.audienceScope === 'direct') {
-        query += " AND p.audience_scope = 'direct'";
+        where += " AND p.audience_scope = 'direct'";
         if (!viewer) {
-            query += " AND 1=0";
+            where += " AND 1=0";
         } else {
-            query += " AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?)";
+            where += " AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?)";
             params.push(viewer, viewer, viewer);
         }
     } else {
         if (!viewer) {
-            query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+            where += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
         } else {
-            query += ` AND (
+            where += ` AND (
                 (p.audience_scope IS NULL OR p.audience_scope = 'public')
                 OR (p.audience_scope = 'group' AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active')))
                 OR (p.audience_scope = 'direct' AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?))
@@ -455,11 +635,11 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     }
 
     if (filter?.targetGroupId) {
-        query += " AND p.target_group_id = ?";
+        where += " AND p.target_group_id = ?";
         params.push(filter.targetGroupId);
     }
     if (filter?.assignedTo) {
-        query += " AND p.assigned_to = ?";
+        where += " AND p.assigned_to = ?";
         params.push(filter.assignedTo);
     }
 
@@ -470,10 +650,10 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     const syncRead = !!(filter?.updatedAfter || filter?.sync);
     if (hiddenFromViewer && !syncRead) {
         if (viewer) {
-            query += " AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)";
+            where += " AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)";
             params.push(viewer);
         } else {
-            query += " AND p.hidden_by_reports_at IS NULL";
+            where += " AND p.hidden_by_reports_at IS NULL";
         }
     }
 
@@ -481,28 +661,32 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         const searchTerms = filter.query.trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
         if (searchTerms.length > 0) {
             const ftsQuery = searchTerms.map(t => `"${t}"*`).join(' OR ');
-            query += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
+            where += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
             params.push(ftsQuery);
             // Goods search isolation: searching marketplace keywords must not return polls unless explicitly asked
             if (filter.type !== 'poll') {
-                query += " AND p.type != 'poll'";
+                where += " AND p.type != 'poll'";
             }
         }
     }
 
     if (filter?.updatedAfter) {
-        query += " AND p.updated_at >= ?";
+        where += " AND p.updated_at >= ?";
         params.push(filter.updatedAfter);
     }
 
-    query += " ORDER BY p.updated_at DESC, p.created_at DESC";
-    
-    if (filter?.limit) {
-        query += " LIMIT ? OFFSET ?";
-        params.push(filter.limit, filter.offset || 0);
+    let rows: any[];
+    if (near) {
+        rows = rowsNear(db, near, where, params, filter!);
+    } else {
+        let query = `${POST_ROW_SELECT}
+        WHERE 1=1${where}${RECENT_ORDER}`;
+        if (filter?.limit) {
+            query += " LIMIT ? OFFSET ?";
+            params.push(filter.limit, filter.offset || 0);
+        }
+        rows = db.prepare(query).all(...params) as any[];
     }
-
-    const rows = db.prepare(query).all(...params) as any[];
     const postIds = rows.map(r => r.id);
 
     const photos = selectInChunks(db, postIds, ph => `SELECT post_id, order_num, updated_at FROM post_photos WHERE post_id IN (${ph})`);
@@ -515,7 +699,8 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         photosByPost.get(p.post_id)!.push(p);
     }
 
-    // Community Polls: batch fetch votes for all poll rows
+    // Community Polls: batch fetch votes for all poll rows. Every reader gets the counts; only a member
+    // (`includeVoters`) gets who voted for what, below.
     const pollRows = rows.filter(r => r.type === 'poll');
     const pollVotesByPost = new Map<string, any[]>();
     if (pollRows.length > 0) {
@@ -577,10 +762,12 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         const post = rowToPost(db, r, photosByPost);
         if (hiddenFromViewer && r.hidden_by_reports_at && r.author_pubkey !== viewer) {
             // Only a sync read gets this far with a hidden post it may not see (the SQL above left it out otherwise).
+            // A removal says nothing of where the post was, so it carries no distance either.
             out.push(hiddenAsRemoved(post));
             continue;
         }
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
+        if (near) post.distanceKm = typeof r.distance_km === 'number' ? Math.round(r.distance_km * 10) / 10 : null;
 
         if (post.type === 'event') {
             const rsvps = rsvpsByPost.get(post.id) || [];
@@ -634,17 +821,29 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
                     return { ...opt, votes: count, percentage };
                 });
             }
-            post.pollVotes = votes.map((v: any) => ({
-                voterPubkey: v.voter_pubkey,
-                voterCallsign: v.voter_callsign || 'Anonymous',
-                optionId: v.option_id,
-                createdAt: v.created_at
-            }));
+            if (filter?.includeVoters) {
+                post.pollVotes = votes.map((v: any) => ({
+                    voterPubkey: v.voter_pubkey,
+                    voterCallsign: v.voter_callsign || 'Anonymous',
+                    optionId: v.option_id,
+                    createdAt: v.created_at
+                }));
+            }
         }
 
         out.push(post);
     }
     return out;
+}
+
+/**
+ * The post without who voted for what (`pollVotes`), for a reader or a socket that is not a member of this node. The
+ * counts stay. Any other post comes back as it was.
+ */
+export function withoutPollVoters(post: MarketplacePost): MarketplacePost {
+    if (!('pollVotes' in post)) return post;
+    const { pollVotes: _voters, ...rest } = post;
+    return rest;
 }
 
 /**

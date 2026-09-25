@@ -173,8 +173,11 @@ import {
     getProfile as getProfileEngine,
     getAllProfiles as getAllProfilesEngine,
     contactVisibleTo,
-    ownersWhoAddedAsFriend as ownersWhoAddedAsFriendEngine,
+    contactViewer as contactViewerEngine,
+    isNodeMember as isNodeMemberEngine,
+    isLiveMemberKey as isLiveMemberKeyEngine,
     publicMemberCard,
+    type ContactViewer,
     rowToMember,
     rowToProfile,
     type Member,
@@ -189,6 +192,7 @@ import {
     type Rating,
     type FriendEntry,
     getPosts as getPostsEngine,
+    withoutPollVoters,
     getPostCount as getPostCountEngine,
     getActivePostCount as getActivePostCountEngine,
     hasListedOffer as hasListedOfferEngine,
@@ -1084,6 +1088,12 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     const joinedPubkey = event?.type === 'member_joined' && typeof event.member?.publicKey === 'string'
         ? event.member.publicKey.toLowerCase() : null;
     let doorbell: string | null = null;
+    // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
+    // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
+    // leaves the voters off and keeps the counts.
+    const carriesVoters = (event?.type === 'new_post' || event?.type === 'post_updated')
+        && !!event.post && typeof event.post === 'object' && 'pollVotes' in event.post;
+    let withoutVoters: string | null = null;
     for (const ws of wsClients) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now.
         if (joinedPubkey && !ws._memberPubkey && ws._pendingMemberPubkey === joinedPubkey) {
@@ -1098,14 +1108,24 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         } else if (!ws._memberPubkey && !ws._openFeed) {
             if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
+        } else if (!ws._memberPubkey && carriesVoters) {
+            out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });
         }
         try { ws.send(out); } catch { wsClients.delete(ws); }
     }
-    // A pruned member's open socket stops being a member socket: from now on it gets what a stranger gets.
-    if (event?.type === 'user_pruned' && typeof event.publicKey === 'string') {
-        const pruned = event.publicKey.toLowerCase();
+    // A member's open socket stops being a member socket once its key no longer makes a member (isNodeMember): from now
+    // on it gets what a stranger gets, as a fresh connect with that key does. A prune says so outright. A re-key started
+    // for a lost or stolen phone announces profile_updated for the old key (issueRekeyCode), and one completed
+    // announces member_rekeyed, so both are asked.
+    const changedKey = event?.type === 'member_rekeyed' ? event.oldPublicKey
+        : event?.type === 'user_pruned' || event?.type === 'profile_updated' ? event.publicKey : null;
+    if (typeof changedKey === 'string') {
+        const key = changedKey.toLowerCase();
+        let demote: boolean | undefined;
         for (const ws of wsClients) {
-            if (typeof ws._memberPubkey === 'string' && ws._memberPubkey.toLowerCase() === pruned) ws._memberPubkey = null;
+            if (typeof ws._memberPubkey !== 'string' || ws._memberPubkey.toLowerCase() !== key) continue;
+            demote ??= event.type === 'user_pruned' || !isNodeMember(ws._memberPubkey);
+            if (demote) ws._memberPubkey = null;
         }
     }
 }
@@ -1204,10 +1224,21 @@ export function getAllProfiles(requesterPubkey?: string): MemberProfile[] {
 
 // Who may see a member's contact details: THE rule, shared by the profile page and every list that sends member
 // rows (see contactVisibleTo in the engine). A route never decides it itself.
-export { contactVisibleTo, publicMemberCard };
+export { contactVisibleTo, publicMemberCard, type ContactViewer };
 
-export function ownersWhoAddedAsFriend(viewerPubkey: string | null | undefined): Set<string> {
-    return ownersWhoAddedAsFriendEngine(db, viewerPubkey);
+/** What contactVisibleTo needs to know about the verified signer: member or not, who added them, who they trade with. */
+export function contactViewer(viewerPubkey: string | null | undefined): ContactViewer {
+    return contactViewerEngine(db, viewerPubkey);
+}
+
+/** A member of this node: a row that exists and isn't pruned, for a key not invalidated by a re-key (the engine's isNodeMember). Pass the verified signer. */
+export function isNodeMember(pubkey: string | null | undefined): boolean {
+    return isNodeMemberEngine(db, pubkey);
+}
+
+/** May make a gated read: a member row, for a key not invalidated by a re-key (the engine's isLiveMemberKey). Pass the verified signer. */
+export function isLiveMemberKey(pubkey: string | null | undefined): boolean {
+    return isLiveMemberKeyEngine(db, pubkey);
 }
 
 export function updateProfile(publicKey: string, update: any): MemberProfile | null {
@@ -6330,6 +6361,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
         setUserStatusRow(publicKey, 'pruned');
+        // A person's coarse area (G4) goes too: a pruned account can't sign the request that clears it.
+        db.prepare('UPDATE members SET area_lat = NULL, area_lng = NULL, area_updated_at = NULL WHERE public_key = ? AND area_lat IS NOT NULL').run(publicKey);
         db.prepare("UPDATE posts SET status='completed', active=0, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey=? AND type='poll' AND status='active'").run(publicKey);
         db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
         // Same scrub as purgeMemberSelf, and it has to happen here rather than being left to the
@@ -6355,7 +6388,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
  * Atomically:
  * 1. Validates no active escrows as buyer or seller.
  * 2. Settles positive or negative balance with COMMONS_POOL.
- * 3. Anonymizes member profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact).
+ * 3. Anonymizes member profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact, coarse area).
  * 4. Cancels active marketplace listings.
  * 5. Purges push tokens, guardian shares, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
@@ -6435,6 +6468,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 can_operate = 0,
                 credit_frozen = 0,
                 elder_vouched_by = NULL,
+                area_lat = NULL,
+                area_lng = NULL,
+                area_updated_at = NULL,
                 profile_updated_at = ?,
                 updated_at = ?
             WHERE public_key = ?

@@ -38,6 +38,13 @@ export interface Member {
      * replication export only (a standby and a take-over keep it); never in the member directory.
      */
     moderationMutedUntil?: string | null;
+    /**
+     * A person's coarse area (global node G4): 0.1° steps, set by the member alone. Carried by the replication export
+     * only (a standby and a take-over keep it); never in the member directory, a profile or anything a peer reads.
+     */
+    areaLat?: number | null;
+    areaLng?: number | null;
+    areaUpdatedAt?: string | null;
 }
 
 export interface InviteCode {
@@ -299,7 +306,107 @@ export function getInviteTree(db: Db, rootPubkey?: string): InviteTreeNode[] {
 }
 
 /**
- * Whether `viewerPubkey` may see the contact details of `ownerPubkey`, who chose `visibility` for them
+ * Whether this node has invalidated `pubkey`: a re-key has started (issueRekeyCode, for a lost or stolen phone) or
+ * finished (completeRekey). The key can still sign, but the server's write guards refuse it (assertMemberActive), it is
+ * no member here (isNodeMember) and it makes no gated read (isLiveMemberKey). Both writers of invalidated_keys lowercase.
+ */
+export function isInvalidatedKey(db: Db, pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    return !!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ?").get(pubkey.toLowerCase());
+}
+
+/**
+ * Whether `pubkey` is a member of this node: a member row that exists and isn't pruned, for a key this node hasn't
+ * invalidated. A pruned or self-deleted account keeps its row and can still sign, but it is no longer in the community.
+ * Nor is the old key of a member being re-keyed: its row stays, set to 'suspended', and the key can still sign until
+ * the new phone binds a new one, however long that takes (an expired code leaves both as they are).
+ *
+ * Every other status counts, 'suspended' and 'disabled' included. The re-key is caught by its invalidated key, not by
+ * 'suspended', because a report suspension writes the same status, and whether a suspended member counts is a separate
+ * call.
+ *
+ * THE test for what only members may read — the People list's distances (G4), poll voters, contact details, the /ws
+ * member feed — so they cannot drift apart. Pass the verified signer (the route's ctx.state.actor), never a key from the
+ * request.
+ */
+export function isNodeMember(db: Db, pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    const row = db.prepare("SELECT status FROM members WHERE public_key = ?").get(pubkey) as { status: string | null } | undefined;
+    return !!row && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
+}
+
+/**
+ * Whether `pubkey` may make a gated read (ENFORCE_READ_AUTH): it has a member row here and this node hasn't invalidated
+ * it. Looser than isNodeMember on one point only: a pruned account still passes, as it always has, and whether it
+ * should is a separate call. Pass the verified signer.
+ */
+export function isLiveMemberKey(db: Db, pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    return !!db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(pubkey) && !isInvalidatedKey(db, pubkey);
+}
+
+/** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade.ts). */
+export const OWNERS_WHO_ADDED_AS_FRIEND_SQL = "SELECT owner_pubkey FROM friends WHERE friend_pubkey = ?";
+
+/**
+ * tradePartnersOf's query: the other side of every marketplace trade the viewer is on, as buyer or as seller. Every
+ * status counts (requested, pending, completed, disputed, cancelled, rejected, and any added later), so there is no
+ * status test. The two halves are answered by idx_marketplace_transactions_buyer_status and _seller_status.
+ */
+export const TRADE_PARTNERS_SQL = `
+    SELECT seller_pubkey AS partner FROM marketplace_transactions WHERE buyer_pubkey = ?
+    UNION
+    SELECT buyer_pubkey FROM marketplace_transactions WHERE seller_pubkey = ?`;
+
+/** Every member who has added `viewerPubkey` as a friend: contactVisibleTo's friends check for many owners at once. */
+export function ownersWhoAddedAsFriend(db: Db, viewerPubkey: string | null | undefined): Set<string> {
+    if (!viewerPubkey) return new Set();
+    const rows = db.prepare(OWNERS_WHO_ADDED_AS_FRIEND_SQL).all(viewerPubkey) as any[];
+    return new Set(rows.map(r => r.owner_pubkey));
+}
+
+/**
+ * Every member `viewerPubkey` has a marketplace trade with, in any state and either way round: a row in
+ * marketplace_transactions with the two of them as buyer and seller. The escrow engine writes that row when a trade
+ * is requested (or accepted outright) and only ever moves its status, so a trade once entered stays entered. A direct
+ * Bean transfer (the `transactions` ledger) is not a trade here: the apps never call one a trade, and "Visible when you
+ * enter a trade" names the marketplace's step.
+ */
+export function tradePartnersOf(db: Db, viewerPubkey: string | null | undefined): Set<string> {
+    if (!viewerPubkey) return new Set();
+    const rows = db.prepare(TRADE_PARTNERS_SQL).all(viewerPubkey, viewerPubkey) as any[];
+    return new Set(rows.map(r => r.partner));
+}
+
+/** Who is reading, for contactVisibleTo. Worked out once per request (contactViewer), then asked about each owner. */
+export interface ContactViewer {
+    /** The verified signer (the route's ctx.state.actor), or null when the request is unsigned. */
+    pubkey: string | null;
+    /** A member of this node (isNodeMember). Community, Trade Partners and Friends all need one. */
+    isMember: boolean;
+    /** Every owner who has added the viewer as a friend (ownersWhoAddedAsFriend). */
+    addedBy: ReadonlySet<string>;
+    /** Every member the viewer has a marketplace trade with (tradePartnersOf). */
+    tradePartners: ReadonlySet<string>;
+}
+
+/**
+ * What contactVisibleTo needs to know about `viewerPubkey`, which must be the verified signer, never a value from the
+ * request: anyone can name a friend's key. A viewer that is not a member is looked up no further.
+ */
+export function contactViewer(db: Db, viewerPubkey: string | null | undefined): ContactViewer {
+    const pubkey = viewerPubkey || null;
+    const isMember = isNodeMember(db, pubkey);
+    return {
+        pubkey,
+        isMember,
+        addedBy: isMember ? ownersWhoAddedAsFriend(db, pubkey) : new Set(),
+        tradePartners: isMember ? tradePartnersOf(db, pubkey) : new Set(),
+    };
+}
+
+/**
+ * Whether `viewer` may see the contact details of `ownerPubkey`, who chose `visibility` for them
  * (Settings → "Who can see this?").
  *
  * THE rule, for every route that sends a member's contact details: the profile page, the member list,
@@ -307,40 +414,31 @@ export function getInviteTree(db: Db, rootPubkey?: string): InviteTreeNode[] {
  * honoured the choice while GET /api/community/members sent every member's contact to every reader.
  *
  *  - The owner always sees their own.
- *  - 'hidden', no visibility stored, or a value this node doesn't know: nobody else.
- *  - 'friends': a viewer the OWNER has added as a friend (a `friends` row owner → viewer). One-way on
+ *  - Nobody else who is not a member of this node (isNodeMember): not an unsigned reader (read auth can be
+ *    off), not a signed non-member, not a pruned account.
+ *  - 'community': every member.
+ *  - 'trade_partners': a member the owner has a marketplace trade with, in any state (tradePartnersOf).
+ *  - 'friends': a member the OWNER has added as a friend (a `friends` row owner → viewer). One-way on
  *    purpose: adding someone as your friend does not reveal their contact to you.
- *  - 'community' and 'trade_partners': any viewer the route already lets read members. Nothing on the
- *    node records who counts as a trade partner, so the profile page has always read 'trade_partners'
- *    like 'community'; this keeps that rule rather than inventing one.
- *
- * `viewerPubkey` must be the verified signer (the route's ctx.state.actor), never a value from the
- * request — anyone can name a friend's key. `ownerAddedViewer` answers "has the owner added the viewer
- * as a friend?"; for a whole list, look it up once with ownersWhoAddedAsFriend().
+ *  - 'hidden', no visibility stored, or a value this node doesn't know: nobody else.
  */
 export function contactVisibleTo(
     ownerPubkey: string,
     visibility: string | null | undefined,
-    viewerPubkey: string | null | undefined,
-    ownerAddedViewer: boolean,
+    viewer: ContactViewer,
 ): boolean {
-    if (viewerPubkey && viewerPubkey === ownerPubkey) return true;
+    if (viewer.pubkey && viewer.pubkey === ownerPubkey) return true;
+    if (!viewer.isMember) return false;
     switch (visibility) {
         case 'community':
-        case 'trade_partners':
             return true;
+        case 'trade_partners':
+            return viewer.tradePartners.has(ownerPubkey);
         case 'friends':
-            return !!viewerPubkey && ownerAddedViewer;
+            return viewer.addedBy.has(ownerPubkey);
         default:
             return false;
     }
-}
-
-/** Every member who has added `viewerPubkey` as a friend: contactVisibleTo's friends check for many owners at once. */
-export function ownersWhoAddedAsFriend(db: Db, viewerPubkey: string | null | undefined): Set<string> {
-    if (!viewerPubkey) return new Set();
-    const rows = db.prepare("SELECT owner_pubkey FROM friends WHERE friend_pubkey = ?").all(viewerPubkey) as any[];
-    return new Set(rows.map(r => r.owner_pubkey));
 }
 
 export function getProfile(db: Db, publicKey: string, requesterPubkey?: string): MemberProfile | null {
@@ -352,22 +450,20 @@ export function getProfile(db: Db, publicKey: string, requesterPubkey?: string):
         const voucher = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(row.elder_vouched_by) as any;
         profile.elderVouchedByCallsign = voucher?.callsign || null;
     }
-    if (profile.contact) {
-        const ownerAddedViewer = !!requesterPubkey && requesterPubkey !== publicKey &&
-            !!db.prepare("SELECT 1 FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(publicKey, requesterPubkey);
-        if (!contactVisibleTo(publicKey, row.contact_visibility, requesterPubkey, ownerAddedViewer)) profile.contact = null;
+    if (profile.contact && !contactVisibleTo(publicKey, row.contact_visibility, contactViewer(db, requesterPubkey))) {
+        profile.contact = null;
     }
     return profile;
 }
 
 export function getAllProfiles(db: Db, requesterPubkey?: string): MemberProfile[] {
     const rows = db.prepare("SELECT * FROM members WHERE status != 'pruned'").all() as any[];
-    const friendOwners = ownersWhoAddedAsFriend(db, requesterPubkey);
+    const viewer = contactViewer(db, requesterPubkey);
 
     const profiles: MemberProfile[] = [];
     for (const row of rows) {
         const profile = rowToProfile(row);
-        if (profile.contact && !contactVisibleTo(profile.publicKey, row.contact_visibility, requesterPubkey, friendOwners.has(profile.publicKey))) {
+        if (profile.contact && !contactVisibleTo(profile.publicKey, row.contact_visibility, viewer)) {
             profile.contact = null;
         }
         profiles.push(profile);

@@ -287,6 +287,8 @@ run_federation_suites() {
       test-open-join
       test-web-door
       test-global-moderation
+      test-distance-search
+      test-distance-search-perf
       test-commons-conservation
       test-ledger-rollback
       test-treasury-keepership
@@ -369,6 +371,7 @@ run_federation_suites() {
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility
+      test-contact-trade-partners
       test-sync-signature
       test-trust-value-curve
       test-trust-tiers-one-source
@@ -421,6 +424,7 @@ run_federation_suites() {
       test-live-post-payloads
       test-moderation-notifications
       test-polls
+      test-poll-voters-members-only
       test-events
       test-enterprise-event-http
       test-event-chat
@@ -537,6 +541,17 @@ run_federation_suites() {
       $SUITE_TIMEOUT pnpm exec tsx src/test-push-preferences.ts
     RC=$?
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-push-preferences(readauth-off,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-push-preferences(readauth-off)"; fi
+    rm -rf "$TMP_DIR"
+
+    # Distance search (G4) again with read enforcement opted out. The loop above runs it as a node ships; here
+    # nothing stands in front of the People list, so its own refusal of a distance to an unsigned caller or a
+    # key that is not a member is what holds.
+    echo "━━━ test-distance-search (read auth opted out) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_READ_AUTH=false ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-distance-search.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-distance-search(readauth-off,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-distance-search(readauth-off)"; fi
     rm -rf "$TMP_DIR"
 
     # Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM,

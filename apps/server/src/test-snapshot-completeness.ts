@@ -40,6 +40,8 @@
  *  13. So does the global node's moderation (G3): a post hidden by reports stays hidden
  *      (`posts.hidden_by_reports_at`), a moderator's takedown still counts (`posts.removed_by_moderator_at`),
  *      and a muted member stays muted (`members.moderation_muted_until`).
+ *  14. And a person's coarse area (G4: `members.area_lat`, `area_lng`, `area_updated_at`), so a restored node still
+ *      measures the People list from it.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -76,7 +78,10 @@ function makePhoto(seed: string): Buffer {
     const filler = Buffer.alloc(24 * 1024);
     for (let i = 0; i < filler.length; i += body.length) body.copy(filler, i);
     for (let i = 0; i < filler.length; i++) filler[i] ^= (i * 31 + seed.charCodeAt(0)) & 0xff;
-    return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), filler, Buffer.from([0xff, 0xd9])]);
+    // A scan with no 0xFF in it, so the metadata strip walks it to EOI and finds nothing to take off: stored exactly
+    // as sent. The node refuses a JPEG it cannot walk (G9a-3), and SOI + APP0 + random bytes, which this built before, is one.
+    for (let i = 0; i < filler.length; i++) if (filler[i] === 0xff) filler[i] = 0xfe;
+    return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]), filler, Buffer.from([0xff, 0xd9])]);
 }
 const dataUrl = (buf: Buffer, mime = 'image/jpeg') => `data:${mime};base64,${buf.toString('base64')}`;
 
@@ -260,6 +265,9 @@ async function main(): Promise<void> {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status) VALUES (?, 'Muted', ?, 'active')`).run(mutedMember, new Date().toISOString());
     db.prepare('UPDATE posts SET hidden_by_reports_at = ?, removed_by_moderator_at = ? WHERE id = ?').run(hiddenAtT, removedAtT, kept!.id);
     db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(mutedAtT, mutedMember);
+    // A person's coarse area (G4), as engine/member-area.ts writes it: already rounded to 0.1°.
+    const areaAtT = new Date(Date.now() - 180_000).toISOString();
+    db.prepare('UPDATE members SET area_lat = ?, area_lng = ?, area_updated_at = ? WHERE public_key = ?').run(-28.6, 153.5, areaAtT, mutedMember);
 
     /** What every referenced object held at T. The whole suite is about reproducing this map. */
     const atT = new Map<string, Buffer>([
@@ -343,6 +351,9 @@ async function main(): Promise<void> {
             assert(moderated?.hidden_by_reports_at === hiddenAtT && moderated?.removed_by_moderator_at === removedAtT,
                 'the archive carries a post hidden by reports, and a moderator\'s takedown, so a restored node keeps both');
             assert(muted?.moderation_muted_until === mutedAtT, 'and a member\'s mute, so a restored node keeps them muted');
+            const area = archived.prepare('SELECT area_lat, area_lng, area_updated_at FROM members WHERE public_key = ?').get(mutedMember) as any;
+            assert(area?.area_lat === -28.6 && area?.area_lng === 153.5 && area?.area_updated_at === areaAtT,
+                'and a person\'s coarse area, so a restored node still measures the People list from it');
         } finally {
             archived.close();
         }

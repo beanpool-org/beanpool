@@ -28,6 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { OWNERS_WHO_ADDED_AS_FRIEND_SQL, TRADE_PARTNERS_SQL } from '@beanpool/engine';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = path.join(__dirname, 'db', 'schema.sql');
@@ -536,6 +537,98 @@ END`;
         const touched = (after.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(pk) as any)?.updated_at;
         assert(touched > '2025-01-01T00:00:00.000Z', `an UPDATE that sets only moderation_muted_until moves updated_at (${touched})`);
         after.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // ── 10. A person's coarse area and the posts distance index (G4) ───────────────────────────────
+    // Every node from before G4: members without area_lat / area_lng / area_updated_at, a members_touch_updated_at that
+    // doesn't list them, and posts without idx_posts_lat_lng. The fixture is a booted node rolled back to that shape,
+    // holding a member. It must boot onto exactly a fresh install's members columns and posts indexes, with the area
+    // NULL on the member it had, and a write of the area alone must move updated_at (so delta sync carries it).
+    console.log('\n--- 10. Legacy members without the area, posts without idx_posts_lat_lng (G4) ---');
+    {
+        const AREA = ['area_lat', 'area_lng', 'area_updated_at'];
+        const touchSql = (d: Database.Database): string =>
+            (d.prepare(`SELECT sql FROM sqlite_master WHERE type='trigger' AND name='members_touch_updated_at'`).get() as any)?.sql ?? '';
+        const dir = tmp('legacy-g4');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const freshMembers = columns(d, 'members');
+        const freshPostIndexes = indexes(d, 'posts');
+        const current = touchSql(d);
+        const old = current.replace(/,\s*area_lat,\s*area_lng,\s*area_updated_at\b/, '');
+        assert(AREA.every(c => freshMembers.includes(c)) && freshPostIndexes.includes('idx_posts_lat_lng')
+            && AREA.every(c => new RegExp(`\\b${c}\\b`).test(current)) && !/\barea_/.test(old),
+            'a fresh install has the area columns, idx_posts_lat_lng and a trigger listing the area; the fixture takes all three out');
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TRIGGER members_touch_updated_at; DROP INDEX idx_posts_lat_lng;
+                ALTER TABLE members DROP COLUMN area_lat; ALTER TABLE members DROP COLUMN area_lng; ALTER TABLE members DROP COLUMN area_updated_at;
+                ${old};`);
+        const pk = 'dd'.repeat(32);
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at, updated_at) VALUES (?, 'Legacy', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')`).run(pk);
+        assert(!AREA.some(c => columns(d, 'members').includes(c)) && !indexes(d, 'posts').includes('idx_posts_lat_lng'),
+            'the fixture genuinely lacks the area columns and the index');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the pre-G4 node boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(columns(after, 'members')) === JSON.stringify(freshMembers), 'ending up with exactly the members columns a fresh install has');
+        assert(JSON.stringify(indexes(after, 'posts')) === JSON.stringify(freshPostIndexes), 'and exactly its posts indexes, idx_posts_lat_lng included');
+        assert(AREA.every(c => new RegExp(`\\b${c}\\b`).test(touchSql(after))), 'its members_touch_updated_at lists the area again');
+        const row = after.prepare('SELECT area_lat, area_lng, area_updated_at FROM members WHERE public_key = ?').get(pk) as any;
+        assert(row && row.area_lat === null && row.area_lng === null && row.area_updated_at === null, 'the member it already had has no area');
+        after.prepare('UPDATE members SET area_lat = -28.6, area_lng = 153.5 WHERE public_key = ?').run(pk);
+        const touched = (after.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(pk) as any)?.updated_at;
+        assert(touched > '2025-01-01T00:00:00.000Z', `an UPDATE that sets only the area moves updated_at (${touched})`);
+        let refused = false;
+        try { after.prepare('UPDATE members SET area_lat = 91 WHERE public_key = ?').run(pk); } catch { refused = true; }
+        assert(refused, 'and the column refuses a latitude past the pole');
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // ── 11. friends(friend_pubkey), and the contact lookups search indexes ─────────────────────────
+    // contactVisibleTo's two lookups run on every member-list and profile read, keyed on the VIEWER: who has added
+    // them as a friend (ownersWhoAddedAsFriend) and who they have a trade with (tradePartnersOf). friends' primary key
+    // leads with owner_pubkey, so the first scanned the whole table on every node from before idx_friends_friend_pubkey
+    // (1–2 ms at 50k rows, #1145's review). The fixture is a booted node with that index dropped, holding a friend
+    // row; it must boot onto exactly a fresh install's friends indexes, and both lookups, the engine's own SQL, must
+    // search an index rather than scan.
+    console.log('\n--- 11. idx_friends_friend_pubkey, and the contact lookups search indexes ---');
+    {
+        const dir = tmp('friends-index');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const freshFriendIndexes = indexes(d, 'friends');
+        assert(freshFriendIndexes.includes('idx_friends_friend_pubkey'), `a fresh install has idx_friends_friend_pubkey (friends indexes: ${freshFriendIndexes.join(', ')})`);
+        d.pragma('foreign_keys = OFF');
+        d.exec('DROP INDEX idx_friends_friend_pubkey');
+        d.prepare(`INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)`).run('ee'.repeat(32), 'ff'.repeat(32));
+        assert(!indexes(d, 'friends').includes('idx_friends_friend_pubkey'), 'the fixture genuinely lacks the index');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before the index boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(indexes(after, 'friends')) === JSON.stringify(freshFriendIndexes),
+            `ending up with exactly the friends indexes a fresh install has (${indexes(after, 'friends').join(', ')})`);
+        const plan = (sql: string, ...params: string[]): string[] =>
+            (after.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as any[]).map(r => String(r.detail));
+        const viewer = 'ff'.repeat(32);
+        const friendsPlan = plan(OWNERS_WHO_ADDED_AS_FRIEND_SQL, viewer);
+        assert(friendsPlan.some(p => /\bUSING (COVERING )?INDEX idx_friends_friend_pubkey\b/.test(p)) && !friendsPlan.some(p => /^SCAN friends\b/.test(p)),
+            `"who has added me" searches idx_friends_friend_pubkey (plan: ${friendsPlan.join(' | ')})`);
+        const tradePlan = plan(TRADE_PARTNERS_SQL, viewer, viewer);
+        assert(tradePlan.some(p => /\bUSING (COVERING )?INDEX idx_marketplace_transactions_buyer_/.test(p))
+            && tradePlan.some(p => /\bUSING (COVERING )?INDEX idx_marketplace_transactions_seller_/.test(p))
+            && !tradePlan.some(p => /^SCAN marketplace_transactions\b/.test(p)),
+            `"who have I traded with" searches the buyer and seller indexes (plan: ${tradePlan.join(' | ')})`);
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
         fs.rmSync(dir, { recursive: true, force: true });
     }
 

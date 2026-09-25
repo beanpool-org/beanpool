@@ -15,7 +15,7 @@ import {
     canOperateTreasury,
     closePoll, votePoll, rsvpEvent,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
-    nodeRoleOf,
+    nodeRoleOf, isNodeMember,
 } from '../state-engine.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -31,6 +31,8 @@ import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody } from './event-post.js';
 import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
+import { parseDistanceQuery } from './distance-query.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -189,6 +191,19 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
 const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;
 
 router.get('/api/marketplace/posts', async (ctx) => {
+    // Distance search (G4, design §3.2), on every profile: `lat`, `lng`, `radiusKm`, `sort=distance|recent`. Checked
+    // first, so garbage is a 400 and never a 304. Without these parameters nothing below changes.
+    const distance = parseDistanceQuery(ctx.query);
+    if (!distance.ok) {
+        ctx.status = 400;
+        ctx.body = { error: distance.error };
+        return;
+    }
+    const { point, radiusKm, sort } = distance.value;
+    // Nearest first when asked, or when a caller gives a point and no sort on a node whose `distanceSortDefault` is on
+    // (the global profile). Without a point, every profile keeps today's order.
+    const byDistance = !!point && (sort === 'distance' || (sort === undefined && getProfileSwitches().distanceSortDefault));
+
     const id = ctx.query.id as string | undefined;
     const type = ctx.query.type as string | undefined;
     const category = ctx.query.category as string | undefined;
@@ -217,8 +232,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
     const viewerPubkey = ctx.state.actor as string | undefined;
+    // Who voted for what in a poll goes to a member of this node only; everyone else gets the counts. This route is a
+    // public read, so an unsigned reader, a signed non-member and a pruned account all reach it. Membership is in the
+    // ETag: joining changes what the board holds without changing any post, so a copy fetched before must not be
+    // confirmed with a 304.
+    const includeVoters = isNodeMember(viewerPubkey);
 
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}`;
+    // With a point, the order is folded in too: it can change with the operator's switch while the URL and the posts
+    // stay the same, and a 304 then would pin the old order. Without one the ETag is what it always was.
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -261,7 +283,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
     // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else.
     const includeHidden = !!viewerPubkey && !!nodeRoleOf(viewerPubkey);
-    const posts = getPosts({ id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden });
+    const posts = getPosts({
+        id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
+        includeVoters, near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
+    });
     const bodyStr = JSON.stringify(posts);
 
     ctx.status = 200;

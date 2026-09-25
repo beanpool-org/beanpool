@@ -203,7 +203,8 @@ member's copy with one scrypt:
 
 - **GitHub:** the node's `sub` is the numeric user id (`readGithubUser` in
   `apps/server/src/engine/github-device.ts`), which is public at `api.github.com/users/<login>`.
-  A GitHub-sealed copy is open to anyone with the database, one scrypt per copy.
+  So a GitHub-sealed copy is open to anyone with the database: the id is one public lookup from
+  the member's GitHub name, and opening the copy with it is one scrypt.
 - **Google:** the same `sub` goes to every OAuth client the person has signed into (§1 above), so
   anyone holding it from another service can open the copy.
 - **Apple:** scoped to BeanPool's developer team, so out of reach of anyone who never sees the
@@ -212,9 +213,9 @@ member's copy with one scrypt:
 "The database" is more than the node's disk: its snapshots, a standby's replica, and backup files.
 A backup file is locked only when the node has a recovery code (`backupLockState` in
 `apps/server/src/services/sealed-backup.ts`, `sendBackup` in `apps/server/src/routes/backup.ts`);
-without one the backup is the readable `state.db`, and a stolen
-backup reaches what the database does. Sealed backups need their recovery code. A secret the
-database does not hold, for the phone and the browser alike, is a separate design pass.
+without one the backup is the readable `state.db`, and a stolen backup reaches what the database
+does. Sealed backups need their recovery code. A secret the database does not hold, for the phone
+and the browser alike, is a separate design pass.
 
 ---
 

@@ -1882,6 +1882,69 @@ test('race: the sweep repairing a direct name between its owner\'s heal to a new
     } finally { w.restore(); }
 });
 
+// A request whose write missed writes nothing when it undoes: it points the record back at the row as it now is. Held
+// between another heal's PATCH to a new address and that heal's row write, it undoes that PATCH unseen — so a heal that
+// moved a live name checks, once its row is written, that Cloudflare routes it, and repairs it if not; a repair
+// Cloudflare refuses leaves the record owed, and the sweep repairs it even once something answers at the old address.
+// Three heals from one key, interleaved as concurrent requests can be (a hook holds one at its row write while the
+// others run):
+//   1. a heal to MOVED_IP PATCHes the record; just before it writes its row,
+//   2. a bare heal reads the row (OLD_IP), finds the record at MOVED_IP and PATCHes it back; it is held at its write;
+//   3. the first heal writes MOVED_IP. A heal to NEW_IP reads that row and PATCHes the record; just before it writes,
+//   4. the bare heal's write misses (the row moved): its undo points the record at the row as it now is (MOVED_IP), and
+//      writes nothing; then `meanwhile` runs;
+//   5. the heal to NEW_IP writes its row.
+// Returns the last heal's answer.
+async function undoInHealWindow(w, owner, name, meanwhile = () => {}) {
+    assert.equal((await w.claim(owner, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+    const gate = () => { let open; const p = new Promise((r) => { open = r; }); return { p, open }; };
+    const bareAtWrite = gate();
+    const bareGoes = gate();
+    let bare;
+    w.beforeRun(/SET mode=\?, public_ip=\?, tunnel_id=\?/, async () => {
+        bare = w.heal(owner, { name });
+        await Promise.race([bareAtWrite.p, bare]);
+    });
+    w.beforeRun(/SET tunnel_id=\?, dns_record_id=\?/, async () => { bareAtWrite.open(); await bareGoes.p; });
+    assert.equal((await w.heal(owner, { name, ...modeBody('direct', MOVED_IP) })).body.status, 'live');
+    w.beforeRun(/SET mode=\?, public_ip=\?, tunnel_id=\?/, async () => { bareGoes.open(); await bare; await meanwhile(); });
+    const last = await w.heal(owner, { name, ...modeBody('direct', NEW_IP) });
+    const b = await bare;
+    assert.equal(b.status, 200, JSON.stringify(b.body));
+    assert.equal(last.body.status, 'live', JSON.stringify(last.body));
+    return last;
+}
+
+test('race: an undo re-pointing the record between a heal\'s PATCH to a new address and that heal\'s row write: Cloudflare routes the address the row records', async () => {
+    const w = await world();
+    try {
+        const name = 'movedtwice';
+        await undoInHealWindow(w, await makeKey(), name);
+        assert.deepEqual([routing(w, name).dns, (await w.row(name)).public_ip], [NEW_IP, NEW_IP]);
+        await routedAsRow(w, name, 'after the three heals');
+        assert.deepEqual(w.sqlite.prepare('SELECT kind FROM teardown').all(), [], 'nothing owed');
+    } finally { w.restore(); }
+});
+
+test('race: the same, with Cloudflare refusing the heal\'s repair: the record is owed, and the sweep repairs it though a stranger answers at the old address', async () => {
+    const w = await world();
+    try {
+        const name = 'movedrefused';
+        await undoInHealWindow(w, await makeKey(), name, () => { w.cf.fail.patchDns = true; });
+        const row = await w.row(name);
+        assert.deepEqual([routing(w, name).dns, row.public_ip], [MOVED_IP, NEW_IP], 'the repair was refused');
+        assert.deepEqual(w.sqlite.prepare('SELECT kind, cf_id FROM teardown').all().map((t) => ({ ...t })), [{ kind: 'dns', cf_id: row.dns_record_id }]);
+        // Cloudflare recovers. A web page that isn't a BeanPool node answers at MOVED_IP (a recycled address): not dark,
+        // so upkeep doesn't look — the owed record is what brings the sweep back to it.
+        w.cf.fail.patchDns = false;
+        w.nodes[`${name}.beanpool.org`] = async () => new Response('<html>router login</html>', { status: 200 });
+        await attestSweep(w.env);
+        await routedAsRow(w, name, 'after the sweep');
+        assert.equal(routing(w, name).dns, NEW_IP);
+        assert.deepEqual(w.sqlite.prepare('SELECT kind FROM teardown').all(), [], 'owed no more');
+    } finally { w.restore(); }
+});
+
 // The admin's pause is the admin's to lift, but the owner's heal still records where its node now is (heal's
 // admin-pause branch). That write, too, holds only while the row is as the heal read it.
 for (const [was, next] of [['tunnel', 'direct'], ['direct', 'tunnel']]) {

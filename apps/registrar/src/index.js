@@ -486,6 +486,10 @@ async function heal(env, cur, b, now) {
 
     if (cur.status === 'live') {
         if (ids.changed.length) await logEvent(env, cur.name, 'healed', `repaired by its owner: ${ids.changed.join(', ')} re-made`);
+        // A request whose write missed undoes by pointing the record at the row as it then is, and writes nothing: one
+        // landing between this heal's last Cloudflare call and its write pointed the record back at the target this
+        // heal moved the name off, unseen. So a heal that changed what a live name routes to checks Cloudflare after.
+        if (routeOf(cur) !== routeOf(res)) await routedOrRepaired(env, cur.name);
         return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id });
     }
 
@@ -1065,21 +1069,16 @@ export async function attestSweep(env) {
 //     no connector, or its 52x for a proxied address it got no answer from (a direct node down, or a record pointing
 //     where no node is; a tunnel name never sees one while it goes through its tunnel) — is looked at: if Cloudflare no
 //     longer routes it as its row says (its record gone or pointing elsewhere, its tunnel gone), it is repaired
-//     (repairLive). Nodes never heal a name /status calls live, so a live name left dark by any ordering of requests
-//     would otherwise stay dark. A node merely asleep costs a read or two; one that answered anything (even a reply
-//     this verifier can't check) costs nothing.
+//     (routedOrRepaired), and its record owed if the repair doesn't take. Nodes never heal a name /status calls live,
+//     so a live name left dark by any ordering of requests would otherwise stay dark. A node merely asleep costs a
+//     read or two; one that answered anything (even a reply this verifier can't check) costs nothing.
 //   - Owed deletions (teardown) are retried.
 const dark = (r) => r.verdict === 'unverifiable' && (r.why === 'unreachable' || /^http 5(2\d|30)$/.test(r.why));
 
 async function upkeep(env, results, batch) {
     const look = results.filter(dark);
     for (let i = 0; i < look.length; i += batch) {
-        await Promise.all(look.slice(i, i + batch).map(async (r) => {
-            try {
-                const row = await db.getAllocation(env, r.a.name);
-                if (row?.status === 'live' && !(await routesAsRow(env, row))) await repairLive(env, row.name);
-            } catch (e) { console.error('[REPAIR_CHECK]', r.a.name, e.message || e); }
-        }));
+        await Promise.all(look.slice(i, i + batch).map((r) => routedOrRepaired(env, r.a.name)));
     }
     try {
         for (const t of await db.listTeardown(env, null)) {
@@ -1096,6 +1095,21 @@ async function routesAsRow(env, row) {
     if (!rec || rec.id !== row.dns_record_id || rec.type !== want.type || rec.content !== want.content || rec.proxied !== want.proxied)
         return false;
     return row.mode !== 'tunnel' || !!(await cf.getTunnel(env, row.tunnel_id));
+}
+
+// A live name Cloudflare doesn't route as its row says is repaired (repairLive). If it still isn't — Cloudflare refused
+// the repair, or can't say — its record is owed, so the sweep keeps at it (settleOwed repairs a live row's owed record
+// until it routes as the row says) even once something answers there: upkeep looks only at a name nothing answers at,
+// and a record left pointing at an old address a stranger now serves is not dark. Never throws.
+async function routedOrRepaired(env, name) {
+    let row;
+    try {
+        row = await db.getAllocation(env, name);
+        if (row?.status !== 'live' || await routesAsRow(env, row)) return;
+        row = await repairLive(env, name);
+        if (row?.status !== 'live' || await routesAsRow(env, row)) return;
+    } catch (e) { console.error('[REPAIR_CHECK]', name, e.message || e); }
+    if (row?.status === 'live') await owe(env, '[REPAIR_OWED]', name, 'dns', row.dns_record_id, 'Cloudflare does not route it as its row says');
 }
 
 export default {

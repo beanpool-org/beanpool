@@ -467,8 +467,7 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
         const originalGetContext = window.HTMLCanvasElement.prototype.getContext;
         const originalToDataUrl = window.HTMLCanvasElement.prototype.toDataURL;
         (window.HTMLCanvasElement.prototype as any).getContext = function (this: HTMLCanvasElement) {
-            const canvas = this;
-            return { drawImage: () => drawn.push({ width: canvas.width, height: canvas.height }) };
+            return { drawImage: () => drawn.push({ width: this.width, height: this.height }) };
         };
         const toDataURL = vi.fn(() => 'data:image/jpeg;base64,UkVTSVpFRA==');
         (window.HTMLCanvasElement.prototype as any).toDataURL = toDataURL;

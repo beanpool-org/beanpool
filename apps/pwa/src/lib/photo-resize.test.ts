@@ -32,8 +32,8 @@ function stubPipeline(natural: { width: number; height: number }, opts: { decode
     const originalGetContext = window.HTMLCanvasElement.prototype.getContext;
     const originalToDataUrl = window.HTMLCanvasElement.prototype.toDataURL;
     (window.HTMLCanvasElement.prototype as any).getContext = function (this: HTMLCanvasElement) {
-        const canvas = this;
-        return { drawImage: (...args: unknown[]) => drawn.push({ canvasWidth: canvas.width, canvasHeight: canvas.height, args }) };
+        // An arrow function keeps the canvas as `this`: the size it was drawn at, read when drawImage is called.
+        return { drawImage: (...args: unknown[]) => drawn.push({ canvasWidth: this.width, canvasHeight: this.height, args }) };
     };
     (window.HTMLCanvasElement.prototype as any).toDataURL = (type: unknown, quality: unknown) => {
         encoded.push({ type, quality });

@@ -213,6 +213,12 @@ export function assertNotMuted(pubkey: string | null | undefined, now: number = 
 }
 
 /**
+ * One author's moderator removals since a time: what auto-mute counts, on every removal. Read through the partial
+ * index idx_posts_author_removed (schema.sql), not a scan of every post; test-global-moderation checks the plan.
+ */
+export const REMOVALS_SINCE_SQL = 'SELECT COUNT(*) AS c FROM posts WHERE author_pubkey = ? AND removed_by_moderator_at > ?';
+
+/**
  * After a moderator removed one of this member's posts: mute them when it is the 3rd within 30 days (since the last
  * lift, if later). True when this call muted them. Does nothing where `autoMute` is off.
  */
@@ -223,9 +229,7 @@ export function evaluateAutoMute(cb: ModerationNoticeCallbacks, authorPubkey: st
     const current = row.moderation_muted_until ? Date.parse(row.moderation_muted_until) : NaN;
     if (Number.isFinite(current) && current > now) return false;
     const since = Math.max(now - AUTO_MUTE.windowDays * DAY_MS, Number.isFinite(current) ? current : -Infinity);
-    const removals = (db.prepare(
-        'SELECT COUNT(*) AS c FROM posts WHERE author_pubkey = ? AND removed_by_moderator_at > ?'
-    ).get(authorPubkey, iso(since)) as { c: number }).c;
+    const removals = (db.prepare(REMOVALS_SINCE_SQL).get(authorPubkey, iso(since)) as { c: number }).c;
     if (removals < AUTO_MUTE.removals) return false;
     db.prepare('UPDATE members SET moderation_muted_until = ?, updated_at = ? WHERE public_key = ?')
         .run(MUTED_UNTIL_LIFTED, iso(now), authorPubkey);

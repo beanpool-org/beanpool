@@ -208,6 +208,8 @@ CREATE TABLE IF NOT EXISTS posts (
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_hidden_by_reports ON posts(hidden_by_reports_at) WHERE hidden_by_reports_at IS NOT NULL;
+-- Auto-mute's count of one author's recent moderator removals (engine/auto-moderation.ts REMOVALS_SINCE_SQL).
+CREATE INDEX IF NOT EXISTS idx_posts_author_removed ON posts(author_pubkey, removed_by_moderator_at) WHERE removed_by_moderator_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_audience_scope ON posts(audience_scope);
 CREATE INDEX IF NOT EXISTS idx_posts_target_group ON posts(target_group_id) WHERE target_group_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_target_pubkey ON posts(target_pubkey) WHERE target_pubkey IS NOT NULL;

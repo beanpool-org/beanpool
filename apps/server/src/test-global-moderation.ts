@@ -63,6 +63,7 @@ import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } 
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { originOfCachedPost } from './federation-commission.js';
+import { REMOVALS_SINCE_SQL } from './engine/auto-moderation.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -579,6 +580,9 @@ async function main(): Promise<void> {
     attempt(() => db.prepare('UPDATE posts SET removed_by_moderator_at = ? WHERE author_pubkey = ? AND removed_by_moderator_at IS NOT NULL').run(ago(31 * DAY), ray.pk));
     await removeByModerator(ray, oldPost(ray, 'Ray new'));
     assert(mutedUntil(ray) === null && (await post(ray)).status === 200, 'removals 31+ days apart never mute');
+    // The count runs on every removal: through the partial index on (author, removal time), not a scan of every post.
+    const plan = (db.prepare(`EXPLAIN QUERY PLAN ${REMOVALS_SINCE_SQL}`).all(ray.pk, ago(30 * DAY)) as { detail: string }[]).map(r => r.detail).join('; ');
+    assert(/idx_posts_author_removed/.test(plan) && !/SCAN posts\b/.test(plan), `auto-mute's count reads idx_posts_author_removed (${plan})`);
 
     // A muted enterprise: its keeper can't edit its posts through the marketplace route either. For an offer the
     // signature check refuses it before the route runs (a body authorPublicKey must be the signer; keepers act for an

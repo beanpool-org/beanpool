@@ -65,6 +65,7 @@ import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury } from './state-engine.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
+import { initDirectoryMirror } from './services/directory-mirror.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
@@ -268,6 +269,10 @@ async function main() {
 
     // Step 10: Start directory publisher (primary only — a backup replica has no
     // public listing of its own; it mirrors the primary, it isn't a joinable node).
+    // Step 10.1: The communities directory mirror (G5): hourly on a main server whose `directoryMirror` switch is on
+    // (the global profile's default), for "communities near you" and place watches. Set on every node, because each
+    // tick reads the role and the switch: a no-op elsewhere, and a standby a take-over promotes starts on its own.
+    initDirectoryMirror();
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
         // Step 10.5: Auto public-address (opt-in via PUBLIC_ADDRESS_* env). Claims <name>.beanpool.org

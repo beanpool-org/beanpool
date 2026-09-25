@@ -121,6 +121,7 @@ import { createAppleReturnRoutes } from './routes/apple-return.js';
 import { isDocumentPolicyFile, isNonCanonicalSpelling, useAppDocumentPolicy, useDocumentPolicy } from './app-document-csp.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
+import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
@@ -281,6 +282,8 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/node/info',                // federation discovery: name + counts + peer URLs, read cross-origin by peers' PWAs, which cannot sign there
     '/api/federation/links',         // link cards (energy balance per peer), public by design — see its handler in routes/community.ts
     '/api/node/identity-epoch',      // split-brain guard: the signed take-over count an old main server reads at its own address (services/identity-epoch.ts)
+    '/api/global/communities',       // global node (G5): the mirrored communities directory, for anyone deciding where to join
+    '/api/global/home',              // global node (G5): the landing card; a signed read adds the caller's own watches
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -1239,6 +1242,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
         createOpenJoinRoutes(deps),
+        createGlobalDirectoryRoutes(deps),
         createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),

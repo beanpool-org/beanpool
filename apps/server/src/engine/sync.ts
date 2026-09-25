@@ -10,6 +10,8 @@ import { getLocalConfig } from '../config/local-config.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { importedArea } from './member-area.js';
+import { mergeReplicatedWatches } from './place-watches.js';
+import { mergeReplicatedDirectory } from './directory-cache.js';
 import {
     exportSyncState as exportSyncStateEngine,
     type SyncPayload,
@@ -383,6 +385,12 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey=?`).run(rowKey);
             return r.changes > 0;
         }
+        // A place watch its member removed, or that went with them on a prune or a self-deletion (engine/place-watches.ts).
+        // Keyed by the watch's id, which is never used again, so there is no newer row to protect and no lookup below.
+        case 'place_watches': {
+            const r = db.prepare(`DELETE FROM place_watches WHERE id=?`).run(rowKey);
+            return r.changes > 0;
+        }
         default:
             console.warn(`[Sync] Ignoring tombstone for unknown table: ${tableName}`);
             return false;
@@ -567,7 +575,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -1339,6 +1347,14 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             if (remote.openJoinSalt !== undefined || remote.openJoins) {
                 writeOpenJoinRecord(remote.openJoinSalt, remote.openJoins);
             }
+
+            // The global node's place watches and its mirror of the directory (G5), so a server that takes over has every
+            // member's watch and quiet day, and knows which communities the old one had already told them about
+            // (engine/place-watches.ts). After the members, because a watch is kept only for a member this database has;
+            // before the tombstones, which remove a watch whatever this copy says of it. A bad row is left out, never the
+            // copy. A main server older than this sends neither and changes nothing here.
+            if (remote.placeWatches) mergeReplicatedWatches(remote.placeWatches);
+            if (remote.directoryCache) mergeReplicatedDirectory(remote.directoryCache);
 
             if (remote.tombstones) {
                 for (const ts of remote.tombstones) {

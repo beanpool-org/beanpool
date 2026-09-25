@@ -30,6 +30,8 @@ import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
+import { dropPlaceWatches } from './engine/place-watches.js';
+import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
@@ -6375,6 +6377,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
         db.prepare("DELETE FROM suspended_node_roles WHERE member_pubkey = ?").run(publicKey);
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
+        // A pruned account can't sign the request that removes a place watch (G5), and must hear nothing from one.
+        dropPlaceWatches(publicKey);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -6494,6 +6498,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
 
         // 6. Purge private device tokens, communication links, and recovery metadata
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
+        dropPlaceWatches(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM chat_mutes WHERE member_pubkey = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM thread_read_cursors WHERE member_pubkey = ?").run(publicKey); } catch { }
@@ -7105,7 +7110,7 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
         'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'open_joins', 'tombstones',
+        'open_joins', 'place_watches', 'directory_cache', 'tombstones',
     ];
     // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
     // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.
@@ -7148,6 +7153,8 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
             `DELETE FROM post_photos WHERE (post_id || '|' || order_num) NOT IN (SELECT value FROM json_each(?))`,
         ).run(keepJson);
     })();
+    // The directory's listed communities are kept in memory for the reads; the table is empty now.
+    forgetListedCommunities();
     if (keep.length > 0) {
         console.log(
             `🧹 [Resync] Cleared replicated tables, KEEPING ${kept} of the ${keep.length} photo row(s) the primary `

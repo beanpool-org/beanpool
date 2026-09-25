@@ -322,6 +322,7 @@ run_federation_suites() {
       test-settlement-orchestration
       test-federation-purchase-route
       test-federation-commission
+      test-p2p-announce
       test-federation-settlement
       test-admin-actor-name
       test-admin-queue

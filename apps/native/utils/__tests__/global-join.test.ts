@@ -83,7 +83,6 @@ import {
     joinKeyForThisPhone,
     commitJoinKey,
     releaseJoinKey,
-    recordBeforeTheDoor,
     type DoorAnswer,
 } from '../global-join';
 
@@ -371,34 +370,62 @@ describe('one identity per device', () => {
     it('refused for good: a key this join made comes off the phone again, with its record', async () => {
         const key = await joinKeyForThisPhone();
         await commitJoinKey(key, 'Sam');
-        expect(await releaseJoinKey(key, null)).toBe(true);
+        expect(await releaseJoinKey(key)).toBe(true);
         expect(await loadIdentity()).toBeNull();
         expect(await getPendingOnboarding()).toBeNull();
     });
 
+    const inviteWizard = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: 'https://test.beanpool.org', callsign: 'Kim', redeemed: true };
+
     it('refused for good: a key the phone already had stays, and gets back the wizard it was in', async () => {
         const phoneKey = await draftIdentity('Kim');
         await importIdentity(phoneKey);
-        const inviteWizard = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: 'https://test.beanpool.org', callsign: 'Kim', redeemed: true };
         await setPendingOnboarding(inviteWizard);
-        const before = await recordBeforeTheDoor();
         const key = await joinKeyForThisPhone();
         await commitJoinKey(key, 'Kim');
+        // Kept inside the door's record, so it survives the app being killed before the door answers.
+        expect(await getPendingOnboarding()).toMatchObject({ step: 'globalJoin', flow: 'global', before: inviteWizard });
 
-        expect(await releaseJoinKey(key, before)).toBe(false);
+        expect(await releaseJoinKey(key)).toBe(false);
         expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
         expect((await loadIdentity())?.publicKey).toBe(phoneKey.publicKey);
         expect(await getPendingOnboarding()).toEqual(inviteWizard);
     });
 
-    it('refused for good with a key the phone had and no wizard known: an invite join to finish, never a stranded key', async () => {
+    it('a second try at the door keeps the wizard from before the first, never the door\'s own record', async () => {
+        const phoneKey = await draftIdentity('Kim');
+        await importIdentity(phoneKey);
+        await setPendingOnboarding(inviteWizard);
+        const key = await joinKeyForThisPhone();
+        await commitJoinKey(key, 'Kim');
+        await commitJoinKey(key, 'Kimberley');
+        expect(await getPendingOnboarding()).toMatchObject({ callsign: 'Kimberley', before: inviteWizard });
+        await releaseJoinKey(key);
+        expect(await getPendingOnboarding()).toEqual(inviteWizard);
+    });
+
+    it('refused for good with a key the phone had and no wizard: the door\'s record goes, the key stays', async () => {
         const phoneKey = await draftIdentity('Kim');
         await importIdentity(phoneKey);
         const key = await joinKeyForThisPhone();
         await commitJoinKey(key, 'Kim');
-        await releaseJoinKey(key, null);
+        await releaseJoinKey(key);
         expect((await loadIdentity())?.publicKey).toBe(phoneKey.publicKey);
-        expect(await getPendingOnboarding()).toMatchObject({ step: 'create', flow: 'invite', inviteCode: '' });
+        expect(await getPendingOnboarding()).toBeNull();
+    });
+
+    it('refused before anything was written (at the sign-in): every record and key is left alone', async () => {
+        const phoneKey = await draftIdentity('Kim');
+        await importIdentity(phoneKey);
+        await setPendingOnboarding(inviteWizard);
+        expect(await releaseJoinKey(await joinKeyForThisPhone())).toBe(false);
+        expect(await getPendingOnboarding()).toEqual(inviteWizard);
+
+        // A key made for a join that the door refused at the sign-in, never written.
+        const unwritten = { identity: await draftIdentity(), createdHere: true };
+        expect(await releaseJoinKey(unwritten)).toBe(false);
+        expect((await loadIdentity())?.publicKey).toBe(phoneKey.publicKey);
+        expect(await getPendingOnboarding()).toEqual(inviteWizard);
     });
 
     it('never takes a key other than the one this join made', async () => {
@@ -407,7 +434,7 @@ describe('one identity per device', () => {
         // Something else put another key on the phone meanwhile.
         const other = await draftIdentity('Other');
         await importIdentity(other);
-        expect(await releaseJoinKey(made, null)).toBe(false);
+        expect(await releaseJoinKey(made)).toBe(false);
         expect((await loadIdentity())?.publicKey).toBe(other.publicKey);
     });
 });

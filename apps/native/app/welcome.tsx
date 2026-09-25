@@ -8,11 +8,11 @@ import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
 import {
     getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding, resumePlan,
-    type OnboardingFlow, type PendingOnboarding,
+    type OnboardingFlow,
 } from '../utils/onboarding-state';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile } from '../utils/node-profile';
 import {
-    MAX_JOIN_NAME, commitJoinKey, doorMessage, joinKeyForThisPhone, nextStepFor, recordBeforeTheDoor, releaseJoinKey,
+    MAX_JOIN_NAME, commitJoinKey, doorMessage, joinKeyForThisPhone, nextStepFor, releaseJoinKey,
     signInAtDoor, submitJoin, type DoorAnswer, type DoorSignIn, type JoinKey,
 } from '../utils/global-join';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
@@ -202,8 +202,6 @@ export default function WelcomeScreen() {
     const [globalKey, setGlobalKey] = useState<JoinKey | null>(null);
     /** The sign-in the join will spend. Dropped once sent: a nonce is spent once. */
     const [doorSignIn, setDoorSignIn] = useState<DoorSignIn | null>(null);
-    /** The record the phone had before the door, given back if the door refuses for good. */
-    const beforeDoorRef = useRef<PendingOnboarding | null | undefined>(undefined);
     /** Whether the community being joined trades in Beans: the How it Works step leaves them out if not. */
     const [joinBeansOn, setJoinBeansOn] = useState(true);
     const [globalCode, setGlobalCode] = useState<GithubDevicePrompt | null>(null);
@@ -959,7 +957,6 @@ export default function WelcomeScreen() {
         try {
             const key = globalKey ?? await joinKeyForThisPhone();
             setGlobalKey(key);
-            if (beforeDoorRef.current === undefined) beforeDoorRef.current = await recordBeforeTheDoor();
             const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity, {
                 // As GitHub recovery does: Android opens GitHub from the button; iOS at once.
                 onGithubPrompt: (prompt) => {
@@ -977,9 +974,10 @@ export default function WelcomeScreen() {
             setDoorSignIn(result.signin);
             if (!callsign.trim() && key.identity.callsign) setCallsign(key.identity.callsign);
             setGlobalPhase('name');
-        } catch (e: any) {
+        } catch (e) {
             // A cancel is not an error: the member thought better of it.
-            setError(e?.reason === 'cancelled' ? null : (e?.message || 'Sign-in failed. Try again.'));
+            const failure = e as { reason?: string; message?: string } | null;
+            setError(failure?.reason === 'cancelled' ? null : (failure?.message || 'Sign-in failed. Try again.'));
         } finally {
             if (globalAbortRef.current === abort) globalAbortRef.current = null;
             setLoading(false);
@@ -1017,9 +1015,9 @@ export default function WelcomeScreen() {
             const answer = await submitJoin(GLOBAL_NODE_URL, identity, name, signin);
             setDoorSignIn(null);
             await afterDoorAnswer(answer, key, identity);
-        } catch (err: any) {
+        } catch (err) {
             setDoorSignIn(null);
-            setError(err?.message || 'Your join could not be completed. Please sign in and try again.');
+            setError((err as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
             setGlobalPhase('signIn');
         } finally {
             setLoading(false);
@@ -1039,12 +1037,11 @@ export default function WelcomeScreen() {
             setGlobalPhase('signIn');
             return;
         }
-        // Refused for good. A key this join made comes off the phone again; one the phone had stays.
-        const removed = await releaseJoinKey(key, beforeDoorRef.current ?? null);
+        // Refused for good: the phone goes back as it was. A key this join made comes off it; one it had stays.
+        const removed = await releaseJoinKey(key);
         if (removed) setIdentity(null);
         setGlobalKey(null);
         setDoorSignIn(null);
-        beforeDoorRef.current = undefined;
         setGlobalMessage(doorMessage(answer));
         setGlobalPhase(next === 'restore' ? 'restore' : 'closed');
     }
@@ -1074,7 +1071,6 @@ export default function WelcomeScreen() {
         setPendingIdentity(identity);
         setGlobalKey(null);
         setDoorSignIn(null);
-        beforeDoorRef.current = undefined;
         setMode('profileSetup');
     }
 

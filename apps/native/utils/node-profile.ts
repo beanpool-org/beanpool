@@ -152,7 +152,7 @@ export async function checkGlobalDoor(
 /** What the member reads for each refusal. Never a hard gate: invites always still work. */
 export const GLOBAL_DOOR_MESSAGES: Record<GlobalDoorRefusal, string> = {
     unreachable: "Can't reach the global community right now. Try again, or join with an invite.",
-    not_global: "This version of BeanPool can't join the global community. Join with an invite, or update BeanPool and try again.",
+    not_global: "The global community isn't available right now. You can still join a community with an invite.",
     door_closed: "The global community isn't taking new members right now. You can still join a community with an invite.",
 };
 

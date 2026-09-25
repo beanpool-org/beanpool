@@ -49,6 +49,12 @@ export interface PendingOnboarding {
      */
     joinEnrolment?: KeeperEnrolmentResult | null;
     /**
+     * Global flow only, at the door: the record this phone had before it (an invite join part-way through,
+     * with the key the global join now uses), given back if the door refuses for good (global-join.ts
+     * `releaseJoinKey`).
+     */
+    before?: PendingOnboarding | null;
+    /**
      * Whether the invite has been redeemed on the node for this identity.
      *
      * Persisted rather than kept in memory because it has to survive the app being killed

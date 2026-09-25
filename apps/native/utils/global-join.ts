@@ -27,8 +27,8 @@
  *
  * ## Never a hard gate
  *
- * Every refusal leaves invites working. A key this join made that the door then refuses for good is
- * taken off the phone again (`releaseJoinKey`), so the phone is as it was before the member tapped.
+ * Every refusal leaves invites working. A door that refuses for good puts the phone back as it was
+ * (`releaseJoinKey`): a key this join made comes off it again, and a wizard it was in comes back.
  */
 
 import { importIdentity, loadIdentity, draftIdentity, discardUnjoinedIdentity, type BeanPoolIdentity } from './identity';
@@ -46,12 +46,7 @@ import {
 } from './sso-signin';
 import { extractSub } from './sso-sheet-connect';
 import { sealSsoShares, enrolmentFromJoin, type KeeperEnrolmentResult } from './keeper-enrolment';
-import {
-    getPendingOnboarding,
-    setPendingOnboarding,
-    clearPendingOnboarding,
-    type PendingOnboarding,
-} from './onboarding-state';
+import { getPendingOnboarding, setPendingOnboarding, clearPendingOnboarding } from './onboarding-state';
 import { GLOBAL_DOOR_MESSAGES, GLOBAL_NODE_URL } from './node-profile';
 
 export const JOIN_NONCE_PATH = '/api/join/sso-nonce';
@@ -310,9 +305,15 @@ export async function submitJoin(
  * Write the join's key to the phone (when this join made it) and the wizard's record, just before the
  * join is sent: an app killed while the join is in flight comes back to the door with the same key, and
  * the node then says whether it landed (`already_member` reads as joined).
+ *
+ * A phone that already had a key may be part-way through an invite join. That record is kept inside this
+ * one (`before`), so a door that then refuses can give it back, even after a restart.
  */
 export async function commitJoinKey(key: JoinKey, callsign: string): Promise<BeanPoolIdentity> {
     const identity = { ...key.identity, callsign };
+    const current = await getPendingOnboarding();
+    // A record with no key behind it describes nothing; only a key the phone already had has a wizard to keep.
+    const before = key.createdHere ? null : current?.flow === 'global' ? current.before ?? null : current;
     if (key.createdHere) await importIdentity(identity);
     await setPendingOnboarding({
         step: 'globalJoin',
@@ -322,38 +323,29 @@ export async function commitJoinKey(key: JoinKey, callsign: string): Promise<Bea
         callsign,
         redeemed: false,
         ...(key.createdHere ? { freshKey: identity.publicKey } : {}),
+        ...(before ? { before } : {}),
     });
     return identity;
 }
 
 /**
- * After a refusal for good (restore, or the door shut): a key this join made is taken off the phone and
- * the record with it, so the phone is as it was before. Returns whether the key went.
+ * After a refusal for good (restore, or the door shut), put the phone back as it was before the door.
+ * Returns whether a key came off it.
  *
- * A key the phone already had stays, with the record it had before the member came to the door
- * (`previous`), or, when that is not known (the app restarted since), an invite join at its first step:
- * the phone keeps a wizard to finish, never a key with nowhere to go, and joining with an invite then
- * uses this same key.
+ * - A key this join made comes off the phone, and the join's record with it.
+ * - A key the phone already had stays. The record the join wrote gives way to the one the phone had before
+ *   (`before`), or to none if it had none.
+ * - A door that refused before anything was written (at the sign-in) leaves every record alone.
  */
-export async function releaseJoinKey(key: JoinKey, previous: PendingOnboarding | null): Promise<boolean> {
-    if (key.createdHere) {
-        const removed = await discardUnjoinedIdentity(key.identity.publicKey);
-        await clearPendingOnboarding();
-        return removed;
-    }
-    await setPendingOnboarding(previous && previous.flow !== 'global' ? previous : {
-        step: 'create',
-        flow: 'invite',
-        inviteCode: '',
-        anchorUrl: '',
-        callsign: key.identity.callsign,
-        redeemed: false,
-    });
-    return false;
-}
-
-/** The record the phone had before the door, to give back if the door refuses (see `releaseJoinKey`). */
-export async function recordBeforeTheDoor(): Promise<PendingOnboarding | null> {
+export async function releaseJoinKey(key: JoinKey): Promise<boolean> {
     const current = await getPendingOnboarding();
-    return current && current.flow !== 'global' ? current : null;
+    const removed = key.createdHere ? await discardUnjoinedIdentity(key.identity.publicKey) : false;
+    if (current?.flow !== 'global') return removed;
+    const before = key.createdHere ? null : current.before ?? null;
+    if (before) {
+        await setPendingOnboarding(before);
+    } else {
+        await clearPendingOnboarding();
+    }
+    return removed;
 }

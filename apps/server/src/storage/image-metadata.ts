@@ -21,7 +21,7 @@
  * Throw, grow the bytes, or lose the picture. A file whose structure does not parse from its first byte to its
  * end marker — truncated, corrupt, a format this does not know — is returned exactly as given, which is how the
  * node stored every image before this existed. It is only ever stripping a file it has walked completely and found
- * a picture in (a JPEG scan, a PNG's critical chunks, a WebP image chunk inside the RIFF, a GIF image block).
+ * a picture in (a JPEG scan, a PNG IDAT chunk before IEND, a WebP image chunk inside the RIFF, a GIF image block).
  *
  * ## Formats
  *
@@ -261,6 +261,7 @@ const PNG_DRAWING_CHUNKS = new Set([
 function stripPng(buf: Buffer): Buffer | null {
     const parts: Buffer[] = [buf.subarray(0, 8)];
     let changed = false;
+    let hasPicture = false;
     let pos = 8;
     for (;;) {
         if (pos + 12 > buf.length) return null; // no IEND before the end: truncated
@@ -269,6 +270,7 @@ function stripPng(buf: Buffer): Buffer | null {
         if (!/^[A-Za-z]{4}$/.test(type) || length > 0x7fffffff) return null;
         const end = pos + 12 + length;
         if (end > buf.length) return null;
+        if (type === 'IDAT') hasPicture = true;
         const critical = type.charCodeAt(0) < 0x61;
         if (critical || PNG_DRAWING_CHUNKS.has(type)) parts.push(buf.subarray(pos, end));
         else changed = true;
@@ -276,7 +278,7 @@ function stripPng(buf: Buffer): Buffer | null {
         if (type === 'IEND') break;
     }
     if (pos < buf.length) changed = true;
-    return changed ? Buffer.concat(parts) : null;
+    return changed && hasPicture ? Buffer.concat(parts) : null;
 }
 
 // ── WebP ───────────────────────────────────────────────────────────────────────────────────────

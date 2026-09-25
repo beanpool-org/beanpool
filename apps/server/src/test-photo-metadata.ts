@@ -438,6 +438,8 @@ async function partOne(m: StripModule): Promise<void> {
         Buffer.concat([riff([vp8x(0x08), riffChunk('EXIF', cameraTiff(true, 1))]), VP8L_CHUNK]));
     exact('JPEG: no scan at all, nothing but metadata', Buffer.concat([SOI, exifApp1(true, 6), COMMENT, EOI]));
     exact('GIF: no image block, nothing but a comment', Buffer.concat([CLEAN_GIF.subarray(0, GIF_HEAD), GIF_COMMENT, Buffer.from([0x3b])]));
+    exact('PNG: no IDAT before IEND, nothing but metadata', Buffer.concat([PNG_SIGNATURE, IHDR, chunk('tEXt', Buffer.from(`Comment\0${CANARY}-TEXT`, 'latin1')), IEND]));
+    exact('PNG: the only IDAT comes after IEND', Buffer.concat([PNG_SIGNATURE, IHDR, chunk('tEXt', Buffer.from(`Comment\0${CANARY}-TEXT`, 'latin1')), IEND, IDAT]));
 
     console.log('\n── 1f. The orientation reader ──');
     assert(readTiffOrientation(cameraTiff(true, 8)) === 8 && readTiffOrientation(cameraTiff(false, 3)) === 3, 'reads both byte orders');

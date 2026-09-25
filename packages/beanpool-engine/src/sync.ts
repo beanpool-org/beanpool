@@ -450,10 +450,12 @@ export function exportSyncState(
             ? db.prepare(`SELECT * FROM ${table} WHERE ${watermark} >= ?`).all(since) as any[]
             : db.prepare(`SELECT * FROM ${table}`).all() as any[];
 
+    // The mute travels with the member (G3), so a promoted standby keeps it; rowToMember leaves it out because the
+    // member directory is built from it too.
     const members = (delta
         ? db.prepare("SELECT * FROM members WHERE updated_at >= ?").all(since) as any[]
         : db.prepare("SELECT * FROM members").all() as any[]
-    ).map(rowToMember);
+    ).map((row): Member => ({ ...rowToMember(row), moderationMutedUntil: row.moderation_muted_until ?? null }));
 
     const postRows = sel('posts', 'updated_at');
     const posts: MarketplacePost[] = postRows.map(row => ({
@@ -500,6 +502,9 @@ export function exportSyncState(
             eventPrivateNote: row.event_private_note || undefined,
             eventState: row.event_state || undefined,
         } : {}),
+        // Moderation (G3): a hidden post stays hidden, and a takedown still counts, on a standby and after a take-over.
+        hiddenByReportsAt: row.hidden_by_reports_at ?? null,
+        removedByModeratorAt: row.removed_by_moderator_at ?? null,
     }));
 
     const photos = sel('post_photos', 'updated_at') as PostPhoto[];

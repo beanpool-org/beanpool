@@ -462,6 +462,24 @@ function postScope(rp: any): [string, string | null, string | null, string | nul
     return [scope, rp.targetGroupId ?? null, rp.targetPubkey ?? null, rp.assignedTo ?? null, reach, peers];
 }
 
+/**
+ * hidden_by_reports_at, removed_by_moderator_at (G3, engine/auto-moderation.ts), in that order. Plain assignment on
+ * update: a restore clears the hide on the replica too. A main server from before G3 sends neither, and never set
+ * either, so null is what it holds.
+ */
+function postModeration(rp: any): [string | null, string | null] {
+    return [instantOrNull(rp.hiddenByReportsAt), instantOrNull(rp.removedByModeratorAt)];
+}
+
+/** members.moderation_muted_until (G3): plain assignment, so a lift on the main server lifts it here too. */
+function mutedUntil(rm: any): string | null {
+    return instantOrNull(rm.moderationMutedUntil);
+}
+
+function instantOrNull(v: unknown): string | null {
+    return typeof v === 'string' && v ? v : null;
+}
+
 const ENFORCE_LEDGER_AUTH = process.env.ENFORCE_LEDGER_AUTH === 'true';
 const LEDGER_CONSERVATION_TOLERANCE = 0.5;
 
@@ -579,8 +597,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             for (const rm of remote.members ?? []) {
                 const existing = db.prepare("SELECT updated_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null } | undefined;
                 if (!existing) {
-                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
@@ -595,7 +613,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.lastActiveAt || null,
                         rm.elderVouchedBy || null,
                         rm.archetype || null,
-                        rm.updatedAt || rm.joinedAt
+                        rm.updatedAt || rm.joinedAt,
+                        mutedUntil(rm)
                     );
                     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(rm.publicKey);
                     newMembers++;
@@ -614,6 +633,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         last_active_at = ?,
                         elder_vouched_by = COALESCE(elder_vouched_by, ?),
                         archetype = ?,
+                        moderation_muted_until = ?,
                         updated_at = ?
                         WHERE public_key = ?`).run(
                         rm.callsign,
@@ -625,6 +645,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.lastActiveAt || null,
                         rm.elderVouchedBy || null,
                         rm.archetype || null,
+                        mutedUntil(rm),
                         rm.updatedAt || existing.updated_at || new Date().toISOString(),
                         rm.publicKey
                     );
@@ -641,8 +662,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 if (!existing) {
                     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, created_by,
                                 event_start_at, event_end_at, event_place_name, event_private_note, event_state,
-                                audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
+                                hidden_by_reports_at, removed_by_moderator_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -671,7 +693,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.eventPlaceName ?? null,
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
-                        ...postScope(rp)
+                        ...postScope(rp),
+                        ...postModeration(rp)
                     );
                     newPosts++;
                 } else {
@@ -707,6 +730,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         assigned_to = ?,
                         reach = ?,
                         reach_peers = ?,
+                        hidden_by_reports_at = ?,
+                        removed_by_moderator_at = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.title,
@@ -733,6 +758,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
                         ...postScope(rp),
+                        ...postModeration(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );

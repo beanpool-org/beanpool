@@ -39,4 +39,14 @@ If one of your own posts is removed by the moderators, you get an alert saying s
 
 Now and then the admins clear out old listings to keep the Market tidy. If some of yours are cleared, you get one alert saying how many. That is routine tidying, not a report.
 
+## On global.beanpool.org
+
+The global community at global.beanpool.org is open to anyone who signs in, so it looks after itself a little more:
+
+- **A post reported by three members** who have been there at least a week is hidden at once, until a moderator looks at it. Its author can still see it, and gets an alert that it is hidden, not removed. If the moderators keep it, everyone can see it again.
+- **New accounts have daily limits** for their first 3 days, and until 3 of their posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. Replying to someone who wrote to you first is never limited. If you reach a limit, the app says which one and when it lets up.
+- **If the moderators remove three of your posts within 30 days,** you can't post or send messages there until a moderator lifts it. You can still read, edit your profile and leave.
+
+None of this happens in your own local community: there, every report waits for the moderators.
+
 If someone is in danger, contact your local emergency services first.

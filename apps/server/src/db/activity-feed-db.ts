@@ -81,6 +81,12 @@ export function getActivityFeed(limit: number = 50, offset: number = 0): Activit
         FROM activity_feed af
         LEFT JOIN members actor ON actor.public_key = af.actor_pubkey
         LEFT JOIN members target ON target.public_key = af.target_pubkey
+        -- A post hidden by reports (G3) is not announced here: the feed is the same for every member. Hiding and
+        -- restoring bump the activity version (engine/auto-moderation.ts).
+        WHERE NOT (af.event_type = 'post_created' AND EXISTS (
+            SELECT 1 FROM posts hp
+             WHERE hp.id = CASE WHEN json_valid(af.metadata) THEN json_extract(af.metadata, '$.postId') END
+               AND hp.hidden_by_reports_at IS NOT NULL))
         ORDER BY af.created_at DESC, af.id DESC
         LIMIT ? OFFSET ?
     `).all(safeLimit, safeOffset) as any[];

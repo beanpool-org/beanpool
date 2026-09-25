@@ -262,6 +262,10 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
  * Deliberately keyed on `posts.origin_node` rather than on anything in the request. The client may name a
  * post; which peer that charges against is ours to decide, exactly as the purchase route resolves the
  * connector itself rather than trusting the `nodeUrl` it was handed.
+ *
+ * A listing hidden here by reports (G3) is not live on this board, so it can't be commissioned until a moderator
+ * restores it: the commission would spend the Commons on a listing waiting for review. The keeper is never its
+ * author (it is a peer's member's), so there is no author exception.
  */
 export function originOfCachedPost(postId: string): { originNode: string; authorPublicKey: string; credits: number; title: string } | null {
     if (!postId) return null;
@@ -269,6 +273,7 @@ export function originOfCachedPost(postId: string): { originNode: string; author
         SELECT origin_node, author_pubkey, credits, title
         FROM posts
         WHERE id = ? AND origin_node IS NOT NULL AND active = 1 AND status = 'active'
+          AND hidden_by_reports_at IS NULL
     `).get(postId) as any;
     if (!row?.origin_node) return null;
     return {

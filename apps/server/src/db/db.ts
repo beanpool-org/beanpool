@@ -461,6 +461,13 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_private_note TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled'))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_conversation_id TEXT`).run(); } catch { }
+    // Moderation on the global profile (G3, engine/auto-moderation.ts). Before the schema.sql exec, which indexes
+    // hidden_by_reports_at and (author_pubkey, removed_by_moderator_at), and whose members_touch_updated_at (dropped
+    // below, so the exec recreates it) lists moderation_muted_until. NULL on every existing row: nothing hidden,
+    // nothing removed by a moderator, nobody muted.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN hidden_by_reports_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN removed_by_moderator_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
     // Per-person reminders for one event (docs/events-on-the-map.md §2.1). Here with the other event
     // columns and BEFORE the schema.sql exec, for the same reason they are: schema.sql indexes
     // event_rsvps, and a CREATE INDEX that runs against a table the exec has already refused to re-shape

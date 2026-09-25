@@ -15,7 +15,10 @@ import {
     canOperateTreasury,
     closePoll, votePoll, rsvpEvent,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
+    nodeRoleOf,
 } from '../state-engine.js';
+import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
+import { assertNotMuted } from '../engine/auto-moderation.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
 import {
@@ -26,6 +29,7 @@ import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody } from './event-post.js';
+import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
@@ -80,6 +84,17 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
         ctx.body = { error: 'Photo not found' };
         return;
     }
+    // A post hidden by reports (G3) shows its photos to its author and the moderators only, and only when they sign
+    // the request; to anyone else, as to an <img>, it has none. Never stored by a shared cache.
+    const hidden = db.prepare('SELECT author_pubkey FROM posts WHERE id = ? AND hidden_by_reports_at IS NOT NULL').get(id) as { author_pubkey: string } | undefined;
+    if (hidden) {
+        const viewer = ctx.state.actor as string | undefined;
+        if (!viewer || (viewer !== hidden.author_pubkey && !nodeRoleOf(viewer))) {
+            ctx.status = 404;
+            ctx.body = { error: 'Photo not found' };
+            return;
+        }
+    }
 
     // A row that has not been evacuated yet is served from the row, exactly as it always was; an evacuated
     // one is served from the store. The two produce identical bytes and an identical content type — that is
@@ -122,7 +137,7 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // Post photos are immutable per (id, order_num): getPosts versions the URL with the photo's
     // updated_at (?v=…), so an edited photo is served under a NEW url. That lets clients cache
     // the bytes forever — killing the cold-start re-download of every photo — with no staleness.
-    ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
+    ctx.set('Cache-Control', hidden ? 'private, no-store' : 'public, max-age=31536000, immutable');
     ctx.type = served.contentType;
     ctx.body = served.body;
     if (served.bytes !== null) ctx.length = served.bytes;
@@ -243,8 +258,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const wantsEvents = type === 'event' || !!types?.includes('event');
     const excludeEvents = !id && !wantsEvents;
 
-    // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
-    const posts = getPosts({ id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly, audienceScope, targetGroupId, assignedTo });
+    // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
+    // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else.
+    const includeHidden = !!viewerPubkey && !!nodeRoleOf(viewerPubkey);
+    const posts = getPosts({ id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden });
     const bodyStr = JSON.stringify(posts);
 
     ctx.status = 200;
@@ -284,6 +301,10 @@ router.post('/api/marketplace/posts', async (ctx) => {
         return;
     }
     try {
+        // G3, global profile: a muted member can't post (403), and a new account has its daily limits (429).
+        assertNotMuted(actor);
+        // A poll keeps no photos, and more than a post can hold is the engine's 400, not a limit.
+        assertMayPost(authorPublicKey, type !== 'poll' && Array.isArray(photos) ? Math.min(photos.length, 5) : 0);
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
         const post = type === 'event'
@@ -385,6 +406,15 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        // G3, global profile: an edit publishes too, so a muted member can't make one; on probation, an edit can't
+        // bring in photos past the day's allowance. A photo the post already has comes back as its own URL.
+        const actor = ctx.state?.actor as string;
+        assertNotMuted(actor);
+        if (Array.isArray(updates.photos)) {
+            const own = new RegExp(`/api/marketplace/posts/${String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/photos/\\d+(\\?.*)?$`);
+            const fresh = updates.photos.filter((p: unknown) => !(typeof p === 'string' && own.test(p))).length;
+            assertMayEditPhotos(actor, String(id), Math.min(updates.photos.length, 5), fresh);
+        }
         const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor);
         if (!post) {
             ctx.status = 404;
@@ -571,6 +601,7 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 function eventChatStatus(msg: string): number {
     if (msg.includes('Event not found')) return 404;
     if (msg.includes('no longer available')) return 410;
+    if (msg === EVENT_CHAT_HIDDEN) return 409;
     if (msg.includes('Only the host and people going') || msg.includes('Only the host can remove')) return 403;
     if (msg.includes('Frozen') || msg.includes('disabled') || msg.includes('suspended')
         || msg.includes('pruned') || msg.includes('Account closed')
@@ -627,10 +658,13 @@ router.post('/api/marketplace/posts/:id/chat/message', async (ctx) => {
         return;
     }
     try {
+        // A muted member (G3) sends nothing anyone else reads.
+        assertNotMuted(actor);
         const message = postEventThreadMessage(ctx.params.id, actor, text, clientId);
         ctx.status = 201;
         ctx.body = { success: true, message };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         const msg = e?.message || 'Could not post the message';
         if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
             ctx.status = 409;
@@ -857,6 +891,9 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        // Putting a post back up publishes it, so a muted member (G3) can't; pausing one stays open.
+        assertNotMuted(ctx.state?.actor as string | undefined);
+        assertNotMuted(authorPublicKey);
         const success = resumePost(postId, authorPublicKey);
         if (success) {
             syncPulseMarketplaceGate();
@@ -867,6 +904,7 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         ctx.status = 400;
         ctx.body = { success: false, error: 'Post not found, not paused, or not owned by author' };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to resume post' };
     }

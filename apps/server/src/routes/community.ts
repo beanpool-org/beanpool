@@ -49,7 +49,10 @@ import {
 } from '../federation-link.js';
 import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
-import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
+import { getProfileSwitches, getNodeProfile, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
+import { probationSummary } from '../engine/probation.js';
+import { muteOf } from '../engine/auto-moderation.js';
+import { respondIfMuted, isNote } from './profile-feature-gate.js';
 import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
@@ -699,6 +702,27 @@ router.get('/api/community/info', async (ctx) => {
     ctx.body = getCommunityInfo(ctx.state.actor as string | undefined);
 });
 
+/**
+ * The signed member's own standing here (G3): whether they are on probation, until when and what is left of today's
+ * limits, and whether they are muted, so the app can explain a limit before the member meets it. Not on the public
+ * allowlist: it is one member's own state, for them only.
+ */
+router.get('/api/community/me', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!getMember(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Read access requires a member identity' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = { publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor) };
+});
+
 router.get('/api/community/health', async (ctx) => {
     // `flags` is the node's fraud and moderation analysis — wash-trading findings, sybil-ring
     // findings, delinquency, and the PUBLIC KEYS of every member involved. This route is in
@@ -1162,6 +1186,9 @@ router.post('/api/ledger/transfer', async (ctx) => {
         ctx.body = { error: 'Invalid recipient' };
         return;
     }
+    // G3: the note rides to the recipient with the Beans (their history and live feed), so it is a message. A
+    // muted member still pays what they owe, without one.
+    if (isNote(memo) && respondIfMuted(ctx, from)) return;
 
     // A visitor's beans live on their home node's ledger, so this node cannot settle
     // a send for them until charge-home settlement exists (#102 / #104). The previous
@@ -1313,6 +1340,8 @@ router.post('/api/ratings', async (ctx) => {
         ctx.body = { error: 'raterPubkey must match authenticated signer' };
         return;
     }
+    // A rating's comment is on the other member's profile for everyone: a muted member (G3) writes none.
+    if (respondIfMuted(ctx, activeActor)) return;
     const rating = addRating(activeActor, targetPubkey, Number(stars), comment || '', transactionId);
     if (!rating) {
         ctx.status = 400;

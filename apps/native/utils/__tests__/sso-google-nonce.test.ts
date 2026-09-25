@@ -553,9 +553,14 @@ describe("Google's web page stays open until just before the node's nonce expire
         return t;
     }
 
-    /** Let the sign-in run as far as opening the page, without moving the clock. */
+    /**
+     * Let the sign-in run as far as opening the page, without moving the clock. Android reaches the page through a
+     * dynamic `import()` of the sign-in module (sso-signin.ts), which settles on the real clock, not the fake one: under
+     * CI load a fixed number of microtask flushes can run out first, so wait for pending imports as well.
+     */
     async function untilThePageOpens(): Promise<void> {
         for (let i = 0; i < 50 && vi.mocked(WebBrowser.openAuthSessionAsync).mock.calls.length === 0; i++) {
+            await vi.dynamicImportSettled();
             await vi.advanceTimersByTimeAsync(0);
         }
         expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalledTimes(1);

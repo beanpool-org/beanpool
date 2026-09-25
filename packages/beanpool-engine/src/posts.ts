@@ -101,6 +101,14 @@ export interface MarketplacePost {
     myRsvp?: EventRsvpStatus | null;
     /** Host only: who has RSVPd. Everyone else sees the counts. */
     eventRsvps?: EventRsvpRecord[];
+    /**
+     * Hidden by reports (global profile, G3: apps/server/src/engine/auto-moderation.ts), waiting for a moderator.
+     * Only its author and the moderators ever receive a hidden post, and to them it says so; everyone else gets
+     * nothing, or a removal on a sync read.
+     */
+    hiddenByReportsAt?: string | null;
+    /** A moderator took it down (G3). Carried by the replication export only. */
+    removedByModeratorAt?: string | null;
 }
 
 export interface PostFilter {
@@ -129,6 +137,11 @@ export interface PostFilter {
      * `type=event`, so an app built before events never receives one (docs/events-on-the-map.md §2.6).
      */
     excludeEvents?: boolean;
+    /**
+     * The viewer is a moderator (an owner, admin or moderator of this node): posts hidden by reports stay in,
+     * marked `hiddenByReportsAt`. Without it only their author gets them. `includeAllScopes` includes them too.
+     */
+    includeHidden?: boolean;
 }
 
 /** An ended event stays readable by id to its host and Going for this long; after that, to nobody. */
@@ -294,6 +307,37 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
             eventPlaceName: row.event_place_name || undefined,
             eventState: (row.event_state || 'scheduled') as EventState,
         } : {}),
+        ...(row.hidden_by_reports_at ? { hiddenByReportsAt: row.hidden_by_reports_at } : {}),
+    };
+}
+
+/**
+ * A post hidden by reports, as a sync read gives it to anyone but its author and the moderators: a removal, with
+ * nothing of what it said. Apps treat it exactly as a post its author took down, so a phone that already holds the
+ * post drops it; when a moderator restores it, the next sync brings the real one back.
+ */
+function hiddenAsRemoved(post: MarketplacePost): MarketplacePost {
+    return {
+        id: post.id,
+        type: post.type,
+        category: post.category,
+        title: '',
+        description: '',
+        credits: 0,
+        priceType: post.priceType,
+        authorPublicKey: post.authorPublicKey,
+        authorCallsign: post.authorCallsign,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        active: false,
+        status: 'cancelled',
+        photos: [],
+        reach: post.reach,
+        audienceScope: post.audienceScope,
+        targetGroupId: post.targetGroupId,
+        targetPubkey: post.targetPubkey,
+        assignedTo: post.assignedTo,
+        ...(post.type === 'event' ? { eventState: 'cancelled' as EventState } : {}),
     };
 }
 
@@ -419,6 +463,20 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         params.push(filter.assignedTo);
     }
 
+    // Hidden by reports (global profile, G3): out of every listing, search, map read and read by id for everyone
+    // but its author and the moderators. A sync read keeps the row, as a removal (hiddenAsRemoved), so a phone that
+    // already holds the post drops it at its next sync.
+    const hiddenFromViewer = !filter?.includeAllScopes && !filter?.includeHidden;
+    const syncRead = !!(filter?.updatedAfter || filter?.sync);
+    if (hiddenFromViewer && !syncRead) {
+        if (viewer) {
+            query += " AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)";
+            params.push(viewer);
+        } else {
+            query += " AND p.hidden_by_reports_at IS NULL";
+        }
+    }
+
     if (filter?.query && filter.query.trim()) {
         const searchTerms = filter.query.trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
         if (searchTerms.length > 0) {
@@ -517,6 +575,11 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     const out: MarketplacePost[] = [];
     for (const r of rows) {
         const post = rowToPost(db, r, photosByPost);
+        if (hiddenFromViewer && r.hidden_by_reports_at && r.author_pubkey !== viewer) {
+            // Only a sync read gets this far with a hidden post it may not see (the SQL above left it out otherwise).
+            out.push(hiddenAsRemoved(post));
+            continue;
+        }
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
 
         if (post.type === 'event') {
@@ -599,7 +662,7 @@ export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
 }
 
 export function getActivePostCount(db: Db): number {
-    const row = db.prepare("SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status = 'active' AND (audience_scope IS NULL OR audience_scope = 'public')").get() as any;
+    const row = db.prepare("SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status = 'active' AND (audience_scope IS NULL OR audience_scope = 'public') AND hidden_by_reports_at IS NULL").get() as any;
     return row?.c || 0;
 }
 
@@ -650,6 +713,11 @@ export function getPostCount(db: Db, filter?: {
         }
     }
 
+    // Hidden by reports (G3): counted for its author only, as getPosts lists it.
+    if (!filter?.includeAllScopes) {
+        if (viewer) { query += " AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)"; params.push(viewer); }
+        else query += " AND p.hidden_by_reports_at IS NULL";
+    }
     if (filter?.targetGroupId) { query += " AND p.target_group_id = ?"; params.push(filter.targetGroupId); }
     if (filter?.type && filter.type !== 'all') { query += " AND p.type = ?"; params.push(filter.type); }
     if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }

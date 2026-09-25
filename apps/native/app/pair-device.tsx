@@ -19,8 +19,10 @@ import {
     Linking,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { router } from 'expo-router';
+import { router, ErrorBoundary } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+
+export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { palette } from '../constants/colors';

@@ -542,7 +542,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             body = (
                 <>
                     <h3 style={heading}>Sign in as {callsign}</h3>
-                    <p style={lede}>Choose the sign-in you joined with. It brings your account back to this browser, and your 12 words with it.</p>
+                    <p style={lede}>Choose the sign-in you joined with. It brings your account back to this browser.</p>
                     <NoticeLine notice={notice} />
                     {!nonceHeld && fetchingNonce ? (
                         <p role="status" style={lede}>Getting the sign-ins ready…</p>

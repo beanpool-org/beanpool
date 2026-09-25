@@ -11,13 +11,17 @@
  *   - the rate-limit and expired-sign-in paths, 409 already_joined → the restore buttons
  *   - a 200 whose body is cut off (asked about, never read as a refusal), and a key restored while a sent join holds
  *     the slot: its own screen with the time left and a way back, and letting that join go only when the member says
+ *   - G11-d: a browser cleared after joining gets the same key back with the sign-in it joined with, Google (the round
+ *     trip through the same return page) and GitHub (the node's device flow): the stub node keeps the copy each join
+ *     carried and answers the recovery routes as apps/server/src/routes/recovery-collect.ts does, and the copy is opened
+ *     in the page by core, for real
  * and fails on any horizontal scroll, any policy violation, a token left in the address bar, or a join the stub node
  * did not expect (wrong key, wrong nonce, an access token sent).
  *
  * Nothing here talks to a node or a provider: /api is answered by the stubs below (and fixtures.mjs for the Market),
  * and every provider host is answered by Playwright. The tokens are fixtures, not signed by anyone.
  *
- * Run: pnpm --filter @beanpool/pwa web-join-check
+ * Run: pnpm --filter @beanpool/pwa web-join-check   (WEB_JOIN_ONLY=<text> runs only the scenarios whose name has it)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
 /* global Buffer, URL, URLSearchParams, console, process, document, window, indexedDB, location, localStorage, sessionStorage -- Node, and the page's side of evaluate() */
@@ -71,6 +75,8 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
     const seen = {
         nonces: [], joins: [], providerVisits: [], violations: [], unexpectedHosts: new Set(), members: new Set(), membershipDown: false,
         doorShut: false, probes: [], enrolled: new Map(),
+        // G11-d: key → the sign-in copy its join carried, with the sign-in's own sub; the recovery sessions and calls.
+        copies: new Map(), collections: new Map(), restoreNonces: [], restoreCalls: [],
     };
     const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce' });
     await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
@@ -159,6 +165,63 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
         if (p === '/api/join/github/poll') {
             const r = github ? github() : { status: 200, body: { status: 'ok', sub: 'github-sub-1' } };
             return reply(r.status, r.body, r.headers);
+        }
+        // The node's recovery routes (routes/recovery-collect.ts), for G11-d: a session bound to the key that opened it.
+        if (p.startsWith('/api/recovery/lookup/')) {
+            const typed = decodeURIComponent(p.split('/').pop()).toLowerCase();
+            return reply(200, [...seen.copies.entries()]
+                .filter(([, c]) => c.callsign.toLowerCase().startsWith(typed))
+                .map(([publicKey, c]) => ({ publicKey, callsign: c.callsign, joinedAt: 1, avatarUrl: null, canRecoverByGuardians: false, canRecoverBySso: true })));
+        }
+        // The member's own view of recoveries against their account (the app asks once it is in): not a restore's call.
+        if (p === '/api/recovery/collect/mine') return reply(200, { collections: [] });
+        if (p.startsWith('/api/recovery/collect')) {
+            const body = JSON.parse(req.postData() || '{}');
+            seen.restoreCalls.push({ path: p, key, body });
+            if (p === '/api/recovery/collect') {
+                const owner = [...seen.copies.entries()].find(([, c]) => c.callsign.toLowerCase() === String(body.callsign).toLowerCase());
+                if (!owner) return reply(400, { error: 'That account has no recovery fragments to collect.' });
+                const id = `col-${seen.collections.size + 1}`;
+                seen.collections.set(id, { owner: owner[0], eph: key, released: false });
+                return reply(200, { collectionId: id, generation: 1, expiresAt: Date.now() + 3_600_000, threshold: 1, progress: null });
+            }
+            const col = seen.collections.get(body.collectionId);
+            if (!col || col.eph !== key) return reply(404, { error: 'No recovery session for this device.' });
+            const copy = seen.copies.get(col.owner);
+            if (p === '/api/recovery/collect/sso-nonce') {
+                const nonce = `restore-nonce-${seen.restoreNonces.length + 1}-${'y'.repeat(24)}`;
+                seen.restoreNonces.push({ nonce, key });
+                return reply(200, { nonce, expiresInSeconds: 600, githubFlow: 'node', clientIds: CLIENT_IDS });
+            }
+            if (p === '/api/recovery/collect/github/start') {
+                return reply(200, { sessionId: 'gh-restore-1', userCode: 'RSTR-9QXK', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 1 });
+            }
+            if (p === '/api/recovery/collect/github/poll') {
+                return reply(200, body.sessionId === 'gh-restore-1' ? { status: 'ok', sub: 'github-sub-1' } : { status: 'expired' });
+            }
+            if (p === '/api/recovery/collect/sso') {
+                let sub = null;
+                if (body.provider === 'github') {
+                    sub = body.proof?.sessionId === 'gh-restore-1' ? 'github-sub-1' : null;
+                } else {
+                    const issued = seen.restoreNonces.find((n) => n.nonce === body.nonce && n.key === key);
+                    const claims = JSON.parse(Buffer.from(String(body.idToken).split('.')[1] || '', 'base64url').toString() || '{}');
+                    sub = issued && claims.nonce === body.nonce ? claims.sub : null;
+                    if (issued) seen.restoreNonces = seen.restoreNonces.filter((n) => n !== issued);
+                }
+                if (!sub) return reply(401, { error: 'That sign-in could not be matched to this request.', code: 'sign_in' });
+                if (!copy || copy.provider !== body.provider || copy.sub !== sub) return reply(400, { error: 'That sign-in account is not the keeper for this recovery.' });
+                col.released = true;
+                return reply(200, { collected: 1, threshold: 1, enough: true });
+            }
+            if (p === '/api/recovery/collect/fragments') {
+                const s = copy?.share;
+                return reply(200, {
+                    collected: col.released ? 1 : 0, threshold: 1, enough: col.released,
+                    fragments: col.released && s ? [{ holderType: 'sso', shareIndex: 1, payload: s.encryptedShare, payloadIv: s.shareIv, payloadTag: s.shareTag, ephemeralPubkey: null, kdfParams: s.kdfParams }] : [],
+                });
+            }
+            return reply(404, { error: 'Not Found' });
         }
         if (p === '/api/join') {
             const body = JSON.parse(req.postData() || '{}');
@@ -300,6 +363,95 @@ async function storedIdentityKey(page) {
     }));
 }
 
+/** The identity as stored (a fixture account's key and words: this is a test page). */
+async function storedIdentity(page) {
+    return page.evaluate(() => new Promise((resolve, reject) => {
+        const open = indexedDB.open('beanpool-identity', 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('keys');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const req = open.result.transaction('keys', 'readonly').objectStore('keys').get('sovereign-identity');
+            req.onsuccess = () => resolve(req.result ?? null);
+            req.onerror = () => reject(req.error);
+        };
+    }));
+}
+
+/**
+ * Everything this site keeps in the browser, gone, as "clear browsing data" does: every IndexedDB database and web
+ * storage. Done from a page on the same origin that is not the app, so nothing holds a database open.
+ */
+async function clearBrowser(page, origin) {
+    await page.goto(`${origin}/api/community/health`, { waitUntil: 'load' });
+    await page.evaluate(async () => {
+        localStorage.clear();
+        sessionStorage.clear();
+        const all = await indexedDB.databases();
+        await Promise.all(all.map((d) => new Promise((resolve, reject) => {
+            const req = indexedDB.deleteDatabase(d.name);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+        })));
+        const left = await indexedDB.databases();
+        if (left.length) throw new Error(`databases left: ${left.map((d) => d.name).join(', ')}`);
+    });
+}
+
+async function restoreScreenIs(page, name, where, timeout = 20_000) {
+    try {
+        await page.getByTestId(`restore-screen-${name}`).waitFor({ timeout });
+    } catch {
+        const current = await page.locator('[data-testid^="restore-screen-"], [data-testid^="join-screen-"]').first().getAttribute('data-testid', { timeout: 1000 }).catch(() => 'none');
+        throw new Failure(`${where}: expected the restore ${name} screen, found ${current}`);
+    }
+}
+
+/**
+ * The restore the stub node saw: every recovery call signed by one throwaway key that is not the account's, a Google
+ * nonce issued to that key and sent back in the release, and the copy released to it.
+ */
+function checkRestore(seen, provider, accountKey, where) {
+    const calls = seen.restoreCalls;
+    if (!calls.length) throw new Failure(`${where}: no recovery call reached the node`);
+    const eph = calls[0].key;
+    if (!eph || eph === accountKey) throw new Failure(`${where}: the recovery calls were signed by ${eph === accountKey ? 'the account itself' : 'nobody'}`);
+    const stray = calls.filter((c) => c.key !== eph);
+    if (stray.length) throw new Failure(`${where}: ${stray.length} recovery calls signed by another key`);
+    const release = calls.filter((c) => c.path === '/api/recovery/collect/sso').at(-1);
+    if (!release || release.body.provider !== provider) throw new Failure(`${where}: released with ${release?.body.provider}`);
+    if (provider === 'github') {
+        if (release.body.proof?.sessionId !== 'gh-restore-1' || release.body.idToken) throw new Failure(`${where}: the GitHub release carried ${JSON.stringify(release.body)}`);
+    } else {
+        const visit = seen.providerVisits.filter((v) => v.provider === provider).at(-1);
+        if (!visit || visit.state !== visit.nonce || release.body.nonce !== visit.nonce) throw new Failure(`${where}: the release's nonce is not the one sent to ${provider}`);
+        if (!visit.nonce.startsWith('restore-nonce-')) throw new Failure(`${where}: went to ${provider} with a join's nonce`);
+    }
+    if (![...seen.collections.values()].some((c) => c.released && c.eph === eph && c.owner === accountKey)) throw new Failure(`${where}: no copy was released`);
+}
+
+/** A browser that joined, cleared, and back at the lobby asking for its account with a sign-in: the name, then the sign-ins. */
+async function toRestoreSignIns(page, origin, view, { shots = false } = {}) {
+    await clearBrowser(page, origin);
+    await page.goto(`${origin}/app`, { waitUntil: 'load' });
+    await screenIs(page, 'lobby', 'a cleared browser');
+    if ((await storedIdentityKey(page)) !== null) throw new Failure('the browser was not cleared');
+    await page.getByRole('button', { name: 'Already have BeanPool?' }).click();
+    await screenIs(page, 'restore', 'Already have BeanPool?');
+    await noSideScroll(page, 'restore choices');
+    if (shots) await shot(page, view, 'restore-choices');
+    await page.getByTestId('join-restore-signin').click();
+    await restoreScreenIs(page, 'name', 'Use my sign-in');
+    await page.getByTestId('restore-callsign').fill('Ali');
+    await page.getByRole('button', { name: 'Alice', exact: true }).waitFor({ timeout: 10_000 });
+    await noSideScroll(page, 'restore name');
+    if (shots) await shot(page, view, 'restore-name');
+    await page.getByRole('button', { name: 'Alice', exact: true }).click();
+    await restoreScreenIs(page, 'providers', 'after picking Alice');
+    await page.getByTestId('restore-provider-google').waitFor();
+    await noSideScroll(page, 'restore sign-ins');
+    if (shots) await shot(page, view, 'restore-sign-ins');
+}
+
 /** Lobby → "I'm new" → name → the sign-in screen, drawing and checking each. */
 async function toSignIn(page, origin, view, name, { shots = false } = {}) {
     await page.goto(`${origin}/app`, { waitUntil: 'load' });
@@ -359,7 +511,12 @@ async function throughOnboarding(page, view, { shots = false, signIn = null } = 
 function joinOk(callsign = 'Alice') {
     return async (body, key, seen) => {
         const stored = Array.isArray(body.recovery?.shares) && body.recovery.shares.length === 1 && body.recovery.shares[0].holderRef === body.provider;
-        if (stored) seen.enrolled.set(key, body.provider);
+        if (stored) {
+            seen.enrolled.set(key, body.provider);
+            // As the node keeps it: the copy, and the sign-in it opens with (the token's sub, or GitHub's).
+            const sub = body.provider === 'github' ? 'github-sub-1' : JSON.parse(Buffer.from(body.idToken.split('.')[1], 'base64url').toString()).sub;
+            seen.copies.set(key, { share: body.recovery.shares[0], provider: body.provider, sub, callsign: body.callsign || callsign });
+        }
         return {
             status: 200,
             body: {
@@ -601,6 +758,71 @@ const SCENARIOS = [
         join: async () => ({ hang: true }),
     },
     {
+        name: 'G11-d: joined with Google, the browser cleared, the same key back with Google, its 12 words with it',
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Alice');
+            const key = await pendingKey(page);
+            await page.getByTestId('join-provider-google').click();
+            await throughOnboarding(page, view, { signIn: 'Google' });
+            const joined = await storedIdentity(page);
+            if (joined?.publicKey !== key) throw new Failure('the join did not save its key');
+
+            await toRestoreSignIns(page, origin, view, { shots: true });
+            await page.getByTestId('restore-provider-google').click();
+            await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 30_000 });
+            if (page.url().includes('id_token')) throw new Failure(`the address bar still reads ${page.url()}`);
+            const back = await storedIdentity(page);
+            if (back?.publicKey !== key) throw new Failure(`restored ${back?.publicKey}, not the key the join made (${key})`);
+            if (back.privateKey !== joined.privateKey) throw new Failure('the restored private key is not the one the join made');
+            if (JSON.stringify(back.mnemonic) !== JSON.stringify(joined.mnemonic)) throw new Failure('the 12 words did not come back with it');
+            if ((await pendingJoin(page)) !== null) throw new Failure('a pending join was left behind');
+            checkRestore(seen, 'google', key, 'restore with Google');
+            if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
+            await noSideScroll(page, 'in, after the restore');
+        },
+        join: joinOk(),
+    },
+    {
+        name: "G11-d: joined with GitHub, the browser cleared, the same key back with GitHub's device flow",
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Alice');
+            const key = await pendingKey(page);
+            await page.getByTestId('join-provider-github').click();
+            await throughOnboarding(page, view, { signIn: 'GitHub' });
+
+            await toRestoreSignIns(page, origin, view);
+            await page.getByTestId('restore-provider-github').click();
+            await restoreScreenIs(page, 'github', 'GitHub for the restore');
+            if ((await page.getByTestId('restore-github-code').innerText()) !== 'RSTR-9QXK') throw new Failure('the restore did not show its own GitHub code');
+            await noSideScroll(page, 'restore GitHub code');
+            await shot(page, view, 'restore-github-code');
+            await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 30_000 });
+            if ((await storedIdentityKey(page)) !== key) throw new Failure('restored another key than the join made');
+            checkRestore(seen, 'github', key, 'restore with GitHub');
+        },
+        join: joinOk(),
+    },
+    {
+        name: "G11-d: a Google account that isn't the account's: said plainly, nothing saved",
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Alice');
+            await page.getByTestId('join-provider-github').click();
+            await throughOnboarding(page, view, { signIn: 'GitHub' });
+            await toRestoreSignIns(page, origin, view);
+            // Alice joined with GitHub; Google is not her way back.
+            await page.getByTestId('restore-provider-google').click();
+            const notice = page.getByTestId('join-notice');
+            await notice.waitFor({ timeout: 30_000 });
+            if (!(await notice.innerText()).includes("That Google account isn't a way back into Alice.")) throw new Failure(`the restore said "${await notice.innerText()}"`);
+            await restoreScreenIs(page, 'providers', 'refused sign-in');
+            await noSideScroll(page, 'refused sign-in');
+            await shot(page, view, 'restore-refused');
+            if ((await storedIdentityKey(page)) !== null) throw new Failure('an identity was saved');
+            if ([...seen.collections.values()].some((c) => c.released)) throw new Failure('a copy was released');
+        },
+        join: joinOk(),
+    },
+    {
         name: "rate limited: the node's sentence, and the same key kept for later",
         async run(page, origin, view) {
             await toSignIn(page, origin, view, 'Alice');
@@ -772,6 +994,7 @@ async function main() {
     let server;
     let browser;
     const failures = [];
+    let runs = 0;
     try {
         await build({ root: PWA_DIR, logLevel: 'error', build: { outDir, emptyOutDir: true } });
         server = await preview({
@@ -787,10 +1010,13 @@ async function main() {
         });
         const origin = server.resolvedUrls.local[0].replace(/\/$/, '');
         browser = await chromium.launch();
+        const only = process.env.WEB_JOIN_ONLY;
+        const scenarios = only ? SCENARIOS.filter((sc) => sc.name.includes(only)) : SCENARIOS;
         for (const view of VIEWS) {
-            for (const scenario of SCENARIOS) {
+            for (const scenario of scenarios) {
                 const { context, page, seen } = await openScenario(browser, origin, view, scenario);
                 const label = `${view.name}: ${scenario.name}`;
+                runs++;
                 try {
                     await scenario.run(page, origin, view, seen);
                     await page.waitForTimeout(200);
@@ -814,10 +1040,10 @@ async function main() {
     }
     console.log(`\nPictures: ${SHOTS_DIR}`);
     if (failures.length) {
-        console.error(`\n❌ ${failures.length} of ${VIEWS.length * SCENARIOS.length} failed.`);
+        console.error(`\n❌ ${failures.length} of ${runs} failed.`);
         process.exit(1);
     }
-    console.log(`\n⭐️ Joining in the browser: ${VIEWS.length * SCENARIOS.length} runs, every screen at 1280 px and at 320 px with 1.3x text, no sideways scroll, 0 policy violations.`);
+    console.log(`\n⭐️ Joining in the browser: ${runs} runs, every screen at 1280 px and at 320 px with 1.3x text, no sideways scroll, 0 policy violations.`);
 }
 
 main().catch((e) => { console.error('❌', e); process.exit(1); });

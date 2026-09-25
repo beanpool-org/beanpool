@@ -391,6 +391,9 @@ async function main(): Promise<void> {
         for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
             const gated = await call('GET', id, p);
             assert(gated.status === (id ? 403 : 401), `${who}: ${p} is for members only (got ${gated.status})`);
+            // The router answers a path with one trailing slash as the path itself, so the gate must hold there too.
+            const slashed = await call('GET', id, `${p}/`);
+            assert(slashed.status === (id ? 403 : 401), `${who}: ${p}/ is for members only too (got ${slashed.status})`);
         }
     }
     {
@@ -401,6 +404,8 @@ async function main(): Promise<void> {
         for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
             const r = await call('GET', bob, p);
             assert(r.status === 200, `a member reads ${p} (got ${r.status})`);
+            const slashed = await call('GET', bob, `${p}/`);
+            assert(slashed.status === 200, `a member reads ${p}/ as the same route, so a guest's refusal there is the gate's (got ${slashed.status})`);
         }
         const feed = await call('GET', bob, '/api/pulse/feed');
         assert(feed.text.includes(alice.pk) && feed.text.includes('SentinelAlice'), 'the Pulse feed a member reads names its creators, as it always did');

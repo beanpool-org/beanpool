@@ -316,8 +316,12 @@ export const MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
     /^\/api\/commons\/decisions\/[^/]+$/,
 ];
 
+// The router answers a path with one trailing slash as the path itself (@koa/router's default, strict: false), so this
+// test does too. Otherwise `/api/pulse/feed/` would miss it, be held only to the gate's usual live-member test, and
+// reach the feed as a pruned account.
 function namesMembers(path: string): boolean {
-    return MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(path) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(path));
+    const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+    return MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed));
 }
 
 function isPublicRead(path: string): boolean {

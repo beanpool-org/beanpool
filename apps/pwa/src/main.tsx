@@ -2,7 +2,13 @@ import { StrictMode, Component, type ReactNode, type ErrorInfo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { applyPatternPreference } from './lib/usePatternBackground';
+import { captureAuthReturn } from './lib/web-join';
 import './index.css';
+
+// A sign-in returning to /app/auth/<provider> carries its token in the fragment: read it and take it out of the
+// address bar and the history before anything else runs, whoever is signed in here (lib/web-join.ts). The join
+// screens pick it up from there.
+captureAuthReturn();
 
 // Before the first paint, so "plain background" never flashes the pattern in.
 applyPatternPreference();

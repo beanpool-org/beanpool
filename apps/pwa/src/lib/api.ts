@@ -177,6 +177,26 @@ export async function signedRequestWithKey<T>(
     privateKeyHex: string,
     publicKeyHex: string,
 ): Promise<T> {
+    const res = await signedFetchWithKey(method, path, body, privateKeyHex, publicKeyHex);
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `Request failed: ${res.status}`);
+    }
+    return res.json();
+}
+
+/**
+ * `signedRequestWithKey` without the reading: the Response as the node sent it, whatever its status. For a caller
+ * that decides by the status, the answer's `code` and its headers (the open door's 409s and 429s, a `Retry-After`),
+ * which the throwing helper folds into one message.
+ */
+export async function signedFetchWithKey(
+    method: string,
+    path: string,
+    body: any,
+    privateKeyHex: string,
+    publicKeyHex: string,
+): Promise<Response> {
     const opts: RequestInit = {
         method,
         cache: 'no-cache',
@@ -202,12 +222,7 @@ export async function signedRequestWithKey<T>(
     h['X-Nonce'] = nonce;
 
     const baseUrl = getNodeApiUrl();
-    const res = await fetch(`${baseUrl}${path}`, opts);
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || `Request failed: ${res.status}`);
-    }
-    return res.json();
+    return fetch(`${baseUrl}${path}`, opts);
 }
 
 function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
@@ -232,6 +247,9 @@ export interface CommunityInfo {
     postCount: number;
     transactionCount: number;
     commonsBalance: number;
+    /** What kind of node this is, and what it does (config/node-profile.ts). Absent on a node older than both. */
+    profile?: 'local' | 'global';
+    features?: { openJoin?: boolean };
 }
 
 export interface Member {

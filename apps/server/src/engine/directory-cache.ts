@@ -216,8 +216,9 @@ export interface DirectoryWrite {
     removed: number;
 }
 
-// The listed communities in memory, for the reads. Only writeDirectoryRows writes the table, and it drops this.
-let listedRows: DirectoryRow[] | null = null;
+// The listed communities in memory, each with its name folded for search, for the reads. Only writeDirectoryRows
+// writes the table, and it drops this.
+let listedRows: Array<{ row: DirectoryRow; folded: string | null }> | null = null;
 
 /**
  * One run's rows (checked, one per key: the caller keeps the last of a repeated key), written in one transaction.
@@ -259,19 +260,22 @@ export function writeDirectoryRows(rows: readonly DirectoryRow[], now: string): 
 
 // ── reading ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-function listed(): DirectoryRow[] {
+function listed(): Array<{ row: DirectoryRow; folded: string | null }> {
     if (listedRows) return listedRows;
     listedRows = (db.prepare('SELECT * FROM directory_cache WHERE listed = 1').all() as CacheRecord[]).map(c => ({
-        key: c.community_key,
-        name: c.name,
-        url: c.node_url,
-        lat: c.lat,
-        lng: c.lng,
-        radiusKm: c.radius_km,
-        memberCount: c.member_count,
-        contactEmail: c.contact_email,
-        contactPhone: c.contact_phone,
-        registryUpdatedAt: c.registry_updated_at,
+        row: {
+            key: c.community_key,
+            name: c.name,
+            url: c.node_url,
+            lat: c.lat,
+            lng: c.lng,
+            radiusKm: c.radius_km,
+            memberCount: c.member_count,
+            contactEmail: c.contact_email,
+            contactPhone: c.contact_phone,
+            registryUpdatedAt: c.registry_updated_at,
+        },
+        folded: c.name === null ? null : foldForSearch(c.name),
     }));
     return listedRows;
 }
@@ -312,10 +316,10 @@ export interface CommunityQuery {
 export function listCommunities(query: CommunityQuery): { communities: Community[]; total: number } {
     const needle = query.q ? foldForSearch(query.q.trim()) : '';
     const rows = listed()
-        .filter(r => !needle || (r.name !== null && foldForSearch(r.name).includes(needle)))
-        .map(r => {
+        .filter(x => !needle || (x.folded !== null && x.folded.includes(needle)))
+        .map(({ row: r, folded }) => {
             const d = query.point && r.lat !== null && r.lng !== null ? haversineKm(query.point.lat, query.point.lng, r.lat, r.lng) : null;
-            return { r, d, name: r.name === null ? null : foldForSearch(r.name) };
+            return { r, d, name: folded };
         });
     const byName = (a: typeof rows[number], b: typeof rows[number]) => {
         if (a.name !== b.name) {

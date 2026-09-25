@@ -16,7 +16,8 @@
  *   6. the hourly diff: communities new to the cache near a watch → exactly one push and one announcement per watcher
  *      (two new communities, one push), none for a watch they don't reach, none twice across runs, none for a
  *      community that leaves the registry and comes back, none for a community first seen before the watch was set;
- *      a community that leaves is scrubbed to its key; a pruned member's watches go with them
+ *      no registry text in any notice; at most one notice a member a day; a flood of new rows tells nobody; a
+ *      community that leaves is scrubbed to its key; a pruned member's watches go with them
  *   7. GET /api/global/home in one request: the nearest communities, the nearby post count, the caller's own watches,
  *      the knock seam (null); unsigned gets no watches; with no point, the member's own area
  *   8. the publisher honours publishToDirectory: nothing is sent on the global profile (and its timer is not set), an
@@ -56,8 +57,19 @@ const registry = http.createServer((req, res) => {
             return;
         }
         registryReads.push({ url: req.url || '', headers: req.headers });
+        // Pages as PostgREST does, by limit and offset, when the body is a list.
+        let body = fixture.body;
+        const u = new URL(req.url || '/', 'http://fixture');
+        const limit = u.searchParams.get('limit');
+        if (fixture.status === 200 && limit !== null) {
+            try {
+                const rows = JSON.parse(fixture.body);
+                const offset = Number(u.searchParams.get('offset') || 0);
+                if (Array.isArray(rows)) body = JSON.stringify(rows.slice(offset, offset + Number(limit)));
+            } catch { /* served as it is */ }
+        }
         res.writeHead(fixture.status, { 'Content-Type': 'application/json' });
-        res.end(fixture.body);
+        res.end(body);
     });
 });
 await new Promise<void>((resolve) => registry.listen(0, '127.0.0.1', resolve));
@@ -89,14 +101,14 @@ const { startP2P } = await import('./p2p.js');
 const { updateLocalConfig } = await import('./config/local-config.js');
 const publisher = await import('./services/directory-publisher.js');
 /** The mirror (G5). A tree without it runs every step anyway, so each one fails as an assertion rather than an abort. */
-type MirrorResult = { ran: boolean; ok?: boolean; reason?: string; error?: string; added?: number; updated?: number; removed?: number; notified?: number };
+type MirrorResult = { ran: boolean; ok?: boolean; reason?: string; error?: string; rows?: number; added?: number; updated?: number; removed?: number; notified?: number };
 const mirror = await import('./services/directory-mirror.js' as string).catch((e) => {
     console.error(`  (no directory mirror in this tree: ${e?.message})`);
     return null;
-}) as { runDirectoryMirror: () => Promise<MirrorResult> } | null;
-const runMirror = async (): Promise<MirrorResult> => {
+}) as { runDirectoryMirror: (opts?: { pageRows?: number }) => Promise<MirrorResult> } | null;
+const runMirror = async (opts?: { pageRows?: number }): Promise<MirrorResult> => {
     if (!mirror) return { ran: false, reason: 'missing' };
-    try { return await mirror.runDirectoryMirror(); } catch (e: any) { console.error(`  (threw: ${e?.message})`); return { ran: false, reason: 'threw' }; }
+    try { return await mirror.runDirectoryMirror(opts); } catch (e: any) { console.error(`  (threw: ${e?.message})`); return { ran: false, reason: 'threw' }; }
 };
 function attempt<T>(fn: () => T): T | undefined {
     try { return fn(); } catch (e: any) { console.error(`  (threw: ${e?.message})`); return undefined; }
@@ -199,6 +211,12 @@ const SUFFOLK = { node_id: 'peer-suffolk', community_name: 'Suffolk Park Swap', 
     service_radius: { lat: -28.70, lng: 153.60, radiusKm: 8 }, member_count: 2 };
 const MITTE = { node_id: 'peer-mitte', community_name: 'Mitte Tausch', node_url: null,
     service_radius: { lat: 52.53, lng: 13.39, radiusKm: 5 }, member_count: 2 };
+const BRUNSWICK = { node_id: 'peer-brunswick', community_name: 'Brunswick Swap', node_url: 'https://brunswick.beanpool.org',
+    service_radius: { lat: -28.35, lng: 153.55, radiusKm: 10 }, member_count: 3 };
+// 26 at once near Nairobi: a flood, not communities starting. Then one more, which is news.
+const FLOOD = Array.from({ length: 26 }, (_, i) => ({ node_id: `peer-flood-${i}`, community_name: `Flood ${i}`,
+    service_radius: { lat: -1.29 + i * 0.01, lng: 36.82, radiusKm: 5 } }));
+const NAIROBI = { node_id: 'peer-nairobi', community_name: 'Nairobi Exchange', service_radius: { lat: -1.28, lng: 36.81, radiusKm: 10 } };
 
 async function main(): Promise<void> {
     console.log('\n=== The communities directory on the global node (G5) ===\n');
@@ -258,6 +276,11 @@ async function main(): Promise<void> {
     assert(registryReads.length >= 1 && registryReads.every(r => r.url.startsWith('/rest/v1/directory_nodes')), `from DIRECTORY_MIRROR_URL (${registryReads[0]?.url})`);
     const cacheCount = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM directory_cache').get() as any).n);
     assert(cacheCount === 6, `directory_cache holds six rows; the row with no id is left out (got ${cacheCount})`);
+    const readsBefore = registryReads.length;
+    const paged = await runMirror({ pageRows: 4 });
+    const offsets = registryReads.slice(readsBefore).map(r => new URL(r.url, 'http://fixture').searchParams.get('offset')).join(',');
+    assert(paged.ok === true && paged.rows === 6 && paged.added === 0 && offsets === '0,4',
+        `paged: a full page asks for the next (4 a page: offsets ${offsets}), and the rows are the same six (${JSON.stringify(paged)})`);
 
     // ── 3. GET /api/global/communities ─────────────────────────────────────────────────────────────────────────
     console.log('\n── 3. GET /api/global/communities ──');
@@ -405,8 +428,11 @@ async function main(): Promise<void> {
     const wesPush = pushesTo(wes)[0];
     assert(same([...(wesPush?.data?.communities ?? [])].sort(), ['peer-bangalow', 'peer-byron']),
         `naming Byron and Bangalow, not Grafton (just out of reach) nor anything far away (${JSON.stringify(wesPush?.data)})`);
-    assert(/2 communities/.test(wesPush?.body ?? '') && /Byron Shire Commons|Bangalow Pool/.test(wesPush?.body ?? '') && wesPush?.categoryId === 'marketplace',
-        `in words: how many, and the nearest by name, on the marketplace channel (${wesPush?.title} / ${wesPush?.body})`);
+    assert(/^2 new communities/.test(wesPush?.body ?? '') && /about \d+ km/.test(wesPush?.body ?? '') && wesPush?.categoryId === 'marketplace',
+        `in words: how many and how far, on the marketplace channel (${wesPush?.title} / ${wesPush?.body})`);
+    const registryText = /Byron Shire|Bangalow Pool|Kiezpool|Grafton|Skipti/;
+    assert(pushed.length > 0 && pushed.every(m => !registryText.test(`${m.title} ${m.body}`)) && announcements(sWes).every(e => !registryText.test(`${e.title} ${e.body}`)),
+        'and no text from the registry in any push or announcement: anyone with a node key can publish a row'); 
     assert(pushesTo(wanda).length === 1 && same(pushesTo(wanda)[0]?.data?.communities, ['peer-kiez']), `Wanda: one push, for Kiezpool (${JSON.stringify(pushesTo(wanda)[0]?.data)})`);
     assert(pushesTo(theo).length === 0, 'Theo, watching Perth: nothing');
     assert(announcements(sWes).length === 1 && announcements(sWes)[0]?.kind === 'community_near_you',
@@ -443,18 +469,44 @@ async function main(): Promise<void> {
     serve([...V2, SUFFOLK]);
     const r7 = await runMirror();
     await settle();
-    assert(r7.added === 1 && pushesTo(theo).length === 1 && pushesTo(wes).length === 1 && same(pushesTo(theo)[0]?.data?.communities, ['peer-suffolk']),
-        `a community new after that watch: Theo and Wes each hear once (${pushesTo(theo).length}, ${pushesTo(wes).length})`);
-    assert(/Suffolk Park Swap/.test(pushesTo(theo)[0]?.body ?? ''), `one community is named (${pushesTo(theo)[0]?.body})`);
+    assert(r7.added === 1 && pushesTo(theo).length === 1 && same(pushesTo(theo)[0]?.data?.communities, ['peer-suffolk']),
+        `a community new after that watch: Theo hears once (${pushesTo(theo).length})`);
+    assert(/^A new community is now in the BeanPool directory, about \d+ km/.test(pushesTo(theo)[0]?.body ?? '') && !/Suffolk/.test(pushesTo(theo)[0]?.body ?? ''),
+        `one community: how far, not its name (${pushesTo(theo)[0]?.body})`);
+    assert(pushesTo(wes).length === 0 && announcements(sWes).length === 1 && r7.notified === 1,
+        `Wes, told less than a day ago, is not told again today: Suffolk is on his card (${pushesTo(wes).length})`);
+    const wesHeard = attempt(() => db.prepare('SELECT DISTINCT last_notified_at AS t FROM place_watches WHERE pubkey = ?').all(wes.pk) as any[]) ?? [];
+    assert(wesHeard.length === 1 && typeof wesHeard[0]?.t === 'string', `every one of his watches carries when he last heard (${JSON.stringify(wesHeard)})`);
 
+    // A day later he hears again. Wanda is pruned meanwhile.
+    db.prepare('UPDATE place_watches SET last_notified_at = ? WHERE pubkey = ?').run(new Date(Date.now() - 25 * 3_600_000).toISOString(), wes.pk);
     adminPruneUser(wanda.pk, owner.pk);
     const wandaLeft = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM place_watches WHERE pubkey = ?').get(wanda.pk) as any).n);
     pushed.length = 0;
-    serve([...V2, SUFFOLK, MITTE]);
+    serve([...V2, SUFFOLK, MITTE, BRUNSWICK]);
     const r8 = await runMirror();
     await settle();
-    assert(wandaLeft === 0 && r8.added === 1 && pushesTo(wanda).length === 0, `a pruned member's watches go with them, and they hear nothing (${wandaLeft}, ${pushesTo(wanda).length})`);
+    assert(r8.added === 2 && pushesTo(wes).length === 1 && same(pushesTo(wes)[0]?.data?.communities, ['peer-brunswick']) && announcements(sWes).length === 2,
+        `a day on, Wes hears about Brunswick, once (${pushesTo(wes).length} ${JSON.stringify(pushesTo(wes)[0]?.data)})`);
+    assert(pushesTo(theo).length === 0 && r8.notified === 1, `Theo, whose Byron watch Brunswick also reaches, heard today already (${pushesTo(theo).length})`);
+    assert(wandaLeft === 0 && pushesTo(wanda).length === 0, `a pruned member's watches go with them, and they hear nothing about Mitte (${wandaLeft}, ${pushesTo(wanda).length})`);
     for (const s of [sWes, sTheo, sPat]) s.ws.close();
+
+    const fay = member('Fay');
+    db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(fay.pk, pushToken(fay));
+    const setF = await call('POST', fay, '/api/global/watches', { lat: -1.29, lng: 36.82, radiusKm: 200 });
+    pushed.length = 0;
+    serve([...V2, SUFFOLK, MITTE, BRUNSWICK, ...FLOOD]);
+    const r9 = await runMirror();
+    await settle();
+    const floodListed = await call('GET', null, '/api/global/communities?q=flood&limit=50');
+    assert(setF.status === 200 && r9.added === 26 && r9.notified === 0 && pushed.length === 0 && floodListed.body?.total === 26,
+        `26 new communities in one run is a flood: listed, and nobody is told (${JSON.stringify(r9)})`);
+    serve([...V2, SUFFOLK, MITTE, BRUNSWICK, ...FLOOD, NAIROBI]);
+    const r10 = await runMirror();
+    await settle();
+    assert(r10.added === 1 && pushesTo(fay).length === 1 && same(pushesTo(fay)[0]?.data?.communities, ['peer-nairobi']),
+        `and the next single community near Fay is news: one push (${pushesTo(fay).length})`);
 
     // ── 7. GET /api/global/home ─────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 7. the landing card, one request ──');
@@ -465,7 +517,7 @@ async function main(): Promise<void> {
     assert(home.status === 200, `a signed member: 200 (${home.status} ${home.text.slice(0, 200)})`);
     assert(same(keys(home), ['peer-byron', 'peer-suffolk', 'peer-bangalow']) && home.body?.point === 'request',
         `the three nearest communities from the point sent (${JSON.stringify(keys(home))})`);
-    assert(home.body?.communityCount === 13, `and how many are listed in all (${home.body?.communityCount})`);
+    assert(home.body?.communityCount === 41, `and how many are listed in all (${home.body?.communityCount})`);
     assert(home.body?.nearbyPosts?.count === 2 && home.body?.nearbyPosts?.radiusKm === 50 && home.body?.nearbyPosts?.more === false,
         `posts within 50 km: 2, not the one in Castlemaine (${JSON.stringify(home.body?.nearbyPosts)})`);
     assert(Array.isArray(home.body?.watches) && home.body.watches.length === 2 && home.body.watches.every((w: any) => typeof w.id === 'string'),

@@ -150,7 +150,8 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'private, no-store');
         ctx.body = {
             point: from,
-            communities: point ? listCommunities({ point, limit: HOME_COMMUNITIES, offset: 0 }).communities : [],
+            // Nearest first puts the communities with a place first: none with no distance is "near you".
+            communities: point ? listCommunities({ point, limit: HOME_COMMUNITIES, offset: 0 }).communities.filter(c => c.distanceKm !== null) : [],
             communityCount: listedCommunityCount(),
             nearbyPosts,
             // null: not a member's read, so no watches to show; [] a member with none.

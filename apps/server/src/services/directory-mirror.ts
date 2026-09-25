@@ -119,7 +119,8 @@ async function fetchRegistry(pageRows: number): Promise<{ rows: DirectoryRow[]; 
             if (row) byKey.set(row.key, row);
             else skipped++;
         }
-        if (page.length < pageRows) break;
+        // A short page is the last. A page longer than asked for is an endpoint that doesn't page: it gave everything.
+        if (page.length !== pageRows) break;
     }
     if (seen >= MAX_DIRECTORY_ROWS) console.warn(`[Directory mirror] ⚠️ The registry holds ${MAX_DIRECTORY_ROWS} rows or more; only the first ${MAX_DIRECTORY_ROWS} are mirrored.`);
     return { rows: [...byKey.values()], skipped };
@@ -170,12 +171,12 @@ export async function runDirectoryMirror(opts: { pageRows?: number } = {}): Prom
 let timer: ReturnType<typeof setInterval> | null = null;
 
 /**
- * At boot, on a main server: once shortly after start, then hourly. Every node sets the timer; each run reads the
- * role and the switch, so a local node's hourly tick does nothing and never contacts the registry, and an operator's
- * override takes effect at the next tick. Returns false on a standby, which never mirrors.
+ * At boot: once shortly after start, then hourly. Every node sets the timer and each run reads the role and the switch,
+ * so a local node's or a standby's hourly tick does nothing and never contacts the registry, an operator's override
+ * takes effect at the next tick, and a standby promoted by a take-over (services/takeover.ts sets the role without a
+ * restart) starts mirroring within the hour.
  */
-export function initDirectoryMirror(): boolean {
-    if (getNodeRole() !== 'primary') return false;
+export function initDirectoryMirror(): void {
     if (timer) clearInterval(timer);
     const tick = () => {
         runDirectoryMirror().catch((e) => console.error('[Directory mirror] Unhandled error:', e?.message || e));
@@ -183,6 +184,5 @@ export function initDirectoryMirror(): boolean {
     timer = setInterval(tick, DIRECTORY_MIRROR_INTERVAL_MS);
     timer.unref?.();
     setTimeout(tick, FIRST_RUN_DELAY_MS).unref?.();
-    if (getProfileSwitches().directoryMirror) console.log('[Directory mirror] 🧭 Mirroring the communities directory hourly.');
-    return true;
+    if (getNodeRole() === 'primary' && getProfileSwitches().directoryMirror) console.log('[Directory mirror] 🧭 Mirroring the communities directory hourly.');
 }

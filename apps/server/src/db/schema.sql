@@ -705,9 +705,10 @@ CREATE TABLE IF NOT EXISTS directory_cache (
 --
 -- A member's own, set and removed only by their signed request, at most 3 each. `lat`/`lng` is the 0.1° cell the
 -- member asked about, rounded BEFORE it is written, never the spot. When the mirror first sees a community that
--- reaches a watch, its member hears once (a push and a live announcement). Node-local like `push_tokens`, the only
--- way a watch reaches anyone: not replicated to a standby, carried in file and sealed backups. Goes with the member
--- on a prune or a self-deletion, and moves with them on a re-key.
+-- reaches a watch, its member hears once (a push and a live announcement), and at most once a day
+-- (`last_notified_at`, on every one of the member's watches). Node-local like `push_tokens`, the only way a watch
+-- reaches anyone: not replicated to a standby, carried in file and sealed backups. Goes with the member on a prune
+-- or a self-deletion, and moves with them on a re-key.
 CREATE TABLE IF NOT EXISTS place_watches (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL REFERENCES members(public_key),
@@ -715,6 +716,7 @@ CREATE TABLE IF NOT EXISTS place_watches (
     lng REAL NOT NULL CHECK (lng >= -180 AND lng <= 180),
     radius_km REAL NOT NULL CHECK (radius_km > 0 AND radius_km <= 200),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    last_notified_at TEXT,
     UNIQUE (pubkey, lat, lng)
 );
 

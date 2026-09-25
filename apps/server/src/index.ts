@@ -269,11 +269,12 @@ async function main() {
 
     // Step 10: Start directory publisher (primary only — a backup replica has no
     // public listing of its own; it mirrors the primary, it isn't a joinable node).
+    // Step 10.1: The communities directory mirror (G5): hourly on a main server whose `directoryMirror` switch is on
+    // (the global profile's default), for "communities near you" and place watches. Set on every node, because each
+    // tick reads the role and the switch: a no-op elsewhere, and a standby a take-over promotes starts on its own.
+    initDirectoryMirror();
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
-        // Step 10.1: The communities directory mirror (G5): hourly on a node whose `directoryMirror` switch is on
-        // (the global profile's default), for "communities near you" and place watches. A no-op tick elsewhere.
-        initDirectoryMirror();
         // Step 10.5: Auto public-address (opt-in via PUBLIC_ADDRESS_* env). Claims <name>.beanpool.org
         // from the registrar on boot and writes the tunnel token for the cloudflared sidecar. No-op unless enabled.
         initPublicAddress();

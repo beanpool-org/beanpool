@@ -62,7 +62,8 @@ export async function pushDirectoryNow() {
     if (getNodeRole() !== 'primary') {
         return { success: false, error: 'Directory push is only allowed on primary nodes' };
     }
-    // Read at every push, the timer's included: an operator's override takes effect without a restart.
+    // Read at every push, the timer's included: an operator's override switching it off takes effect at the next push.
+    // Switched on at runtime, the timer starts at the next boot, or when Settings saves the push interval.
     if (!getProfileSwitches().publishToDirectory) {
         return { success: false, error: NOT_LISTED_MESSAGE };
     }

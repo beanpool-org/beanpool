@@ -24,7 +24,8 @@
  *      someone who wrote first and a known contact → allowed, and the window rolls; /api/community/me reports it all
  *   5. auto-mute: 3 moderator removals in 30 days → posting, editing, starting and sending messages refused 403; still
  *      reads and edits the profile; the moderators' muted list names them; a moderator lifts it and both come back,
- *      and one more removal after the lift does not re-mute; removals 31+ days apart never mute
+ *      and one more removal after the lift does not re-mute; removals 31+ days apart never mute; a keeper can't edit
+ *      a muted enterprise's post through the marketplace route
  *   6. replication: the export carries hidden_by_reports_at, removed_by_moderator_at and moderation_muted_until, and
  *      a standby importing it (insert and update) holds all three
  *
@@ -492,6 +493,21 @@ async function main(): Promise<void> {
     attempt(() => db.prepare('UPDATE posts SET removed_by_moderator_at = ? WHERE author_pubkey = ? AND removed_by_moderator_at IS NOT NULL').run(ago(31 * DAY), ray.pk));
     await removeByModerator(ray, oldPost(ray, 'Ray new'));
     assert(mutedUntil(ray) === null && (await post(ray)).status === 200, 'removals 31+ days apart never mute');
+
+    // A muted enterprise: its keeper can't edit its posts through the marketplace route either. Today the signature
+    // check refuses it before the route runs (a body authorPublicKey must be the signer; keepers act for an
+    // enterprise through /api/treasury/:treasury/..., which checks both mutes); pinned so a change there can't open it.
+    const shop = member('Shop', 60);
+    const kit = member('Kit', 60);
+    db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(shop.pk);
+    db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(kit.pk);
+    db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'keeper', ?)`).run(shop.pk, kit.pk, owner.pk);
+    const shopPost = oldPost(shop, 'Shop listing');
+    attempt(() => db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run('9999-12-31T23:59:59.999Z', shop.pk));
+    const kitEdit = await call('POST', kit, '/api/marketplace/posts/update', { id: shopPost, authorPublicKey: shop.pk, description: 'Buy now' });
+    const shopDescription = (db.prepare('SELECT description FROM posts WHERE id = ?').get(shopPost) as any)?.description;
+    assert(kitEdit.status === 403 && shopDescription !== 'Buy now',
+        `a keeper can't edit a muted enterprise's post through the marketplace route (got ${kitEdit.status} ${kitEdit.body?.error})`);
 
     // ── 6. replication ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. replication: a standby holds the hide, the takedowns and the mute ──');

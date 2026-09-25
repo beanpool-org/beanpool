@@ -935,11 +935,28 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
 });
 
 /**
+ * A moderator can't undo what members did about their own post, by restoring it or by dismissing a report on it (a
+ * dismissal un-hides it once the rest no longer add up), as they can't lift their own mute: that is for an owner or
+ * admin. Refuses 403 and returns true when so.
+ */
+function refuseModeratorsOwnPost(ctx: any, postId: string | null | undefined, doing: string): boolean {
+    const actor = ctx.state?.actor as string | undefined;
+    if (ctx.state?.adminRole !== 'moderator' || !actor || !postId) return false;
+    const post = db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(postId) as { author_pubkey: string | null } | undefined;
+    if (!post?.author_pubkey || post.author_pubkey.toLowerCase() !== actor.toLowerCase()) return false;
+    ctx.status = 403;
+    ctx.body = { success: false, error: `A moderator cannot ${doing} their own post. Ask an owner or admin.` };
+    return true;
+}
+
+/**
  * Restore a post hidden by reports (G3, engine/auto-moderation.ts). Owners, admins and moderators: every open report
- * on it is dismissed (its reporters hear it was kept, and cannot hide it again), and everyone sees it again.
+ * on it is dismissed (its reporters hear it was kept, and cannot hide it again), and everyone sees it again. A
+ * moderator can't restore their own.
  */
 router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (refuseModeratorsOwnPost(ctx, ctx.params.id, 'restore')) return;
     const result = restoreHiddenPost(ctx.params.id);
     if (result === 'not_found') {
         ctx.status = 404;
@@ -1199,6 +1216,8 @@ router.get('/api/local/admin/reports', async (ctx) => {
 router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
+        const reported = db.prepare('SELECT target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
+        if (refuseModeratorsOwnPost(ctx, reported?.target_post_id, 'dismiss a report on')) return;
         const ok = dismissReport(ctx.params.id);
         if (!ok) {
             ctx.status = 404;

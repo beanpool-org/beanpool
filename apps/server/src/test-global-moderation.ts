@@ -15,7 +15,8 @@
  *      author and moderators still see it, marked; only the author's socket gets the notice (reason "reports"), and an
  *      edit of it reaches only the author in full; a vote in a hidden poll or an RSVP to a hidden event is refused to
  *      anyone but its author, and hands nothing back. A moderator restore un-hides it, the same reporters can't hide it
- *      again, new ones can; dismissing reports un-hides once they no longer add up; a moderator can still remove it
+ *      again, new ones can; dismissing reports un-hides once they no longer add up; a moderator can still remove it. A
+ *      moderator can't restore their own post or dismiss a report on it (another can)
  *   4. probation: the 4th post in 24 hours → 429 with the limit and when it resets; the window rolls after 24 hours;
  *      photos past 5 → 429, on a new post and on an edit; after 72 hours with 3 kept posts no limits; an old account
  *      with no posts is on probation until it has 3; DMs to an 11th new person → 429 (start and send), a reply to
@@ -344,6 +345,20 @@ async function main(): Promise<void> {
     assert(hiddenAt(miaPost) === null && (await listIds(viewer)).includes(miaPost), '3 established reports of a member hide nothing of theirs');
     const miaQueued = (db.prepare(`SELECT COUNT(*) AS c FROM abuse_reports WHERE target_pubkey = ? AND target_post_id IS NULL AND status = 'pending'`).get(mia.pk) as any).c;
     assert(miaQueued === 3, 'they wait in the queue');
+
+    // A moderator can't undo a hide on their own post, by restoring it or by dismissing a report on it; another can.
+    const moOwn = oldPost(mo, 'Mo listing');
+    for (const r of S) await report(r, moOwn, mo);
+    assert(!!hiddenAt(moOwn), 'setup: established reporters hide a moderator\'s own post');
+    const moOwnReport = db.prepare(`SELECT id FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).get(moOwn) as { id: string };
+    const selfRestore = await admin('POST', `/api/local/admin/posts/${moOwn}/restore`);
+    const selfDismiss = await admin('POST', `/api/local/admin/reports/${moOwnReport.id}/dismiss`);
+    assert(selfRestore.status === 403 && selfDismiss.status === 403 && !!hiddenAt(moOwn),
+        `a moderator can't restore their own hidden post, or dismiss a report on it (${selfRestore.status}, ${selfDismiss.status}): it stays hidden`);
+    const moe = member('Moe', 60);
+    grantNodeRole(moe.pk, 'moderator', owner.pk);
+    const moeRestore = await call('POST', null, `/api/local/admin/posts/${moOwn}/restore`, undefined, { 'x-admin-session': keySession(moe) });
+    assert(moeRestore.status === 200 && hiddenAt(moOwn) === null, `another moderator restores it (${moeRestore.status})`);
     avaSock.ws.close(); vicSock.ws.close();
 
     // ── 4. probation ─────────────────────────────────────────────────────────────────────────────

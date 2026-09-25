@@ -412,7 +412,8 @@ export interface GithubPollOptions {
 /**
  * Wait for the member to enter the code at GitHub: poll the node at GitHub's interval until it says ok, denied or
  * expired. A 429 is "still waiting", and the next poll waits the `Retry-After` it came with (the poll's own
- * per-address bucket, apps/server/src/github-poll-rate-limit.ts). No answer, or a 503 (GitHub could not be asked), is
+ * per-address bucket, apps/server/src/github-poll-rate-limit.ts), never less than the interval: a `Retry-After: 0`, or
+ * a date already past, would otherwise ask again at once, and again. No answer, or a 503 (GitHub could not be asked), is
  * waited through too: the session has its own deadline, and a blip should not throw away a code being typed.
  */
 export async function runGithubPoll(opts: GithubPollOptions): Promise<GithubPollResult> {
@@ -433,7 +434,7 @@ export async function runGithubPoll(opts: GithubPollOptions): Promise<GithubPoll
         }
         if (opts.signal?.aborted) return { status: 'aborted' };
         if (answer.status === 429) {
-            waitMs = (answer.retryAfterSeconds ?? intervalSeconds) * 1000;
+            waitMs = Math.max(answer.retryAfterSeconds ?? 0, intervalSeconds) * 1000;
             continue;
         }
         if (answer.status === 503) {

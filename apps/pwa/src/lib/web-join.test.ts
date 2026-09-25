@@ -296,6 +296,13 @@ describe('the GitHub wait (design §3.3)', () => {
         expect(h.waits).toEqual([5000, 5000]);
     });
 
+    it('a 429 with a Retry-After of 0 (or a date already past) still waits the interval: never a poll straight after', async () => {
+        const h = harness([answer(429, {}, 0), answer(429, {}, 0), answer(429, {}, 2), answer(200, { status: 'ok', sub: 'gh-1' })]);
+        expect(await h.run()).toEqual({ status: 'ok', sub: 'gh-1' });
+        expect(h.waits).toEqual([5000, 5000, 5000, 5000]);
+        expect(parseRetryAfter(new Date(Date.now() - 60_000).toUTCString())).toBe(0);
+    });
+
     it('denied and expired end the wait', async () => {
         expect(await harness([answer(200, { status: 'denied' })]).run()).toEqual({ status: 'denied' });
         expect(await harness([answer(200, { status: 'expired' })]).run()).toEqual({ status: 'expired' });

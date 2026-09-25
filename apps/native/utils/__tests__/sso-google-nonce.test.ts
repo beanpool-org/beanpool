@@ -146,6 +146,7 @@ import {
     SsoSignInError,
     googleAuthUrl,
     readGoogleCallback,
+    signInWithFacebook,
     signInWithGoogle,
     startSsoSignIn,
 } from '../sso-signin';
@@ -164,6 +165,7 @@ beforeEach(() => {
     tb.state.dropNonce = false;
     tb.state.calls.length = 0;
     vi.mocked(WebBrowser.openAuthSessionAsync).mockReset();
+    vi.mocked(WebBrowser.dismissAuthSession).mockClear();
     tb.GoogleSignIn.configure.mockClear();
     tb.GoogleSignIn.signIn.mockClear();
     tb.GoogleSignIn.signOut.mockClear();
@@ -520,6 +522,85 @@ describe("Android: Google's web page when Credential Manager's sheet cannot appe
             expect(err).toBeInstanceOf(SsoSignInError);
             expect(err.reason).toBe('cancelled');
         });
+    });
+});
+
+describe("Google's web page stays open until just before the node's nonce expires", () => {
+    // The page holds the whole Google sign-in: email, password, 2-Step Verification (perhaps an SMS
+    // code, when the lost phone was the one that got the prompt) and the first-time consent screen.
+    // The node's nonce lives ten minutes (NONCE_TTL_MS, apps/server/src/sso.ts).
+    beforeEach(() => {
+        // Android reaches the page when the sheet cannot appear. The iPhone never asks the sheet.
+        tb.state.failWith = { code: 'NO_CREDENTIALS', message: 'No credentials available on this device' };
+        vi.useFakeTimers();
+    });
+
+    const EIGHT_MIN_50_S = 8 * 60_000 + 50_000;
+
+    function pageNeverSettles(): void {
+        vi.mocked(WebBrowser.openAuthSessionAsync).mockReturnValueOnce(new Promise(() => {}));
+    }
+
+    /** Follow a sign-in without awaiting it: how it settled, and when on the fake clock. */
+    function track(signIn: Promise<unknown>): { outcome: unknown; at: number } {
+        const t = { outcome: 'pending' as unknown, at: NaN };
+        signIn.then(
+            () => { t.outcome = 'signed in'; t.at = Date.now(); },
+            (e) => { t.outcome = e; t.at = Date.now(); },
+        );
+        return t;
+    }
+
+    /** Let the sign-in run as far as opening the page, without moving the clock. */
+    async function untilThePageOpens(): Promise<void> {
+        for (let i = 0; i < 50 && vi.mocked(WebBrowser.openAuthSessionAsync).mock.calls.length === 0; i++) {
+            await vi.advanceTimersByTimeAsync(0);
+        }
+        expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalledTimes(1);
+    }
+
+    it.each(['ios', 'android'])('%s: still open at 8 min 50 s, and timed out once 9 min have passed', async (os) => {
+        rn.Platform.OS = os;
+        pageNeverSettles();
+        const signIn = track(signInWithGoogle(NODE_NONCE));
+        await untilThePageOpens();
+
+        await vi.advanceTimersByTimeAsync(EIGHT_MIN_50_S);
+        expect(signIn.outcome).toBe('pending');
+        expect(WebBrowser.dismissAuthSession).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(10_001);
+        expect(signIn.outcome).toBeInstanceOf(SsoSignInError);
+        expect(signIn.outcome).toMatchObject({ reason: 'provider', message: 'google sign-in timed out.' });
+        expect(WebBrowser.dismissAuthSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('Facebook keeps its 120 s', async () => {
+        pageNeverSettles();
+        const signIn = track(signInWithFacebook(NODE_NONCE));
+        await untilThePageOpens();
+
+        await vi.advanceTimersByTimeAsync(119_000);
+        expect(signIn.outcome).toBe('pending');
+
+        await vi.advanceTimersByTimeAsync(1_001);
+        expect(signIn.outcome).toBeInstanceOf(SsoSignInError);
+        expect(signIn.outcome).toMatchObject({ reason: 'provider', message: 'facebook sign-in timed out.' });
+    });
+
+    it.each(['ios', 'android'])('%s: a member who closes the page sees the cancel at once, not at the deadline', async (os) => {
+        rn.Platform.OS = os;
+        vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'cancel' } as any);
+        const openedAt = Date.now();
+        const signIn = track(signInWithGoogle(NODE_NONCE));
+        await untilThePageOpens();
+
+        for (let i = 0; i < 50 && signIn.outcome === 'pending'; i++) await vi.advanceTimersByTimeAsync(100);
+
+        expect(signIn.outcome).toBeInstanceOf(SsoSignInError);
+        expect(signIn.outcome).toMatchObject({ reason: 'cancelled' });
+        // At most Android's spurious-cancel grace (SPURIOUS_CANCEL_GRACE_MS, 2 s); nothing on the iPhone.
+        expect(signIn.at - openedAt).toBeLessThanOrEqual(2_000);
     });
 });
 

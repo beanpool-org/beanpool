@@ -146,10 +146,25 @@ export async function runDirectoryMirror(opts: { pageRows?: number } = {}): Prom
             return { ran: true, ok: false, error };
         }
         const now = new Date().toISOString();
-        const written = writeDirectoryRows(fetched.rows, now);
+        let written: ReturnType<typeof writeDirectoryRows>;
+        try {
+            // One transaction: a failure here leaves the cache exactly as the last good run wrote it.
+            written = writeDirectoryRows(fetched.rows, now);
+        } catch (e: any) {
+            const error = `could not write the cache: ${String(e?.message || e)}`;
+            writeMirrorStatus({ lastAttemptAt: attemptAt, lastError: error });
+            console.error(`[Directory mirror] ❌ ${error}`);
+            return { ran: true, ok: false, error };
+        }
         const changed = written.added.length > 0 || written.updated > 0 || written.removed > 0;
         writeMirrorStatus({ fetchedAt: now, lastAttemptAt: attemptAt, lastError: null });
-        const notified = notifyPlaceWatchers({ broadcast, dispatchPushNotification, isMember: isNodeMember }, written.added, now);
+        let notified = 0;
+        try {
+            notified = notifyPlaceWatchers({ broadcast, dispatchPushNotification, isMember: isNodeMember }, written.added, now);
+        } catch (e: any) {
+            // The cache is written; the communities are on the card. A watcher who wasn't told this run won't be.
+            console.error('[Directory mirror] Telling watchers failed:', e?.message || e);
+        }
         // Quiet when nothing changed: an unchanged directory is most hours.
         if (changed) {
             const skipped = fetched.skipped ? `, ${fetched.skipped} ${fetched.skipped === 1 ? 'row' : 'rows'} with no id left out` : '';

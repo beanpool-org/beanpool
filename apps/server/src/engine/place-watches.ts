@@ -175,7 +175,7 @@ export function notifyPlaceWatchers(cb: PlaceWatchNoticeCallbacks, added: readon
         const km = Math.max(1, Math.round(near[0].km));
         const title = near.length === 1 ? COMMUNITY_NEAR_TITLE : COMMUNITIES_NEAR_TITLE;
         const body = near.length === 1 ? communityNearBody(km) : communitiesNearBody(near.length, km);
-        // Stamped first: a notice that fails below is not sent again next hour either.
+        // Stamped before sending: a notice that throws below still starts the member's quiet day.
         heard.run(now, pubkey);
         const data = { kind: 'community_near_you', communities: near.slice(0, KEYS_IN_NOTICE).map(n => n.c.key) };
         try {

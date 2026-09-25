@@ -103,10 +103,12 @@ async function remember(url: string, profile: NodeProfile): Promise<void> {
  * Ask `url` what it is, and remember the answer. Null when it could not be asked (no network, a
  * timeout, an error answer, or something that is not an info answer); the cache is left as it was.
  */
-export async function fetchNodeProfile(url: string, fetchImpl: typeof fetch = fetch): Promise<NodeProfile | null> {
+export async function fetchNodeProfile(
+    url: string, fetchImpl: typeof fetch = fetch, timeoutMs: number = FETCH_TIMEOUT_MS,
+): Promise<NodeProfile | null> {
     const base = url.trim().replace(/\/+$/, '');
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
         const res = await fetchImpl(`${base}/api/community/info`, {
             method: 'GET',
@@ -137,12 +139,14 @@ export type GlobalDoorCheck = { ok: true; profile: NodeProfile } | { ok: false; 
 
 /**
  * Whether `url` is the worldwide community with its door open, asked fresh (never from the cache:
- * the door is about to be used, so an old answer would only move the failure later).
+ * the door is about to be used, so an old answer would only move the failure later). The welcome
+ * screen asks the same question, with a shorter wait, before it offers the door at all
+ * (utils/global-door-offer.ts).
  */
 export async function checkGlobalDoor(
-    url: string = GLOBAL_NODE_URL, fetchImpl: typeof fetch = fetch,
+    url: string = GLOBAL_NODE_URL, fetchImpl: typeof fetch = fetch, timeoutMs?: number,
 ): Promise<GlobalDoorCheck> {
-    const profile = await fetchNodeProfile(url, fetchImpl);
+    const profile = await fetchNodeProfile(url, fetchImpl, timeoutMs);
     if (!profile) return { ok: false, reason: 'unreachable' };
     if (profile.profile !== 'global') return { ok: false, reason: 'not_global' };
     if (profile.features.openJoin !== true) return { ok: false, reason: 'door_closed' };

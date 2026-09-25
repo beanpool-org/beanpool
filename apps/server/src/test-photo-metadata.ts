@@ -434,6 +434,10 @@ async function partOne(m: StripModule): Promise<void> {
     exact('GIF: a sub-block that runs off the end', Buffer.concat([CLEAN_GIF.subarray(0, GIF_HEAD), GIF_COMMENT.subarray(0, 8)]));
     exact('GIF: an unknown block introducer', Buffer.concat([CLEAN_GIF.subarray(0, GIF_HEAD), GIF_COMMENT, Buffer.from([0x99]), CLEAN_GIF.subarray(GIF_HEAD)]));
     exact('GIF: no trailer', Buffer.concat([CLEAN_GIF.subarray(0, GIF_HEAD), GIF_COMMENT, CLEAN_GIF.subarray(GIF_HEAD, -1)]));
+    exact('WebP: a RIFF size that stops before the picture (only metadata inside it)',
+        Buffer.concat([riff([vp8x(0x08), riffChunk('EXIF', cameraTiff(true, 1))]), VP8L_CHUNK]));
+    exact('JPEG: no scan at all, nothing but metadata', Buffer.concat([SOI, exifApp1(true, 6), COMMENT, EOI]));
+    exact('GIF: no image block, nothing but a comment', Buffer.concat([CLEAN_GIF.subarray(0, GIF_HEAD), GIF_COMMENT, Buffer.from([0x3b])]));
 
     console.log('\n── 1f. The orientation reader ──');
     assert(readTiffOrientation(cameraTiff(true, 8)) === 8 && readTiffOrientation(cameraTiff(false, 3)) === 3, 'reads both byte orders');

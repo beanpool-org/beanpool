@@ -20,7 +20,8 @@
  *
  * Throw, grow the bytes, or lose the picture. A file whose structure does not parse from its first byte to its
  * end marker — truncated, corrupt, a format this does not know — is returned exactly as given, which is how the
- * node stored every image before this existed. It is only ever stripping a file it has walked completely.
+ * node stored every image before this existed. It is only ever stripping a file it has walked completely and found
+ * a picture in (a JPEG scan, a PNG's critical chunks, a WebP image chunk inside the RIFF, a GIF image block).
  *
  * ## Formats
  *
@@ -128,6 +129,7 @@ function stripJpeg(buf: Buffer): Buffer | null {
     const parts: Buffer[] = [buf.subarray(0, 2)];
     let changed = false;
     let orientationKept = false;
+    let hasPicture = false;
     let pos = 2;
     for (;;) {
         // A marker must start here; running out of bytes before EOI means a truncated file.
@@ -185,6 +187,7 @@ function stripJpeg(buf: Buffer): Buffer | null {
         pos = end;
 
         if (marker === 0xda) { // SOS: the entropy-coded scan follows its header
+            hasPicture = true;
             let i = pos;
             for (;;) {
                 i = buf.indexOf(0xff, i);
@@ -198,7 +201,7 @@ function stripJpeg(buf: Buffer): Buffer | null {
         }
     }
     if (pos < buf.length) changed = true; // bytes after EOI
-    return changed ? Buffer.concat(parts) : null;
+    return changed && hasPicture ? Buffer.concat(parts) : null;
 }
 
 /**
@@ -285,6 +288,7 @@ function stripPng(buf: Buffer): Buffer | null {
 // — EXIF, "XMP ", anything unknown, which a decoder is required to ignore — goes, as does anything after the RIFF.
 
 const WEBP_DRAWING_CHUNKS = new Set(['VP8X', 'VP8 ', 'VP8L', 'ALPH', 'ANIM', 'ANMF', 'ICCP']);
+const WEBP_PICTURE_CHUNKS = new Set(['VP8 ', 'VP8L', 'ANMF']);
 const VP8X_EXIF_FLAG = 0x08;
 const VP8X_XMP_FLAG = 0x04;
 
@@ -294,6 +298,7 @@ function stripWebp(buf: Buffer): Buffer | null {
     const parts: Buffer[] = [];
     let changed = false;
     let vp8xIndex = -1;
+    let hasPicture = false;
     let pos = 12;
     while (pos < riffEnd) {
         if (pos + 8 > riffEnd) return null;
@@ -301,6 +306,7 @@ function stripWebp(buf: Buffer): Buffer | null {
         const size = buf.readUInt32LE(pos + 4);
         const end = pos + 8 + size + (size & 1);
         if (end > riffEnd) return null;
+        if (WEBP_PICTURE_CHUNKS.has(fourcc)) hasPicture = true;
         if (WEBP_DRAWING_CHUNKS.has(fourcc)) {
             if (fourcc === 'VP8X') {
                 if (size < 10 || vp8xIndex !== -1) return null;
@@ -313,7 +319,8 @@ function stripWebp(buf: Buffer): Buffer | null {
         pos = end;
     }
     if (riffEnd < buf.length) changed = true;
-    if (!changed) return null;
+    // No picture inside the RIFF (a size field that stops short of it, say): nothing here to keep safely.
+    if (!changed || !hasPicture) return null;
     if (vp8xIndex !== -1) {
         const vp8x = Buffer.from(parts[vp8xIndex]);
         vp8x[8] &= ~(VP8X_EXIF_FLAG | VP8X_XMP_FLAG) & 0xff;
@@ -359,6 +366,7 @@ function stripGif(buf: Buffer): Buffer | null {
     if (pos > buf.length) return null;
     const parts: Buffer[] = [buf.subarray(0, pos)];
     let changed = false;
+    let hasPicture = false;
     for (;;) {
         if (pos >= buf.length) return null; // no trailer before the end: truncated
         const introducer = buf[pos];
@@ -373,6 +381,7 @@ function stripGif(buf: Buffer): Buffer | null {
             const end = data > buf.length ? -1 : skipGifSubBlocks(buf, data);
             if (end < 0) return null;
             parts.push(buf.subarray(pos, end));
+            hasPicture = true;
             pos = end;
             continue;
         }
@@ -392,5 +401,5 @@ function stripGif(buf: Buffer): Buffer | null {
         return null;
     }
     if (pos < buf.length) changed = true;
-    return changed ? Buffer.concat(parts) : null;
+    return changed && hasPicture ? Buffer.concat(parts) : null;
 }

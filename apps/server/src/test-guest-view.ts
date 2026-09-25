@@ -89,7 +89,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 
@@ -101,6 +101,33 @@ function assert(cond: boolean, msg: string): void {
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 let BASE = '';
+/** Every request this run sent, by method: the sweep's size, printed at the end so a change to it shows. */
+const requestsSent: Record<string, number> = {};
+
+// ── what this run started, stopped on any exit ──────────────────────────────────────────────────
+// The other combinations run in child processes (section 8), each with its own node and data directory. A run that
+// fails, throws or is killed takes them with it: in CI, a parent blocked in spawnSync outlived test-all's timeout, and
+// the rest of its run landed in the next suite's log (run 36193976409). So the children are spawned async and stopped on
+// this process's exit, a signal ends the run through that exit, and a child stops when its parent is gone however it
+// went (SIGKILL included): its IPC channel closes. Each node runs in its own process, so it stops with it.
+const children = new Set<ChildProcess>();
+const ownedDirs = new Set<string>();
+process.on('exit', () => {
+    for (const c of children) c.kill('SIGTERM');
+    for (const d of ownedDirs) fs.rmSync(d, { recursive: true, force: true });
+});
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
+    process.on(sig, () => {
+        console.error(`${MODE} ${sig}: stopping this run and every process it started`);
+        process.exit(128 + os.constants.signals[sig]);
+    });
+}
+if (process.env.GUEST_VIEW_CHILD === '1') {
+    // A child combination: the data directory was made for it, and it stops when its parent does.
+    if (process.env.BEANPOOL_DATA_DIR) ownedDirs.add(process.env.BEANPOOL_DATA_DIR);
+    process.on('disconnect', () => process.exit(1));
+    process.channel?.unref();
+}
 
 // ── the reference rules: this suite's own copies ────────────────────────────────────────────────
 const R_KM = 6371;
@@ -163,6 +190,7 @@ let beforeCall: () => void = () => {};
 type Method = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 async function call(method: Method, id: Id | null, urlPath: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
     beforeCall();
+    requestsSent[method] = (requestsSent[method] ?? 0) + 1;
     const bodiless = method === 'GET' || method === 'HEAD';
     const raw = bodiless ? '' : JSON.stringify(body ?? {});
     const headers: Record<string, string> = { ...extra };
@@ -889,11 +917,20 @@ async function main(): Promise<void> {
     ] as const) {
         console.log(`\n── 8. ${what} ──`);
         const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `beanpool-guest-view-${combo.replace('+', '-')}-`));
-        const env: NodeJS.ProcessEnv = { ...process.env, GUEST_VIEW_COMBO: combo, BEANPOOL_DATA_DIR: dataDir };
+        ownedDirs.add(dataDir);
+        const env: NodeJS.ProcessEnv = { ...process.env, GUEST_VIEW_COMBO: combo, GUEST_VIEW_CHILD: '1', BEANPOOL_DATA_DIR: dataDir };
         delete env.NODE_PROFILE;
-        const child = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], { env, stdio: 'inherit' });
+        // Async, with an IPC channel the child watches (above): this process stays free to stop it on a signal.
+        const child = spawn(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], { env, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+        children.add(child);
+        const status = await new Promise<number | null>(resolve => {
+            child.on('exit', code => resolve(code));
+            child.on('error', () => resolve(null));
+        });
+        children.delete(child);
         fs.rmSync(dataDir, { recursive: true, force: true });
-        assert(child.status === 0, `the ${combo} run passed (exit ${child.status})`);
+        ownedDirs.delete(dataDir);
+        assert(status === 0, `the ${combo} run passed (exit ${status})`);
     }
 
     /**
@@ -916,6 +953,18 @@ async function main(): Promise<void> {
             earlier();
             resetAdminRateLimit?.(); resetChatRateLimit(); resetAdminAuthTarpit(); resetPasswordBrake(); pruneGithubPolls(Date.now() + 3_600_000);
         };
+        // The admin tarpit (admin-auth.ts) sleeps before it refuses: 250 ms even from the floor resetAdminAuthTarpit leaves
+        // it at, on each of the ~180 admin reads, writes and HEADs a caller sends here. That was about 400 s of this suite's
+        // 435 (45 s a caller, 9 sweeps) and put it past test-all's timeout. The sleep decides only WHEN the 401 goes out, never
+        // its status or body, which is all this sweep reads (test-admin-auth measures the delay itself). So for this section a
+        // timer set from admin-auth fires at once; every other timer keeps its delay.
+        const realSetTimeout = globalThis.setTimeout;
+        let tarpitsAnsweredAtOnce = 0;
+        globalThis.setTimeout = ((fn: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+            const tarpit = /[\\/]admin-auth\.[cm]?[jt]s:\d+/.test(new Error().stack ?? '');
+            if (tarpit) tarpitsAnsweredAtOnce++;
+            return realSetTimeout(fn, tarpit ? 0 : ms, ...args);
+        }) as unknown as typeof setTimeout;
         // Bob brought Alice in and vouches for her as an elder, and they are friends: her trust profile names him, with his face.
         db.prepare('UPDATE members SET invited_by = ?, elder_vouched_by = ? WHERE public_key = ?').run(bob.pk, bob.pk, alice.pk);
         db.prepare('INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?), (?, ?)').run(alice.pk, bob.pk, bob.pk, alice.pk);
@@ -1264,9 +1313,13 @@ async function main(): Promise<void> {
             assert(headMismatch.length === 0, `${who}: a HEAD to every read answers as its GET does${headMismatch.length ? ` — ${headMismatch.slice(0, 6).join(' | ')}` : ''}`);
         }
         console.log(`  (answers by status: ${Object.entries(tally).map(([k, v]) => `${k}×${v}`).join(', ')}; a server error, which names nobody either: ${[...serverErrors].join(', ') || 'none'})`);
+        const gets = served.filter(r => r.startsWith('GET ')).length;
+        console.log(`  (cases ${MODE}: ${served.length} routes, every method, × ${guestsHere.length} callers = ${served.length * guestsHere.length}, `
+            + `and a HEAD for each of the ${gets} GETs × ${guestsHere.length} = ${gets * guestsHere.length}; the admin tarpit answered at once ${tarpitsAnsweredAtOnce} times)`);
         const stillPruned = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pruned.pk) as { status: string }).status;
         assert(stillPruned === 'pruned', `the pruned account is still pruned after the sweep (${stillPruned})`);
         beforeCall = earlier;
+        globalThis.setTimeout = realSetTimeout;
     }
 
     /**
@@ -1495,7 +1548,9 @@ async function main(): Promise<void> {
 
 main()
     .then(() => {
-        console.log(`\n${passed}/${run} passed ${MODE}`);
+        console.log(`\n(requests sent ${MODE}: ${Object.values(requestsSent).reduce((a, b) => a + b, 0)} — `
+            + `${Object.entries(requestsSent).sort().map(([m, n]) => `${m} ${n}`).join(', ')})`);
+        console.log(`${passed}/${run} passed ${MODE}`);
         process.exit(passed === run ? 0 : 1);
     })
     .catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

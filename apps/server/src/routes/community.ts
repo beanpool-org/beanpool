@@ -54,6 +54,8 @@ import { getProfileSwitches, getNodeProfile, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS
 import { probationSummary } from '../engine/probation.js';
 import { muteOf } from '../engine/auto-moderation.js';
 import { respondIfMuted, isNote } from './profile-feature-gate.js';
+import { isPoint, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
+import { parsePoint, type Point } from './distance-query.js';
 import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
@@ -721,8 +723,68 @@ router.get('/api/community/me', async (ctx) => {
         return;
     }
     ctx.set('Cache-Control', 'private, no-store');
-    ctx.body = { publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor) };
+    ctx.body = { publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor), area: readMemberArea(actor) };
 });
+
+/**
+ * The signed member sets or clears their own coarse area (G4, engine/member-area.ts): `{ lat, lng }` sets it, rounded
+ * to 0.1° before anything is written; `{ lat: null, lng: null }` clears it. Only ever the signer's own: the actor comes
+ * from the signature, and a body naming anyone else is refused by the signature check before this runs.
+ */
+router.post('/api/community/me/area', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const { lat, lng } = (ctx as any).requestBody || {};
+    const clear = lat === null && lng === null;
+    // A pruned account is no longer in the community (its area was cleared with it), so it can't set a new one; clearing
+    // is never refused to anyone with a row here.
+    const member = getMember(actor);
+    if (!member || (member.status === 'pruned' && !clear)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Only a member of this community can set an area here' };
+        return;
+    }
+    if (!clear && !isPoint(lat, lng)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Send lat (-90 to 90) and lng (-180 to 180) as numbers to set your area, or both as null to clear it.' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = { success: true, area: setMemberArea(actor, clear ? null : { lat, lng }) };
+});
+
+/**
+ * A point on a People list (G4): parsed, and allowed only to a signed member, whatever ENFORCE_READ_AUTH says, because
+ * the distances are worked out from members' areas. Answers the request itself and returns undefined when it may not go
+ * on. Before the ETag, so garbage is a 400 and never a 304.
+ */
+function peoplePoint(ctx: any): Point | null | undefined {
+    const point = parsePoint(ctx.query);
+    if (!point.ok) {
+        ctx.status = 400;
+        ctx.body = { error: point.error };
+        return undefined;
+    }
+    if (!point.value) return null;
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Distances to people need a signed request' };
+        return undefined;
+    }
+    // A pruned or self-deleted account keeps its row and can still sign, but it is no longer in the community.
+    const member = getMember(actor);
+    if (!member || member.status === 'pruned') {
+        ctx.status = 403;
+        ctx.body = { error: 'Read access requires a member identity' };
+        return undefined;
+    }
+    return point.value;
+}
 
 router.get('/api/community/health', async (ctx) => {
     // `flags` is the node's fraud and moderation analysis — wash-trading findings, sybil-ring
@@ -755,6 +817,10 @@ router.get('/api/community/membership/:publicKey', async (ctx) => {
 });
 
 router.get('/api/community/members', async (ctx) => {
+    // With `lat` and `lng`: each person's distance in whole km from their coarse area, nearest first (G4).
+    // The point is in the querystring, which the viewer signature below already hashes.
+    const point = peoplePoint(ctx);
+    if (point === undefined) return;
     // Contact details follow each member's choice (contactVisibleTo), so two members asking for this URL get
     // different bodies. The viewer is the verified signer only, and it goes into the ETag together with who
     // has added them as a friend: being added changes what they may see without changing any member row, so
@@ -808,7 +874,7 @@ router.get('/api/community/members', async (ctx) => {
             };
         });
 
-    const bodyStr = JSON.stringify(members);
+    const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
 
     ctx.status = 200;
     ctx.type = 'application/json';
@@ -1542,11 +1608,14 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
 
 
 router.get('/api/members', async (ctx) => {
+    // With `lat` and `lng`: each person's distance in whole km from their coarse area, nearest first (G4).
+    const point = peoplePoint(ctx);
+    if (point === undefined) return;
     const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
     const etag = `W/"members-${getMembersVersion()}${querySig}"`;
 
     ctx.set('ETag', etag);
-    ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
+    ctx.set('Cache-Control', point ? 'private, max-age=0, must-revalidate' : 'public, max-age=0, must-revalidate');
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch) {
@@ -1589,7 +1658,7 @@ router.get('/api/members', async (ctx) => {
         archetype: m.archetype || null,
     }));
 
-    const bodyStr = JSON.stringify(members);
+    const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
 
     ctx.status = 200;
     ctx.type = 'application/json';

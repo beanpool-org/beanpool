@@ -9,6 +9,7 @@ import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type Pho
 import { getLocalConfig } from '../config/local-config.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
+import { importedArea } from './member-area.js';
 import {
     exportSyncState as exportSyncStateEngine,
     type SyncPayload,
@@ -471,6 +472,9 @@ function postModeration(rp: any): [string | null, string | null] {
     return [instantOrNull(rp.hiddenByReportsAt), instantOrNull(rp.removedByModeratorAt)];
 }
 
+// members.area_lat / area_lng / area_updated_at (G4) come from importedArea (engine/member-area.ts): plain assignment,
+// so a member who clears their area on the main server has none here either.
+
 /** members.moderation_muted_until (G3): plain assignment, so a lift on the main server lifts it here too. */
 function mutedUntil(rm: any): string | null {
     return instantOrNull(rm.moderationMutedUntil);
@@ -597,8 +601,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             for (const rm of remote.members ?? []) {
                 const existing = db.prepare("SELECT updated_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null } | undefined;
                 if (!existing) {
-                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until,
+                                area_lat, area_lng, area_updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
@@ -614,7 +619,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.elderVouchedBy || null,
                         rm.archetype || null,
                         rm.updatedAt || rm.joinedAt,
-                        mutedUntil(rm)
+                        mutedUntil(rm),
+                        ...importedArea(rm)
                     );
                     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(rm.publicKey);
                     newMembers++;
@@ -634,6 +640,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         elder_vouched_by = COALESCE(elder_vouched_by, ?),
                         archetype = ?,
                         moderation_muted_until = ?,
+                        area_lat = ?,
+                        area_lng = ?,
+                        area_updated_at = ?,
                         updated_at = ?
                         WHERE public_key = ?`).run(
                         rm.callsign,
@@ -646,6 +655,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.elderVouchedBy || null,
                         rm.archetype || null,
                         mutedUntil(rm),
+                        ...importedArea(rm),
                         rm.updatedAt || existing.updated_at || new Date().toISOString(),
                         rm.publicKey
                     );

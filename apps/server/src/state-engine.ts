@@ -6330,6 +6330,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
         setUserStatusRow(publicKey, 'pruned');
+        // A person's coarse area (G4) goes too: a pruned account can't sign the request that clears it.
+        db.prepare('UPDATE members SET area_lat = NULL, area_lng = NULL, area_updated_at = NULL WHERE public_key = ? AND area_lat IS NOT NULL').run(publicKey);
         db.prepare("UPDATE posts SET status='completed', active=0, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey=? AND type='poll' AND status='active'").run(publicKey);
         db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
         // Same scrub as purgeMemberSelf, and it has to happen here rather than being left to the
@@ -6355,7 +6357,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
  * Atomically:
  * 1. Validates no active escrows as buyer or seller.
  * 2. Settles positive or negative balance with COMMONS_POOL.
- * 3. Anonymizes member profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact).
+ * 3. Anonymizes member profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact, coarse area).
  * 4. Cancels active marketplace listings.
  * 5. Purges push tokens, guardian shares, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
@@ -6435,6 +6437,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 can_operate = 0,
                 credit_frozen = 0,
                 elder_vouched_by = NULL,
+                area_lat = NULL,
+                area_lng = NULL,
+                area_updated_at = NULL,
                 profile_updated_at = ?,
                 updated_at = ?
             WHERE public_key = ?

@@ -11,10 +11,10 @@
  *      changed at runtime changes nothing either
  *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the nine
  *      `features` exactly (open join on the global profile only, since G2; probation, auto-hide and auto-mute since
- *      G3), and every field it had before
+ *      G3; distance search on both since G4), and every field it had before
  *   5. node_config overrides change the configured switch (and the boot log reports them), an override of a built
- *      switch (openJoin) reaches the API, bad ones are ignored with a log line, and a switch this build doesn't have
- *      yet (knocks) stays pinned, so the API never advertises it
+ *      switch (openJoin, distanceSortDefault) reaches the code, bad ones are ignored with a log line, and a switch
+ *      this build doesn't have yet (knocks) stays pinned, so the API never advertises it
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-node-profile.ts
  */
@@ -63,11 +63,11 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
 // What this build does on each profile. G2 built open join: on for the global profile, off for local. G1 built Beans
 // off: on global, Beans, escrow and enterprises are off (this database's ledger has never moved; test-global-no-beans
 // covers one that has). G3 built probation, auto-hide and auto-mute: on for global only (test-global-moderation).
-// Until G4 (distance search) and G6 (knocks) land the rest is the same on both. The PR that builds one of these
-// changes its line here, with the test that proves it.
+// G4 built distance search: every profile answers it (test-distance-search). Until G6 (knocks) lands the rest is the
+// same on both. The PR that builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: false, probation: false, autoHideReports: false, autoMute: false },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: false, probation: true, autoHideReports: true, autoMute: true },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true },
 };
 
 async function main() {
@@ -202,6 +202,11 @@ async function main() {
     assert(getProfileSwitches().knocks === false, 'knocks are not built yet (G6), so the switch the code reads stays off');
     assert(getNodeFeatures().knocks === false && (await getInfo()).body.features.knocks === false,
         '/api/community/info does not advertise knocks because an override asked for them');
+    assert(getProfileSwitches().distanceSortDefault === false, 'local: a post listing with a point keeps today\'s order by default');
+    setOverride('distanceSortDefault', 'true');
+    assert(getProfileSwitches().distanceSortDefault === true,
+        'distance sort is built (G4), so local + nodeProfile.distanceSortDefault=true reaches the code: nearest first by default');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.distanceSortDefault`);
     setOverride('ssoRequiredForJoin', 'false');
     assert(getProfileSwitches().ssoRequiredForJoin === true,
         'the door without a sign-in (D1 b) is not built, so nodeProfile.ssoRequiredForJoin=false changes nothing');
@@ -226,6 +231,10 @@ async function main() {
         'global with overrides: /api/community/info reports what this build does, the built override (probation off) included and the unbuilt one (knocks) not');
     assert(getProfileSwitches().probation === false && getProfileSwitches().autoHideReports === true,
         'probation is built (G3), so nodeProfile.probation=false turns it off; auto-hide keeps the global default');
+    assert(getProfileSwitches().distanceSortDefault === true, 'global: nearest first by default, no longer pinned off (G4)');
+    setOverride('distanceSortDefault', 'false');
+    assert(getProfileSwitches().distanceSortDefault === false, 'and the operator\'s nodeProfile.distanceSortDefault=false turns it off');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.distanceSortDefault`);
 
     setOverride('beans', 'maybe');
     setOverride('openjoin', 'true');

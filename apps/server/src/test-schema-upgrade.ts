@@ -539,6 +539,56 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 10. A person's coarse area and the posts distance index (G4) ───────────────────────────────
+    // Every node from before G4: members without area_lat / area_lng / area_updated_at, a members_touch_updated_at that
+    // doesn't list them, and posts without idx_posts_lat_lng. The fixture is a booted node rolled back to that shape,
+    // holding a member. It must boot onto exactly a fresh install's members columns and posts indexes, with the area
+    // NULL on the member it had, and a write of the area alone must move updated_at (so delta sync carries it).
+    console.log('\n--- 10. Legacy members without the area, posts without idx_posts_lat_lng (G4) ---');
+    {
+        const AREA = ['area_lat', 'area_lng', 'area_updated_at'];
+        const touchSql = (d: Database.Database): string =>
+            (d.prepare(`SELECT sql FROM sqlite_master WHERE type='trigger' AND name='members_touch_updated_at'`).get() as any)?.sql ?? '';
+        const dir = tmp('legacy-g4');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const freshMembers = columns(d, 'members');
+        const freshPostIndexes = indexes(d, 'posts');
+        const current = touchSql(d);
+        const old = current.replace(/,\s*area_lat,\s*area_lng,\s*area_updated_at\b/, '');
+        assert(AREA.every(c => freshMembers.includes(c)) && freshPostIndexes.includes('idx_posts_lat_lng')
+            && AREA.every(c => new RegExp(`\\b${c}\\b`).test(current)) && !/\barea_/.test(old),
+            'a fresh install has the area columns, idx_posts_lat_lng and a trigger listing the area; the fixture takes all three out');
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TRIGGER members_touch_updated_at; DROP INDEX idx_posts_lat_lng;
+                ALTER TABLE members DROP COLUMN area_lat; ALTER TABLE members DROP COLUMN area_lng; ALTER TABLE members DROP COLUMN area_updated_at;
+                ${old};`);
+        const pk = 'dd'.repeat(32);
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at, updated_at) VALUES (?, 'Legacy', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')`).run(pk);
+        assert(!AREA.some(c => columns(d, 'members').includes(c)) && !indexes(d, 'posts').includes('idx_posts_lat_lng'),
+            'the fixture genuinely lacks the area columns and the index');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the pre-G4 node boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(columns(after, 'members')) === JSON.stringify(freshMembers), 'ending up with exactly the members columns a fresh install has');
+        assert(JSON.stringify(indexes(after, 'posts')) === JSON.stringify(freshPostIndexes), 'and exactly its posts indexes, idx_posts_lat_lng included');
+        assert(AREA.every(c => new RegExp(`\\b${c}\\b`).test(touchSql(after))), 'its members_touch_updated_at lists the area again');
+        const row = after.prepare('SELECT area_lat, area_lng, area_updated_at FROM members WHERE public_key = ?').get(pk) as any;
+        assert(row && row.area_lat === null && row.area_lng === null && row.area_updated_at === null, 'the member it already had has no area');
+        after.prepare('UPDATE members SET area_lat = -28.6, area_lng = 153.5 WHERE public_key = ?').run(pk);
+        const touched = (after.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(pk) as any)?.updated_at;
+        assert(touched > '2025-01-01T00:00:00.000Z', `an UPDATE that sets only the area moves updated_at (${touched})`);
+        let refused = false;
+        try { after.prepare('UPDATE members SET area_lat = 91 WHERE public_key = ?').run(pk); } catch { refused = true; }
+        assert(refused, 'and the column refuses a latitude past the pole');
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

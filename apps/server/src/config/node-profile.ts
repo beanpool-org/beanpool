@@ -69,7 +69,9 @@ export interface ProfileSwitches {
     crowdfund: boolean;
     /** This node takes "ask to join" requests from non-members (D4 = a: on for every community, with an opt-out). */
     knocks: boolean;
-    /** Post listings sort nearest-first unless the caller asks otherwise. Not the same as `features.distanceSearch`. */
+    /** A post listing read with a point (`lat`, `lng`) and no `sort` comes nearest first; off, it keeps the most
+     *  recently updated first. Without a point every profile keeps that order (routes/marketplace.ts). Not the same as
+     *  `features.distanceSearch`, which every node reports. */
     distanceSortDefault: boolean;
     /** Mirror the public communities directory hourly, for "communities near you". Primary only. */
     directoryMirror: boolean;
@@ -138,7 +140,6 @@ const NOT_BUILT_YET: Readonly<Partial<ProfileSwitches>> = {
     // probation) is not built, so an override asking for it is reported at boot and changes nothing.
     ssoRequiredForJoin: true,
     knocks: false, // G6
-    distanceSortDefault: false, // G4
     directoryMirror: false, // G5
     publishToDirectory: true, // G5 (the operator's directory settings decide, as they always have)
 };
@@ -153,7 +154,9 @@ export interface NodeFeatures {
     enterprises: boolean;
     openJoin: boolean;
     knocks: boolean;
-    /** The listing answers `?lat&lng&radiusKm&sort=distance`, on every profile (design §3.2). G4 builds it. */
+    /** This server understands the distance parameters, on every profile (design §3.2, G4): the posts listing's
+     *  `lat`, `lng`, `radiusKm` and `sort=distance|recent`, a point on the People lists, and a member's coarse area
+     *  (POST /api/community/me/area). Apps from before G4 ignore it. */
     distanceSearch: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
     probation: boolean;
@@ -244,8 +247,8 @@ export function getNodeFeatures(): NodeFeatures {
         enterprises: s.enterprises && s.treasuries,
         openJoin: s.openJoin,
         knocks: s.knocks,
-        // A capability of the build, not a profile switch: once built, a local node answers distance queries too.
-        distanceSearch: false, // G4
+        // A capability of the build, not a profile switch: a local node answers distance queries too.
+        distanceSearch: true,
         probation: s.probation,
         autoHideReports: s.autoHideReports,
         autoMute: s.autoMute,

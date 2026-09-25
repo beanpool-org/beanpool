@@ -12,6 +12,8 @@
  *      PUBLIC_READ_PATTERNS entry (a pattern with no example fails, so a new public route must be listed here). No body
  *      holds a member's key or name, an /api/avatar/ URL, the event's typed place or a place finer than its area; no
  *      person field (author, taker, keeper, voter, owner, key, name) holds a real value
+ *  2b. every public read that takes a point (found by asking each one with a bad point and a good one, and in the code
+ *      by every module that reads a point from a query) is one this suite measures below; one that isn't fails here
  *   3. the guest shape: every listing there, every person neutral (`'hidden'`, `''`, null, 0), the counts kept,
  *      'pending' kept, the area for the place; direct, group and hidden posts out; one member's listings, a group's or
  *      a person's refused 403; the membership probe names only the signer; the Commons decisions, pool balance and
@@ -24,10 +26,18 @@
  *      and one pass with a radius or a filter): each guest lat/lng is roundToArea of the place, each distance the
  *      whole km from the area, the order the order of the areas' distances, a radius holds exactly the areas inside
  *      it, and no place appears. Counted: how often the place itself would have answered differently
+ *  7b. the landing card (/api/global/home, G5), which counts the listings within 50 km of any point: from 200 points
+ *      (the antimeridian and both poles among them) and on both sides of 40 listings' 50 km edges, a guest's count is
+ *      of the listings whose AREA is within 50 km, a member's of those whose place is. And the deciding review's attack
+ *      (4108073735), automated: bisecting where an unsigned count drops, on 8 rays, and fitting the point 50 km from
+ *      every drop, converges on the lone listing's area centre, never the listing
+ *  7c. the communities (/api/global/communities, and the card's): each distance and the order are from the place each
+ *      community shows in the body (the public directory's), and from nothing else
  *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset): nothing
  *      changes; a guest's body is the engine's read for that reader, names, keys and places included, and no view
  *      header is sent; an enterprise names its keepers; faces are public by key, avatar URLs
- *      carry no `k=`, and the recovery lookup matches a prefix with photos
+ *      carry no `k=`, and the recovery lookup matches a prefix with photos; where an operator keeps the directory there,
+ *      the landing card's count is from each listing's place, as the listing shows it
  *   9. faces and names (G9a-2): /api/avatar/:pk without its key is 404 to anyone; the member-only key a member's
  *      members list carries opens it, unsigned as an <img> asks; a wrong key, another member's, or the key of a photo
  *      since changed is 404, as is a conditional request without one; a member's listings carry keyed URLs, a guest's
@@ -36,10 +46,10 @@
  *      Alice proposed): where they are switched on and so is the visitors' view, every read of them is for members
  *      only, trailing slash or not, and a member reads them naming their people; where they are off, 404 to everyone
  *
- * The rule is the switch's, whatever else is switched on, so a switch can't hide a leak from this suite: sections 1, 2
- * and 10 run again in a child process for each other combination that matters (§8's local run is one of them):
+ * The rule is the switch's, whatever else is switched on, so a switch can't hide a leak from this suite: sections 1, 2,
+ * 2b, 7b, 7c and 10 run again in a child process for each other combination that matters (§8's local run is one of them):
  *   - global with the Beans switched back on (beans, escrow, enterprises, treasuries, crowdfund), as an operator may
- *   - local with `guestListingsOnly` overridden on
+ *   - local with `guestListingsOnly` overridden on, and the directory (`directoryMirror`) so the landing card is there
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-guest-view.ts
  */
@@ -63,7 +73,7 @@ const MONEY_ON = COMBO !== 'global';
 /** The operator's `node_config` overrides that make this combination, written before boot as an operator's would be. */
 const OVERRIDES: Record<string, string> = COMBO === 'global+money'
     ? { beans: 'true', escrow: 'true', enterprises: 'true', treasuries: 'true', crowdfund: 'true' }
-    : COMBO === 'local+guest' ? { guestListingsOnly: 'true' } : {};
+    : COMBO === 'local+guest' ? { guestListingsOnly: 'true', directoryMirror: 'true' } : {};
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -91,6 +101,33 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
 }
 /** A place's area: 0.1° to the nearest step, halves up (design §5). */
 const area = (deg: number) => Math.round(deg * 10) / 10 + 0;
+type Place = { lat: number; lng: number };
+const km = (a: Place, b: Place) => haversine(a.lat, a.lng, b.lat, b.lng);
+const cellOf = (p: Place): Place => ({ lat: area(p.lat), lng: area(p.lng) });
+/** The point `dist` km from `p` on a bearing (degrees from north), on this suite's sphere. */
+function destination(p: Place, dist: number, bearing: number): Place {
+    const d = dist / R_KM, b = rad(bearing), f1 = rad(p.lat), l1 = rad(p.lng);
+    const f2 = Math.asin(Math.sin(f1) * Math.cos(d) + Math.cos(f1) * Math.sin(d) * Math.cos(b));
+    const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(f1), Math.cos(d) - Math.sin(f1) * Math.sin(f2));
+    return { lat: f2 * 180 / Math.PI, lng: ((l2 * 180 / Math.PI + 540) % 360) - 180 };
+}
+/** The point `dist` km from every one of `points`, least squares, by an ever finer grid: what an attacker would fit. */
+function fitCentre(points: Place[], dist: number): Place {
+    const cost = (c: Place) => points.reduce((s, p) => s + (km(c, p) - dist) ** 2, 0);
+    let best: Place = { lat: points.reduce((s, p) => s + p.lat, 0) / points.length, lng: points.reduce((s, p) => s + p.lng, 0) / points.length };
+    for (let step = 0.5; step > 1e-8; step /= 4) {
+        let next = best;
+        for (let i = -10; i <= 10; i++) {
+            for (let j = -10; j <= 10; j++) {
+                const c = { lat: best.lat + i * step, lng: best.lng + j * step };
+                if (cost(c) < cost(next)) next = c;
+            }
+        }
+        best = next;
+    }
+    return best;
+}
+const span = (xs: number[]) => xs.length ? `${Math.min(...xs).toFixed(3)} to ${Math.max(...xs).toFixed(3)} km` : 'none';
 
 /** Seeded, so a failure reproduces. */
 function prng(seed: number): () => number {
@@ -160,6 +197,19 @@ const PENDING_AT = { lat: -28.51977, lng: 153.55519 };
 const KEEPER_AT = { lat: -28.61803, lng: 153.47777 };
 const BOB_AT = { lat: -28.58821, lng: 153.52263 };
 const ENTERPRISE_AT = { lat: -28.57731, lng: 153.44129 };
+/** A listing alone in its part of the world, 5.07 km from its area's centre: the deciding review's target (4108073735). */
+const LONE_AT = { lat: -31.123456, lng: 146.654321 };
+/** The landing card's radius (routes/global-directory.ts NEARBY_POSTS_RADIUS_KM). */
+const NEARBY_KM = 50;
+/** Communities in the public directory (the mirror's cache), each at the place it publishes. */
+const COMMUNITIES = [
+    { key: 'dir-ridge', name: 'Ridge Commons', lat: -28.61, lng: 153.47, radiusKm: 20 },
+    { key: 'dir-plains', name: 'Plains Exchange', lat: -31.4, lng: 146.2, radiusKm: 40 },
+    { key: 'dir-fjord', name: 'Fjord Swap', lat: 69.65, lng: 18.96, radiusKm: 15 },
+    { key: 'dir-dateline', name: 'Dateline Traders', lat: -17.72, lng: 179.95, radiusKm: 30 },
+    { key: 'dir-far-side', name: 'Far Side Circle', lat: -17.69, lng: -179.93, radiusKm: 30 },
+    { key: 'dir-unplaced', name: 'Somewhere Unplaced', lat: null, lng: null, radiusKm: null },
+] as const;
 
 /** The fields that name a person, and may hold only nothing, `''` or `'hidden'` for a guest. */
 const PERSON_FIELDS = new Set(['authorPublicKey', 'acceptedBy', 'createdBy', 'voterPubkey', 'memberPubkey', 'ownerPubkey', 'publicKey', 'callsign',
@@ -191,6 +241,7 @@ async function main(): Promise<void> {
     const https = await import('./https-server.js') as any;
     const { db, createCrowdfundProject, initSchema } = await import('./db/db.js');
     const { getProfileSwitches } = await import('./config/node-profile.js');
+    const { writeDirectoryRows } = await import('./engine/directory-cache.js');
     // Before boot, where the faces' keys are decided (engine/avatar-keys.ts); the schema first, as boot would lay it.
     initSchema();
     for (const [k, v] of Object.entries(OVERRIDES)) db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(`nodeProfile.${k}`, v);
@@ -292,6 +343,9 @@ async function main(): Promise<void> {
     for (let i = 0; i < 6; i++) places.push({ lat: r7(51.4712 + 0.02 * rand()), lng: r7(-0.1291 + 0.02 * rand()) });
     for (let i = 0; i < places.length; i++) post(grid, `Grid post ${i}`, places[i], {}, 'offer', 'grid');
     // Grid posts: one each; later ones updated later, so ties break the same way on both sides.
+    const lone = post(grid, 'Sentinel lone offer', LONE_AT);
+    writeDirectoryRows(COMMUNITIES.map(c => ({ key: c.key, name: c.name, url: `https://${c.key}.example`, lat: c.lat, lng: c.lng, radiusKm: c.radiusKm,
+        memberCount: 5, contactEmail: null, contactPhone: null, registryUpdatedAt: now })), now);
 
     /** Every post's place, from the database itself. */
     const truth = new Map((db.prepare('SELECT id, lat, lng FROM posts').all() as Array<{ id: string; lat: number | null; lng: number | null }>)
@@ -371,7 +425,11 @@ async function main(): Promise<void> {
         assert(patternExamples.some(e => re.test(e.path.split('?')[0])),
             `PUBLIC_READ_PATTERNS ${re} has an example in this sweep (a new public pattern must be listed here)`);
     }
-    const exactReads = [...(EXACT ?? [])].flatMap(p => p === POSTS ? postReads : [p === '/api/invite/check' ? `${p}?code=NOPE-NOPE` : p]);
+    /** The other reads that take a point (2b), each read with one as well. */
+    const withPoint = new Set(['/api/global/home', '/api/global/communities']);
+    const exactReads = [...(EXACT ?? [])].flatMap(p => p === POSTS ? postReads
+        : withPoint.has(p) ? [p, `${p}?lat=-28.55&lng=153.51`, `${p}?lat=${LONE_AT.lat}&lng=${LONE_AT.lng}`]
+            : [p === '/api/invite/check' ? `${p}?code=NOPE-NOPE` : p]);
     const guests: Array<[string, Id | null]> = [['unsigned', null], ['a non-member signer', outsider], ['a pruned account', pruned]];
     const allowPerson = (route: string) => (p: string) =>
         // The peers are communities, not people; a callsign check echoes the name it was asked about; the health
@@ -395,6 +453,74 @@ async function main(): Promise<void> {
         }
         assert(failures.length === 0, `${who}: none of ${n} public reads holds a member's key or name, a face URL, the typed place or a place finer than its area${failures.length ? ` — ${failures.slice(0, 6).join(' | ')}` : ''}`);
         assert(persons.length === 0, `${who}: no person field holds a real value in any of them${persons.length ? ` — ${persons.slice(0, 6).join(' | ')}` : ''}`);
+    }
+
+    // ── 2b. every read that takes a point is measured ──────────────────────────────────────────
+    console.log('\n── 2b. every read a visitor can send a point to is one this suite measures ──');
+    /**
+     * Every read a guest can send a point (`lat`, `lng`) to, and how this suite measures what it works out from one: a
+     * count, a distance, an order or a radius can only ever place a listing at its area's centre. A read that takes a
+     * point and isn't here fails below, so the next one can't slip past a body-only sweep.
+     */
+    const POINT_READS: Record<string, string> = {
+        [POSTS]: "section 7: each place, distance, order, radius and page is its area's",
+        '/api/global/home': "section 7b: the nearby count is of the listings whose area is within 50 km, and the bisection finds the area",
+        '/api/global/communities': "section 7c: each distance and the order are from the place each community shows (the public directory's)",
+    };
+    /** The People lists take a point from a member only (routes/community.ts peoplePoint): gated, refused to every guest. */
+    const PEOPLE_POINT_READS = ['/api/community/members', '/api/members'];
+    const publicReads = [...new Set([...(EXACT ?? []), ...patternExamples.map(e => e.path)])];
+    const takesPoint = new Set<string>();
+    for (const p of publicReads) {
+        const url = p === '/api/invite/check' ? `${p}?code=NOPE-NOPE` : p;
+        const plus = (q: string) => `${url}${url.includes('?') ? '&' : '?'}${q}`;
+        for (const id of [null, outsider]) {
+            // A point that isn't one is a 400 that names it (routes/distance-query.ts) where a read parses points...
+            const bad = await call('GET', id, plus('lat=nope&lng=nope'));
+            const a = await call('GET', id, url);
+            // ...and a read that reads one some other way answers differently with one than, twice, without.
+            const b = await call('GET', id, plus('lat=-28.55&lng=153.51'));
+            const c = await call('GET', id, url);
+            const namesPoint = bad.status === 400 && (a.status !== 400 || /\b(lat|lng)\b/.test(String(bad.body?.error ?? '')));
+            const movedByPoint = a.status === c.status && a.text === c.text && (b.status !== a.status || b.text !== a.text);
+            if (namesPoint || movedByPoint) takesPoint.add(p);
+        }
+    }
+    const unmeasured = [...takesPoint].filter(p => !(p in POINT_READS));
+    assert(unmeasured.length === 0, `every public read that takes a point is one this suite measures (found ${[...takesPoint].join(', ') || 'none'})`
+        + `${unmeasured.length ? ` — not measured: ${unmeasured.join(', ')}` : ''}`);
+    assert(Object.keys(POINT_READS).every(p => takesPoint.has(p)),
+        `and the probe finds each of them, so it would find a new one (${Object.keys(POINT_READS).filter(p => !takesPoint.has(p)).join(', ') || 'all found'})`);
+    {
+        // In the code, too: every module that reads a point from a query, and how many times, is one whose reads are
+        // listed above. The parser itself is routes/distance-query.ts.
+        const src = path.dirname(fileURLToPath(import.meta.url));
+        const found: Record<string, number> = {};
+        const walk = (dir: string) => {
+            for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+                const f = path.join(dir, e.name);
+                if (e.isDirectory()) { if (e.name !== 'node_modules') walk(f); continue; }
+                if (!/\.ts$/.test(e.name) || /^test-|\.test\.ts$/.test(e.name) || f.endsWith(path.join('routes', 'distance-query.ts'))) continue;
+                const n = (fs.readFileSync(f, 'utf8').match(/\bparse(Point|DistanceQuery)\(|\bquery(\.|\[['"])(lat|lng|lon|latitude|longitude|near)\b/g) ?? []).length;
+                if (n) found[path.relative(src, f)] = n;
+            }
+        };
+        walk(src);
+        const KNOWN: Record<string, number> = {
+            [path.join('routes', 'marketplace.ts')]: 1, // the listing (POSTS)
+            [path.join('routes', 'global-directory.ts')]: 2, // the communities and the landing card
+            [path.join('routes', 'community.ts')]: 1, // peoplePoint: the People lists, members only
+        };
+        assert(JSON.stringify(Object.entries(found).sort()) === JSON.stringify(Object.entries(KNOWN).sort()),
+            `the code reads a point from a query in the modules this suite knows, and no others (${JSON.stringify(found)}); a new one needs its reads in POINT_READS and measured`);
+    }
+    for (const [who, id] of guests) {
+        const refused: string[] = [];
+        for (const p of PEOPLE_POINT_READS) {
+            const r = await call('GET', id, `${p}?lat=-28.55&lng=153.51`);
+            if (r.status !== (id ? 403 : 401) || leaks(r.text).length) refused.push(`${p} → ${r.status}`);
+        }
+        assert(refused.length === 0, `${who}: the People lists refuse a guest's point (${refused.join(', ') || `${PEOPLE_POINT_READS.length} refused`})`);
     }
 
     // ── 10. the Beans constructs ───────────────────────────────────────────────────────────────
@@ -437,6 +563,9 @@ async function main(): Promise<void> {
             assert(pin?.lat === ENTERPRISE_AT.lat && KEYED_FACE.test(pin?.avatar ?? ''), "the map pin holds the enterprise's exact place and its keyed face");
         }
     }
+
+    // ── 7b and 7c: the landing card and the communities, from any point ─────────────────────────
+    await pointChecks();
     if (COMBO !== 'global') return;
 
     // ── 3. the guest shape ─────────────────────────────────────────────────────────────────────
@@ -749,6 +878,149 @@ async function main(): Promise<void> {
         assert(child.status === 0, `the ${combo} run passed (exit ${child.status})`);
     }
 
+    /**
+     * The deciding review's attack on the landing card (4108073735), automated, with unsigned reads of /api/global/home
+     * only: from `from`, 8 rays out; on each, the point where the count of listings within 50 km drops from 1 to 0,
+     * bisected to about a decimetre; then the point 50 km from every drop.
+     */
+    async function bisectHome(from: Place): Promise<{ ok: boolean; drops: Place[]; centre: Place; requests: number }> {
+        let requests = 0;
+        const count = async (p: Place) => {
+            requests++;
+            const r = await call('GET', null, `/api/global/home?lat=${p.lat}&lng=${p.lng}`);
+            return r.status === 200 ? r.body?.nearbyPosts?.count as number : -r.status;
+        };
+        let ok = await count(from) === 1;
+        const drops: Place[] = [];
+        for (let bearing = 0; bearing < 360; bearing += 45) {
+            let lo = 0, hi = 120;
+            ok = ok && await count(destination(from, hi, bearing)) === 0;
+            for (let k = 0; k < 20; k++) {
+                const mid = (lo + hi) / 2;
+                if (await count(destination(from, mid, bearing)) === 1) lo = mid; else hi = mid;
+            }
+            drops.push(destination(from, (lo + hi) / 2, bearing));
+        }
+        return { ok, drops, centre: fitCentre(drops, NEARBY_KM), requests };
+    }
+
+    async function pointChecks(): Promise<void> {
+        console.log('\n── 7b. /api/global/home: the nearby count is the areas\', from 200 points, at 40 edges, and against the review\'s bisection ──');
+        const HOME = '/api/global/home';
+        const hrand = prng(4108073735);
+        const cellKm = (q: Place, p: Place) => km(q, cellOf(p));
+        /** The listings a reader's count is of: the listing's own read for that reader (swept above), each at its place. */
+        const visibleTo = async (id: Id | null) => {
+            const r = await call('GET', id, `${POSTS}?${ALL_TYPES}`);
+            return ((Array.isArray(r.body) ? r.body : []) as any[]).map(p => truth.get(p.id))
+                .filter((t): t is { id: string; lat: number; lng: number } => !!t && t.lat !== null && t.lng !== null);
+        };
+        const readers: Array<[string, Id | null]> = [...guests, ['a member', bob]];
+        const seen = new Map<Id | null, Array<{ id: string; lat: number; lng: number }>>();
+        for (const [, id] of readers) seen.set(id, await visibleTo(id));
+        assert(guests.every(([, id]) => seen.get(id)!.length === seen.get(null)!.length) && seen.get(null)!.length > 50
+            && seen.get(bob)!.length > seen.get(null)!.length && seen.get(null)!.some(p => p.id === lone.id),
+            `the listings each count is of: ${seen.get(null)!.length} for each guest, ${seen.get(bob)!.length} for a member, the lone one among them`);
+        /** How many of `set` are within 50 km of q by `dist`, cut at 99 as the card does; unsure within a micrometre. */
+        const reference = (set: Place[], q: Place, dist: (q: Place, p: Place) => number) => {
+            let n = 0, unsure = false;
+            for (const p of set) {
+                const d = dist(q, p);
+                if (Math.abs(d - NEARBY_KM) <= 1e-9) unsure = true;
+                else if (d <= NEARBY_KM) n++;
+            }
+            return { n: Math.min(n, 99), unsure };
+        };
+        const countOf = async (id: Id | null, q: Place) => {
+            const r = await call('GET', id, `${HOME}?lat=${q.lat}&lng=${q.lng}`);
+            return r.status === 200 ? r.body?.nearbyPosts?.count as number : -r.status;
+        };
+        const wrong: string[] = [];
+        const teeth = { points: 0, edges: 0, sameBothSides: 0 };
+        /** A guest's count is the areas', a member's the places'. */
+        const checkAt = async (label: string, q: Place, g: [string, Id | null]) => {
+            const [who, id] = g;
+            const byArea = reference(seen.get(id)!, q, cellKm);
+            const got = await countOf(id, q);
+            if (!byArea.unsure && got !== byArea.n) wrong.push(`${label} ${who}: ${got}, by area ${byArea.n}, by place ${reference(seen.get(id)!, q, km).n}`);
+            const byPlace = reference(seen.get(bob)!, q, km);
+            const member = await countOf(bob, q);
+            if (!byPlace.unsure && member !== byPlace.n) wrong.push(`${label} a member: ${member}, by place ${byPlace.n}`);
+            return { got, byArea, byPlace: reference(seen.get(id)!, q, km) };
+        };
+
+        const points: Place[] = [];
+        for (let i = 0; i < 20; i++) points.push({ lat: -70 + 140 * hrand(), lng: hrand() < 0.5 ? 179.9 + 0.1 * hrand() : -180 + 0.1 * hrand() });
+        for (let i = 0; i < 10; i++) points.push({ lat: 89.9 + 0.1 * hrand(), lng: -180 + 360 * hrand() });
+        for (let i = 0; i < 10; i++) points.push({ lat: -90 + 0.1 * hrand(), lng: -180 + 360 * hrand() });
+        points.push({ lat: 90, lng: 0 }, { lat: -90, lng: 0 }, { lat: 0, lng: 180 }, { lat: 0, lng: -180 }, { lat: 51.48, lng: -0.12 });
+        // About a circle's width from a listing, where the 50 km edge falls among them.
+        const guestSeen = seen.get(null)!;
+        for (let i = 0; i < 80; i++) points.push(destination(guestSeen[Math.floor(hrand() * guestSeen.length)], 40 + 20 * hrand(), 360 * hrand()));
+        while (points.length < 200) points.push({ lat: Math.asin(2 * hrand() - 1) * 180 / Math.PI, lng: -180 + 360 * hrand() });
+        for (let i = 0; i < points.length; i++) {
+            const r = await checkAt(`#${i}`, points[i], guests[i % guests.length]);
+            if (!r.byArea.unsure && r.byPlace.n !== r.byArea.n) teeth.points++;
+        }
+        // Either side of a listing's own 50 km edge: 20 m apart, the place's count changes; the area's only where the
+        // area's edge falls between them too.
+        for (let i = 0; i < 40; i++) {
+            const p = guestSeen[Math.floor(hrand() * guestSeen.length)];
+            const bearing = 360 * hrand();
+            const g = guests[i % guests.length];
+            const inner = await checkAt(`edge ${i} inside`, destination(p, NEARBY_KM - 0.01, bearing), g);
+            const outer = await checkAt(`edge ${i} outside`, destination(p, NEARBY_KM + 0.01, bearing), g);
+            if (inner.byPlace.n !== outer.byPlace.n) teeth.edges++;
+            if (inner.byArea.n === outer.byArea.n && inner.got === outer.got) teeth.sameBothSides++;
+        }
+        assert(wrong.length === 0, `200 points and 40 listings' edges, as each guest and as a member: a guest's count is of the listings whose area is `
+            + `within 50 km, a member's of those whose place is${wrong.length ? ` — ${wrong.length} wrong: ${wrong.slice(0, 5).join(' | ')}` : ''}`);
+        console.log(`  (the place itself would have given a guest another count at ${teeth.points} of 200 points and across ${teeth.edges} of 40 edges;`
+            + ` a guest's count was the same on both sides of ${teeth.sameBothSides} of them)`);
+        assert(teeth.points > 0 && teeth.edges >= 30 && teeth.sameBothSides >= 30,
+            "the checks have teeth: counting from the place would have failed at points and across edges, where a guest's count doesn't move");
+
+        // The review's attack. The lone listing has nothing else within 170 km, so each drop is its.
+        const cell = cellOf(LONE_AT);
+        const crowd = placed.filter(p => p.id !== lone.id && km(p, LONE_AT) < 170);
+        assert(crowd.length === 0 && Math.abs(km(LONE_AT, cell) - 5.07) < 0.01,
+            `the lone listing is alone within 170 km, ${km(LONE_AT, cell).toFixed(3)} km from its area's centre (${cell.lat}, ${cell.lng})`);
+        const attack = await bisectHome(cell);
+        const fromCell = attack.drops.map(d => km(d, cell));
+        const fromPlace = attack.drops.map(d => km(d, LONE_AT));
+        assert(attack.ok && fromCell.every(d => Math.abs(d - NEARBY_KM) < 0.005),
+            `unsigned, bisecting where the count drops on 8 rays (${attack.requests} reads): every drop is 50 km from the area's centre `
+            + `(${span(fromCell)}), not from the listing (${span(fromPlace)})`);
+        assert(km(attack.centre, cell) < 0.005 && km(attack.centre, LONE_AT) > 5,
+            `the fit converges on the area's centre (${(km(attack.centre, cell) * 1000).toFixed(1)} m from it), never the listing `
+            + `(${km(attack.centre, LONE_AT).toFixed(3)} km from it)`);
+
+        console.log('\n── 7c. the communities: distances and order from the places they show ──');
+        const off: string[] = [];
+        let listed = 0;
+        for (let i = 0; i < points.length; i += 4) {
+            const q = points[i];
+            const [, id] = guests[i % guests.length];
+            const at = `lat=${q.lat}&lng=${q.lng}`;
+            for (const [route, r] of [['communities', await call('GET', id, `/api/global/communities?${at}&limit=50`)], ['home', await call('GET', id, `${HOME}?${at}`)]] as const) {
+                let prev = -1;
+                for (const c of (r.body?.communities ?? []) as any[]) {
+                    listed++;
+                    const seeded = COMMUNITIES.find(s => s.key === c.key);
+                    if (!seeded || c.lat !== seeded.lat || c.lng !== seeded.lng) off.push(`${route} #${i}: ${c.key} at ${c.lat},${c.lng}`);
+                    const d = c.lat === null || c.lng === null ? null : km(q, c);
+                    if (d === null ? c.distanceKm !== null : typeof c.distanceKm !== 'number' || Math.abs(c.distanceKm - d) > 0.05 + 1e-9) {
+                        off.push(`${route} #${i}: ${c.key} distanceKm ${c.distanceKm}, from the place it shows ${d?.toFixed(3)}`);
+                    }
+                    if (c.distanceKm !== null && c.distanceKm < prev) off.push(`${route} #${i}: ${c.key} after one ${prev} km away`);
+                    if (c.distanceKm !== null) prev = c.distanceKm;
+                }
+            }
+        }
+        assert(off.length === 0 && listed > 100, `50 points × 2 reads, ${listed} communities: each at the place it publishes, each distance from that `
+            + `place and in its order${off.length ? ` — ${off.slice(0, 5).join(' | ')}` : ''}`);
+    }
+
     async function localChecks(): Promise<void> {
         console.log('── a local node: a guest reads what the engine gives that reader, as before G9a ──');
         for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
@@ -792,6 +1064,23 @@ async function main(): Promise<void> {
         assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !members.text.includes('&k=') && !posts.text.includes('&k='),
             'avatar URLs carry no key here');
         assert(!!members.headers.get('cache-control')?.startsWith('public'), `/api/members keeps its cache header (${members.headers.get('cache-control')})`);
+
+        // The landing card (G5), where an operator keeps the directory on a local node: the count is from each listing's
+        // place, for anyone, as before G9a. The listing shows every reader that place anyway.
+        db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('nodeProfile.directoryMirror', 'true');
+        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
+            const counts: unknown[] = [];
+            for (const d of [NEARBY_KM - 0.01, NEARBY_KM + 0.01]) {
+                const q = destination(LONE_AT, d, 0);
+                counts.push((await call('GET', id, `/api/global/home?lat=${q.lat}&lng=${q.lng}`)).body?.nearbyPosts?.count);
+            }
+            assert(counts[0] === 1 && counts[1] === 0, `${who}: the card counts the lone listing 10 m inside its own 50 km, not 10 m outside (${counts.join(', ')})`);
+        }
+        const attack = await bisectHome(cellOf(LONE_AT));
+        const fromPlace = attack.drops.map(d => km(d, LONE_AT));
+        assert(attack.ok && fromPlace.every(d => Math.abs(d - NEARBY_KM) < 0.005) && km(attack.centre, LONE_AT) < 0.005,
+            `so the bisection finds the listing's place (drops ${span(fromPlace)} from it, the fit ${(km(attack.centre, LONE_AT) * 1000).toFixed(1)} m away), as before`);
+        db.prepare('DELETE FROM node_config WHERE key = ?').run('nodeProfile.directoryMirror');
     }
 }
 

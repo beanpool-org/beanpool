@@ -1,0 +1,133 @@
+name: Registrar deploy
+
+# The registrar Worker (apps/registrar) and its D1 migrations, deployed from one commit and then checked live
+# (design §5.2, scratch/registrar/DESIGN-2026-09-24-fable.md). The one-time token setup and D1 bootstrap are in
+# apps/registrar/README.md, "Deploy".
+#
+# MANUAL ONLY (director's call, 2026-09-25): a Worker deploy needs Marty's explicit go, so the deploy job runs only
+# from "Run workflow", on main: no push trigger, no tag trigger. The design wanted it to follow every merge; to make
+# it do that later, add `push: { branches: [main], paths: ['apps/registrar/**'] }` under `on:` and change the deploy
+# job's `if:` to `github.event_name != 'pull_request'`.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/registrar/**'
+      - '.github/workflows/registrar-deploy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  # Every registrar pull request: what a deploy would upload, and the migrations on fresh local databases. No secret,
+  # and no Cloudflare call.
+  dry-run:
+    name: Registrar dry run (no deploy)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/registrar
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install wrangler (the workspace's)
+        working-directory: .
+        run: pnpm install --frozen-lockfile --filter @beanpool/registrar
+
+      - name: wrangler deploy --dry-run
+        run: npx --no-install wrangler deploy --dry-run --outdir "$RUNNER_TEMP/registrar-dry-run" --var "GIT_SHA:$GITHUB_SHA"
+
+      - name: Migrations (a fresh local database)
+        run: npx --no-install wrangler d1 migrations list beanpool-registrar --local --persist-to "$RUNNER_TEMP/d1-list"
+
+      - name: Migrations and the bootstrap (local databases only)
+        run: node scripts/check-migrations.mjs
+
+  deploy:
+    name: Deploy the registrar
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # One deploy at a time; a second waits rather than cancelling one half way through its migrations.
+    concurrency:
+      group: registrar-deploy
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: apps/registrar
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 151a28c4fd1e6ee09768f4226be76b4d
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Deploy from main only
+        if: github.ref != 'refs/heads/main'
+        working-directory: .
+        run: |
+          echo "::error::the registrar deploys from main only; this run is on $GITHUB_REF"
+          exit 1
+
+      - name: The deploy token is set
+        if: env.CLOUDFLARE_API_TOKEN == ''
+        working-directory: .
+        run: |
+          echo "::error::repository secret CLOUDFLARE_WORKERS_TOKEN is not set (apps/registrar/README.md, Deploy, one-time setup)"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install wrangler (the workspace's)
+        working-directory: .
+        run: pnpm install --frozen-lockfile --filter @beanpool/registrar
+
+      # `wrangler d1 migrations apply` on a database whose d1_migrations doesn't record 0001 would run 0001 against
+      # the live data. Read-only; fails when the table is missing, empty, or lacks 0001_init.sql.
+      - name: The live database is bootstrapped
+        run: |
+          if ! npx --no-install wrangler d1 execute beanpool-registrar --remote --json \
+                 --command "SELECT name FROM d1_migrations ORDER BY id" > "$RUNNER_TEMP/d1_migrations.json"; then
+            cat "$RUNNER_TEMP/d1_migrations.json"
+            echo "::error::could not read d1_migrations on the live database: run scripts/bootstrap-d1-migrations.sql once (apps/registrar/README.md)"
+            exit 1
+          fi
+          node scripts/deploy-checks.mjs bootstrapped < "$RUNNER_TEMP/d1_migrations.json"
+
+      # wrangler lists them in directory order; apply runs them by number.
+      - name: Pending migrations
+        run: npx --no-install wrangler d1 migrations list beanpool-registrar --remote
+
+      # Before the Worker: every migration so far is one the old Worker keeps working on.
+      - name: Apply migrations
+        run: npx --no-install wrangler d1 migrations apply beanpool-registrar --remote
+
+      - name: Deploy the Worker
+        run: npx --no-install wrangler deploy --var "GIT_SHA:$GITHUB_SHA"
+
+      - name: The live Worker is this commit and accepts every protocol the node can send
+        run: >-
+          node scripts/deploy-checks.mjs health
+          --url https://beanpool.org/api/registrar/health
+          --commit "$GITHUB_SHA"
+          --node-client ../server/src/services/registrar-client.ts

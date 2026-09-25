@@ -6,6 +6,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 - **Node-facing (signed):** `GET /api/registrar/available` (public) · `POST /api/registrar/claim` (a new
   name, or a heal of the claimant's own) · `POST /api/registrar/heal` · `GET /api/registrar/status` ·
   `POST /api/registrar/update` · `POST /api/registrar/release` (`/offline` is its old name and still works)
+- **Health (public):** `GET /api/registrar/health` → `{ status: 'ok', commit, accepted_proto }`: the git commit
+  this Worker was deployed from (`null` if its deploy didn't say) and the signing protocols it accepts
 - **Admin (shared secret):** `GET /api/local/admin/registrar/pending` (every held name, any state) ·
   `GET /api/local/admin/registrar/events[?name=]` · `POST /api/local/admin/registrar/:name/`
   `approve | pause | resume | block | release` (`revoke` is block's old name). Every action is logged in
@@ -97,24 +99,110 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    before the Worker; a rerun stops at the ALTER.
    Then `--file migrations/0004_teardown.sql` (one table, `teardown`: deletions Cloudflare refused, which the
    sweep retries). Before the Worker; a rerun changes nothing.
-3. Deploy the Worker. Until the migrations table is bootstrapped with 0001 marked applied (design PR 4),
-   don't use `wrangler d1 migrations apply --remote` — it would run 0001.
+3. Deploy the Worker.
+
+Or let the deploy workflow apply them (below), once the live database is bootstrapped.
+
+### `wrangler d1 migrations` and the one-time bootstrap
+
+`wrangler d1 migrations apply` applies every file in `migrations/` that its table `d1_migrations` doesn't
+record, in order, each in one transaction with its own record. The live database predates that table, so a
+first `apply --remote` would run 0001 against it — and 0001 succeeds silently (`IF NOT EXISTS`, `INSERT OR
+IGNORE`), re-seeding the policy rows the live table dropped. `wrangler d1 migrations list` doesn't help: it too
+creates an empty `d1_migrations`. So, **once, before the deploy workflow's first run** (Marty, not an agent):
+
+```bash
+npx wrangler d1 execute beanpool-registrar --remote --file scripts/bootstrap-d1-migrations.sql
+```
+
+It creates `d1_migrations` exactly as wrangler would and records each migration whose objects the database
+already has (0001's tables; 0002's seven columns, two tables and three indexes; 0003's column; 0004's table and
+index), then prints the table. Safe to re-run. Whatever it didn't record — say 0002–0004, if they were never
+applied by hand — the workflow applies next, before the Worker that needs them is deployed. The workflow refuses
+to apply anything until `d1_migrations` records `0001_init.sql`.
+
+`node scripts/check-migrations.mjs` (the workflow's dry-run job runs it on every registrar PR) proves this on
+local throwaway databases only: `migrations apply` builds exactly the schema and policy seed that applying the
+files by hand does (and that the tests' `node:sqlite` database does); the bootstrap, run on a database at any
+stage of the hand path, records exactly what it has, after which `migrations apply` adds only the rest, never
+re-runs 0001 (a policy row deleted beforehand stays deleted) and ends at the same schema; and the guard refuses
+a database never bootstrapped, including one whose empty `d1_migrations` a `migrations list` made.
 
 ## Signed request scheme (node → registrar)
 
-Headers `x-bp-pubkey` (64 hex), `x-bp-timestamp` (unix s), `x-bp-signature` (128 hex);
-signed message `` `beanpool-registrar-request/v1\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}` `` with the node's Ed25519 key.
+Headers `x-bp-pubkey` (64 hex), `x-bp-timestamp` (unix s), `x-bp-signature` (128 hex), and `x-bp-proto` (the
+signing protocol) for any protocol but v1; signed message
+`` `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}` `` with the node's Ed25519 key.
+For v1 that is `` `beanpool-registrar-request/v1\n${METHOD}\n…` ``, exactly as before protocols had versions.
 
-The leading domain tag is load-bearing, not cosmetic: the node signs both this and a PUBLIC attestation with the same identity key, so without distinct tags `/api/attest` is a forgery oracle for this scheme. Change it here and in `registrar-client.ts` together, never one alone.
+The leading domain tag is load-bearing, not cosmetic: the node signs both this and a PUBLIC attestation with the same identity key, so without distinct tags `/api/attest` is a forgery oracle for this scheme.
+
+### Protocol versions (design §5.1)
+
+`PROTOCOLS` in `src/sign.js` and in the node's `apps/server/src/services/registrar-client.ts` name each version's
+two tags. On 2026-09-24 the node changed its tag alone (#542) and every signed request 401'd; a format change is
+now a new version, never an edit of one:
+
+1. One PR adds `v(n+1)` to **both** tables. Both sides accept it; nobody sends it yet.
+2. Deploy the Worker (the deploy workflow checks the live Worker's `accepted_proto` covers every key of the
+   node's table). A later node release moves `SEND_PROTO` to `v(n+1)`.
+3. Two releases after that, the old entry goes from both tables — from the node's no later than from the
+   Worker's, since the Worker must accept everything the node can send.
+
+So each side accepts two versions while a change is in flight, and deploy order never matters. `v1` is
+`DEFAULT_PROTO` on both sides: a request with no `x-bp-proto`, or an attestation with no `proto`, is v1. A
+request under a protocol the Worker doesn't speak gets `401 { error: 'bad signature', accepted_proto }`; the node
+retries once under the newest protocol both speak and logs a warning. An attestation under one is
+`unverifiable` — never evidence against the node. `apps/server/src/test-registrar-contract.ts` (in
+`scripts/test-all.sh`, so CI) signs with the node's code and verifies with this Worker's, and fails the moment one
+side changes a tag alone.
 
 ## Attestation response (node serves at `/api/attest?nonce=`)
 
 ```json
 { "pubkey": "<hex>", "nonce": "<echoed>", "timestamp": <unix s>,
-  "signature": "<Ed25519 over `beanpool-node-attest/v1\n${nonce}\n${timestamp}`, hex>" }
+  "signature": "<Ed25519 over `${PROTOCOLS[proto].attest}\n${nonce}\n${timestamp}`, hex>",
+  "proto": "<only for a protocol other than v1>" }
 ```
 
+For v1 (no `proto`) the signed message is `` `beanpool-node-attest/v1\n${nonce}\n${timestamp}` ``, as before.
+
 ## Deploy
+
+### The deploy workflow (`.github/workflows/registrar-deploy.yml`)
+
+**Manual only** (director's call, 2026-09-25: a Worker deploy needs Marty's explicit go). Actions → *Registrar
+deploy* → *Run workflow* on `main`. It refuses any other branch, then:
+
+1. refuses unless the live `d1_migrations` records `0001_init.sql` (the bootstrap above);
+2. lists and applies pending migrations: `wrangler d1 migrations apply beanpool-registrar --remote`;
+3. `wrangler deploy --var GIT_SHA:<the commit>`;
+4. fails unless `https://beanpool.org/api/registrar/health` answers that `commit` and an `accepted_proto` that
+   includes every protocol in the node's `PROTOCOLS` (`scripts/deploy-checks.mjs`, polled for up to 3 minutes).
+
+On every pull request that touches `apps/registrar/**` a **dry-run** job, with no secret, runs `wrangler deploy
+--dry-run`, lists the migrations against a fresh local database and runs `scripts/check-migrations.mjs`.
+
+**One-time setup (Marty):**
+
+1. Cloudflare dashboard → My Profile → API Tokens → Create Token → *Create Custom Token*, named e.g.
+   `github-registrar-deploy`, with:
+   - Account · **Workers Scripts** · Edit
+   - Account · **D1** · Edit
+   - Account · **Account Settings** · Read
+   - Zone · **Workers Routes** · Edit, and Zone · **Zone** · Read — for zone `beanpool.org` only. The Worker's
+     `[[routes]]` (`beanpool.org/api/registrar/*`, `/admin*`, `/i/*`) are attached by `wrangler deploy`, which looks
+     the zone up by name; without these it fails at the routes step.
+
+   Account Resources: the BeanPool account only. No IP filter (GitHub's runners have no fixed address).
+2. GitHub → the repo → Settings → Secrets and variables → Actions → New repository secret
+   `CLOUDFLARE_WORKERS_TOKEN` = that token.
+3. Run the bootstrap above once.
+
+This token deploys the Worker only; the Worker's own `CF_API_TOKEN` (tunnels + DNS) stays a Worker secret and is
+never in GitHub.
+
+### By hand (a new database, or without the workflow)
 
 ```bash
 cd apps/registrar
@@ -130,8 +218,8 @@ npx wrangler secret put CF_ACCOUNT_ID            # 151a28c4fd1e6ee09768f4226be76
 npx wrangler secret put CF_ZONE_ID               # 060a99ae34e53b26dcf3be6578722b31
 npx wrangler secret put ADMIN_SECRET
 
-# 3. Deploy + attach routes (uncomment [[routes]] in wrangler.toml first)
-npx wrangler deploy
+# 3. Deploy + attach routes
+npx wrangler deploy --var GIT_SHA:$(git rev-parse HEAD)
 ```
 
 > The Worker attaches to `beanpool.org/api/registrar/*` and `beanpool.org/i/*` via Worker Routes and
@@ -146,6 +234,10 @@ settles what is owed, with Cloudflare refusing writes for a while. After Cloudfl
 but the owner is routed, a paused, blocked, released or pending name routes nothing, a live name routes exactly what
 its row records, and nothing owed is lost. `npm run fuzz` runs the whole matrix (about 35,000 cases, 3½ minutes);
 `FUZZ_CASE='…'` replays one case and prints its trace.
+
+The signing contract with the node is tested from the node's side: `apps/server/src/test-registrar-contract.ts`
+(run by `scripts/test-all.sh`) imports this Worker's `src/` and the harness. `node scripts/check-migrations.mjs`
+checks the migrations and the bootstrap on local databases (about 40 s; needs wrangler).
 
 ## Status
 

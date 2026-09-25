@@ -171,8 +171,10 @@ For v1 (no `proto`) the signed message is `` `beanpool-node-attest/v1\n${nonce}\
 
 ### The deploy workflow (`.github/workflows/registrar-deploy.yml`)
 
-**Manual only** (director's call, 2026-09-25: a Worker deploy needs Marty's explicit go). Actions → *Registrar
-deploy* → *Run workflow* on `main`. It refuses any other branch, then:
+**Manual only, and only with Marty's approval** (director's calls, 2026-09-25 and 2026-09-26). Actions →
+*Registrar deploy* → *Run workflow* → branch `main` → *Run workflow*. The deploy job then waits for approval: open
+the run → *Review deployments* → tick `registrar-production` → *Approve and deploy*. Approve only a run you started
+yourself, from `main`. Once approved, it refuses any branch but `main`, checks the token is set, then:
 
 1. refuses unless the live `d1_migrations` records `0001_init.sql` (the bootstrap above);
 2. lists and applies pending migrations: `wrangler d1 migrations apply beanpool-registrar --remote`;
@@ -180,12 +182,30 @@ deploy* → *Run workflow* on `main`. It refuses any other branch, then:
 4. fails unless `https://beanpool.org/api/registrar/health` answers that `commit` and an `accepted_proto` that
    includes every protocol in the node's `PROTOCOLS` (`scripts/deploy-checks.mjs`, polled for up to 3 minutes).
 
-On every pull request that touches `apps/registrar/**` a **dry-run** job, with no secret, runs `wrangler deploy
---dry-run`, lists the migrations against a fresh local database and runs `scripts/check-migrations.mjs`.
+**Who can deploy is GitHub's rule, not the workflow file's.** The deploy token is a secret of the
+`registrar-production` environment and nowhere else. GitHub hands an environment's secrets only to a job that names
+that environment, only on a branch the environment allows (`main`), and only after a required reviewer (Marty)
+approves that run. A repository secret would be different: GitHub gives it to a run from any branch, and that run
+uses the branch's own copy of the workflow, so "manual only, main only" would hold only while nobody edited the
+file. A pull request that edits the workflow, `gh workflow run --ref <branch>`, or another collaborator pressing
+*Run workflow* would each get the token. With the environment, none of them gets it until Marty approves.
 
-**One-time setup (Marty):**
+The workflow sets the token only on the steps that run wrangler against Cloudflare (and on the check that it is
+set). The actions, and `pnpm install` with its dependencies' install scripts, never see it. Every action is pinned
+to a full commit SHA, and the deploy installs without the dependency cache.
 
-1. Cloudflare dashboard → My Profile → API Tokens → Create Token → *Create Custom Token*, named e.g.
+On every pull request that touches `apps/registrar/**` or the workflow, a **dry-run** job with no secret and no
+environment:
+- runs `scripts/check-deploy-workflow.mjs`, which fails if the deploy job stops naming the environment, if the
+  token appears anywhere but a wrangler step's own `env`, if an action isn't pinned to a SHA, or if the workflow
+  gains a trigger besides a manual run and pull requests;
+- runs `wrangler deploy --dry-run`;
+- lists the migrations against a fresh local database;
+- runs `scripts/check-migrations.mjs`.
+
+**One-time setup (Marty), in this order:**
+
+1. **Cloudflare dashboard** → My Profile → API Tokens → Create Token → *Create Custom Token*, named e.g.
    `github-registrar-deploy`, with:
    - Account · **Workers Scripts** · Edit
    - Account · **D1** · Edit
@@ -194,13 +214,30 @@ On every pull request that touches `apps/registrar/**` a **dry-run** job, with n
      `[[routes]]` (`beanpool.org/api/registrar/*`, `/admin*`, `/i/*`) are attached by `wrangler deploy`, which looks
      the zone up by name; without these it fails at the routes step.
 
-   Account Resources: the BeanPool account only. No IP filter (GitHub's runners have no fixed address).
-2. GitHub → the repo → Settings → Secrets and variables → Actions → New repository secret
-   `CLOUDFLARE_WORKERS_TOKEN` = that token.
-3. Run the bootstrap above once.
+   Account Resources: the BeanPool account only. No IP filter (GitHub's runners have no fixed address). Keep the
+   token on screen for step 2.
+2. **GitHub → the repo → Settings → Environments → New environment**, name `registrar-production` → *Configure
+   environment*. (If `registrar-production` is already listed, open it instead: a run that names an environment
+   creates it, empty and unprotected.) On that one page, top to bottom:
+   - **Required reviewers**: tick it and add `martyinspace`. Leave **Prevent self-review** unticked, or you can't
+     approve a run you started.
+   - **Allow administrators to bypass configured protection rules**: untick it, so nobody can skip the approval.
+     You are the only admin today.
+   - Click **Save protection rules**.
+   - **Deployment branches and tags**: choose *Selected branches and tags* → *Add deployment branch or tag rule* →
+     Ref type *Branch*, name pattern `main` → *Add rule*. Add no other rule, and never `refs/pull/*/merge`.
+   - **Environment secrets** → *Add environment secret*: name `CLOUDFLARE_WORKERS_TOKEN`, value the token from
+     step 1 → *Add secret*.
+3. **GitHub → the repo → Settings → Secrets and variables → Actions.** Under *Repository secrets* (and
+   *Organization secrets*), `CLOUDFLARE_WORKERS_TOKEN` must not be listed; delete it if it is. Never add it there:
+   every branch could read it. (On 2026-09-26 neither list had any secret.)
+4. Run the bootstrap above once, from `apps/registrar`.
 
-This token deploys the Worker only; the Worker's own `CF_API_TOKEN` (tunnels + DNS) stays a Worker secret and is
-never in GitHub.
+Treat this token as holding the Worker's own secrets. Workers Scripts · Edit can upload a new version of
+`beanpool-registrar`, and a new version keeps the Worker's secret bindings, so whoever holds the token can read
+`CF_API_TOKEN` (tunnels + DNS for `beanpool.org`: every community's address) and `ADMIN_SECRET`. That is why it lives
+only in the approval-gated environment. The Worker's `CF_API_TOKEN` itself stays a Worker secret and is never in
+GitHub.
 
 ### By hand (a new database, or without the workflow)
 
@@ -238,6 +275,9 @@ its row records, and nothing owed is lost. `npm run fuzz` runs the whole matrix 
 The signing contract with the node is tested from the node's side: `apps/server/src/test-registrar-contract.ts`
 (run by `scripts/test-all.sh`) imports this Worker's `src/` and the harness. `node scripts/check-migrations.mjs`
 checks the migrations and the bootstrap on local databases (about 40 s; needs wrangler).
+`test/deploy-workflow.test.js` (in `npm test`) runs `scripts/check-deploy-workflow.mjs` on the deploy workflow,
+and on copies with one regression planted each (the token at job level, in `pnpm install`, in an action, in the
+dry-run job; no environment; a push trigger; an action on a tag), each of which must fail.
 
 ## Status
 

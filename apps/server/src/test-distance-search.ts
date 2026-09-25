@@ -479,6 +479,13 @@ async function main(): Promise<void> {
     const gusAgain = await setArea(gus, { lat: 10.1, lng: 20.2 });
     assert(halAgain.status === 403 && gusAgain.status === 403 && areaOf(hal)?.area_lat === null && areaOf(gus)?.area_lat === null,
         `and neither key can set one again afterwards (${halAgain.status}, ${gusAgain.status})`);
+    // Nor read anyone else's distance: the key still signs and its row is still there, but it is out of the community.
+    for (const route of ['/api/community/members', '/api/members']) {
+        const halPeople = await call('GET', hal, `${route}?lat=${cLat}&lng=${cLng}`);
+        const gusPeople = await call('GET', gus, `${route}?lat=${cLat}&lng=${cLng}`);
+        assert(halPeople.status === 403 && gusPeople.status === 403 && !halPeople.text.includes('distanceKm') && !gusPeople.text.includes('distanceKm'),
+            `${route} with a point, signed by the pruned or the deleted key → 403, no distances (${halPeople.status}, ${gusPeople.status})`);
+    }
 
     // ── 11. replication, and nowhere else ────────────────────────────────────────────────────────
     console.log('\n── 11. a standby keeps the area, and nothing else carries it ──');

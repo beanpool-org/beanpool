@@ -775,7 +775,9 @@ function peoplePoint(ctx: any): Point | null | undefined {
         ctx.body = { error: 'Distances to people need a signed request' };
         return undefined;
     }
-    if (!getMember(actor)) {
+    // A pruned or self-deleted account keeps its row and can still sign, but it is no longer in the community.
+    const member = getMember(actor);
+    if (!member || member.status === 'pruned') {
         ctx.status = 403;
         ctx.body = { error: 'Read access requires a member identity' };
         return undefined;

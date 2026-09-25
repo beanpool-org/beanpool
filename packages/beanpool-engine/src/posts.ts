@@ -415,14 +415,27 @@ export const NEAREST_FIRST_CIRCLES_KM: readonly number[] = [1, 3, 10, 30, 100, 3
 export const NEAREST_FIRST_CIRCLES_MAX_DEPTH = 5000;
 
 /**
- * The fewest matches the circles ask for when they ask how many posts the listing matches (postRowsNear rankMatches):
- * fewer than this, and that one read ranks them all. A circle reads every post in it, whatever the filter, so for a
+ * How many posts near the reader the circles may read (or a page's worth, if that is more) before they count how many
+ * posts the listing matches (postRowsNear, rankMatches). A circle reads every post in it, whatever the filter, so for a
  * filter few posts match (the Events or Polls tab, a rare category) the circles would read the posts near the reader
- * again and again for a few matches. Measured at 100k posts / 200k transactions (test-distance-search-perf's world):
- * asking for 500 costs a broad filter's read about 0.7 ms, and asking for 1,000 or 2,000 made the Offers and Needs tabs
- * about 2 and 5 ms slower a read.
+ * again and again for a few matches; the count finds those few through the filter's own index, and ranks them.
+ * Measured at 100k posts / 200k transactions (the perf suite's world, with a dense spot, and with a rural town): 500 made
+ * broad reads count where reading on would do (category=food 7.0 → 13.8 ms, type=need 8.3 → 16.0 ms, Fiji 9.0 → 11.8 ms);
+ * 2,000 made the Events tab and a rare category 2 to 9 ms slower, because the circles read up to 2,000 posts near the
+ * reader for a few matches, and it lets a guess read twice as far (NEAREST_FIRST_GUESS_MULTIPLE).
  */
-export const NEAREST_FIRST_MATCHES_PROBE = 500;
+export const NEAREST_FIRST_MATCHES_PROBE = 1000;
+
+/**
+ * A circle that the last circle's share of matches says will hold the page is read without the count, while the posts
+ * the circles have read stay within this many times the posts they may read uncounted (NEAREST_FIRST_MATCHES_PROBE, or a
+ * page's worth): 4,000 for a first page. Past that they count first, so a share that held only near the reader (a
+ * category common in one small town and rare everywhere else, with a city in the next circle) costs at most that many
+ * posts, never a city's. Measured at 100k posts / 200k transactions: with 8, that rural read took the city 600 km away
+ * (5.8 ms on 743b5d57, 23 ms), and with 4, 8.5 ms; 2 made the deepest pages count first (offset 4,950: 61 → 77 ms). 4
+ * costs one read a count that 8 spares it: no filter, 150 km from the city, whose 5,800 posts it counts (25 → 32 ms).
+ */
+export const NEAREST_FIRST_GUESS_MULTIPLE = 4;
 
 /**
  * A read with a point (G4): the order first, on ids and distances alone, then the rows of that page in full. The trade
@@ -533,26 +546,27 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     let ranked: Array<{ id: string; distance_km: number | null }> | undefined;
     if (byDistance && filter.limit && !narrowed && offset + filter.limit <= NEAREST_FIRST_CIRCLES_MAX_DEPTH) {
         const depth = offset + filter.limit;
-        // A circle reads every post in it, whatever the filter, so before each the circles weigh what it would read (the
-        // posts in its box) against what they know. They may read as many posts as the page asks for, and after that as
-        // many as the listing is known to match (`known`): one pass over the matches costs about that much. A circle
-        // that the last circle's share of matches says will hold the page is read whatever it holds, until one such
-        // guess misses. Otherwise the circles ask how many posts the listing matches, once (rankMatches): fewer than
-        // asked for, and those are the page; as many, and that many is known. If even that many posts, at the last
-        // circle's share, could not fill the page, the matches are few around the reader, and one pass ranks them
-        // without asking. Every read handed to the one pass keeps its page exact, because that pass is exact.
+        // A circle reads every post in its box, whatever the filter, so before each the circles weigh what they would
+        // have read (`read`, every box so far, plus this one) against what they know. Up to `known` posts, they read on:
+        // at first NEAREST_FIRST_MATCHES_PROBE, or a page's worth. Past it, they read on without asking only if the last
+        // circle's share of matches says this circle holds the page, and only within NEAREST_FIRST_GUESS_MULTIPLE times
+        // what they may first read. Otherwise they count the listing's matches, up to one more than they would then have
+        // read (rankMatches): fewer, and those are every match, ranked, and the page; as many, and one pass would read at
+        // least as many posts as the circles, so they read on, and that many is known. So past what they may first read,
+        // the circles never read more posts than the listing matches, but for that bounded guess. Once a page's worth of
+        // posts has been read and the last circle matched none, the matches are elsewhere, and one pass ranks them. Every
+        // read the circles hand to one pass or to the count keeps its page exact, because both rank every match.
         let read = 0;
-        let known = depth;
-        let share: number | undefined;
-        let asked = false, guessedWrong = false;
+        let known = Math.max(depth, NEAREST_FIRST_MATCHES_PROBE);
+        const guessLimit = NEAREST_FIRST_GUESS_MULTIPLE * known;
+        let matched = 0, lastPosts = 0;
         for (const km of NEAREST_FIRST_CIRCLES_KM) {
             if (near.radiusKm !== undefined && km >= near.radiusKm) break;
+            if (lastPosts > 0 && matched === 0 && read >= depth) break;
             const posts = postsInBox(km);
-            const guess = !guessedWrong && share !== undefined && share * posts >= depth;
-            if (!guess && read + posts > known) {
-                const cap = Math.max(NEAREST_FIRST_MATCHES_PROBE, depth + 1, read + posts + 1);
-                if (asked || (share !== undefined && share * cap < depth)) break;
-                asked = true;
+            const guess = lastPosts > 0 && matched * posts >= depth * lastPosts && read + posts <= guessLimit;
+            if (read + posts > known && !guess) {
+                const cap = read + posts + 1;
                 ranked = rankMatches(cap);
                 if (ranked) break;
                 known = cap;
@@ -560,8 +574,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             read += posts;
             const inside = rank(km, depth, 0, true);
             if (inside.length === depth) { ranked = inside.slice(offset); break; }
-            if (guess) guessedWrong = true;
-            if (posts > 0) share = inside.length / posts;
+            if (posts > 0) { matched = inside.length; lastPosts = posts; }
         }
     }
     ranked ??= rank(near.radiusKm, filter.limit, offset, false);

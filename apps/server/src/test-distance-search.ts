@@ -576,13 +576,13 @@ async function main(): Promise<void> {
     delete process.env.NODE_PROFILE;
 
     // ── 13. a filter, on either side of the count ────────────────────────────────────────────────
-    // With a filter, the circles ask how many posts the listing matches before reading posts near the reader the filter
-    // may not match (engine posts.ts, the second deciding review of #1140): fewer than NEAREST_FIRST_MATCHES_PROBE, and
-    // that read is the page; as many, and the circles or one pass give it. Through the route, each reader's pages are the
-    // brute-force pages of what that reader may see, on both sides of it: 'bikes' is 460 posts to Bea, and 510 to Eve
-    // (her 50 hidden by reports) and to Cal (his club's 50); 'garden' is over 600 to everyone, all near Mullumbimby.
-    // 150 of the gardens are within 600 m, so the first circle holds more than a page and the count is asked; what it
-    // finds is what the route shows each reader.
+    // With a filter, the circles read up to NEAREST_FIRST_MATCHES_PROBE posts near the reader, and before reading more
+    // ask how many posts the listing matches (engine posts.ts, the second deciding review of #1140): fewer than asked
+    // for, and that read is the page; as many, and the circles or one pass give it. 1,100 gardens lie within 600 m of
+    // Mullumbimby, so its first circle holds more than that and the count is asked there, for one more match than the
+    // circle holds. Through the route, each reader's pages are the brute-force pages of what that reader may see, on both
+    // sides of that: 'bikes' is 1,060 posts to Bea, and 1,120 to Eve (her 60 hidden by reports) and to Cal (his club's
+    // 60); 'garden' is 1,200 to everyone; 40 events are still to come; and what the count finds is what the route shows.
     console.log('\n── 13. global, a point and a filter: each page is the brute-force page, on either side of the count ──');
     process.env.NODE_PROFILE = 'global';
     const K = NEAREST_FIRST_MATCHES_PROBE;
@@ -606,12 +606,12 @@ async function main(): Promise<void> {
             type === 'event' ? '2099-01-01T10:00:00.000Z' : null, type === 'event' ? (extra.ended ? '2020-01-01T12:00:00.000Z' : '2099-01-01T12:00:00.000Z') : null);
     };
     db.transaction(() => {
-        for (let i = 0; i < 150; i++) seedFiltered(ann, 'offer', 'garden', toward(hLat, hLng, rand13() * 0.6));
-        for (let i = 0; i < 470; i++) seedFiltered(ann, 'offer', 'garden', toward(hLat, hLng, 1 + rand13() * 24));
-        for (let i = 0; i < 30; i++) seedFiltered(eve, 'offer', 'garden', toward(hLat, hLng, rand13() * 25), { hidden: true });
-        for (let i = 0; i < 460; i++) seedFiltered(ann, 'offer', 'bikes', toward(hLat, hLng, 5 + rand13() * 3000));
-        for (let i = 0; i < 50; i++) seedFiltered(eve, 'offer', 'bikes', toward(hLat, hLng, 5 + rand13() * 3000), { hidden: true });
-        for (let i = 0; i < 50; i++) seedFiltered(cal, 'offer', 'bikes', toward(hLat, hLng, 5 + rand13() * 3000), { group: group.id });
+        for (let i = 0; i < 1100; i++) seedFiltered(ann, 'offer', 'garden', toward(hLat, hLng, rand13() * 0.6));
+        for (let i = 0; i < 100; i++) seedFiltered(ann, 'offer', 'garden', toward(hLat, hLng, 1.5 + rand13() * 24));
+        for (let i = 0; i < 30; i++) seedFiltered(eve, 'offer', 'garden', toward(hLat, hLng, 1.5 + rand13() * 24), { hidden: true });
+        for (let i = 0; i < 1060; i++) seedFiltered(ann, 'offer', 'bikes', toward(hLat, hLng, 5 + rand13() * 3000));
+        for (let i = 0; i < 60; i++) seedFiltered(eve, 'offer', 'bikes', toward(hLat, hLng, 5 + rand13() * 3000), { hidden: true });
+        for (let i = 0; i < 60; i++) seedFiltered(cal, 'offer', 'bikes', toward(hLat, hLng, 5 + rand13() * 3000), { group: group.id });
         for (let i = 0; i < 40; i++) seedFiltered(ann, 'event', 'community', toward(hLat, hLng, rand13() * 4000));
         for (let i = 0; i < 10; i++) seedFiltered(ann, 'event', 'community', toward(hLat, hLng, rand13() * 40), { ended: true });
     })();
@@ -636,8 +636,8 @@ async function main(): Promise<void> {
             for (const [name, filter, query] of filters) {
                 const ref = filteredFor(viewer, filter, lat, lng);
                 const pages: Array<[number, number]> = [[50, 0], [7, 0], [7, 7], [7, 49], [7, ref.length - 3], [7, ref.length + 2]];
-                for (const o of [K - 56, K - 7, K - 1, K]) pages.push([7, o]);
-                pages.push([50, K - 50]);
+                for (const o of [K - 56, K - 7, K - 1, K, 1053, 1059, 1060, 1113]) pages.push([7, o]);
+                pages.push([50, K - 50], [50, 1055]);
                 const wrong: string[] = [];
                 for (const [limit, offset] of pages) {
                     if (offset < 0) continue;
@@ -646,7 +646,7 @@ async function main(): Promise<void> {
                     if (!same(ids(got), want.map(r => r.id)) || !same(got.map(p => p.distanceKm), want.map(r => r.d === null ? null : Math.round(r.d * 10) / 10))) wrong.push(`${limit}@${offset}`);
                 }
                 assert(wrong.length === 0,
-                    `${viewer.name} at ${where}, ${name} (${ref.length} ${ref.length < K ? 'fewer' : 'no fewer'} than ${K}): every page is the brute-force page (${wrong.length ? `wrong: ${wrong.join(', ')}` : 'none wrong'})`);
+                    `${viewer.name} at ${where}, ${name} (${ref.length}): every page is the brute-force page (${wrong.length ? `wrong: ${wrong.join(', ')}` : 'none wrong'})`);
             }
         }
     }
@@ -671,16 +671,18 @@ async function main(): Promise<void> {
     };
     const told = (f: Array<{ cap: number; matched: number | undefined }>) => f.map(c => `asked for ${c.cap}, found ${c.matched === undefined ? 'none' : c.matched === c.cap ? `${c.cap} (as many)` : c.matched}`).join('; ') || 'not asked';
     const beaBikes = await counted(bea, 'category=bikes'), eveBikes = await counted(eve, 'category=bikes'), calBikes = await counted(cal, 'category=bikes');
-    assert(beaBikes.length === 1 && beaBikes[0].cap === K && beaBikes[0].matched === 460,
-        `the count sees what the route shows Bea: 460 bikes, fewer than ${K}, so that read is her page (${told(beaBikes)})`);
-    assert([eveBikes, calBikes].every(f => f.length === 1 && f[0].matched === K),
-        `and Eve's hidden posts and Cal's club posts are in theirs: it stops at ${K} (Eve: ${told(eveBikes)}; Cal: ${told(calBikes)})`);
+    const cap = beaBikes[0]?.cap ?? 0;
+    assert(beaBikes.length === 1 && cap > K && beaBikes[0].matched === 1060,
+        `the count sees what the route shows Bea: all 1,060 bikes, fewer than the ${cap} it asked for, so that read is her page (${told(beaBikes)})`);
+    assert([eveBikes, calBikes].every(f => f.length === 1 && f[0].cap === cap && f[0].matched === cap) && cap <= 1120,
+        `and Eve's hidden posts and Cal's club posts are in theirs: it stops at ${cap} (Eve: ${told(eveBikes)}; Cal: ${told(calBikes)})`);
     const garden = await counted(bea, 'category=garden'), events = await counted(bea, 'type=event'), nothing = await counted(bea, 'category=nothing');
-    assert(garden.length === 1 && garden[0].matched === K && events.length === 1 && events[0].matched === 40 && nothing.length === 1 && nothing[0].matched === undefined,
-        `garden stops at ${K}, the events still to come are 40, and the empty category is none (${told(garden)}; ${told(events)}; ${told(nothing)})`);
+    assert(garden.length === 1 && garden[0].matched === cap && events.length === 1 && events[0].matched === 40 && nothing.length === 1 && nothing[0].matched === undefined,
+        `garden stops at ${cap}, the events still to come are 40, and the empty category is none (${told(garden)}; ${told(events)}; ${told(nothing)})`);
     const bikesFor = (viewer: Id) => filteredFor(viewer, { category: 'bikes' }, hLat, hLng).length;
-    assert(bikesFor(bea) < K && bikesFor(eve) >= K && bikesFor(cal) >= K && filteredFor(bea, { category: 'garden' }, hLat, hLng).length >= K,
-        `the reads fall on both sides of ${K}: bikes is ${bikesFor(bea)} to Bea, ${bikesFor(eve)} to Eve and ${bikesFor(cal)} to Cal; garden is ${filteredFor(bea, { category: 'garden' }, hLat, hLng).length}`);
+    const gardens = filteredFor(bea, { category: 'garden' }, hLat, hLng).length;
+    assert(bikesFor(bea) < cap && bikesFor(eve) >= cap && bikesFor(cal) >= cap && gardens >= cap,
+        `the reads fall on both sides of the count's ${cap} (and of ${K}): bikes is ${bikesFor(bea)} to Bea, ${bikesFor(eve)} to Eve and ${bikesFor(cal)} to Cal; garden is ${gardens}; events 40`);
     const eventsSeen = filteredFor(bea, { type: 'event' }, hLat, hLng).length;
     assert(eventsSeen === 40, `the events that have ended are in no page (${eventsSeen} of the 50 seeded)`);
     delete process.env.NODE_PROFILE;

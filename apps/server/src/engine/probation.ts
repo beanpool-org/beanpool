@@ -118,7 +118,7 @@ function refusal(limit: ProbationLimit, resetsAtMs: number, now: number): Probat
         posts: `While your account is new you can make ${PROBATION.posts} posts in any 24 hours. You can post again ${when}. ${WHY}`,
         photos: `While your account is new you can add ${PROBATION.photos} photos to posts in any 24 hours. You can add more ${when}. ${WHY}`,
         new_dm_recipients: `While your account is new you can message ${PROBATION.newDmRecipients} new people in any 24 hours. You can message someone new again ${when}. Replying to someone who wrote to you first is not limited. ${WHY}`,
-        knocks: `While your account is new you can ask ${PROBATION.knocks} community a day to let you in. You can ask again ${when}. ${WHY}`,
+        knocks: `While your account is new you can ask ${PROBATION.knocks} community in any 24 hours to let you in. You can ask again ${when}. ${WHY}`,
     }[limit];
     return new ProbationLimitError(limit, iso(resetsAtMs), message);
 }

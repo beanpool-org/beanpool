@@ -64,6 +64,7 @@ import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { originOfCachedPost } from './federation-commission.js';
 import { REMOVALS_SINCE_SQL } from './engine/auto-moderation.js';
+import { knockRefusal } from './engine/probation.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -530,6 +531,9 @@ async function main(): Promise<void> {
     const deeMe = await me(dee);
     assert(deeMe?.probation?.limits?.new_dm_recipients?.used === 10 && deeMe?.probation?.limits?.new_dm_recipients?.limit === 10,
         `/api/community/me: 10 of 10 new people (got ${JSON.stringify(deeMe?.probation?.limits?.new_dm_recipients)})`);
+    const knock = knockRefusal(dee.pk, [ago(HOUR)]);
+    assert(knock?.limit === 'knocks' && /ask 1 community in any 24 hours/.test(knock.message),
+        `the knock limit says "in any 24 hours" like the others: it is a rolling window, not a calendar day (${knock?.message})`);
     db.prepare('UPDATE messages SET timestamp = ? WHERE author_pubkey = ?').run(ago(25 * HOUR), dee.pk);
     db.prepare('UPDATE conversations SET created_at = ? WHERE created_by = ?').run(ago(25 * HOUR), dee.pk);
     const rolled = await open(dee, targets[10]);

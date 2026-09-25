@@ -135,6 +135,15 @@ export function eventHiddenFrom(row: EventRow, pubkey: string | undefined): bool
     return !!row.hidden_by_reports_at && row.author_pubkey !== pubkey;
 }
 
+/**
+ * A chat that drops out of this member's chat list: an event's, while the event is hidden from them (G3). The
+ * conversations list and the unread counts behind it and every push's badge (getListedUnreadCounts) all go by this.
+ */
+export function chatHiddenFrom(conv: { id: string; type: string }, pubkey: string | undefined): boolean {
+    if (conv.type !== 'event_thread') return false;
+    try { return eventHiddenFrom(loadEventForThread(conv.id), pubkey); } catch { return false; }
+}
+
 /** Host or Going — checked on every read and every post, never trusted from the participants mirror. */
 export function canReadEventThread(row: EventRow, pubkey: string | undefined): boolean {
     if (!pubkey) return false;

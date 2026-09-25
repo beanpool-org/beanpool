@@ -17,9 +17,11 @@ import {
     seededGetRandomValues,
     type SsoShareVector,
 } from '@beanpool/core/sso-share-vectors';
-import { recoveryStored, sealJoinRecovery } from './join-recovery';
+import { recoveryStored, sealJoinRecovery, signInNames } from './join-recovery';
 import { joinBody, type SignInProof } from './web-join';
-import { generateIdentity, type BeanPoolIdentity } from './identity';
+import { generateIdentity, importIdentity, type BeanPoolIdentity } from './identity';
+import { getSignInRecovery } from './api';
+import { memoryIndexedDB } from './memory-indexeddb';
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -122,6 +124,46 @@ describe('a copy that cannot be made is null, never a throw (the join then goes 
     });
 });
 
+describe("asking the node which sign-ins bring this account back (Settings)", () => {
+    function answer(status: number, body: unknown) {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+        vi.stubGlobal('fetch', fetchMock);
+        return fetchMock;
+    }
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it("the node's list, asked with a signed POST", async () => {
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        const me = await generateIdentity('Me');
+        await importIdentity(me);
+        const fetchMock = answer(200, { enrolledSso: ['google', 7, 'github'], total: 1 });
+        expect(await getSignInRecovery()).toEqual(['google', 'github']);
+        const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+        expect(url).toMatch(/\/api\/recovery\/shares\/status$/);
+        expect(init.method).toBe('POST');
+        expect((init.headers as Record<string, string>)['X-Public-Key']).toBe(me.publicKey);
+    });
+
+    it.each([
+        ['none', 200, { enrolledSso: [] }, []],
+        ['an answer without the list', 200, { total: 0 }, null],
+        ['an older node', 404, { error: 'Not Found' }, null],
+        ['not signed', 401, { error: 'Unauthenticated' }, null],
+    ])('%s', async (_label, status, body, expected) => {
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        answer(status, body);
+        expect(await getSignInRecovery()).toEqual(expected);
+    });
+
+    it('no answer at all', async () => {
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+        expect(await getSignInRecovery()).toBeNull();
+    });
+});
+
 describe("the node's word on the copy", () => {
     it('stored only when it says enrolled: true', () => {
         expect(recoveryStored({ enrolled: true, generation: 1, enrolledSso: ['google'] })).toBe(true);
@@ -130,6 +172,16 @@ describe("the node's word on the copy", () => {
         expect(recoveryStored({})).toBe(false);
         expect(recoveryStored(null)).toBe(false);
         expect(recoveryStored(undefined)).toBe(false);
+    });
+
+    it('the sign-ins named as a member reads them; one this app has no name for is left out', () => {
+        expect(signInNames(['google'])).toBe('Google');
+        expect(signInNames(['google', 'github'])).toBe('Google and GitHub');
+        expect(signInNames(['google', 'apple', 'github'])).toBe('Google, Apple and GitHub');
+        expect(signInNames(['google', 'google'])).toBe('Google');
+        expect(signInNames(['facebook', 'myspace'])).toBe('Facebook');
+        expect(signInNames(['toString'])).toBeNull();
+        expect(signInNames([])).toBeNull();
     });
 
     it('the vector key really is the words\' key (a check on the fixture, not the code)', () => {

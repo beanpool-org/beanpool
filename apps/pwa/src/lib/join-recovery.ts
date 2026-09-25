@@ -28,6 +28,7 @@
 import { recoveryWordsMatchSeed, sealSeedToSso, toEd25519Seed, type SealedShare } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { getMnemonic, type BeanPoolIdentity, type JoinProvider } from './identity';
+import { providerLabel } from './web-join';
 
 /** The one piece a join carries: the whole seed (and the words, when they make it) sealed to the sign-in. */
 export type JoinRecoveryShare = SealedShare & { holderType: 'sso'; holderRef: JoinProvider; shareIndex: 1 };
@@ -75,4 +76,16 @@ export async function sealJoinRecovery(identity: BeanPoolIdentity, provider: Joi
  */
 export function recoveryStored(answered: unknown): boolean {
     return !!answered && typeof answered === 'object' && (answered as { enrolled?: unknown }).enrolled === true;
+}
+
+/**
+ * The sign-ins the node names (its `enrolledSso`) as a member reads them: "Google", "Google and GitHub", "Google,
+ * Apple and GitHub". One this app has no name for is left out rather than shown as the node spells it. Null when none.
+ */
+export function signInNames(providers: readonly string[]): string | null {
+    const names = [...new Set(providers)]
+        .filter((p): p is JoinProvider => ['google', 'apple', 'facebook', 'github'].includes(p))
+        .map(providerLabel);
+    if (names.length === 0) return null;
+    return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }

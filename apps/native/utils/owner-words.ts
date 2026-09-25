@@ -5,9 +5,13 @@
  * Why an owner is asked: the community's take-over lock and its sealed backups are locked to each owner's member key.
  * If an owner loses this phone, the 12 words are what rebuild that key when the main server is gone too.
  *
- *   - The words are checked HERE, on the phone (@beanpool/core checkOwnerWords): derive the key, compare it with the
- *     account's public key, and open a throwaway sealed envelope with it. The words are never sent, never stored,
- *     and the screen clears them as soon as the check answers (see {@link ownerWordsReducer}).
+ *   - The words are checked HERE, on the phone, by the one check the add-your-words save uses too (identity.ts
+ *     `checkWordsForAccount`: @beanpool/core checkOwnerWords, which decides with recoveryWordsMatchPublicKey, then
+ *     opens a throwaway sealed envelope with the derived key). The words are never sent, and the screen clears them
+ *     as soon as the check answers (see {@link ownerWordsReducer}).
+ *   - The one exception: on a phone with no copy of the words, a match offers "Save them on this phone", and the
+ *     words are held in the screen's memory until the member saves, types again or leaves. Saving goes through the
+ *     add form's own save (identity.ts `addMnemonicToIdentity`), which checks them again.
  *   - On a match the node gets one signed statement, `{ attestation: 'owner-12-words-checked' }`: the fact, and the
  *     date (the signed timestamp). Nothing derived from the words.
  *   - Never a gate. Nothing in the app or on the node waits for this. "Later" is always there, and the prompt comes
@@ -16,10 +20,13 @@
 
 import { buildSignedHeaders } from './crypto';
 import {
-    OWNER_WORDS_CHECK_PATH, checkOwnerWords, isOwnerWordsCheckDue, ownerWordsPromptRound, splitTypedWords,
+    OWNER_WORDS_CHECK_PATH, isOwnerWordsCheckDue, ownerWordsPromptRound, splitTypedWords,
     type OwnerWordsCheckResult,
 } from '@beanpool/core';
-import type { BeanPoolIdentity } from './identity';
+import {
+    addMnemonicToIdentity, checkWordsForAccount, hasMnemonic,
+    type AddMnemonicResult, type BeanPoolIdentity,
+} from './identity';
 
 export const OWNER_WORDS_ATTESTATION = 'owner-12-words-checked';
 
@@ -92,12 +99,23 @@ export async function sendOwnerWordsAttestation(nodeUrl: string, identity: Pick<
 }
 
 /**
- * Check the typed words against this phone's account. Accepts the native raw-seed key and a PKCS8 key imported from
- * the PWA alike (core normalises). Only the public key and the stored key are read from the identity: never its
- * stored `mnemonic`, so a phone that still holds the words cannot "pass" by comparing them with themselves.
+ * Check the typed words against this phone's account: identity.ts `checkWordsForAccount`, the same check the
+ * add-your-words save makes. Accepts the native raw-seed key and a PKCS8 key imported from the PWA alike (core
+ * normalises). Only the public key and the stored key are read from the identity: never its stored `mnemonic`, so a
+ * phone that still holds the words cannot "pass" by comparing them with themselves.
  */
 export function checkMyWords(typed: string, identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>): Promise<OwnerWordsCheckResult> {
-    return checkOwnerWords(typed, { publicKeyHex: identity.publicKey, privateKey: identity.privateKey });
+    return checkWordsForAccount(typed, identity);
+}
+
+/** After a match, offer "Save them on this phone"? Only where the phone has no copy of the words. */
+export function shouldOfferSaveWords(identity: BeanPoolIdentity | null | undefined): boolean {
+    return !hasMnemonic(identity);
+}
+
+/** "Save them on this phone": the add form's own save, which checks the words again before keeping them. */
+export function saveCheckedWords(words: string): Promise<AddMnemonicResult> {
+    return addMnemonicToIdentity(words);
 }
 
 /** How many words are typed so far, for the "7 of 12" hint. Counts only; never which word. */
@@ -154,11 +172,24 @@ export const OWNER_WORDS_COPY = {
     mismatch: "These aren't the words for this account.",
     count: (n: number) => `That's ${n} word${n === 1 ? '' : 's'}. Type all 12, in order.`,
     findThem: "Can't find them? If this phone still has them, Settings → View Recovery Phrase shows them.",
+    /** The same line on a phone with no copy of the words, where View Recovery Phrase has nothing to show. */
+    findThemNoWords: "Can't find them? This phone has no copy of them to show you. When you find them, check them here, then save them on this phone.",
+    saveOffer: 'This phone has no copy of your 12 words. Save them here and Settings → View Recovery Phrase shows them.',
+    saveButton: 'Save them on this phone',
+    saving: 'Saving…',
+    saved: 'Saved. Settings → View Recovery Phrase shows your 12 words on this phone now.',
+    saveFailed: "They couldn't be saved on this phone. Nothing has changed. Settings → View Recovery Phrase lets you add them.",
     checkNow: 'Check now',
     later: 'Later',
 } as const;
 
+/** "Can't find them?", true on either phone. */
+export function ownerWordsFindThem(hasWords: boolean): string {
+    return hasWords ? OWNER_WORDS_COPY.findThem : OWNER_WORDS_COPY.findThemNoWords;
+}
+
 // ── The screen's state: the typed words live here and nowhere else, and are cleared on every answer ──────────
+// (but for `unsaved`: the words that matched on a phone with no copy, held only while "Save them" is on offer)
 
 export type OwnerWordsOutcome = 'match' | 'mismatch' | 'count';
 
@@ -171,38 +202,57 @@ export interface OwnerWordsState {
     /** After a match: telling the node ('sending'), told ('saved', with its date), or it could not be reached. */
     record: 'none' | 'sending' | 'saved' | 'failed';
     recordedAt: number | null;
+    /** "Save them on this phone", after a match on a phone with no copy of the words. */
+    save: 'none' | 'offered' | 'saving' | 'saved' | 'failed';
+    /** The words that matched, while the save is offered or running. Null otherwise: never kept past it. */
+    unsaved: string | null;
 }
 
 export type OwnerWordsAction =
     | { type: 'typed'; text: string }
     | { type: 'checking' }
-    | { type: 'answered'; result: OwnerWordsCheckResult; countSeen: number }
+    /** `offerSave`: this phone has no copy of the words, so a match offers to save them ({@link shouldOfferSaveWords}). */
+    | { type: 'answered'; result: OwnerWordsCheckResult; countSeen: number; offerSave?: boolean }
     | { type: 'recorded'; at: number | null }
+    | { type: 'saving' }
+    | { type: 'saveAnswered'; ok: boolean }
     | { type: 'clear' };
 
-export const OWNER_WORDS_INITIAL: OwnerWordsState = { typed: '', busy: false, outcome: null, countSeen: 0, record: 'none', recordedAt: null };
+export const OWNER_WORDS_INITIAL: OwnerWordsState = {
+    typed: '', busy: false, outcome: null, countSeen: 0, record: 'none', recordedAt: null, save: 'none', unsaved: null,
+};
 
 export function ownerWordsReducer(state: OwnerWordsState, action: OwnerWordsAction): OwnerWordsState {
     switch (action.type) {
         case 'typed':
-            // Typing again after an answer starts a fresh try.
-            return { ...state, typed: action.text, outcome: null };
+            // Typing again after an answer starts a fresh try, and drops any words held for saving.
+            return { ...state, typed: action.text, outcome: null, save: 'none', unsaved: null };
         case 'checking':
             return { ...state, busy: true };
-        case 'answered':
+        case 'answered': {
             // Not 12 words: nothing was checked, so keep what they typed and say how many there are.
             if (!action.result.matches && action.result.reason === 'count') {
                 return { ...state, busy: false, outcome: 'count', countSeen: action.countSeen };
             }
-            // Checked: the words are cleared whatever the answer. A right answer needs them no more, and a wrong
-            // one should be typed again from the paper rather than edited from a guess on screen.
+            // Checked: the words are cleared from the box whatever the answer. A wrong one should be typed again
+            // from the paper rather than edited from a guess on screen. A right one needs them no more, unless this
+            // phone has no copy: then they are held, out of the box, for "Save them on this phone".
+            const offer = action.result.matches && action.offerSave === true && state.typed.trim() !== '';
             return {
                 typed: '', busy: false, countSeen: 0,
                 outcome: action.result.matches ? 'match' : 'mismatch',
                 record: action.result.matches ? 'sending' : 'none', recordedAt: null,
+                save: offer ? 'offered' : 'none',
+                unsaved: offer ? state.typed : null,
             };
+        }
         case 'recorded':
             return { ...state, record: action.at === null ? 'failed' : 'saved', recordedAt: action.at };
+        case 'saving':
+            return { ...state, save: 'saving' };
+        case 'saveAnswered':
+            // Saved or not, the words are let go: a failed save points to Settings, where they can be typed again.
+            return { ...state, save: action.ok ? 'saved' : 'failed', unsaved: null };
         case 'clear':
             return OWNER_WORDS_INITIAL;
     }

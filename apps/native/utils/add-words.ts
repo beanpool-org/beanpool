@@ -1,15 +1,26 @@
 /**
- * "Add your 12 words to this phone" (Settings → Recovery Phrase, on a phone that has none).
+ * "Add your 12 words to this phone": what View Recovery Phrase opens on a phone that has none.
  *
  * A phone restored with a sign-in, from a copy made before copies carried the words, has the key but not the
  * words, and they can't be rebuilt from it. A member who has them written down types them here; the identity
- * module keeps them only if they make this account's key (identity.ts `addMnemonicToIdentity`). Everything
- * here is the typing: twelve boxes, checked against the word list as the member goes, forgiving case and
- * spacing, and a paste of the whole phrase into any box spreads it across all twelve.
+ * module keeps them only if they are this account's (identity.ts `addMnemonicToIdentity`, through the same check
+ * as the owners' "Check your 12 words"). Everything here is the typing: twelve boxes, checked against the word
+ * list as the member goes, forgiving case and spacing, and a paste of the whole phrase into any box spreads it
+ * across all twelve.
  *
  * Nothing here or in the save reaches a network.
  */
 import { BIP39_ENGLISH, normaliseRecoveryWords } from '@beanpool/core';
+import { hasMnemonic, type BeanPoolIdentity } from './identity';
+import { NO_WORDS_VIEW_LINE } from './no-words-copy';
+
+/**
+ * What View Recovery Phrase (Settings) and Show My 12 Recovery Words (Account Protection) open. Both are drawn on
+ * every phone: with the words they show them, as they always have; without, they open the add form.
+ */
+export function viewWordsOpens(identity: BeanPoolIdentity | null | undefined): 'show-words' | 'add-words' {
+    return hasMnemonic(identity) ? 'show-words' : 'add-words';
+}
 
 export const WORD_BOXES = 12;
 
@@ -92,7 +103,8 @@ export function wordBoxesStatus(check: WordBoxesCheck): string {
 export const ADD_WORDS_COPY = {
     title: 'Add your 12 words to this phone',
     open: 'I have my 12 words',
-    intro: 'Have your 12 words written down? Type them here, in order, or paste them. This phone checks them against your account. They are not sent anywhere.',
+    /** The one plain line (no-words-copy.ts). */
+    intro: NO_WORDS_VIEW_LINE,
     paste: 'Paste',
     submit: 'Add these words',
     checking: 'Checking…',
@@ -102,6 +114,4 @@ export const ADD_WORDS_COPY = {
     failed: 'The words could not be saved on this phone. Nothing has changed. Try again.',
     /** Shown once, after the words are saved. */
     done: 'Your 12 words are on this phone again, and Show Recovery Phrase works. A sign-in you connected before still brings back your account without them. To include them, tap Connect again next to it under Account Protection.',
-    /** Account Protection, on a phone with no words: the way to this screen. */
-    fromProtection: 'Have your 12 words written down? Add them to this phone',
 } as const;

@@ -41,6 +41,7 @@ import { ledger } from './ledger.js';
 import { logger } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
+import { movePlaceWatches } from './place-watches.js';
 
 // ===================== TYPES =====================
 
@@ -342,6 +343,8 @@ export function completeRekey(
 
         // (n) push_tokens (Purge old device tokens as device was lost)
         db.prepare('DELETE FROM push_tokens WHERE public_key = ?').run(cleanOld);
+        // (n2) place watches (G5): the places the member watches are theirs, whatever device holds the key.
+        movePlaceWatches(cleanOld, cleanNew);
 
         // (o) member_preferences
         db.prepare('UPDATE member_preferences SET public_key = ? WHERE public_key = ?').run(cleanNew, cleanOld);

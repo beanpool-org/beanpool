@@ -218,3 +218,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-06 - O(1) Enterprise Name Resolution in Native NewEventModal
 **Learning:** In `apps/native/components/NewEventModal.tsx`, mapping keeper public keys (`keeperOf`) to enterprise options executed `treasuries.find(t => t.publicKey === pk)` for every keeper item.
 **Action:** Pre-computed `treasuriesMap` Map indexed by `publicKey` before mapping `keeperOf`, converting enterprise name resolution into constant-time $O(1)$ Map retrievals ($O(K + T)$ overall).
+
+## 2026-10-07 - O(1) Transaction Lookups for System Messages in PWA MessagesPage
+**Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, rendering system messages and system message action buttons repeatedly scanned `userTransactions` via `.find(t => t.postId === ...)` inside message mapping loops, creating an $O(M \times T)$ linear array scan during message rendering in chat threads.
+**Action:** Pre-computed `userTransactionsByPostId` Map via `useMemo` and updated `formatSystemMessage` and system message action button rendering to use constant-time $O(1)$ Map retrievals.

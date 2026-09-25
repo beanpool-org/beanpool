@@ -290,6 +290,7 @@ run_federation_suites() {
       test-distance-search
       test-guest-view
       test-distance-search-perf
+      test-global-directory
       test-commons-conservation
       test-ledger-rollback
       test-treasury-keepership
@@ -352,6 +353,7 @@ run_federation_suites() {
       test-takeover-split-brain
       test-profile-takeover
       test-open-join-failover
+      test-place-watch-failover
       test-unlock-cancel
       test-cash-also-needed
       test-posts-ignore-archetypes
@@ -379,6 +381,7 @@ run_federation_suites() {
       test-vouch-covenant
       test-wash-sybil-defense
       test-apple-probe
+      test-apple-return
       test-recovery-backup-durability
       test-public-address
       test-invite-trampoline

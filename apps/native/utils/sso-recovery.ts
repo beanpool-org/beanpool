@@ -34,6 +34,7 @@ import {
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
 import { importIdentity, type BeanPoolIdentity } from './identity';
+import { clearToRestore, type ConfirmReplace } from './restore-account';
 import {
     signInWithGoogle, signInWithApple, signInWithFacebook, signInWithGithubViaNode, SsoSignInError,
     type SsoProvider, type GithubDevicePrompt,
@@ -108,6 +109,13 @@ export async function recoverAccountWithSso(options: {
      * providers' own sheets have their own cancel.
      */
     signal?: AbortSignal;
+    /**
+     * Asked before this restore writes another account over the one the phone holds ("Replace this phone's
+     * account?", restore-account.ts). Called after the account has been rebuilt and before anything is written: the
+     * community's address, the key and the onboarding record all stay as they are unless it says yes. Without it, a
+     * phone holding another account refuses the restore. Never asked when the phone has no account, or this one.
+     */
+    confirmReplace?: ConfirmReplace;
 }): Promise<SsoRecoveryResult> {
     const rawCallsign = options.callsign.trim();
     if (!rawCallsign) {
@@ -381,9 +389,12 @@ export async function recoverAccountWithSso(options: {
         ...(mnemonic ? { mnemonic } : {}),
     };
 
-    // 9. Save Anchor URL and Identity
+    // 9. Never over another account without the member's yes: until then nothing on the phone changes.
+    const toSave = await clearToRestore(restoredIdentity, options.confirmReplace);
+
+    // 10. Save Anchor URL and Identity
     await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
-    await importIdentity(restoredIdentity);
+    await importIdentity(toSave);
 
     // Clear any pending onboarding state
     try {
@@ -393,7 +404,7 @@ export async function recoverAccountWithSso(options: {
 
     options.onProgress?.({ step: 'done', message: 'Account restored successfully!' });
     return {
-        identity: restoredIdentity,
+        identity: toSave,
         provider: options.provider,
     };
 }

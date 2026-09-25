@@ -240,8 +240,12 @@ const readsOf = ({ circles, passes }: { circles: number; passes: number }) =>
 /** The same kind of read: circles or not, and a pass after them or not. How many circles differs with the areas. */
 const samePath = (a: { circles: number; passes: number }, b: { circles: number; passes: number }) => (a.circles > 0) === (b.circles > 0) && a.passes === b.passes;
 
-/** Within a timer's noise of 743b5d57, generously: half as slow again, or 3 ms, whichever is more. */
-const noSlower = (t: number, base: number) => t <= Math.max(1.5 * base, base + 3);
+/**
+ * Within a timer's noise of 743b5d57, generously: twice as slow, or 5 ms, whichever is more. The regressions this suite exists
+ * to catch were 4x to 800x (#1140's rounds 1 and 2); a shared CI runner put a read that runs the very same SQL as 743b5d57 at
+ * 1.56x on 2026-09-26 (type=event, 20k posts: 29.5 ms against 18.9 ms), which the old 1.5x bound failed.
+ */
+const noSlower = (t: number, base: number) => t <= Math.max(2 * base, base + 5);
 
 interface Row {
     size: string; shape: Shape; before: number; now: number; reads: string; same: boolean;

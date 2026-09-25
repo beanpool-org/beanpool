@@ -14,8 +14,9 @@
  *      G3; distance search on both since G4; the visitors' view of the listings on global only since G9a), and every
  *      field it had before
  *   5. node_config overrides change the configured switch (and the boot log reports them), an override of a built
- *      switch (openJoin, distanceSortDefault) reaches the code, bad ones are ignored with a log line, and a switch
- *      this build doesn't have yet (knocks) stays pinned, so the API never advertises it
+ *      switch (openJoin, distanceSortDefault, directoryMirror, publishToDirectory) reaches the code, bad ones are
+ *      ignored with a log line, and a switch this build doesn't have yet (knocks) stays pinned, so the API never
+ *      advertises it
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-node-profile.ts
  */
@@ -214,6 +215,14 @@ async function main() {
     assert(getProfileSwitches().guestListingsOnly === true && (await getInfo()).body.features.guestListingsOnly === true,
         'the visitors\' view is built (G9a), so local + nodeProfile.guestListingsOnly=true reaches the code and the API says so');
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.guestListingsOnly`);
+    assert(getProfileSwitches().directoryMirror === false && getProfileSwitches().publishToDirectory === true,
+        'local: no directory mirror, and listed as the operator\'s directory settings say (G5)');
+    setOverride('directoryMirror', 'true');
+    setOverride('publishToDirectory', 'false');
+    assert(getProfileSwitches().directoryMirror === true && getProfileSwitches().publishToDirectory === false,
+        'both are built (G5), so local + overrides reach the code: a mirror, and never listed');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.directoryMirror`);
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.publishToDirectory`);
     setOverride('ssoRequiredForJoin', 'false');
     assert(getProfileSwitches().ssoRequiredForJoin === true,
         'the door without a sign-in (D1 b) is not built, so nodeProfile.ssoRequiredForJoin=false changes nothing');
@@ -239,6 +248,8 @@ async function main() {
     assert(getProfileSwitches().probation === false && getProfileSwitches().autoHideReports === true,
         'probation is built (G3), so nodeProfile.probation=false turns it off; auto-hide keeps the global default');
     assert(getProfileSwitches().distanceSortDefault === true, 'global: nearest first by default, no longer pinned off (G4)');
+    assert(getProfileSwitches().directoryMirror === true && getProfileSwitches().publishToDirectory === false,
+        'global: the directory mirror on and never listed by default, no longer pinned (G5)');
     setOverride('distanceSortDefault', 'false');
     assert(getProfileSwitches().distanceSortDefault === false, 'and the operator\'s nodeProfile.distanceSortDefault=false turns it off');
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.distanceSortDefault`);

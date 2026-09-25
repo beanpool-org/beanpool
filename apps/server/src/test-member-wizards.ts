@@ -268,6 +268,10 @@ async function main() {
     db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash) VALUES (?, 'google', 'alice-join-hash', ?, NULL)")
         .run(oldAliceKey, new Date().toISOString());
 
+    // 17. Alice watches a place for a community to start near it (G5, engine/place-watches.ts)
+    db.prepare("INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES ('alice-watch', ?, -28.6, 153.6, 50, ?)")
+        .run(oldAliceKey, new Date().toISOString());
+
     // Step A: Issue re-key code (tested with uppercase key to verify case normalization)
     const rekeyIssue = issueRekeyCode(oldAliceKey.toUpperCase(), operatorPubkey);
     assert(Boolean(rekeyIssue.code), `Re-enrolment code generated: ${rekeyIssue.code}`);
@@ -416,6 +420,11 @@ async function main() {
     const openJoinNew = db.prepare('SELECT join_hash FROM open_joins WHERE member_pubkey = ?').get(newAliceKey) as any;
     const openJoinOld = db.prepare('SELECT 1 FROM open_joins WHERE member_pubkey = ?').get(oldAliceKey);
     assert(openJoinNew?.join_hash === 'alice-join-hash' && !openJoinOld, 'open_joins row moved to newAliceKey');
+
+    // Place watches (G5): the places she watches are hers, whatever device holds the key.
+    const watchNew = db.prepare('SELECT id FROM place_watches WHERE pubkey = ?').all(newAliceKey) as any[];
+    const watchOld = db.prepare('SELECT 1 FROM place_watches WHERE pubkey = ?').get(oldAliceKey);
+    assert(watchNew.length === 1 && watchNew[0].id === 'alice-watch' && !watchOld, 'place watch moved to newAliceKey');
 
     // Case-insensitive assertMemberActive check
     throws(() => assertMemberActive(oldAliceKey.toUpperCase()), new RegExp(newAliceKey), 'assertMemberActive on uppercase old key reports rekeyed_to new key');
@@ -647,8 +656,10 @@ async function main() {
     makeMember('push_member', pushMemberKey);
     db.prepare("INSERT INTO push_tokens (public_key, token, platform) VALUES (?, 'token_123', 'ios')").run(pushMemberKey);
     assert((db.prepare("SELECT COUNT(*) as c FROM push_tokens WHERE public_key = ?").get(pushMemberKey) as any).c === 1, 'Push token created');
+    db.prepare("INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES ('push-member-watch', ?, 52.5, 13.4, 50, ?)").run(pushMemberKey, new Date().toISOString());
     executeOffboard(pushMemberKey, { resolution: 'prune_zero_balance' }, operatorPubkey);
     assert((db.prepare("SELECT COUNT(*) as c FROM push_tokens WHERE public_key = ?").get(pushMemberKey) as any).c === 0, 'Push token purged on offboard');
+    assert((db.prepare("SELECT COUNT(*) as c FROM place_watches WHERE pubkey = ?").get(pushMemberKey) as any).c === 0, 'Place watches purged on offboard (G5)');
 
     // Member 7: Concurrent Balance Race Condition Guard
     // Verifies that getBalance is read inside conservingTransaction under the transaction lock.

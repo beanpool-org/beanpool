@@ -204,7 +204,7 @@ export function PostModerationPanel({
                     <select
                         id="admin-post-type-filter"
                         value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value as any)}
+                        onChange={(e) => setTypeFilter(e.target.value as 'all' | 'offer' | 'need')}
                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
                     >
                         <option value="all">All Types</option>
@@ -237,7 +237,12 @@ export function PostModerationPanel({
                 id="admin-posts-list"
                 className="space-y-3 max-h-[500px] overflow-y-auto divide-y divide-nature-800/60 pr-1"
             >
-                {filteredPosts.length === 0 ? (
+                {posts == null ? (
+                    <div className="py-8 text-center text-xs text-nature-400 font-mono bg-nature-950/50 rounded-xl border border-nature-800 flex items-center justify-center gap-2">
+                        <span className="animate-spin text-sm">🔄</span>
+                        <span>Loading marketplace posts...</span>
+                    </div>
+                ) : filteredPosts.length === 0 ? (
                     <div className="py-8 text-center text-xs text-nature-400 italic bg-nature-950/50 rounded-xl border border-nature-800">
                         No marketplace posts match your search and filter criteria.
                     </div>

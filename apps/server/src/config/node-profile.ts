@@ -73,9 +73,12 @@ export interface ProfileSwitches {
      *  recently updated first. Without a point every profile keeps that order (routes/marketplace.ts). Not the same as
      *  `features.distanceSearch`, which every node reports. */
     distanceSortDefault: boolean;
-    /** Mirror the public communities directory hourly, for "communities near you". Primary only. */
+    /** Mirror the public communities directory hourly, for "communities near you", and serve it with place watches
+     *  and the landing card under /api/global (services/directory-mirror.ts, routes/global-directory.ts). Off: no
+     *  fetch, and every /api/global route is 404. Main servers only: a standby never fetches. */
     directoryMirror: boolean;
-    /** On: the operator's directory settings decide whether this node is listed, as today. Off: never listed. */
+    /** On: the operator's directory settings decide whether this node is listed, as today. Off: never listed: the
+     *  publisher sends nothing and sets no timer (services/directory-publisher.ts). */
     publishToDirectory: boolean;
     /** New accounts are rate-limited for their first days: posts, photos, new DM recipients, knocks
      *  (engine/probation.ts). */
@@ -149,8 +152,6 @@ const NOT_BUILT_YET: Readonly<Partial<ProfileSwitches>> = {
     // probation) is not built, so an override asking for it is reported at boot and changes nothing.
     ssoRequiredForJoin: true,
     knocks: false, // G6
-    directoryMirror: false, // G5
-    publishToDirectory: true, // G5 (the operator's directory settings decide, as they always have)
 };
 
 /** The switches that hold or move Beans. None of them can be off on a node whose ledger has ever moved. */
@@ -379,6 +380,7 @@ const FEATURE_OFF_MESSAGES: Partial<Record<ProfileSwitch, string>> = {
     enterprises: 'Enterprises are switched off on this node.',
     treasuries: 'Treasuries are switched off on this node.',
     crowdfund: 'Crowdfunding is switched off on this node.',
+    directoryMirror: 'This node does not keep the communities directory. Find communities near you on the global community.',
 };
 
 export function featureOffMessage(feature: ProfileSwitch): string {

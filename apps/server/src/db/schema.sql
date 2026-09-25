@@ -676,6 +676,55 @@ CREATE TABLE IF NOT EXISTS open_joins (
 CREATE INDEX IF NOT EXISTS idx_open_joins_ip ON open_joins(ip_hash, joined_at) WHERE ip_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_open_joins_updated_at ON open_joins(updated_at);
 
+-- 14d. The communities directory as this node last fetched it (global profile G5, services/directory-mirror.ts).
+--
+-- On every node, empty unless `directoryMirror` is on (the global profile's default). Written only by the hourly
+-- mirror, from the public registry every node publishes to, and read by GET /api/global/communities and
+-- /api/global/home. Every field is what the registry said once checked (engine/directory-cache.ts); a field that
+-- failed its check is NULL, never a guess: a row with no `node_url` is a community shown with no link and no knock
+-- target. A row is never deleted: a community that leaves the registry is kept as its key and `first_seen_at` only
+-- (`listed` 0, every published field cleared), so a community is new to this node once, and a watcher is told
+-- about it once. Replicated to a standby (`updated_at`, stamped only when a row changes), so a server that takes over
+-- knows what the old one had already seen and tells nobody about it again.
+CREATE TABLE IF NOT EXISTS directory_cache (
+    community_key TEXT PRIMARY KEY,
+    listed INTEGER NOT NULL DEFAULT 1 CHECK (listed IN (0, 1)),
+    name TEXT,
+    node_url TEXT,
+    lat REAL CHECK (lat IS NULL OR (lat >= -90 AND lat <= 90)),
+    lng REAL CHECK (lng IS NULL OR (lng >= -180 AND lng <= 180)),
+    radius_km REAL CHECK (radius_km IS NULL OR radius_km > 0),
+    member_count INTEGER CHECK (member_count IS NULL OR member_count >= 0),
+    contact_email TEXT,
+    contact_phone TEXT,
+    registry_updated_at TEXT,
+    first_seen_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_directory_cache_updated_at ON directory_cache(updated_at);
+
+-- 14e. Place watches (global profile G5, engine/place-watches.ts): "tell me when a community starts near here".
+--
+-- A member's own, set and removed only by their signed request, at most 3 each. `lat`/`lng` is the 0.1° cell the
+-- member asked about, rounded BEFORE it is written, never the spot. When the mirror first sees a community that
+-- reaches a watch, its member hears once (a push and a live announcement), and at most once a day
+-- (`last_notified_at`, on every one of the member's watches). Replicated to a standby, watermarked on `updated_at`
+-- (stamped by a set, a radius change, a notice and a re-key), with a `place_watches` tombstone keyed by `id` for each
+-- removal, so a server that takes over has every watch and each member's quiet day. Carried in file and sealed
+-- backups. Goes with the member on a prune or a self-deletion, and moves with them on a re-key.
+CREATE TABLE IF NOT EXISTS place_watches (
+    id TEXT PRIMARY KEY,
+    pubkey TEXT NOT NULL REFERENCES members(public_key),
+    lat REAL NOT NULL CHECK (lat >= -90 AND lat <= 90),
+    lng REAL NOT NULL CHECK (lng >= -180 AND lng <= 180),
+    radius_km REAL NOT NULL CHECK (radius_km > 0 AND radius_km <= 200),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    last_notified_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE (pubkey, lat, lng)
+);
+CREATE INDEX IF NOT EXISTS idx_place_watches_updated_at ON place_watches(updated_at);
+
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

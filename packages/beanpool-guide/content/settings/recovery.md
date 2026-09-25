@@ -52,7 +52,9 @@ If someone starts recovering your account, you get an alert, and Settings shows 
 
 ## If the phone already has an account
 
-Restoring a different account replaces the one on this phone. The app asks you to type **WIPE** first. Make sure you have the 12 words for the account you are replacing. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back.
+Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once you have signed in). Nothing changes until you type **WIPE** and tap **Replace Account**. Tap **Keep**, then the account's name, **go back** to leave everything as it was.
+
+Make sure you have the 12 words for the account you are replacing. If this phone has them, that screen shows them when you tap **Show** (the account's name) **12 words**. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back.
 
 ## Lost everything?
 

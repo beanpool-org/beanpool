@@ -2,7 +2,8 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
-import { createIdentity, createIdentityFromMnemonic, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
+import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
+import { restoreFromWords, type ConfirmReplace } from '../utils/restore-account';
 import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
@@ -12,8 +13,9 @@ import {
 } from '../utils/onboarding-state';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile } from '../utils/node-profile';
 import {
-    MAX_JOIN_NAME, adoptJoinKey, commitJoinKey, doorMessage, joinKeyForThisPhone, keepJoinedIdentity, nextStepFor, releaseJoinKey,
-    signInAtDoor, submitJoin, type DoorAnswer, type DoorSignIn, type JoinKey,
+    MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
+    keepJoinedIdentity, nameCheckMessage, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin,
+    type DoorAnswer, type DoorPhase, type DoorSignIn, type JoinKey,
 } from '../utils/global-join';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -32,7 +34,7 @@ import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolm
 import { protectionFrom } from '../utils/protection-state';
 import { NO_WORDS_WAY_BACK, noWordsBeforeWipe } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
-import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
+import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 import { recoverAccountWithSso, waitingOnGithub } from '../utils/sso-recovery';
 import { returnToApp, type GithubDevicePrompt } from '../utils/sso-signin';
@@ -195,7 +197,7 @@ export default function WelcomeScreen() {
     // --- The global community's open door (utils/global-join.ts; design §2.3). Sign in once, choose a
     // name, join; then the same steps as an invite. `joinFlow` says which door this wizard came in by. ---
     const [joinFlow, setJoinFlow] = useState<OnboardingFlow>('invite');
-    const [globalPhase, setGlobalPhase] = useState<'checking' | 'unavailable' | 'signIn' | 'name' | 'joining' | 'restore' | 'closed'>('checking');
+    const [globalPhase, setGlobalPhase] = useState<DoorPhase>('checking');
     /** What the member reads on the `unavailable`, `restore` and `closed` screens. */
     const [globalMessage, setGlobalMessage] = useState<string | null>(null);
     /** The key the door's sign-in is bound to: the phone's own, or one made for this join. */
@@ -209,14 +211,25 @@ export default function WelcomeScreen() {
     /** Stops a GitHub sign-in at the door that is waiting on the member at GitHub. */
     const globalAbortRef = useRef<AbortController | null>(null);
     useEffect(() => () => globalAbortRef.current?.abort(), []);
+    /** Stops the name step's check when the member leaves it (Back to Home, Use a different sign-in). */
+    const nameCheckRef = useRef<AbortController | null>(null);
+    useEffect(() => () => nameCheckRef.current?.abort(), []);
+    /** From the key going onto the phone until the join's answer: the door's screen is not left mid-join. */
+    const joinSendingRef = useRef(false);
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone
     // that already holds one). Rare, but destructive: the phone can only hold one
     // identity, so restoring a different one replaces — and can orphan — the
     // current account. We force an explicit typed confirmation and offer to back
-    // up the outgoing account's 12 words first so it can always be retrieved. ---
+    // up the outgoing account's 12 words first so it can always be retrieved.
+    // Both restores, 12 words and a sign-in, ask it through the one gate
+    // (utils/restore-account.ts), which writes nothing until it has a yes. ---
     const [outgoingIdentity, setOutgoingIdentity] = useState<BeanPoolIdentity | null>(null);
-    const [pendingRecovery, setPendingRecovery] = useState<{ words: string[]; anchorUrl: string } | null>(null);
+    /** Which restore asked, so Cancel goes back to it. */
+    const [replaceFrom, setReplaceFrom] = useState<'recover' | 'ssoRecover'>('recover');
+    /** The asking restore's answer, waiting on Replace Account or Cancel. Leaving the screen any other way is Cancel. */
+    const replaceAnswerRef = useRef<((replace: boolean) => void) | null>(null);
+    useEffect(() => () => replaceAnswerRef.current?.(false), []);
     const [replaceConfirmText, setReplaceConfirmText] = useState('');
     const [showOutgoingSeed, setShowOutgoingSeed] = useState(false);
     const [outgoingSeedCopied, setOutgoingSeedCopied] = useState(false);
@@ -751,9 +764,17 @@ export default function WelcomeScreen() {
         }
     }
 
-    // Validates the recovery form and either proceeds straight to recovery, or —
-    // when this would REPLACE a different identity already on the phone — diverts
-    // to the confirm-replace screen so the swap can never happen by accident.
+    // Validates the recovery form, then restores through the one gate every restore
+    // passes (utils/restore-account.ts): when this would REPLACE a different
+    // identity already on the phone, the confirm-replace screen asks first, and
+    // nothing is written until it has a yes, so the swap can never happen by accident.
+    //
+    // The 12 words ARE the identity. The callsign and avatar are just node-held
+    // profile data that travel with the key, so we pull the callsign from the node
+    // rather than asking for it; the avatar (and everything else) then lands with
+    // the normal members-directory sync. We never write a typed/placeholder name
+    // back to the node. If the node can't be reached the account still restores —
+    // it comes up nameless and adopts its real callsign on the first online sync.
     async function handleRecover() {
         const words = recoveryWords.map(w => w.toLowerCase().trim());
         const valid = words.filter(w => w.length > 0).length === 12;
@@ -782,60 +803,67 @@ export default function WelcomeScreen() {
         setLoading(true);
         setError(null);
         try {
-            // Derive the incoming account's public key WITHOUT saving it, so we can
-            // tell whether recovering would overwrite a DIFFERENT account already
-            // stored on this phone.
-            const { publicKeyHex } = await mnemonicToKeypair(words);
-            const existing = await loadIdentity();
-            if (existing && existing.publicKey !== publicKeyHex) {
-                // A different account lives here — divert to the guarded screen.
-                setPendingRecovery({ words, anchorUrl: finalAnchorUrl });
-                setOutgoingIdentity(existing);
-                setReplaceConfirmText('');
-                setShowOutgoingSeed(false);
-                setOutgoingSeedCopied(false);
-                setLoading(false);
-                setMode('confirmReplace');
-                return;
-            }
-            // Fresh phone, or restoring the SAME account — no overwrite, proceed.
-            await doRecover(words, finalAnchorUrl);
+            const identity = await restoreFromWords(words, finalAnchorUrl, {
+                confirmReplace: askToReplace('recover'),
+                nameOnNode: (publicKey) => fetchNodeCallsign(finalAnchorUrl, publicKey),
+            });
+            setOutgoingIdentity(null);
+            setIdentity(identity);
         } catch (err) {
-            setError('Recovery failed. Check words and try again.');
+            // Keep on the confirm-replace screen has already gone back, with nothing changed.
+            if ((err as { reason?: string } | null)?.reason !== 'cancelled') {
+                setError('Recovery failed. Check words and try again.');
+                leaveReplace('recover');
+            }
+        } finally {
             setLoading(false);
         }
     }
 
-    // Performs the actual identity restore. Only called once we're certain the
-    // user intends any overwrite (either no prior identity, the same identity, or
-    // an explicit typed WIPE confirmation on the confirm-replace screen).
-    //
-    // The 12 words ARE the identity. The callsign and avatar are just node-held
-    // profile data that travel with the key, so we pull the callsign from the node
-    // rather than asking for it; the avatar (and everything else) then lands with
-    // the normal members-directory sync. We never write a typed/placeholder name
-    // back to the node. If the node can't be reached the account still restores —
-    // it comes up nameless and adopts its real callsign on the first online sync.
-    async function doRecover(words: string[], finalAnchorUrl: string) {
-        setLoading(true);
-        setError(null);
-        try {
-            await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
+    /**
+     * The confirm-replace screen, for a restore about to write over a different account on this phone. It resolves
+     * with the member's answer; until then the restore waits and nothing on the phone has changed.
+     */
+    function askToReplace(from: 'recover' | 'ssoRecover'): ConfirmReplace {
+        return async (outgoing) => {
+            // A sign-in may still have its page in front of the app (GitHub on iOS): this screen must be seen.
+            if (from === 'ssoRecover') await returnToApp();
+            return new Promise<boolean>((resolve) => {
+                replaceAnswerRef.current?.(false);
+                replaceAnswerRef.current = resolve;
+                setReplaceFrom(from);
+                setOutgoingIdentity(outgoing);
+                setReplaceConfirmText('');
+                setShowOutgoingSeed(false);
+                setOutgoingSeedCopied(false);
+                setError(null);
+                setLoading(false);
+                setMode('confirmReplace');
+            });
+        };
+    }
 
-            const { publicKeyHex } = await mnemonicToKeypair(words);
-            const callsign = (await fetchNodeCallsign(finalAnchorUrl, publicKeyHex)) || '';
-
-            const identity = await createIdentityFromMnemonic(words, callsign);
-            // Recovering an existing account supersedes any half-finished join
-            // wizard on this device — drop the rescue record so the gatekeeper
-            // doesn't bounce a recovered member back into onboarding.
-            await clearPendingOnboarding();
-            setIdentity(identity);
-        } catch (err) {
-            setError('Recovery failed. Check words and try again.');
-        } finally {
-            setLoading(false);
+    /** Replace Account (true) or Keep (false), handed to the restore that asked. */
+    function answerReplace(replace: boolean) {
+        const answer = replaceAnswerRef.current;
+        replaceAnswerRef.current = null;
+        if (replace) {
+            setError(null);
+            setLoading(true);
+        } else {
+            setError(null);
+            leaveReplace(replaceFrom);
         }
+        answer?.(replace);
+    }
+
+    /** Off the confirm-replace screen, back to the restore that asked, with the outgoing account's words put away. */
+    function leaveReplace(to: 'recover' | 'ssoRecover') {
+        setMode(m => (m === 'confirmReplace' ? to : m));
+        setOutgoingIdentity(null);
+        setReplaceConfirmText('');
+        setShowOutgoingSeed(false);
+        setOutgoingSeedCopied(false);
     }
 
     async function handleSsoRecover(provider: SsoProvider) {
@@ -890,11 +918,15 @@ export default function WelcomeScreen() {
                     if (Platform.OS === 'ios') WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
                 },
                 signal: abort.signal,
+                // Onto a phone that holds another account: "Replace this phone's account?" first, as the
+                // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
+                confirmReplace: askToReplace('ssoRecover'),
             });
             // Same reason the enrolment sheet does it, and the same platform trap: GitHub's
             // confirmation page says nothing about returning, and `dismissBrowser` is iOS-only.
             await returnToApp();
             await clearPendingOnboarding();
+            setOutgoingIdentity(null);
             setIdentity(result.identity);
             setMode('home');
             router.replace('/');
@@ -903,6 +935,7 @@ export default function WelcomeScreen() {
                 setError(null);
             } else {
                 setError(e.message || `Recovery failed: ${String(e)}`);
+                leaveReplace('ssoRecover');
             }
         } finally {
             if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
@@ -937,11 +970,24 @@ export default function WelcomeScreen() {
      * stored one since (an invite join makes its own when the phone has none): then that one (`joinKeyForThisPhone`).
      */
     function leaveGlobalDoor() {
+        // A tap that lands in the frame before the join's spinner replaces this button: the join is out, and its answer decides.
+        if (joinSendingRef.current) return;
         globalAbortRef.current?.abort();
+        nameCheckRef.current?.abort();
         setDoorSignIn(null);
         setGlobalCode(null);
         setCallsignSuggestions([]);
         goBack();
+    }
+
+    /** "Use a different sign-in" on the name step: open while its check runs, which stops it. */
+    function signInAgainAtDoor() {
+        if (joinSendingRef.current) return;
+        nameCheckRef.current?.abort();
+        setDoorSignIn(null);
+        setCallsignSuggestions([]);
+        setError(null);
+        setGlobalPhase('signIn');
     }
 
     /** Dash stripped: GitHub renders eight separate cells (see SsoEnrolSheet). */
@@ -1008,19 +1054,24 @@ export default function WelcomeScreen() {
         }
         setLoading(true);
         setError(null);
+        nameCheckRef.current?.abort();
+        const leave = new AbortController();
+        nameCheckRef.current = leave;
         try {
-            // As an invite join does: a name that is free there, before joining, rather than a quiet rename.
-            // 'unknown' (couldn't tell) goes ahead; the node makes a taken name unique anyway.
-            const availability = await checkCallsignAvailable(name, key.createdHere ? undefined : key.identity.publicKey, GLOBAL_NODE_URL);
-            if (availability === 'taken') {
-                // No longer than the join keeps: a suggestion is sent exactly as it was checked and shown.
-                setCallsignSuggestions(await suggestCallsigns(name, undefined, 3, GLOBAL_NODE_URL, MAX_JOIN_NAME));
-                setError(`"${name}" is already taken in the global community. Pick one of the suggestions below, or choose another name.`);
+            // As an invite join does: a name that is free there, before joining, rather than a quiet rename. Bounded,
+            // and stopped when the member leaves the step (utils/global-join.ts `checkNameAtDoor`).
+            const check = await checkNameAtDoor(GLOBAL_NODE_URL, name, key, { signal: leave.signal });
+            // Left while it ran: the way out they took has already drawn its screen.
+            if (check.kind === 'cancelled' || leave.signal.aborted) return;
+            if (check.kind !== 'free') {
+                setCallsignSuggestions(check.kind === 'taken' ? check.suggestions : []);
+                setError(nameCheckMessage(name, check));
                 return;
             }
             setCallsignSuggestions([]);
-            const identity = await commitJoinKey(key, name);
+            joinSendingRef.current = true;
             setGlobalPhase('joining');
+            const identity = await commitJoinKey(key, name);
             const answer = await submitJoin(GLOBAL_NODE_URL, identity, name, signin);
             setDoorSignIn(null);
             await afterDoorAnswer(answer, key, identity, 'join');
@@ -1029,6 +1080,8 @@ export default function WelcomeScreen() {
             setError((err as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
             setGlobalPhase('signIn');
         } finally {
+            joinSendingRef.current = false;
+            if (nameCheckRef.current === leave) nameCheckRef.current = null;
             setLoading(false);
         }
     }
@@ -1039,7 +1092,8 @@ export default function WelcomeScreen() {
      */
     async function afterDoorAnswer(answer: DoorAnswer, key: JoinKey, identity: BeanPoolIdentity, via: 'signIn' | 'join') {
         if (answer.kind === 'joined') {
-            await finishGlobalJoin(answer.callsign ? { ...identity, callsign: answer.callsign } : identity, answer.enrolment);
+            // Under the name the node kept: from the answer, or, for `already_member`, asked of the node.
+            await finishGlobalJoin(await joinedUnderNodeName(GLOBAL_NODE_URL, answer, identity), answer.enrolment);
             return;
         }
         const next = nextStepFor(answer);
@@ -1102,16 +1156,6 @@ export default function WelcomeScreen() {
         setTimeout(() => setOutgoingSeedCopied(false), 2000);
     }
 
-    // Confirm the overwrite: proceed with the pending recovery, then clear state.
-    async function handleConfirmReplace() {
-        if (!pendingRecovery) return;
-        const { words, anchorUrl } = pendingRecovery;
-        await doRecover(words, anchorUrl);
-        setPendingRecovery(null);
-        setOutgoingIdentity(null);
-        setReplaceConfirmText('');
-        setShowOutgoingSeed(false);
-    }
 
 
 
@@ -1856,6 +1900,7 @@ export default function WelcomeScreen() {
         const signedInWith = doorSignIn
             ? { apple: 'Apple', google: 'Google', facebook: 'Facebook', github: 'GitHub' }[doorSignIn.provider]
             : null;
+        const doorWays = doorWaysOut(globalPhase, loading, !!globalCode);
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
@@ -2048,8 +2093,8 @@ export default function WelcomeScreen() {
                                     </Pressable>
                                     <Pressable
                                         style={styles.backBtn}
-                                        onPress={() => { setDoorSignIn(null); setCallsignSuggestions([]); setError(null); setGlobalPhase('signIn'); }}
-                                        disabled={loading}
+                                        onPress={signInAgainAtDoor}
+                                        disabled={!doorWays.otherSignIn}
                                         accessibilityRole="button"
                                     >
                                         <Text style={styles.backBtnText}>Use a different sign-in</Text>
@@ -2067,7 +2112,7 @@ export default function WelcomeScreen() {
                             )}
 
                             {globalPhase !== 'joining' && (
-                                <Pressable style={styles.backBtn} onPress={leaveGlobalDoor} disabled={loading && !globalCode} accessibilityRole="button" accessibilityLabel="Back to Home">
+                                <Pressable style={styles.backBtn} onPress={leaveGlobalDoor} disabled={!doorWays.back} accessibilityRole="button" accessibilityLabel="Back to Home">
                                     <Text style={styles.backBtnText}>← Back to Home</Text>
                                 </Pressable>
                             )}
@@ -2217,7 +2262,7 @@ export default function WelcomeScreen() {
                             <Pressable
                                 style={[styles.dangerBtn, (loading || replaceConfirmText !== 'WIPE') && styles.disabledBtn]}
                                 disabled={loading || replaceConfirmText !== 'WIPE'}
-                                onPress={handleConfirmReplace}
+                                onPress={() => answerReplace(true)}
                                 accessibilityRole="button"
                                 accessibilityHint="Replaces the account currently stored on this phone"
                             >
@@ -2226,14 +2271,7 @@ export default function WelcomeScreen() {
 
                             <Pressable
                                 style={styles.backBtn}
-                                onPress={() => {
-                                    setMode('recover');
-                                    setPendingRecovery(null);
-                                    setOutgoingIdentity(null);
-                                    setReplaceConfirmText('');
-                                    setShowOutgoingSeed(false);
-                                    setError(null);
-                                }}
+                                onPress={() => answerReplace(false)}
                                 disabled={loading}
                                 accessibilityRole="button"
                                 accessibilityLabel={`Keep ${outCallsign} and go back`}

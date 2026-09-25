@@ -45,6 +45,21 @@ export async function signedPost(
 }
 
 /**
+ * A signed GET: a read the node answers only for a member (read auth), signed by the key it is about.
+ * Empty body, as for {@link signedDelete}.
+ */
+export async function signedGet(
+    url: string, path: string, identity: BeanPoolIdentity,
+): Promise<Response> {
+    const headers = await buildSignedHeaders(
+        'GET', path, '', identity.privateKey, identity.publicKey,
+    );
+    return fetch(`${url.replace(/\/+$/, '')}${path}`, {
+        method: 'GET', headers,
+    });
+}
+
+/**
  * A signed DELETE to the member's own node.
  *
  * The signed message is `${method}\n${path}\n${ts}\n${nonce}\n${body}`, so the verb is part of

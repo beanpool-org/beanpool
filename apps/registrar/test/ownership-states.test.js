@@ -2003,3 +2003,30 @@ for (const mode of ['tunnel', 'direct']) {
         } finally { w.restore(); }
     });
 }
+
+test('an owed record the live row records, re-pointed by a missed heal: the sweep keeps it owed until it routes the row again', async () => {
+    const w = await world();
+    try {
+        const name = 'repointed';
+        const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
+        assert.equal((await w.claim(oldKey, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+        // The 'adopted' race above; Cloudflare refuses record deletes from the release on …
+        w.cf.during(/^PATCH \/zones\/zone\/dns_records\//, async () => {
+            w.cf.fail.deleteDns = true;
+            await w.admin(name, 'release');
+            assert.equal((await w.claim(newKey, { name, ...modeBody('direct', NEW_IP) })).body.status, 'live');
+            // … and the undo's PATCH-back, and every PATCH after it.
+            w.cf.during(/^PATCH \/zones\/zone\/dns_records\//, async () => { w.cf.fail.patchDns = true; });
+        });
+        assert.equal((await w.heal(oldKey, modeBody('direct', MOVED_IP))).status, 409);
+        assert.equal(routing(w, name).dns, MOVED_IP, 'the undo could neither point the record back nor delete it');
+        // Something answers there that isn't a BeanPool node: not dark, so only the owed entry brings the sweep here.
+        w.nodes[`${name}.beanpool.org`] = async () => new Response('not a BeanPool node', { status: 200 });
+        await attestSweep(w.env);                                   // still refusing
+        w.cf.fail.patchDns = false; w.cf.fail.deleteDns = false;
+        await attestSweep(w.env);
+        assert.equal((await w.row(name)).node_pubkey, newKey.pubHex);
+        assert.equal(routing(w, name).dns, NEW_IP, 'the new owner\'s address, not the old key\'s');
+        await routedAsRow(w, name, 'after Cloudflare recovered and a sweep');
+    } finally { w.restore(); }
+});

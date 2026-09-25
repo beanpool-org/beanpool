@@ -26,6 +26,12 @@ If someone else here already has the name you chose, you get it with a number ad
 
 If you close the page halfway, open it again within 10 minutes and it carries on with the same name.
 
+**One account per browser.** If you join in two tabs at once, the second one says **This browser already has an account** and offers **Open** with that account's name. Nothing replaces it. If the second tab's join had gone through too, that account is kept on this browser as well, and **Show** (its name) **12 words** shows its words: write them down if you want to keep it. To use it instead, sign out in Settings (**Remove from This Device Only**), then restore it with those words.
+
+**A join that went out comes first.** If this browser sent a join that may have gone through, the page asks the community about it before anything else, even an invite or restoring another account. If you are in, you carry on. If it may still go through, the page asks you to wait a few minutes, then **Check again**. This holds even when the community has stopped taking new members.
+
+If something goes wrong on the page after your join went out, it says so and offers **Reload page**. Your join is kept on this browser, and the reload checks whether you are in.
+
 ## Different names and places
 
 - **Tabs:** the web app has **Market**, **Pulse**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.

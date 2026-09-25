@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+import { afterEach, describe, it } from 'vitest';
 import assert from 'node:assert';
 import Database from 'better-sqlite3';
 import {
@@ -288,6 +288,10 @@ describe('Distance search (G4)', () => {
 // page, in the same order, wherever the page falls — inside a circle, across a circle's edge, across the last post with
 // a place, and past the end.
 describe('Nearest first, searched in widening circles (G4)', { timeout: 60_000 }, () => {
+    // CI (2026-09-26): these tests are long synchronous SQLite work, and vitest runs them back to back without letting the
+    // worker's event loop turn, so its reply to the main process timed out ("Timeout calling onTaskUpdate") although every
+    // test passed. One turn of the event loop after each test lets the reply through; no assertion or data changes.
+    afterEach(() => new Promise<void>((resolve) => setImmediate(resolve)));
     const KM_PER_DEG = 6371 * Math.PI / 180;
     const hub = { lat: -28.55, lng: 153.5 };
     interface Seed { lat: number | null; lng: number | null; hidden?: boolean; inactive?: boolean; group?: boolean }
@@ -507,6 +511,10 @@ describe('Nearest first, searched in widening circles (G4)', { timeout: 60_000 }
 // filter, or offers or needs (posts.ts CIRCLE_FIELDS), and every other read takes one pass. Held here to: the path each
 // read takes, decided by the kind of filter and nothing else; and the brute-force page on both paths.
 describe('Nearest first: circles only for the reads they suit (G4)', { timeout: 60_000 }, () => {
+    // CI (2026-09-26): these tests are long synchronous SQLite work, and vitest runs them back to back without letting the
+    // worker's event loop turn, so its reply to the main process timed out ("Timeout calling onTaskUpdate") although every
+    // test passed. One turn of the event loop after each test lets the reply through; no assertion or data changes.
+    afterEach(() => new Promise<void>((resolve) => setImmediate(resolve)));
     const hub = { lat: -28.55, lng: 153.5 };   // 1,200 offers and 300 needs within a kilometre, none in the categories read here
     const town = { lat: -37.07, lng: 144.22 }; // 1,400 'common' posts within 2 km, and nothing else
     const quiet = { lat: 10, lng: -30 };        // 30 posts within a kilometre and 400 more within three

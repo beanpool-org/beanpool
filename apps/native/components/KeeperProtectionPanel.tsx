@@ -10,7 +10,7 @@ import { colors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
 import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from './SsoButton';
 import type { SsoProvider } from '../utils/sso-signin';
-import { NO_WORDS_WAY_BACK } from '../utils/no-words-copy';
+import { NO_WORDS_WAY_BACK, SSO_WORDS_NOTE } from '../utils/no-words-copy';
 
 const PROVIDER_NAMES: Record<SsoProvider, string> = {
     apple: 'Apple',
@@ -74,7 +74,7 @@ export function KeeperProtectionPanel({
                 <Text style={styles.ssoGroupTitle}>Sign-In Recovery Providers (1-of-N)</Text>
                 <Text style={styles.ssoGroupSubtitle}>
                     {hasWords
-                        ? 'Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. It does not hand your 12 words back, and it only works while your hub is running — so keep the words written down.'
+                        ? `Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. ${SSO_WORDS_NOTE} It only works while your hub is running — so keep the words written down.`
                         : 'Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. It only works while your hub is running.'}
                 </Text>
 
@@ -102,16 +102,31 @@ export function KeeperProtectionPanel({
                                     >✅</Text>
                                     <Text style={styles.providerName}>{PROVIDER_NAMES[prov]} Connected</Text>
                                 </View>
-                                {onDisconnectSso && (
-                                    <TouchableOpacity
-                                        style={styles.disconnectBtn}
-                                        onPress={() => onDisconnectSso(prov)}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={`Disconnect ${PROVIDER_NAMES[prov]}`}
-                                    >
-                                        <Text style={styles.disconnectText}>Disconnect</Text>
-                                    </TouchableOpacity>
-                                )}
+                                {/* Connecting again replaces this sign-in's copy with one that carries the 12 words.
+                                    The only way to add them to a copy made before copies carried words: the node
+                                    refuses to disconnect a member's last sign-in. Pointless on a phone without words. */}
+                                <View style={styles.providerActions}>
+                                    {hasWords && (
+                                        <TouchableOpacity
+                                            style={styles.reconnectBtn}
+                                            onPress={() => onProtectSso(prov)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`Connect ${PROVIDER_NAMES[prov]} again, to include your 12 words`}
+                                        >
+                                            <Text style={styles.reconnectText}>Connect again</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                    {onDisconnectSso && (
+                                        <TouchableOpacity
+                                            style={styles.disconnectBtn}
+                                            onPress={() => onDisconnectSso(prov)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`Disconnect ${PROVIDER_NAMES[prov]}`}
+                                        >
+                                            <Text style={styles.disconnectText}>Disconnect</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
                             </View>
                         );
                     }
@@ -234,8 +249,11 @@ const styles = StyleSheet.create({
         color: colors.text.secondary,
         marginBottom: 10,
     },
+    // Wraps: at 320dp and a 1.3x font the name and two buttons do not fit on one line.
     providerConnectedRow: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
         alignItems: 'center',
         justifyContent: 'space-between',
         backgroundColor: colors.surface.card,
@@ -250,6 +268,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         flex: 1,
+        minWidth: 150,
+    },
+    providerActions: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
     },
     providerName: {
         fontSize: 14,
@@ -270,6 +294,20 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: colors.feedback.danger.fg,
+    },
+    reconnectBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        minHeight: 44,
+        justifyContent: 'center',
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: colors.feedback.success.border,
+    },
+    reconnectText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.feedback.success.fg,
     },
     actionNote: {
         fontSize: 12,

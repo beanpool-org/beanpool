@@ -130,13 +130,18 @@ async function makeSignedRequest(url, method, keyPair, pubHex, bodyObj = null) {
     });
 }
 
-test('R1: GET /api/registrar/health returns status ok', async () => {
+// Health also says which commit is deployed (the deploy workflow fails unless it is the one it deployed) and which
+// signing protocols this Worker accepts (registrar PR 4, design §5.1–5.2).
+test('R1: GET /api/registrar/health returns status ok, the deployed commit and the accepted protocols', async () => {
     const env = mockEnv();
     const req = new Request('https://beanpool.org/api/registrar/health', { method: 'GET' });
     const res = await worker.fetch(req, env);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { status: 'ok' });
+    assert.deepEqual(body, { status: 'ok', commit: null, accepted_proto: ['v1'] });
+
+    const deployed = await worker.fetch(new Request('https://beanpool.org/api/registrar/health'), { ...env, GIT_SHA: 'abc123' });
+    assert.deepEqual(await deployed.json(), { status: 'ok', commit: 'abc123', accepted_proto: ['v1'] });
 });
 
 test('Ed25519 Signature Verification: claim and status endpoints', async () => {

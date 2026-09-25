@@ -124,3 +124,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/marketplace/posts/pause` and `POST /api/marketplace/posts/resume` in `apps/server/src/routes/marketplace.ts` returned HTTP `200 OK` with `{ success: false }` when `pausePost` or `resumePost` returned `false`.
 **Learning:** Returning HTTP 200 OK on failed post state transition mutations misleads clients into treating failed post pause/resume requests as successful operations.
 **Pattern:** Ensure route handlers calling state mutation functions inspect the boolean return value and explicitly set `ctx.status = 400` on failure.
+
+## 2026-09-25 - [Uncaught JSON.parse exception in processQueuedGrants]
+**Issue:** `processQueuedGrants` (tickDecisions in `apps/server/src/decisions-engine.ts`) executed `JSON.parse(top.params || '{}')` without a try/catch block. Malformed JSON parameters stored on queued decisions threw unhandled exceptions during periodic decision evaluation ticks.
+**Learning:** Unhandled exceptions inside periodic tick loops interrupt background processing and abort execution of subsequent queued tasks.
+**Pattern:** Always enclose `JSON.parse` operations on database-driven or user-supplied string fields inside try/catch blocks with sensible fallback values.

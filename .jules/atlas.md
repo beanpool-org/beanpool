@@ -125,3 +125,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `EnterpriseLocationPicker` component in `apps/manager/src/components/modules/EnterpriseLocationPicker.tsx` was untested.
 **Learning:** Mocking `leaflet` (`L.map`, `L.marker`, `L.tileLayer`, `L.divIcon`) prevents DOM/canvas map rendering issues during component unit tests while allowing full assertion on location inputs, approximate rounding logic, save/clear location node-client API calls, error boundaries, and modal close callbacks.
 **Action:** Continue identifying remaining untested module components in `apps/manager/src/components/modules/`.
+
+## 2026-09-15 - [manager tests] BulletinSection component unit tests
+**Gap:** `BulletinSection` component in `apps/manager/src/components/modules/BulletinSection.tsx` was untested.
+**Learning:** `BulletinSection` uses `resolveNodeApiUrl` to route requests via `/proxy/...` and `useSectionSubTab` to sync state with `onSubTabChange`. Mocking `globalThis.fetch` with endpoint-specific pathname matches and wrapping state updates in controlled state wrappers allowed complete coverage of broadcast forms, severity selectors, tab switching, and RSS feed curation modals.
+**Action:** Identify remaining untested module components in `apps/manager/src/components/modules/`.

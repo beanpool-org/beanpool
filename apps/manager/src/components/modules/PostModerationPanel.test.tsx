@@ -148,6 +148,21 @@ describe('PostModerationPanel Component (Bucket 2 Item 2)', () => {
         expect(screen.getByText(/No marketplace posts match your search/i)).toBeInTheDocument();
     });
 
+    it('renders loading state when posts is null', () => {
+        const handleRefresh = vi.fn();
+
+        render(
+            <PostModerationPanel
+                posts={null}
+                activeNode={mockNode}
+                onRefresh={handleRefresh}
+            />
+        );
+
+        expect(screen.getByText('0 of 0 posts')).toBeInTheDocument();
+        expect(screen.getByText(/Loading marketplace posts\.\.\./i)).toBeInTheDocument();
+    });
+
     it('renders safely with null and wrong-typed fields', () => {
         const handleRefresh = vi.fn();
         const malformedPosts = [

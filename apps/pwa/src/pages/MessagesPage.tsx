@@ -58,7 +58,8 @@ function resizeImageToDataUri(file: File, maxW: number, quality: number): Promis
     });
 }
 
-function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]) {
+// ⚡ Bolt: O(1) Map lookup helper for transaction seller resolution in system messages
+function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[] | Map<string, MarketplaceTransaction>) {
     let metaObj: any = null;
     try {
         if (msg.metadata) metaObj = JSON.parse(msg.metadata);
@@ -67,14 +68,21 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
     const amount = metaObj?.amount ?? '';
     const beansStr = amount ? `${amount} Beans` : 'Beans';
 
+    const getSellerPublicKey = (postId?: string) => {
+        if (!postId) return undefined;
+        if (userTransactions instanceof Map) {
+            return userTransactions.get(postId)?.sellerPublicKey;
+        }
+        return (userTransactions as any[]).find(t => t.postId === postId)?.sellerPublicKey;
+    };
+
     if (msg.systemType === 'ESCROW_FUNDED') {
         return `${beansStr} held in trust.`;
     }
 
     if (msg.systemType === 'ESCROW_RELEASED') {
         // Find transaction to see who is the seller (provider)
-        const sellerPubkey = metaObj?.sellerPubkey || 
-            userTransactions.find(t => t.postId === metaObj?.postId)?.sellerPublicKey;
+        const sellerPubkey = metaObj?.sellerPubkey || getSellerPublicKey(metaObj?.postId);
         
         const isSeller = sellerPubkey === myPubkey;
         if (isSeller) {
@@ -95,8 +103,7 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
     }
     if (txt.includes('Payment of R')) {
         txt = txt.replace(/Payment of R(\d+) released to the provider\./g, (_: string, amt: string) => {
-            const sellerPubkey = metaObj?.sellerPubkey || 
-                userTransactions.find(t => t.postId === metaObj?.postId)?.sellerPublicKey;
+            const sellerPubkey = metaObj?.sellerPubkey || getSellerPublicKey(metaObj?.postId);
             const isSeller = sellerPubkey === myPubkey;
             return `Payment of ${amt} Beans released to ${isSeller ? 'you' : 'the provider'}.`;
         });
@@ -184,6 +191,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // ⚡ Bolt: O(1) Map lookups for member details and completed transactions in conversation list and chat views
     const membersByPublicKey = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
+    const userTransactionsByPostId = useMemo(() => {
+        const map = new Map<string, MarketplaceTransaction>();
+        for (const tx of userTransactions) {
+            if (tx.postId && !map.has(tx.postId)) {
+                map.set(tx.postId, tx);
+            }
+        }
+        return map;
+    }, [userTransactions]);
     const completedTransactionsByPostId = useMemo(() => {
         const map = new Map<string, MarketplaceTransaction>();
         for (const tx of userTransactions) {
@@ -1156,7 +1172,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         borderRadius: '16px', padding: '0.4rem 0.8rem',
                                         fontSize: '0.8rem', fontWeight: 600
                                     }}>
-                                        {icon} {formatSystemMessage(msg, identity.publicKey, userTransactions)}
+                                        {icon} {formatSystemMessage(msg, identity.publicKey, userTransactionsByPostId)}
                                     </div>
                                     
                                     {msg.systemType === 'ESCROW_FUNDED' && metaObj?.postId && (
@@ -1172,7 +1188,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     )}
                                     
                                     {msg.systemType === 'ESCROW_RELEASED' && metaObj?.postId && (() => {
-                                        const relatedTx = userTransactions.find(t => t.postId === metaObj.postId && t.status === 'completed');
+                                        const relatedTx = completedTransactionsByPostId.get(metaObj.postId);
                                         const isBuyer = relatedTx ? relatedTx.buyerPublicKey === identity.publicKey : false;
                                         const hasRated = relatedTx ? (isBuyer ? relatedTx.ratedByBuyer : relatedTx.ratedBySeller) : false;
                                         return (

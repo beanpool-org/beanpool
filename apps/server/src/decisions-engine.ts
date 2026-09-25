@@ -1622,7 +1622,13 @@ export function tickDecisions(asOfTime?: number): {
                 const entAccount = ledger.getAccount(top.subject);
                 requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
             } else {
-                requiredAmount = Number(JSON.parse(top.params || '{}')?.amount || 0);
+                let parsed: any = {};
+                try {
+                    parsed = JSON.parse(top.params || '{}');
+                } catch {
+                    parsed = {};
+                }
+                requiredAmount = Number(parsed?.amount || 0);
             }
 
             if (requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {

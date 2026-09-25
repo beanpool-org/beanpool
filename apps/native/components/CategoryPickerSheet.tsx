@@ -95,7 +95,7 @@ export function CategoryPickerSheet({ visible, selected, onSelect, onClose }: Ca
     return (
         <Modal visible={visible} transparent animationType="slide">
             <Pressable style={styles.overlay} accessibilityRole="button" accessibilityLabel="Close category picker" onPress={onClose}>
-                <Pressable style={styles.sheet} accessibilityRole="button" onPress={e => e.stopPropagation()}>
+                <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
                     {/* Handle bar */}
                     <View style={styles.handleBar} />
 

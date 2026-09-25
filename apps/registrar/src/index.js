@@ -12,12 +12,15 @@
 
 import * as cf from './cf.js';
 import * as db from './db.js';
-import { verifySignedRequest, verifyEd25519, ATTEST_DOMAIN } from './sign.js';
+import { verifySignedRequest, verifyEd25519, requestProto, protoOf, attestMessage, ACCEPTED_PROTOS } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
 const json = (obj, status = 200) =>
     new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } });
+// A signed request that doesn't verify. accepted_proto lets a node that signed under a protocol this Worker doesn't
+// speak retry once under one it does (design §3.3, §5.1).
+const badSignature = () => json({ error: 'bad signature', accepted_proto: ACCEPTED_PROTOS }, 401);
 const nowS = () => Math.floor(Date.now() / 1000);
 const DEFAULT_ORIGIN = 'http://beanpool-node:8080';
 const key16 = (pubkey) => `${String(pubkey).slice(0, 16)}…`;
@@ -614,13 +617,13 @@ async function claimReply(env, out) {
 
 async function handleClaim(request, env, bodyText) {
     const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return json({ error: 'bad signature' }, 401);
+    if (!pubkey) return badSignature();
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
 
     const name = String(b.name || '').toLowerCase();
     if (!NAME_RE.test(name)) return json({ error: 'invalid name (3–32; a–z 0–9 -; no leading/trailing hyphen)' }, 400);
     const now = nowS();
-    await db.touchContact(env, pubkey, now);
+    await db.touchContact(env, pubkey, now, requestProto(request));
     const existing = await db.getAllocation(env, name);
 
     // The claimant's own name: a heal (or taking back its own release). Ownership outranks a policy row added
@@ -641,10 +644,10 @@ async function handleClaim(request, env, bodyText) {
 // tunnel had to be re-made (a node that already runs the old one keeps running it), and `changed`.
 async function handleHeal(request, env, bodyText) {
     const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return json({ error: 'bad signature' }, 401);
+    if (!pubkey) return badSignature();
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
     const now = nowS();
-    await db.touchContact(env, pubkey, now);
+    await db.touchContact(env, pubkey, now, requestProto(request));
     const cur = b.name ? await db.getAllocation(env, String(b.name).toLowerCase()) : await db.getOwnAllocation(env, pubkey);
     if (!isOwnRow(cur, pubkey)) return json({ error: 'no name to heal', status: 'none' }, 404);
     if (cur.status === 'blocked') return json({ error: 'name blocked' }, 403);
@@ -663,8 +666,8 @@ async function handleHeal(request, env, bodyText) {
 
 async function handleStatus(request, env) {
     const pubkey = await verifySignedRequest(request, '');
-    if (!pubkey) return json({ error: 'bad signature' }, 401);
-    await db.touchContact(env, pubkey, nowS());
+    if (!pubkey) return badSignature();
+    await db.touchContact(env, pubkey, nowS(), requestProto(request));
     // Any state: answering 'none' for a name the node still owns is what made nodes wipe their saved address
     // (2026-09-24 incident).
     const a = await db.getOwnAllocation(env, pubkey);
@@ -683,8 +686,8 @@ async function handleStatus(request, env) {
 
 async function handleUpdate(request, env, bodyText) {
     const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return json({ error: 'bad signature' }, 401);
-    await db.touchContact(env, pubkey, nowS());
+    if (!pubkey) return badSignature();
+    await db.touchContact(env, pubkey, nowS(), requestProto(request));
     const a = await db.getAllocationByPubkey(env, pubkey);
     if (!a) return json({ error: 'allocation not found' }, 404);
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
@@ -729,10 +732,10 @@ async function onFreshRow(read, act) {
 // POST /api/registrar/release (and /offline, its old name) — signed by the owner.
 async function handleRelease(request, env, bodyText) {
     const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return json({ error: 'bad signature' }, 401);
+    if (!pubkey) return badSignature();
     let b = {}; try { b = JSON.parse(bodyText || '{}') || {}; } catch { /* /offline has always taken any body */ }
     const now = nowS();
-    await db.touchContact(env, pubkey, now);
+    await db.touchContact(env, pubkey, now, requestProto(request));
     const read = () => (typeof b.name === 'string' && b.name
         ? db.getAllocation(env, b.name.toLowerCase())
         : db.getOwnAllocation(env, pubkey));
@@ -960,8 +963,9 @@ h1{font-size:1.5rem;color:#dc2626}</style></head><body>
 //   'impostor'     — a fresh attest for our nonce whose signature VERIFIES under a key that is not the registered
 //                    one: proof that another node answers at this hostname. The only verdict that counts.
 //   'unverifiable' — everything else: unreachable, timeout, non-2xx, not JSON, not an attest for our nonce, stale,
-//                    or a signature that verifies under no key we can check (an unknown signing format). That is
-//                    what a sleeping solar node, a format drift, or a bug on OUR side looks like — never evidence.
+//                    or a signature that verifies under no key we can check (an unknown signing format, or a
+//                    `proto` this Worker doesn't speak). That is what a sleeping solar node, a format drift, or a
+//                    bug on OUR side looks like — never evidence.
 // Content that isn't an attest at all (a swapped origin) is unverifiable here too; what to do about it is a
 // separate, slower decision (design D2). Such replies carry `swap: true` so the sweep log can count them.
 const ATTEST_TIMEOUT_MS = 15_000;
@@ -983,7 +987,9 @@ async function classify(env, a) {
         return { verdict: 'unverifiable', why: 'not an attest for this nonce', swap: typeof j?.signature !== 'string' };
     const ts = parseInt(j.timestamp, 10);
     if (!ts || Math.abs(nowS() - ts) > 120) return { verdict: 'unverifiable', why: 'stale timestamp' };
-    if (!(await verifyEd25519(signer, `${ATTEST_DOMAIN}\n${nonce}\n${j.timestamp}`, j.signature)))
+    const proto = protoOf(j.proto);   // the signing protocol the node names; none = the default
+    if (!proto) return { verdict: 'unverifiable', why: `unknown proto ${JSON.stringify(j.proto).slice(0, 24)}` };
+    if (!(await verifyEd25519(signer, attestMessage(proto, nonce, j.timestamp), j.signature)))
         return { verdict: 'unverifiable', why: 'signature does not verify' };
     if (signer === String(a.node_pubkey).toLowerCase()) return { verdict: 'ok' };
     return { verdict: 'impostor', why: `valid signature by ${signer.slice(0, 16)}…` };
@@ -1129,7 +1135,10 @@ export default {
         const p = url.pathname;
         const method = request.method;
         try {
-            if (method === 'GET' && p === '/api/registrar/health') return json({ status: 'ok' });
+            // commit: the git SHA this Worker was deployed from (`wrangler deploy --var GIT_SHA:…`, the deploy workflow);
+            // null for a deploy that didn't say. The workflow fails unless it is the commit it deployed.
+            if (method === 'GET' && p === '/api/registrar/health')
+                return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: ACCEPTED_PROTOS });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
             if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/heal') return await handleHeal(request, env, await request.text());

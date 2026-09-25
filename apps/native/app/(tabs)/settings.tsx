@@ -30,6 +30,8 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference';
 import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../utils/LocalAuth';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
+import { NoWordsNotice } from '../../components/NoWordsNotice';
+import { NO_WORDS_CHECK_FIRST, NO_WORDS_CONNECT, NO_WORDS_MENU, NO_WORDS_SIGN_OUT_ALERT, noWordsBeforeWipe } from '../../utils/no-words-copy';
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { protectionFrom } from '../../utils/protection-state';
@@ -1300,7 +1302,9 @@ export default function SettingsScreen() {
 
         Alert.alert(
             "Sign Out (Device Only)",
-            "This removes your private key and local database from this phone. Your account remains safely stored on the community node and can be restored anytime with your 12-word recovery phrase.",
+            hasMnemonic(identity)
+                ? "This removes your private key and local database from this phone. Your account remains safely stored on the community node and can be restored anytime with your 12-word recovery phrase."
+                : NO_WORDS_SIGN_OUT_ALERT,
             [
                 { text: "Cancel", style: "cancel" },
                 { 
@@ -1362,7 +1366,9 @@ export default function SettingsScreen() {
 
         Alert.alert(
             "Permanent Node Purge",
-            "This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. This CANNOT be undone, even with your 12-word phrase.",
+            hasMnemonic(identity)
+                ? "This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. This CANNOT be undone, even with your 12-word phrase."
+                : "This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. This CANNOT be undone.",
             [
                 { text: "Cancel", style: "cancel" },
                 { 
@@ -1550,9 +1556,10 @@ export default function SettingsScreen() {
 
                     <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => { setMode('seed'); setSeedConfirm(''); setSeedVisible(false); }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔑</Text></View>
+                        {/* A phone restored with a sign-in has no words to view; the row says so and still opens the explanation. */}
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>View Recovery Phrase</Text>
-                            <Text style={styles.menuSub}>View your 12-word backup seed</Text>
+                            <Text style={styles.menuText}>{hasMnemonic(identity) ? 'View Recovery Phrase' : NO_WORDS_MENU.title}</Text>
+                            <Text style={styles.menuSub}>{hasMnemonic(identity) ? 'View your 12-word backup seed' : NO_WORDS_MENU.sub}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -1879,6 +1886,7 @@ export default function SettingsScreen() {
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
                                 communityName={protectionNodeLabel || undefined}
+                                hasWords={hasMnemonic(identity)}
                                 onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                     if (prov) setSsoEnrolProvider(prov);
                                     skipNextFocusResetRef.current = true;
@@ -1887,6 +1895,8 @@ export default function SettingsScreen() {
                                 onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
                             />
 
+                            {/* No words on a phone restored with a sign-in: the panel above says so, and there is nothing to show. */}
+                            {hasMnemonic(identity) && (
                             <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
                                 <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
                                     🔑 12 Recovery Words
@@ -1953,6 +1963,7 @@ export default function SettingsScreen() {
                                     </View>
                                 )}
                             </View>
+                            )}
 
                             {Platform.OS === 'web' && (
                                 <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
@@ -2459,9 +2470,11 @@ export default function SettingsScreen() {
                 <View style={styles.card}>
                     <Text style={styles.sectionTitle}>🔑 Recovery Phrase</Text>
                     {!hasMnemonic(identity) ? (
-                        <Text style={styles.infoText}>
-                            This identity was created before seed phrase support. Please create a new account to enable recovery phrase backups.
-                        </Text>
+                        <NoWordsNotice
+                            kind="way-back"
+                            colors={colors}
+                            action={{ label: NO_WORDS_CONNECT, onPress: () => setMode('protection') }}
+                        />
                     ) : (
                         <>
                             {!seedVisible ? (
@@ -2563,7 +2576,9 @@ export default function SettingsScreen() {
                                     </Text>
                                 </View>
                                 <Text style={{ fontSize: 13, color: colors.text.secondary, lineHeight: 18 }}>
-                                    Clears your private key and local database from this phone. Your account and listings remain active on the community node and can be restored anytime with your 12-word recovery phrase.
+                                    {hasMnemonic(identity)
+                                        ? 'Clears your private key and local database from this phone. Your account and listings remain active on the community node and can be restored anytime with your 12-word recovery phrase.'
+                                        : `Clears your private key and local database from this phone. Your account and listings remain active on the community node. ${noWordsBeforeWipe()}`}
                                 </Text>
                                 <Pressable
                                     style={{
@@ -2600,7 +2615,7 @@ export default function SettingsScreen() {
                                     </Text>
                                 </View>
                                 <Text style={{ fontSize: 13, color: colors.feedback.danger.fg, lineHeight: 18 }}>
-                                    Permanently purges your account from this community node and clears this phone. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. <Text style={{ fontWeight: 'bold' }}>Cannot be undone, even with your 12-word phrase.</Text>
+                                    Permanently purges your account from this community node and clears this phone. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. <Text style={{ fontWeight: 'bold' }}>{hasMnemonic(identity) ? 'Cannot be undone, even with your 12-word phrase.' : 'Cannot be undone.'}</Text>
                                 </Text>
                                 <Pressable
                                     style={{
@@ -2635,7 +2650,9 @@ export default function SettingsScreen() {
                     {wipeType === 'local' && (
                         <View style={{ gap: 12, marginTop: 4 }}>
                             <Text style={styles.infoText}>
-                                This will remove your private key and local database from this phone. You will need your 12-word recovery phrase to restore access later.
+                                {hasMnemonic(identity)
+                                    ? 'This will remove your private key and local database from this phone. You will need your 12-word recovery phrase to restore access later.'
+                                    : 'This will remove your private key and local database from this phone.'}
                             </Text>
 
                             {hasMnemonic(identity) ? (
@@ -2653,14 +2670,11 @@ export default function SettingsScreen() {
                                     </Pressable>
                                 </View>
                             ) : (
-                                <View style={{ backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, borderRadius: 12, padding: 12 }}>
-                                    <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, lineHeight: 18, fontWeight: 'bold' }}>
-                                        ⚠️ No Recovery Words Saved
-                                    </Text>
-                                    <Text style={{ color: colors.feedback.danger.fg, fontSize: 12, lineHeight: 17, marginTop: 4 }}>
-                                        This account has no recovery phrase saved on this phone. Signing out will permanently erase your private key from this device.
-                                    </Text>
-                                </View>
+                                <NoWordsNotice
+                                    kind="before-wipe"
+                                    colors={colors}
+                                    action={{ label: NO_WORDS_CHECK_FIRST, onPress: () => setMode('protection') }}
+                                />
                             )}
 
                             <Text style={styles.label}>TYPE 'WIPE' TO CONFIRM DEVICE SIGN OUT</Text>

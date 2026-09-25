@@ -23,6 +23,7 @@ import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
 import { GoogleButton, AppleButton, FacebookButton, GitHubButton, GoogleLogo, AppleLogo, FacebookLogo, GitHubLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
+import { NO_WORDS_WAY_BACK, noWordsBeforeWipe } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
@@ -912,7 +913,7 @@ export default function WelcomeScreen() {
     // --- Back-button guard for seed phrase screen ---
     function handleSeedBackPress() {
         Alert.alert(
-            'Have you saved your words?',
+            hasMnemonic(pendingIdentity) ? 'Have you saved your words?' : 'Go back?',
             'If you go back now, you\'ll need to start over.',
             [
                 { text: 'Stay', style: 'cancel' },
@@ -1111,6 +1112,7 @@ export default function WelcomeScreen() {
                     <View style={styles.card}>
                         <KeeperProtectionPanel
                             protection={protection}
+                            hasWords={hasMnemonic(pendingIdentity)}
                             onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                 if (prov) setSsoProvider(prov);
                                 setShowSsoSheet(true);
@@ -1147,8 +1149,12 @@ export default function WelcomeScreen() {
                           meeting somebody who is genuinely protected with a wall of twelve words
                           to copy down teaches them the panel above was noise. Everyone else sees
                           them expanded, because for them the words are the actual answer.
+
+                          A phone restored with a sign-in, joining another community, has no words: the
+                          panel says so in one line, and there is no grid, copy or tickbox for words that
+                          don't exist (the grid would otherwise wait on them forever).
                         */}
-                        {!protection.showWords && !revealWords ? (
+                        {!hasMnemonic(pendingIdentity) ? null : !protection.showWords && !revealWords ? (
                             <Pressable
                                 style={[styles.secondaryBtn, { marginBottom: 4 }]}
                                 onPress={() => setRevealWords(true)}
@@ -1361,12 +1367,18 @@ export default function WelcomeScreen() {
                             {/* Spaced locally rather than by changing guideStyles.cardText,
                                 which has no marginBottom because the other three cards end on
                                 it. This is the only card where it is followed by bullets. */}
-                            <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
-                                Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment by your node administrator.
-                            </Text>
-                            <Text style={guideStyles.bulletItem}>
-                                📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
-                            </Text>
+                            {hasMnemonic(pendingIdentity) ? (
+                                <>
+                                    <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
+                                        Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment by your node administrator.
+                                    </Text>
+                                    <Text style={guideStyles.bulletItem}>
+                                        📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
+                                    </Text>
+                                </>
+                            ) : (
+                                <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>{NO_WORDS_WAY_BACK}</Text>
+                            )}
                             <Text style={guideStyles.bulletItem}>
                                 🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.
                             </Text>
@@ -1679,7 +1691,7 @@ export default function WelcomeScreen() {
                             ) : (
                                 <View style={styles.noSeedWarnBox}>
                                     <Text style={styles.noSeedWarnText}>
-                                        ⚠️ {outCallsign}'s recovery words aren't stored on this phone, so we can't show them here. If you don't already have them written down somewhere, continuing without them will require operator-assisted recovery to regain access to {outCallsign}.
+                                        ⚠️ {noWordsBeforeWipe(outCallsign)}
                                     </Text>
                                 </View>
                             )}

@@ -159,11 +159,9 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         credential = { idToken: input.idToken, nonce: input.nonce };
     }
 
-    const words = identity.mnemonic;
-    if (!words || words.length === 0) {
-        return nothing('this identity has no recovery words to split');
-    }
-
+    // No check for the 12 words: the deposit seals the private key, never the words. A phone restored
+    // with a sign-in holds no words (sso-recovery.ts can't rebuild them from the seed), and it belongs
+    // to exactly the member who most needs a connected sign-in.
     const url = await anchorUrl();
     if (!url) return nothing('no node configured yet');
 

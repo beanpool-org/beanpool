@@ -95,6 +95,11 @@ export function probationState(pubkey: string, now: number = Date.now()): Probat
     return { onProbation: young || kept < PROBATION.keptPosts, exemptBecause: null, ...base };
 }
 
+/** For the checks on every post and message: the switch first, so a node without probation reads nothing more. */
+function onProbation(pubkey: string, now: number): boolean {
+    return getProfileSwitches().probation && probationState(pubkey, now).onProbation;
+}
+
 /** "in about 5 hours", from now to the moment a limit lets up. */
 function inAbout(resetsAtMs: number, now: number): string {
     const mins = Math.max(1, Math.ceil((resetsAtMs - now) / 60_000));
@@ -145,7 +150,7 @@ function photoTimes(pubkey: string, now: number, exceptPostId?: string): string[
  * or when its `photoCount` photos would take them past 5.
  */
 export function assertMayPost(pubkey: string, photoCount: number, now: number = Date.now()): void {
-    if (!probationState(pubkey, now).onProbation) return;
+    if (!onProbation(pubkey, now)) return;
     const posts = inWindow(postTimes(pubkey, now), now);
     if (posts.used >= PROBATION.posts) throw refusal('posts', posts.resetsAtMs!, now);
     assertPhotosFit(pubkey, photoCount, now);
@@ -167,7 +172,7 @@ function assertPhotosFit(pubkey: string, adding: number, now: number, exceptPost
  */
 export function assertMayEditPhotos(pubkey: string, postId: string, photoSetSize: number, newPhotoCount: number, now: number = Date.now()): void {
     if (newPhotoCount <= 0) return;
-    if (!probationState(pubkey, now).onProbation) return;
+    if (!onProbation(pubkey, now)) return;
     const row = db.prepare('SELECT created_at FROM posts WHERE id = ?').get(postId) as { created_at?: string } | undefined;
     const createdMs = row?.created_at ? Date.parse(row.created_at) : NaN;
     const inside = Number.isFinite(createdMs) && createdMs > now - PROBATION.windowMs;
@@ -215,7 +220,7 @@ function newRecipientTimes(contacts: Map<string, { mineFirst: string | null; the
  * first, is never limited.
  */
 export function assertMayMessage(sender: string, recipient: string, now: number = Date.now()): void {
-    if (!probationState(sender, now).onProbation) return;
+    if (!onProbation(sender, now)) return;
     const contacts = dmContacts(sender);
     const known = contacts.get(recipient);
     if (known?.mineFirst || known?.theirsFirst) return;
@@ -228,7 +233,7 @@ export function assertMayMessage(sender: string, recipient: string, now: number 
  * refusal to answer 429 with, or null. Probation is read on the node the member belongs to.
  */
 export function knockRefusal(pubkey: string, knockTimes: readonly string[], now: number = Date.now()): ProbationLimitError | null {
-    if (!probationState(pubkey, now).onProbation) return null;
+    if (!onProbation(pubkey, now)) return null;
     const knocks = inWindow(knockTimes, now);
     return knocks.used >= PROBATION.knocks ? refusal('knocks', knocks.resetsAtMs!, now) : null;
 }

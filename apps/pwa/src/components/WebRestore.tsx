@@ -95,8 +95,11 @@ type Screen =
     /** No copy to open, or one the web can't open. */
     | { name: 'no_copy'; message: string }
     | { name: 'already_here'; identity: BeanPoolIdentity }
-    /** The account is open in this page, and the node could not be asked about it. */
-    | { name: 'save_unreachable' };
+    /**
+     * The account is open in this page and nothing is saved: the node could not be asked about it (`unreachable`), or
+     * this browser could not write it. Try again hands the same account on.
+     */
+    | { name: 'save_failed'; unreachable: boolean };
 
 /** The node's recovery session this page is in: bound to `eph`, for `account`. */
 interface Session {
@@ -157,9 +160,16 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         }
         setNotice(null);
         setScreen({ name: 'saving' });
-        const ok = await onRestoredRef.current(identity);
+        let ok: boolean;
+        try {
+            ok = await onRestoredRef.current(identity);
+        } catch (e) {
+            console.error('[WebRestore] the account could not be saved:', e);
+            if (mounted.current) setScreen({ name: 'save_failed', unreachable: false });
+            return;
+        }
         if (!mounted.current || ok) return;
-        setScreen({ name: 'save_unreachable' });
+        setScreen({ name: 'save_failed', unreachable: true });
     }, []);
 
     // ---------- the sign-in ----------
@@ -336,8 +346,10 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                     return toProviders({ tone: 'error', text: 'GitHub said no. Try again, or choose another way.' });
                 case 'expired':
                     return toProviders({ tone: 'error', text: 'That GitHub code expired. Choose GitHub again for a new one.' });
-                case 'failed':
-                    return toProviders({ tone: 'error', text: releaseRefusalMessage(result.answer, 'github', s.account.callsign) });
+                case 'failed': {
+                    const said = typeof result.answer.body.error === 'string' && result.answer.body.error ? result.answer.body.error : null;
+                    return toProviders({ tone: 'error', text: said ?? 'GitHub sign-in could not be checked. Try again, or choose another way.' });
+                }
             }
         }).catch((e) => {
             console.error('[WebRestore] GitHub wait failed:', e);
@@ -383,7 +395,9 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             const s: Session = { eph, collectionId: opened.collectionId, account };
             setSession(s);
             await fetchNonce(s);
-            if (mounted.current) setScreen({ name: 'providers' });
+            // To the sign-ins, with Try again if the nonce did not come; unless the node had already let the session go
+            // and fetchNonce has gone back to the name.
+            if (mounted.current) setScreen((now) => (now.name === 'starting' ? { name: 'providers' } : now));
         } catch (e) {
             fail(e);
         } finally {
@@ -642,12 +656,14 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             );
             break;
 
-        case 'save_unreachable':
+        case 'save_failed':
             body = (
                 <>
-                    <p role="alert" data-testid="restore-save-unreachable" style={{ ...lede, color: 'var(--text-primary)' }}>
-                        {callsign} is back on this page, but the community can't be reached to finish. Check your connection,
-                        then try again. Nothing has been saved yet.
+                    <p role="alert" data-testid="restore-save-failed" style={{ ...lede, color: 'var(--text-primary)' }}>
+                        {screen.unreachable
+                            ? `${callsign} is back on this page, but the community can't be reached to finish. Check your connection, then try again.`
+                            : `${callsign} is back on this page, but this browser couldn't save it. Try again, or try another browser.`}
+                        {' '}Nothing has been saved yet.
                     </p>
                     <button type="button" style={primaryButton} onClick={() => void retrySave()}>Try again</button>
                 </>

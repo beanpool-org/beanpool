@@ -231,6 +231,30 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         expect(screen.queryByText("That sign-in wasn't started here.", { exact: false })).toBeNull();
     });
 
+    it("this browser can't write the account: said, nothing saved, and Try again hands the same account on", async () => {
+        await leftFor('google', makeEphemeralKey());
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const onRestored = vi.fn<(identity: BeanPoolIdentity) => Promise<boolean>>()
+            .mockRejectedValueOnce(new DOMException('The quota has been exceeded.', 'QuotaExceededError'))
+            .mockResolvedValueOnce(true);
+        renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1'), onRestored });
+        expect(await screen.findByTestId('restore-save-failed')).toHaveTextContent("this browser couldn't save it");
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(onRestored).toHaveBeenCalledTimes(2));
+        expect(onRestored.mock.calls[1][0].publicKey).toBe(account.publicKey);
+    });
+
+    it('the node let the session go before the sign-ins: back to the name, said, never an empty sign-in screen', async () => {
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/collect/sso-nonce': () => json(404, { error: 'No recovery session for this device.' }),
+        });
+        renderRestore();
+        await pickAlice();
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent('That restore timed out on the community.');
+        await screen.findByTestId('restore-screen-name');
+    });
+
     it('GitHub: the code, the wait, released with the node\'s session', async () => {
         const node = recoveryNode(() => copyOf(account, 'github', 'gh-sub-1'));
         const { onRestored } = renderRestore();
@@ -303,7 +327,7 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
         const onRestored = vi.fn<(identity: BeanPoolIdentity) => Promise<boolean>>().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
         renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1'), onRestored });
-        await screen.findByTestId('restore-save-unreachable');
+        expect(await screen.findByTestId('restore-save-failed')).toHaveTextContent("the community can't be reached to finish");
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         await waitFor(() => expect(onRestored).toHaveBeenCalledTimes(2));
         expect(onRestored.mock.calls[1][0].publicKey).toBe(account.publicKey);

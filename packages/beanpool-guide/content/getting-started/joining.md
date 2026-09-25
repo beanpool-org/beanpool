@@ -1,14 +1,14 @@
 ---
 slug: joining
 title: Joining BeanPool
-summary: Two ways in: a community, with an invite from a member, or the global community, with one sign-in. And how to invite someone else.
+summary: Two ways in: a community, with an invite from a member, or the global community when it is open, with one sign-in. And how to invite someone else.
 related: your-12-words, your-profile, communities, how-it-works, web-app
 ---
 
 ## Two ways in
 
 - **With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.
-- **Without an invite**, you can join the **global community**: people from everywhere, where you can post, message people and find a community near you. There are no Beans there. Beans, credit and the Commons live in local communities.
+- **Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans there. Beans, credit and the Commons live in local communities.
 
 Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password.
 
@@ -31,7 +31,7 @@ To join:
 
 You can join in the phone app or in a web browser. In a browser, open global.beanpool.org and tap **Join**: see "Using BeanPool in a web browser" for the steps. In the phone app:
 
-- On the first screen, tap **Explore BeanPool worldwide**.
+- On the first screen, tap **Explore BeanPool worldwide**. It is at the bottom of the screen: on a small phone, scroll down. The app shows it only when the global community is open.
 - Sign in once with Google, Apple (on an iPhone), Facebook or GitHub. This keeps out fake accounts: one sign-in account makes one BeanPool account. BeanPool never sees your password and never posts anything for you.
 - Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others.
 
@@ -55,6 +55,7 @@ If you close the app halfway, it carries on from the same step next time.
 
 ## If joining the global community does not work
 
+- **No Explore BeanPool worldwide button:** the global community isn't open yet, or the app couldn't reach it. Check your connection and open the app again. You can still join a community with an invite.
 - **Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.
 - **The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Use a different sign-in** and **← Back to Home** still work.
 - **This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.

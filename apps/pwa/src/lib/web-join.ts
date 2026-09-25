@@ -376,9 +376,11 @@ export async function startGithubJoin(identity: BeanPoolIdentity): Promise<{ sta
         start: {
             sessionId: b.sessionId,
             userCode: b.userCode,
-            // A link the page will draw: only GitHub's own page, whatever the answer says.
-            verificationUri: typeof b.verificationUri === 'string' && b.verificationUri.startsWith('https://github.com/')
-                ? b.verificationUri : GITHUB_DEVICE_PAGE,
+            // A link the page will draw: GitHub's device page itself, whatever the answer says. Not any github.com
+            // address: another page there (an OAuth app asking for your repositories, say) would be one click from
+            // a member who thinks they are typing a code. The phone app accepts this page and nothing else too
+            // (apps/native/utils/sso-signin.ts).
+            verificationUri: GITHUB_DEVICE_PAGE,
             expiresInSeconds: typeof b.expiresInSeconds === 'number' && b.expiresInSeconds > 0 ? b.expiresInSeconds : 900,
             intervalSeconds: typeof b.intervalSeconds === 'number' && b.intervalSeconds > 0 ? b.intervalSeconds : 5,
         },

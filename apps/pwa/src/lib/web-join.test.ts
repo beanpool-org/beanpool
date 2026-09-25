@@ -450,5 +450,19 @@ describe('the door calls are signed by the joining key', () => {
         }), { status: 200 })));
         expect(await startGithubJoin(identity)).toMatchObject({ start: { userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device' } });
     });
+
+    it("GitHub's start: another page on github.com is replaced too, an OAuth app's consent screen included", async () => {
+        for (const elsewhere of [
+            'https://github.com/login/oauth/authorize?client_id=Iv1.someone-else&scope=repo',
+            'https://github.com/someone/phish',
+            'https://github.com/login/device/../../someone/phish',
+            'https://github.com/login/device.evil.example',
+        ]) {
+            vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+                sessionId: 's', userCode: 'ABCD-1234', verificationUri: elsewhere, expiresInSeconds: 900, intervalSeconds: 5,
+            }), { status: 200 })));
+            expect(await startGithubJoin(identity)).toMatchObject({ start: { verificationUri: 'https://github.com/login/device' } });
+        }
+    });
 });
 

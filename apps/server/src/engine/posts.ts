@@ -10,6 +10,7 @@ import { bumpPostsVersion } from './versions.js';
 import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
+import { assertNodeMember } from './members.js';
 import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
@@ -550,6 +551,9 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     if (!isAuthor && !isConvenor) {
         return false;
     }
+    // Someone else's post, as a keeper or a convenor: only from a member of this node. Both rows read above outlast a
+    // prune, and a pending re-key leaves them on the old key.
+    if (!isDirectAuthor) assertNodeMember(callerPublicKey);
 
     const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'`).get(id) as any;
     if (pendingTx && pendingTx.c > 0) throw new Error('This post has a deal in escrow — complete or cancel the deal before deleting it');

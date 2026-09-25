@@ -30,7 +30,7 @@ import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody } from './event-post.js';
 import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
-import { NOT_A_MEMBER_ERROR } from '../engine/members.js';
+import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -418,7 +418,7 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         }
         ctx.body = { success: removed };
     } catch (e: any) {
-        ctx.status = 400;
+        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to remove post' };
     }
 });

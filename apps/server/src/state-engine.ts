@@ -156,7 +156,9 @@ import {
     updateProfile as updateProfileEngine,
     isCallsignAvailable,
     findRecoveryCandidates,
-    setMemberActivityHook
+    setMemberActivityHook,
+    NOT_A_MEMBER_ERROR,
+    assertNodeMember,
 } from './engine/members.js';
 import {
     generateInvite,
@@ -3932,6 +3934,8 @@ export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; fai
 export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
     if (voucherPubkey === targetPubkey) throw new Error('You cannot vouch for yourself');
     if (!getMember(voucherPubkey)) throw new Error('Voucher not found');
+    // can_vouch outlasts a prune, and a pending re-key leaves it on the old key: neither hands out a credit floor.
+    assertNodeMember(voucherPubkey);
     if (!getMember(targetPubkey)) throw new Error('Member not found');
     if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
     const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
@@ -3954,6 +3958,9 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     if (!vouchedBy) return { ok: true };
     const isAdmin = isAdminPubkey(actorPubkey);
     if (!isAdmin && actorPubkey !== vouchedBy) throw new Error('Only the voucher who vouched, or an admin, can withdraw a vouch');
+    // Nor a pruned voucher, nor the old key of one being re-keyed (whose node role, if any, waits on the old key
+    // until the re-key completes). An admin key with no member row at all, the legacy single-admin setting, is as before.
+    if (!isAdmin || getMember(actorPubkey)) assertNodeMember(actorPubkey);
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
     }
@@ -5308,7 +5315,8 @@ export function isReportRateLimited(reporterPubkey: string, now: number = Date.n
 }
 
 export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
-    if (!getMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
+    // A member of this node, not just a row: a pruned account, or a re-keyed phone's old key, reports nobody.
+    if (!isNodeMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
     const existing = findPendingReport(reporterPubkey, targetPubkey, targetPostId, targetPulseItemId);
     if (existing) return existing;
     const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : String(reason ?? '').slice(0, 500);
@@ -7546,7 +7554,17 @@ export function isGroupLead(groupId: string, memberPubkey: string): boolean {
  * outgoing lead stays a convenor. The group's chat says so — who leads a group is the group's business, not a
  * quiet database change.
  */
+/**
+ * A convenor's or lead's action on a group, or a say in who convenes it: only from a member of this node
+ * (isNodeMember). The group's own role tests read group_members alone, which a prune and a pending re-key both leave
+ * as they were, so a pruned convenor, or the old key of one being re-keyed, would otherwise still run the group.
+ */
+function assertGroupActorIsMember(actorPubkey: string): void {
+    if (!isNodeMember(actorPubkey)) throw new Error(`UNAUTHORIZED: ${NOT_A_MEMBER_ERROR}`);
+}
+
 export function handOverGroupLead(groupId: string, leadPubkey: string, targetPubkey: string): GroupMember {
+    assertGroupActorIsMember(leadPubkey);
     const res = handOverGroupLeadEngine(db, groupId, leadPubkey, targetPubkey);
     try {
         syncGroupThreadMembership(groupId, targetPubkey);
@@ -7595,6 +7613,7 @@ export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
 }
 
 export function setMemberRole(groupId: string, convenorPubkey: string, targetPubkey: string, newRole: GroupRole): GroupMember {
+    assertGroupActorIsMember(convenorPubkey);
     const before = getGroupMemberEngine(db, groupId, targetPubkey);
     const res = setMemberRoleEngine(db, groupId, convenorPubkey, targetPubkey, newRole);
     try {
@@ -7614,6 +7633,8 @@ export function setMemberRole(groupId: string, convenorPubkey: string, targetPub
 }
 
 export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string): boolean {
+    // Leaving is anyone's own business; removing someone else is a convenor's.
+    if (actorPubkey !== targetPubkey) assertGroupActorIsMember(actorPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
     const res = removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey);
     if (res) {
@@ -7638,6 +7659,7 @@ export function removeGroupMember(groupId: string, actorPubkey: string, targetPu
 }
 
 export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinPolicy: JoinPolicy): Group {
+    assertGroupActorIsMember(convenorPubkey);
     const res = updateGroupPolicyEngine(db, groupId, convenorPubkey, joinPolicy);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
@@ -7650,6 +7672,7 @@ export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinP
 }
 
 export function updateGroup(groupId: string, convenorPubkey: string, updates: UpdateGroupParams): Group {
+    assertGroupActorIsMember(convenorPubkey);
     const res = updateGroupEngine(db, groupId, convenorPubkey, { ...updates, avatarUrl: storableGroupPicture(updates.avatarUrl) });
     // The chat is titled by the group's name; a rename carries over (and replicates: the conversations import
     // updates name on conflict).
@@ -7665,6 +7688,7 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
 }
 
 export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
+    assertGroupActorIsMember(convenorPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
     const res = approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey);
     afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
@@ -7675,6 +7699,7 @@ export function approveGroupMember(groupId: string, convenorPubkey: string, targ
 }
 
 export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member'): GroupMember {
+    assertGroupActorIsMember(convenorPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
     const res = inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role);
     // Inviting someone who had asked to join admits them at once.
@@ -7697,16 +7722,19 @@ export function postGroupThreadMessage(groupId: string, authorPubkey: string, te
 }
 
 export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {
+    assertGroupActorIsMember(actorPubkey);
     return removeGroupThreadMessageEngine(getMessagingCb(), groupId, messageId, actorPubkey);
 }
 
 export function proposeGroupConvenor(groupId: string, proposerPubkey: string, candidatePubkey: string) {
+    assertGroupActorIsMember(proposerPubkey);
     const res = proposeGroupConvenorEngine(getMessagingCb(), groupId, proposerPubkey, candidatePubkey);
     bumpGroupsVersion();
     return res;
 }
 
 export function voteGroupConvenor(proposalId: string, voterPubkey: string, choice: 'yes' | 'no') {
+    assertGroupActorIsMember(voterPubkey);
     const res = voteGroupConvenorEngine(getMessagingCb(), proposalId, voterPubkey, choice);
     bumpGroupsVersion();
     return res;
@@ -7738,6 +7766,7 @@ export function listYourChats(pubkey: string) {
 }
 
 export function deleteGroupPost(groupId: string, convenorPubkey: string, postId: string): boolean {
+    assertGroupActorIsMember(convenorPubkey);
     const res = deleteGroupPostEngine(db, groupId, convenorPubkey, postId);
     if (res) {
         bumpPostsVersion();

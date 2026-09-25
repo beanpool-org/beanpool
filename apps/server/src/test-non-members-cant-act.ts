@@ -17,6 +17,10 @@
  *  4. Invites: a pruned account can't make one; a code or an offline ticket it made before the prune no longer
  *     redeems, and the pre-flight check says so; a live member's and an admin's invites still redeem, the admin's
  *     even after the genesis member it hangs the code on has been pruned.
+ *  5. The sweep, every other signed write that reaches another member or moves Beans: a pruned convenor runs the group
+ *     no more (members, roles, invites, requests, details, lead, chat, posts, succession); a pruned voucher neither
+ *     vouches nor unvouches; a pruned account rates, reports and reacts to nobody; the old key of a member being
+ *     re-keyed opens, approves and buys no trade, messages and reacts to nobody, and pledges none of the member's Beans.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-non-members-cant-act.ts
  */
@@ -33,7 +37,9 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, transfer, createPost, acceptPost, requestPost, completePostTransaction,
     createGroup, joinGroup, rsvpEvent, postEventThreadMessage, adminPruneUser, seedGenesisMember,
+    postGroupThreadMessage, vouchMember, createConversation, sendMessage, getBalance, proposeGroupConvenor,
 } from './state-engine.js';
+import { createCrowdfundProject } from './db/db.js';
 import { issueRekeyCode } from './engine/member-wizards.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -67,7 +73,7 @@ function makeMember(callsign: string): Id {
     return id;
 }
 
-async function signedFetch(method: 'GET' | 'POST', path: string, id: Id, body?: unknown) {
+async function signedFetch(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, id: Id, body?: unknown) {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
@@ -78,8 +84,8 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: Id, body?: 
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
-    if (method === 'POST') headers['Content-Type'] = 'application/json';
-    const res = await fetch(`${BASE}${path}`, { method, headers, body: method === 'POST' ? bodyString : undefined });
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? bodyString : undefined });
     let json: any; try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json };
 }
@@ -196,6 +202,33 @@ async function main(): Promise<void> {
     const bobRekeyLine = postEventThreadMessage(rekeyEvent.id, bob.pubKeyHex, 'Bringing tomato seed');
     const rekeyeeOffer = offer(rekeyee, 'Rekeyee chutney');
     const tRekeyee = requestPost(rekeyeeOffer.id, bob.pubKeyHex);
+
+    // For the sweep (section 5): Pruney runs two groups, with Bob's chat line and post in one and Carol asking to join
+    // the other; Pruney can vouch and has vouched for Carol, and has a DM with Alice. Rekeyee has a request waiting
+    // on them, a DM with Bob, and Beans to pledge.
+    const carol = makeMember('CarolNM');
+    offer(carol, 'Carol plums');
+    const bobGroupLine = postGroupThreadMessage(group.id, bob.pubKeyHex, 'Seedlings are in');
+    const bobGroupPost = createPost('offer', 'produce', 'Bob spare pots', 'For the club', 1, 'fixed', bob.pubKeyHex,
+        undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: group.id });
+    if (!bobGroupPost) throw new Error('could not post to the group');
+    const askGroup = createGroup({ name: 'Seed library NM', createdBy: pruney.pubKeyHex, joinPolicy: 'request_to_join' } as any);
+    joinGroup(askGroup.id, carol.pubKeyHex);
+    db.prepare('UPDATE members SET can_vouch = 1 WHERE public_key = ?').run(pruney.pubKeyHex);
+    vouchMember(pruney.pubKeyHex, carol.pubKeyHex, 1);
+    const pruneyDm = createConversation('dm', [pruney.pubKeyHex, alice.pubKeyHex], pruney.pubKeyHex)!;
+    const aliceDmLine = sendMessage(pruneyDm.id, alice.pubKeyHex, 'aGk=', 'n1')!;
+    const rekeyeeDm = createConversation('dm', [rekeyee.pubKeyHex, bob.pubKeyHex], rekeyee.pubKeyHex)!;
+    const bobDmLine = sendMessage(rekeyeeDm.id, bob.pubKeyHex, 'aGk=', 'n2')!;
+    const rekeyeeOffer2 = offer(rekeyee, 'Rekeyee pickles');
+    const tRekeyee2 = requestPost(rekeyeeOffer2.id, bob.pubKeyHex);
+    const aliceOffer4 = offer(alice, 'Alice quinces');
+    const aliceOffer5 = offer(alice, 'Alice walnuts');
+    // A group whose only convenor (the operator) has gone quiet, so its members may vote on a new one.
+    const quietGroup = createGroup({ name: 'Tool library NM', createdBy: operator.pubKeyHex, joinPolicy: 'open' } as any);
+    for (const m of [pruney, bob, alice]) joinGroup(quietGroup.id, m.pubKeyHex);
+    const project = `proj-${crypto.randomUUID()}`;
+    createCrowdfundProject(project, alice.pubKeyHex, 'Community oven NM', 'A wood-fired oven', [], 500, null);
 
     adminPruneUser(pruney.pubKeyHex, 'owner:password');
     issueRekeyCode(rekeyee.pubKeyHex, operator.pubKeyHex);
@@ -329,6 +362,93 @@ async function main(): Promise<void> {
             { code: seed2.body?.code, publicKey: viaAdmin2.pubKeyHex, callsign: viaAdmin2.callsign });
         assert(seed2.status === 200 && adminRedeem2.status === 200 && isMemberRow(viaAdmin2.pubKeyHex),
             `with the genesis member pruned, an admin's invite still redeems (got ${seed2.status}, ${adminRedeem2.status} ${JSON.stringify(adminRedeem2.body)})`);
+    }
+
+
+    // ── 5. The sweep: every other signed write that reaches another member or moves Beans ────────────
+    console.log('\n── 5. The sweep');
+    {
+        const refused = (label: string, r: { status: number; body: any }, want = 403) =>
+            assert(r.status === want && !namesAnyone(r.body, alice, bob, carol), `${label} (got ${r.status} ${JSON.stringify(r.body)})`);
+        const groupRow = (gid: string, pk: string) =>
+            db.prepare('SELECT role, status FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(gid, pk) as { role: string; status: string } | undefined;
+
+        // A pruned convenor runs the group no more.
+        refused('a pruned convenor cannot remove Bob from the group',
+            await signedFetch('DELETE', `/api/groups/${group.id}/members/${bob.pubKeyHex}`, pruney));
+        assert(groupRow(group.id, bob.pubKeyHex)?.status === 'active', 'Bob is still in it');
+        refused("nor change Bob's role",
+            await signedFetch('PATCH', `/api/groups/${group.id}/members/${bob.pubKeyHex}`, pruney, { role: 'observer' }));
+        assert(groupRow(group.id, bob.pubKeyHex)?.role === 'member', "Bob's role is unchanged");
+        refused('nor invite anyone',
+            await signedFetch('POST', `/api/groups/${group.id}/members`, pruney, { targetPubkey: carol.pubKeyHex }));
+        assert(!groupRow(group.id, carol.pubKeyHex), 'Carol was not invited');
+        refused("nor approve Carol's request to join",
+            await signedFetch('POST', `/api/groups/${askGroup.id}/members`, pruney, { targetPubkey: carol.pubKeyHex, action: 'approve' }));
+        assert(groupRow(askGroup.id, carol.pubKeyHex)?.status === 'pending_approval', "Carol's request is still waiting");
+        refused("nor rename the group", await signedFetch('PATCH', `/api/groups/${group.id}`, pruney, { description: 'Taken over' }));
+        assert((db.prepare('SELECT description FROM groups WHERE id = ?').get(group.id) as any)?.description !== 'Taken over', 'the group is unchanged');
+        refused('nor hand the lead on', await signedFetch('POST', `/api/groups/${group.id}/lead`, pruney, { targetPubkey: alice.pubKeyHex }));
+        refused("nor remove Bob's line from the group chat",
+            await signedFetch('POST', `/api/groups/${group.id}/chat/remove`, pruney, { messageId: bobGroupLine.id }));
+        assert(messageType(bobGroupLine.id) === 'text', "Bob's group line is kept");
+        refused("nor delete Bob's group post", await signedFetch('DELETE', `/api/groups/${group.id}/posts/${bobGroupPost.id}`, pruney));
+        refused("nor remove it from the market",
+            await signedFetch('POST', '/api/marketplace/posts/remove', pruney, { id: bobGroupPost.id, authorPublicKey: pruney.pubKeyHex }));
+        assert(postStatus(bobGroupPost.id) === 'active', "Bob's group post is kept");
+        const propose = await signedFetch('POST', `/api/groups/${group.id}/succession/propose`, pruney, { candidatePubkey: bob.pubKeyHex });
+        assert(propose.status === 403 && propose.body?.error?.includes('Only members of this community'),
+            `nor propose a new convenor (got ${propose.status} ${JSON.stringify(propose.body)})`);
+        const quietSince = new Date(Date.now() - 40 * 86_400_000).toISOString();
+        db.prepare('UPDATE members SET last_active_at = ?, joined_at = ? WHERE public_key = ?').run(quietSince, quietSince, operator.pubKeyHex);
+        const opened = proposeGroupConvenor(quietGroup.id, bob.pubKeyHex, alice.pubKeyHex);
+        const vote = await signedFetch('POST', `/api/groups/${quietGroup.id}/succession/${opened.proposal.id}/vote`, pruney, { choice: 'no' });
+        assert(vote.status === 403 && vote.body?.error?.includes('Only members of this community'),
+            `nor vote on one (got ${vote.status} ${JSON.stringify(vote.body)})`);
+
+        // Vouching hands out a credit floor; a pruned voucher's can_vouch outlasts the prune.
+        const vouchOf = (pk: string) => db.prepare('SELECT elder_vouched_by, vouch_credit FROM members WHERE public_key = ?').get(pk) as any;
+        const vouch = await signedFetch('POST', '/api/profile/vouch', pruney, { targetPubkey: bob.pubKeyHex });
+        assert(vouch.status === 400 && !vouchOf(bob.pubKeyHex)?.elder_vouched_by, `a pruned voucher vouches for nobody (got ${vouch.status})`);
+        const unvouch = await signedFetch('POST', '/api/profile/unvouch', pruney, { targetPubkey: carol.pubKeyHex });
+        assert(unvouch.status === 400 && vouchOf(carol.pubKeyHex)?.elder_vouched_by === pruney.pubKeyHex,
+            `nor takes Carol's vouch away (got ${unvouch.status})`);
+
+        // Ratings and reports land on another member's record.
+        const rating = await signedFetch('POST', '/api/ratings', pruney,
+            { targetPubkey: alice.pubKeyHex, stars: 1, comment: 'bad', transactionId: tPruneyDone.id });
+        assert(rating.status === 400 && !db.prepare('SELECT 1 FROM ratings WHERE rater_pubkey = ?').get(pruney.pubKeyHex),
+            `a pruned account rates nobody (got ${rating.status})`);
+        const report = await signedFetch('POST', '/api/reports', pruney, { targetPubkey: alice.pubKeyHex, reason: 'spam' });
+        assert(report.status === 400 && !db.prepare('SELECT 1 FROM abuse_reports WHERE reporter_pubkey = ?').get(pruney.pubKeyHex),
+            `nor reports anyone (got ${report.status})`);
+
+        // A pruned participant's DM reaction still reached the other person.
+        refused("a pruned account cannot react to Alice's DM",
+            await signedFetch('POST', '/api/messages/react', pruney, { messageId: aliceDmLine.id, authorPubkey: pruney.pubKeyHex, emoji: '👍' }));
+
+        // The old key of a member being re-keyed: trades, messages, Beans.
+        refused("the old key cannot request Alice's offer",
+            await signedFetch('POST', '/api/marketplace/posts/request', rekeyee, { postId: aliceOffer4.id, buyerPublicKey: rekeyee.pubKeyHex }));
+        assert(!db.prepare('SELECT 1 FROM marketplace_transactions WHERE post_id = ?').get(aliceOffer4.id), 'and no trade is opened');
+        refused("nor approve Bob's request (which would lock Bob's Beans in escrow)",
+            await signedFetch('POST', '/api/marketplace/transactions/approve', rekeyee, { transactionId: tRekeyee2.id, authorPublicKey: rekeyee.pubKeyHex }));
+        assert(tradeStatus(tRekeyee2.id) === 'requested', "Bob's request is still only a request");
+        refused("nor buy Alice's offer outright",
+            await signedFetch('POST', '/api/marketplace/posts/accept', rekeyee, { postId: aliceOffer5.id, buyerPublicKey: rekeyee.pubKeyHex }));
+        assert(!db.prepare('SELECT 1 FROM marketplace_transactions WHERE post_id = ?').get(aliceOffer5.id), 'and no trade is opened');
+        const before = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(rekeyeeDm.id) as { n: number };
+        refused('nor message Bob as them',
+            await signedFetch('POST', '/api/messages/send', rekeyee, { conversationId: rekeyeeDm.id, authorPubkey: rekeyee.pubKeyHex, ciphertext: 'aGk=', nonce: 'n3' }));
+        assert((db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(rekeyeeDm.id) as { n: number }).n === before.n, 'and nothing is sent');
+        refused("nor react to Bob's message",
+            await signedFetch('POST', '/api/messages/react', rekeyee, { messageId: bobDmLine.id, authorPubkey: rekeyee.pubKeyHex, emoji: '👍' }));
+        const held = getBalance(rekeyee.pubKeyHex).balance;
+        refused("nor pledge the member's Beans to a project",
+            await signedFetch('POST', `/api/crowdfund/projects/${project}/pledge`, rekeyee, { amount: 5 }));
+        assert(getBalance(rekeyee.pubKeyHex).balance === held, `and the balance is untouched (${held})`);
+        const livePledge = await signedFetch('POST', `/api/crowdfund/projects/${project}/pledge`, bob, { amount: 5 });
+        assert(livePledge.status === 200, `a live member still pledges (got ${livePledge.status} ${JSON.stringify(livePledge.body)})`);
     }
 
     console.log(`\n${passed}/${run} passed`);

@@ -161,6 +161,9 @@ export function requestPost(
     // on this node (config/node-profile.ts), before a row is written. The routes answer 404 before this.
     assertFeatureOn('escrow');
     assertMemberActive(requesterPublicKey);
+    // The module's own test above passes the old key of a member being re-keyed (a lost or stolen phone): its row
+    // is 'suspended', which that test lets trade. assertNodeMember refuses the invalidated key.
+    assertNodeMember(requesterPublicKey);
     assertProfileComplete(requesterPublicKey);
     assertNotOnHoliday(requesterPublicKey);
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
@@ -313,6 +316,8 @@ export function approvePostRequest(
     }
 
     assertMemberActive(authorPublicKey);
+    // Approving locks the requester's Beans into escrow: never on the word of a re-keyed phone's old key.
+    assertNodeMember(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
     if (isOnHoliday(row.buyer_pubkey) || isOnHoliday(row.seller_pubkey)) {
         throw new Error('Trading is paused while a member is in holiday mode.');
@@ -532,6 +537,7 @@ export function acceptPost(
 ): MarketplaceTransaction {
     assertFeatureOn('escrow');
     assertMemberActive(buyerPublicKey);
+    assertNodeMember(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
     if (!post || cannotSeeGroupPost(post.audienceScope, post.targetGroupId, post.authorPublicKey, buyerPublicKey)

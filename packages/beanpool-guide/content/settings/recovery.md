@@ -24,11 +24,13 @@ This works only if you linked one before (see below), and only while your commun
 - Type your name in the community. The app may suggest "Is this you?".
 - Type your community's name or address.
 - Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone.
+- With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts.
 
 ## Protecting your account now
 
 - Open **Settings** and tap **Account Protection**.
 - Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.
+- With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.
 
 This is not a way to log in. Your account is still your own key. The linked account only helps you get it back, in that community.
 

@@ -83,7 +83,7 @@ const FB_SUB = '10229876543210987';
 const FB_EMAIL = 'member@example.com';
 const ACCESS_TOKEN = 'EAALoNLYaccessTOKENtheAppMustNeverKeep1';
 const LONG_LIVED_TOKEN = 'EAALoNLYlongLivedTOKENtheAppMustNeverKeep2';
-const PLAIN = "Facebook didn't finish the sign-in. Try again, or use Google, Apple or your 12 words.";
+const PLAIN = "Facebook didn't finish the sign-in. Try again, or choose another way.";
 
 const NONCE_PATH = '/api/recovery/sso-nonce';
 const DEPOSIT = '/api/recovery/shares/sso';

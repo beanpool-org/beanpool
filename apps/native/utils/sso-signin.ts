@@ -759,7 +759,7 @@ const FACEBOOK_REDIRECT_URI = 'https://beanpool.org/auth/facebook';
 const FACEBOOK_COMPLETION_URI = 'beanpool://auth/facebook';
 
 /** What the member reads when Facebook's return cannot be used. A cancel is not this: it stays quiet. */
-const FACEBOOK_UNFINISHED = "Facebook didn't finish the sign-in. Try again, or use Google, Apple or your 12 words.";
+const FACEBOOK_UNFINISHED = "Facebook didn't finish the sign-in. Try again, or choose another way.";
 
 /**
  * Facebook's dialog, asking for an OIDC id_token for our app with the node's nonce in it. The nonce doubles as

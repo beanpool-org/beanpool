@@ -1,9 +1,11 @@
 -- 0004: Cloudflare resources the registrar let go of but Cloudflare refused to delete — owed deletions.
--- A request that lets go of a tunnel or DNS record no row will record any more (another key taking a name over, a
--- tunnel a failed request made, one an undo or a resume could not delete) writes it here instead of dropping it:
--- a live bp-<name> tunnel nobody records makes Cloudflare refuse every later tunnel for the name (error 1013), and a
--- record nobody records keeps routing the old holder. The sweep retries every row each run; a row goes once the
--- resource is gone (deleted, or already a 404), or once the name's live row records it as its own.
+-- A request that lets go of a tunnel or DNS record (another key taking a name over, a tunnel a failed request made,
+-- one an undo or a resume could not delete, a take-down's record, the record a failed re-attest took back down) and
+-- has its delete refused writes it here instead of dropping it: a live bp-<name> tunnel nobody records makes
+-- Cloudflare refuse every later tunnel for the name (error 1013), and a record left up keeps routing a node the
+-- registrar no longer routes. The sweep retries every row each run; a row goes once the resource is gone (deleted, or
+-- already a 404), or, for a record, once the name's live row records it as its own. A tunnel a live row, or an admin
+-- pause, still keeps stays owed until no row keeps it.
 --
 -- Additive: one new table. Apply before deploying the Worker that writes it. Re-running changes nothing.
 

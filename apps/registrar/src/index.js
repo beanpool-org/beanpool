@@ -203,10 +203,10 @@ const provisionFailed = (e) => {
 // --- Owed deletions ---
 // A tunnel or record a request let go of — the old holder's at a take-over, one a failed request made, one an undo
 // or a resume could not delete, a take-down's record, the record a failed re-attest took back down — that Cloudflare
-// refused to delete is owed (teardown, migration 0004), never dropped:
-// a live bp-<name> tunnel nobody records fails every later tunnel for the name, and a record nobody records keeps
-// routing the old holder. Logged under `tag`. The sweep retries it (settleOwed); a tunnel still alive is also
-// deleted by the name's next tunnel (createTunnelFor).
+// refused to delete is owed (teardown, migration 0004), never dropped: a live bp-<name> tunnel nobody records fails
+// every later tunnel for the name, and a record left up keeps routing a node the registrar no longer routes. Logged
+// under `tag`. The sweep retries it (settleOwed); a tunnel still alive is also deleted by the name's next tunnel
+// (createTunnelFor).
 async function owe(env, tag, name, kind, id, err) {
     if (!id) return;
     console.error(tag, name, kind, id, String(err?.message || err || 'Cloudflare refused its delete'), '— owed: the sweep retries it');
@@ -361,10 +361,10 @@ async function dnsOffAt(env, hostname, known) {
 // or request that landed since (the admin's resume, a release and another key's claim) may have put up or re-pointed
 // its own at the hostname. The tunnel `a` recorded goes regardless: whatever rode it dies with it. What Cloudflare
 // refused stays on the row; a record is also owed, so the sweep retries it — a paused, blocked or released name
-// would otherwise stay routed. (A tunnel with no record routes nothing, and the next action on the row — resume,
-// take-back, take-over — deletes it first.) And since no check is atomic with Cloudflare, a row that moved on during
-// the clean-up and is live gets its routing made whole again (repairLive): a record deleted from under it, or the
-// tunnel it went live on.
+// would otherwise stay routed. (A tunnel is not owed: with no record it routes nothing. A resume, take-back or
+// take-over deletes it first; the owner's heal reuses it, and routes only on an edge re-attest.) And since no check
+// is atomic with Cloudflare, a row that moved on during the clean-up and is live gets its routing made whole again
+// (repairLive): a record deleted from under it, or the tunnel it went live on.
 async function stopRouting(env, a, to, { keepTunnel = false, byHostname = false } = {}) {
     const written = { ...to, ...decision(a) };
     if (!(await db.updateIfUnchanged(env, a.name, a, written, { withIds: true }))) return false;

@@ -2175,6 +2175,20 @@ export async function cancelRecoveryCollection(collectionId: string): Promise<bo
     return !!res?.cancelled;
 }
 
+/**
+ * The sign-ins that bring this account back, as the node holds them (`enrolledSso` of `POST /api/recovery/shares/status`,
+ * signed): the one a browser joined the global community with (G11-c), and any a phone connected. An empty list is
+ * "none"; null is "could not ask" (no answer, an older node, a body without the list), which says nothing either way.
+ */
+export async function getSignInRecovery(): Promise<string[] | null> {
+    try {
+        const res = await request<{ enrolledSso?: unknown }>('POST', '/api/recovery/shares/status', {});
+        return Array.isArray(res?.enrolledSso) ? res.enrolledSso.filter((p): p is string => typeof p === 'string') : null;
+    } catch {
+        return null;
+    }
+}
+
 
 // ===================== NOTIFICATION PREFERENCES =====================
 

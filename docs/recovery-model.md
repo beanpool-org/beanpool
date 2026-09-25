@@ -116,6 +116,23 @@ strict provider constraints (e.g. Apple Services ID domain association restricti
 PWA members are strictly **sovereign tier**: 12 words, nothing stored on the node, no exceptions.
 SSO recovery is native-only.
 
+**Except on the global community (G11-c, decided 2026-09-25, D-1 = a).** A browser member of
+`global.beanpool.org` joins with a sign-in (Google, Apple, GitHub or Facebook), and the same join
+enrols that sign-in as their recovery: the page seals the account's seed and its 12 words to the
+sign-in's `sub` with `sealSeedToSso`, and the door stores the copy from the sign-in it has just
+verified, exactly as the phone's global join does (the two clients build the same bytes; see
+`@beanpool/core/sso-share-vectors`). Neither reason above holds for that one node. The web app
+there is shipped by us, on a domain we run, so "a hostile operator can ship JavaScript" is the
+custodial trade-off every SSO member already accepts on a phone, not a new one: the copy is the
+same single-blob seal (`scrypt-xc20p-single-v1`) the phone has made since #750, with no hub
+fragment, and its only secret is `provider:sub`, which the operator receives on every sign-in.
+For GitHub that `sub` is public, so a GitHub-sealed copy is open to anyone holding the database
+(see [What each party can reach](#what-each-party-can-reach)). And it is one fixed domain, not a
+dynamic community domain, so the providers' redirect and Services ID rules are met once, in their
+consoles. Local communities' web apps stay 12-words only. A seal that fails, or a copy the node
+cannot store, never blocks the join; the member then has the 12 words, and Settings says the
+sign-in is not connected. Restoring with the sign-in in a browser is G11-d.
+
 ---
 
 ## Recovery flows
@@ -169,12 +186,36 @@ Friends and keepers are not notified because keeper/social recovery has been scr
 
 ## What each party can reach
 
-| | SSO tier (Native) | Sovereign (12 words) |
+| | SSO tier (phones; the global node's browsers) | Sovereign (12 words) |
 |---|---|---|
-| Cold DB / backup thief | nothing | nothing |
+| Cold DB / backup thief | **GitHub: the account**, and its 12 words when the copy carries them. Google, Apple, Facebook: the same, given that member's `sub` from elsewhere (below) | nothing |
 | Node operator, passively | nothing | nothing |
 | **Node operator, deliberately** | **the account** | nothing |
 | Hijacked Google/Apple account | **the account** — the sign-in is the authentication | nothing |
+
+**The database row.** Every sign-in copy either client makes today is single-blob
+(`sealSeedToSso`, `scrypt-xc20p-single-v1`; the phone since #750, the global node's browsers since
+G11-c): the whole seed, and the 12 words when it carries them, under one key,
+`scrypt(provider:sub, salt)`. The salt and the scrypt cost are stored beside it in `kdfParams`, and
+there is no hub half. (The `A ⊕ B` construction above describes copies made before #750.) So the
+only secret is the `sub`, and whoever holds the database and knows a member's `sub` opens that
+member's copy with one scrypt:
+
+- **GitHub:** the node's `sub` is the numeric user id (`readGithubUser` in
+  `apps/server/src/engine/github-device.ts`), which is public at `api.github.com/users/<login>`.
+  So a GitHub-sealed copy is open to anyone with the database: the id is one public lookup from
+  the member's GitHub name, and opening the copy with it is one scrypt.
+- **Google:** the same `sub` goes to every OAuth client the person has signed into (§1 above), so
+  anyone holding it from another service can open the copy.
+- **Apple:** scoped to BeanPool's developer team, so out of reach of anyone who never sees the
+  node's sign-ins.
+
+"The database" is more than the node's disk: its snapshots, a standby's replica, and backup files.
+A backup file is locked only when the node has a recovery code (`backupLockState` in
+`apps/server/src/services/sealed-backup.ts`, `sendBackup` in `apps/server/src/routes/backup.ts`);
+without one the backup is the readable `state.db`, and a stolen backup reaches what the database
+does. Sealed backups need their recovery code. A secret the database does not hold, for the phone
+and the browser alike, is a separate design pass.
 
 ---
 

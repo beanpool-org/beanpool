@@ -67,9 +67,10 @@ class Failure extends Error {}
 async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, github } = {}) {
     // membershipDown: the membership probe gets no answer, as when the node can't be reached. doorShut: an operator has
     // shut the door (open-join.ts reads it per request). probes: every key the membership probe was asked about.
+    // enrolled: key → the sign-in whose recovery copy a join stored (G11-c).
     const seen = {
         nonces: [], joins: [], providerVisits: [], violations: [], unexpectedHosts: new Set(), members: new Set(), membershipDown: false,
-        doorShut: false, probes: [],
+        doorShut: false, probes: [], enrolled: new Map(),
     };
     const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce' });
     await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
@@ -177,6 +178,8 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
             return reply(200, { isMember: seen.members.has(k), callsign: seen.members.has(k) ? 'Alice' : null });
         }
         if (p === '/api/community/health') return reply(200, { status: 'ok', memberCount: 4, version: 'harness' });
+        // Settings asks which sign-ins bring the account back (G11-c): the ones this stub stored with a join.
+        if (p === '/api/recovery/shares/status') return reply(200, { enrolledSso: key && seen.enrolled.get(key) ? [seen.enrolled.get(key)] : [] });
         const body = mockResponse(p, url.search);
         if (body === undefined) return reply(p.startsWith('/api/onboarding') || req.method() === 'POST' ? 200 : 404, body === undefined ? {} : body);
         return reply(200, body);
@@ -330,7 +333,7 @@ async function addressBarClean(page, origin, where) {
 }
 
 /** Photo, 12 words, tour, and into the app. */
-async function throughOnboarding(page, view, { shots = false } = {}) {
+async function throughOnboarding(page, view, { shots = false, signIn = null } = {}) {
     await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
     const bar = await page.getByTestId('onboarding-stepper').innerText();
     if (!/Sign in/.test(bar)) throw new Failure(`the steps bar says "${bar.replace(/\s+/g, ' ')}", not "Sign in"`);
@@ -339,6 +342,10 @@ async function throughOnboarding(page, view, { shots = false } = {}) {
     await page.getByTitle('Green Bean').click();
     await page.getByRole('button', { name: 'Next →' }).click();
     await page.getByText('Your Safety Backup').waitFor();
+    if (signIn) {
+        const line = await page.getByTestId('backup-signin-recovery').innerText();
+        if (line !== `Signing in with ${signIn} also brings this account back.`) throw new Failure(`the 12 words step says "${line}"`);
+    }
     await noSideScroll(page, '12 words step');
     if (shots) await shot(page, view, 'words');
     await page.getByRole('button', { name: 'Next →' }).click();
@@ -348,8 +355,19 @@ async function throughOnboarding(page, view, { shots = false } = {}) {
     await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 20_000 });
 }
 
+/** A yes, and, as the node does, the sign-in recovery copy the join carried stored and said so (G11-c). */
 function joinOk(callsign = 'Alice') {
-    return async (body, key) => ({ status: 200, body: { success: true, member: { publicKey: key, callsign: body.callsign || callsign }, provider: body.provider } });
+    return async (body, key, seen) => {
+        const stored = Array.isArray(body.recovery?.shares) && body.recovery.shares.length === 1 && body.recovery.shares[0].holderRef === body.provider;
+        if (stored) seen.enrolled.set(key, body.provider);
+        return {
+            status: 200,
+            body: {
+                success: true, member: { publicKey: key, callsign: body.callsign || callsign }, provider: body.provider,
+                ...(body.recovery ? { recovery: stored ? { enrolled: true, generation: 1, provider: body.provider, enrolledSso: [body.provider] } : { enrolled: false, error: 'not stored' } } : {}),
+            },
+        };
+    };
 }
 
 /** The join the stub node saw: the pending key signed it, with the nonce the page sent to the provider, and nothing else. */
@@ -369,6 +387,16 @@ function checkJoin(seen, provider, key, where) {
         if (!j.body.idToken || j.body.idToken.split('.').length !== 3) throw new Failure(`${where}: no id_token in the join`);
     } else if (j.body.proof?.sessionId !== 'gh-session-1') {
         throw new Failure(`${where}: the GitHub join carried ${JSON.stringify(j.body.proof)}`);
+    }
+    // G11-c: the key sealed to this sign-in (its 12 words with it) went with the join, one piece, in the phone's shape.
+    const shares = j.body.recovery?.shares;
+    const share = Array.isArray(shares) && shares.length === 1 ? shares[0] : null;
+    let params = null;
+    try { params = share ? JSON.parse(share.kdfParams) : null; } catch { params = null; }
+    if (!share || share.holderType !== 'sso' || share.holderRef !== provider || share.shareIndex !== 1
+        || params?.alg !== 'scrypt-xc20p-single-v1' || params?.words?.alg !== 'bip39-bits-xc20p-v1'
+        || Buffer.from(share.encryptedShare, 'base64').length !== 32) {
+        throw new Failure(`${where}: the join did not carry the sign-in recovery copy: ${JSON.stringify(j.body.recovery)?.slice(0, 200)}`);
     }
 }
 
@@ -391,9 +419,15 @@ const SCENARIOS = [
             if (q.client_id !== CLIENT_IDS.google || q.response_type !== 'id_token' || q.redirect_uri !== `${origin}/app/auth/google`) {
                 throw new Failure(`Google was asked ${JSON.stringify(q)}`);
             }
-            await throughOnboarding(page, view, { shots: true });
+            await throughOnboarding(page, view, { shots: true, signIn: 'Google' });
             if ((await storedIdentityKey(page)) !== key) throw new Failure('the app is not using the key that joined');
             if ((await pendingKey(page)) !== null) throw new Failure('the pending join was left behind');
+            // Settings says the sign-in is connected (G11-c), read from the node.
+            await page.getByRole('button', { name: 'Settings' }).filter({ visible: true }).first().click();
+            const line = await page.getByTestId('signin-recovery').innerText({ timeout: 20_000 });
+            if (!/Sign-in recovery: connected \(Google\)/.test(line)) throw new Failure(`Settings says "${line.replace(/\s+/g, ' ')}"`);
+            await noSideScroll(page, 'Settings');
+            await shot(page, view, 'settings');
         },
         join: joinOk(),
     },

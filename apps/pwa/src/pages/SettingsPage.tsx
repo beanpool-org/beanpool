@@ -9,8 +9,10 @@ import { clearAccountStorage } from '../lib/device-prefs';
 import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
-    updateNotificationPreferences, getNodeStats, purgeAccountApi,
+    updateNotificationPreferences, getNodeStats, purgeAccountApi, getSignInRecovery,
 } from '../lib/api';
+import { signInNames } from '../lib/join-recovery';
+import { SignInRecoveryLine } from '../components/SignInRecoveryLine';
 import { resolveAvatarUrl } from '../lib/avatar';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
@@ -113,6 +115,16 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [seedViewed, setSeedViewed] = useState(() => {
         return localStorage.getItem(seedViewedKey(identity.publicKey)) === 'true';
     });
+
+    // Whether a sign-in also brings this account back (G11-c): the node's list, asked once. Undefined while asking,
+    // null when it could not be asked; neither is drawn as "connected" or "not connected".
+    const [signInRecovery, setSignInRecovery] = useState<string[] | null | undefined>(undefined);
+    useEffect(() => {
+        let cancelled = false;
+        getSignInRecovery().then((r) => { if (!cancelled) setSignInRecovery(r); });
+        return () => { cancelled = true; };
+    }, [identity.publicKey]);
+    const signInRecoveryNames = signInRecovery ? signInNames(signInRecovery) : null;
 
     // Holiday mode
     const [holidayMode, setHolidayMode] = useState(false);
@@ -668,8 +680,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             <span aria-hidden="true">⚠️</span> You haven't saved your recovery phrase yet
                                         </p>
                                         <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
-                                            Your 12 words are the <strong>only</strong> way to recover your account.
-                                            Browsers can clear site data without warning — Safari does it after 7 days of inactivity.
+                                            {signInRecoveryNames
+                                                ? <>Your 12 words bring your account back on any device, and so does signing in with {signInRecoveryNames}.</>
+                                                : <>Your 12 words are the <strong>only</strong> way to recover your account.</>}
+                                            {' '}Browsers can clear site data without warning — Safari does it after 7 days of inactivity.
                                         </p>
                                         <button
                                             onClick={() => setMode('seed')}
@@ -706,6 +720,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
+                                <SignInRecoveryLine enrolled={signInRecovery} />
                             </div>
                         </div>
 

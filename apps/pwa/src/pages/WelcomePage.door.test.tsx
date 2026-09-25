@@ -143,6 +143,41 @@ describe('after the door says yes: the same steps every new member has', () => {
     });
 });
 
+describe('the words screen after a door join that enrolled its sign-in (G11-c)', () => {
+    /** Through the door with Google, the node answering `recovery` as given, to the 12 words. */
+    async function toTheWords(recovery: unknown) {
+        await savePendingJoin({ identity, provider: 'google', nonce: 'n1', startedAt: Date.now(), expiresAt: Date.now() + PENDING_JOIN_TTL_MS, restored: false });
+        const token = `${b64url('{"alg":"RS256"}')}.${b64url(JSON.stringify({ sub: 'g1', nonce: 'n1' }))}.c2ln`;
+        window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
+        const calls = stubNode(GLOBAL_OPEN, {
+            '/api/join': () => json(200, { success: true, member: { callsign: 'Alice' }, provider: 'google', recovery }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText(/Your Safety Backup/);
+        return calls;
+    }
+
+    it('stored: the words screen says the sign-in brings the account back too, and never "the only way"', async () => {
+        const calls = await toTheWords({ enrolled: true, generation: 1, provider: 'google', enrolledSso: ['google'] });
+        expect(calls.find((c) => c.path === '/api/join')?.body.recovery.shares).toHaveLength(1);
+        expect(screen.getByTestId('backup-signin-recovery')).toHaveTextContent('Signing in with Google also brings this account back.');
+        expect(screen.queryByText(/only/, { selector: 'strong' })).toBeNull();
+        expect(screen.getByText(/They bring your identity back if you lose this device\./)).toBeInTheDocument();
+        // The tickbox and the words are today's.
+        for (const w of identity.mnemonic!) expect(screen.getAllByText(w).length).toBeGreaterThan(0);
+        expect(screen.getByLabelText("I've written these words down somewhere safe")).not.toBeChecked();
+    });
+
+    it('not stored: the words screen is exactly as before', async () => {
+        await toTheWords({ enrolled: false, error: 'The recovery keeper could not be stored.' });
+        expect(screen.queryByTestId('backup-signin-recovery')).toBeNull();
+        expect(screen.getByText(/way to recover your identity if you lose this device\./)).toBeInTheDocument();
+        expect(screen.getAllByText('only', { selector: 'strong' }).length).toBeGreaterThan(0);
+    });
+});
+
 describe('a join whose answer was lost (review 4106075404)', () => {
     afterEach(() => { vi.restoreAllMocks(); });
 

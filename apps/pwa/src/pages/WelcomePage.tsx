@@ -12,6 +12,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
     clearUnsentPendingJoin, createIdentity, createIdentityFromMnemonic, identityFromMnemonic, importIdentity, updateCallsign, getMnemonic,
     hasMnemonic, lastSentAt, loadPendingJoin, pendingJoinSent, seedViewedKey, IdentityHeldError, type BeanPoolIdentity,
+    type JoinProvider,
 } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
@@ -21,7 +22,7 @@ import {
     getCommunityInfo, isRouteMissing,
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
-import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey } from '../lib/web-join';
+import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, providerLabel } from '../lib/web-join';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
@@ -228,6 +229,8 @@ export function WelcomePage({ onComplete }: Props) {
     // there is no going back to a name screen.
     const [joinedByDoor, setJoinedByDoor] = useState(false);
     const [joinedAsNote, setJoinedAsNote] = useState<string | null>(null);
+    // The sign-in the door join also enrolled as this account's way back (G11-c), when the node stored the copy.
+    const [signInRecovery, setSignInRecovery] = useState<JoinProvider | null>(null);
     // A key restored here (phone or 12 words) that is not a member of this open community yet: it joins as it is. Also
     // a member's key, while a join that went out from this browser is settled first (below).
     const [restoredForDoor, setRestoredForDoor] = useState<BeanPoolIdentity | null>(null);
@@ -682,6 +685,7 @@ export function WelcomePage({ onComplete }: Props) {
             return;
         }
         setJoinedByDoor(true);
+        setSignInRecovery(joined.recovery?.enrolled ? joined.recovery.provider : null);
         setInviteRedeemed(true);
         setJoinedAsNote(joined.earlierJoinKept
             // A key was brought here, but the join this browser sent earlier had landed: that one is the account.
@@ -1201,7 +1205,10 @@ export function WelcomePage({ onComplete }: Props) {
                                 <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 space-y-2">
                                     <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🔑 Your 12 Words Are Everything</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment.
+                                        Your 12 words are your primary key to your account across devices.
+                                        {signInRecovery
+                                            ? <> Signing in with {providerLabel(signInRecovery)} also brings it back.</>
+                                            : <> Without them, account recovery requires operator-assisted re-enrolment.</>}
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         ⚠️ <strong>Browser storage can be wiped without warning.</strong> Safari clears site data after
@@ -1270,8 +1277,16 @@ export function WelcomePage({ onComplete }: Props) {
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>🔑 Your Safety Backup</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                                 Write these 12 words down on paper and keep them safe.
-                                This is the <strong>only</strong> way to recover your identity if you lose this device.
+                                {signInRecovery
+                                    ? <> They bring your identity back if you lose this device.</>
+                                    : <> This is the <strong>only</strong> way to recover your identity if you lose this device.</>}
                             </p>
+                            {/* The join also enrolled the sign-in as a way back (G11-c): said once, next to the words. */}
+                            {signInRecovery && (
+                                <p data-testid="backup-signin-recovery" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    Signing in with {providerLabel(signInRecovery)} also brings this account back.
+                                </p>
+                            )}
 
                             {/* Browser storage eviction warning — PWA is sovereign-only, no keepers.
                                 Tailwind rather than inline style: the amber-500 hex this used to

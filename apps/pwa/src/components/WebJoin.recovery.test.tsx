@@ -142,6 +142,9 @@ describe('the copy goes with the join', () => {
         const { onJoined } = renderJoin();
         await waitFor(() => expect(onJoined).toHaveBeenCalledTimes(1));
         expect(onJoined.mock.calls[0][0].recovery).toEqual({ enrolled: false, provider: 'google' });
+        // Nothing is shown about it; the reason goes to the log.
+        expect(screen.queryByTestId('join-notice')).toBeNull();
+        expect(vi.mocked(console.warn).mock.calls.flat().join(' ')).toContain('The recovery keeper could not be stored.');
         expect((await loadIdentity())?.publicKey).toBe(identity.publicKey);
         expect(await loadPendingJoin()).toBeNull();
     });

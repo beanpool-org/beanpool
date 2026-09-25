@@ -481,6 +481,11 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                 lastSealed.current = { proof, publicKey: sent.identity.publicKey, recovery: null };
                 return send(sent, null);
             }
+            if (verdict.kind === 'joined' && recovery && !recoveryStored(verdict.recovery)) {
+                // In, without the copy: the words are the way back, and Settings will say not connected. Why, for a log.
+                const said = (verdict.recovery as { error?: unknown } | null)?.error;
+                console.warn(`[WebJoin] joined, but the community did not store the sign-in recovery copy: ${typeof said === 'string' ? said.slice(0, 200) : 'no reason given'}`);
+            }
             switch (verdict.kind) {
                 case 'joined': return finish(sent, verdict.callsign, verdict.recovery ? { enrolled: recoveryStored(verdict.recovery), provider: proof.provider } : null);
                 case 'already_member': return finish(sent, null, null);

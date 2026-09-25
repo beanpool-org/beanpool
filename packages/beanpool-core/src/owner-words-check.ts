@@ -6,10 +6,12 @@
  * that key. So an owner is asked, gently and never as a gate, to type them once and prove they are the right ones.
  *
  * What the check proves, all on the device:
- *   1. The words derive a keypair (the same double SHA-256 both clients use, native `utils/crypto.ts` and PWA
- *      `lib/mnemonic.ts`) whose public key is this account's.
- *   2. If the device's stored private key is passed, it is the same seed. It may be the native raw 32-byte seed
- *      or the PWA's 48-byte PKCS8 — it only ever goes through `toEd25519Seed` (identity-key-format-divergence).
+ *   1. The words are this account's: recovery-words.ts `recoveryWordsMatchPublicKey`, the one comparison of words
+ *      with an account, which the add-your-words save, a sign-in restore and enrolment make too. 12 listed words
+ *      whose key (the double SHA-256 both clients use) has this account's public key.
+ *   2. If the device's stored private key is passed, it is this account's key too. It may be the native raw
+ *      32-byte seed or the PWA's 48-byte PKCS8 — it only ever goes through `toEd25519Seed`
+ *      (identity-key-format-divergence).
  *   3. The *derived* seed opens a throwaway envelope sealed to this account's public key — the same code path a
  *      take-over or a restore will use — so "these words" means "these words open the safe on this device".
  *
@@ -20,9 +22,10 @@
  */
 
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { toEd25519Seed } from './ed25519-key.js';
+import { RECOVERY_WORD_COUNT, normaliseRecoveryWords, recoveryWordsMatchPublicKey } from './recovery-words.js';
+import { seedFromRecoveryWords } from './recovery-words-seed.js';
 import { sealEnvelope, openEnvelope } from './sealed-envelope.js';
 
 /** Signed POST records a check; signed GET reads the owner's own last check. Owner-only on the server. */
@@ -35,8 +38,7 @@ export type OwnerWordsCheckResult = { matches: true } | { matches: false; reason
 
 /** Split what the member typed into words: any whitespace, any case, surrounding space ignored. */
 export function splitTypedWords(input: string | string[]): string[] {
-    const joined = Array.isArray(input) ? input.join(' ') : input;
-    return joined.toLowerCase().split(/\s+/).filter(Boolean);
+    return normaliseRecoveryWords(input);
 }
 
 function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -63,31 +65,28 @@ export async function checkOwnerWords(
     account: { publicKeyHex: string; privateKey?: string | Uint8Array | null },
 ): Promise<OwnerWordsCheckResult> {
     const words = splitTypedWords(typed);
-    if (words.length !== 12) return { matches: false, reason: 'count' };
+    if (words.length !== RECOVERY_WORD_COUNT) return { matches: false, reason: 'count' };
+    // 1. The one comparison. Nothing below runs for words that are not this account's.
+    if (!recoveryWordsMatchPublicKey(words, account.publicKeyHex)) return { matches: false, reason: 'mismatch' };
 
-    const phraseBytes = utf8ToBytes(words.join(' '));
-    const inner = sha256(phraseBytes);
-    const seed = sha256(inner);
-    phraseBytes.fill(0);
-    inner.fill(0);
+    const seed = seedFromRecoveryWords(words);
     let storedSeed: Uint8Array | null = null;
     try {
         const expected = asBytes(account.publicKeyHex);
-        if (!constantTimeEqual(ed25519.getPublicKey(seed), expected)) {
-            return { matches: false, reason: 'mismatch' };
-        }
+        // 2. The key this device signs with belongs to the same account. A stored key that does not parse is
+        //    ignored: the public key is what the lock is sealed to.
         if (account.privateKey) {
             try {
                 storedSeed = toEd25519Seed(asBytes(account.privateKey));
             } catch {
                 storedSeed = null;
             }
-            if (storedSeed && !constantTimeEqual(storedSeed, seed)) {
+            if (storedSeed && !constantTimeEqual(ed25519.getPublicKey(storedSeed), expected)) {
                 return { matches: false, reason: 'mismatch' };
             }
         }
-        // Seal a throwaway payload to the account's public key and open it with the derived seed. The payload
-        // and the signing key are random and thrown away; nothing here is kept or sent.
+        // 3. Seal a throwaway payload to the account's public key and open it with the derived seed. The payload
+        //    and the signing key are random and thrown away; nothing here is kept or sent.
         const probe = randomBytes(32);
         const signingKey = randomBytes(32);
         try {

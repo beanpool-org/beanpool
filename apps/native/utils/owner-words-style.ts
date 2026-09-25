@@ -27,6 +27,7 @@ export const OWNER_WORDS_TEXT_ON = {
     checkBtnText: 'checkBtn',
     matchText: 'matchBox',
     mismatchText: 'mismatchBox',
+    saveText: 'saveBox',
 } as const;
 
 export function ownerWordsStyleSpec(colors: AppColors) {
@@ -85,6 +86,12 @@ export function ownerWordsStyleSpec(colors: AppColors) {
             backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border,
         },
         mismatchText: { fontSize: 15, lineHeight: 21, fontWeight: '600' as const, color: colors.feedback.danger.fg },
+        // "Save them on this phone", after a match on a phone with no copy of the words. Its button is a checkBtn.
+        saveBox: {
+            padding: 14, borderRadius: 12, borderWidth: 1, gap: 12,
+            backgroundColor: colors.surface.card, borderColor: colors.border.strong,
+        },
+        saveText: { fontSize: 15, lineHeight: 21, color: colors.text.body },
         footer: { paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border.default, backgroundColor: colors.surface.app },
     };
 }

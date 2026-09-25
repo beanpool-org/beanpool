@@ -9,6 +9,10 @@
  * On a match the node is told the fact and the date, signed. On a miss: "These aren't the words for this account."
  * No hint which word. Nothing is blocked either way, and Back is always there.
  *
+ * On a phone with no copy of the words, a match also offers "Save them on this phone": the add form's own save
+ * (identity.ts addMnemonicToIdentity), which checks them again with the same check. Until the member saves, types
+ * again or leaves, the words that matched are held in the reducer (out of the box), and cleared with everything else.
+ *
  * Keyboard: the root KeyboardProvider only (no nested provider); same shape as the "Suggest a change" screen, which was
  * measured at 320dp + 1.3×.
  */
@@ -22,9 +26,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
+import { hasMnemonic } from '../utils/identity';
 import {
-    OWNER_WORDS_COPY as COPY, OWNER_WORDS_INITIAL, checkMyWords, forgetOwnerWordsStatus, ownerWordsReducer,
-    sendOwnerWordsAttestation, typedWordCount,
+    OWNER_WORDS_COPY as COPY, OWNER_WORDS_INITIAL, checkMyWords, forgetOwnerWordsStatus, ownerWordsFindThem,
+    ownerWordsReducer, saveCheckedWords, sendOwnerWordsAttestation, shouldOfferSaveWords, typedWordCount,
 } from '../utils/owner-words';
 import { ownerWordsStyleSpec } from '../utils/owner-words-style';
 
@@ -34,10 +39,11 @@ export default function OwnerWordsCheckScreen() {
     const { theme, colors } = useTheme();
     const insets = useSafeAreaInsets();
     const styles = useStyles(({ colors }) => StyleSheet.create(ownerWordsStyleSpec(colors)));
-    const { identity } = useIdentity();
+    const { identity, setIdentity } = useIdentity();
     const [state, dispatch] = useReducer(ownerWordsReducer, OWNER_WORDS_INITIAL);
     const [footerHeight, setFooterHeight] = useState(0);
     const busyRef = useRef(false);
+    const savingRef = useRef(false);
 
     // Clear the words when the app leaves the foreground (the app switcher takes a picture of the screen),
     // and when this screen closes.
@@ -56,7 +62,7 @@ export default function OwnerWordsCheckScreen() {
         dispatch({ type: 'checking' });
         const typed = state.typed;
         const result = await checkMyWords(typed, identity);
-        dispatch({ type: 'answered', result, countSeen: typedWordCount(typed) });
+        dispatch({ type: 'answered', result, countSeen: typedWordCount(typed), offerSave: shouldOfferSaveWords(identity) });
         busyRef.current = false;
         if (result.matches) {
             const url = await getAnchorUrl();
@@ -66,7 +72,26 @@ export default function OwnerWordsCheckScreen() {
         }
     };
 
+    // "Save them on this phone": the add form's save, so it checks them again and never replaces words.
+    const handleSave = async () => {
+        const words = state.unsaved;
+        if (!words || savingRef.current) return;
+        savingRef.current = true;
+        dispatch({ type: 'saving' });
+        let ok = false;
+        try {
+            const result = await saveCheckedWords(words);
+            if (result.ok) {
+                setIdentity(result.identity);
+                ok = true;
+            }
+        } catch { /* ok stays false: the failure line says where to add them instead */ }
+        dispatch({ type: 'saveAnswered', ok });
+        savingRef.current = false;
+    };
+
     const matchText = state.record === 'saved' ? COPY.matchSaved : state.record === 'failed' ? COPY.matchNotSaved : COPY.match;
+    const saveText = state.save === 'saved' ? COPY.saved : state.save === 'failed' ? COPY.saveFailed : COPY.saveOffer;
 
     return (
         <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -107,6 +132,24 @@ export default function OwnerWordsCheckScreen() {
                             <Text style={styles.matchText}>{state.record === 'sending' ? COPY.match : matchText}</Text>
                         </View>
                     ) : null}
+                    {state.outcome === 'match' && state.save !== 'none' ? (
+                        <View style={styles.saveBox} accessibilityLiveRegion="polite">
+                            <Text style={styles.saveText}>{saveText}</Text>
+                            {state.save === 'offered' || state.save === 'saving' ? (
+                                <Pressable
+                                    style={[styles.checkBtn, state.save === 'saving' && styles.checkBtnDisabled]}
+                                    onPress={handleSave}
+                                    disabled={state.save === 'saving'}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ busy: state.save === 'saving', disabled: state.save === 'saving' }}
+                                >
+                                    {state.save === 'saving'
+                                        ? <ActivityIndicator color={colors.text.inverse} accessibilityLabel={COPY.saving} />
+                                        : <Text style={styles.checkBtnText}>{COPY.saveButton}</Text>}
+                                </Pressable>
+                            ) : null}
+                        </View>
+                    ) : null}
                     {state.outcome === 'mismatch' ? (
                         <View style={styles.mismatchBox} accessibilityLiveRegion="polite">
                             <Text style={styles.mismatchText}>{COPY.mismatch}</Text>
@@ -118,7 +161,7 @@ export default function OwnerWordsCheckScreen() {
                         </View>
                     ) : null}
 
-                    <Text style={styles.hint}>{COPY.findThem}</Text>
+                    <Text style={styles.hint}>{ownerWordsFindThem(hasMnemonic(identity))}</Text>
                 </KeyboardAwareScrollView>
 
                 <KeyboardStickyView onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>

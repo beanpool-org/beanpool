@@ -30,6 +30,7 @@ import type { Readable } from 'node:stream';
 import {
     getImageStore, openObject, readObject, sha256Hex, writeObject, type ImageStore, type StoredObject,
 } from './image-store.js';
+import { stripImageValue } from './image-metadata.js';
 
 /**
  * The route's own parse, deliberately duplicated rather than imported: `^data:([^;]+);base64,(.*)$` with no
@@ -266,6 +267,25 @@ export async function storePhotoColumnsAsync(
         return inlinePhotoColumns(photoData);
     }
     return { photo_data: null, storage_key: put.key, sha256: put.sha256, bytes: put.bytes, mime: put.mime };
+}
+
+/**
+ * A photo a member is writing — a new post, event or enterprise listing, or an edit of one — with its metadata
+ * stripped first (image-metadata.ts: EXIF GPS, serial numbers, XMP, comments), then stored exactly as
+ * {@link storePhotoColumns} stores any photo. A photo that carries no metadata, which is every photo the phone
+ * and the web app send, reaches the store character for character as it always did.
+ *
+ * The round-trip rule above is untouched: it is about reproducing what a row HOLDS, and the stripped photo is
+ * what the row holds from the start. Only this writer strips. The evacuation job moves bytes that are already
+ * stored and must not change them, and the backup importer (engine/sync.ts) copies its mirror's stored photos
+ * verbatim: a replica is the primary's state, and the primary strips at upload.
+ */
+export function storeUploadedPhotoColumns(
+    store: ImageStore,
+    key: (s: StorableBytes) => string,
+    photoData: string,
+): PhotoColumns {
+    return storePhotoColumns(store, key, stripImageValue(photoData));
 }
 
 export function inlinePhotoColumns(photoData: string): PhotoColumns {

@@ -22,11 +22,10 @@
  */
 
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { hexToBytes } from '@noble/hashes/utils.js';
 import { BIP39_ENGLISH } from './bip39-english.js';
 import { toEd25519Seed } from './ed25519-key.js';
-import { splitTypedWords } from './owner-words-check.js';
+import { seedFromRecoveryWords } from './recovery-words-seed.js';
 
 export { BIP39_ENGLISH };
 
@@ -44,16 +43,20 @@ function wordIndex(word: string): number | undefined {
     return indexOf.get(word);
 }
 
+function splitWords(text: string): string[] {
+    return text.toLowerCase().split(/\s+/).filter(Boolean);
+}
+
 /**
- * What was typed or stored, as words: any whitespace, any case, surrounding space ignored. The same split the
- * owners' words check uses, so "the words" means one thing everywhere.
+ * What was typed or stored, as words: any whitespace, any case, surrounding space ignored. The owners' words
+ * check splits with this too (owner-words-check.ts `splitTypedWords`), so "the words" means one thing everywhere.
  *
  * Not only the typed shapes: stored words are parsed JSON. Anything that is not text or a list of text is no
  * words, never a throw, so every check built on this answers false for it.
  */
 export function normaliseRecoveryWords(input: string | readonly string[]): string[] {
-    if (typeof input === 'string') return splitTypedWords(input);
-    if (Array.isArray(input) && input.every((w) => typeof w === 'string')) return splitTypedWords([...input]);
+    if (typeof input === 'string') return splitWords(input);
+    if (Array.isArray(input) && input.every((w) => typeof w === 'string')) return splitWords(input.join(' '));
     return [];
 }
 
@@ -75,18 +78,12 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
     return diff === 0;
 }
 
-/** The account key the words make: the apps' own derivation, over the normalised words. */
-function seedFromWords(words: readonly string[]): Uint8Array {
-    const phrase = utf8ToBytes(words.join(' '));
-    const inner = sha256(phrase);
-    const seed = sha256(inner);
-    phrase.fill(0);
-    inner.fill(0);
-    return seed;
-}
-
 /**
  * Do these 12 words make the account with this public key?
+ *
+ * The one comparison of words with an account. The add-your-words save, a sign-in restore, enrolment's seal and
+ * the owners' "Check your 12 words" (owner-words-check.ts `checkOwnerWords`) all decide with it, so no two
+ * screens can give a member two answers for the same words.
  *
  * False for anything that is not 12 listed words, for a public key that will not parse, and for words that make
  * another account. Never throws, and returns nothing derived from the words.
@@ -106,7 +103,7 @@ export function recoveryWordsMatchPublicKey(
     }
     // Not only the typed shapes: a stored identity is parsed JSON, and one without a public key must not throw.
     if (!expected || expected.length !== 32) return false;
-    const seed = seedFromWords(normaliseRecoveryWords(input));
+    const seed = seedFromRecoveryWords(normaliseRecoveryWords(input));
     try {
         return constantTimeEqual(ed25519.getPublicKey(seed), expected);
     } catch {

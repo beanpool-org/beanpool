@@ -29,6 +29,7 @@ import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../util
 import { colors, palette } from '../constants/colors';
 import { recoverAccountWithSso, waitingOnGithub } from '../utils/sso-recovery';
 import { returnToApp, type GithubDevicePrompt } from '../utils/sso-signin';
+import { GithubCodeSteps } from '../components/GithubCodeSteps';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
@@ -808,13 +809,16 @@ export default function WelcomeScreen() {
                     // release on a cancel can't be honoured. The steps that follow show instead.
                     if (!waitingOnGithub(p.step)) setRecoveryCode(null);
                 },
-                // GitHub's device flow cannot finish unless the member sees this. Copy it and open
-                // GitHub for them. The code, a Copy button and a way back to GitHub stay on this
-                // screen behind the browser until GitHub says yes.
+                // GitHub's device flow cannot finish unless the member sees this. Copy it and show it,
+                // with what to do on GitHub (GithubCodeSteps).
+                // - Android: the member opens GitHub with the button, as the Account Protection sheet has
+                //   done since 2026-08-28. Opened here at once, the tab hid the steps, and on Android
+                //   nothing brings the app back from GitHub unless the member knows to tap ✕.
+                // - iOS: unchanged. GitHub opens at once, and returnToApp dismisses it once GitHub says yes.
                 onDeviceCode: (prompt) => {
                     setRecoveryCode(prompt);
                     copyRecoveryCode(prompt);
-                    WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
+                    if (Platform.OS === 'ios') WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
                 },
                 signal: abort.signal,
             });
@@ -1960,6 +1964,8 @@ export default function WelcomeScreen() {
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                     {recoveryCode ? (
                                         <>
+                                            {/* What to do on GitHub, first: Paste, then how to come back. */}
+                                            <GithubCodeSteps />
                                             {/* Shown the way the enrolment sheet shows it. As a sentence inside the
                                                 progress line it could not be selected or copied, so it had to be
                                                 written down and retyped — reported from a real recovery. */}
@@ -2006,10 +2012,6 @@ export default function WelcomeScreen() {
                                                     </Text>
                                                 </Pressable>
                                             </View>
-                                            <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 13, textAlign: 'center' }}>
-                                                On GitHub, press and hold the first box and choose Paste. Tapping the
-                                                clipboard chip above the keyboard fills only one box.
-                                            </Text>
                                             <Pressable
                                                 onPress={() => { WebBrowser.openBrowserAsync(recoveryCode.verificationUri).catch(() => {}); }}
                                                 accessibilityRole="button"

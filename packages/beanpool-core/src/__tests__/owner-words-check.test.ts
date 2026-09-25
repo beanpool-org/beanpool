@@ -10,6 +10,12 @@ vi.mock('../sealed-envelope.js', async (importOriginal) => {
     return { ...real, openEnvelope: vi.fn(real.openEnvelope) };
 });
 import { openEnvelope } from '../sealed-envelope.js';
+// Wraps the words-to-account comparison so the test can see checkOwnerWords decide with it.
+vi.mock('../recovery-words.js', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../recovery-words.js')>();
+    return { ...real, recoveryWordsMatchPublicKey: vi.fn(real.recoveryWordsMatchPublicKey) };
+});
+import { recoveryWordsMatchPublicKey } from '../recovery-words.js';
 import {
     OWNER_WORDS_CHECK_RENEW_MS,
     checkOwnerWords,
@@ -105,6 +111,31 @@ describe('checkOwnerWords', () => {
         await checkOwnerWords(typed, { publicKeyHex: PUB, privateKey: key });
         expect(typed).toEqual(WORDS);
         expect(bytesToHex(key)).toBe(RAW_HEX);
+    });
+});
+
+describe('one comparison: checkOwnerWords decides with recoveryWordsMatchPublicKey', () => {
+    // The add-your-words save, the sign-in restore and enrolment all ask recoveryWordsMatchPublicKey. The owners'
+    // check had its own derivation and compare; now it asks the same function, so the two screens where a member
+    // types the words can never give two answers.
+    it('asks recoveryWordsMatchPublicKey about the words and the account', async () => {
+        const compare = vi.mocked(recoveryWordsMatchPublicKey);
+        compare.mockClear();
+        expect(await checkOwnerWords(WORDS, { publicKeyHex: PUB })).toEqual({ matches: true });
+        expect(compare).toHaveBeenCalledTimes(1);
+        expect(compare.mock.calls[0][0]).toEqual(WORDS);
+        expect(compare.mock.calls[0][1]).toBe(PUB);
+    });
+
+    it('answers as it does, words off the list included (neither app makes an account from them)', async () => {
+        const offList = [...WORDS.slice(0, 11), 'zzzz'];
+        const offListPub = bytesToHex(ed25519.getPublicKey(sha256(sha256(utf8ToBytes(offList.join(' '))))));
+        const swapped = [WORDS[1], WORDS[0], ...WORDS.slice(2)];
+        for (const [typed, pub] of [[WORDS, PUB], [offList, offListPub], [swapped, PUB], [WORDS, offListPub]] as const) {
+            const expected = recoveryWordsMatchPublicKey(typed, pub);
+            expect((await checkOwnerWords([...typed], { publicKeyHex: pub })).matches).toBe(expected);
+        }
+        expect(await checkOwnerWords(offList, { publicKeyHex: offListPub })).toEqual({ matches: false, reason: 'mismatch' });
     });
 });
 

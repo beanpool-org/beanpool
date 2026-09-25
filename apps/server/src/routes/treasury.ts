@@ -33,6 +33,8 @@ import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { createEventFromBody } from './event-post.js';
+import { stripImageValue } from '../storage/image-metadata.js';
+import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
@@ -520,6 +522,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         let photoUrl = avatar;
         if (!photoUrl && Array.isArray(photos) && photos.length > 0) photoUrl = photos[0];
+        // G9a-3: the projects row below stores it too, not only createTreasury, and the crowdfund listing hands it out
+        // as stored, so it is held to the photo rule (bare base64 included) as crowdfund photos are.
+        if (!isAcceptablePhotoValue(photoUrl)) {
+            ctx.status = 400;
+            ctx.body = { error: AVATAR_FORMAT_ERROR };
+            return;
+        }
+        photoUrl = stripImageValue(photoUrl);
         const enterprisePurpose = String(purpose || description || enterpriseName).trim();
         const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || deadlineAt) ? 'bounded' : 'ongoing';
         const parsedGoal = goalAmount != null ? Number(goalAmount) : null;
@@ -586,6 +596,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
+        // G9a-3: the enterprise routes hand members.avatar_url out as stored (avatarUrl), so the photo rule, as above.
+        if (!isAcceptablePhotoValue(String(avatar))) { ctx.status = 400; ctx.body = { error: AVATAR_FORMAT_ERROR }; return; }
         try {
             ctx.body = {
                 success: true,

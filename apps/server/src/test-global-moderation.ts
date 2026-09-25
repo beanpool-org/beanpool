@@ -388,6 +388,24 @@ async function main(): Promise<void> {
     const vicLineBack = await call('POST', viewer, `/api/marketplace/posts/${ev}/chat/message`, { text: 'See you there' });
     assert(vicBack.status === 200 && vicLineBack.status === 201, `and its chat is open again to the people Going (${vicBack.status}, ${vicLineBack.status})`);
 
+    // A hidden event's unread lines leave the unread badge with its chat: totalUnread counts only the chats listed.
+    const T = [1, 2, 3].map(i => member(`Tia${i}`, 20)); // reporters of their own, under the hourly report limit
+    const meetup = createPost('event', 'other', 'Hidden meetup', 'Another event to hide', 0, 'fixed', ava.pk, -28.55, 153.5, [], false, undefined, false,
+        { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Hall' })!.id;
+    await call('POST', viewer, `/api/marketplace/posts/${meetup}/rsvp`, { status: 'going' });
+    const hostLine = await call('POST', ava, `/api/marketplace/posts/${meetup}/chat/message`, { text: 'Doors at six' });
+    const vicChats = async () => (await call('GET', viewer, `/api/messages/conversations/${viewer.pk}`)).body ?? {};
+    const listedUnread = (b: any) => (b.conversations ?? []).reduce((n: number, c: any) => n + (c.unreadCount ?? 0), 0);
+    const unreadBefore = await vicChats();
+    const meetupUnread = (unreadBefore.conversations ?? []).find((c: any) => c.id === meetup)?.unreadCount ?? 0;
+    assert(hostLine.status === 201 && meetupUnread >= 1 && unreadBefore.totalUnread === listedUnread(unreadBefore),
+        `before: the host's line is unread for someone Going, and counted in their totalUnread (${hostLine.status}, ${meetupUnread}, ${unreadBefore.totalUnread})`);
+    for (const r of T) await report(r, meetup, ava);
+    const unreadAfter = await vicChats();
+    assert(!!hiddenAt(meetup) && !(unreadAfter.conversations ?? []).some((c: any) => c.id === meetup)
+        && unreadAfter.totalUnread === unreadBefore.totalUnread - meetupUnread && unreadAfter.totalUnread === listedUnread(unreadAfter),
+        `hidden: its chat leaves their list, and its unread lines leave totalUnread with it (${unreadBefore.totalUnread} → ${unreadAfter.totalUnread}, listed ${listedUnread(unreadAfter)})`);
+
     // A moderator removal of a hidden post works as always.
     const openOnTarget = db.prepare(`SELECT id FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).get(target) as { id: string };
     const actioned = await admin('POST', `/api/local/admin/reports/${openOnTarget.id}/action`, { deletePost: true, reasonCategory: 'spam' });

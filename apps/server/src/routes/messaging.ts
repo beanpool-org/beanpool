@@ -332,10 +332,9 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const convs = getConversationsByMember(publicKey).filter(c => c.type !== 'event_thread' || !eventChatHiddenFrom(c.id, publicKey));
     const unreadCounts = getUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
-    ctx.body = {
-        conversations: convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null })),
-        totalUnread: Object.values(unreadCounts).reduce((a, b) => a + b, 0),
-    };
+    const conversations = convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null }));
+    // Over the listed chats only, as listYourChats does: a badge for a chat that isn't there can't be cleared.
+    ctx.body = { conversations, totalUnread: conversations.reduce((n, c) => n + c.unreadCount, 0) };
 });
 
 router.post('/api/messages/mark-read', async (ctx) => {

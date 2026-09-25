@@ -2,15 +2,11 @@ import React, { useEffect } from 'react';
 import { View, ActivityIndicator, Text, DeviceEventEmitter } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
-import { useLeaveAuthReturn } from '../../components/useLeaveAuthReturn';
 
-/**
- * Where Facebook's page returns when it reaches the app as a link: on Android the
- * `https://beanpool.org/auth/facebook` App Link. It goes back to the screen waiting for the sign-in
- * (utils/auth-return.ts).
- */
 export default function FacebookAuthCallbackScreen() {
+    const router = useRouter();
     const url = Linking.useURL();
 
     useEffect(() => {
@@ -24,8 +20,15 @@ export default function FacebookAuthCallbackScreen() {
         } catch (e) {
             console.warn('[Facebook Auth Callback] Error completing auth session:', e);
         }
-    }, [url]);
-    useLeaveAuthReturn(url);
+        const timer = setTimeout(() => {
+            if (router.canGoBack()) {
+                router.back();
+            } else {
+                router.replace('/');
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [router, url]);
 
     return (
         <View

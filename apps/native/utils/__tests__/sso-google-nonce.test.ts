@@ -303,8 +303,10 @@ describe('iPhone: the Google web sign-in page', () => {
     });
 
     it('the return link lands on a screen, not Unmatched Route', () => {
-        // `redirectSystemPath` broadcasts the callback and then lets Expo Router navigate to the
-        // same path, so every provider it recognises needs a screen at app/auth/<provider>.tsx.
+        // On a phone `redirectSystemPath` broadcasts the callback and cancels the navigation
+        // (auth-return.test.ts). Expo Router still navigates on the web preview, and for any form of
+        // the link that check misses, so every provider it recognises needs a screen at
+        // app/auth/<provider>.tsx.
         const intent = fs.readFileSync(path.resolve(__dirname, '../../app/+native-intent.ts'), 'utf-8');
         const providers = [...intent.matchAll(/path\.includes\('auth\/(\w+)'\)/g)].map((m) => m[1]);
         expect(providers).toContain('google');

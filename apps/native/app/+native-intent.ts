@@ -2,10 +2,11 @@ import * as WebBrowser from 'expo-web-browser';
 import { DeviceEventEmitter, Platform } from 'react-native';
 import { linkRoutePath, isReturnFromSettings } from '../utils/settings-return';
 import { postIdFromLink } from '../utils/event-extras';
+import { isAuthReturnLink } from '../utils/auth-return';
 
 /**
  * Intercept incoming native deep links before Expo Router matches routes.
- * Completes WebBrowser auth sessions for OAuth callbacks (e.g. GitHub, Facebook)
+ * Hands OAuth callbacks (e.g. Google, Facebook) to the waiting sign-in without navigating,
  * and prevents unmatched route errors.
  */
 export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string | null {
@@ -54,6 +55,15 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
         } catch (e) {
             console.warn('[NativeIntent] Failed to complete auth session:', e);
         }
+    }
+
+    // A sign-in provider's return (utils/auth-return.ts). The waiting sign-in takes it from the Linking event this
+    // arrived on, or from the broadcast above; nothing more is needed. Navigating to app/auth/<provider> as well put a
+    // screen over the one waiting for the sign-in, and every screen that reacts to navigation got a chance to disturb
+    // it. So this works like the foreground link: the member stays where they are. On a cold start no sign-in can be
+    // waiting, because the process that started it is gone, so the app opens as it does from its icon.
+    if (isAuthReturnLink(path)) {
+        return initial ? '/' : null;
     }
 
     // A shared event: `https://<node>/?post=<id>` (apps/native/utils/event-extras.ts). Path "/" is what the

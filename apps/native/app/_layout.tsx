@@ -503,9 +503,8 @@ function RootLayoutNav() {
         // welcome flow and the guardian-recovery screen. Guardian recovery runs
         // on a fresh device that holds no local identity yet — the screen mints
         // the new identity itself at the "Submit Request" step — so it must be
-        // reachable without one. Any other route → back to welcome, except a
-        // sign-in return screen (app/auth/*), which goes back by itself to the
-        // screen waiting for that sign-in — see utils/auth-return.ts.
+        // reachable without one. Any other route → back to welcome
+        // (utils/auth-return.ts, `setupRedirect`).
         if (!identity) {
             const to = setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false });
             if (to) {

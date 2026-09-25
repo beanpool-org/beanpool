@@ -2,17 +2,18 @@ import React, { useEffect } from 'react';
 import { View, ActivityIndicator, Text, DeviceEventEmitter } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
-import { useLeaveAuthReturn } from '../../components/useLeaveAuthReturn';
 
 /**
- * Where Google's web page returns when it reaches the app as a link rather than inside an auth
- * session (utils/sso-signin.ts, `signInWithGoogleWebPage`): `beanpool://auth/google` from the
- * bounce page, or on Android the `https://beanpool.org/auth/google` App Link. Without a screen here
- * the member is left on Expo Router's Unmatched Route after signing in. It goes back to the screen
- * waiting for the sign-in (utils/auth-return.ts).
+ * Where Google's return lands if Expo Router ever navigates to it. On a phone it does not:
+ * `+native-intent.ts` passes `beanpool://auth/google` and the `https://beanpool.org/auth/google`
+ * App Link to the waiting sign-in (utils/sso-signin.ts, `signInWithGoogleWebPage`) and stays on
+ * the screen waiting for it (utils/auth-return.ts). This screen is for the web preview and any
+ * form of the link that check misses, so the member never sees Expo Router's Unmatched Route.
  */
 export default function GoogleAuthCallbackScreen() {
+    const router = useRouter();
     const url = Linking.useURL();
 
     useEffect(() => {
@@ -25,8 +26,15 @@ export default function GoogleAuthCallbackScreen() {
         } catch (e) {
             console.warn('[Google Auth Callback] Error completing auth session:', e);
         }
-    }, [url]);
-    useLeaveAuthReturn(url);
+        const timer = setTimeout(() => {
+            if (router.canGoBack()) {
+                router.back();
+            } else {
+                router.replace('/');
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [router, url]);
 
     return (
         <View

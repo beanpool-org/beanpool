@@ -9,7 +9,7 @@ related: recovery, communities, holiday-mode, your-12-words
 
 Open **Settings** and tap **Account Deletion & Sign Out**, at the bottom. You can:
 
-- **Remove from This Device Only:** sign this phone out. Your account stays in your community. You can come back with your 12 words.
+- **Remove from This Device Only:** sign this phone out. Your account stays in your community. You can come back with your 12 words, or with a linked sign-in account.
 - **Permanently Delete Account:** delete your account in this community for good.
 
 Going away for a while? Holiday Mode may be what you want. See "Going away".
@@ -21,6 +21,8 @@ Going away for a while? Holiday Mode may be what you want. See "Going away".
 - Pass your phone's lock screen check, then tap **Sign Out** to confirm.
 
 Your account and every community you saved are removed from this phone. A few settings stay, such as your block list. **Without your 12 words you cannot get back in.** Check you have them first.
+
+A phone restored with a sign-in account has no 12 words. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there.
 
 ## Deleting your account
 

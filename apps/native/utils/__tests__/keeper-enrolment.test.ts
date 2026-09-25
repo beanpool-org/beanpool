@@ -101,16 +101,93 @@ describe('keeper-enrolment.ts', () => {
     // SSO-tier enrolment
     // ---------------------------------------------------------------------------
     describe('enrolSsoKeeper', () => {
-        it('rejects if identity has no mnemonic', async () => {
-            const result = await enrolSsoKeeper({
-                identity: { ...IDENTITY, mnemonic: undefined },
-                provider: 'google',
-                sub: 'google-sub-12345',
-                idToken: 'mock-jwt-token',
-                nonce: 'mock-nonce',
+        // A phone restored with a sign-in holds no words: they can't be rebuilt from the seed
+        // (sso-recovery.ts saves the identity without them). The deposit seals the seed, never the
+        // words, so these members — the ones with no 12 words to fall back on — must still be able
+        // to protect their account. Android 275 refused them: "this identity has no recovery words
+        // to split".
+        describe('an identity with no words (restored with a sign-in)', () => {
+            const WORDLESS_SEED = new Uint8Array(32).map((_, i) => (i * 11 + 5) & 0xff);
+            const WORDLESS = {
+                callsign: 'Restored',
+                publicKey: Buffer.from(ed25519.getPublicKey(WORDLESS_SEED)).toString('hex'),
+                privateKey: Buffer.from(WORDLESS_SEED).toString('hex'),
+                createdAt: '2026-09-25T00:00:00.000Z',
+            } as any;
+
+            /** The deposited piece, opened with the same provider and sub, as the public key it gives. */
+            async function openedPublicKey(provider: string, sub: string): Promise<string> {
+                const opened = await openShareFromSso(depositedSsoShare(), provider, sub);
+                return Buffer.from(ed25519.getPublicKey(opened)).toString('hex');
+            }
+
+            it.each([
+                ['no mnemonic field', undefined],
+                ['an empty mnemonic', []],
+            ])('deposits with %s, and the sealed seed opens to this identity\'s key', async (_label, mnemonic) => {
+                mockNode();
+
+                const result = await enrolSsoKeeper({
+                    identity: { ...WORDLESS, mnemonic },
+                    provider: 'google',
+                    sub: 'google-sub-restored',
+                    idToken: 'mock-jwt-token',
+                    nonce: 'mock-nonce',
+                });
+
+                expect(result.error).toBeUndefined();
+                expect(result.enrolled).toEqual(['sso']);
+                expect(result.generation).toBe(2);
+                expect(signedPost).toHaveBeenCalledTimes(1);
+                expect(await openedPublicKey('google', 'google-sub-restored')).toBe(WORDLESS.publicKey);
             });
-            expect(result.enrolled).toEqual([]);
-            expect(result.error).toContain('no recovery words');
+
+            it('deposits with a PKCS8 private key (the PWA\'s format), and the sealed seed opens to this identity\'s key', async () => {
+                mockNode();
+                const pkcs8 = toEd25519Pkcs8(WORDLESS_SEED);
+                expect(pkcs8.length).toBe(48);
+
+                const result = await enrolSsoKeeper({
+                    identity: { ...WORDLESS, privateKey: Buffer.from(pkcs8).toString('hex') },
+                    provider: 'facebook',
+                    sub: 'facebook-sub-restored',
+                    idToken: 'mock-jwt-token',
+                    nonce: 'mock-nonce',
+                });
+
+                expect(result.error).toBeUndefined();
+                expect(result.enrolled).toEqual(['sso']);
+                expect(await openedPublicKey('facebook', 'facebook-sub-restored')).toBe(WORDLESS.publicKey);
+            });
+
+            it('deposits for GitHub with the node\'s session, and the sealed seed opens to this identity\'s key', async () => {
+                mockNode();
+
+                const result = await enrolSsoKeeper({
+                    identity: WORDLESS,
+                    provider: 'github',
+                    sub: '24680',
+                    proof: { sessionId: 'node-session-restored' },
+                });
+
+                expect(result.error).toBeUndefined();
+                expect(result.enrolled).toEqual(['sso']);
+                expect(await openedPublicKey('github', '24680')).toBe(WORDLESS.publicKey);
+            });
+
+            it('still refuses a key it cannot read, and sends nothing', async () => {
+                const result = await enrolSsoKeeper({
+                    identity: { ...WORDLESS, privateKey: '12345678' },
+                    provider: 'google',
+                    sub: 'google-sub-restored',
+                    idToken: 'mock-jwt-token',
+                    nonce: 'mock-nonce',
+                });
+
+                expect(result.enrolled).toEqual([]);
+                expect(result.error).toContain('could not read the private key');
+                expect(signedPost).not.toHaveBeenCalled();
+            });
         });
 
         it('successfully seals and deposits single-blob SSO share', async () => {
@@ -287,6 +364,62 @@ describe('keeper-enrolment.ts', () => {
             });
             expect(result.enrolled).toEqual([]);
             expect(result.error).toContain('could not read the private key');
+        });
+
+        // GitHub's proof is the node's own finished device-flow session (S2): a GitHub token proves
+        // nothing a node can check, so the deposit names the session and carries no token and no nonce.
+        it('a GitHub deposit carries proof: { sessionId } and no idToken or nonce', async () => {
+            mockNode();
+
+            const result = await enrolSsoKeeper({
+                identity: IDENTITY,
+                provider: 'github',
+                sub: '987654',
+                proof: { sessionId: 'node-session-1' },
+            });
+
+            expect(result.error).toBeUndefined();
+            expect(result.enrolled).toEqual(['sso']);
+            const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
+            expect(call[2].provider).toBe('github');
+            expect(call[2].proof).toEqual({ sessionId: 'node-session-1' });
+            expect(call[2]).not.toHaveProperty('idToken');
+            expect(call[2]).not.toHaveProperty('nonce');
+            // Sealed to the `sub` the node read from GitHub, which is what recovery opens it with.
+            const opened = await openShareFromSso(depositedSsoShare(), 'github', '987654');
+            expect(Array.from(opened)).toEqual(Array.from(new Uint8Array(32).fill(9)));
+        });
+
+        it('refuses a GitHub deposit that carries a token instead of the node session, and sends nothing', async () => {
+            mockNode();
+
+            const result = await enrolSsoKeeper({
+                identity: IDENTITY,
+                provider: 'github',
+                sub: '987654',
+                idToken: 'gho_token_from_anywhere',
+                nonce: 'mock-nonce',
+            } as any);
+
+            expect(result.enrolled).toEqual([]);
+            expect(result.error).toMatch(/GitHub/);
+            expect(signedPost).not.toHaveBeenCalled();
+        });
+
+        it('an Apple, Google or Facebook deposit sends its idToken and nonce, and no GitHub proof', async () => {
+            mockNode();
+
+            await enrolSsoKeeper({
+                identity: IDENTITY,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
+            });
+
+            const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
+            expect(call[2]).toMatchObject({ provider: 'google', idToken: 'mock-jwt-token', nonce: 'mock-nonce' });
+            expect(call[2]).not.toHaveProperty('proof');
         });
     });
 

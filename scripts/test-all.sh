@@ -285,6 +285,7 @@ run_federation_suites() {
       test-sso-recovery-roundtrip
       test-keeper-http
       test-open-join
+      test-web-door
       test-global-moderation
       test-distance-search
       test-distance-search-perf
@@ -369,6 +370,7 @@ run_federation_suites() {
       test-api-path-auth
       test-read-auth-default
       test-activity-feed-members-only
+      test-members-contact-visibility
       test-sync-signature
       test-trust-value-curve
       test-trust-tiers-one-source

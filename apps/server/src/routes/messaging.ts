@@ -8,11 +8,11 @@ import {
     createConversation, sendMessage, editMessage, deleteOwnMessage,
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
-    markConversationRead, getUnreadCounts,
+    markConversationRead, getListedUnreadCounts,
     getMember,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage } from '../engine/messaging.js';
-import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
+import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
@@ -51,10 +51,6 @@ function refuseGroupChat(ctx: any, groupId: string, actor: string | undefined, n
     ctx.status = refusal.status === 404 ? notFound.status : refusal.status;
     ctx.body = { error: refusal.status === 404 ? notFound.error : refusal.error };
     return true;
-}
-
-function eventChatHiddenFrom(conversationId: string, pubkey: string | undefined): boolean {
-    try { return eventHiddenFrom(loadEventForThread(conversationId), pubkey); } catch { return false; }
 }
 
 const CONVERSATION_NOT_FOUND = { status: 404, error: 'Conversation not found' };
@@ -329,9 +325,10 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
         ctx.body = { error: 'You may only read your own conversations' };
         return;
     }
-    // An event hidden by reports (G3) is not there for anyone but its author, and its chat is named after it.
-    const convs = getConversationsByMember(publicKey).filter(c => c.type !== 'event_thread' || !eventChatHiddenFrom(c.id, publicKey));
-    const unreadCounts = getUnreadCounts(publicKey);
+    // An event hidden by reports (G3) is not there for anyone but its author, and its chat is named after it. The
+    // unread counts leave out the same chats, as the badge every push carries does (getListedUnreadCounts).
+    const convs = getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey));
+    const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
     const conversations = convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null }));
     // Over the listed chats only, as listYourChats does: a badge for a chat that isn't there can't be cleared.

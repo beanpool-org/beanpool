@@ -31,6 +31,7 @@ import {
     purgeMemberSelf,
     getMembersVersion,
     lastActiveForViewer,
+    contactVisibleTo, ownersWhoAddedAsFriend, publicMemberCard,
 } from '../state-engine.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
@@ -817,13 +818,23 @@ router.get('/api/community/membership/:publicKey', async (ctx) => {
 
 router.get('/api/community/members', async (ctx) => {
     // With `lat` and `lng`: each person's distance in whole km from their coarse area, nearest first (G4).
+    // The point is in the querystring, which the viewer signature below already hashes.
     const point = peoplePoint(ctx);
     if (point === undefined) return;
-    const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
-    const etag = `W/"community-members-${getMembersVersion()}${querySig}"`;
+    // Contact details follow each member's choice (contactVisibleTo), so two members asking for this URL get
+    // different bodies. The viewer is the verified signer only, and it goes into the ETag together with who
+    // has added them as a friend: being added changes what they may see without changing any member row, so
+    // the members version alone would confirm a stale copy with a 304.
+    const viewer = ctx.state.actor as string | undefined;
+    const friendOwners = ownersWhoAddedAsFriend(viewer);
+    const viewerSig = crypto.createHash('sha256')
+        .update(`${ctx.querystring || ''}:${viewer || ''}:${[...friendOwners].sort().join(',')}`)
+        .digest('hex').slice(0, 8);
+    const etag = `W/"community-members-${getMembersVersion()}-${viewerSig}"`;
 
     ctx.set('ETag', etag);
-    ctx.set('Cache-Control', point ? 'private, max-age=0, must-revalidate' : 'public, max-age=0, must-revalidate');
+    // `private`: this response varies by viewer, so a shared cache must never store it.
+    ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch) {
@@ -836,15 +847,32 @@ router.get('/api/community/members', async (ctx) => {
     }
 
     // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
+    // An allowlist, never a spread of the row: the spread sent every member's contact details whatever they
+    // chose, the invite code they joined with, and updatedAt (which moves when a moderator mutes someone or
+    // an admin freezes their credit) to every reader, and would have sent any column added to the row later.
+    // The apps read publicKey, callsign, avatarUrl, joinedAt and status; the rest is public on the profile page.
     const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
     const members = getMembers()
         .filter(m => !m.isTreasury)
-        .map(m => ({
-            ...m,
-            lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
-            nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-            avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
-        }));
+        .map(m => {
+            const showContact = !!m.contactValue && contactVisibleTo(m.publicKey, m.contactVisibility, viewer, friendOwners.has(m.publicKey));
+            return {
+                publicKey: m.publicKey,
+                callsign: m.callsign,
+                joinedAt: m.joinedAt,
+                avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
+                profileUpdatedAt: m.profileUpdatedAt,
+                bio: m.bio,
+                contactValue: showContact ? m.contactValue : null,
+                contactVisibility: showContact ? m.contactVisibility : null,
+                status: m.status,
+                lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
+                earnedCredit: m.earnedCredit,
+                elderVouchedBy: m.elderVouchedBy,
+                archetype: m.archetype,
+                nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
+            };
+        });
 
     const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
 
@@ -896,7 +924,10 @@ router.post('/api/invite/redeem', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
-    ctx.body = { success: true, member: result.member, alreadyMember: result.alreadyMember };
+    // Unsigned (the joiner is not a member yet), and for a publicKey that is already a member this answers before
+    // the code is checked as used, so ANYONE holding a recent code could name any member's key here. The public
+    // card only: the whole row carried that member's contact details whatever they chose. The apps read avatarUrl.
+    ctx.body = { success: true, member: result.member ? publicMemberCard(result.member) : undefined, alreadyMember: result.alreadyMember };
 });
 
 router.post('/api/invite/redeem-offline', async (ctx) => {
@@ -912,7 +943,8 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
-    ctx.body = { success: true, member: result.member, alreadyMember: result.alreadyMember };
+    // The public card only, as /api/invite/redeem above: unsigned, and answers for any existing member's key.
+    ctx.body = { success: true, member: result.member ? publicMemberCard(result.member) : undefined, alreadyMember: result.alreadyMember };
 });
 
 // Read-only pre-flight: lets onboarding reject a dud invite at Step 1 (before

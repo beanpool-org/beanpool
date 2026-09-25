@@ -5,8 +5,10 @@
  * 1. Generates a temporary ephemeral Ed25519 keypair for the recovering device.
  * 2. Opens a collection session for the callsign via POST /api/recovery/collect.
  * 3. Requests an SSO nonce bound to the ephemeral key via POST /api/recovery/collect/sso-nonce.
- * 4. Signs in with Google/Apple to obtain the id_token.
- * 5. Releases the SSO fragment via POST /api/recovery/collect/sso.
+ * 4. Signs in with Google/Apple/Facebook to obtain the id_token, or has the node run GitHub's
+ *    sign-in (POST /api/recovery/collect/github/start, then …/poll) for a session id.
+ * 5. Releases the SSO fragment via POST /api/recovery/collect/sso, with the id_token and nonce, or
+ *    with `proof: { sessionId }` for GitHub.
  * 6. Releases the Hub fragment via POST /api/recovery/collect/hub (instant under SSO tier, D7 bypassed).
  * 7. Fetches the released fragments via POST /api/recovery/collect/fragments.
  * 8. Decrypts the SSO share (B) via openShareFromSso(sealed, provider, sub).
@@ -26,8 +28,15 @@ import {
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
 import { importIdentity, type BeanPoolIdentity } from './identity';
-import { signInWithGoogle, signInWithApple, signInWithFacebook, signInWithGithub, type SsoProvider, type GithubDevicePrompt } from './sso-signin';
+import {
+    signInWithGoogle, signInWithApple, signInWithFacebook, signInWithGithubViaNode, SsoSignInError,
+    type SsoProvider, type GithubDevicePrompt,
+} from './sso-signin';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
+
+/** The recovering device's pair (routes/recovery-collect.ts), bound to its ephemeral key. */
+const GITHUB_RECOVERY_START = '/api/recovery/collect/github/start';
+const GITHUB_RECOVERY_POLL = '/api/recovery/collect/github/poll';
 
 export interface SsoRecoveryProgress {
     step: 'opening' | 'nonce' | 'signing-in' | 'awaiting-sso' | 'releasing-sso' | 'releasing-hub' | 'fetching-fragments' | 'reconstructing' | 'done';
@@ -39,8 +48,18 @@ export interface SsoRecoveryResult {
     provider: SsoProvider;
 }
 
-function parseJwtSub(idToken: string, fallbackSub?: string): string {
-    if (fallbackSub) return fallbackSub;
+/**
+ * Whether recovery is waiting on the member at GitHub: the one time welcome.tsx shows the code, Copy,
+ * Open GitHub and Cancel. It takes them down at the first step past it. From the release on a cancel
+ * cannot be honoured, so none is offered, and the steps that follow show instead.
+ *
+ * `onDeviceCode` runs before the `awaiting-sso` progress, so the panel still goes up when it should.
+ */
+export function waitingOnGithub(step: SsoRecoveryProgress['step']): boolean {
+    return step === 'awaiting-sso';
+}
+
+function parseJwtSub(idToken: string): string {
     const parts = idToken?.split('.');
     if (!parts || parts.length < 2) {
         throw new Error('Could not determine user identifier for this sign-in.');
@@ -77,6 +96,12 @@ export async function recoverAccountWithSso(options: {
      * is correct.
      */
     onDeviceCode: (prompt: GithubDevicePrompt) => void;
+    /**
+     * Stops a GitHub sign-in that is waiting for the member to finish at GitHub, or that has just
+     * finished there and not yet been released. Not after the release: see below. The other
+     * providers' own sheets have their own cancel.
+     */
+    signal?: AbortSignal;
 }): Promise<SsoRecoveryResult> {
     const rawCallsign = options.callsign.trim();
     if (!rawCallsign) {
@@ -122,23 +147,21 @@ export async function recoverAccountWithSso(options: {
         throw new Error('Node did not return a valid recovery session ID.');
     }
 
-    // 3. Request SSO Nonce bound to ephemeral key
+    // 3. Request SSO Nonce bound to ephemeral key. Its answer also says whether this node runs
+    // GitHub's sign-in itself (`githubFlow`), which is the only way a GitHub recovery can go.
     options.onProgress?.({ step: 'nonce', message: 'Requesting secure sign-in challenge...' });
-    const requestNonce = async (): Promise<string> => {
-        const res = await signedPost(finalAnchorUrl, '/api/recovery/collect/sso-nonce', {
-            collectionId,
-        }, ephIdentity);
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error || `Could not obtain sign-in challenge (${res.status})`);
-        }
-        const body = await res.json();
-        if (!body?.nonce) {
-            throw new Error('Node returned an empty sign-in nonce.');
-        }
-        return body.nonce as string;
-    };
-    const nonce = await requestNonce();
+    const nonceRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/sso-nonce', {
+        collectionId,
+    }, ephIdentity);
+    if (!nonceRes.ok) {
+        const err = await nonceRes.json().catch(() => ({}));
+        throw new Error(err.error || `Could not obtain sign-in challenge (${nonceRes.status})`);
+    }
+    const nonceBody = await nonceRes.json();
+    if (!nonceBody?.nonce) {
+        throw new Error('Node returned an empty sign-in nonce.');
+    }
+    const nonce = nonceBody.nonce as string;
 
     // 4. Sign in with Provider (Google / Apple / Facebook / GitHub)
     const providerLabel = options.provider === 'google' ? 'Google'
@@ -151,44 +174,61 @@ export async function recoverAccountWithSso(options: {
         message: `Signing in with ${providerLabel}...`,
     });
 
-    let signInResult: { idToken: string; nonce: string; email?: string; sub?: string };
-    if (options.provider === 'google') {
-        signInResult = await signInWithGoogle(nonce);
-    } else if (options.provider === 'apple') {
-        signInResult = await signInWithApple(nonce);
-    } else if (options.provider === 'facebook') {
-        signInResult = await signInWithFacebook(nonce);
-    } else {
-        // GitHub is the device flow: it has no redirect and cannot complete unless the member is
-        // SHOWN a code. `signInWithGithub` deliberately does not open a browser itself — the
-        // enrolment sheet owns that, so the code is not buried the instant it appears. Recovery has
-        // no such sheet, so without this the code went nowhere: no prompt, no browser, and a silent
-        // fifteen-minute poll. Recovery is the entire point of these fragments, so it cannot be the
-        // one path that quietly hangs.
-        signInResult = await signInWithGithub(nonce, (prompt) => {
-            options.onDeviceCode(prompt);
-            options.onProgress?.({
-                step: 'awaiting-sso',
-                message: `Enter code ${prompt.userCode} at ${prompt.verificationUri.replace('https://', '')}`,
-            });
+    // What the release carries: the provider's token and the nonce inside it, or for GitHub the
+    // node's own finished session. Never a GitHub token: the node refuses one, rightly.
+    let sub: string;
+    let credential: { idToken: string; nonce: string } | { proof: { sessionId: string } };
+    if (options.provider === 'github') {
+        // GitHub is the device flow, run by the node: it has no redirect and cannot complete unless
+        // the member is SHOWN a code. Recovery has no sheet, so without `onDeviceCode` the code went
+        // nowhere: no prompt, no browser, and a silent fifteen-minute wait. Recovery is the entire
+        // point of these fragments, so it cannot be the one path that quietly hangs.
+        //
+        // No nonce is re-minted afterwards, as the phone-run flow had to: the session id is the
+        // node's single-use challenge, bound to this ephemeral key.
+        const github = await signInWithGithubViaNode({
+            post: (path, body) => signedPost(finalAnchorUrl, path, body, ephIdentity),
+            routes: { start: GITHUB_RECOVERY_START, poll: GITHUB_RECOVERY_POLL, body: { collectionId } },
+            githubFlow: nonceBody.githubFlow,
+            onPrompt: (prompt) => {
+                options.onDeviceCode(prompt);
+                options.onProgress?.({
+                    step: 'awaiting-sso',
+                    message: `Enter code ${prompt.userCode} at ${prompt.verificationUri.replace('https://', '')}`,
+                });
+            },
+            signal: options.signal,
         });
-        // Re-mint before depositing. The node's nonce lives ten minutes and this one was issued
-        // before the device flow began — and the device flow spends however long the member takes,
-        // which on a new phone includes signing in to GitHub from scratch. An expired nonce is
-        // reported as "GitHub sign-in could not be matched to this request", which during recovery
-        // reads as "your account is gone". Safe because the device flow never binds it to anything.
-        signInResult = { ...signInResult, nonce: await requestNonce() };
+        sub = github.sub;
+        credential = { proof: { sessionId: github.sessionId } };
+    } else {
+        let signInResult: { idToken: string; nonce: string; email?: string };
+        if (options.provider === 'google') {
+            signInResult = await signInWithGoogle(nonce);
+        } else if (options.provider === 'apple') {
+            signInResult = await signInWithApple(nonce);
+        } else {
+            signInResult = await signInWithFacebook(nonce);
+        }
+        sub = parseJwtSub(signInResult.idToken);
+        credential = { idToken: signInResult.idToken, nonce: signInResult.nonce };
     }
 
-    const sub = parseJwtSub(signInResult.idToken, signInResult.sub);
+    // The last point a cancel can be honoured. A member can tap Cancel after GitHub has said yes but
+    // before the poll carrying it has been acted on, and nothing has been released yet, so nothing is.
+    // The release cannot be taken back: the node lets the piece go and tells the owner it did. So
+    // welcome.tsx takes Cancel down at the progress step below (`waitingOnGithub`), rather than
+    // leaving one up that does nothing.
+    if (options.signal?.aborted) {
+        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    }
 
     // 5. Submit SSO verification to Node
     options.onProgress?.({ step: 'releasing-sso', message: 'Verifying sign-in with node...' });
     const ssoRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/sso', {
         collectionId,
         provider: options.provider,
-        idToken: signInResult.idToken,
-        nonce: signInResult.nonce,
+        ...credential,
     }, ephIdentity);
 
     if (!ssoRes.ok) {

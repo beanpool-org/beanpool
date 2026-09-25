@@ -26,6 +26,8 @@ Open **Settings** with the sliders button at the top of the screen. Then either:
 - Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.
 - Or tap **Account Protection**, then **Show My 12 Recovery Words**. Tap **Hide** when you are done.
 
+A phone restored with a sign-in account has no 12 words: they can't be rebuilt from a sign-in. Settings says so instead of showing them. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**.
+
 ## A second way back: a sign-in account
 
 On the phone app you can also link a Google, Facebook or GitHub account (and Apple on an iPhone). If you lose your phone, that account together with your community's server can restore your account on a new phone. See "Getting your account back".

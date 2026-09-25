@@ -10,6 +10,7 @@ import { colors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
 import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from './SsoButton';
 import type { SsoProvider } from '../utils/sso-signin';
+import { NO_WORDS_WAY_BACK } from '../utils/no-words-copy';
 
 const PROVIDER_NAMES: Record<SsoProvider, string> = {
     apple: 'Apple',
@@ -35,13 +36,19 @@ export function formatCommunityName(raw?: string | null): string | null {
     return trimmed;
 }
 
-export function KeeperProtectionPanel({ 
+export function KeeperProtectionPanel({
     protection,
     communityName,
     onProtectSso,
     onDisconnectSso,
-}: { 
+    hasWords,
+}: {
     protection: Protection;
+    /**
+     * Whether this phone holds the 12 words (`hasMnemonic`). A phone restored with a sign-in holds
+     * none, so the panel must not call them the way back or tell the member to keep them written down.
+     */
+    hasWords: boolean;
     /**
      * The community this protection describes. Keepers are enrolled PER NODE, so a
      * panel that names no community reads as a property of the account and is how a
@@ -66,7 +73,9 @@ export function KeeperProtectionPanel({
             <View style={styles.ssoGroup}>
                 <Text style={styles.ssoGroupTitle}>Sign-In Recovery Providers (1-of-N)</Text>
                 <Text style={styles.ssoGroupSubtitle}>
-                    Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. It does not hand your 12 words back, and it only works while your hub is running — so keep the words written down.
+                    {hasWords
+                        ? 'Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. It does not hand your 12 words back, and it only works while your hub is running — so keep the words written down.'
+                        : 'Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. It only works while your hub is running.'}
                 </Text>
 
                 {allProviders.map((prov) => {
@@ -172,12 +181,22 @@ export function KeeperProtectionPanel({
         );
     }
 
+    // A phone restored with a sign-in has no words to call primary: one line says so, and what to do.
     return (
         <View style={[styles.panel, styles.wordsOnly]}>
-            <Text style={styles.heading} accessibilityRole="header">🔑 Your 12 words are your primary recovery</Text>
-            <Text style={styles.body}>
-                Your 12 words are your primary key to your account. Write them down safely. Without them or a connected sign-in provider, restoring your account requires operator-assisted re-enrolment by your node administrator.
-            </Text>
+            {hasWords ? (
+                <>
+                    <Text style={styles.heading} accessibilityRole="header">🔑 Your 12 words are your primary recovery</Text>
+                    <Text style={styles.body}>
+                        Your 12 words are your primary key to your account. Write them down safely. Without them or a connected sign-in provider, restoring your account requires operator-assisted re-enrolment by your node administrator.
+                    </Text>
+                </>
+            ) : (
+                <>
+                    <Text style={styles.heading} accessibilityRole="header">🔑 Connect a sign-in</Text>
+                    <Text style={styles.body}>{NO_WORDS_WAY_BACK}</Text>
+                </>
+            )}
 
             <View style={styles.buttonContainer}>
                 {renderSsoProviders()}

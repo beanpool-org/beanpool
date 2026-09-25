@@ -4,33 +4,13 @@ import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../constants/colors';
 import { anchorUrl } from '../utils/node-post';
-import { startSsoSignIn, SsoSignInError, returnToApp } from '../utils/sso-signin';
+import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import type { SsoProvider, GithubDevicePrompt } from '../utils/sso-signin';
-import { enrolSsoKeeper, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
+import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
+import { connectAndDeposit } from '../utils/sso-sheet-connect';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
 import { useIdentity } from '../app/IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
-
-/**
- * Decode the `sub` claim from a JWT id_token without signature verification,
- * or use the directly-resolved `fallbackSub` for OAuth providers (like GitHub).
- */
-function extractSub(idToken: string, fallbackSub?: string): string {
-    if (fallbackSub) return fallbackSub;
-    const parts = idToken?.split('.');
-    if (!parts || parts.length < 2 || !parts[1]) {
-        throw new Error('Could not determine user identifier for this sign-in.');
-    }
-    try {
-        const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-        const payload = JSON.parse(globalThis.atob(pad)) as Record<string, unknown>;
-        if (typeof payload?.sub === 'string' && payload.sub) {
-            return payload.sub;
-        }
-    } catch {}
-    throw new Error('ID token missing subject claim (sub).');
-}
 
 export function SsoEnrolSheet({
     visible,
@@ -53,12 +33,16 @@ export function SsoEnrolSheet({
         : 'GitHub';
     const { identity: contextIdentity } = useIdentity();
     const identity = passedIdentity ?? contextIdentity;
-    const [step, setStep] = useState<'processing' | 'success' | 'error'>('processing');
+    /** `saving`: the provider is done and the deposit is going ahead, so no Cancel (utils/sso-sheet-connect.ts). */
+    const [step, setStep] = useState<'processing' | 'saving' | 'success' | 'error'>('processing');
     const [errorMessage, setErrorMessage] = useState('');
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);
-    /** GitHub's device flow has no redirect — the member types this code at github.com/login/device. */
+    /**
+     * GitHub's device flow has no redirect — the member types this code at github.com/login/device.
+     * Both come from the node, which runs the flow (`signInWithGithubViaNode`).
+     */
     const [devicePrompt, setDevicePrompt] = useState<GithubDevicePrompt | null>(null);
-    /** Aborts an in-flight device-flow poll: closing the sheet must stop it, not orphan it. */
+    /** Aborts the wait on the node's GitHub sign-in: closing the sheet must stop it, not orphan it. */
     const abortRef = React.useRef<AbortController | null>(null);
     const [codeCopied, setCodeCopied] = useState(false);
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,13 +57,25 @@ export function SsoEnrolSheet({
     /**
      * Close, and stop what is running.
      *
-     * The device flow polls GitHub on a timer, and the modal stays mounted with `visible={false}`,
+     * A GitHub sign-in polls the node on a timer, and the modal stays mounted with `visible={false}`,
      * so unmount cleanup alone would leave a poll running unseen until the code expired.
      */
     const closeAndStop = React.useCallback(() => {
         abortRef.current?.abort();
         onClose();
     }, [onClose]);
+
+    /**
+     * Dash stripped deliberately. GitHub renders eight separate cells; handing them nine characters
+     * is the likeliest reason the paste chip flashed and vanished. MEASURED 2026-08-28: ~5 failed
+     * paste attempts before one landed.
+     */
+    const copyCode = (prompt: GithubDevicePrompt) => {
+        Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
+            () => setCodeCopied(true),
+            () => setCodeCopied(false),
+        );
+    };
 
     const handleConnect = async () => {
         if (!identity) {
@@ -102,32 +98,26 @@ export function SsoEnrolSheet({
                 return;
             }
 
-            const signin = await startSsoSignIn(provider, url, identity, (prompt) => {
-                setDevicePrompt(prompt);
-                // Copied before the member has done anything. The whole friction was having to
-                // return to the app for the code once GitHub was on screen.
-                // Dash stripped deliberately. GitHub renders eight separate cells; handing them
-                // nine characters is the likeliest reason the paste chip flashed and vanished.
-                // MEASURED 2026-08-28: ~5 failed paste attempts before one landed.
-                Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
-                    () => setCodeCopied(true),
-                    () => setCodeCopied(false),
-                );
-            }, abort.signal);
-
-            // Get them back here. GitHub's success page says nothing about returning, and
-            // `dismissBrowser` is iOS-only — on Android the tab sat on "you're all set" while the
-            // account was already connected behind it. `returnToApp` handles both platforms.
-            await returnToApp();
-
-            const sub = extractSub(signin.idToken, signin.sub);
-
-            const result = await enrolSsoKeeper({
+            const result = await connectAndDeposit({
+                provider,
+                url,
                 identity,
-                provider: signin.provider,
-                sub,
-                idToken: signin.idToken,
-                nonce: signin.nonce,
+                onGithubPrompt: (prompt) => {
+                    setDevicePrompt(prompt);
+                    // Copied before the member has done anything. The whole friction was having to
+                    // return to the app for the code once GitHub was on screen.
+                    copyCode(prompt);
+                },
+                // The provider is done: the code and Cancel come down, and the deposit goes ahead.
+                onSignedIn: async () => {
+                    setDevicePrompt(null);
+                    setStep('saving');
+                    // Get them back here. GitHub's success page says nothing about returning, and
+                    // `dismissBrowser` is iOS-only — on Android the tab sat on "you're all set" while the
+                    // account was already connected behind it. `returnToApp` handles both platforms.
+                    await returnToApp();
+                },
+                signal: abort.signal,
             });
 
             if (result.error) {
@@ -149,7 +139,11 @@ export function SsoEnrolSheet({
                     onClose();
                     return;
                 }
-                if (e.reason === 'unsupported') {
+                if (e.reason === 'unsupported' && provider === 'github') {
+                    // Not this device: the community's server has to run GitHub's sign-in, and says
+                    // so in full.
+                    setErrorMessage(e.message);
+                } else if (e.reason === 'unsupported') {
                     setErrorMessage(`This device can't sign in with ${PROVIDER_NAME}. (${e.message})`);
                 } else if (e.reason === 'no-token' || e.reason === 'provider') {
                     setErrorMessage(`${PROVIDER_NAME} sign-in failed: ${e.message}`);
@@ -204,27 +198,39 @@ export function SsoEnrolSheet({
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             {devicePrompt ? (
                                 <>
+                                    {/* The code and the address both come from the node's answer. */}
                                     <Text style={styles.processingText}>
-                                        Enter this code on GitHub to finish:
-                                    </Text>
-                                    <Pressable
-                                        onPress={() => {
-                                            Clipboard.setStringAsync(devicePrompt.userCode.replace(/-/g, '')).then(
-                                                () => setCodeCopied(true),
-                                                () => setCodeCopied(false),
-                                            );
-                                        }}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={codeCopied
-                                            ? `Code ${devicePrompt.userCode.split('').join(' ')}, copied to clipboard. Tap to copy again.`
-                                            : `Code ${devicePrompt.userCode.split('').join(' ')}. Tap to copy.`}
-                                        style={styles.deviceCodeBox}
-                                    >
-                                        <Text style={styles.deviceCodeText} selectable>{devicePrompt.userCode}</Text>
-                                        <Text style={styles.deviceCodeHint}>
-                                            {codeCopied ? '✓ copied — or just type it, it is 8 characters' : 'tap to copy'}
+                                        Enter this code at{' '}
+                                        <Text style={styles.deviceCodeEmphasis}>
+                                            {devicePrompt.verificationUri.replace(/^https:\/\//, '')}
                                         </Text>
-                                    </Pressable>
+                                        {' '}to finish:
+                                    </Text>
+                                    <View style={styles.deviceCodeBox}>
+                                        {/* One line, shrunk to fit. MEASURED (Roboto Bold widths): at 320dp the
+                                            box is 212dp inside, and WDJB-MJHT needs 254dp at 1.0x and 330dp at
+                                            1.3x, so it broke at the dash. Android shrinks until it fits (Fabric
+                                            ignores minimumFontScale); iOS stops at 0.5, which fits MMMM-WWWW. */}
+                                        <Text
+                                            style={styles.deviceCodeText}
+                                            selectable
+                                            numberOfLines={1}
+                                            adjustsFontSizeToFit
+                                            minimumFontScale={0.5}
+                                            accessibilityLabel={`Code ${devicePrompt.userCode.split('').join(' ')}`}
+                                        >
+                                            {devicePrompt.userCode}
+                                        </Text>
+                                        <Pressable
+                                            onPress={() => copyCode(devicePrompt)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={codeCopied ? 'Code copied. Copy it again.' : 'Copy the code'}
+                                            style={styles.copyButton}
+                                            hitSlop={8}
+                                        >
+                                            <Text style={styles.copyButtonText}>{codeCopied ? '✓ Copied' : 'Copy'}</Text>
+                                        </Pressable>
+                                    </View>
                                     {/* The member taps when they have read the code, rather than the
                                         browser covering it the instant it appears. */}
                                     {/* Above the button, not below it. Android floats a clipboard
@@ -268,6 +274,16 @@ export function SsoEnrolSheet({
                             >
                                 <Text style={styles.secondaryButtonText}>Cancel</Text>
                             </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* No Cancel: the deposit is going ahead and cannot be called back once sent.
+                        Android's back still closes the sheet, and a deposit that lands is still
+                        reported (onEnrolled), because the node has it. */}
+                    {step === 'saving' && (
+                        <View style={styles.centerContent} accessibilityLiveRegion="polite">
+                            <ActivityIndicator size="large" color={colors.brand.primary} />
+                            <Text style={styles.processingText}>Linking your {PROVIDER_NAME} sign-in...</Text>
                         </View>
                     )}
 
@@ -401,10 +417,18 @@ const styles = StyleSheet.create({
         fontVariant: ['tabular-nums'],
         textAlign: 'center',
     },
-    deviceCodeHint: {
-        fontSize: 12,
-        color: colors.text.secondary,
-        marginTop: 8,
+    copyButton: {
+        marginTop: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 22,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: colors.brand.primary,
+    },
+    copyButtonText: {
+        fontSize: 15,
+        fontWeight: 'bold',
+        color: colors.brand.primary,
     },
     deviceCodeEmphasis: {
         fontWeight: 'bold',

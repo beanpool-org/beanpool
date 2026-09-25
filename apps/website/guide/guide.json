@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 28,
-  "hash": "6bc1fabbcab29b63001d65a008b8e291eab411d9504a38d9b8851d8e0bfd85b9",
+  "version": 30,
+  "hash": "3badf1c5f944ae0737f2c9b1efe254443a884e3fa9efddb7155e9112119420dc",
   "sections": [
     {
       "id": "about",
@@ -940,6 +940,10 @@
             "Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.",
             "Or tap **Account Protection**, then **Show My 12 Recovery Words**. Tap **Hide** when you are done."
           ]
+        },
+        {
+          "type": "p",
+          "text": "A phone restored with a sign-in account has no 12 words: they can't be rebuilt from a sign-in. Settings says so instead of showing them. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**."
         },
         {
           "type": "h2",
@@ -4426,7 +4430,7 @@
         {
           "type": "ul",
           "items": [
-            "**Remove from This Device Only:** sign this phone out. Your account stays in your community. You can come back with your 12 words.",
+            "**Remove from This Device Only:** sign this phone out. Your account stays in your community. You can come back with your 12 words, or with a linked sign-in account.",
             "**Permanently Delete Account:** delete your account in this community for good."
           ]
         },
@@ -4449,6 +4453,10 @@
         {
           "type": "p",
           "text": "Your account and every community you saved are removed from this phone. A few settings stay, such as your block list. **Without your 12 words you cannot get back in.** Check you have them first."
+        },
+        {
+          "type": "p",
+          "text": "A phone restored with a sign-in account has no 12 words. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there."
         },
         {
           "type": "h2",
@@ -4532,8 +4540,13 @@
             "Type your name in the community. The app may suggest \"Is this you?\".",
             "Type your community's name or address.",
             "Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone.",
-            "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead."
+            "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.",
+            "With GitHub, the app shows a code and opens GitHub's page, github.com/login/device. The code is already copied: on GitHub, press and hold the first box and choose **Paste**, then approve. Tap **Copy** to copy it again, or **Open GitHub** to get back to the page. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the code and **Cancel** go away and the app finishes getting your account back."
           ]
+        },
+        {
+          "type": "p",
+          "text": "A phone restored this way has no 12 words: they can't be rebuilt from a sign-in. A linked sign-in account is its way back, so keep one linked, and link a second one if you can (see below)."
         },
         {
           "type": "h2",
@@ -4544,8 +4557,17 @@
           "items": [
             "Open **Settings** and tap **Account Protection**.",
             "Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.",
-            "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool."
+            "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.",
+            "With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the app links your account by itself."
           ]
+        },
+        {
+          "type": "p",
+          "text": "This works on a phone restored with a sign-in account too, which has no 12 words."
+        },
+        {
+          "type": "p",
+          "text": "GitHub works only once your community's server has been updated for it. Until then the app says so. Use Google, Apple or your 12 words instead."
         },
         {
           "type": "p",
@@ -4569,7 +4591,7 @@
         },
         {
           "type": "p",
-          "text": "Restoring a different account replaces the one on this phone. The app asks you to type **WIPE** first. Make sure you have the 12 words for the account you are replacing."
+          "text": "Restoring a different account replaces the one on this phone. The app asks you to type **WIPE** first. Make sure you have the 12 words for the account you are replacing. If this phone was restored with a sign-in account, it has no 12 words for that account: without a linked sign-in account, you cannot get it back."
         },
         {
           "type": "h2",

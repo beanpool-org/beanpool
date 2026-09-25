@@ -20,7 +20,23 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   verdicts **pause** the name (tunnel and DNS deleted, the name kept for its key); an `ok` or
   `unverifiable` verdict in an applied sweep ends the run (a suspended sweep changes nothing). Every
   sweep writes one `sweep_log` row, including a count of content-swaps (a 2xx that is no attest at all),
-  which are counted only, never acted on yet.
+  which are counted only, never acted on yet. Then, applied or suspended alike, **upkeep** (not a verdict: it
+  never takes routing away from a live name or routes one that isn't live): a live name whose attest reached no
+  node at all (unreachable, Cloudflare's 530, or its 52x for a proxied address) is checked at Cloudflare, and if its
+  record or tunnel is gone or points elsewhere it is re-made as its row says (event `repaired`; a new tunnel's
+  token reaches the node through `/status`). Nodes never heal a name `/status` calls live, so this is what keeps any ordering of
+  requests from leaving a live name dark. A node merely asleep costs one or two reads; one that answered
+  anything costs none. Deletions Cloudflare refused earlier (`teardown`) are retried.
+
+A tunnel or record the registrar lets go of that Cloudflare refuses to delete is recorded in `teardown`, never
+dropped: another key's take-over of a name, a pause, block or release's record, the record a heal, take-back or
+resume takes back down when its re-attest fails, the old tunnel of a move to a direct address, a failed request's
+tunnel. The sweep retries each one, but not while it is a live name's routing
+(a record at its hostname is the live row's to keep: its repair runs first, and the record stays owed until the
+hostname routes as the row says) or the tunnel an admin pause keeps. A live `bp-<name>` tunnel
+no row records would make Cloudflare refuse every later tunnel for the name (1013), so a claim that meets one
+deletes it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10
+minutes ago. Otherwise the claim answers **503** "cleaning up … try again shortly".
 
 ## Ownership: a name belongs to its node's key
 
@@ -77,7 +93,10 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    deploying the Worker that reads the new columns. The old Worker keeps working on the new schema (a
    `paused` row is just "not revoked" to it). A second run stops at its first ALTER and changes nothing.
    Then `--file migrations/0003_decision_seq.sql` (one column, `decision_seq`: the count of decisions a
-   request in flight must not overwrite). Same rule: before the Worker; a rerun stops at the ALTER.
+   request in flight must not overwrite, and of writes recording Cloudflare work that changed routing). Same rule:
+   before the Worker; a rerun stops at the ALTER.
+   Then `--file migrations/0004_teardown.sql` (one table, `teardown`: deletions Cloudflare refused, which the
+   sweep retries). Before the Worker; a rerun changes nothing.
 3. Deploy the Worker. Until the migrations table is bootstrapped with 0001 marked applied (design PR 4),
    don't use `wrangler d1 migrations apply --remote` — it would run 0001.
 
@@ -117,6 +136,16 @@ npx wrangler deploy
 
 > The Worker attaches to `beanpool.org/api/registrar/*` and `beanpool.org/i/*` via Worker Routes and
 > coexists with the existing Cloudflare Pages static site (Worker routes win for matching paths).
+
+## Tests
+
+`npm test` runs the Worker against an in-memory SQLite loaded with the migrations and a stateful fake of the
+Cloudflare API (`test/harness.js`); no network. It includes a seeded slice of the race fuzz (`test/fuzz.test.js`,
+about 12 s): a request or decision landing at each Cloudflare call of another, at its re-attest, or while the sweep
+settles what is owed, with Cloudflare refusing writes for a while. After Cloudflare recovers and the sweep runs, no key
+but the owner is routed, a paused, blocked, released or pending name routes nothing, a live name routes exactly what
+its row records, and nothing owed is lost. `npm run fuzz` runs the whole matrix (about 35,000 cases, 3½ minutes);
+`FUZZ_CASE='…'` replays one case and prints its trace.
 
 ## Status
 

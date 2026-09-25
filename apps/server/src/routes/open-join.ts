@@ -1,7 +1,7 @@
 /**
  * The open door (global profile, design §2.2): join with a one-time sign-in instead of an invite.
  *
- *   POST /api/join/sso-nonce     → { nonce, expiresInSeconds, providers, githubFlow }   (the same shape as /api/recovery/sso-nonce)
+ *   POST /api/join/sso-nonce     → { nonce, expiresInSeconds, providers, githubFlow, clientIds }   (the same shape as /api/recovery/sso-nonce)
  *   POST /api/join/github/start  → { sessionId, userCode, verificationUri, expiresInSeconds, intervalSeconds }
  *   POST /api/join/github/poll   { sessionId } → { status: pending | ok | denied | expired, … }
  *   POST /api/join               { callsign, provider, idToken, nonce, recovery?: { shares } }
@@ -78,6 +78,7 @@ import {
     SsoVerificationError,
     SsoProviderUnavailableError,
     SSO_PROVIDERS,
+    webClientIds,
     type SsoIdentity,
     type SsoProvider,
 } from '../sso.js';
@@ -229,6 +230,8 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
             expiresInSeconds: 600,
             providers: SSO_PROVIDERS,
             githubFlow: GITHUB_FLOW,
+            // The id a browser puts in its request to each provider it leaves the page for (sso.ts webClientId).
+            clientIds: webClientIds(),
         };
     });
 

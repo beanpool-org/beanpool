@@ -23,10 +23,11 @@ import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
 import { GoogleButton, AppleButton, FacebookButton, GitHubButton, GoogleLogo, AppleLogo, FacebookLogo, GitHubLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
+import { NO_WORDS_WAY_BACK, noWordsBeforeWipe } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
-import { recoverAccountWithSso } from '../utils/sso-recovery';
+import { recoverAccountWithSso, waitingOnGithub } from '../utils/sso-recovery';
 import { returnToApp, type GithubDevicePrompt } from '../utils/sso-signin';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
@@ -159,6 +160,9 @@ export default function WelcomeScreen() {
         return () => { cancelled = true; clearTimeout(t); };
     }, [ssoCallsign, recoveryAnchorUrl]);
     const [recoveryCodeCopied, setRecoveryCodeCopied] = useState(false);
+    /** Stops a GitHub recovery that is waiting on the member at GitHub. */
+    const recoveryAbortRef = useRef<AbortController | null>(null);
+    useEffect(() => () => recoveryAbortRef.current?.abort(), []);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -790,23 +794,29 @@ export default function WelcomeScreen() {
         setSsoProgressMessage('Connecting to recovery session...');
         setRecoveryCode(null);
         setRecoveryCodeCopied(false);
+        recoveryAbortRef.current?.abort();
+        const abort = new AbortController();
+        recoveryAbortRef.current = abort;
         try {
             const result = await recoverAccountWithSso({
                 callsign: trimmedCallsign,
                 anchorUrl: finalAnchorUrl,
                 provider,
-                onProgress: (p) => setSsoProgressMessage(p.message),
+                onProgress: (p) => {
+                    setSsoProgressMessage(p.message);
+                    // Past GitHub the code, Open GitHub and Cancel no longer apply: from the
+                    // release on a cancel can't be honoured. The steps that follow show instead.
+                    if (!waitingOnGithub(p.step)) setRecoveryCode(null);
+                },
                 // GitHub's device flow cannot finish unless the member sees this. Copy it and open
-                // GitHub for them — during recovery there is no sheet with a button, and the code
-                // stays on screen behind the browser via the progress message above.
+                // GitHub for them. The code, a Copy button and a way back to GitHub stay on this
+                // screen behind the browser until GitHub says yes.
                 onDeviceCode: (prompt) => {
                     setRecoveryCode(prompt);
-                    Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
-                        () => setRecoveryCodeCopied(true),
-                        () => setRecoveryCodeCopied(false),
-                    );
+                    copyRecoveryCode(prompt);
                     WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
                 },
+                signal: abort.signal,
             });
             // Same reason the enrolment sheet does it, and the same platform trap: GitHub's
             // confirmation page says nothing about returning, and `dismissBrowser` is iOS-only.
@@ -822,9 +832,19 @@ export default function WelcomeScreen() {
                 setError(e.message || `Recovery failed: ${String(e)}`);
             }
         } finally {
+            if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
             setLoading(false);
             setSsoProgressMessage(null);
+            setRecoveryCode(null);
         }
+    }
+
+    /** Dash stripped: GitHub renders eight separate cells (see SsoEnrolSheet). */
+    function copyRecoveryCode(prompt: GithubDevicePrompt) {
+        Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
+            () => setRecoveryCodeCopied(true),
+            () => setRecoveryCodeCopied(false),
+        );
     }
 
     // --- Copy the OUTGOING account's seed to the clipboard (confirm-replace) ---
@@ -893,7 +913,7 @@ export default function WelcomeScreen() {
     // --- Back-button guard for seed phrase screen ---
     function handleSeedBackPress() {
         Alert.alert(
-            'Have you saved your words?',
+            hasMnemonic(pendingIdentity) ? 'Have you saved your words?' : 'Go back?',
             'If you go back now, you\'ll need to start over.',
             [
                 { text: 'Stay', style: 'cancel' },
@@ -1092,6 +1112,7 @@ export default function WelcomeScreen() {
                     <View style={styles.card}>
                         <KeeperProtectionPanel
                             protection={protection}
+                            hasWords={hasMnemonic(pendingIdentity)}
                             onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                 if (prov) setSsoProvider(prov);
                                 setShowSsoSheet(true);
@@ -1128,8 +1149,12 @@ export default function WelcomeScreen() {
                           meeting somebody who is genuinely protected with a wall of twelve words
                           to copy down teaches them the panel above was noise. Everyone else sees
                           them expanded, because for them the words are the actual answer.
+
+                          A phone restored with a sign-in, joining another community, has no words: the
+                          panel says so in one line, and there is no grid, copy or tickbox for words that
+                          don't exist (the grid would otherwise wait on them forever).
                         */}
-                        {!protection.showWords && !revealWords ? (
+                        {!hasMnemonic(pendingIdentity) ? null : !protection.showWords && !revealWords ? (
                             <Pressable
                                 style={[styles.secondaryBtn, { marginBottom: 4 }]}
                                 onPress={() => setRevealWords(true)}
@@ -1342,12 +1367,18 @@ export default function WelcomeScreen() {
                             {/* Spaced locally rather than by changing guideStyles.cardText,
                                 which has no marginBottom because the other three cards end on
                                 it. This is the only card where it is followed by bullets. */}
-                            <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
-                                Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment by your node administrator.
-                            </Text>
-                            <Text style={guideStyles.bulletItem}>
-                                📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
-                            </Text>
+                            {hasMnemonic(pendingIdentity) ? (
+                                <>
+                                    <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
+                                        Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment by your node administrator.
+                                    </Text>
+                                    <Text style={guideStyles.bulletItem}>
+                                        📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
+                                    </Text>
+                                </>
+                            ) : (
+                                <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>{NO_WORDS_WAY_BACK}</Text>
+                            )}
                             <Text style={guideStyles.bulletItem}>
                                 🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.
                             </Text>
@@ -1660,7 +1691,7 @@ export default function WelcomeScreen() {
                             ) : (
                                 <View style={styles.noSeedWarnBox}>
                                     <Text style={styles.noSeedWarnText}>
-                                        ⚠️ {outCallsign}'s recovery words aren't stored on this phone, so we can't show them here. If you don't already have them written down somewhere, continuing without them will require operator-assisted recovery to regain access to {outCallsign}.
+                                        ⚠️ {noWordsBeforeWipe(outCallsign)}
                                     </Text>
                                 </View>
                             )}
@@ -1933,39 +1964,72 @@ export default function WelcomeScreen() {
                                                 progress line it could not be selected or copied, so it had to be
                                                 written down and retyped — reported from a real recovery. */}
                                             <Text style={{ color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                                Enter this code on GitHub to finish:
-                                            </Text>
-                                            <Pressable
-                                                onPress={() => {
-                                                    Clipboard.setStringAsync(recoveryCode.userCode.replace(/-/g, '')).then(
-                                                        () => setRecoveryCodeCopied(true),
-                                                        () => setRecoveryCodeCopied(false),
-                                                    );
-                                                }}
-                                                accessibilityRole="button"
-                                                accessibilityLabel={recoveryCodeCopied
-                                                    ? `Code ${recoveryCode.userCode.split('').join(' ')}, copied to clipboard. Tap to copy again.`
-                                                    : `Code ${recoveryCode.userCode.split('').join(' ')}. Tap to copy.`}
-                                                style={{
-                                                    marginTop: 14, paddingVertical: 16, paddingHorizontal: 24,
-                                                    borderRadius: 12, borderWidth: 2, borderColor: palette.blue600,
-                                                    backgroundColor: colors.surface.subtle, alignSelf: 'stretch',
-                                                    alignItems: 'center',
-                                                }}
-                                            >
-                                                <Text selectable style={{
-                                                    fontSize: 30, fontWeight: 'bold', letterSpacing: 5,
-                                                    color: colors.text.heading, textAlign: 'center',
-                                                }}>{recoveryCode.userCode}</Text>
-                                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 8 }}>
-                                                    {recoveryCodeCopied ? '✓ copied — tap to copy again' : 'tap to copy'}
+                                                Enter this code at{' '}
+                                                <Text style={{ fontWeight: 'bold', color: colors.text.heading }}>
+                                                    {recoveryCode.verificationUri.replace(/^https:\/\//, '')}
                                                 </Text>
-                                            </Pressable>
+                                                {' '}to finish:
+                                            </Text>
+                                            <View style={{
+                                                marginTop: 14, paddingVertical: 16, paddingHorizontal: 24,
+                                                borderRadius: 12, borderWidth: 2, borderColor: palette.blue600,
+                                                backgroundColor: colors.surface.subtle, alignSelf: 'stretch',
+                                                alignItems: 'center',
+                                            }}>
+                                                {/* One line, shrunk to fit: at 320dp this box is 170dp inside and
+                                                    WDJB-MJHT needs 221dp at 1.0x, 287dp at 1.3x (see SsoEnrolSheet).
+                                                    Android shrinks until it fits; iOS stops at 0.5, which fits any
+                                                    code but an all-M/W one at 1.3x (needs 0.49). */}
+                                                <Text
+                                                    selectable
+                                                    numberOfLines={1}
+                                                    adjustsFontSizeToFit
+                                                    minimumFontScale={0.5}
+                                                    accessibilityLabel={`Code ${recoveryCode.userCode.split('').join(' ')}`}
+                                                    style={{
+                                                        fontSize: 30, fontWeight: 'bold', letterSpacing: 5,
+                                                        color: colors.text.heading, textAlign: 'center',
+                                                    }}
+                                                >{recoveryCode.userCode}</Text>
+                                                <Pressable
+                                                    onPress={() => copyRecoveryCode(recoveryCode)}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={recoveryCodeCopied ? 'Code copied. Copy it again.' : 'Copy the code'}
+                                                    hitSlop={8}
+                                                    style={{
+                                                        marginTop: 10, paddingVertical: 8, paddingHorizontal: 22,
+                                                        borderRadius: 8, borderWidth: 1, borderColor: palette.blue600,
+                                                    }}
+                                                >
+                                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: palette.blue600 }}>
+                                                        {recoveryCodeCopied ? '✓ Copied' : 'Copy'}
+                                                    </Text>
+                                                </Pressable>
+                                            </View>
                                             <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 13, textAlign: 'center' }}>
                                                 On GitHub, press and hold the first box and choose Paste. Tapping the
                                                 clipboard chip above the keyboard fills only one box.
                                             </Text>
+                                            <Pressable
+                                                onPress={() => { WebBrowser.openBrowserAsync(recoveryCode.verificationUri).catch(() => {}); }}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="Open GitHub to enter the code"
+                                                style={[styles.primaryBtn, { marginTop: 14, alignSelf: 'stretch' }]}
+                                            >
+                                                <Text style={styles.primaryBtnText}>Open GitHub →</Text>
+                                            </Pressable>
                                             <ActivityIndicator color={palette.blue600} style={{ marginTop: 14 }} />
+                                            {/* Stops waiting here. The session the node started is
+                                                left to run out on its own: unfinished, it proves nothing. */}
+                                            <Pressable
+                                                onPress={() => recoveryAbortRef.current?.abort()}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="Cancel GitHub recovery"
+                                                hitSlop={8}
+                                                style={{ marginTop: 10, paddingVertical: 12, alignSelf: 'stretch', alignItems: 'center' }}
+                                            >
+                                                <Text style={{ color: colors.text.secondary, fontSize: 16 }}>Cancel</Text>
+                                            </Pressable>
                                         </>
                                     ) : (
                                         <>

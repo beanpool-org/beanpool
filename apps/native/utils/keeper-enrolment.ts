@@ -42,6 +42,7 @@ import {
 import { anchorUrl, signedPost, signedDelete } from './node-post';
 import { hexToBytes } from './crypto';
 import type { BeanPoolIdentity } from './identity';
+import type { SsoProvider } from './sso-signin';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,18 +109,21 @@ export async function enrolKeepers(_identity: BeanPoolIdentity): Promise<KeeperE
 // SSO-tier enrolment — called from the sign-in flow (not at signup)
 // ---------------------------------------------------------------------------
 
-export interface SsoEnrolmentInput {
+interface SsoEnrolmentBase {
     /** The identity of the member being enrolled. */
     identity: BeanPoolIdentity;
-    /** The SSO provider name, e.g. 'google' or 'apple'. */
-    provider: string;
-    /** The `sub` claim from the provider's id_token, used to derive the sealing key. */
+    /** The provider's subject (user id), used to derive the sealing key. */
     sub: string;
-    /** The provider's `id_token` from the client. */
-    idToken: string;
-    /** The nonce issued by the node for this sign-in. */
-    nonce: string;
 }
+
+/**
+ * What the deposit proves the sign-in with. Apple, Google and Facebook: the provider's `id_token` and
+ * the node's nonce inside it. GitHub: the node's own finished sign-in session (`proof: { sessionId }`),
+ * because a GitHub token proves nothing a node can check — never a token.
+ */
+export type SsoEnrolmentInput =
+    | SsoEnrolmentBase & { provider: Exclude<SsoProvider, 'github'>; idToken: string; nonce: string }
+    | SsoEnrolmentBase & { provider: 'github'; proof: { sessionId: string } };
 
 /**
  * Seal the member's entire seed into a single device-encrypted AEAD blob under
@@ -133,7 +137,7 @@ export interface SsoEnrolmentInput {
  * of the keeper enrolment module.
  */
 export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEnrolmentResult> {
-    const { identity, provider, sub, idToken, nonce } = input;
+    const { identity, provider, sub } = input;
     const skipped: { keeper: string; reason: string }[] = [];
     const nothing = (error: string): KeeperEnrolmentResult => {
         // Logged, not just returned: every enrolment failure to date has been invisible in
@@ -142,11 +146,22 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         return { enrolled: [], generation: null, skipped, available: 0, error };
     };
 
-    const words = identity.mnemonic;
-    if (!words || words.length === 0) {
-        return nothing('this identity has no recovery words to split');
+    // Checked here as well as by the type: a GitHub deposit that carries a token rather than the
+    // node's session is exactly the credential the node must not be handed, so it is not sent.
+    let credential: { idToken: string; nonce: string } | { proof: { sessionId: string } };
+    if (input.provider === 'github') {
+        const sessionId = input.proof?.sessionId;
+        if (typeof sessionId !== 'string' || !sessionId) {
+            return nothing('GitHub is connected through your community\'s server, and this sign-in did not come from it');
+        }
+        credential = { proof: { sessionId } };
+    } else {
+        credential = { idToken: input.idToken, nonce: input.nonce };
     }
 
+    // No check for the 12 words: the deposit seals the private key, never the words. A phone restored
+    // with a sign-in holds no words (sso-recovery.ts can't rebuild them from the seed), and it belongs
+    // to exactly the member who most needs a connected sign-in.
     const url = await anchorUrl();
     if (!url) return nothing('no node configured yet');
 
@@ -179,8 +194,7 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         const res = await signedPost(url, '/api/recovery/shares/sso', {
             provider,
             shares,
-            idToken,
-            nonce,
+            ...credential,
         }, identity);
         console.log(`[KEEPER] ${provider}: deposit responded ${res.status}`);
         if (!res.ok) {

@@ -62,6 +62,7 @@ import {
     SsoVerificationError,
     SSO_PROVIDERS,
     isSsoProvider,
+    webClientIds,
     type SsoProvider,
 } from '../sso.js';
 import type { RouteDeps } from './types.js';
@@ -280,6 +281,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             expiresInSeconds: 600,
             providers: SSO_PROVIDERS,
             githubFlow: GITHUB_FLOW,
+            // The id a browser puts in its request to each provider it leaves the page for (sso.ts webClientId).
+            clientIds: webClientIds(),
         };
     });
 

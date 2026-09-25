@@ -170,8 +170,10 @@ import {
     getInvitesByMember as getInvitesByMemberEngine,
     getInviteTree as getInviteTreeEngine,
     getProfile as getProfileEngine,
-    getProfiles as getProfilesEngine,
     getAllProfiles as getAllProfilesEngine,
+    contactVisibleTo,
+    ownersWhoAddedAsFriend as ownersWhoAddedAsFriendEngine,
+    publicMemberCard,
     rowToMember,
     rowToProfile,
     type Member,
@@ -328,6 +330,7 @@ import {
     getEventThread as getEventThreadEngine,
     postEventThreadMessage as postEventThreadMessageEngine,
     removeEventThreadMessage as removeEventThreadMessageEngine,
+    chatHiddenFrom,
     type EventThreadMessage,
     type EventThreadView
 } from './engine/event-thread.js';
@@ -1194,12 +1197,16 @@ export function getProfile(publicKey: string, requesterPubkey?: string): MemberP
     return getProfileEngine(db, publicKey, requesterPubkey);
 }
 
-export function getProfiles(): Record<string, MemberProfile> {
-    return getProfilesEngine(db);
-}
-
 export function getAllProfiles(requesterPubkey?: string): MemberProfile[] {
     return getAllProfilesEngine(db, requesterPubkey);
+}
+
+// Who may see a member's contact details: THE rule, shared by the profile page and every list that sends member
+// rows (see contactVisibleTo in the engine). A route never decides it itself.
+export { contactVisibleTo, publicMemberCard };
+
+export function ownersWhoAddedAsFriend(viewerPubkey: string | null | undefined): Set<string> {
+    return ownersWhoAddedAsFriendEngine(db, viewerPubkey);
 }
 
 export function updateProfile(publicKey: string, update: any): MemberProfile | null {
@@ -5096,6 +5103,21 @@ export function getUnreadCounts(pubkey: string): Record<string, number> {
     return getUnreadCountsEngine(db, pubkey);
 }
 
+/**
+ * A member's unread counts over the chats their conversation list shows: an event's chat is left out while the event
+ * is hidden from them by reports (G3, chatHiddenFrom). GET /api/messages/conversations and the badge every push
+ * carries both read this, so the number on the app icon is always one the member can open and clear.
+ */
+export function getListedUnreadCounts(pubkey: string): Record<string, number> {
+    const counts = getUnreadCounts(pubkey);
+    const typeOf = db.prepare('SELECT type FROM conversations WHERE id = ?');
+    for (const id of Object.keys(counts)) {
+        const conv = typeOf.get(id) as { type: string } | undefined;
+        if (conv && chatHiddenFrom({ id, type: conv.type }, pubkey)) delete counts[id];
+    }
+    return counts;
+}
+
 export function ensureTransactionConversation(postId: string, buyerPubkey: string, sellerPubkey: string): string {
     return ensureTransactionConversationEngine(getMessagingCb(), postId, buyerPubkey, sellerPubkey);
 }
@@ -6141,7 +6163,8 @@ export function createTreasury(
     clearEnterpriseFloorCache(pubKeyHex);
     ledger.initializeGenesisAccount(pubKeyHex);
     ledger.setDecayExempt(pubKeyHex);
-    broadcast({ type: 'member_joined', member: getMember(pubKeyHex) });
+    // The card, never the whole row: every member socket gets this (engine/members.ts registerMemberInternal).
+    broadcast({ type: 'member_joined', member: publicMemberCard(getMember(pubKeyHex)!) });
     broadcast({ type: 'treasury_created', publicKey: pubKeyHex, name: trimmed });
     console.log(`🏛️ Treasury created: "${trimmed}" (${pubKeyHex.substring(0, 12)}…) creditLine=${line}`);
     return { publicKey: pubKeyHex };
@@ -7292,8 +7315,8 @@ export function dispatchPushNotification(
         const tokens = getPushTokens(pk);
         if (tokens.length === 0) continue;
 
-        // Calculate total unread count for badge
-        const unreadCounts = getUnreadCounts(pk);
+        // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
+        const unreadCounts = getListedUnreadCounts(pk);
         const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
 
         for (const { token, platform } of tokens) {

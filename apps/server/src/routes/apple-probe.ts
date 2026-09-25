@@ -39,6 +39,7 @@
 
 import Router from '@koa/router';
 import type Koa from 'koa';
+import { useDocumentPolicy } from '../app-document-csp.js';
 
 /** Apple's POST callback is small; anything larger is not from Apple. */
 const MAX_CALLBACK_BYTES = 16 * 1024;
@@ -158,6 +159,7 @@ export function createAppleProbeRoutes(): Router {
     }
 
     router.get('/apple-probe', async (ctx: Koa.Context) => {
+        useDocumentPolicy(ctx); // an inline script of its own; the web app's policy is the default (app-document-csp.ts)
         // Host is client-controlled and lands inside a <script> block below, so it is validated
         // here as well as escaped there. An unusable Host yields no redirect URI rather than a
         // sanitised guess: the value has to match what is registered on the Services ID exactly,
@@ -200,6 +202,7 @@ derive keys from <code>sub</code>. Different means it cannot.</p>
     });
 
     router.post('/apple-probe', async (ctx: Koa.Context) => {
+        useDocumentPolicy(ctx);
         let raw = '';
         try {
             raw = await readRawBody(ctx.req);

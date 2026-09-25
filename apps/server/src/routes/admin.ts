@@ -626,8 +626,14 @@ router.post('/api/local/admin/data', async (ctx) => {
             // the granted lane (it leaves out earned trade and vouches), and vouching is a capability
             // shown by canVouch, not a tier.
             const tier = getMemberTrustProfile(m.publicKey).tier.name;
+            // An admin sees no more of a member's contact details than any member does: the choice reads "Hidden —
+            // only you can see it", and the manager never shows them. `profiles` below carries them by the same rule
+            // as the profile page (contactVisibleTo, no viewer). The rest of the row stays: the manager draws the
+            // invite tree, pruning and roles from it.
+            const { contactValue, contactVisibility, ...row } = m;
+            void contactValue; void contactVisibility;
             return {
-                ...m,
+                ...row,
                 // Admins see the day too: a node admin could otherwise match secret-ballot votes to voters.
                 lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
                 tier,
@@ -947,9 +953,10 @@ function isModeratorsOwn(ctx: any, pubkey: string | null | undefined): boolean {
 }
 
 /**
- * A moderator can't undo what members did about their own post, or one by an enterprise they keep, by restoring it or
- * by dismissing a report on it (a dismissal un-hides it once the rest no longer add up), as they can't lift their own
- * mute: that is for another moderator, an admin or an owner. Refuses 403 and returns true when so.
+ * A moderator can't undo what members did about their own post, or one by an enterprise they keep, by restoring it, by
+ * dismissing a report on it (a dismissal un-hides it once the rest no longer add up), or by closing a report on it
+ * without taking it down (a closed report no longer counts towards a hide), as they can't lift their own mute: that is
+ * for another moderator, an admin or an owner. Refuses 403 and returns true when so.
  */
 function refuseModeratorsOwnPost(ctx: any, postId: string | null | undefined, doing: string): boolean {
     if (!postId) return false;
@@ -1252,11 +1259,17 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
         }
+        const report = db.prepare('SELECT status, target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
+            { status: string | null; target_post_id: string | null } | undefined;
+        // Closing a report on a moderator's own post, or one by an enterprise they keep, without taking the post down
+        // is a dismissal by another name (G3): a closed report no longer counts towards the 3 that hide it, and its
+        // reporter hears nothing. Refused as restore and dismiss are. A Pulse removal takes nothing off a post, so only
+        // `deletePost` lets it through; taking their own post down stays theirs to do, since it only counts against them.
+        if (!deletePost && refuseModeratorsOwnPost(ctx, report?.target_post_id, 'close a report on')) return;
         // A moderator removes a post or Pulse item only through a report that is still open, as on
         // posts/:id/delete: once dismissed ('reviewed') or actioned, only an owner or admin can take it down.
-        // Marking a report handled with no removal is not gated.
+        // Marking a report handled with no removal is not gated otherwise.
         if ((deletePost || removePulseItem) && (ctx.state as any)?.adminRole === 'moderator') {
-            const report = db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(ctx.params.id) as any;
             if (report && report.status !== 'pending' && report.status != null) {
                 ctx.status = 403;
                 ctx.body = { success: false, error: 'Moderators can remove a post only while a report on it is open' };

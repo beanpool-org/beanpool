@@ -6,6 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { isSelfAvatarUrl } from '@beanpool/core';
+import { registerGeoFunctions } from '@beanpool/engine';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,6 +22,9 @@ const STATE_BACKUP_PATH = path.join(DATA_DIR, `state.backup-${Date.now()}.json`)
 
 // Initialize Database connection
 export const db: Database.Database = new Database(DB_PATH);
+// `haversine_km`, for the posts listing searched by distance (G4). A function lives on the connection, not in the file,
+// and this is the one connection that runs the listing; the read-only handles opened on backups and snapshots never do.
+registerGeoFunctions(db);
 
 const pendingPostCommitHooks: (() => void)[] = [];
 
@@ -468,6 +472,11 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN hidden_by_reports_at TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN removed_by_moderator_at TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
+    // A person's coarse area (G4, engine/member-area.ts). Before the schema.sql exec, whose members_touch_updated_at
+    // (dropped below, so the exec recreates it) lists all three. NULL on every existing row: nobody has an area.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN area_lat REAL CHECK (area_lat IS NULL OR (area_lat >= -90 AND area_lat <= 90))`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN area_lng REAL CHECK (area_lng IS NULL OR (area_lng >= -180 AND area_lng <= 180))`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN area_updated_at TEXT`).run(); } catch { }
     // Per-person reminders for one event (docs/events-on-the-map.md §2.1). Here with the other event
     // columns and BEFORE the schema.sql exec, for the same reason they are: schema.sql indexes
     // event_rsvps, and a CREATE INDEX that runs against a table the exec has already refused to re-shape

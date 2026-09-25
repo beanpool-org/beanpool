@@ -75,6 +75,14 @@ CREATE TABLE IF NOT EXISTS members (
     -- removals after it count towards the next mute. Its writers set updated_at themselves, and it is in
     -- members_touch_updated_at's list for any that doesn't, so delta sync always carries a mute and its lift.
     moderation_muted_until TEXT,
+    -- A person's coarse area (global node G4, design §3.2): opt-in, set and cleared only by the member's own signed
+    -- request (POST /api/community/me/area). Rounded to 0.1° (about 10 km) BEFORE it is written, so a precise position
+    -- never reaches the disk. Only its member reads it back; everyone else gets a distance in whole km from the People
+    -- list. Deliberately NOT lat/lng above, which are an enterprise's public, precise map location. NULL: no area.
+    -- In members_touch_updated_at's list, so delta sync carries it to a standby.
+    area_lat REAL CHECK (area_lat IS NULL OR (area_lat >= -90 AND area_lat <= 90)),
+    area_lng REAL CHECK (area_lng IS NULL OR (area_lng >= -180 AND area_lng <= 180)),
+    area_updated_at TEXT,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -208,6 +216,8 @@ CREATE TABLE IF NOT EXISTS posts (
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_hidden_by_reports ON posts(hidden_by_reports_at) WHERE hidden_by_reports_at IS NOT NULL;
+-- Distance search (G4): the box a radius query searches before the exact distance (beanpool-engine geo.ts, posts.ts).
+CREATE INDEX IF NOT EXISTS idx_posts_lat_lng ON posts(lat, lng);
 -- Auto-mute's count of one author's recent moderator removals (engine/auto-moderation.ts REMOVALS_SINCE_SQL).
 CREATE INDEX IF NOT EXISTS idx_posts_author_removed ON posts(author_pubkey, removed_by_moderator_at) WHERE removed_by_moderator_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_audience_scope ON posts(audience_scope);
@@ -716,7 +726,8 @@ AFTER UPDATE OF
     purpose, goal_amount, deadline_at, lifecycle, paused,
     paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
     lat, lng, location_auth_signer, auth_signer, location_updated_at,
-    moderation_muted_until
+    moderation_muted_until,
+    area_lat, area_lng, area_updated_at
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

@@ -38,6 +38,13 @@ export interface Member {
      * replication export only (a standby and a take-over keep it); never in the member directory.
      */
     moderationMutedUntil?: string | null;
+    /**
+     * A person's coarse area (global node G4): 0.1° steps, set by the member alone. Carried by the replication export
+     * only (a standby and a take-over keep it); never in the member directory, a profile or anything a peer reads.
+     */
+    areaLat?: number | null;
+    areaLng?: number | null;
+    areaUpdatedAt?: string | null;
 }
 
 export interface InviteCode {

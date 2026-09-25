@@ -11,6 +11,7 @@ import {
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
 import { avatarUrlFor } from '@beanpool/core';
+import { boundingBox } from './geo.js';
 
 type Db = Database.Database;
 
@@ -109,6 +110,11 @@ export interface MarketplacePost {
     hiddenByReportsAt?: string | null;
     /** A moderator took it down (G3). Carried by the replication export only. */
     removedByModeratorAt?: string | null;
+    /**
+     * Great-circle km from the point the reader gave (`PostFilter.near`), to 0.1 km; null for a post with no place.
+     * Absent when no point was given (G4).
+     */
+    distanceKm?: number | null;
 }
 
 export interface PostFilter {
@@ -142,6 +148,17 @@ export interface PostFilter {
      * marked `hiddenByReportsAt`. Without it only their author gets them. `includeAllScopes` includes them too.
      */
     includeHidden?: boolean;
+    /**
+     * Distance search (global node G4, design §3.2). Every post read carries `distanceKm` from this point. With
+     * `radiusKm`, only posts within it (great-circle) are read, and a post with no place is left out. Every other filter
+     * applies as without it.
+     */
+    near?: { lat: number; lng: number; radiusKm?: number };
+    /**
+     * Nearest first (needs `near`): posts with no place last, then most recently updated first among equals. Without
+     * it, the usual most-recently-updated order.
+     */
+    sortByDistance?: boolean;
 }
 
 /** An ended event stays readable by id to its host and Going for this long; after that, to nobody. */
@@ -357,9 +374,13 @@ export function liveOfferCount(db: Db, publicKey: string): number {
 }
 
 export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
+    // `haversine_km` is registered on the connection (geo.ts registerGeoFunctions); asked only when a point is given, so
+    // every read without one runs exactly the query it always has.
+    const near = filter?.near;
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
-               g.name as target_group_name,
+               g.name as target_group_name,${near ? `
+               haversine_km(?, ?, p.lat, p.lng) AS distance_km,` : ''}
                COALESCE(m.earned_credit, 0) as author_earned_credit,
                (
                  COALESCE((SELECT COUNT(*) FROM transactions t
@@ -377,7 +398,7 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         LEFT JOIN groups g ON p.target_group_id = g.id
         WHERE 1=1
     `;
-    const params: any[] = [];
+    const params: any[] = near ? [near.lat, near.lng] : [];
 
     if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
@@ -495,7 +516,21 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         params.push(filter.updatedAfter);
     }
 
-    query += " ORDER BY p.updated_at DESC, p.created_at DESC";
+    // Within a radius: a box on posts(lat, lng) that idx_posts_lat_lng answers, split in two across the antimeridian and
+    // every longitude around a pole (geo.ts boundingBox), then the exact great-circle distance. A post with no place
+    // fails BETWEEN, so it is never in a radius query.
+    if (near && near.radiusKm !== undefined) {
+        const box = boundingBox(near.lat, near.lng, near.radiusKm);
+        query += ` AND p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
+        params.push(box.latMin, box.latMax, ...box.lngRanges.flat());
+        query += " AND haversine_km(?, ?, p.lat, p.lng) <= ?";
+        params.push(near.lat, near.lng, near.radiusKm);
+    }
+
+    // Nearest first ends on p.id, so the order is total and limit/offset pages it without repeats or gaps.
+    query += near && filter?.sortByDistance
+        ? " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, p.created_at DESC, p.id ASC"
+        : " ORDER BY p.updated_at DESC, p.created_at DESC";
     
     if (filter?.limit) {
         query += " LIMIT ? OFFSET ?";
@@ -577,10 +612,12 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         const post = rowToPost(db, r, photosByPost);
         if (hiddenFromViewer && r.hidden_by_reports_at && r.author_pubkey !== viewer) {
             // Only a sync read gets this far with a hidden post it may not see (the SQL above left it out otherwise).
+            // A removal says nothing of where the post was, so it carries no distance either.
             out.push(hiddenAsRemoved(post));
             continue;
         }
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
+        if (near) post.distanceKm = typeof r.distance_km === 'number' ? Math.round(r.distance_km * 10) / 10 : null;
 
         if (post.type === 'event') {
             const rsvps = rsvpsByPost.get(post.id) || [];

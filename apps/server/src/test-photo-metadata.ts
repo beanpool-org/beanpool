@@ -7,8 +7,10 @@
  *
  * Part 1 — the strip itself, on real images built here byte by byte: a clean image with every kind of metadata
  * spliced in, which must come back as exactly the clean image (plus a 26-byte orientation block for the JPEG).
- * Truncated at every length, and fuzzed with bit flips: never a throw, never a byte more, and a file that does
- * not parse to its end comes back exactly as given.
+ * Truncated at every length, and fuzzed with bit flips: never a throw, never a byte more. A JPEG is read the way
+ * libjpeg reads it — extraneous bytes between segments skipped, the end of the data after a scan read as EOI — so the
+ * two defects decoders accept in a camera file are stripped like any other; anything else that does not parse to
+ * its end comes back exactly as given, and a node refuses to store it (isStorableImageValue).
  *
  * Part 2 — over a real HTTPS round trip, signed as a member: each upload route, read back through the route
  * that serves it (post photos, events, avatars, enterprises, crowdfund projects, groups, and the operator's
@@ -16,7 +18,9 @@
  * image's. A member's photo is also read back the way other members see it: every route that hands out the
  * stored value (group, group members, profile) and every one that turns it into an avatar address (the group and
  * event chats). A photo in a format the strip does not know (a HEIC, GPS inside) is refused on every one of those
- * routes rather than stored with its GPS: with a data: prefix, as bare base64, or labelled image/jpeg.
+ * routes rather than stored with its GPS: with a data: prefix, as bare base64, or labelled image/jpeg. So is a JPEG
+ * the walk cannot read. A camera JPEG with extraneous bytes or no EOI goes through a profile, a post and an
+ * enterprise stripped, and a pricing-guide item read back with the aggregator's photo link saves with it.
  *
  * "Still decodes" is checked structurally: every result is compared byte for byte with the clean image, which
  * libvips drew, and a PNG's CRCs and inflated pixels are checked on their own.
@@ -36,6 +40,7 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { runPricingAggregationCycle } from './pricing-aggregator.js';
 
 const PORT = 8757;
 const BASE = `https://localhost:${PORT}`;
@@ -189,6 +194,23 @@ const CAMERA_PROGRESSIVE_JPEG = Buffer.concat([
     SOI, exifApp1(false, 1), CLEAN_PROGRESSIVE_JPEG.subarray(2, -2), COMMENT, EOI,
 ]);
 
+/**
+ * The two defects in a camera JPEG that decoders accept (#1148 review): bytes between two segments (libjpeg: "2
+ * extraneous bytes before marker 0xe1"), and no EOI after the scan (a file cut short). Pillow and macOS ImageIO read
+ * both, and until the walk read them the way libjpeg does, both were stored and served with their EXIF GPS.
+ */
+const PADDED_CAMERA_JPEG = Buffer.concat([
+    SOI, JFIF_WITH_THUMBNAIL, exifApp1(true, 6), Buffer.from([0x00, 0x00]), XMP_APP1, IPTC_APP13, COMMENT, MPF_APP2,
+    CLEAN_JPEG.subarray(2), MPF_SECOND_IMAGE,
+]);
+const CAMERA_JPEG_NO_EOI = Buffer.concat([
+    SOI, JFIF_WITH_THUMBNAIL, exifApp1(true, 6), XMP_APP1, IPTC_APP13, COMMENT, MPF_APP2, CLEAN_JPEG.subarray(2, -2),
+]);
+/** Stripped, a file with no EOI still has none: its scan is kept to the last byte and nothing is added. */
+const CAMERA_JPEG_NO_EOI_STRIPPED = CAMERA_JPEG_STRIPPED.subarray(0, -2);
+/** A camera JPEG whose structure no decoder reads (a second SOI after its EXIF): the node cannot strip it, so refuses it. */
+const UNWALKABLE_CAMERA_JPEG = Buffer.concat([SOI, exifApp1(true, 6), SOI, CLEAN_JPEG.subarray(2)]);
+
 // PNG pieces.
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
     let c = n;
@@ -270,6 +292,13 @@ function leak(bytes: Buffer): string | null {
     return null;
 }
 
+/** Where a well-formed JPEG's first scan data begins: just past its first SOS segment, found by segment lengths. */
+function firstScanData(jpeg: Buffer): number {
+    let pos = 2;
+    while (jpeg[pos + 1] !== 0xda) pos += 2 + jpeg.readUInt16BE(pos + 2);
+    return pos + 2 + jpeg.readUInt16BE(pos + 2);
+}
+
 /** A PNG decoded without help: every chunk's CRC checks and the IDAT data inflates to the pixels we drew. */
 function pngDecodes(bytes: Buffer): boolean {
     if (!bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return false;
@@ -342,7 +371,7 @@ async function partOne(m: StripModule): Promise<void> {
         assert(strip(out) === out, `${name}: stripping twice changes nothing (idempotent)`);
     }
 
-    console.log('\n── 1c. Truncated at every length: no throw, no growth, and unchanged until the end marker ──');
+    console.log('\n── 1c. Truncated at every length: no throw, no growth; a JPEG cut short once its scan has begun is stripped ──');
     const ends: Array<[string, Buffer, number]> = [
         ['JPEG', CAMERA_JPEG, CAMERA_JPEG.length - MPF_SECOND_IMAGE.length],
         ['progressive JPEG', CAMERA_PROGRESSIVE_JPEG, CAMERA_PROGRESSIVE_JPEG.length],
@@ -350,14 +379,35 @@ async function partOne(m: StripModule): Promise<void> {
         ['WebP', CAMERA_WEBP, CAMERA_WEBP.length],
         ['GIF', CAMERA_GIF, CAMERA_GIF.length],
     ];
+    // libjpeg reads the end of the data as EOI, so a JPEG cut short after its first scan has begun is a picture, and it
+    // comes back as the stripped file's first n − (metadata before the picture) bytes: every picture byte it had,
+    // nothing added. Less any trailing 0xFF, which begins a marker whose code was cut off (or is a stuffed 0xFF whose
+    // 0x00 was): a decoder reads it as fill before the end. Cut before the scan, it holds no picture: unchanged.
+    const cutJpeg: Record<string, { scan: number; stripped: Buffer; removed: number; pictureEnd: number }> = {
+        'JPEG': {
+            scan: firstScanData(CAMERA_JPEG), stripped: CAMERA_JPEG_STRIPPED,
+            removed: CAMERA_JPEG.length - MPF_SECOND_IMAGE.length - CAMERA_JPEG_STRIPPED.length, pictureEnd: CAMERA_JPEG_STRIPPED.length,
+        },
+        'progressive JPEG': {
+            // Its comment comes after the last scan, so what a cut there keeps is the picture up to (not including) EOI.
+            scan: firstScanData(CAMERA_PROGRESSIVE_JPEG), stripped: CLEAN_PROGRESSIVE_JPEG,
+            removed: exifApp1(false, 1).length, pictureEnd: CLEAN_PROGRESSIVE_JPEG.length - 2,
+        },
+    };
     for (const [name, file, endMarkerEnd] of ends) {
+        const jpeg = cutJpeg[name];
         let bad = '';
         for (let n = 0; n < file.length && !bad; n++) {
             const prefix = Buffer.from(file.subarray(0, n));
             let out: Buffer;
             try { out = strip(prefix); } catch (e) { bad = `threw at ${n}: ${e}`; break; }
             if (out.length > prefix.length) bad = `grew at ${n}`;
-            else if (n < endMarkerEnd && out !== prefix) bad = `changed a file cut before its end marker, at ${n}`;
+            else if (jpeg && n >= jpeg.scan) {
+                let want = jpeg.stripped.subarray(0, Math.min(n - jpeg.removed, jpeg.pictureEnd));
+                while (want.length > 0 && want[want.length - 1] === 0xff) want = want.subarray(0, -1);
+                if (!out.equals(want)) bad = `a cut after the scan began, at ${n}, is not the stripped picture so far (${out.length} bytes, ${want.length} expected)`;
+                else if (leak(out) !== null) bad = `a cut at ${n} kept ${leak(out)}`;
+            } else if (n < endMarkerEnd && out !== prefix) bad = `changed a file cut before its ${jpeg ? 'scan' : 'end marker'}, at ${n}`;
         }
         assert(bad === '', `${name}: all ${file.length} truncations${bad ? ` — ${bad}` : ''}`);
     }
@@ -401,8 +451,7 @@ async function partOne(m: StripModule): Promise<void> {
     exact('JPEG: a segment length of 1', Buffer.concat([SOI, Buffer.from([0xff, 0xe1, 0x00, 0x01]), COMMENT, CLEAN_JPEG.subarray(2)]));
     exact('JPEG: a segment that claims more bytes than the file has', Buffer.concat([SOI, COMMENT, Buffer.from([0xff, 0xe1, 0xff, 0xff, 0x00])]));
     exact('JPEG: a second SOI where a segment should be', Buffer.concat([SOI, COMMENT, SOI, CLEAN_JPEG.subarray(2)]));
-    exact('JPEG: a data byte where a marker should be', Buffer.concat([SOI, COMMENT, Buffer.from([0x00]), CLEAN_JPEG.subarray(2)]));
-    exact('JPEG: no EOI (the scan runs off the end)', Buffer.concat([SOI, exifApp1(true, 6), CLEAN_JPEG.subarray(2, -2)]));
+    exact('JPEG: a marker code T.81 reserves (0xF7, JPEG-LS), which libjpeg refuses', Buffer.concat([SOI, COMMENT, Buffer.from([0xff, 0xf7, 0x00, 0x04, 0x00, 0x00]), CLEAN_JPEG.subarray(2)]));
     exact('PNG: a chunk type that is not four letters', Buffer.concat([PNG_SIGNATURE, IHDR, chunk('tE1t', Buffer.from(CANARY)), IDAT, IEND]));
     exact('PNG: a chunk length of 2^32-1', Buffer.concat([PNG_SIGNATURE, IHDR, Buffer.from([0xff, 0xff, 0xff, 0xff]), Buffer.from('tEXt', 'latin1'), IDAT, IEND]));
     exact('PNG: no IEND', Buffer.concat([PNG_SIGNATURE, IHDR, chunk('tEXt', Buffer.from(CANARY)), IDAT]));
@@ -448,6 +497,76 @@ async function partOne(m: StripModule): Promise<void> {
         assert(stripImageValue(v) === v, `left exactly as given: ${JSON.stringify(v)}`);
     }
     assert((stripImageValue as (v: unknown) => unknown)({ not: 'a string' }) !== undefined, 'a non-string value passes through');
+
+    console.log('\n── 1h. The two defects decoders accept: read the way libjpeg reads them, and stripped ──');
+    const padded = strip(PADDED_CAMERA_JPEG);
+    assert(padded.equals(CAMERA_JPEG_STRIPPED),
+        'JPEG with two extraneous bytes after its Exif segment: every metadata block goes, the extraneous bytes too, and every picture byte stays');
+    assert(leak(padded) === null, `padded JPEG: no canary and no GPS coordinate survives (${leak(padded) ?? 'clean'})`);
+    const noEoi = strip(CAMERA_JPEG_NO_EOI);
+    assert(noEoi.equals(CAMERA_JPEG_NO_EOI_STRIPPED),
+        'JPEG with no EOI after its scan: every metadata block goes, the scan is kept to its last byte and nothing is added');
+    assert(leak(noEoi) === null, `JPEG with no EOI: no canary and no GPS coordinate survives (${leak(noEoi) ?? 'clean'})`);
+    assert(stripImageValue(dataUrl('image/jpeg', PADDED_CAMERA_JPEG)) === dataUrl('image/jpeg', CAMERA_JPEG_STRIPPED)
+        && stripImageValue(CAMERA_JPEG_NO_EOI.toString('base64')) === CAMERA_JPEG_NO_EOI_STRIPPED.toString('base64'),
+        'the same, as a data URL and as bare base64');
+    // These two were "returned as given" (1e) before the walk read JPEGs the way libjpeg does.
+    assert(strip(Buffer.concat([SOI, COMMENT, Buffer.from([0x00]), CLEAN_JPEG.subarray(2)])).equals(CLEAN_JPEG),
+        'JPEG: a data byte where a marker should be is skipped, as libjpeg skips it, and the comment before it goes');
+    assert(strip(Buffer.concat([SOI, exifApp1(true, 6), CLEAN_JPEG.subarray(2, -2)])).equals(Buffer.concat([SOI, ORIENTATION_6_ONLY, CLEAN_JPEG.subarray(2, -2)])),
+        'JPEG: no EOI (the scan runs off the end): the Exif goes, its orientation stays, the scan is kept to its last byte');
+    // libjpeg's next_marker also skips a stuffed 0xFF00 outside a scan, and any fill bytes before the marker it finds.
+    assert(strip(Buffer.concat([SOI, exifApp1(true, 6), Buffer.from([0x12, 0xff, 0x00, 0x34, 0xff, 0xff]), CLEAN_JPEG.subarray(2)]))
+        .equals(Buffer.concat([SOI, ORIENTATION_6_ONLY, Buffer.from([0xff, 0xff]), CLEAN_JPEG.subarray(2)])),
+        'JPEG: extraneous bytes with a stuffed 0xFF00 among them are skipped; fill bytes before the next marker stay with it');
+    {
+        // Between two scans of a progressive file, after a table: where libjpeg's warning usually points.
+        const tables = CLEAN_PROGRESSIVE_JPEG.indexOf(Buffer.from([0xff, 0xc4]), firstScanData(CLEAN_PROGRESSIVE_JPEG));
+        const dht = CLEAN_PROGRESSIVE_JPEG.subarray(tables, tables + 2 + CLEAN_PROGRESSIVE_JPEG.readUInt16BE(tables + 2));
+        const at = tables + dht.length;
+        const junky = Buffer.concat([SOI, exifApp1(false, 1), CLEAN_PROGRESSIVE_JPEG.subarray(2, at), Buffer.from([0, 0, 0]), CLEAN_PROGRESSIVE_JPEG.subarray(at)]);
+        assert(strip(junky).equals(CLEAN_PROGRESSIVE_JPEG), 'progressive JPEG: extraneous bytes after a table between two scans are skipped, every scan byte kept');
+    }
+
+    console.log('\n── 1i. What a node refuses rather than store with its metadata ──');
+    // Absent before this check existed, when every value was stored: read as "storable" so the suite still runs there.
+    const storable = (v: unknown): boolean => typeof m.isStorableImageValue !== 'function' || m.isStorableImageValue(v);
+    const cutInsideIcc = CAMERA_JPEG.subarray(0, CAMERA_JPEG.indexOf(CLEAN_JPEG.subarray(2)) + 100);
+    for (const [name, bytes] of [
+        ['JPEG: a second SOI after its Exif', UNWALKABLE_CAMERA_JPEG],
+        ['JPEG: a segment length of 1 after its Exif', Buffer.concat([SOI, exifApp1(true, 6), Buffer.from([0xff, 0xe1, 0x00, 0x01]), CLEAN_JPEG.subarray(2)])],
+        ['JPEG: a reserved marker code after its Exif', Buffer.concat([SOI, exifApp1(true, 6), Buffer.from([0xff, 0xf7, 0x00, 0x04, 0x00, 0x00]), CLEAN_JPEG.subarray(2)])],
+        ['JPEG: no scan at all, nothing but metadata', Buffer.concat([SOI, exifApp1(true, 6), COMMENT, EOI])],
+        ['JPEG: cut short before its scan, Exif and all', cutInsideIcc],
+        ['PNG: no IEND, a tEXt inside', Buffer.concat([PNG_SIGNATURE, IHDR, chunk('tEXt', Buffer.from(CANARY)), IDAT])],
+        ['PNG: no IDAT before IEND, nothing but metadata', Buffer.concat([PNG_SIGNATURE, IHDR, chunk('tEXt', Buffer.from(`Comment\0${CANARY}-TEXT`, 'latin1')), IEND])],
+        ['PNG: cut short inside a chunk', CLEAN_PNG.subarray(0, CLEAN_PNG.length - 20)],
+        ['PNG: a chunk type that is not four letters', Buffer.concat([PNG_SIGNATURE, IHDR, chunk('tE1t', Buffer.from(CANARY)), IDAT, IEND])],
+        ['WebP: a RIFF size larger than the file, Exif inside', tooBig],
+        ['WebP: a RIFF size that stops before the picture', Buffer.concat([riff([vp8x(0x08), riffChunk('EXIF', cameraTiff(true, 1))]), VP8L_CHUNK])],
+        ['GIF: no trailer, a comment inside', Buffer.concat([CLEAN_GIF.subarray(0, GIF_HEAD), GIF_COMMENT, CLEAN_GIF.subarray(GIF_HEAD, -1)])],
+        ['GIF: an unknown block introducer', Buffer.concat([CLEAN_GIF.subarray(0, GIF_HEAD), GIF_COMMENT, Buffer.from([0x99]), CLEAN_GIF.subarray(GIF_HEAD)])],
+    ] as const) {
+        assert(strip(bytes) === bytes, `${name}: the strip returns it as given`);
+        assert(!storable(dataUrl('image/jpeg', bytes)) && !storable(bytes.toString('base64')) && !storable(bytes.toString('base64url'))
+            && !storable(`?${bytes.toString('base64')}`),
+            `${name}: refused as a data URL, as bare base64, URL-safe, and with a character the avatar route skips`);
+    }
+    for (const [name, value] of [
+        ...([['camera JPEG', CAMERA_JPEG], ['padded camera JPEG', PADDED_CAMERA_JPEG], ['camera JPEG with no EOI', CAMERA_JPEG_NO_EOI],
+            ['progressive camera JPEG', CAMERA_PROGRESSIVE_JPEG], ['camera PNG', CAMERA_PNG], ['camera WebP', CAMERA_WEBP], ['camera GIF', CAMERA_GIF],
+            ['clean JPEG', CLEAN_JPEG], ['clean PNG', CLEAN_PNG], ['clean WebP', CLEAN_WEBP], ['clean GIF', CLEAN_GIF],
+            ['the JFIF-only JPEG the image-store suites use', legacyTestJpeg],
+            ['a clean PNG cut at a chunk boundary, nothing in it but the picture', CLEAN_PNG.subarray(0, CLEAN_PNG.length - IEND.length)],
+        ] as const).map(([n, b]) => [n, dataUrl('image/jpeg', b)] as const),
+        // What other suites post as placeholders: a PNG signature alone, and a JFIF header cut short.
+        ['a PNG signature alone', 'data:image/png;base64,iVBORw0KGgo='], ['a JFIF header cut short', 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='],
+        ['an empty data URL', 'data:image/jpeg;base64,'], ['null', null], ['nothing', ''], ['a bundled:// name', 'bundled://sprout'],
+        ['an emoji', '🌾'], ['a link', 'https://example.org/me.jpg'], ['this node\'s avatar address', '/api/avatar/abcdef'],
+        ['this node\'s post-photo address', `/api/marketplace/posts/${crypto.randomUUID()}/photos/0`],
+    ] as const) {
+        assert(storable(value), `stored: ${name}`);
+    }
 }
 
 // ── Part 2: over HTTPS, signed as a member ────────────────────────────────────────────────────────
@@ -848,6 +967,92 @@ async function partTwo(): Promise<void> {
     }
     const bundled = await signed('POST', '/api/profile/update', { avatar: 'bundled://sprout' }, member);
     assert(bundled.status === 200 && storedAvatar() === 'bundled://sprout', `a bundled:// avatar is accepted and stored as sent (${bundled.status} ${bundled.json?.error ?? ''})`);
+
+    console.log('\n── 2j. The two camera defects decoders accept, through a profile, a post and an enterprise; and a JPEG no walk can read ──');
+    for (const [label, camera, expected, tag] of [
+        ['two extraneous bytes after its Exif', PADDED_CAMERA_JPEG, CAMERA_JPEG_STRIPPED, 'Padded'],
+        ['no EOI after its scan', CAMERA_JPEG_NO_EOI, CAMERA_JPEG_NO_EOI_STRIPPED, 'Cut'],
+    ] as const) {
+        const upd = await signed('POST', '/api/profile/update', { avatar: dataUrl('image/jpeg', camera) }, member);
+        assert(upd.status === 200, `a member's photo with ${label} is saved (${upd.status} ${upd.json?.error ?? ''})`);
+        await served(`the member's photo with ${label}, GET /api/avatar/:pk`, (await fetchBytes(`/api/avatar/${member.pub}`)).bytes, expected);
+        await served(`the member's photo with ${label}, as stored and handed out`, await avatarBytes(storedAvatar()), expected);
+
+        const post = await signed('POST', '/api/marketplace/posts', {
+            type: 'offer', category: 'other', title: `${tag} pears from the tree`, description: 'A bag of pears', credits: 0, priceType: 'fixed',
+            authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/jpeg', camera)],
+        }, member);
+        const id = post.json?.post?.id as string | undefined;
+        assert(post.status === 200 && !!id, `a post photo with ${label} is saved (${post.status} ${post.json?.error ?? ''})`);
+        if (id) await served(`the post photo with ${label}, GET …/photos/0`, (await fetchBytes(`/api/marketplace/posts/${id}/photos/0`)).bytes, expected);
+
+        const ent = await signed('POST', '/api/treasury', {
+            name: `${tag} Orchard Co-op`, purpose: 'We grow pears', lifecycle: 'bounded', goalAmount: 500, avatar: dataUrl('image/jpeg', camera),
+        }, member);
+        const key = ent.json?.publicKey as string | undefined;
+        assert(ent.status === 200 && !!key, `an enterprise photo with ${label} is saved (${ent.status} ${ent.json?.error ?? ''})`);
+        if (key) {
+            await served(`the enterprise photo with ${label}, GET /api/avatar/<enterprise>`, (await fetchBytes(`/api/avatar/${key}`)).bytes, expected);
+            const row = db.prepare('SELECT photos FROM projects WHERE id = ?').get(key) as { photos: string } | undefined;
+            await served(`the enterprise photo with ${label}, its projects row`, decodeDataUrl(row ? JSON.parse(row.photos)[0] : null), expected);
+        }
+    }
+
+    // Not walkable, so the strip cannot take its Exif off: refused with a plain 400, and nothing is stored.
+    const avatarBefore = storedAvatar();
+    for (const [label, value] of [
+        ['a JPEG with a second SOI after its Exif, as a data URL', dataUrl('image/jpeg', UNWALKABLE_CAMERA_JPEG)],
+        ['the same as bare base64', UNWALKABLE_CAMERA_JPEG.toString('base64')],
+        ['a JPEG cut short before its scan, Exif and all', dataUrl('image/jpeg', CAMERA_JPEG.subarray(0, firstScanData(CAMERA_JPEG) - 20))],
+    ] as const) {
+        const upd = await signed('POST', '/api/profile/update', { avatar: value }, member);
+        assert(upd.status === 400 && upd.json?.error === 'avatar_invalid', `${label} is refused as a member's photo (${upd.status} ${upd.json?.error ?? ''})`);
+        assert(storedAvatar() === avatarBefore, `${label}: the stored photo is unchanged`);
+    }
+    const refusedPost = await signed('POST', '/api/marketplace/posts', {
+        type: 'offer', category: 'other', title: 'Quinces from the tree', description: 'A bag of quinces', credits: 0, priceType: 'fixed',
+        authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/jpeg', CLEAN_JPEG), dataUrl('image/jpeg', UNWALKABLE_CAMERA_JPEG)],
+    }, member);
+    assert(refusedPost.status === 400, `the same JPEG as a post's second photo is refused (${refusedPost.status} ${refusedPost.json?.error ?? ''})`);
+    assert((db.prepare('SELECT COUNT(*) AS n FROM posts WHERE title = ?').get('Quinces from the tree') as { n: number }).n === 0, 'and no post is stored');
+    const refusedEnt = await signed('POST', '/api/treasury', {
+        name: 'Quince Co-op', purpose: 'We grow quinces', lifecycle: 'bounded', goalAmount: 500, avatar: dataUrl('image/jpeg', UNWALKABLE_CAMERA_JPEG),
+    }, member);
+    assert(refusedEnt.status === 400, `and as an enterprise's photo (${refusedEnt.status} ${refusedEnt.json?.error ?? ''})`);
+    assert((db.prepare('SELECT COUNT(*) AS n FROM members WHERE callsign = ?').get('Quince Co-op') as { n: number }).n === 0, 'and no enterprise is stored');
+
+    console.log('\n── 2k. A pricing-guide item saved back with its own photo link: GET /api/pricing-guide → POST …/admin/item ──');
+    // The aggregator gives an item its matching listing's first photo, as this node's address for it: a string made
+    // only of base64 characters, which the bare-base64 photo rule read as a picture and refused.
+    const listing = await signed('POST', '/api/marketplace/posts', {
+        type: 'offer', category: 'other', title: 'Lemons (bag) from the tree', description: 'Picked this morning', credits: 5, priceType: 'fixed',
+        authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/jpeg', CLEAN_JPEG)],
+    }, member);
+    const listingId = listing.json?.post?.id as string | undefined;
+    assert(listing.status === 200 && !!listingId, `a listing that matches the item is created (${listing.status} ${listing.json?.error ?? ''})`);
+    runPricingAggregationCycle();
+    const guideItem = async () => ((await signed('GET', '/api/pricing-guide', undefined, member)).json?.items as any[] | undefined)?.find(i => i.id === 'custom-photo-meta');
+    const readBack = await guideItem();
+    const photoLink = `/api/marketplace/posts/${listingId}/photos/0`;
+    assert(readBack?.thumbnailUrl === photoLink, `the aggregator gave the item the listing's photo link (${readBack?.thumbnailUrl})`);
+    if (readBack) {
+        const { id, category, emoji, name, description, priceBeans, unit, isPinned, seasonalityHint, thumbnailUrl } = readBack;
+        const resaved = await fetch(`${BASE}/api/pricing-guide/admin/item`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+            body: JSON.stringify({ id, category, emoji, name, description, priceBeans: priceBeans + 1, unit, isPinned: true, seasonalityHint, thumbnailUrl }),
+        });
+        assert(resaved.status === 200, `the item, read back and saved with a new price and its own photo link, is saved (${resaved.status})`);
+        const after = await guideItem();
+        assert(after?.priceBeans === priceBeans + 1 && after?.isPinned === true, `the new price and pin are saved (${after?.priceBeans}, ${after?.isPinned})`);
+        assert(after?.thumbnailUrl === photoLink, `the photo link is kept (${after?.thumbnailUrl})`);
+    }
+    for (const link of [`${photoLink}?v=1`, `${BASE}${photoLink}`]) {
+        const res = await saveThumbnail(link);
+        assert(res.status === 200, `this node's photo link ${link.startsWith('/') ? 'with its ?v=' : 'as an absolute address'} is saved as a thumbnail (${res.status})`);
+    }
+    const refusedThumb = await saveThumbnail(dataUrl('image/jpeg', UNWALKABLE_CAMERA_JPEG));
+    assert(refusedThumb.status === 400, `a JPEG no walk can read is refused as a thumbnail (${refusedThumb.status})`);
 }
 
 async function main(): Promise<void> {

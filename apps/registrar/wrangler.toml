@@ -1,6 +1,9 @@
 # Beanpool node-address registrar — Cloudflare Worker (fetch + scheduled).
-# Deploy: `wrangler deploy`. First-time D1 setup: `wrangler d1 create beanpool-registrar`, paste the returned
-# database_id below, then apply migrations/ in order (a NEW database only — see README "Schema and migrations").
+# Deploy: the "Registrar deploy" GitHub workflow (.github/workflows/registrar-deploy.yml, run by hand), which applies
+# migrations/ with `wrangler d1 migrations apply --remote`, deploys with `--var GIT_SHA:<commit>` (answered by /health),
+# and checks the live Worker. First-time D1 setup: `wrangler d1 create beanpool-registrar`, paste the returned
+# database_id below, then `wrangler d1 migrations apply beanpool-registrar --remote` (a NEW database only — the live
+# one needs scripts/bootstrap-d1-migrations.sql first; see README "Schema and migrations").
 
 name = "beanpool-registrar"
 main = "src/index.js"
@@ -29,6 +32,8 @@ RELEASE_COOLOFF_S = "2592000"   # 30 days: an owner-released name is held this l
 binding = "DB"
 database_name = "beanpool-registrar"
 database_id = "165d8b11-fee8-4788-8ece-c632851e47d9"
+# `wrangler d1 migrations` keeps what it applied in the table d1_migrations (its default).
+migrations_dir = "migrations"
 
 # Routes on the beanpool.org zone. The Worker intercepts these paths; the Pages static
 # site continues to serve everything else. Uncomment + set zone_id at deploy time.

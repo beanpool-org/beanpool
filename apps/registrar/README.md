@@ -136,6 +136,16 @@ npx wrangler deploy
 > The Worker attaches to `beanpool.org/api/registrar/*` and `beanpool.org/i/*` via Worker Routes and
 > coexists with the existing Cloudflare Pages static site (Worker routes win for matching paths).
 
+## Tests
+
+`npm test` runs the Worker against an in-memory SQLite loaded with the migrations and a stateful fake of the
+Cloudflare API (`test/harness.js`); no network. It includes a seeded slice of the race fuzz (`test/fuzz.test.js`,
+about 12 s): a request or decision landing at each Cloudflare call of another, at its re-attest, or while the sweep
+settles what is owed, with Cloudflare refusing writes for a while. After Cloudflare recovers and the sweep runs, no key
+but the owner is routed, a paused, blocked, released or pending name routes nothing, a live name routes exactly what
+its row records, and nothing owed is lost. `npm run fuzz` runs the whole matrix (about 35,000 cases, 3½ minutes);
+`FUZZ_CASE='…'` replays one case and prints its trace.
+
 ## Status
 
 Phase 1a (this dir): registrar core — **not yet deployed or run**; validate with `wrangler dev` + a

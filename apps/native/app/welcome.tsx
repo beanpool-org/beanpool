@@ -12,7 +12,7 @@ import {
 } from '../utils/onboarding-state';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile } from '../utils/node-profile';
 import {
-    MAX_JOIN_NAME, commitJoinKey, doorMessage, joinKeyForThisPhone, keepJoinedIdentity, nextStepFor, releaseJoinKey,
+    MAX_JOIN_NAME, adoptJoinKey, commitJoinKey, doorMessage, joinKeyForThisPhone, keepJoinedIdentity, nextStepFor, releaseJoinKey,
     signInAtDoor, submitJoin, type DoorAnswer, type DoorSignIn, type JoinKey,
 } from '../utils/global-join';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
@@ -638,6 +638,10 @@ export default function WelcomeScreen() {
             setPendingIdentity(identity);
             setPendingInviteCode(parsedCode);
 
+            // The phone's key is about to go to this community: if the global door made it, the door must never
+            // take it off the phone again, even if this redeem lands and its answer is lost (global-join.ts).
+            if (storedIdentity) await adoptJoinKey(storedIdentity.publicKey);
+
             // Redeem invite on node IMMEDIATELY so member is registered right away
             try {
                 await redeemInvite(parsedCode, identity.callsign, identity);
@@ -972,7 +976,7 @@ export default function WelcomeScreen() {
             });
             if (provider === 'github') await returnToApp();
             if (result.kind === 'answered') {
-                await afterDoorAnswer(result.answer, key, { ...key.identity, callsign: callsign.trim() || key.identity.callsign });
+                await afterDoorAnswer(result.answer, key, { ...key.identity, callsign: callsign.trim() || key.identity.callsign }, 'signIn');
                 return;
             }
             setDoorSignIn(result.signin);
@@ -1019,7 +1023,7 @@ export default function WelcomeScreen() {
             setGlobalPhase('joining');
             const answer = await submitJoin(GLOBAL_NODE_URL, identity, name, signin);
             setDoorSignIn(null);
-            await afterDoorAnswer(answer, key, identity);
+            await afterDoorAnswer(answer, key, identity, 'join');
         } catch (err) {
             setDoorSignIn(null);
             setError((err as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
@@ -1029,8 +1033,11 @@ export default function WelcomeScreen() {
         }
     }
 
-    /** Where each answer from the door takes the member (utils/global-join.ts `nextStepFor`). */
-    async function afterDoorAnswer(answer: DoorAnswer, key: JoinKey, identity: BeanPoolIdentity) {
+    /**
+     * Where each answer from the door takes the member (utils/global-join.ts `nextStepFor`). `via` is what answered:
+     * the sign-in (the nonce) or the join itself.
+     */
+    async function afterDoorAnswer(answer: DoorAnswer, key: JoinKey, identity: BeanPoolIdentity, via: 'signIn' | 'join') {
         if (answer.kind === 'joined') {
             await finishGlobalJoin(answer.callsign ? { ...identity, callsign: answer.callsign } : identity, answer.enrolment);
             return;
@@ -1042,13 +1049,17 @@ export default function WelcomeScreen() {
             setGlobalPhase('signIn');
             return;
         }
-        // Refused for good: the phone goes back as it was. A key this join made comes off it; one it had stays.
-        const removed = await releaseJoinKey(key);
+        // Refused for good. Only the join's own refusal puts the phone back as it was, and releaseJoinKey takes a key
+        // off only when no node can hold it. A refusal at the sign-in leaves every key and record alone: a shut door
+        // says so before it looks for the member, so an earlier join whose answer was lost may still have landed.
+        const removed = via === 'join' ? await releaseJoinKey(key) : false;
         if (removed) setIdentity(null);
         setGlobalKey(null);
         setDoorSignIn(null);
         setGlobalMessage(doorMessage(answer));
-        setGlobalPhase(next === 'restore' ? 'restore' : 'closed');
+        // A shut door reads as it does on arrival, with Try again: it can open again, and a key kept here learns
+        // that it joined by asking once it has.
+        setGlobalPhase(next === 'restore' ? 'restore' : answer.kind === 'door_closed' ? 'unavailable' : 'closed');
     }
 
     /** In. From here it is an invite join's steps: photo, Safety Backup, How it Works, then the Market. */

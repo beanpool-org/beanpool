@@ -67,13 +67,14 @@ vi.mock('../sso-signin', async (importOriginal) => {
 });
 
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isSingleBlobSso, openSeedFromSso, toEd25519Seed } from '@beanpool/core';
 import { signInWithGoogle, signInWithApple, signInWithFacebook } from '../sso-signin';
 import { draftIdentity, loadIdentity, importIdentity, type BeanPoolIdentity } from '../identity';
 import { hexToBytes } from '../crypto';
 import { protectionFrom } from '../protection-state';
 import { enrolmentFromJoin } from '../keeper-enrolment';
-import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
+import { getPendingOnboarding, setPendingOnboarding, resumePlan } from '../onboarding-state';
 import {
     readDoorAnswer,
     nextStepFor,
@@ -84,8 +85,10 @@ import {
     commitJoinKey,
     keepJoinedIdentity,
     releaseJoinKey,
+    adoptJoinKey,
     JOIN_TIMEOUT_MS,
     type DoorAnswer,
+    type JoinKey,
 } from '../global-join';
 
 const NODE = 'https://global.beanpool.org';
@@ -518,5 +521,230 @@ describe('one identity per device', () => {
         await importIdentity(other);
         expect(await releaseJoinKey(made)).toBe(false);
         expect((await loadIdentity())?.publicKey).toBe(other.publicKey);
+    });
+});
+
+describe('a key any node may hold is never taken off the phone', () => {
+    const X = 'https://x.beanpool.org';
+    /** The record handleCreate writes once an invite join has redeemed the phone's key at X (welcome.tsx). */
+    const inviteRecord = { step: 'profileSetup' as const, inviteCode: 'INV-X', anchorUrl: X, callsign: 'Sam', redeemed: true };
+    const PENDING = 'beanpool_pending_onboarding';
+
+    const REFUSED_FOR_GOOD: Array<[string, Answer]> = [
+        ['409 already_joined', { status: 409, body: { code: 'already_joined', error: 'This Google account already has a BeanPool identity here.' } }],
+        ['403 removed', { status: 403, body: { code: 'removed', error: 'The BeanPool identity this Google account joined with was removed.' } }],
+        ['404 invite_only (the door shut)', { status: 404, body: { code: 'invite_only', error: 'This community is invite-only.' } }],
+    ];
+    const RATE_LIMITED: Answer = { status: 429, body: { code: 'rate_limited', error: 'Too many new accounts have joined from this network.' } };
+    const ALREADY_JOINED = REFUSED_FOR_GOOD[0][1];
+    const SHUT = REFUSED_FOR_GOOD[2][1];
+    /** The node took the join, and the answer never reached the phone. */
+    const lostAnswer = (): Answer => { throw new TypeError('Network request failed'); };
+
+    /** One visit to the door as welcome.tsx runs it: sign in, then Join (`commitJoinKey`, then `submitJoin`). */
+    async function joinOnce(key: JoinKey, join: Answer | 'offline' | (() => Answer)): Promise<DoorAnswer> {
+        installDoor({ [NONCE]: NONCE_OK, [JOIN]: join });
+        const signedIn = await signInAtDoor('google', NODE, key.identity);
+        if (signedIn.kind !== 'signed_in') throw new Error('expected a sign-in');
+        const identity = await commitJoinKey(key, 'Sam');
+        return submitJoin(NODE, identity, 'Sam', signedIn.signin);
+    }
+
+    /** The app starting again at the door: welcome.tsx's resume effect, which sets the door's key from the plan. */
+    async function restartAtTheDoor(): Promise<JoinKey> {
+        const plan = resumePlan(await getPendingOnboarding(), await loadIdentity());
+        if (plan.action !== 'resume' || plan.mode !== 'globalJoin' || !plan.identity) throw new Error('expected a resume at the door');
+        return { identity: plan.identity, createdHere: plan.freshKey };
+    }
+
+    async function expectKept(publicKey: string) {
+        expect((await loadIdentity())?.publicKey).toBe(publicKey);
+        expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+    }
+
+    describe('an invite join took over the key the door made (deciding pass, first finding)', () => {
+        for (const [first, firstAnswer] of [['429', RATE_LIMITED], ['no answer', 'offline']] as const) {
+            for (const [refusal, refusalAnswer] of REFUSED_FOR_GOOD) {
+                it(`first join: ${first}; back, invite join with the same key, back to the door, refused for good (${refusal}): the key and the invite's record stay`, async () => {
+                    const held = await joinKeyForThisPhone();
+                    const K = held.identity.publicKey;
+                    expect(nextStepFor(await joinOnce(held, firstAnswer))).toBe('retry');
+
+                    // ← Back to Home, Join with an invite: handleCreate reuses the stored key, redeems it at X, and writes its record.
+                    await setPendingOnboarding(inviteRecord);
+
+                    // Back at the door, with the key the screen still holds from the first visit.
+                    const key = await joinKeyForThisPhone(held);
+                    expect(key.identity.publicKey).toBe(K);
+                    expect(key.createdHere).toBe(false);
+                    expect(nextStepFor(await joinOnce(key, refusalAnswer))).not.toBe('retry');
+
+                    expect(await releaseJoinKey(key)).toBe(false);
+                    await expectKept(K);
+                    expect(await getPendingOnboarding()).toEqual(inviteRecord);
+                });
+            }
+        }
+
+        it('the same after a restart: the resume brings the door\'s key back, "Join with an invite" takes it over, and a later refusal leaves it', async () => {
+            const first = await joinKeyForThisPhone();
+            const K = first.identity.publicKey;
+            await joinOnce(first, RATE_LIMITED);
+
+            const held = await restartAtTheDoor();
+            expect(held).toMatchObject({ createdHere: true });
+            // "Join with an invite" on the door's screen: handleCreate reuses the key and writes its record.
+            await setPendingOnboarding(inviteRecord);
+
+            const key = await joinKeyForThisPhone(held);
+            expect(key.createdHere).toBe(false);
+            await joinOnce(key, ALREADY_JOINED);
+            expect(await releaseJoinKey(key)).toBe(false);
+            await expectKept(K);
+            expect(await getPendingOnboarding()).toEqual(inviteRecord);
+        });
+
+        it('an invite join that sent the key but never wrote its record (its redeem failed): the door stops counting the key as its own', async () => {
+            const held = await joinKeyForThisPhone();
+            const K = held.identity.publicKey;
+            await joinOnce(held, RATE_LIMITED);
+
+            // handleCreate, just before it redeems with the stored key. The redeem then fails, so the door's record stays.
+            await adoptJoinKey(K);
+            expect(await getPendingOnboarding()).toMatchObject({ step: 'globalJoin', flow: 'global' });
+            expect((await getPendingOnboarding())?.freshKey).toBeUndefined();
+
+            const key = await joinKeyForThisPhone(held);
+            expect(key.createdHere).toBe(false);
+            await joinOnce(key, SHUT);
+            expect(await releaseJoinKey(key)).toBe(false);
+            await expectKept(K);
+        });
+
+        it('Join never writes a key over a different one the phone stored after the sign-in', async () => {
+            const held = await joinKeyForThisPhone();
+            const other = await draftIdentity('Kim');
+            await importIdentity(other);
+            await setPendingOnboarding(inviteRecord);
+            await expect(commitJoinKey(held, 'Sam')).rejects.toThrow(/different BeanPool account/);
+            expect(await loadIdentity()).toEqual(other);
+            expect(await getPendingOnboarding()).toEqual(inviteRecord);
+        });
+
+        it('adoptJoinKey leaves any other record alone', async () => {
+            const held = await joinKeyForThisPhone();
+            await commitJoinKey(held, 'Sam');
+            await adoptJoinKey((await draftIdentity()).publicKey);
+            expect((await getPendingOnboarding())?.freshKey).toBe(held.identity.publicKey);
+            await setPendingOnboarding(inviteRecord);
+            await adoptJoinKey(held.identity.publicKey);
+            expect(await getPendingOnboarding()).toEqual(inviteRecord);
+        });
+    });
+
+    describe('a join that may have landed (deciding pass, second finding)', () => {
+        it('join landed, answer lost, the door shut, sign in again (404 invite_only): the key stays, and reads as joined once the door opens', async () => {
+            const key = await joinKeyForThisPhone();
+            const K = key.identity.publicKey;
+            let landed = false;
+            const first = await joinOnce(key, () => { landed = true; return lostAnswer(); });
+            expect(landed).toBe(true);
+            expect(first.kind).toBe('unreachable');
+
+            // The operator shuts the door and the member signs in again. The node says the door is shut before it looks
+            // the key up (open-join.ts `joiningKey`), so this 404 says nothing about whether the key is a member.
+            installDoor({ [NONCE]: SHUT });
+            const again = await joinKeyForThisPhone(key);
+            const refused = await signInAtDoor('google', NODE, again.identity);
+            expect(refused).toMatchObject({ kind: 'answered', answer: { kind: 'door_closed' } });
+
+            // On 591795c2 the screen handed this refusal to releaseJoinKey, which took the key off. The screen no longer
+            // does (onboarding-resume.test.ts), and releaseJoinKey itself won't: the join it signed may have landed.
+            expect(await releaseJoinKey(again)).toBe(false);
+            await expectKept(K);
+            expect(await getPendingOnboarding()).toMatchObject({ step: 'globalJoin', flow: 'global', freshKey: K });
+
+            // The door opens again: the nonce says the key is a member, which reads as joined.
+            installDoor({ [NONCE]: { status: 409, body: { code: 'already_member' } } });
+            expect(await signInAtDoor('google', NODE, again.identity)).toMatchObject({ kind: 'answered', answer: { kind: 'joined' } });
+        });
+
+        for (const [refusal, refusalAnswer] of REFUSED_FOR_GOOD) {
+            it(`an earlier join went unanswered, then the next join is refused for good (${refusal}): the key stays`, async () => {
+                const key = await joinKeyForThisPhone();
+                expect((await joinOnce(key, lostAnswer)).kind).toBe('unreachable');
+                const again = await joinKeyForThisPhone(key);
+                expect(again.createdHere).toBe(true);
+                await joinOnce(again, refusalAnswer);
+                expect(await releaseJoinKey(again)).toBe(false);
+                await expectKept(key.identity.publicKey);
+            });
+        }
+
+        it('the same after a restart: an unanswered join still counts, so a refusal at the next join leaves the key', async () => {
+            const first = await joinKeyForThisPhone();
+            await joinOnce(first, { status: 502, body: null });
+            const held = await restartAtTheDoor();
+            const key = await joinKeyForThisPhone(held);
+            expect(key.createdHere).toBe(true);
+            await joinOnce(key, SHUT);
+            expect(await releaseJoinKey(key)).toBe(false);
+            await expectKept(first.identity.publicKey);
+        });
+
+        it('the join is counted on the phone before it is sent, so an app stopped mid-join never loses the key', async () => {
+            const key = await joinKeyForThisPhone();
+            let atSend: Record<string, unknown> | null = null;
+            await joinOnce(key, () => { atSend = JSON.parse(mem.async.get(PENDING) ?? 'null'); return lostAnswer(); });
+            expect(atSend).toMatchObject({ step: 'globalJoin', freshKey: key.identity.publicKey, joinsOut: 1 });
+            // Killed here: the next launch comes back to the door, and nothing takes the key off.
+            const held = await restartAtTheDoor();
+            await joinOnce(held, ALREADY_JOINED);
+            expect(await releaseJoinKey(held)).toBe(false);
+            await expectKept(key.identity.publicKey);
+        });
+
+        it('a join the phone could not count is not sent', async () => {
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const key = await joinKeyForThisPhone();
+            const seen = installDoor({ [NONCE]: NONCE_OK, [JOIN]: joinedAnswer() });
+            const signedIn = await signInAtDoor('google', NODE, key.identity);
+            if (signedIn.kind !== 'signed_in') throw new Error('expected a sign-in');
+            const identity = await commitJoinKey(key, 'Sam');
+            vi.mocked(AsyncStorage.setItem).mockRejectedValueOnce(new Error('disk full'));
+            const a = await submitJoin(NODE, identity, 'Sam', signedIn.signin);
+            expect(a.kind).toBe('try_again');
+            expect(seen.some(s => s.path === JOIN)).toBe(false);
+        });
+
+        it('a join the node took (2xx) is never counted as refused', async () => {
+            const key = await joinKeyForThisPhone();
+            expect((await joinOnce(key, joinedAnswer())).kind).toBe('joined');
+            expect(await getPendingOnboarding()).toMatchObject({ freshKey: key.identity.publicKey, joinsOut: 1 });
+            expect(await releaseJoinKey(key)).toBe(false);
+            await expectKept(key.identity.publicKey);
+        });
+    });
+
+    describe('a key no node can hold still comes off, as before', () => {
+        for (const [refusal, refusalAnswer] of REFUSED_FOR_GOOD) {
+            it(`made here, and its first join is refused for good (${refusal}): it comes off the phone with its record`, async () => {
+                const key = await joinKeyForThisPhone();
+                expect(nextStepFor(await joinOnce(key, refusalAnswer))).not.toBe('retry');
+                expect(await releaseJoinKey(key)).toBe(true);
+                expect(await loadIdentity()).toBeNull();
+                expect(await getPendingOnboarding()).toBeNull();
+            });
+        }
+
+        it('every join it signed was refused (429, 401, then the door shut): it comes off', async () => {
+            const key = await joinKeyForThisPhone();
+            expect((await joinOnce(key, RATE_LIMITED)).kind).toBe('rate_limited');
+            expect((await joinOnce(await joinKeyForThisPhone(key), { status: 401, body: { code: 'sign_in', error: 'jwt expired' } })).kind).toBe('sign_in_again');
+            const last = await joinKeyForThisPhone(key);
+            expect((await joinOnce(last, SHUT)).kind).toBe('door_closed');
+            expect(await releaseJoinKey(last)).toBe(true);
+            expect(await loadIdentity()).toBeNull();
+        });
     });
 });

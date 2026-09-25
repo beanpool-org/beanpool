@@ -111,4 +111,31 @@ describe('the welcome screen', () => {
         expect(door).toMatch(/setEnrolment\(joinEnrolment\)/);
         expect(door).not.toMatch(/setShowSsoSheet|connectAndDeposit|enrolSsoKeeper/);
     });
+
+    it('a refusal at the sign-in never takes a key off the phone: only the join\'s own refusal reaches releaseJoinKey', () => {
+        const s = src();
+        const signIn = s.slice(s.indexOf('async function handleGlobalSignIn('), s.indexOf('async function handleGlobalJoin('));
+        expect(signIn).toMatch(/afterDoorAnswer\(result\.answer, key, [^\n]*, 'signIn'\);/);
+        expect(signIn).not.toMatch(/releaseJoinKey/);
+        const join = s.slice(s.indexOf('async function handleGlobalJoin('), s.indexOf('async function afterDoorAnswer('));
+        expect(join).toMatch(/afterDoorAnswer\(answer, key, identity, 'join'\);/);
+        const after = s.slice(s.indexOf('async function afterDoorAnswer('), s.indexOf('async function finishGlobalJoin('));
+        expect(after.match(/releaseJoinKey\(/g)).toHaveLength(1);
+        expect(after).toMatch(/const removed = via === 'join' \? await releaseJoinKey\(key\) : false;/);
+        // Nowhere else on the screen takes a key off for the door.
+        expect(s.match(/releaseJoinKey\(/g)).toHaveLength(1);
+        expect(s).not.toMatch(/discardUnjoinedIdentity/);
+    });
+
+    it('an invite join that reuses the phone\'s key tells the door before it sends the key anywhere', () => {
+        const s = src();
+        const create = s.slice(s.indexOf('async function handleCreate('), s.indexOf('async function handleConfirmSeed('));
+        expect(create).toMatch(/if \(storedIdentity\) await adoptJoinKey\(storedIdentity\.publicKey\);[\s\S]*await redeemInvite\(parsedCode/);
+        expect(create.indexOf('adoptJoinKey(')).toBeLessThan(create.indexOf('redeemInvite(parsedCode'));
+    });
+
+    it('a shut door offers Try again wherever it is met, and the other refusals for good do not', () => {
+        const after = src().slice(src().indexOf('async function afterDoorAnswer('), src().indexOf('async function finishGlobalJoin('));
+        expect(after).toMatch(/setGlobalPhase\(next === 'restore' \? 'restore' : answer\.kind === 'door_closed' \? 'unavailable' : 'closed'\);/);
+    });
 });

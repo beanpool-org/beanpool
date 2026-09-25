@@ -37,12 +37,22 @@ export interface PendingOnboarding {
     avatar?: string | null;
     flow?: OnboardingFlow;
     /**
-     * Global flow only: the public key this join made, which no community has accepted yet. Survives a
-     * restart so a door that then refuses for good can take that key off the phone again (identity.ts
-     * `discardUnjoinedIdentity`). A key, not a flag: only that exact key is ever taken, never one the
-     * phone already had or holds instead.
+     * Global flow only: the public key the door made, which has never been offered to any other community.
+     * An invite join that reuses the key takes this away before it sends it (global-join.ts `adoptJoinKey`),
+     * and replaces the whole record once it has redeemed. Survives a restart so a door that refuses for good
+     * can take that key off the phone again (identity.ts `discardUnjoinedIdentity`), but only while
+     * `joinsOut` is 0. A key, not a flag: only that exact key is ever taken, never one the phone already had
+     * or holds instead.
      */
     freshKey?: string;
+    /**
+     * Global flow only, with `freshKey`: how many joins signed by that key went out without the node answering
+     * that it refused them. Counted up on the phone before each join is sent, and down when the node refuses
+     * it (global-join.ts `submitJoin`). A join with no answer, an unclear one (a 5xx) or a 2xx stays counted,
+     * as does one the app was stopped in the middle of. The key comes off the phone only at 0: no join it
+     * signed can have put it on the node.
+     */
+    joinsOut?: number;
     /**
      * Global flow only: what the join's sign-in left protecting the account (the recovery copy the join
      * carried), so Safety Backup shows it after a restart too. Provider names and counts, nothing secret.
@@ -123,7 +133,10 @@ export type ResumePlan =
         avatar: string | null;
         /** The stored key the wizard carries on with. Null only for an invite join still at `create`. */
         identity: BeanPoolIdentity | null;
-        /** Global flow: the stored key was made by that join and no community has accepted it (see `freshKey`). */
+        /**
+         * Global flow: the stored key was made by that join and never offered to another community (see `freshKey`).
+         * Only a hint for the screen: global-join.ts reads the record again before it writes or takes off a key.
+         */
         freshKey: boolean;
         joinEnrolment: KeeperEnrolmentResult | null;
     };

@@ -66,7 +66,10 @@ function makePhoto(seed: string): Buffer {
     const block = crypto.createHash('sha512').update(seed).digest();
     const filler = Buffer.alloc(24 * 1024);
     for (let i = 0; i < filler.length; i += block.length) block.copy(filler, i);
-    return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), filler, Buffer.from([0xff, 0xd9])]);
+    // A scan with no 0xFF in it, so the metadata strip walks it to EOI and finds nothing to take off: stored exactly
+    // as sent. The node refuses a JPEG it cannot walk (G9a-3), and SOI + APP0 + random bytes, which this built before, is one.
+    for (let i = 0; i < filler.length; i++) if (filler[i] === 0xff) filler[i] = 0xfe;
+    return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]), filler, Buffer.from([0xff, 0xd9])]);
 }
 const dataUrl = (b: Buffer) => `data:image/jpeg;base64,${b.toString('base64')}`;
 

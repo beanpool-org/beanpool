@@ -29,8 +29,9 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   anything costs none. Deletions Cloudflare refused earlier (`teardown`) are retried.
 
 A tunnel or record the registrar lets go of that Cloudflare refuses to delete is recorded in `teardown`, never
-dropped: another key's take-over of a name, a pause, block or release's record, the old tunnel of a move to a
-direct address, a failed request's tunnel. The sweep retries each one, but not while it is a live name's routing
+dropped: another key's take-over of a name, a pause, block or release's record, the record a heal, take-back or
+resume takes back down when its re-attest fails, the old tunnel of a move to a direct address, a failed request's
+tunnel. The sweep retries each one, but not while it is a live name's routing
 (a record at its hostname is the live row's to keep) or the tunnel an admin pause keeps. A live `bp-<name>` tunnel
 no row records would make Cloudflare refuse every later tunnel for the name (1013), so a claim that meets one
 deletes it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10

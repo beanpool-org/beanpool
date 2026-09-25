@@ -202,7 +202,8 @@ const provisionFailed = (e) => {
 
 // --- Owed deletions ---
 // A tunnel or record a request let go of — the old holder's at a take-over, one a failed request made, one an undo
-// or a resume could not delete — that Cloudflare refused to delete is owed (teardown, migration 0004), never dropped:
+// or a resume could not delete, a take-down's record, the record a failed re-attest took back down — that Cloudflare
+// refused to delete is owed (teardown, migration 0004), never dropped:
 // a live bp-<name> tunnel nobody records fails every later tunnel for the name, and a record nobody records keeps
 // routing the old holder. Logged under `tag`. The sweep retries it (settleOwed); a tunnel still alive is also
 // deleted by the name's next tunnel (createTunnelFor).
@@ -422,14 +423,18 @@ const LIVE = { status: 'live', pause_reason: null, paused_at: null, attest_fails
 // the row live — only while it is still `res`, ids and all — and returns { live: true, attest? }, or { missed: true }
 // for the caller to undo; else takes routing back off — again only while the row is still `res`: once it changed, the
 // record may be a newer decision's or request's (a resume gone live on it), and the caller undoes instead — and
-// returns { live: false, verdict, why, dns_record_id } for the caller to record.
+// returns { live: false, verdict, why, dns_record_id } for the caller to record. A record Cloudflare refused to delete
+// is also owed: the row stays paused, which neither the sweep's attest nor its upkeep looks at, so nothing else would
+// ever take it down, and it would keep routing whoever failed the re-attest.
 async function routeIfOnlyOwner(env, res, ids, now) {
     const goLive = async (fields, out) => ((await db.updateIfUnchanged(env, res.name, res, fields, { withIds: true })) ? out : { missed: true });
     if (res.mode === 'tunnel' && ids.changed.includes('tunnel')) return goLive(LIVE, { live: true });
     const r = await classify(env, res);
     if (r.verdict === 'ok') return goLive({ ...LIVE, last_attest_at: now, last_ok_at: now }, { live: true, attest: 'ok' });
     if (!(await db.isUnchanged(env, res.name, res, { withIds: true }))) return { missed: true };
-    return { live: false, ...r, dns_record_id: await dnsOff(env, res) };
+    const left = await dnsOff(env, res);
+    await owe(env, '[REATTEST_LEFT]', res.name, 'dns', left);
+    return { live: false, ...r, dns_record_id: left };
 }
 
 // The owner's own held name (live, paused or pending): bring it back to what it should be. Never deprovisions

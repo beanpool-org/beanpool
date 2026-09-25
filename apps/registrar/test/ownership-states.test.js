@@ -1932,3 +1932,40 @@ test('a take-over that changes mode, the old record\'s delete refused: the old k
         assert.equal(routing(w, name).dns, `${row.tunnel_id}.cfargotunnel.com`);
     } finally { w.restore(); }
 });
+
+// A re-attest that fails takes routing back off (routeIfOnlyOwner) — heal, take-back and resume alike. The row is
+// then paused, which the sweep's attest and its upkeep never look at, so a record Cloudflare refused to delete is
+// owed: otherwise it would keep routing whoever failed the re-attest — here an impostor — for good.
+for (const via of ['heal', 'take-back', 'resume']) {
+    test(`a ${via} whose re-attest finds an impostor, its record delete refused: the sweep removes the record once Cloudflare recovers`, async () => {
+        const w = await world();
+        try {
+            const name = `reattest-${via}`;
+            const host = `${name}.beanpool.org`;
+            const [owner, intruder, n1, n2] = await Promise.all([makeKey(), makeKey(), makeKey(), makeKey()]);
+            assert.equal((await w.claim(owner, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+            await liveName(w, `${name}-a`, n1); await liveName(w, `${name}-b`, n2);
+            w.nodes[host] = attestsAs(intruder);
+            await attestSweep(w.env); await attestSweep(w.env);
+            assert.deepEqual([(await w.row(name)).status, (await w.row(name)).pause_reason], ['paused', 'impostor']);
+            if (via === 'take-back') assert.equal((await w.release(owner)).body.status, 'released');
+
+            // The intruder still answers at the owner's address: routing goes back up for the re-attest, which sees
+            // it, and Cloudflare refuses to take the record down again.
+            w.cf.fail.deleteDns = true;
+            const r = via === 'heal' ? await w.heal(owner) : via === 'take-back' ? await w.claim(owner, { name, ...modeBody('direct', OLD_IP) }) : await w.admin(name, 'resume');
+            assert.equal(r.status, 200, JSON.stringify(r.body));
+            assert.deepEqual([r.body.status, r.body.reason, r.body.attest], ['paused', 'impostor', 'impostor']);
+            const row = await w.row(name);
+            assert.deepEqual([row.status, row.pause_reason, row.node_pubkey], ['paused', 'impostor', owner.pubHex]);
+            assert.equal(routing(w, name).dns, OLD_IP, 'Cloudflare refused the delete');
+            await attestSweep(w.env);
+            assert.equal(routing(w, name).dns, OLD_IP, 'still refused');
+
+            w.cf.fail.deleteDns = false;
+            await attestSweep(w.env);
+            await routedAsRow(w, name, `after the ${via}, Cloudflare recovered, and a sweep`);
+            assert.equal((await w.row(name)).node_pubkey, owner.pubHex, 'still the owner\'s');
+        } finally { w.restore(); }
+    });
+}

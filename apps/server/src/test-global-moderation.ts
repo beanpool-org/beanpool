@@ -436,6 +436,27 @@ async function main(): Promise<void> {
     grantNodeRole(moe.pk, 'moderator', owner.pk);
     const moeRestore = await call('POST', null, `/api/local/admin/posts/${moOwn}/restore`, undefined, { 'x-admin-session': keySession(moe) });
     assert(moeRestore.status === 200 && hiddenAt(moOwn) === null, `another moderator restores it (${moeRestore.status})`);
+    // Nor a post by an enterprise they keep, or its mute: the same stake. Another moderator decides.
+    const coop = member('Coop', 60);
+    db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(coop.pk);
+    db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(mo.pk);
+    db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'keeper', ?)`).run(coop.pk, mo.pk, owner.pk);
+    const coopPost = oldPost(coop, 'Coop listing');
+    for (const r of S) await report(r, coopPost, coop);
+    assert(!!hiddenAt(coopPost), 'setup: established reporters hide a post by an enterprise the moderator keeps');
+    const coopReport = db.prepare(`SELECT id FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).get(coopPost) as { id: string };
+    const keeperRestore = await admin('POST', `/api/local/admin/posts/${coopPost}/restore`);
+    const keeperDismiss = await admin('POST', `/api/local/admin/reports/${coopReport.id}/dismiss`);
+    assert(keeperRestore.status === 403 && keeperDismiss.status === 403 && !!hiddenAt(coopPost),
+        `a moderator can't restore a post by an enterprise they keep, or dismiss a report on it (${keeperRestore.status}, ${keeperDismiss.status}): it stays hidden`);
+    attempt(() => db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run('9999-12-31T23:59:59.999Z', coop.pk));
+    const keeperUnmute = await admin('POST', `/api/local/admin/members/${coop.pk}/unmute`);
+    assert(keeperUnmute.status === 403 && !!mutedUntil(coop), `nor lift the enterprise's mute (${keeperUnmute.status})`);
+    const moeSession = keySession(moe);
+    const moeRestoresCoop = await call('POST', null, `/api/local/admin/posts/${coopPost}/restore`, undefined, { 'x-admin-session': moeSession });
+    const moeUnmutesCoop = await call('POST', null, `/api/local/admin/members/${coop.pk}/unmute`, undefined, { 'x-admin-session': moeSession });
+    assert(moeRestoresCoop.status === 200 && hiddenAt(coopPost) === null && moeUnmutesCoop.status === 200,
+        `another moderator restores it and lifts the mute (${moeRestoresCoop.status}, ${moeUnmutesCoop.status})`);
 
     // A hidden post its author then took down, restored later: the author is not told it is back, because it isn't.
     const takenDown = oldPost(ava, 'Hidden, then taken down');

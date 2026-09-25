@@ -935,17 +935,28 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
 });
 
 /**
- * A moderator can't undo what members did about their own post, by restoring it or by dismissing a report on it (a
- * dismissal un-hides it once the rest no longer add up), as they can't lift their own mute: that is for an owner or
- * admin. Refuses 403 and returns true when so.
+ * Is `pubkey` the moderator making this request, or an enterprise they keep? Then what members did about it is
+ * theirs, and someone else decides (G3). The moderator's key comes from their signed session; any keeper row counts,
+ * whatever it lets them spend, since the stake is the same.
+ */
+function isModeratorsOwn(ctx: any, pubkey: string | null | undefined): boolean {
+    const actor = ctx.state?.actor as string | undefined;
+    if (ctx.state?.adminRole !== 'moderator' || !actor || !pubkey) return false;
+    if (pubkey.toLowerCase() === actor.toLowerCase()) return true;
+    return !!db.prepare('SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?').get(actor, pubkey);
+}
+
+/**
+ * A moderator can't undo what members did about their own post, or one by an enterprise they keep, by restoring it or
+ * by dismissing a report on it (a dismissal un-hides it once the rest no longer add up), as they can't lift their own
+ * mute: that is for another moderator, an admin or an owner. Refuses 403 and returns true when so.
  */
 function refuseModeratorsOwnPost(ctx: any, postId: string | null | undefined, doing: string): boolean {
-    const actor = ctx.state?.actor as string | undefined;
-    if (ctx.state?.adminRole !== 'moderator' || !actor || !postId) return false;
+    if (!postId) return false;
     const post = db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(postId) as { author_pubkey: string | null } | undefined;
-    if (!post?.author_pubkey || post.author_pubkey.toLowerCase() !== actor.toLowerCase()) return false;
+    if (!isModeratorsOwn(ctx, post?.author_pubkey)) return false;
     ctx.status = 403;
-    ctx.body = { success: false, error: `A moderator cannot ${doing} their own post. Ask an owner or admin.` };
+    ctx.body = { success: false, error: `A moderator cannot ${doing} their own post, or one by an enterprise they keep. Ask another moderator, an admin or an owner.` };
     return true;
 }
 
@@ -983,15 +994,15 @@ router.get('/api/local/admin/members/muted', async (ctx) => {
 
 /**
  * Lift a member's mute (G3). Owners, admins and moderators, the actor from their signed session, never the body. A
- * moderator can't lift their own: that is for an owner or admin.
+ * moderator can't lift their own, or one on an enterprise they keep: someone else decides.
  */
 router.post('/api/local/admin/members/:pubkey/unmute', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = (ctx.state as any)?.actor as string | undefined;
     const pubkey = ctx.params.pubkey;
-    if ((ctx.state as any)?.adminRole === 'moderator' && actor && actor.toLowerCase() === pubkey.toLowerCase()) {
+    if (isModeratorsOwn(ctx, pubkey)) {
         ctx.status = 403;
-        ctx.body = { success: false, error: 'A moderator cannot lift their own mute. Ask an owner or admin.' };
+        ctx.body = { success: false, error: 'A moderator cannot lift their own mute, or one on an enterprise they keep. Ask another moderator, an admin or an owner.' };
         return;
     }
     if (!getMember(pubkey)) {

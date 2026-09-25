@@ -137,7 +137,10 @@ function standingOf(row: KnockRow | undefined, now: number): Standing {
         return ageMs(row.decided_at, now) < KNOCK_RULES.declineBlockDays * DAY_MS ? { kind: 'waiting', row } : { kind: 'free' };
     }
     const expiresAt = inviteExpiry(row.invite_code);
-    const used = !!db.prepare('SELECT 1 FROM invite_codes WHERE code = ? AND used_by IS NOT NULL').get(row.invite_code);
+    // Used, by this node's invite row, or by the member row (which replicates): a standby's copy of the invite is made
+    // unused (mergeReplicatedKnocks), so after a take-over only the member row knows the applicant joined with it.
+    const used = !!db.prepare('SELECT 1 FROM invite_codes WHERE code = ? AND used_by IS NOT NULL').get(row.invite_code)
+        || !!db.prepare('SELECT 1 FROM members WHERE public_key = ? AND invite_code = ? COLLATE NOCASE').get(row.pubkey, row.invite_code);
     if (used || (expiresAt !== null && expiresAt > now)) return { kind: 'invited', row, expiresAt };
     return { kind: 'free' };
 }

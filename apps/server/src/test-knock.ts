@@ -28,8 +28,8 @@
  *  11. privacy: nothing about knocks is in a public read; the status read answers only for the signer
  *  12. a member who once knocked deletes their account: what they wrote goes, the record stays
  *  13. replication: every row reaches a standby (never the address hash), an approved knock's invite is made there
- *      (invite codes don't replicate) so the applicant can still redeem it after a take-over, and the replica audit
- *      counts join_requests
+ *      (invite codes don't replicate) so the applicant can still redeem it after a take-over; one redeemed on the main
+ *      still reads approved on the standby once its 30 days are up; and the replica audit counts join_requests
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-knock.ts
  */
@@ -482,6 +482,22 @@ async function main(): Promise<void> {
     assert(eveOnStandby.status === 400, 'which still admits only her key');
     const fayRedeems = await call(null, 'POST', '/api/invite/redeem', { code: fayCode2, publicKey: fay.pk, callsign: 'Fay' });
     assert(fayRedeems.status === 200 && fayRedeems.body?.success === true, `and admits her (${fayRedeems.status})`);
+    // She joined on the "main". A standby copies her member row and the approval, and makes the invite unused (the
+    // redemption is not in the copy). Once that invite is 30 days old, her status must still say approved there.
+    const payload3: any = await exportSyncState(nodeId);
+    clearReplicatedTables();
+    db.prepare('DELETE FROM invite_codes WHERE code = ?').run(fayCode2);
+    setNodeRole('backup');
+    await importRemoteState(payload3);
+    setNodeRole('primary');
+    const fayInviteOnStandby = db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(fayCode2) as any;
+    const fayMemberOnStandby = db.prepare('SELECT invite_code FROM members WHERE public_key = ?').get(fay.pk) as any;
+    assert(!!fayInviteOnStandby && !fayInviteOnStandby.used_by && fayMemberOnStandby?.invite_code === fayCode2,
+        'on a standby her invite is unused, and her member row says she joined with it');
+    db.prepare('UPDATE invite_codes SET created_at = ? WHERE code = ?').run(ago(31 * DAY_MS), fayCode2);
+    const fayLaterOnStandby = await status(fay);
+    assert(fayLaterOnStandby.body?.status === 'approved' && fayLaterOnStandby.body?.invite === fayCode2,
+        `after a take-over, an invite she used reads approved past its 30 days, as on the main (${fayLaterOnStandby.text})`);
     assert(!!bobId && rowsFor(bob.pk)[0]?.id === bobId && rowsFor(bob.pk)[0]?.status === 'pending', 'Bob\'s open knock is still open on the standby');
     const consistency = getReplicaConsistency(db, await exportSyncState(nodeId), 0);
     const jr = consistency.tables.find(t => t.name === 'join_requests');

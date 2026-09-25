@@ -32,11 +32,15 @@
  *      overrides): a request or an accept on a hidden offer is answered as for an id nobody has, writes no trade and
  *      moves no Beans; its author can't approve a request into a new escrow while it is hidden, but can decline one,
  *      and an escrow opened before the hide can still finish or be called off; a hidden listing can't be commissioned;
- *      after a restore it all works again
+ *      after a restore it all works again. A muted member writes nothing anyone else reads: the enterprise thread,
+ *      groups (start, rename, invite, chat), event chat, reactions, Decisions, Commons projects, crowdfunds,
+ *      enterprises, ratings, putting a post back up, a note with Beans or a pledge, and the Pulse (submit, ingest,
+ *      add or change a channel), each 403 moderation_muted with nothing stored; they still read, pause a post, join
+ *      and leave, and send Beans without a note; after a lift the thread takes their line again
  *
- * Section 1 also shows a request on a reported local post going through on the local profile; section 3 shows a
- * hidden event's chat closed to everyone but its author (who reads it but can't post into it), and open again once
- * it is un-hidden.
+ * Section 1 also shows a request on a reported local post, an enterprise thread line and a new group from a member
+ * with 3 removals all going through on the local profile; section 3 shows a hidden event's chat closed to everyone
+ * but its author (who reads it but can't post into it), and open again once it is un-hidden.
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-global-moderation.ts
  */
@@ -50,7 +54,7 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, grantNodeRole, createPost, exportSyncState, importRemoteState, setNodeRole,
-    payFromCommons,
+    payFromCommons, createGroup,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -92,7 +96,7 @@ function member(name: string, daysAgo: number): Id {
 }
 
 interface Res { status: number; body: any; headers: Headers }
-async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
+async function call(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', id: Id | null, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
     resetGatewayRateLimit();
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
     const headers: Record<string, string> = { ...extra };
@@ -228,6 +232,12 @@ async function main(): Promise<void> {
     assert(removedLocal.every(s => s === 200), `local: a moderator removes 3 of Lars's posts (${removedLocal.join(',')})`);
     assert(mutedUntil(localMax) === null && (await post(localMax)).status === 200 && (await dm(localMax, targets[0])).send?.status === 200,
         'local: 3 removals mute nobody: Lars still posts and messages');
+    const localShop = member('Loco', 60);
+    db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(localShop.pk);
+    const larsThread = await call('POST', localMax, `/api/enterprise/${localShop.pk}/thread/message`, { text: 'Hello from Lars' });
+    const larsGroup = await call('POST', localMax, '/api/groups', { name: 'Lars club' });
+    assert(larsThread.status === 201 && larsGroup.status === 201,
+        `local: and writes in an enterprise's thread and starts a group (${larsThread.status} ${larsThread.body?.error ?? ''}, ${larsGroup.status} ${larsGroup.body?.error ?? ''})`);
     const localMe = await me(localNew);
     assert(localMe?.probation?.onProbation === false && localMe?.probation?.exemptBecause === 'off' && localMe?.mute?.muted === false,
         `local: /api/community/me says no probation (off here) and no mute (got ${JSON.stringify({ p: localMe?.probation?.onProbation, e: localMe?.probation?.exemptBecause, m: localMe?.mute })})`);
@@ -698,6 +708,81 @@ async function main(): Promise<void> {
     const bobTakesKettleAgain = await call('POST', bob, '/api/marketplace/posts/accept', { postId: kettle, buyerPublicKey: bob.pk });
     assert(bobTakesKettleAgain.status === 200 && trades(kettle).some(t => t.buyer_pubkey === bob.pk && t.status === 'pending'),
         `and Bob's accept opens an escrow (${bobTakesKettleAgain.status} ${bobTakesKettleAgain.body?.error ?? ''})`);
+
+    // 7b. A muted member writes nothing anyone else reads.
+    console.log('\n── 7b. a muted member writes nothing anyone else reads ──');
+    assert(!!mutedUntil(max), 'setup: Max is muted (section 6 muted him again)');
+    const refused = (r: Res) => r.status === 403 && r.body?.code === 'moderation_muted';
+    const linesBy = (id: Id) => (db.prepare('SELECT COUNT(*) AS c FROM messages WHERE author_pubkey = ?').get(id.pk) as any).c;
+    const maxClub = createGroup({ name: 'Max club', description: 'Before the mute', createdBy: max.pk }); // a group he already convenes
+    const openClub = createGroup({ name: 'Open club', createdBy: kim.pk });
+    const joined = await call('POST', max, `/api/groups/${openClub.id}/join`);
+    const kimEvent = createPost('event', 'other', 'Hub open day', 'Come along', 0, 'fixed', kim.pk, -28.55, 153.5, [], false, undefined, false,
+        { eventStartAt: new Date(Date.now() + 3 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 3 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Hub' })!.id;
+    const going = await call('POST', max, `/api/marketplace/posts/${kimEvent}/rsvp`, { status: 'going' });
+    const maxPost = (db.prepare('SELECT id FROM posts WHERE author_pubkey = ? AND active = 1 AND status = \'active\' LIMIT 1').get(max.pk) as { id: string }).id;
+    const paused = await call('POST', max, '/api/marketplace/posts/pause', { postId: maxPost, authorPublicKey: max.pk });
+    assert(joined.status === 200 && going.status === 200 && paused.status === 200,
+        `a muted member still joins a group, says they're going to an event, and pauses a post: none of that says anything (${joined.status}, ${going.status}, ${paused.status})`);
+    const maxLines = linesBy(max);
+    const zedLine = zedToMax.send?.body?.message?.id as string;
+    const zedLineMeta = () => (db.prepare('SELECT metadata FROM messages WHERE id = ?').get(zedLine) as any)?.metadata ?? null;
+    const metaBefore = zedLineMeta();
+    const tries: [string, Res][] = [
+        ['a line in an enterprise\'s thread', await call('POST', max, `/api/enterprise/${hub.pk}/thread/message`, { text: 'Buy now' })],
+        ['a line in the group chat', await call('POST', max, `/api/groups/${openClub.id}/chat/message`, { text: 'Buy now' })],
+        ['a line in the event chat', await call('POST', max, `/api/marketplace/posts/${kimEvent}/chat/message`, { text: 'Buy now' })],
+        ['a reaction', await call('POST', max, '/api/messages/react', { messageId: zedLine, emoji: 'Buy now at spam.example' })],
+        ['starting a group', await call('POST', max, '/api/groups', { name: 'Spam club', description: 'Buy now' })],
+        ['new words on his group\'s card', await call('PATCH', max, `/api/groups/${maxClub.id}`, { description: 'Buy now' })],
+        ['inviting someone to his group', await call('POST', max, `/api/groups/${maxClub.id}/members`, { targetPubkey: viewer.pk })],
+        ['proposing a Decision', await call('POST', max, '/api/commons/decisions', { title: 'Buy now', description: 'Buy now at spam.example', touches: 'member', effect: 'freeze_credit', subject: viewer.pk })],
+        ['proposing a Commons project', await call('POST', max, '/api/commons/projects', { title: 'Buy now', description: 'spam.example', requestedAmount: 10 })],
+        ['starting a crowdfund', await call('POST', max, '/api/crowdfund/projects', { title: 'Buy now', description: 'spam.example', goalAmount: 50 })],
+        ['editing a crowdfund', await call('POST', max, '/api/crowdfund/projects/update', { id: crypto.randomUUID(), title: 'Buy now', goalAmount: 50 })],
+        ['starting an enterprise', await call('POST', max, '/api/enterprise', { name: 'Max Co', purpose: 'Buy now' })],
+        ['posting as an enterprise he keeps', await call('POST', max, `/api/treasury/${hub.pk}/offer`, { title: 'Buy now', category: 'other' })],
+        ['posting for a muted enterprise, as a keeper who isn\'t muted', await call('POST', kit, `/api/treasury/${shop.pk}/offer`, { title: 'Buy now', category: 'other' })],
+        ['a rating', await call('POST', max, '/api/ratings', { targetPubkey: zed.pk, stars: 5, comment: 'Buy now', transactionId: crypto.randomUUID() })],
+        ['putting a paused post back up', await call('POST', max, '/api/marketplace/posts/resume', { postId: maxPost, authorPublicKey: max.pk })],
+        ['a note with Beans', await call('POST', max, '/api/ledger/transfer', { to: zed.pk, amount: 1, memo: 'Buy now' })],
+        ['a note with a crowdfund pledge', await call('POST', max, `/api/crowdfund/projects/${crypto.randomUUID()}/pledge`, { amount: 1, memo: 'Buy now' })],
+        ['a note with an enterprise pledge', await call('POST', max, `/api/enterprise/${hub.pk}/pledge`, { amount: 1, memo: 'Buy now' })],
+        ['submitting to the Pulse', await call('POST', max, '/api/member/pulse/submit', { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })],
+        ['adding a Pulse channel', await call('POST', max, '/api/member/channels', { platform: 'youtube', url: 'https://www.youtube.com/@maxspam' })],
+        ['changing a Pulse channel', await call('POST', max, `/api/member/channels/${crypto.randomUUID()}`, { category: 'music' })],
+        ['ingesting Pulse items', await call('POST', max, '/api/member/pulse/oauth-ingest', { channelId: crypto.randomUUID(), items: [] })],
+    ];
+    for (const [what, r] of tries) assert(refused(r), `muted: ${what} → 403 moderation_muted (got ${r.status} ${JSON.stringify(r.body)?.slice(0, 140)})`);
+    const one = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as any)?.c ?? 0;
+    const stored = {
+        lines: linesBy(max) - maxLines,
+        reaction: zedLineMeta() !== metaBefore ? 1 : 0,
+        groups: one("SELECT COUNT(*) AS c FROM groups WHERE name = 'Spam club'"),
+        card: one("SELECT COUNT(*) AS c FROM groups WHERE id = ? AND description = 'Buy now'", maxClub.id),
+        invite: one('SELECT COUNT(*) AS c FROM group_members WHERE group_id = ? AND member_pubkey = ?', maxClub.id, viewer.pk),
+        decisions: one('SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey = ?', max.pk),
+        commons: JSON.stringify((await call('GET', viewer, '/api/commons/projects')).body ?? '').includes('spam.example') ? 1 : 0,
+        crowdfunds: one('SELECT COUNT(*) AS c FROM projects WHERE creator_pubkey = ?', max.pk),
+        enterprises: one("SELECT COUNT(*) AS c FROM members WHERE callsign = 'Max Co'"),
+        posts: one("SELECT COUNT(*) AS c FROM posts WHERE title = 'Buy now'"),
+        ratings: one('SELECT COUNT(*) AS c FROM ratings WHERE rater_pubkey = ?', max.pk),
+        resumed: one("SELECT COUNT(*) AS c FROM posts WHERE id = ? AND status = 'active'", maxPost),
+        notes: one("SELECT COUNT(*) AS c FROM transactions WHERE memo = 'Buy now'"),
+        pulse: one('SELECT COUNT(*) AS c FROM pulse_items WHERE owner_pubkey = ?', max.pk) + one('SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?', max.pk),
+    };
+    assert(Object.values(stored).every(v => v === 0), `and none of it is stored (${JSON.stringify(stored)})`);
+    const unnoted = await call('POST', max, '/api/ledger/transfer', { to: zed.pk, amount: 1 });
+    assert(unnoted.body?.code !== 'moderation_muted', `a send without a note is not refused for the mute (${unnoted.status} ${unnoted.body?.error})`);
+    const reads = [await call('GET', max, '/api/marketplace/posts'), await call('GET', max, `/api/enterprise/${hub.pk}/thread`), await call('GET', max, `/api/groups/${openClub.id}/chat`)];
+    const left = await call('DELETE', max, `/api/groups/${openClub.id}/members/${max.pk}`);
+    assert(reads.every(r => r.status === 200) && left.status === 200,
+        `he still reads the listing, the thread and the group chat, and leaves the group (${reads.map(r => r.status).join(', ')}, ${left.status})`);
+    const beforeLift = linesBy(max);
+    const liftAgain = await admin('POST', `/api/local/admin/members/${max.pk}/unmute`);
+    const threadBack = await call('POST', max, `/api/enterprise/${hub.pk}/thread/message`, { text: 'Hello again' });
+    assert(liftAgain.status === 200 && threadBack.status === 201 && linesBy(max) === beforeLift + 1,
+        `after a moderator lifts the mute, the thread takes his line again (${liftAgain.status}, ${threadBack.status} ${threadBack.body?.error ?? ''})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

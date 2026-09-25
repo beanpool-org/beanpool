@@ -21,7 +21,7 @@ import {
     type ProfileSwitch, type ProfileSwitches,
 } from '../config/node-profile.js';
 import { ProbationLimitError } from '../engine/probation.js';
-import { MutedError } from '../engine/auto-moderation.js';
+import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 
 interface GatedRoutes {
     /** On only while every one of these switches is on. */
@@ -114,4 +114,18 @@ export function respondProfileRefusal(ctx: { status: number; body: unknown; set?
         return true;
     }
     return false;
+}
+
+/**
+ * For a route that writes something other members read and has no catch of its own for it: answers 403
+ * `moderation_muted` while this member is muted (G3), with the body respondProfileRefusal gives. True when it did.
+ */
+export function respondIfMuted(ctx: { status: number; body: unknown }, pubkey: string | null | undefined): boolean {
+    try {
+        assertNotMuted(pubkey);
+        return false;
+    } catch (e) {
+        if (respondProfileRefusal(ctx, e)) return true;
+        throw e;
+    }
 }

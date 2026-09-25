@@ -507,6 +507,8 @@ router.post('/api/messages/react', async (ctx) => {
     // share (PR #1048 review). A DM keeps the DM rules — its fan-out is the other phone.
     if (isGroupChatMessage(messageId) && !chatRateLimit(ctx, actor)) return;
     try {
+        // A reaction is up to 32 characters of anything, shown to everyone in the chat: a muted member (G3) adds none.
+        assertNotMuted(actor);
         const result = toggleMessageReaction(messageId, actor, emoji.trim());
         if (!result) {
             ctx.status = 404;
@@ -515,6 +517,7 @@ router.post('/api/messages/react', async (ctx) => {
         }
         ctx.body = { success: true, metadata: result.metadata };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         respondToMessagingError(ctx, e, 'update the reaction');
     }
 });

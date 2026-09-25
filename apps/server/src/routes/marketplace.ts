@@ -891,6 +891,9 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        // Putting a post back up publishes it, so a muted member (G3) can't; pausing one stays open.
+        assertNotMuted(ctx.state?.actor as string | undefined);
+        assertNotMuted(authorPublicKey);
         const success = resumePost(postId, authorPublicKey);
         if (success) {
             syncPulseMarketplaceGate();
@@ -901,6 +904,7 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         ctx.status = 400;
         ctx.body = { success: false, error: 'Post not found, not paused, or not owned by author' };
     } catch (e: any) {
+        if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to resume post' };
     }

@@ -34,7 +34,7 @@ import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { createEventFromBody } from './event-post.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { respondProfileRefusal } from './profile-feature-gate.js';
+import { respondProfileRefusal, respondIfMuted } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor } from '@beanpool/core';
 
@@ -474,6 +474,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'A positive amount is required' };
             return;
         }
+        // A note with a pledge is words the keepers read: a muted member (G3) pledges without one.
+        if (typeof memo === 'string' && memo.trim() && respondIfMuted(ctx, actor)) return;
         try {
             const txId = crypto.randomUUID();
             pledgeToProject(txId, treasury, actor, parsedAmount, memo || 'Enterprise Pledge', (ctx.state as any)?.authSig);
@@ -505,6 +507,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };
             return;
         }
+        // A muted member (G3) starts nothing other members read, and an enterprise's name and purpose are its page.
+        if (respondIfMuted(ctx, actor)) return;
 
         const body = (ctx as any).requestBody || {};
         const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt, lat, lng } = body;
@@ -1585,6 +1589,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
 
         try {
+            // A muted member (G3) writes nothing anyone else reads, here as in a group or event chat.
+            assertNotMuted(actor);
             const message = postEnterpriseThreadMessage(treasury, actor, text, clientId);
             ctx.status = 201;
             ctx.body = {
@@ -1592,6 +1598,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 message,
             };
         } catch (e: any) {
+            // Before the matching below, which would answer a mute as a plain 400.
+            if (respondProfileRefusal(ctx, e)) return;
             const msg = e?.message || 'Failed to post message';
             if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
                 ctx.status = 409;

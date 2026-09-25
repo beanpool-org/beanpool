@@ -63,6 +63,8 @@ export function adminGenerateInvite(
     return invite;
 }
 
+const REPLACED_KEY = 'This key was replaced by a new one, so it can’t join with this invite. Use the device or the 12 words that hold the new key.';
+
 /**
  * Validates and redeems standard INV- code, registering the member and seeding earned credit.
  */
@@ -97,13 +99,13 @@ export function redeemInvite(
         recordFunnelEvent('invite_failed', 'wrong_key');
         return { success: false, error: 'This invite was made for someone else, so it can’t be used here. Ask a member for your own invite.' };
     }
-    // Nor a key a re-key replaced (engine/member-wizards.ts), even the one the knock names. A re-key moves the knock to
-    // the new key (engine/knocks.ts `moveKnocks`), so the check above already refuses the old one; this is the second
-    // lock, for a knock left on a replaced key however it got there. Admitted, the replaced key would be a second
-    // member, the thing the re-key was for stopping.
-    if (knock && isInvalidatedKey(db, String(publicKey))) {
+    // Nor, with any invite, a key a re-key replaced (engine/member-wizards.ts). Admitted, the replaced key would be a
+    // second member, able to make invites of its own (`generateInvite` asks only for a member row): the thing the
+    // re-key was for stopping. For a knock's invite this is the second lock: a re-key moves the knock to the new key
+    // (engine/knocks.ts `moveKnocks`), so the check above already refuses the old one. `redeemOfflineTicket` has it too.
+    if (isInvalidatedKey(db, String(publicKey))) {
         recordFunnelEvent('invite_failed', 'key_invalidated');
-        return { success: false, error: 'This key was replaced by a new one, so it can’t join with this invite. Use the device or the 12 words that hold the new key.' };
+        return { success: false, error: REPLACED_KEY };
     }
 
     // Check if identity is ALREADY a member before "already used" check
@@ -166,6 +168,12 @@ export function redeemOfflineTicket(
             return { success: false, error: verified.error };
         }
         const { inviterPubkey, timestamp, intendedFor, codeHash } = verified;
+
+        // Never a key a re-key replaced, as in redeemInvite.
+        if (isInvalidatedKey(db, String(joinerPublicKey))) {
+            recordFunnelEvent('invite_failed', 'key_invalidated');
+            return { success: false, error: REPLACED_KEY };
+        }
 
         // Check if identity is ALREADY a member before "already used" check
         const existingMember = getMember(db, joinerPublicKey);

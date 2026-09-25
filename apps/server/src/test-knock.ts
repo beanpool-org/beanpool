@@ -44,6 +44,8 @@
  *      stale copy nor a full snapshot brings it back; a standby doesn't tidy by itself
  *  16. node-wide ceilings: the 31st knock in 24 hours, from a new address and a new key, and the 51st open knock each
  *      get the per-address limit's own 429; a reopened knock counts as a new one; answering one frees a slot
+ *  17. a key a re-key replaced gets nothing from an ordinary invite or an offline ticket (no member row, no invites of
+ *      its own), while the new key and newcomers are unaffected
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-knock.ts
  */
@@ -929,6 +931,38 @@ async function main(): Promise<void> {
     assert((await approve(max, rowsFor(flood[1].pk)[0]?.id)).status === 200 && (await listedNow()) === 49, 'a member approves one: 49 open');
     const intoSlot2 = await knockFromNew(newId('Crowded3'));
     assert(intoSlot2.status === 201, `and that slot is taken too (${intoSlot2.status})`);
+
+    console.log('\n── 17. a key a re-key replaced gets nothing from any invite ──');
+    // The reviewer's reproduction: Olga is re-keyed K1 → K2, Mia makes an ordinary invite, and K1 redeems it.
+    const olga = newId('Olga');
+    const olgaNew = newId('OlgaNew');
+    makeMember(olga, mia.pk);
+    assert(reKey(olga, olgaNew), 'Olga loses her phone and is re-keyed');
+    const ordinaryCode = (await call(mia, 'POST', '/api/invite/generate', { publicKey: mia.pk })).body?.invite?.code as string;
+    const usedBy = (c: string) => (db.prepare('SELECT used_by FROM invite_codes WHERE code = ? COLLATE NOCASE').get(c) as any)?.used_by ?? null;
+    const k1Redeem = await redeem(ordinaryCode, olga);
+    assert(k1Redeem.status === 400 && /replaced/.test(k1Redeem.body?.error ?? ''), `her old key redeeming Mia's ordinary invite → refused (${k1Redeem.status} ${k1Redeem.body?.error})`);
+    assert(!memberRow(olga.pk) && usedBy(ordinaryCode) === null, 'no member row for the old key, and the invite is not used');
+    // A paper invite: an offline ticket Mia signed.
+    const ticketPayload = JSON.stringify({ i: mia.pk, t: Date.now() });
+    const ticket = Buffer.from(JSON.stringify({ p: ticketPayload, s: crypto.sign(null, Buffer.from(ticketPayload), mia.priv).toString('base64') })).toString('base64');
+    const redeemTicket = (id: Id) => call(null, 'POST', '/api/invite/redeem-offline', { ticketB64: ticket, publicKey: id.pk, callsign: id.name });
+    const k1Ticket = await redeemTicket(olga);
+    assert(k1Ticket.status === 400 && /replaced/.test(k1Ticket.body?.error ?? ''), `her old key redeeming Mia's offline ticket → refused (${k1Ticket.status} ${k1Ticket.body?.error})`);
+    assert(!memberRow(olga.pk), 'still no member row for the old key');
+    const k1Mint = await call(olga, 'POST', '/api/invite/generate', { publicKey: olga.pk });
+    assert(k1Mint.status === 403 && !k1Mint.body?.invite, `and the old key can make no invite (${k1Mint.status})`);
+    const k2Redeem = await redeem(ordinaryCode, olgaNew);
+    assert(k2Redeem.status === 200 && k2Redeem.body?.alreadyMember === true, `her new key is a member as before (${k2Redeem.status})`);
+    const k2Mint = await call(olgaNew, 'POST', '/api/invite/generate', { publicKey: olgaNew.pk });
+    assert(k2Mint.status === 200 && typeof k2Mint.body?.invite?.code === 'string', `and makes invites as before (${k2Mint.status})`);
+    const quinn = newId('Quinn');
+    const rosa = newId('Rosa');
+    const quinnJoins = await redeem(ordinaryCode, quinn);
+    const rosaJoins = await redeemTicket(rosa);
+    assert(quinnJoins.status === 200 && memberRow(quinn.pk)?.status === 'active' && usedBy(ordinaryCode) === quinn.pk,
+        `a newcomer joins with the ordinary invite (${quinnJoins.status})`);
+    assert(rosaJoins.status === 200 && memberRow(rosa.pk)?.status === 'active', `and another with the offline ticket (${rosaJoins.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

@@ -231,8 +231,12 @@ function race(f: PostFilter, reps: number): { before: number; now: number } {
     return { before: median(a), now: median(b) };
 }
 
-/** Within a timer's noise of 743b5d57, generously: half as slow again, or 3 ms, whichever is more. */
-const noSlower = (t: number, base: number) => t <= Math.max(1.5 * base, base + 3);
+/**
+ * Within a timer's noise of 743b5d57, generously: twice as slow, or 5 ms, whichever is more. The regressions this suite exists
+ * to catch were 4x to 800x (#1140's rounds 1 and 2); a shared CI runner put a read that runs the very same SQL as 743b5d57 at
+ * 1.56x on 2026-09-26 (type=event, 20k posts: 29.5 ms against 18.9 ms), which the old 1.5x bound failed.
+ */
+const noSlower = (t: number, base: number) => t <= Math.max(2 * base, base + 5);
 
 interface Row { size: string; shape: Shape; before: number; now: number; reads: string; same: boolean }
 function measure(size: string): Row[] {

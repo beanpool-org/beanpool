@@ -308,8 +308,9 @@ export async function signInWithApple(nonce: string): Promise<Omit<SsoSignIn, 'p
 /**
  * Can this device offer Sign in with Google?
  *
- * Both native platforms, never the web. Android uses Credential Manager; the iPhone uses Google's
- * web sign-in page (see `signInWithGoogle`), where it is a secondary option to Apple.
+ * Both native platforms, never the web. Android uses Credential Manager, or Google's web sign-in
+ * page when its sheet cannot appear; the iPhone uses the web page (see `signInWithGoogle`), where it
+ * is a secondary option to Apple.
  */
 export function googleSignInAvailable(): boolean {
     if (Platform.OS === 'web') return false;
@@ -330,35 +331,39 @@ function lacksPlayServices(e: unknown): boolean {
 }
 
 /**
+ * Credential Manager answered without showing its sheet, so the member had nothing to choose from
+ * and nothing to cancel.
+ *
+ * NO_CREDENTIALS is what a suppressed sheet looks like, once the module has already fallen back to
+ * every account: no Google account on the phone, "Sign-in prompts" turned off for any account on it,
+ * or the sheet held back after a few dismissals. A phone without Play services has no provider for
+ * Credential Manager at all. Google's button flow (`GetSignInWithGoogleOption`) would cover the first
+ * two, but the module only ever builds `GetGoogleIdOption` (`GoogleSignInModule.kt`), so
+ * `signInWithGoogleCredentialManager` opens Google's web page instead.
+ */
+function googleSheetCannotShow(e: unknown): boolean {
+    return (isErrorWithCode(e) && e.code === 'NO_CREDENTIALS') || lacksPlayServices(e);
+}
+
+/**
  * Map Google Sign-In errors to SsoFailure reasons.
  *
  * Same pattern as describeAppleError: a discriminant the caller can act on. The codes are the ones
  * @thoughtbot/react-native-social-auth's Android module rejects with. SIGN_IN_CANCELLED is the one
  * that matters — the member opened the sheet, looked, and decided not to. Not a failure.
  *
- * `unsupported` is a phone that cannot do Google sign-in as it stands: no Google account on it
- * (NO_CREDENTIALS, once the module has already fallen back to every account), or no Play services.
+ * `unsupported` is a phone where Credential Manager's sheet cannot appear (`googleSheetCannotShow`).
+ * The sign-in does not end there: Google's web page takes over.
  */
 export function describeGoogleError(e: unknown): SsoFailure {
-    if (isErrorWithCode(e)) {
-        if (e.code === 'SIGN_IN_CANCELLED') return 'cancelled';
-        if (e.code === 'NO_CREDENTIALS') return 'unsupported';
-    }
-    if (lacksPlayServices(e)) return 'unsupported';
+    if (isErrorWithCode(e) && e.code === 'SIGN_IN_CANCELLED') return 'cancelled';
+    if (googleSheetCannotShow(e)) return 'unsupported';
     return 'provider';
 }
 
-/** The error a failed Google sign-in surfaces as, with a message a member can act on. */
+/** The error a failed Google sheet surfaces as, once `googleSheetCannotShow` is ruled out. */
 function googleSignInFailure(e: unknown): SsoSignInError {
-    const reason = describeGoogleError(e);
-    if (reason === 'cancelled') return new SsoSignInError('cancelled', 'Sign-in was cancelled.');
-    if (reason === 'unsupported') {
-        // Credential Manager can also answer NO_CREDENTIALS while it holds its sheet back after a few
-        // dismissals, so the message does not claim the phone has no account at all.
-        return new SsoSignInError('unsupported', lacksPlayServices(e)
-            ? 'Google sign-in needs Google Play services, which this phone does not have or needs to update.'
-            : "Google found no account to use on this phone. Check that a Google account is added in the phone's settings, then try again in a few minutes.");
-    }
+    if (describeGoogleError(e) === 'cancelled') return new SsoSignInError('cancelled', 'Sign-in was cancelled.');
     return new SsoSignInError('provider', formatGoogleErrorMessage(e));
 }
 
@@ -385,7 +390,8 @@ function jwtClaims(token: string): Record<string, unknown> | null {
  * set a nonce, so neither platform uses it any more:
  *
  * - Android: Credential Manager, through @thoughtbot/react-native-social-auth, which passes the
- *   nonce to `GetGoogleIdOption.setNonce()`.
+ *   nonce to `GetGoogleIdOption.setNonce()`. When its sheet cannot appear at all, Google's web page
+ *   instead, as on the iPhone.
  * - iPhone: Google's own web sign-in page. The same library's iOS side does not pass the nonce
  *   yet (its own comment in `ios/GoogleSignIn.mm`), so it is not even linked there
  *   (`react-native.config.js`).
@@ -447,6 +453,13 @@ async function signInWithGoogleCredentialManager(nonce: string): Promise<{ idTok
     try {
         credential = await GoogleSignIn.signIn();
     } catch (e) {
+        if (googleSheetCannotShow(e)) {
+            // Same nonce: the sheet never appeared, so no token carries it and the node, which spends
+            // a nonce only when a token bearing it comes back (`consumeNonce` in sso.ts), has not seen
+            // it. A cancelled sheet never gets here; the member chose not to go on.
+            console.log(`[SSO] google: Credential Manager could not show its sheet (${extractErrorMessage(e)}), opening Google's web page`);
+            return signInWithGoogleWebPage(nonce);
+        }
         throw googleSignInFailure(e);
     }
     if (!credential?.idToken) {
@@ -483,6 +496,14 @@ const SPURIOUS_CANCEL_GRACE_MS = Platform.OS === 'ios' ? 0 : 2_000;
 const EXCHANGE_TIMEOUT_MS = 20_000;
 
 const TIMED_OUT = Symbol('sso-timeout');
+
+interface AuthSessionOptions {
+    /**
+     * What to tell the member when the browser cannot open the page at all. Without it a browser
+     * that throws ends the sign-in as a cancel, as it always has for Facebook.
+     */
+    browserFailure?: string;
+}
 
 /**
  * Every parameter in a callback URL, from the query and the fragment together.
@@ -538,7 +559,8 @@ async function openAuthSessionWithLinkingFallback(
     authUrl: string,
     completionUri: string,
     expectedState: string,
-    provider: SsoProvider
+    provider: SsoProvider,
+    { browserFailure }: AuthSessionOptions = {},
 ): Promise<string> {
     let resolveArrival: (url: string) => void = () => {};
     const arrival = new Promise<string>((resolve) => {
@@ -580,13 +602,14 @@ async function openAuthSessionWithLinkingFallback(
         })
         .catch((e) => {
             console.log(`[SSO] ${provider}: browser threw`, e);
-            return null;
+            return browserFailure === undefined ? null : new SsoSignInError('provider', browserFailure);
         });
 
     console.log(`[SSO] ${provider}: opening auth session`);
     try {
         const outcome = await Promise.race([arrival, browser, deadline]);
         if (typeof outcome === 'string') return outcome;
+        if (outcome instanceof SsoSignInError) throw outcome;
         if (outcome === TIMED_OUT) {
             console.log(`[SSO] ${provider}: no callback within ${AUTH_CALLBACK_TIMEOUT_MS}ms`);
             throw new SsoSignInError('provider', `${provider} sign-in timed out.`);
@@ -604,12 +627,14 @@ async function openAuthSessionWithLinkingFallback(
 }
 
 /**
- * Where Google sends the iPhone back. Registered as an authorised redirect URI on the Web client.
+ * Where Google's web page sends the member back. Registered as an authorised redirect URI on the
+ * Web client.
  *
- * `apps/website/auth/google.html` answers it and bounces to `beanpool://auth/google`, which
- * `ASWebAuthenticationSession` catches: the iOS associated domains cover only `/` and `/app*`, so
- * this https page is loaded, not claimed by the app. On Android `beanpool.org/auth/*` is an App
- * Link, but Android does not use this flow.
+ * On the iPhone, `apps/website/auth/google.html` answers it and bounces to `beanpool://auth/google`,
+ * which `ASWebAuthenticationSession` catches: the iOS associated domains cover only `/` and `/app*`,
+ * so this https page is loaded, not claimed by the app. On Android `beanpool.org/auth/` is a verified
+ * App Link (`app.json`), so the redirect opens the app directly, as Facebook's does, and the bounce
+ * page only matters if the link is not claimed.
  */
 export const GOOGLE_REDIRECT_URI = 'https://beanpool.org/auth/google';
 const GOOGLE_COMPLETION_URI = 'beanpool://auth/google';
@@ -663,9 +688,21 @@ export function readGoogleCallback(url: string, expectedState: string): { idToke
     return { idToken, email: typeof email === 'string' && email ? email : undefined };
 }
 
-/** iPhone: Google's web sign-in page, returning through the website's bounce page. */
+/**
+ * Google's web sign-in page: always on the iPhone, and on Android when Credential Manager's sheet
+ * cannot appear (`googleSheetCannotShow`).
+ *
+ * On Android this is the Facebook flow exactly: the App Link brings the app forward over the Custom
+ * Tab, which Android gives an app no way to close, and `openAuthSessionWithLinkingFallback` takes the
+ * callback from the link rather than from the browser's spurious cancel.
+ *
+ * A page that cannot open at all is said so plainly. For a member who got here because the sheet
+ * could not appear, reading that as a cancel would mean tapping and seeing nothing happen.
+ */
 async function signInWithGoogleWebPage(nonce: string): Promise<{ idToken: string; email?: string }> {
-    const url = await openAuthSessionWithLinkingFallback(googleAuthUrl(nonce), GOOGLE_COMPLETION_URI, nonce, 'google');
+    const url = await openAuthSessionWithLinkingFallback(googleAuthUrl(nonce), GOOGLE_COMPLETION_URI, nonce, 'google', {
+        browserFailure: "Google's sign-in page could not open on this phone. Try again.",
+    });
     return readGoogleCallback(url, nonce);
 }
 

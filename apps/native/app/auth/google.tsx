@@ -6,9 +6,10 @@ import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
 
 /**
- * Where `beanpool://auth/google` lands when it reaches the app as a link rather than inside the
- * iPhone's auth session (utils/sso-signin.ts, `signInWithGoogleWebPage`). Without a screen here the
- * member is left on Expo Router's Unmatched Route after signing in.
+ * Where Google's web page returns when it reaches the app as a link rather than inside an auth
+ * session (utils/sso-signin.ts, `signInWithGoogleWebPage`): `beanpool://auth/google` from the
+ * bounce page, or on Android the `https://beanpool.org/auth/google` App Link. Without a screen here
+ * the member is left on Expo Router's Unmatched Route after signing in.
  */
 export default function GoogleAuthCallbackScreen() {
     const router = useRouter();

@@ -1,24 +1,28 @@
 // Invariant fuzz for the registrar's races (PR 1b; kept from the deciding pass's scratch fuzz). One run: a setup puts
 // a name in a state; a primary request runs; an interfering request or decision lands just before Cloudflare answers
-// one of the primary's calls, or during its edge re-attest; and Cloudflare refuses some writes for a while (a failure
-// mode). Then Cloudflare recovers, and the name settles as it would in production: the sweep runs and nodes poll
-// /status, three times. After that, on the name and its two neighbours:
+// one of the primary's calls, just before one of its D1 writes (PR 1c), or during its edge re-attest; and Cloudflare
+// refuses some writes for a while (a failure mode). Then Cloudflare recovers, and the name settles as it would in
+// production: the sweep runs and nodes poll /status, three times. After that, on the name and its two neighbours:
 //   1. nothing routes a key that doesn't own the name: no attest in the last two sweeps reached one (the first sweep
 //      after recovery attests before its upkeep repairs), and the record at the hostname points only at the live row's
 //      key (an address that key serves, or a tunnel only it was given);
 //   2. a paused, blocked, released or pending name routes nothing: no record at its hostname;
 //   3. a live name routes exactly what its row records (its record, pointing at its target; its tunnel alive), and
-//      its owner's node answers there;
+//      its owner's node answers there (or, at an old address its row still records, whatever was recycled there);
 //   4. no teardown is lost: no bp-<name> tunnel is alive but the row's, and nothing is still owed but a tunnel the
 //      row keeps (live on it, or the admin's pause) — owed on purpose until no row does (settleOwed);
+//   5. a node's move (healMoved, claimMoved: it leaves OLD_IP, which is then recycled) that the registrar answered live
+//      is what the row records, if the name is still its owner's and live — unless the owner's own request naming
+//      another target raced it;
 // and no request answered 500.
 // Nodes answer only where Cloudflare routes: an A record reaches the node serving that address (none: 522); a CNAME
 // reaches the node whose connector runs that tunnel — the last token the registrar gave it — if the tunnel is alive and
 // its ingress names the hostname (else 530 or 404). So a record left pointing at another key is seen as that key.
 //
-// `npm test` runs every setup × primary × mode once undisturbed (1,008 runs), then a seeded sample of the matrix
-// (FUZZ_SAMPLE runs, default 1000; FUZZ_SEED, default 1137, printed with each failing case): about 12 s. `npm run fuzz`
-// runs the whole matrix, ~35,000 cases in about 3½ minutes (FUZZ_SETUP=<name> for one setup's share).
+// `npm test` runs every setup × primary × mode once undisturbed (1,134 runs), then the moves' cases in full (moveCase:
+// 1,395), then a seeded sample of the rest of the matrix (FUZZ_SAMPLE runs, default 1000; FUZZ_SEED, default 1137,
+// printed with each failing case): about 19 s. `npm run fuzz` runs the whole matrix, ~105,000 cases in about 11 minutes
+// (FUZZ_SETUP=<name> or FUZZ_PRIMARY=<name> for one share: the largest setup takes about 2½ minutes).
 // FUZZ_CASE='setup|primary|interferer|mode|at' replays one case and prints its trace.
 
 import test from 'node:test';
@@ -39,6 +43,7 @@ const direct = (ip) => ({ mode: 'direct', public_ip: ip });
 async function fuzzWorld(K) {
     const w = await world();
     const serves = new Map([[OLD_IP, K.owner], [MOVED_IP, K.owner], [NEW_IP, K.other]]);
+    const recycled = new Set();  // addresses a web page that isn't a BeanPool node now answers at
     const runs = new Map();      // key → the tunnel its connector runs
     const given = new Map();     // tunnel id → the keys the registrar gave its token
     const heard = [];            // each attest that reached a node: { host, key }
@@ -54,7 +59,10 @@ async function fuzzWorld(K) {
     const reaches = (host) => {
         const rec = w.cf.recordAt(host);
         if (!rec) return { status: 'unresolved' };
-        if (rec.type === 'A') return serves.has(rec.content) ? { key: serves.get(rec.content) } : { status: 522 };
+        if (rec.type === 'A') {
+            if (serves.has(rec.content)) return { key: serves.get(rec.content) };
+            return recycled.has(rec.content) ? { status: 200, page: true } : { status: 522 };
+        }
         const id = rec.content.replace(/\.cfargotunnel\.com$/, '');
         const t = w.cf.liveTunnel(id);
         if (!t) return { status: 530 };
@@ -65,6 +73,7 @@ async function fuzzWorld(K) {
     const answer = (host) => async (nonce) => {
         const r = reaches(host);
         if (r.status === 'unresolved') throw new Error(`${host} does not resolve`);
+        if (r.page) return new Response('<html>router login</html>', { status: 200 });
         if (!r.key) return new Response(`cloudflare ${r.status}`, { status: r.status });
         heard.push({ host, key: r.key });
         return attestsAs(r.key)(nonce);
@@ -72,7 +81,10 @@ async function fuzzWorld(K) {
     for (const host of [HOST, ...NEIGHBOURS.map((n) => `${n}.beanpool.org`)]) w.nodes[host] = answer(host);
     const keeping = (key) => async (p) => { const r = await p; statuses.push(r.status); took(key, r.body); return r; };
     return {
-        w, K, serves, runs, given, heard, statuses, reaches, answer,
+        w, K, serves, recycled, runs, given, heard, statuses, reaches, answer,
+        // The owner's node moves off OLD_IP (nothing answers there: Cloudflare's 522); later the address is recycled.
+        move: () => { serves.delete(OLD_IP); },
+        recycle: () => { if (!serves.has(OLD_IP)) recycled.add(OLD_IP); },
         claim: (key, body) => keeping(key)(w.claim(key, body)),
         heal: (key, body) => keeping(key)(w.heal(key, body)),
         release: (key, body) => keeping(key)(w.release(key, body)),
@@ -125,9 +137,34 @@ const ACTIONS = {
     blockResume: async (fz) => { await fz.admin('block'); return fz.admin('resume'); },
     relNew: async (fz) => { await fz.admin('release'); return fz.claim(fz.K.other, { name: NAME }); },
     relNewDirect: async (fz) => { await fz.admin('release'); return fz.claim(fz.K.other, { name: NAME, ...direct(NEW_IP) }); },
+    // The owner's node moves to a new address (nothing answers at OLD_IP any more), then heals, or claims, there. Once
+    // the primary is done, OLD_IP is recycled: a web page that isn't a BeanPool node answers there, which isn't dark.
+    healMoved: (fz) => { fz.move(); return fz.heal(fz.K.owner, { name: NAME, ...direct(MOVED_IP) }); },
+    claimMoved: (fz) => { fz.move(); return fz.claim(fz.K.owner, { name: NAME, ...direct(MOVED_IP) }); },
+    // Interfering only: the same key's heal, or claim, back to its old address.
+    healOld: (fz) => fz.heal(fz.K.owner, { name: NAME, ...direct(OLD_IP) }),
+    claimOld: (fz) => fz.claim(fz.K.owner, { name: NAME, ...direct(OLD_IP) }),
     sweep: (fz) => attestSweep(fz.w.env),
+    // The sweep while nothing answers at the owner's new address yet — Cloudflare's edge takes a few seconds to follow a
+    // PATCH, or the node is still coming up there — so its attest at the name finds nothing (522) and its upkeep looks.
+    sweepDark: async (fz) => {
+        fz.serves.delete(MOVED_IP);
+        try { return await attestSweep(fz.w.env); } finally { fz.serves.set(MOVED_IP, fz.K.owner); }
+    },
 };
-const PRIMARIES = Object.keys(ACTIONS).filter((a) => a !== 'sweep');
+const PRIMARIES = Object.keys(ACTIONS).filter((a) => !['sweep', 'sweepDark', 'healOld', 'claimOld'].includes(a));
+const MOVES = new Set(['healMoved', 'claimMoved']);
+// A move is a primary only: the node leaving its old address is what (5) checks, and as an interfering request its heal
+// may rightly be refused (a block, a pause) with the node gone from the address its row records. healDirect interferes
+// with the same request, the node staying where it was.
+const INTERFERERS = Object.keys(ACTIONS).filter((a) => !MOVES.has(a));
+// Run in full by `npm test`: a node's move with the requests that read the row at its old address — the sweep's repair
+// (the node has just left it: Cloudflare's 52x), a bare heal, a heal or claim back to it — landing just before one of
+// the move's D1 writes (r4101264972).
+const MOVE_INTERFERERS = ['sweep', 'sweepDark', 'heal', 'healOld', 'claimOld'];
+const moveCase = (c) => MOVES.has(c.primary) && MOVE_INTERFERERS.includes(c.interferer) && String(c.at).startsWith('write:');
+// The owner's own requests naming a routing target: a move racing one of them may end on either (invariant 5).
+const OWN_TARGETS = new Set(['healDirect', 'healTunnel', 'claim', 'healOld', 'claimOld', 'healMoved', 'claimMoved']);
 
 // What Cloudflare refuses (fake Cloudflare's `fail` flags), and when: from the primary's start, while the interfering
 // action runs, from the end of that action, or from the call after the one it landed at (the in-flight call goes
@@ -175,7 +212,11 @@ async function broken(fz, name, since) {
         else if (rec.type !== want.type || rec.content !== want.content) out.push(`3: live ${row.mode}, the record points elsewhere`);
         if (row.mode === 'tunnel' && !w.cf.liveTunnel(row.tunnel_id)) out.push('3: live on a tunnel Cloudflare no longer has');
         const r = fz.reaches(host);
-        if (rec && r.key?.pubHex !== row.node_pubkey) out.push(`3: live, but ${r.key ? who(K, r.key) : `Cloudflare's ${r.status}`} answers there, not its owner's node`);
+        const there = r.key ? who(K, r.key) : r.page ? 'a web page that isn\'t a BeanPool node (a recycled address)' : `Cloudflare's ${r.status}`;
+        // An address its row still records that was recycled once its node left: the owner's own last word (a heal back
+        // to it, or a move the registrar answered as failed). The registrar can't see that; (5) checks the moves.
+        const ownOld = r.page && row.mode === 'direct' && rec?.content === row.public_ip;
+        if (rec && r.key?.pubHex !== row.node_pubkey && !ownOld) out.push(`3: live, but ${there} answers there, not its owner's node`);
     }
     const keeps = (t) => t.kind === 'tunnel' && t.cf_id === row?.tunnel_id && (live || (row.status === 'paused' && row.pause_reason === 'admin'));
     const owed = w.sqlite.prepare('SELECT kind, cf_id FROM teardown WHERE name=?').all(name).filter((t) => !keeps(t));
@@ -186,10 +227,11 @@ async function broken(fz, name, since) {
 }
 
 // One case: { setup, primary, interferer, mode, at } — `at` the n-th Cloudflare call of the primary (a number),
+// 'write:n' (just before the primary's n-th D1 write: between its last Cloudflare answer and its row write),
 // 'attest' (its edge re-attest at the name), 'sweep:n' (the n-th Cloudflare call of the sweep during the outage: a
 // take-down landing while the sweep settles what is owed), or null (undisturbed). Returns the invariants broken, and
-// where an interfering action can land: the primary's Cloudflare calls, whether it attested at the name, and the
-// outage sweep's Cloudflare calls.
+// where an interfering action can land: the primary's Cloudflare calls and D1 writes, whether it attested at the name,
+// and the outage sweep's Cloudflare calls.
 async function run(K, c) {
     const fz = await fuzzWorld(K);
     const { w } = fz;
@@ -218,12 +260,18 @@ async function run(K, c) {
         };
         if (c.at === 'attest') armed = true;
         else if (typeof c.at === 'number') w.cf.at(c.at, interfere);
+        else if (String(c.at).startsWith('write:')) w.atWrite(Number(c.at.slice(6)), interfere);
         const n0 = w.cf.calls.length;
+        const d0 = w.writes();
         if (m.from === 'start') refuse(m.refuse, true);
-        try { await ACTIONS[c.primary](fz); } catch (e) { fz.statuses.push(`threw ${e.message}`); }
+        let answered;
+        try { answered = await ACTIONS[c.primary](fz); } catch (e) { fz.statuses.push(`threw ${e.message}`); }
         const used = w.cf.calls.length - n0;
+        const wrote = w.writes() - d0;
         w.nodes[HOST] = answer;
         w.cf.hooks.length = 0;
+        w.runHooks.length = 0;
+        if (MOVES.has(c.primary)) fz.recycle();
         let sweepCalls = 0;
         if (m.outage) {
             if (String(c.at).startsWith('sweep:')) w.cf.at(Number(c.at.slice(6)), interfere);
@@ -241,13 +289,18 @@ async function run(K, c) {
         await attestSweep(w.env); await fz.reconcile();
         const bad = [];
         for (const n of [NAME, ...NEIGHBOURS]) bad.push(...await broken(fz, n, since));
+        if (MOVES.has(c.primary) && answered?.status === 200 && answered.body?.status === 'live' && !OWN_TARGETS.has(c.interferer)) {
+            const row = await w.row(NAME);
+            if (row?.status === 'live' && row.node_pubkey === K.owner.pubHex && !(row.mode === 'direct' && row.public_ip === MOVED_IP))
+                bad.push(`5: its move was answered live, but the row records ${row.mode === 'direct' ? row.public_ip : 'a tunnel'}`);
+        }
         for (const s of fz.statuses) if (s === 500 || String(s).startsWith('threw')) bad.push(`a request answered ${s}`);
         const trace = c.trace && {
             answers: fz.statuses, events: w.events(NAME), row: await w.row(NAME), record: w.cf.recordAt(HOST),
             tunnels: routing(w, NAME).tunnels, owed: w.sqlite.prepare('SELECT * FROM teardown').all(),
             attests: fz.heard.map((h, i) => `${i < since ? '' : '(settled) '}${h.host} → ${who(K, h.key)}`), calls: w.cf.calls,
         };
-        return { bad, used, attested, sweepCalls, trace };
+        return { bad, used, wrote, attested, sweepCalls, trace };
     } finally { w.restore(); }
 }
 
@@ -292,6 +345,7 @@ test(`fuzz: races × Cloudflare refusals leave every name routed as its row says
         failures.get(shape).push(caseId(c));
     };
     let matrix = 0;
+    let moves = 0;
     let trace;
     const started = Date.now();
     await quietly(async () => {
@@ -307,24 +361,29 @@ test(`fuzz: races × Cloudflare refusals leave every name routed as its row says
         for (const setup of Object.keys(SETUPS)) {
             if (process.env.FUZZ_SETUP && setup !== process.env.FUZZ_SETUP) continue;
             for (const primary of PRIMARIES) {
+                if (process.env.FUZZ_PRIMARY && primary !== process.env.FUZZ_PRIMARY) continue;
                 for (const mode of Object.keys(MODES)) {
                     const c = { setup, primary, interferer: null, mode, at: null };
                     const base = await run(K, c);
                     tally(c, base.bad);
                     const points = [
                         ...Array.from({ length: base.used ?? 0 }, (_, i) => i + 1), ...(base.attested ? ['attest'] : []),
+                        ...Array.from({ length: base.wrote ?? 0 }, (_, i) => `write:${i + 1}`),
                         ...Array.from({ length: base.sweepCalls ?? 0 }, (_, i) => `sweep:${i + 1}`),
                     ];
-                    for (const interferer of Object.keys(ACTIONS)) for (const at of points) cases.push({ setup, primary, interferer, mode, at });
+                    for (const interferer of INTERFERERS) for (const at of points) cases.push({ setup, primary, interferer, mode, at });
                 }
             }
         }
         matrix = cases.length;
         let todo = cases;
         if (!FULL) {
+            // The moves' cases in full, then a seeded sample of the rest.
+            const rest = cases.filter((c) => !moveCase(c));
+            moves = cases.length - rest.length;
             const rand = prng(SEED);
-            for (let i = cases.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [cases[i], cases[j]] = [cases[j], cases[i]]; }
-            todo = cases.slice(0, SAMPLE);
+            for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+            todo = [...cases.filter(moveCase), ...rest.slice(0, SAMPLE)];
         }
         for (const c of todo) tally(c, (await run(K, c)).bad);
     });
@@ -332,7 +391,7 @@ test(`fuzz: races × Cloudflare refusals leave every name routed as its row says
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     const brokenRuns = [...failures.values()].reduce((n, cs) => n + cs.length, 0);
     const report = [...failures].map(([shape, cs]) => `${shape}\n    ${cs.length} case(s), e.g. FUZZ_CASE='${cs[0]}'`);
-    console.log(`[fuzz] ${ran} runs (every setup × primary × mode undisturbed, then ${FULL ? 'all' : `a seed-${SEED} sample`} of a `
+    console.log(`[fuzz] ${ran} runs (every setup × primary × mode undisturbed, then ${FULL ? 'all' : `its ${moves} move cases and a seed-${SEED} sample of the rest`} of a `
         + `${matrix}-case matrix) in ${secs}s: ${brokenRuns} broken, ${failures.size} distinct shapes`);
     assert.deepEqual(report, [], `seed ${SEED}:\n${report.join('\n')}`);
 });

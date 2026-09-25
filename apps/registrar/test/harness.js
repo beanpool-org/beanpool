@@ -16,12 +16,14 @@ export const migration = (m) => readFileSync(new URL(`../migrations/${m}`, impor
 // once, just after the first first() whose SQL matches `re` has read its row, `run` runs to completion before the
 // caller gets that row — a request landing between another request's read and its first write. `beforeRun(re, run)`:
 // once, just before the first run() whose SQL matches `re` writes, `run` runs to completion — a request landing
-// between another request's last Cloudflare call and its write.
+// between another request's last Cloudflare call and its write. `atWrite(n, run)`: the same, just before the n-th run()
+// from now; `writes()` counts the run() calls so far.
 export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql']) {
     const sqlite = new DatabaseSync(':memory:');
     for (const m of migrations) sqlite.exec(migration(m));
     const readHooks = [];
     const runHooks = [];
+    let runs = 0;
     const d1 = {
         prepare(sql) {
             const stmt = sqlite.prepare(sql);
@@ -36,7 +38,8 @@ export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003
                 },
                 async all() { return { results: stmt.all(...args).map((r) => ({ ...r })) }; },
                 async run() {
-                    const h = runHooks.findIndex((x) => x.re.test(sql));
+                    runs++;
+                    const h = runHooks.findIndex((x) => (x.re ? x.re.test(sql) : x.n === runs));
                     if (h >= 0) await runHooks.splice(h, 1)[0].run();
                     const r = stmt.run(...args);
                     return { success: true, meta: { changes: Number(r.changes) } };
@@ -47,7 +50,8 @@ export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003
     const all = (sql, ...a) => sqlite.prepare(sql).all(...a).map((r) => ({ ...r }));
     const afterRead = (re, run) => readHooks.push({ re, run });
     const beforeRun = (re, run) => runHooks.push({ re, run });
-    return { sqlite, d1, all, afterRead, beforeRun };
+    const atWrite = (n, run) => runHooks.push({ n: runs + n, run });
+    return { sqlite, d1, all, afterRead, beforeRun, atWrite, writes: () => runs, runHooks };
 }
 
 // Cloudflare as far as the registrar uses it. A duplicate live tunnel name and a second record at a hostname are
@@ -150,7 +154,7 @@ export const attestsAs = (key) => async (nonce) => {
 // One world per test: D1, fake Cloudflare, and nodes answering at hostnames — but only while Cloudflare routes the
 // hostname (a DNS record exists), so an edge attest can only pass once the registrar has routing back up.
 export async function world({ migrations, env: extra } = {}) {
-    const { sqlite, d1, all, afterRead, beforeRun } = sqliteD1(migrations);
+    const { sqlite, d1, all, afterRead, beforeRun, atWrite, writes, runHooks } = sqliteD1(migrations);
     const cf = fakeCloudflare();
     const nodes = {};
     const env = {
@@ -179,7 +183,7 @@ export async function world({ migrations, env: extra } = {}) {
     };
     const call = async (req) => { const res = await worker.fetch(req, env); return { status: res.status, body: await res.json() }; };
     const w = {
-        env, cf, nodes, sqlite, afterRead, beforeRun,
+        env, cf, nodes, sqlite, afterRead, beforeRun, atWrite, writes, runHooks,
         restore: () => { globalThis.fetch = original; },
         row: async (name) => db.getAllocation(env, name),
         events: (name) => all('SELECT event, detail FROM name_events WHERE name=? ORDER BY id', name),

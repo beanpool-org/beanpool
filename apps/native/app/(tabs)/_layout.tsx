@@ -10,7 +10,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getGlobalUnreadCount, syncMessages, getPosts, getMarketplaceTransactions } from '../../utils/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../ThemeContext';
+import { useNodeStatus } from '../NodeStatusContext';
 import { withJitter } from '../../utils/jitter';
+import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab } from '../../utils/node-profile';
 
 // A small label sits ABOVE each icon,
 // so the text is buffered from the busy page below. Height is fixed here because the library
@@ -109,6 +111,25 @@ export default function TabLayout() {
     const [dealsCount, setDealsCount] = useState(0);
     const [needsBackup, setNeedsBackup] = useState(false);
     const lastNetSyncAtRef = useRef(0);
+    const { nodeUrl } = useNodeStatus();
+    // Commons and Ledger are money: a node with Beans off (the global community) hides them. What this phone
+    // last heard from the node first, so the strip doesn't jump, then the node's own answer.
+    const [hiddenTabs, setHiddenTabs] = useState<HideableTab[]>([]);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const url = nodeUrl ?? await AsyncStorage.getItem('beanpool_anchor_url');
+            if (!url) {
+                if (!cancelled) setHiddenTabs([]);
+                return;
+            }
+            const cached = await getCachedNodeProfile(url);
+            if (!cancelled) setHiddenTabs(hiddenTabsFor(cached?.features));
+            const fresh = await fetchNodeProfile(url);
+            if (fresh && !cancelled) setHiddenTabs(hiddenTabsFor(fresh.features));
+        })().catch(() => {});
+        return () => { cancelled = true; };
+    }, [nodeUrl]);
 
     useEffect(() => {
         if (!identity?.publicKey) return;
@@ -309,6 +330,7 @@ export default function TabLayout() {
                 <Tabs.Screen
                     name="projects"
                     options={{
+                        ...(hiddenTabs.includes('projects') ? { href: null } : {}),
                         title: 'Commons',
                         tabBarAccessibilityLabel: 'Commons',
                         tabBarButtonTestID: 'tab-commons',
@@ -318,6 +340,7 @@ export default function TabLayout() {
                 <Tabs.Screen
                     name="ledger"
                     options={{
+                        ...(hiddenTabs.includes('ledger') ? { href: null } : {}),
                         title: 'Ledger',
                         tabBarAccessibilityLabel: 'Ledger',
                         tabBarButtonTestID: 'tab-ledger',

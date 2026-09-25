@@ -91,22 +91,50 @@ export function hasMnemonic(identity: BeanPoolIdentity | null | undefined): iden
 }
 
 /**
- * Generate a new Ed25519 identity from a 12-word mnemonic.
+ * A new Ed25519 identity from fresh 12 words, NOT saved.
+ *
+ * For a key that has to sign before the member has committed to anything: the global community's door
+ * binds its sign-in to the joining key (utils/global-join.ts), so the key exists before the sign-in and
+ * is written to the phone only when the member taps Join. `importIdentity` saves it.
  */
-export async function createIdentity(callsign: string): Promise<BeanPoolIdentity> {
+export async function draftIdentity(callsign = ''): Promise<BeanPoolIdentity> {
     const words = generateMnemonic();
     const { publicKeyHex, privateKeyHex } = await mnemonicToKeypair(words);
-
-    const identity: BeanPoolIdentity = {
+    return {
         publicKey: publicKeyHex,
         privateKey: privateKeyHex,
         callsign,
         createdAt: new Date().toISOString(),
         mnemonic: words,
     };
+}
 
+/**
+ * Generate a new Ed25519 identity from a 12-word mnemonic.
+ */
+export async function createIdentity(callsign: string): Promise<BeanPoolIdentity> {
+    const identity = await draftIdentity(callsign);
     await saveIdentity(identity);
     return identity;
+}
+
+/**
+ * Take off this phone a key that no community ever accepted, and only if it is the key stored here.
+ *
+ * For one caller: the global community's join, when its door refuses for good a key that same join made
+ * (the sign-in already has an account there, or the door is shut). The member never saw its words and no
+ * node knows it. Left behind, it would be the phone's "account": restoring the member's real one would
+ * then ask them to replace it, under a name they chose a minute ago. Returns whether a key was removed.
+ */
+export async function discardUnjoinedIdentity(publicKey: string): Promise<boolean> {
+    const stored = await loadIdentity();
+    if (!stored || !publicKey || stored.publicKey !== publicKey) return false;
+    if (isWeb) {
+        localStorage.removeItem(KEY_ID);
+    } else {
+        await SecureStore.deleteItemAsync(KEY_ID);
+    }
+    return true;
 }
 
 /**

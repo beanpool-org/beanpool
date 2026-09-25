@@ -65,7 +65,7 @@ While one of these shows, the invite icon is hidden.
 
 ## The buttons on the right
 
-- **The invite icon** (a person with a plus): opens **Invites**, to invite someone or join another community. See "Joining with an invite".
+- **The invite icon** (a person with a plus): opens **Invites**, to invite someone or join another community. See "Joining BeanPool".
 - **Settings** (the sliders): opens **Settings**. Tap it again to go back to where you were.
 - **Your picture:** opens your own profile, as others see it.
 

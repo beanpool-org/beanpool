@@ -34,7 +34,7 @@ import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { viewerTier, VIEW_HEADER } from './viewer.js';
+import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { guestPost } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 
@@ -732,6 +732,9 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
         ctx.body = { error: 'Authentication required' };
         return;
     }
+    // The answer names the writer. The engine refuses a non-member on every node (removeEventThreadMessage); here, as
+    // on every route that hands its caller a person, the visitors' view answers first.
+    if (!membersOnlyHere(ctx)) return;
     const body = (ctx as any).requestBody || {};
     const messageId = body.messageId || body.id;
     if (!messageId || typeof messageId !== 'string') {
@@ -822,6 +825,7 @@ router.post('/api/marketplace/transactions/reject', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
         const tx = rejectPostRequest(transactionId, authorPublicKey);
         if (!tx) {
             ctx.status = 400;
@@ -843,6 +847,7 @@ router.post('/api/marketplace/transactions/cancel-request', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
+        if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
         const tx = cancelPostRequest(transactionId, buyerPublicKey);
         if (!tx) {
             ctx.status = 400;
@@ -863,6 +868,7 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
         return;
     }
     if (!assertActorEntitled(ctx, confirmerPublicKey)) return;
+    if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
     const rawHours = finalHours !== undefined ? finalHours : hours;
     const parsedFinalHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
     try {
@@ -894,6 +900,7 @@ router.post('/api/marketplace/transactions/cancel', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, cancellerPublicKey)) return;
+        if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
         const tx = cancelPostTransaction(transactionId, cancellerPublicKey);
         if (!tx) {
             ctx.status = 400;

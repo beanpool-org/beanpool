@@ -980,6 +980,29 @@ async function main(): Promise<void> {
             db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata) VALUES (?, 'conv-pruned', ?, 'Y2lwaGVy', 'bm9uY2U=', 'text', ?)`)
                 .run(mid, author, reactedByAlice);
         }
+        // And the event chats and trades pruning leaves it (4109135691): an event of its own and one in the group it
+        // convenes, each with a line of Alice's; a request it made, one waiting on it, a deal it is in, and one it completed.
+        // Made while it was a member, as they would have been.
+        db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(pruned.pk);
+        const inAWeek = { eventStartAt: new Date(Date.now() + 7 * 86_400_000).toISOString(), eventPlaceName: PLACE_NAME };
+        const prunedEvent = post(pruned, 'Sentinel pruned working bee', EVENT_AT, inAWeek, 'event', 'community');
+        const prunedOffer = post(pruned, 'Sentinel pruned jam', OFFER_AT);
+        db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(pruned.pk);
+        const clubEvent = post(alice, 'Sentinel pruned club picnic', EVENT_AT, { ...inAWeek, audienceScope: 'group', targetGroupId: prunedClub.id }, 'event', 'community');
+        se.rsvpEvent(prunedEvent.id, alice.pk, 'going');
+        const aliceLines = [prunedEvent, clubEvent].map(e => se.postEventThreadMessage(e.id, alice.pk, 'Sentinel: bringing the urn').id);
+        for (const [id, postId, buyer, seller, status] of [
+            ['mt-pruned-asks', offer.id, pruned.pk, alice.pk, 'requested'],       // it asked for Alice's offer
+            ['mt-pruned-decides', prunedOffer.id, alice.pk, pruned.pk, 'requested'], // Alice asked for its jam
+            ['mt-pruned-pending', bobOffer.id, pruned.pk, bob.pk, 'pending'],     // it is buying from Bob
+            ['mt-pruned-done', trade.id, pruned.pk, alice.pk, 'completed'],       // it bought from Alice
+        ]) {
+            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                        VALUES (?, ?, ?, ?, 1, ?, ?)`).run(id, postId, buyer, seller, status, new Date().toISOString());
+        }
+        const tradeStatuses = () => (db.prepare("SELECT id, status FROM marketplace_transactions WHERE id LIKE 'mt-pruned-%' ORDER BY id").all() as { id: string; status: string }[])
+            .map(r => `${r.id}=${r.status}`).join(' ');
+        const tradesBefore = tradeStatuses();
         // A code and a paper ticket from Bob, as anyone he invites holds.
         const code = se.generateInvite(bob.pk)!.code;
         const ticketPayload = JSON.stringify({ i: bob.pk, t: Date.now() });
@@ -1072,6 +1095,15 @@ async function main(): Promise<void> {
             'POST /api/messages/mark-read': { conversationId: 'conv-pruned' },
             'POST /api/messages/mute': { conversationId: 'conv-pruned', duration: '8h' },
             'POST /api/messages/send': { conversationId: 'conv-pruned', ciphertext: 'c2VudA==', nonce: 'bm9uY2U=' },
+            // The event chat of the group it convenes (the URL's :id, below): Alice's line.
+            'POST /api/marketplace/posts/:id/chat/remove': { messageId: aliceLines[1] },
+            // Its trades: each answer is the trade, with the other party.
+            'POST /api/marketplace/transactions/reject': { transactionId: 'mt-pruned-decides', authorPublicKey: pruned.pk },
+            'POST /api/marketplace/transactions/cancel-request': { transactionId: 'mt-pruned-asks', buyerPublicKey: pruned.pk },
+            'POST /api/marketplace/transactions/cancel': { transactionId: 'mt-pruned-pending', cancellerPublicKey: pruned.pk },
+            'POST /api/marketplace/transactions/complete': { transactionId: 'mt-pruned-done', confirmerPublicKey: pruned.pk },
+            // An invite, which would bring its holder in as someone new.
+            'POST /api/invite/generate': { publicKey: pruned.pk },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1248,7 +1280,7 @@ async function main(): Promise<void> {
             'GET /apple-probe', 'POST /apple-probe',
         ]);
         const ID_BY_PREFIX: Array<[RegExp, string]> = [
-            [/^\/api\/groups\//, prunedClub.id], [/^\/api\/marketplace\/posts\//, offer.id], [/^\/api\/commons\/decisions\//, 'dec-sentinel'],
+            [/^\/api\/groups\//, prunedClub.id], [/^\/api\/marketplace\/posts\/:id\/chat/, clubEvent.id], [/^\/api\/marketplace\/posts\//, offer.id], [/^\/api\/commons\/decisions\//, 'dec-sentinel'],
             [/^\/api\/crowdfund\/projects\//, crowdfund], [/^\/api\/messages\//, 'msg-sentinel'], [/^\/api\/pulse\/items\//, 'item_sentinel'],
             [/^\/api\/member\/pulse\/items\//, 'item_sentinel'], [/^\/api\/member\/(pulse\/)?channels\//, 'chan-sentinel'],
             [/^\/api\/local\/admin\/posts\//, offer.id], [/^\/api\/local\/admin\/decisions\//, 'dec-sentinel'],
@@ -1318,6 +1350,18 @@ async function main(): Promise<void> {
             + `and a HEAD for each of the ${gets} GETs × ${guestsHere.length} = ${gets * guestsHere.length}; the admin tarpit answered at once ${tarpitsAnsweredAtOnce} times)`);
         const stillPruned = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pruned.pk) as { status: string }).status;
         assert(stillPruned === 'pruned', `the pruned account is still pruned after the sweep (${stillPruned})`);
+        // 11e. What the sweep sent it could not change: Alice's lines, its trades, and no invite of its own.
+        {
+            for (const [label, ev, line] of [['its own event', prunedEvent, aliceLines[0]], ['the group event it convenes', clubEvent, aliceLines[1]]] as const) {
+                const read = await call('GET', pruned, `/api/marketplace/posts/${ev.id}/chat`);
+                const remove = await call('POST', pruned, `/api/marketplace/posts/${ev.id}/chat/remove`, { messageId: line });
+                const kept = (db.prepare('SELECT type FROM messages WHERE id = ?').get(line) as { type: string }).type;
+                assert(read.status === 403 && remove.status === 403 && noPerson(read, [pruned.pk]) && noPerson(remove, [pruned.pk]) && kept === 'text',
+                    `the pruned account neither reads nor removes Alice's line in ${label}, and it is kept (${read.status} ${remove.status} ${kept})`);
+            }
+            assert(tradeStatuses() === tradesBefore, `its trades are as they were (${tradeStatuses()})`);
+            assert(!db.prepare('SELECT 1 FROM invite_codes WHERE created_by = ?').get(pruned.pk), 'and it made no invite');
+        }
         beforeCall = earlier;
         globalThis.setTimeout = realSetTimeout;
     }

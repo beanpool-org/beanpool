@@ -300,7 +300,7 @@ for NODE in "${TARGETS[@]}"; do
     fi
     # --- END preserve/restore ---
     cd $PROJECT_DIR
-    export PUBLIC_IP=\$(curl -s ifconfig.me)
+    export PUBLIC_IP=\$(curl -s -4 ifconfig.me)  # IPv4: an IPv6-first host answered with its v6 address (global node, 2026-09-25)
     export CF_API_TOKEN='${CF_API_TOKEN}'
     export CF_ZONE_ID='${CF_ZONE_ID}'
     export CF_RECORD_NAME='${DNS}'

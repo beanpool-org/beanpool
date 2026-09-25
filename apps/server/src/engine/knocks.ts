@@ -360,7 +360,13 @@ export function mergeReplicatedKnocks(rows: unknown): KnockMerge {
         if (!ok) merge.invalid++;
         return ok;
     });
-    valid.sort((a, b) => (a.updatedAt < b.updatedAt ? -1 : a.updatedAt > b.updatedAt ? 1 : 0));
+    // At the same moment, a decided row before a pending one, then by id: a prune's scrub stamps all of a key's rows
+    // with one time, and the old knock must leave the one-open index here before the key's newer open one arrives.
+    valid.sort((a, b) => {
+        if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? -1 : 1;
+        if ((a.status === 'pending') !== (b.status === 'pending')) return a.status === 'pending' ? 1 : -1;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
     db.transaction(() => {
         for (const r of valid) {
             const here = current.get(r.id) as { updated_at: string } | undefined;

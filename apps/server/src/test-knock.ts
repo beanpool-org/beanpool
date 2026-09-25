@@ -29,7 +29,8 @@
  *  12. a member who once knocked deletes their account: what they wrote goes, the record stays
  *  13. replication: every row reaches a standby (never the address hash), an approved knock's invite is made there
  *      (invite codes don't replicate) so the applicant can still redeem it after a take-over; one redeemed on the main
- *      still reads approved on the standby once its 30 days are up; and the replica audit counts join_requests
+ *      still reads approved on the standby once its 30 days are up; the replica audit counts join_requests; and two of
+ *      a key's knocks changed at one moment merge whatever order the copy lists them in
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-knock.ts
  */
@@ -48,6 +49,7 @@ import { db } from './db/db.js';
 import { registerMemberInternal } from './engine/members.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { forgetOldJoinAddresses } from './engine/open-join.js';
+import { mergeReplicatedKnocks } from './engine/knocks.js';
 import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -502,6 +504,24 @@ async function main(): Promise<void> {
     const consistency = getReplicaConsistency(db, await exportSyncState(nodeId), 0);
     const jr = consistency.tables.find(t => t.name === 'join_requests');
     assert(jr?.match === true && jr.primary > 0, `the replica audit counts join_requests (${JSON.stringify(jr)})`);
+
+    // A key's old knock, still open on a standby that fell behind, and the key's newer open knock arrive stamped with
+    // one moment (a prune's scrub stamps all of a key's rows), the newer first: the standby must take both.
+    const gil = newId('Gil');
+    const gilOld = crypto.randomUUID();
+    const gilNew = crypto.randomUUID();
+    const stamp = new Date().toISOString();
+    db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, status, created_at, updated_at) VALUES (?, ?, 'Gil', 'Hello', 'pending', ?, ?)`)
+        .run(gilOld, gil.pk, ago(70 * DAY_MS), ago(70 * DAY_MS));
+    const scrubbed = { callsign: 'Deleted Member', message: '', avatar: null, fromNode: null, updatedAt: stamp };
+    const gilMerge = mergeReplicatedKnocks([
+        { ...scrubbed, id: gilNew, pubkey: gil.pk, status: 'pending', createdAt: ago(20 * DAY_MS), decidedBy: null, inviteCode: null, decidedAt: null },
+        { ...scrubbed, id: gilOld, pubkey: gil.pk, status: 'declined', createdAt: ago(70 * DAY_MS), decidedBy: mia.pk, inviteCode: null, decidedAt: ago(60 * DAY_MS) },
+    ]);
+    const gilRows = rowsFor(gil.pk);
+    assert(gilMerge.written === 2 && gilMerge.invalid === 0 && gilRows.length === 2
+        && gilRows.find((r) => r.id === gilOld)?.status === 'declined' && gilRows.find((r) => r.id === gilNew)?.status === 'pending',
+        `two of a key's knocks changed at one moment: the decided one is written first, so the open one fits (${JSON.stringify(gilMerge)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

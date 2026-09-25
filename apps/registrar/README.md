@@ -191,8 +191,10 @@ file. A pull request that edits the workflow, `gh workflow run --ref <branch>`, 
 *Run workflow* would each get the token. With the environment, none of them gets it until Marty approves.
 
 The workflow sets the token only on the steps that run wrangler against Cloudflare (and on the check that it is
-set). The actions, and `pnpm install` with its dependencies' install scripts, never see it. Every action is pinned
-to a full commit SHA, and the deploy installs without the dependency cache.
+set). The actions and `pnpm install` don't get it in their environment. Code they install still runs inside the
+wrangler steps, though (an install script can change wrangler's files or the job's PATH), so what really limits
+third-party code is that every action is pinned to a full commit SHA and the install uses the lockfile's integrity
+hashes (`--frozen-lockfile`), without the dependency cache.
 
 On every pull request that touches `apps/registrar/**` or the workflow, a **dry-run** job with no secret and no
 environment:

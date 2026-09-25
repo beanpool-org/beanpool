@@ -18,8 +18,9 @@ name: Registrar deploy
 # run would still wait for Marty's approval.
 #
 # The token is set only in the `env:` of the steps that run wrangler against Cloudflare (and of the check that it is
-# set, before anything else runs), never for the job, so no action and no `pnpm install` script ever sees it. Every
-# action is pinned to a full commit SHA, with its version in a comment.
+# set, before anything else runs), never for the job, so the actions and `pnpm install` don't get it in their
+# environment. Code they install still runs in the wrangler steps, so the real limit on third-party code is that every
+# action is pinned to a full commit SHA (its version in a comment) and the install uses the lockfile's hashes.
 on:
   workflow_dispatch:
   pull_request:

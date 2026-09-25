@@ -415,6 +415,16 @@ export const NEAREST_FIRST_CIRCLES_KM: readonly number[] = [1, 3, 10, 30, 100, 3
 export const NEAREST_FIRST_CIRCLES_MAX_DEPTH = 5000;
 
 /**
+ * The fewest matches the circles ask for when they ask how many posts the listing matches (postRowsNear rankMatches):
+ * fewer than this, and that one read ranks them all. A circle reads every post in it, whatever the filter, so for a
+ * filter few posts match (the Events or Polls tab, a rare category) the circles would read the posts near the reader
+ * again and again for a few matches. Measured at 100k posts / 200k transactions (test-distance-search-perf's world):
+ * asking for 500 costs a broad filter's read about 0.7 ms, and asking for 1,000 or 2,000 made the Offers and Needs tabs
+ * about 2 and 5 ms slower a read.
+ */
+export const NEAREST_FIRST_MATCHES_PROBE = 500;
+
+/**
  * A read with a point (G4): the order first, on ids and distances alone, then the rows of that page in full. The trade
  * counts, the joins and everything after them run for the page, not for every post the order had to look at.
  * Returns the page's rows in order, each with its `distance_km`.
@@ -428,6 +438,21 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     const narrowed = !!(filter.id || filter.query?.trim() || filter.authorPubkey || filter.targetGroupId || filter.assignedTo
         || filter.updatedAfter || filter.sync || filter.audienceScope === 'group' || filter.audienceScope === 'direct');
 
+    // Within `km` of the point, for posts `t`: a box on posts(lat, lng) that idx_posts_lat_lng answers, split in two
+    // across the antimeridian and every longitude around a pole (geo.ts boundingBox), then the exact great-circle
+    // distance. A post with no place fails BETWEEN, so it is never inside one.
+    const within = (t: string, km: number) => {
+        const { latMin, latMax, lngRanges } = boundingBox(near.lat, near.lng, km);
+        const box = `${t}.lat BETWEEN ? AND ? AND (${lngRanges.map(() => `${t}.lng BETWEEN ? AND ?`).join(' OR ')})`;
+        const boxParams: unknown[] = [latMin, latMax, ...lngRanges.flat()];
+        return {
+            box, boxParams,
+            sql: `${box}
+          AND haversine_km(?, ?, ${t}.lat, ${t}.lng) <= ?`,
+            params: [...boxParams, near.lat, near.lng, km],
+        };
+    };
+
     // `m` is joined for the author's filters in `where` (paused, winding up); it is one row at most, as are the joins
     // POST_ROW_SELECT adds, so no join changes which posts there are.
     const rank = (withinKm: number | undefined, limit: number | undefined, skip: number, circle: boolean) => {
@@ -440,15 +465,11 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE 1=1`;
         } else {
-            // Within a radius: a box on posts(lat, lng) that idx_posts_lat_lng answers, split in two across the
-            // antimeridian and every longitude around a pole (geo.ts boundingBox), then the exact great-circle distance. A
-            // post with no place fails BETWEEN, so it is never inside one.
             // In a circle, the box is `b` and each post in it is joined to itself (`p`) for the listing's own conditions.
             // SQLite never reorders a CROSS JOIN, so the box always drives: left to itself, the planner takes
             // idx_posts_category for a category filter, and every circle would read every post in that category. One
             // pass (a radius, or everything) is left to the planner.
-            const box = boundingBox(near.lat, near.lng, withinKm);
-            const t = circle ? 'b' : 'p';
+            const inside = within(circle ? 'b' : 'p', withinKm);
             sql += circle ? `
         FROM posts b
         CROSS JOIN posts p
@@ -456,10 +477,9 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key`;
             sql += `
-        WHERE ${t}.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => `${t}.lng BETWEEN ? AND ?`).join(' OR ')})
-          AND haversine_km(?, ?, ${t}.lat, ${t}.lng) <= ?${circle ? `
+        WHERE ${inside.sql}${circle ? `
           AND p.id = b.id` : ''}`;
-            params.push(box.latMin, box.latMax, ...box.lngRanges.flat(), near.lat, near.lng, withinKm);
+            params.push(...inside.params);
         }
         sql += where;
         params.push(...whereParams);
@@ -471,13 +491,77 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         return db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
     };
 
+    // Every post in a circle's box, whatever the filter: what reading that circle costs. idx_posts_lat_lng alone answers
+    // it, without reading a post.
+    const postsInBox = (km: number) => {
+        const inside = within('b', km);
+        return (db.prepare(`SELECT COUNT(*) AS n FROM posts b WHERE ${inside.box}`).get(...inside.boxParams) as { n: number }).n;
+    };
+
+    // The listing's own matches (inside the radius, if one was given), at most `cap` of them, ranked as the page is.
+    // Fewer than `cap`: that is every match, and the page is exact. As many: undefined, and the listing matches at least
+    // `cap` posts. The FROM, joins and conditions are the one pass's, so it sees exactly the posts the listing shows:
+    // its rows become the page, so a rule it missed would show a post the listing hides, not only choose the wrong path.
+    // MATERIALIZED, so LIMIT bounds what is read: SQLite otherwise folds a LIMIT without an order into the ORDER BY
+    // outside it, and measures every match (measured: 100 ms instead of 1 ms at 100k posts).
+    // `cap` is always past the page's end, so no rows means fewer matches than the offset: all of them.
+    const rankMatches = (cap: number) => {
+        let sql = `
+        WITH matches AS MATERIALIZED (
+            SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at
+            FROM posts p
+            LEFT JOIN members m ON p.author_pubkey = m.public_key
+            WHERE 1=1`;
+        const params: unknown[] = [];
+        if (near.radiusKm !== undefined) {
+            const inside = within('p', near.radiusKm);
+            sql += ` AND ${inside.sql}`;
+            params.push(...inside.params);
+        }
+        sql += `${where}
+            LIMIT ?
+        )
+        SELECT p.id, haversine_km(?, ?, p.lat, p.lng) AS distance_km, (SELECT COUNT(*) FROM matches) AS matched
+        FROM matches p${NEAREST_ORDER}
+        LIMIT ? OFFSET ?`;
+        params.push(...whereParams, cap, near.lat, near.lng, filter.limit, offset);
+        const rows = db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null; matched: number }>;
+        if (rows.length > 0 && rows[0].matched >= cap) return undefined;
+        return rows.map(({ id, distance_km }) => ({ id, distance_km }));
+    };
+
     let ranked: Array<{ id: string; distance_km: number | null }> | undefined;
     if (byDistance && filter.limit && !narrowed && offset + filter.limit <= NEAREST_FIRST_CIRCLES_MAX_DEPTH) {
         const depth = offset + filter.limit;
+        // A circle reads every post in it, whatever the filter, so before each the circles weigh what it would read (the
+        // posts in its box) against what they know. They may read as many posts as the page asks for, and after that as
+        // many as the listing is known to match (`known`): one pass over the matches costs about that much. A circle
+        // that the last circle's share of matches says will hold the page is read whatever it holds, until one such
+        // guess misses. Otherwise the circles ask how many posts the listing matches, once (rankMatches): fewer than
+        // asked for, and those are the page; as many, and that many is known. If even that many posts, at the last
+        // circle's share, could not fill the page, the matches are few around the reader, and one pass ranks them
+        // without asking. Every read handed to the one pass keeps its page exact, because that pass is exact.
+        let read = 0;
+        let known = depth;
+        let share: number | undefined;
+        let asked = false, guessedWrong = false;
         for (const km of NEAREST_FIRST_CIRCLES_KM) {
             if (near.radiusKm !== undefined && km >= near.radiusKm) break;
+            const posts = postsInBox(km);
+            const guess = !guessedWrong && share !== undefined && share * posts >= depth;
+            if (!guess && read + posts > known) {
+                const cap = Math.max(NEAREST_FIRST_MATCHES_PROBE, depth + 1, read + posts + 1);
+                if (asked || (share !== undefined && share * cap < depth)) break;
+                asked = true;
+                ranked = rankMatches(cap);
+                if (ranked) break;
+                known = cap;
+            }
+            read += posts;
             const inside = rank(km, depth, 0, true);
             if (inside.length === depth) { ranked = inside.slice(offset); break; }
+            if (guess) guessedWrong = true;
+            if (posts > 0) share = inside.length / posts;
         }
     }
     ranked ??= rank(near.radiusKm, filter.limit, offset, false);

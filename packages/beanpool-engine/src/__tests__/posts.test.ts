@@ -2,7 +2,8 @@ import { describe, it } from 'vitest';
 import assert from 'node:assert';
 import Database from 'better-sqlite3';
 import {
-    generateSearchKeywords, getPosts, publicBroadcastPost, NEAREST_FIRST_CIRCLES_KM, NEAREST_FIRST_CIRCLES_MAX_DEPTH, type MarketplacePost, type PostFilter,
+    generateSearchKeywords, getPosts, publicBroadcastPost, NEAREST_FIRST_CIRCLES_KM, NEAREST_FIRST_CIRCLES_MAX_DEPTH, NEAREST_FIRST_MATCHES_PROBE,
+    type MarketplacePost, type PostFilter,
 } from '../posts.js';
 import { boundingBox, haversineKm, registerGeoFunctions, MAX_RADIUS_KM } from '../geo.js';
 
@@ -398,7 +399,12 @@ describe('Nearest first, searched in widening circles (G4)', () => {
         const page = getPosts(db, { near: hub, sortByDistance: true, limit: 50 });
         delete (db as any).prepare;
         assert.strictEqual(page.length, 50);
-        assert.ok(seen.length > 0 && seen.every(r => /\blat BETWEEN \? AND \?/.test(r.sql)), `every ranking read was a box (${seen.length} reads)`);
+        // The first circle's box holds more than a page, so the circles first ask how many posts the listing matches
+        // (posts.ts rankMatches): that read stops at NEAREST_FIRST_MATCHES_PROBE matches, never reading every post.
+        const probes = seen.filter(r => /WITH matches AS MATERIALIZED/.test(r.sql));
+        const capped = probes.every(r => r.params[r.params.length - 5] === NEAREST_FIRST_MATCHES_PROBE && NEAREST_FIRST_MATCHES_PROBE < seeds.length);
+        assert.ok(seen.length > 0 && capped && seen.every(r => /\blat BETWEEN \? AND \?/.test(r.sql) || probes.includes(r)),
+            `every ranking read was a box, or the count that stops at ${NEAREST_FIRST_MATCHES_PROBE} of the ${seeds.length} posts (${seen.length} reads, ${probes.length} count)`);
         const last = seen[seen.length - 1];
         const plan = (db.prepare(`EXPLAIN QUERY PLAN ${last.sql}`).all(...last.params) as Array<{ detail: string }>).map(r => r.detail);
         assert.ok(plan.some(d => /idx_posts_lat_lng/.test(d)), `the circle that held the page was searched with idx_posts_lat_lng (${plan.join(' | ')})`);
@@ -494,6 +500,225 @@ describe('Nearest first, searched in widening circles (G4)', () => {
                 assert.deepStrictEqual(rest, plain.get(post.id));
             }
             assert.ok(got.some(p => p.authorFoundingNeeded) && got.some(p => !p.authorFoundingNeeded), 'authors with and without a trade');
+        }
+    });
+});
+
+// A circle reads every post in it, whatever the filter, so with a filter few posts match the circles would read the
+// posts near the reader again and again for a few matches (the second deciding review of #1140). Before a circle bigger
+// than what they know of, the circles ask how many posts the listing matches (rankMatches, capped at
+// NEAREST_FIRST_MATCHES_PROBE), or hand the page to one pass. Held here to: the path each read takes (that count must
+// see exactly the posts the listing shows, or it would choose the wrong path), and the brute-force page on every path.
+describe('Nearest first with a filter few posts match (G4)', () => {
+    const K = NEAREST_FIRST_MATCHES_PROBE;
+    const hub = { lat: -28.55, lng: 153.5 };   // 300 posts within a kilometre, none of them in the categories read here
+    const town = { lat: -37.07, lng: 144.22 }; // 700 'common' posts within 2 km, and nothing else
+    const quiet = { lat: 10, lng: -30 };        // 30 posts within a kilometre and 400 more within three
+    const FUTURE = '2099-01-01T00:00:00.000Z', PAST = '2000-01-01T00:00:00.000Z';
+    const NOT_SHOWN = 60;                       // of each kind the listing leaves out: past K on its own
+
+    function prng(seed: number): () => number {
+        let x = seed >>> 0;
+        return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
+    }
+    function around(rand: () => number, lat: number, lng: number, km: number): [number, number] {
+        const d = km / 6371, b = rand() * 2 * Math.PI, φ = lat * Math.PI / 180, λ = lng * Math.PI / 180;
+        const φ2 = Math.asin(Math.min(1, Math.max(-1, Math.sin(φ) * Math.cos(d) + Math.cos(φ) * Math.sin(d) * Math.cos(b))));
+        const λ2 = λ + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(φ), Math.cos(d) - Math.sin(φ) * Math.sin(φ2));
+        return [φ2 * 180 / Math.PI, ((λ2 * 180 / Math.PI + 540) % 360) - 180];
+    }
+    /** Somewhere between 5 and 2,000 km from the hub, so no rare post is in the hub's first circles. */
+    const awayFromHub = (rand: () => number) => around(rand, hub.lat, hub.lng, 5 + rand() * 1995);
+
+    interface Row { type?: string; category: string; at: [number, number]; author?: string; active?: number; status?: string;
+        hidden?: boolean; scope?: 'public' | 'group' | 'direct'; group?: string; target?: string; eventEnd?: string }
+
+    function listing(): Database.Database {
+        const db = new Database(':memory:');
+        registerGeoFunctions(db);
+        db.exec(POSTS_FIXTURE_DDL);
+        db.exec('CREATE INDEX idx_posts_lat_lng ON posts(lat, lng)');
+        // An event read by a signed member asks whether they host it (posts.ts isEventHost).
+        db.exec('CREATE TABLE treasury_operators (member_pubkey TEXT, treasury_pubkey TEXT)');
+        // v0 reads and belongs to nothing; v1 is in the club; h0 wrote the posts hidden by reports; g0 convenes the club.
+        db.exec(`INSERT INTO members (public_key, callsign, paused, status) VALUES
+                     ('a0', 'Ann', 0, 'active'), ('v0', 'Viv', 0, 'active'), ('v1', 'Val', 0, 'active'), ('h0', 'Hal', 0, 'active'),
+                     ('g0', 'Gus', 0, 'active'), ('hol', 'Holly', 0, 'active'), ('pau', 'Paula', 1, 'active'), ('wnd', 'Wendy', 0, 'winding_up');
+                 INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES ('hol', 'holiday_mode', 'true');
+                 INSERT INTO groups (id, name, slug) VALUES ('club', 'Club', 'club');
+                 INSERT INTO group_members (group_id, member_pubkey, status) VALUES ('club', 'g0', 'active'), ('club', 'v1', 'active');`);
+        const rand = prng(11);
+        const rows: Row[] = [];
+        for (let i = 0; i < 300; i++) rows.push({ category: 'other', at: around(rand, hub.lat, hub.lng, rand() * 0.8) });
+        // 'rare': 450 the listing shows anyone, and NOT_SHOWN of each kind it leaves out for v0.
+        for (let i = 0; i < 450; i++) rows.push({ category: 'rare', at: awayFromHub(rand) });
+        for (let i = 0; i < NOT_SHOWN; i++) {
+            rows.push({ category: 'rare', at: awayFromHub(rand), author: 'h0', hidden: true });
+            rows.push({ category: 'rare', at: awayFromHub(rand), active: 0 });
+            rows.push({ category: 'rare', at: awayFromHub(rand), status: 'cancelled' });
+            rows.push({ category: 'rare', at: awayFromHub(rand), author: 'g0', scope: 'group', group: 'club' });
+            rows.push({ category: 'rare', at: awayFromHub(rand), author: 'a0', scope: 'direct', target: 'wnd' });
+            rows.push({ category: 'rare', at: awayFromHub(rand), author: 'hol' });
+            rows.push({ category: 'rare', at: awayFromHub(rand), author: 'pau' });
+            rows.push({ category: 'rare', at: awayFromHub(rand), author: 'wnd' });
+        }
+        // Events: 450 still to come, and NOT_SHOWN that have ended.
+        for (let i = 0; i < 450; i++) rows.push({ type: 'event', category: 'meet', at: awayFromHub(rand), eventEnd: FUTURE });
+        for (let i = 0; i < NOT_SHOWN; i++) rows.push({ type: 'event', category: 'meet', at: awayFromHub(rand), eventEnd: PAST });
+        // More than K, all in one town; more than K, all over 3,000 km from it.
+        for (let i = 0; i < 700; i++) rows.push({ category: 'common', at: around(rand, town.lat, town.lng, rand() * 2) });
+        for (let i = 0; i < 600; i++) rows.push({ category: 'faraway', at: around(rand, town.lat, town.lng, 3500 + rand() * 5000) });
+        for (let i = 0; i < 30; i++) rows.push({ category: 'other', at: around(rand, quiet.lat, quiet.lng, rand() * 0.7) });
+        for (let i = 0; i < 400; i++) rows.push({ category: 'other', at: around(rand, quiet.lat, quiet.lng, 1.5 + rand() * 1.3) });
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
+                                                   active, status, hidden_by_reports_at, audience_scope, target_group_id, target_pubkey, event_end_at)
+                                VALUES (?, ?, ?, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        db.transaction(() => rows.forEach((r, i) => {
+            const updated = new Date(Date.UTC(2026, 0, 1, 0, i % 13)).toISOString();
+            const created = new Date(Date.UTC(2025, 0, 1, 0, i % 7)).toISOString();
+            ins.run(`q${String(i).padStart(5, '0')}`, r.type ?? 'offer', r.category, `Post ${i}`, r.author ?? 'a0', created, updated, r.at[0], r.at[1],
+                r.active ?? 1, r.status ?? 'active', r.hidden ? updated : null, r.scope ?? 'public', r.group ?? null, r.target ?? null, r.eventEnd ?? null);
+        }))();
+        return db;
+    }
+
+    /** The reference: the posts the same read shows without a point, measured and sorted here. */
+    function bruteForce(db: Database.Database, filter: PostFilter, lat: number, lng: number) {
+        const by = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+        return getPosts(db, filter)
+            .map(p => ({ id: p.id, u: p.updatedAt ?? '', c: p.createdAt, d: typeof p.lat === 'number' && typeof p.lng === 'number' ? haversineKm(lat, lng, p.lat, p.lng) : null }))
+            .sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
+    }
+
+    type Step = { kind: 'count' | 'probe' | 'circle' | 'pass'; cap?: number; matched?: number };
+    /** The reads a nearest-first page makes, in order: a box's posts counted, the listing's matches asked for (with the cap
+     *  asked for and how many there were), a circle, or one pass. */
+    function trace(db: Database.Database, filter: PostFilter): { page: MarketplacePost[]; steps: Step[] } {
+        const steps: Step[] = [];
+        const prepare = db.prepare.bind(db);
+        (db as any).prepare = (sql: string) => {
+            const st = prepare(sql);
+            const kind = /WITH matches AS MATERIALIZED/.test(sql) ? 'probe' : /CROSS JOIN posts p/.test(sql) ? 'circle'
+                : /COUNT\(\*\) AS n FROM posts b/.test(sql) ? 'count' : /haversine_km/.test(sql) ? 'pass' : undefined;
+            if (!kind) return st;
+            for (const method of ['all', 'get'] as const) {
+                const run = (st as any)[method].bind(st);
+                (st as any)[method] = (...params: unknown[]) => {
+                    const out = run(...params);
+                    steps.push(kind === 'probe'
+                        ? { kind, cap: params[params.length - 5] as number, matched: out.length ? out[0].matched : undefined }
+                        : { kind });
+                    return out;
+                };
+            }
+            return st;
+        };
+        try { return { page: getPosts(db, filter), steps }; } finally { delete (db as any).prepare; }
+    }
+    const kinds = (steps: Step[]) => steps.map(s => s.kind).join(' → ');
+
+    /** Pages all through the read (limits 7 and 50, around K, past the end), each compared with the reference. */
+    function checkPages(db: Database.Database, filter: PostFilter, at: { lat: number; lng: number }, what: string): number {
+        const ref = bruteForce(db, filter, at.lat, at.lng);
+        const pages: Array<[number, number]> = [[50, 0], [7, 0], [7, 7], [7, 200], [7, ref.length - 3], [7, ref.length], [50, ref.length + 5]];
+        for (const o of [K - 60, K - 7, K - 1, K]) if (o >= 0) pages.push([7, o], [50, o]);
+        for (const [limit, offset] of pages) {
+            if (offset < 0) continue;
+            const got = getPosts(db, { ...filter, near: at, sortByDistance: true, limit, offset });
+            const want = ref.slice(offset, offset + limit);
+            assert.deepStrictEqual(got.map(p => p.id), want.map(r => r.id), `${what}: limit ${limit}, offset ${offset}`);
+            assert.deepStrictEqual(got.map(p => p.distanceKm), want.map(r => r.d === null ? null : Math.round(r.d * 10) / 10), `${what}: distances, offset ${offset}`);
+        }
+        return ref.length;
+    }
+
+    const db = listing();
+    const rare = { category: 'rare', excludeEvents: true };
+
+    it('fewer matches than K: the count that asks for K is every match, and the page; no circle is read', () => {
+        for (const [who, filter] of [
+            ['a signed member', { ...rare, viewerPubkey: 'v0' }],
+            ['a reader who is not signed in', rare],
+            ['the author of posts hidden by reports, reading a category they posted none of', { category: 'meet', type: 'event', viewerPubkey: 'h0' }],
+        ] as Array<[string, PostFilter]>) {
+            const { page, steps } = trace(db, { ...filter, near: hub, sortByDistance: true, limit: 50 });
+            const probe = steps.find(s => s.kind === 'probe');
+            assert.strictEqual(kinds(steps), 'count → probe', `${who}: ${kinds(steps)}`);
+            assert.ok(probe && probe.cap === K && probe.matched === 450, `${who}: the count asked for ${K} and found the 450 the listing shows (${JSON.stringify(probe)})`);
+            assert.deepStrictEqual(page.map(p => p.id), bruteForce(db, filter, hub.lat, hub.lng).slice(0, 50).map(r => r.id), `${who}: the brute-force page`);
+        }
+    });
+
+    it('the count sees exactly what the listing shows: each reader to whom the left-out posts show counts past K', () => {
+        // v0 is shown 450 of 'rare'. Each of these is shown NOT_SHOWN more: 510, so the count stops at K and the circles
+        // go on. Were the count to miss any rule the listing applies (hidden by reports, inactive, cancelled, the group,
+        // a direct post, holiday mode, a paused or winding-up author), v0's count would stop at K too, and the test above
+        // fails.
+        for (const [who, filter] of [
+            ['the author of the posts hidden by reports', { ...rare, viewerPubkey: 'h0' }],
+            ['a moderator', { ...rare, viewerPubkey: 'v0', includeHidden: true }],
+            ['a member of the club', { ...rare, viewerPubkey: 'v1' }],
+        ] as Array<[string, PostFilter]>) {
+            const { page, steps } = trace(db, { ...filter, near: hub, sortByDistance: true, limit: 50 });
+            const probe = steps.find(s => s.kind === 'probe');
+            assert.ok(probe && probe.cap === K && probe.matched === K, `${who}: the count stopped at ${K} (${JSON.stringify(probe)})`);
+            assert.ok(steps[steps.length - 1].kind === 'pass' && steps.filter(s => s.kind === 'circle').length === 1,
+                `${who}: one circle of the hub's posts matched none of them, and one pass gave the page (${kinds(steps)})`);
+            assert.deepStrictEqual(page.map(p => p.id), bruteForce(db, filter, hub.lat, hub.lng).slice(0, 50).map(r => r.id), `${who}: the brute-force page`);
+            assert.strictEqual(bruteForce(db, filter, hub.lat, hub.lng).length, 450 + NOT_SHOWN, `${who} is shown 450 + ${NOT_SHOWN}`);
+        }
+    });
+
+    it('more matches than K, all in the town the reader is in: the page comes from a circle', () => {
+        const { page, steps } = trace(db, { category: 'common', excludeEvents: true, near: town, sortByDistance: true, limit: 50 });
+        const probe = steps.find(s => s.kind === 'probe');
+        assert.ok(probe && probe.matched === probe.cap, `the count stopped at its cap (${JSON.stringify(probe)})`);
+        assert.strictEqual(steps[steps.length - 1].kind, 'circle', `a circle gave the page (${kinds(steps)})`);
+        assert.deepStrictEqual(page.map(p => p.id), bruteForce(db, { category: 'common', excludeEvents: true }, town.lat, town.lng).slice(0, 50).map(r => r.id));
+    });
+
+    it('more matches than K, none within 3,000 km: one circle, then one pass, not every circle', () => {
+        const { page, steps } = trace(db, { category: 'faraway', excludeEvents: true, near: town, sortByDistance: true, limit: 50 });
+        assert.strictEqual(kinds(steps), 'count → probe → circle → count → pass', kinds(steps));
+        assert.deepStrictEqual(page.map(p => p.id), bruteForce(db, { category: 'faraway', excludeEvents: true }, town.lat, town.lng).slice(0, 50).map(r => r.id));
+    });
+
+    it('none of the posts in the first circles match: one pass, without asking', () => {
+        // The first circle holds fewer posts than a page, so it is read; none of them match, so nothing the circles could
+        // read up to K would fill the page either.
+        const { page, steps } = trace(db, { ...rare, viewerPubkey: 'v0', near: quiet, sortByDistance: true, limit: 50 });
+        assert.strictEqual(kinds(steps), 'count → circle → count → pass', kinds(steps));
+        assert.deepStrictEqual(page.map(p => p.id), bruteForce(db, { ...rare, viewerPubkey: 'v0' }, quiet.lat, quiet.lng).slice(0, 50).map(r => r.id));
+    });
+
+    it('a category with no posts: an empty page from the count', () => {
+        const { page, steps } = trace(db, { category: 'none', excludeEvents: true, near: hub, sortByDistance: true, limit: 50 });
+        assert.strictEqual(kinds(steps), 'count → probe', kinds(steps));
+        assert.deepStrictEqual(page, []);
+    });
+
+    it('on either side of K, and on every path, every page is the brute-force page', () => {
+        const reads: Array<[string, PostFilter, { lat: number; lng: number }]> = [
+            ['rare, v0 (450: under K), from the hub', { ...rare, viewerPubkey: 'v0' }, hub],
+            ['rare, h0 (510: over K), from the hub', { ...rare, viewerPubkey: 'h0' }, hub],
+            ['rare, v1 (510: over K), from the quiet place', { ...rare, viewerPubkey: 'v1' }, quiet],
+            ['events still to come (450), from the hub', { type: 'event', viewerPubkey: 'v0' }, hub],
+            ['common (700), from the town', { category: 'common', excludeEvents: true, viewerPubkey: 'v0' }, town],
+            ['common (700), from the hub', { category: 'common', excludeEvents: true, viewerPubkey: 'v0' }, hub],
+            ['faraway (600), from the town', { category: 'faraway', excludeEvents: true, viewerPubkey: 'v0' }, town],
+            ['no filter, from the quiet place', { excludeEvents: true, viewerPubkey: 'v0' }, quiet],
+        ];
+        for (const [what, filter, at] of reads) {
+            const n = checkPages(db, filter, at, what);
+            assert.ok(n > 0, `${what}: ${n} posts`);
+        }
+        const radius = { ...rare, viewerPubkey: 'h0' };
+        for (const radiusKm of [100, 800, 2500]) {
+            const ref = bruteForce(db, radius, hub.lat, hub.lng).filter(r => r.d !== null && r.d <= radiusKm);
+            for (const [limit, offset] of [[50, 0], [7, 3], [7, Math.max(0, ref.length - 2)]]) {
+                const got = getPosts(db, { ...radius, near: { ...hub, radiusKm }, sortByDistance: true, limit, offset });
+                assert.deepStrictEqual(got.map(p => p.id), ref.slice(offset, offset + limit).map(r => r.id), `rare within ${radiusKm} km, offset ${offset}`);
+            }
         }
     });
 });

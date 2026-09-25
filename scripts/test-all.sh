@@ -287,6 +287,7 @@ run_federation_suites() {
       test-open-join
       test-global-moderation
       test-distance-search
+      test-distance-search-perf
       test-commons-conservation
       test-ledger-rollback
       test-treasury-keepership

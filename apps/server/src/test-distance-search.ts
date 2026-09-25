@@ -531,6 +531,49 @@ async function main(): Promise<void> {
     const replication = await call('GET', null, '/api/local/admin/sync-delta');
     assert(replication.status === 401, `the replication export itself needs the replication token (${replication.status})`);
 
+    // ── 12. the default order, page by page ──────────────────────────────────────────────────────
+    // Global's default (a point, no sort, no radius) is searched in widening circles (engine posts.ts). Through the
+    // route, each reader's pages are the pages a brute-force haversine over everything that reader may see gives: the
+    // hidden post only for its author, the group post only for the group, the removed post for nobody, the posts with
+    // no place last.
+    console.log('\n── 12. global, a point and no sort: each page is the brute-force page ──');
+    process.env.NODE_PROFILE = 'global';
+    const by = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    const nearestFor = (viewer: Id, lat: number, lng: number) => getPosts({ viewerPubkey: viewer.pk, excludeEvents: true })
+        .map(p => ({ id: p.id, u: p.updatedAt ?? '', c: p.createdAt, d: typeof p.lat === 'number' && typeof p.lng === 'number' ? haversine(lat, lng, p.lat, p.lng) : null }))
+        .sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
+    const readers: Array<[Id, Array<[string, number, number]>]> = [
+        [bea, [['Mullumbimby', hLat, hLng], ['Fiji', -17.7, 178], ['near the North Pole', 88, 45], ['near the South Pole', -89.5, 0]]],
+        [cal, [['Mullumbimby', hLat, hLng], ['on the antimeridian', -12, 180]]],
+        [eve, [['Mullumbimby', hLat, hLng]]],
+    ];
+    for (const [viewer, places] of readers) {
+        for (const [where, lat, lng] of places) {
+            const ref = nearestFor(viewer, lat, lng);
+            const located = ref.filter(r => r.d !== null).length;
+            const offsets = new Set<number>([ref.length + 3]);
+            for (let o = 0; o < 84; o += 7) offsets.add(o);
+            for (const o of [located - 10, located - 4, located]) if (o >= 0) offsets.add(o);
+            const wrong: number[] = [];
+            let compared = 0;
+            for (const offset of offsets) {
+                const got = await list(viewer, `lat=${lat}&lng=${lng}&limit=7&offset=${offset}`);
+                const want = ref.slice(offset, offset + 7);
+                compared++;
+                if (!same(ids(got), want.map(r => r.id)) || !same(got.map(p => p.distanceKm), want.map(r => r.d === null ? null : Math.round(r.d * 10) / 10))) wrong.push(offset);
+            }
+            assert(ref.length > 84 && wrong.length === 0,
+                `${viewer.name} at ${where}: ${compared} pages of 7, each the brute-force page, the ${ref.length - located} post(s) with no place last (${wrong.length ? `wrong at offsets ${wrong.join(', ')}` : 'none wrong'})`);
+        }
+    }
+    const firstPage = async (viewer: Id) => ids(await list(viewer, `${hub}&limit=50`));
+    assert((await firstPage(eve)).includes(hidden) && !(await firstPage(bea)).includes(hidden), 'the post hidden by reports is on its author\'s first page and nobody else\'s');
+    assert((await firstPage(cal)).includes(groupPost) && !(await firstPage(bea)).includes(groupPost), 'the group post is on its convenor\'s first page and not on an outsider\'s');
+    const withRemoved: string[] = [];
+    for (const v of [bea, cal, eve, ann]) if ((await firstPage(v)).includes(removed)) withRemoved.push(v.name);
+    assert(withRemoved.length === 0, `the removed post is on nobody's first page, its author's included (${withRemoved.join(', ') || 'nobody'})`);
+    delete process.env.NODE_PROFILE;
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Posts are found by distance, the lobby sorts nearest-first, and a person is never placed better than a 10 km area.');

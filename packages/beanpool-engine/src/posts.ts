@@ -373,14 +373,10 @@ export function liveOfferCount(db: Db, publicKey: string): number {
     return row?.c || 0;
 }
 
-export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
-    // `haversine_km` is registered on the connection (geo.ts registerGeoFunctions); asked only when a point is given, so
-    // every read without one runs exactly the query it always has.
-    const near = filter?.near;
-    let query = `
+/** A listed post's row: the post, its author, who took it, its group, and the author's trade count. */
+const POST_ROW_SELECT = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
-               g.name as target_group_name,${near ? `
-               haversine_km(?, ?, p.lat, p.lng) AS distance_km,` : ''}
+               g.name as target_group_name,
                COALESCE(m.earned_credit, 0) as author_earned_credit,
                (
                  COALESCE((SELECT COUNT(*) FROM transactions t
@@ -395,26 +391,128 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
-        LEFT JOIN groups g ON p.target_group_id = g.id
-        WHERE 1=1
-    `;
-    const params: any[] = near ? [near.lat, near.lng] : [];
+        LEFT JOIN groups g ON p.target_group_id = g.id`;
+
+const RECENT_ORDER = " ORDER BY p.updated_at DESC, p.created_at DESC";
+// Nearest first ends on p.id, so the order is total and limit/offset pages it without repeats or gaps.
+const NEAREST_ORDER = " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, p.created_at DESC, p.id ASC";
+
+/**
+ * The circles a nearest-first page is searched in, widening from the reader's point (km). The first that holds the page
+ * gives it, and exactly: every post outside a circle is farther than every post inside it. Each is a box on
+ * idx_posts_lat_lng, so the posts near the reader are read and the rest of the world is not. If none holds it, one pass
+ * gives it: over every post (the posts with no place last), or over the radius the reader gave.
+ * About three times wider each time, so where posts are evenly spread the circle that holds the page holds about ten
+ * pages at most, and the circles before it cost a tenth of it. None wider than 3,000 km: past that a box holds much of
+ * the world's posts, and one pass over every post costs about the same (measured: a 10,000 km circle cost more).
+ */
+export const NEAREST_FIRST_CIRCLES_KM: readonly number[] = [1, 3, 10, 30, 100, 300, 1000, 3000];
+
+/**
+ * Deeper into the list than this, the circles are skipped for one pass over every post: each circle would hand back up
+ * to this many ids only for most of them to be passed over.
+ */
+export const NEAREST_FIRST_CIRCLES_MAX_DEPTH = 5000;
+
+/**
+ * A read with a point (G4): the order first, on ids and distances alone, then the rows of that page in full. The trade
+ * counts, the joins and everything after them run for the page, not for every post the order had to look at.
+ * Returns the page's rows in order, each with its `distance_km`.
+ */
+function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: string, whereParams: unknown[], filter: PostFilter): any[] {
+    const byDistance = !!filter.sortByDistance;
+    const offset = filter.offset || 0;
+    // Reads narrowed to a few posts (one post, a search, one author's, one group's, one assignee's, a sync delta) are
+    // ranked in one pass, and the planner picks how to find them: circles would read the posts near the point again for
+    // each circle, only to find a few of them.
+    const narrowed = !!(filter.id || filter.query?.trim() || filter.authorPubkey || filter.targetGroupId || filter.assignedTo
+        || filter.updatedAfter || filter.sync || filter.audienceScope === 'group' || filter.audienceScope === 'direct');
+
+    // `m` is joined for the author's filters in `where` (paused, winding up); it is one row at most, as are the joins
+    // POST_ROW_SELECT adds, so no join changes which posts there are.
+    const rank = (withinKm: number | undefined, limit: number | undefined, skip: number, circle: boolean) => {
+        let sql = `
+        SELECT p.id, haversine_km(?, ?, p.lat, p.lng) AS distance_km`;
+        const params: unknown[] = [near.lat, near.lng];
+        if (withinKm === undefined) {
+            sql += `
+        FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE 1=1`;
+        } else {
+            // Within a radius: a box on posts(lat, lng) that idx_posts_lat_lng answers, split in two across the
+            // antimeridian and every longitude around a pole (geo.ts boundingBox), then the exact great-circle distance. A
+            // post with no place fails BETWEEN, so it is never inside one.
+            // In a circle, the box is `b` and each post in it is joined to itself (`p`) for the listing's own conditions.
+            // SQLite never reorders a CROSS JOIN, so the box always drives: left to itself, the planner takes
+            // idx_posts_category for a category filter, and every circle would read every post in that category. One
+            // pass (a radius, or everything) is left to the planner.
+            const box = boundingBox(near.lat, near.lng, withinKm);
+            const t = circle ? 'b' : 'p';
+            sql += circle ? `
+        FROM posts b
+        CROSS JOIN posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key` : `
+        FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key`;
+            sql += `
+        WHERE ${t}.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => `${t}.lng BETWEEN ? AND ?`).join(' OR ')})
+          AND haversine_km(?, ?, ${t}.lat, ${t}.lng) <= ?${circle ? `
+          AND p.id = b.id` : ''}`;
+            params.push(box.latMin, box.latMax, ...box.lngRanges.flat(), near.lat, near.lng, withinKm);
+        }
+        sql += where;
+        params.push(...whereParams);
+        sql += byDistance ? NEAREST_ORDER : RECENT_ORDER;
+        if (limit) {
+            sql += " LIMIT ? OFFSET ?";
+            params.push(limit, skip);
+        }
+        return db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
+    };
+
+    let ranked: Array<{ id: string; distance_km: number | null }> | undefined;
+    if (byDistance && filter.limit && !narrowed && offset + filter.limit <= NEAREST_FIRST_CIRCLES_MAX_DEPTH) {
+        const depth = offset + filter.limit;
+        for (const km of NEAREST_FIRST_CIRCLES_KM) {
+            if (near.radiusKm !== undefined && km >= near.radiusKm) break;
+            const inside = rank(km, depth, 0, true);
+            if (inside.length === depth) { ranked = inside.slice(offset); break; }
+        }
+    }
+    ranked ??= rank(near.radiusKm, filter.limit, offset, false);
+
+    const full = selectInChunks(db, ranked.map(r => r.id), ph => `${POST_ROW_SELECT}\n        WHERE p.id IN (${ph})`);
+    const byId = new Map(full.map(row => [row.id as string, row]));
+    return ranked.flatMap(r => {
+        const row = byId.get(r.id);
+        return row ? [{ ...row, distance_km: r.distance_km }] : [];
+    });
+}
+
+export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
+    // `haversine_km` is registered on the connection (geo.ts registerGeoFunctions); asked only when a point is given, so
+    // every read without one runs exactly the query it always has.
+    const near = filter?.near;
+    // The listing's conditions, each " AND …", read with `params`.
+    let where = '';
+    const params: any[] = [];
 
     if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
         if (!filter?.includeInactive) {
-            query += selfView
+            where += selfView
                 ? " AND p.active = 1 AND (p.status IN ('active', 'pending', 'paused') OR (p.type = 'poll' AND p.status = 'completed'))"
                 : " AND p.active = 1 AND (p.status IN ('active', 'pending') OR (p.type = 'poll' AND p.status = 'completed'))";
         }
         // Events drop off the feed and map when they end — a filter, not a sweep (§2.2).
-        query += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
+        where += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
         params.push(new Date().toISOString());
         if (!filter?.authorPubkey) {
-            query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
-            query += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+            where += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
+            where += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
         } else if (!selfView && !filter?.includeInactive) {
-            query += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+            where += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
         }
     } else if (filter?.updatedAfter || filter?.sync) {
         // Include completed/cancelled/deleted states for sync
@@ -422,22 +520,22 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         // By id, a cancelled event stays readable (to its host and the people going, checked below) until the
         // 30-day scrub marks it completed: the host has to be able to open the page and see it CANCELLED,
         // not just its chat (events §1, "host and attendees can still see it for 30 days").
-        query += " AND (p.active = 1 OR (p.type = 'event' AND p.status = 'cancelled' AND p.event_state = 'cancelled'))";
+        where += " AND (p.active = 1 OR (p.type = 'event' AND p.status = 'cancelled' AND p.event_state = 'cancelled'))";
     }
 
-    if (filter?.id) { query += " AND p.id = ?"; params.push(filter.id); }
-    if (filter?.type && filter.type !== 'all') { query += " AND p.type = ?"; params.push(filter.type); }
+    if (filter?.id) { where += " AND p.id = ?"; params.push(filter.id); }
+    if (filter?.type && filter.type !== 'all') { where += " AND p.type = ?"; params.push(filter.type); }
     if (filter?.types && filter.types.length > 0) {
-        query += ` AND p.type IN (${filter.types.map(() => '?').join(',')})`;
+        where += ` AND p.type IN (${filter.types.map(() => '?').join(',')})`;
         params.push(...filter.types);
     }
-    if (filter?.excludeEvents) { query += " AND p.type != 'event'"; }
-    if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
-    if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
-    if (filter?.authorPubkey) { query += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
+    if (filter?.excludeEvents) { where += " AND p.type != 'event'"; }
+    if (filter?.category && filter.category !== 'all') { where += " AND p.category = ?"; params.push(filter.category); }
+    if (filter?.status) { where += " AND p.status = ?"; params.push(filter.status); }
+    if (filter?.authorPubkey) { where += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
     // #108: beans-only browse. COALESCE so rows predating the column are treated as beans-only
     // rather than vanishing from the filtered view.
-    if (filter?.beansOnly) { query += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
+    if (filter?.beansOnly) { where += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
 
     // Audience scoping (docs/the-commons.md §9, Item 10)
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
@@ -445,28 +543,28 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     if (filter?.includeAllScopes) {
         // Internal engine lookup bypasses feed scoping
     } else if (filter?.audienceScope === 'public') {
-        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+        where += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
     } else if (filter?.audienceScope === 'group') {
-        query += " AND p.audience_scope = 'group'";
+        where += " AND p.audience_scope = 'group'";
         if (!viewer) {
-            query += " AND 1=0";
+            where += " AND 1=0";
         } else {
-            query += " AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))";
+            where += " AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))";
             params.push(viewer, viewer);
         }
     } else if (filter?.audienceScope === 'direct') {
-        query += " AND p.audience_scope = 'direct'";
+        where += " AND p.audience_scope = 'direct'";
         if (!viewer) {
-            query += " AND 1=0";
+            where += " AND 1=0";
         } else {
-            query += " AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?)";
+            where += " AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?)";
             params.push(viewer, viewer, viewer);
         }
     } else {
         if (!viewer) {
-            query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+            where += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
         } else {
-            query += ` AND (
+            where += ` AND (
                 (p.audience_scope IS NULL OR p.audience_scope = 'public')
                 OR (p.audience_scope = 'group' AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active')))
                 OR (p.audience_scope = 'direct' AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?))
@@ -476,11 +574,11 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     }
 
     if (filter?.targetGroupId) {
-        query += " AND p.target_group_id = ?";
+        where += " AND p.target_group_id = ?";
         params.push(filter.targetGroupId);
     }
     if (filter?.assignedTo) {
-        query += " AND p.assigned_to = ?";
+        where += " AND p.assigned_to = ?";
         params.push(filter.assignedTo);
     }
 
@@ -491,10 +589,10 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     const syncRead = !!(filter?.updatedAfter || filter?.sync);
     if (hiddenFromViewer && !syncRead) {
         if (viewer) {
-            query += " AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)";
+            where += " AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)";
             params.push(viewer);
         } else {
-            query += " AND p.hidden_by_reports_at IS NULL";
+            where += " AND p.hidden_by_reports_at IS NULL";
         }
     }
 
@@ -502,42 +600,32 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         const searchTerms = filter.query.trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
         if (searchTerms.length > 0) {
             const ftsQuery = searchTerms.map(t => `"${t}"*`).join(' OR ');
-            query += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
+            where += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
             params.push(ftsQuery);
             // Goods search isolation: searching marketplace keywords must not return polls unless explicitly asked
             if (filter.type !== 'poll') {
-                query += " AND p.type != 'poll'";
+                where += " AND p.type != 'poll'";
             }
         }
     }
 
     if (filter?.updatedAfter) {
-        query += " AND p.updated_at >= ?";
+        where += " AND p.updated_at >= ?";
         params.push(filter.updatedAfter);
     }
 
-    // Within a radius: a box on posts(lat, lng) that idx_posts_lat_lng answers, split in two across the antimeridian and
-    // every longitude around a pole (geo.ts boundingBox), then the exact great-circle distance. A post with no place
-    // fails BETWEEN, so it is never in a radius query.
-    if (near && near.radiusKm !== undefined) {
-        const box = boundingBox(near.lat, near.lng, near.radiusKm);
-        query += ` AND p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
-        params.push(box.latMin, box.latMax, ...box.lngRanges.flat());
-        query += " AND haversine_km(?, ?, p.lat, p.lng) <= ?";
-        params.push(near.lat, near.lng, near.radiusKm);
+    let rows: any[];
+    if (near) {
+        rows = postRowsNear(db, near, where, params, filter!);
+    } else {
+        let query = `${POST_ROW_SELECT}
+        WHERE 1=1${where}${RECENT_ORDER}`;
+        if (filter?.limit) {
+            query += " LIMIT ? OFFSET ?";
+            params.push(filter.limit, filter.offset || 0);
+        }
+        rows = db.prepare(query).all(...params) as any[];
     }
-
-    // Nearest first ends on p.id, so the order is total and limit/offset pages it without repeats or gaps.
-    query += near && filter?.sortByDistance
-        ? " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, p.created_at DESC, p.id ASC"
-        : " ORDER BY p.updated_at DESC, p.created_at DESC";
-    
-    if (filter?.limit) {
-        query += " LIMIT ? OFFSET ?";
-        params.push(filter.limit, filter.offset || 0);
-    }
-
-    const rows = db.prepare(query).all(...params) as any[];
     const postIds = rows.map(r => r.id);
 
     const photos = selectInChunks(db, postIds, ph => `SELECT post_id, order_num, updated_at FROM post_photos WHERE post_id IN (${ph})`);

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 28,
-  "hash": "6bc1fabbcab29b63001d65a008b8e291eab411d9504a38d9b8851d8e0bfd85b9",
+  "version": 29,
+  "hash": "1c95d8711b961a35152ac2e8ec5cacc1b1f15f200bd8426c67f0f64cecfa2406",
   "sections": [
     {
       "id": "about",
@@ -4532,7 +4532,8 @@
             "Type your name in the community. The app may suggest \"Is this you?\".",
             "Type your community's name or address.",
             "Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone.",
-            "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead."
+            "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.",
+            "With GitHub, the app shows a code and opens GitHub's page, github.com/login/device. The code is already copied: on GitHub, press and hold the first box and choose **Paste**, then approve. Tap **Copy** to copy it again, or **Open GitHub** to get back to the page. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the code and **Cancel** go away and the app finishes getting your account back."
           ]
         },
         {
@@ -4544,8 +4545,13 @@
           "items": [
             "Open **Settings** and tap **Account Protection**.",
             "Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.",
-            "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool."
+            "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.",
+            "With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the app links your account by itself."
           ]
+        },
+        {
+          "type": "p",
+          "text": "GitHub works only once your community's server has been updated for it. Until then the app says so. Use Google, Apple or your 12 words instead."
         },
         {
           "type": "p",

@@ -31,7 +31,7 @@ import {
     purgeMemberSelf,
     getMembersVersion,
     lastActiveForViewer,
-    contactVisibleTo, ownersWhoAddedAsFriend, publicMemberCard,
+    contactVisibleTo, contactViewer, isNodeMember, isLiveMemberKey, publicMemberCard,
 } from '../state-engine.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
@@ -717,7 +717,8 @@ router.get('/api/community/me', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (!getMember(actor)) {
+    // The gated-read test, whatever ENFORCE_READ_AUTH says: the old key of a member being re-keyed reads nothing here.
+    if (!isLiveMemberKey(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'Read access requires a member identity' };
         return;
@@ -777,8 +778,7 @@ function peoplePoint(ctx: any): Point | null | undefined {
         return undefined;
     }
     // A pruned or self-deleted account keeps its row and can still sign, but it is no longer in the community.
-    const member = getMember(actor);
-    if (!member || member.status === 'pruned') {
+    if (!isNodeMember(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'Read access requires a member identity' };
         return undefined;
@@ -822,13 +822,14 @@ router.get('/api/community/members', async (ctx) => {
     const point = peoplePoint(ctx);
     if (point === undefined) return;
     // Contact details follow each member's choice (contactVisibleTo), so two members asking for this URL get
-    // different bodies. The viewer is the verified signer only, and it goes into the ETag together with who
-    // has added them as a friend: being added changes what they may see without changing any member row, so
-    // the members version alone would confirm a stale copy with a 304.
-    const viewer = ctx.state.actor as string | undefined;
-    const friendOwners = ownersWhoAddedAsFriend(viewer);
+    // different bodies. The viewer is the verified signer only, and it goes into the ETag together with whether
+    // they are a member, who has added them as a friend and who they have a trade with: being added, joining or
+    // requesting a trade changes what they may see without changing any member row, so the members version
+    // alone would confirm a stale copy with a 304.
+    const viewer = contactViewer(ctx.state.actor as string | undefined);
     const viewerSig = crypto.createHash('sha256')
-        .update(`${ctx.querystring || ''}:${viewer || ''}:${[...friendOwners].sort().join(',')}`)
+        .update(`${ctx.querystring || ''}:${viewer.pubkey || ''}:${viewer.isMember ? 'member' : 'reader'}`
+            + `:${[...viewer.addedBy].sort().join(',')}:${[...viewer.tradePartners].sort().join(',')}`)
         .digest('hex').slice(0, 8);
     const etag = `W/"community-members-${getMembersVersion()}-${viewerSig}"`;
 
@@ -855,7 +856,7 @@ router.get('/api/community/members', async (ctx) => {
     const members = getMembers()
         .filter(m => !m.isTreasury)
         .map(m => {
-            const showContact = !!m.contactValue && contactVisibleTo(m.publicKey, m.contactVisibility, viewer, friendOwners.has(m.publicKey));
+            const showContact = !!m.contactValue && contactVisibleTo(m.publicKey, m.contactVisibility, viewer);
             return {
                 publicKey: m.publicKey,
                 callsign: m.callsign,

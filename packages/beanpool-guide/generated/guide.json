@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 33,
-  "hash": "d29362cd021c38973ee61d686e047aa70871b5604bcd9beacfafc32bf6d27c04",
+  "version": 34,
+  "hash": "9702eb69e65f6b0b3d4003f205ae4daf80521520b4323a2f22621c3421918185",
   "sections": [
     {
       "id": "about",
@@ -1091,7 +1091,7 @@
           "type": "ul",
           "items": [
             "**Hidden:** nobody.",
-            "**Trade Partners:** meant for people you trade with. For now it works like Community: every member can see it. To keep it private, choose Hidden or Friends.",
+            "**Trade Partners:** members you have a deal with. It counts from the moment one of you taps **Accept Offer** or **Offer to Fulfill** on the other's post, even if the deal is later cancelled or turned down. Sending beans on their own is not a deal.",
             "**Friends:** people you have added as friends.",
             "**Community:** every member of your community."
           ]

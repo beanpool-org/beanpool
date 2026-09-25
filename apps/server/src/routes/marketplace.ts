@@ -15,7 +15,7 @@ import {
     canOperateTreasury,
     closePoll, votePoll, rsvpEvent,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
-    nodeRoleOf,
+    nodeRoleOf, isNodeMember,
 } from '../state-engine.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -232,10 +232,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
     const viewerPubkey = ctx.state.actor as string | undefined;
+    // Who voted for what in a poll goes to a member of this node only; everyone else gets the counts. This route is a
+    // public read, so an unsigned reader, a signed non-member and a pruned account all reach it. Membership is in the
+    // ETag: joining changes what the board holds without changing any post, so a copy fetched before must not be
+    // confirmed with a 304.
+    const includeVoters = isNodeMember(viewerPubkey);
 
     // With a point, the order is folded in too: it can change with the operator's switch while the URL and the posts
     // stay the same, and a 304 then would pin the old order. Without one the ETag is what it always was.
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}`;
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -280,7 +285,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const includeHidden = !!viewerPubkey && !!nodeRoleOf(viewerPubkey);
     const posts = getPosts({
         id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
-        near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
+        includeVoters, near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
     });
     const bodyStr = JSON.stringify(posts);
 

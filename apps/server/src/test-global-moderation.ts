@@ -16,9 +16,11 @@
  *      edit of it reaches only the author in full; a vote in a hidden poll or an RSVP to a hidden event is refused to
  *      anyone but its author, and hands nothing back. A moderator restore un-hides it and its author hears, the same
  *      reporters can't hide it again, new ones can; dismissing reports un-hides once they no longer add up; a
- *      moderator can still remove it. A moderator can't restore their own post or dismiss a report on it, nor one by
- *      an enterprise they keep, or lift that enterprise's mute (another moderator can), and restoring a post its
- *      author took down tells them nothing. A hidden event's unread lines leave totalUnread with its chat
+ *      moderator can still remove it. A moderator can't restore their own post, dismiss a report on it or close one
+ *      without taking it down (the report "action" with no removal, or a Pulse-only one), nor one by an enterprise they
+ *      keep, or lift that enterprise's mute (another moderator can); taking it down stays theirs to do; restoring a
+ *      post its author took down tells them nothing. A hidden event's unread lines leave totalUnread with its chat,
+ *      and the badge every push carries (the host's still counts it)
  *   4. probation: the 4th post in 24 hours → 429 with the limit and when it resets; the window rolls after 24 hours;
  *      photos past 5 → 429, on a new post and on an edit; after 72 hours with 3 kept posts no limits; an old account
  *      with no posts is on probation until it has 3; opening a conversation with an 11th new person → 429 even with
@@ -57,7 +59,7 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, grantNodeRole, createPost, exportSyncState, importRemoteState, setNodeRole,
-    payFromCommons, createGroup,
+    payFromCommons, createGroup, dispatchPushNotification,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db, createCrowdfundProject } from './db/db.js';
@@ -399,17 +401,54 @@ async function main(): Promise<void> {
         { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Hall' })!.id;
     await call('POST', viewer, `/api/marketplace/posts/${meetup}/rsvp`, { status: 'going' });
     const hostLine = await call('POST', ava, `/api/marketplace/posts/${meetup}/chat/message`, { text: 'Doors at six' });
+    // A line the host has unread, so their badge has the event's chat in it too (Vic's own line never counts for Vic).
+    const goerLine = await call('POST', viewer, `/api/marketplace/posts/${meetup}/chat/message`, { text: 'Save me a seat' });
     const vicChats = async () => (await call('GET', viewer, `/api/messages/conversations/${viewer.pk}`)).body ?? {};
     const listedUnread = (b: any) => (b.conversations ?? []).reduce((n: number, c: any) => n + (c.unreadCount ?? 0), 0);
     const unreadBefore = await vicChats();
     const meetupUnread = (unreadBefore.conversations ?? []).find((c: any) => c.id === meetup)?.unreadCount ?? 0;
     assert(hostLine.status === 201 && meetupUnread >= 1 && unreadBefore.totalUnread === listedUnread(unreadBefore),
         `before: the host's line is unread for someone Going, and counted in their totalUnread (${hostLine.status}, ${meetupUnread}, ${unreadBefore.totalUnread})`);
+    // The badge every push carries sets the app icon, so it must count the same chats. The push sender is stubbed:
+    // nothing leaves the machine, and each push's badge is read off what it was handed.
+    const realFetch = globalThis.fetch;
+    const pushed: any[] = [];
+    (globalThis as any).fetch = async (url: any, init: any) => {
+        if (String(url).includes('exp.host')) {
+            pushed.push(...JSON.parse(init.body));
+            return { ok: true, status: 200, json: async () => ({}) } as any;
+        }
+        return realFetch(url, init);
+    };
+    const pushToken = (id: Id) => `ExponentPushToken[g3-${id.name}]`;
+    for (const id of [viewer, ava]) db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(id.pk, pushToken(id));
+    const badgeOf = (id: Id): number | undefined => {
+        pushed.length = 0;
+        dispatchPushNotification([id.pk], 'SYSTEM', 'Badge check', 'Badge check', {}, 'chat');
+        return pushed.find(m => m.to === pushToken(id))?.badge;
+    };
+    const avaChats = async () => (await call('GET', ava, `/api/messages/conversations/${ava.pk}`)).body ?? {};
+    const vicBadgeBefore = badgeOf(viewer);
+    const avaBadgeBefore = badgeOf(ava);
+    const avaListBefore = await avaChats();
+    assert(goerLine.status === 201 && vicBadgeBefore === unreadBefore.totalUnread && avaBadgeBefore === avaListBefore.totalUnread
+        && ((avaListBefore.conversations ?? []).find((c: any) => c.id === meetup)?.unreadCount ?? 0) >= 1,
+        `before: a push's badge is the member's totalUnread, the event's chat in it for both (Vic ${vicBadgeBefore}/${unreadBefore.totalUnread}, host ${avaBadgeBefore}/${avaListBefore.totalUnread})`);
     for (const r of T) await report(r, meetup, ava);
     const unreadAfter = await vicChats();
     assert(!!hiddenAt(meetup) && !(unreadAfter.conversations ?? []).some((c: any) => c.id === meetup)
         && unreadAfter.totalUnread === unreadBefore.totalUnread - meetupUnread && unreadAfter.totalUnread === listedUnread(unreadAfter),
         `hidden: its chat leaves their list, and its unread lines leave totalUnread with it (${unreadBefore.totalUnread} → ${unreadAfter.totalUnread}, listed ${listedUnread(unreadAfter)})`);
+    const vicBadgeAfter = badgeOf(viewer);
+    assert(vicBadgeAfter === unreadAfter.totalUnread && vicBadgeAfter === (vicBadgeBefore ?? 0) - meetupUnread,
+        `and from the badge a push carries: an icon number they could never clear (${vicBadgeBefore} → ${vicBadgeAfter}, totalUnread ${unreadAfter.totalUnread})`);
+    const avaBadgeAfter = badgeOf(ava);
+    const avaListAfter = await avaChats();
+    assert(avaBadgeAfter === avaBadgeBefore && avaBadgeAfter === avaListAfter.totalUnread
+        && (avaListAfter.conversations ?? []).some((c: any) => c.id === meetup),
+        `the host still has the event, so their badge still counts its chat (${avaBadgeBefore} → ${avaBadgeAfter}, totalUnread ${avaListAfter.totalUnread})`);
+    db.prepare('DELETE FROM push_tokens WHERE token IN (?, ?)').run(pushToken(viewer), pushToken(ava));
+    (globalThis as any).fetch = realFetch;
 
     // A moderator removal of a hidden post works as always.
     const openOnTarget = db.prepare(`SELECT id FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).get(target) as { id: string };
@@ -460,6 +499,32 @@ async function main(): Promise<void> {
     const moeUnmutesCoop = await call('POST', null, `/api/local/admin/members/${coop.pk}/unmute`, undefined, { 'x-admin-session': moeSession });
     assert(moeRestoresCoop.status === 200 && hiddenAt(coopPost) === null && moeUnmutesCoop.status === 200,
         `another moderator restores it and lifts the mute (${moeRestoresCoop.status}, ${moeUnmutesCoop.status})`);
+    // Nor close a report on either through the report "action" without taking the post down: a closed report no longer
+    // counts towards the 3, so it would stop the hide as a dismissal does, and its reporter would hear nothing. A Pulse
+    // removal takes nothing off a post, so it doesn't count as one. Taking the post down stays theirs to do (it only
+    // counts against them), and another moderator can close the report.
+    const Q = [1, 2, 3].map(i => member(`Uma${i}`, 20)); // reporters of their own, under the hourly report limit
+    const openOn = (postId: string) => db.prepare(`SELECT id FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).all(postId) as { id: string }[];
+    const reportStatus = (reportId: string) => (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(reportId) as any)?.status;
+    for (const [whose, author] of [['their own post', mo], ['a post by an enterprise they keep', coop]] as const) {
+        const p = oldPost(author, `Reported, ${whose}`);
+        await report(Q[0], p, author);
+        await report(Q[1], p, author);
+        const [first = '', second = ''] = openOn(p).map(r => r.id);
+        const bare = await admin('POST', `/api/local/admin/reports/${first}/action`, {});
+        const pulseOnly = await admin('POST', `/api/local/admin/reports/${second}/action`, { removePulseItem: true });
+        assert(bare.status === 403 && pulseOnly.status === 403 && reportStatus(first) === 'pending' && reportStatus(second) === 'pending',
+            `a moderator can't close a report on ${whose} with no removal, or a Pulse one (${bare.status}, ${pulseOnly.status}): both stay pending`);
+        await report(Q[2], p, author);
+        assert(!!hiddenAt(p), `so a 3rd established reporter then hides ${whose}`);
+        const moeCloses = await call('POST', null, `/api/local/admin/reports/${first}/action`, {}, { 'x-admin-session': moeSession });
+        assert(moeCloses.status === 200 && reportStatus(first) === 'actioned', `another moderator can close one (${moeCloses.status})`);
+        const takeDown = await admin('POST', `/api/local/admin/reports/${second}/action`, { deletePost: true, reasonCategory: 'spam' });
+        const down = attempt(() => db.prepare('SELECT active, status, removed_by_moderator_at FROM posts WHERE id = ?').get(p) as any);
+        assert(takeDown.status === 200 && down?.active === 0 && down?.status === 'cancelled' && !!down?.removed_by_moderator_at
+            && reportStatus(second) === 'actioned',
+            `and the moderator can still take ${whose} down through the report, recorded as a removal (${takeDown.status} ${takeDown.body?.error ?? ''})`);
+    }
 
     // A hidden post its author then took down, restored later: the author is not told it is back, because it isn't.
     const takenDown = oldPost(ava, 'Hidden, then taken down');

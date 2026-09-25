@@ -11,6 +11,7 @@ import { readProfileRecord } from '../config/node-profile.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { importedArea } from './member-area.js';
 import { mergeReplicatedWatches } from './place-watches.js';
+import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
 import {
     exportSyncState as exportSyncStateEngine,
@@ -575,7 +576,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -1355,6 +1356,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             // copy. A main server older than this sends neither and changes nothing here.
             if (remote.placeWatches) mergeReplicatedWatches(remote.placeWatches);
             if (remote.directoryCache) mergeReplicatedDirectory(remote.directoryCache);
+
+            // Requests to join (G6, engine/knocks.ts): every knock and every answer, so a server that takes over still
+            // has them. After the members, because an approved row's invite is made again here only by a member this
+            // database has. Never deleted, so the tombstones below never touch them. A main server older than this
+            // sends none and changes nothing here.
+            if (remote.joinRequests) mergeReplicatedKnocks(remote.joinRequests);
 
             if (remote.tombstones) {
                 for (const ts of remote.tombstones) {

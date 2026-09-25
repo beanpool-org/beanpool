@@ -122,6 +122,7 @@ import { isDocumentPolicyFile, isNonCanonicalSpelling, useAppDocumentPolicy, use
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
 import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
+import { createKnockRoutes } from './routes/knocks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
@@ -284,6 +285,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/node/identity-epoch',      // split-brain guard: the signed take-over count an old main server reads at its own address (services/identity-epoch.ts)
     '/api/global/communities',       // global node (G5): the mirrored communities directory, for anyone deciding where to join
     '/api/global/home',              // global node (G5): the landing card; a signed read adds the caller's own watches
+    '/api/join/knock/status',        // ask to join (G6): the applicant, not a member here, reads their own knock; answers only a signed request, for the signer
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -876,7 +878,8 @@ export async function startHttpsServer(port: number): Promise<number> {
             ctx.body = { error: 'Federation feature is currently disabled by node gateway' };
             return;
         }
-        if (!gwConfig.features?.invites && (lowerPath.startsWith('/api/invite') || lowerPath.startsWith('/api/community/invite'))) {
+        // A knock (G6) is answered with an invite, so a node that takes no invites takes no knocks either.
+        if (!gwConfig.features?.invites && (lowerPath.startsWith('/api/invite') || lowerPath.startsWith('/api/community/invite') || lowerPath.startsWith('/api/join/knock'))) {
             ctx.status = 503;
             ctx.body = { error: 'Invites feature is currently disabled by node gateway' };
             return;
@@ -1243,6 +1246,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createKeeperRoutes(deps),
         createOpenJoinRoutes(deps),
         createGlobalDirectoryRoutes(deps),
+        createKnockRoutes(deps),
         createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
@@ -1405,6 +1409,9 @@ const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
  *  a byte is buffered. Pulse OAuth ingest is at most 50 items of link metadata. */
 const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
+    // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
+    [/^\/api\/join\/knock$/, 192 * 1024],
+    [/^\/api\/join\/knocks\//, 4 * 1024],
 ];
 
 function routeBodyLimit(path: string): number {

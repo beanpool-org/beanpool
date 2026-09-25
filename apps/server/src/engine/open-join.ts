@@ -88,10 +88,22 @@ export function openJoinAddressHash(limiterKey: string): string {
     return keyedHash('beanpool-open-join-ip/v1', [limiterKey]);
 }
 
-/** Clear the address from rows older than a day: past the longest window, the limiter never reads them again. */
+/**
+ * What `join_requests.ip_hash` holds for an address (engine/knocks.ts): the same key, its own domain, so a knock's
+ * address and a sign-up's never compare equal.
+ */
+export function knockAddressHash(limiterKey: string): string {
+    return keyedHash('beanpool-knock-ip/v1', [limiterKey]);
+}
+
+/**
+ * Clear the address from rows older than a day, the door's and the knocks' (engine/knocks.ts): past the longest
+ * window, neither limiter reads them again. Neither table stamps `updated_at` for it: the hash never travels.
+ */
 export function forgetOldJoinAddresses(now = Date.now()): number {
-    return db.prepare('UPDATE open_joins SET ip_hash = NULL WHERE ip_hash IS NOT NULL AND joined_at < ?')
-        .run(new Date(now - DAY_MS).toISOString()).changes;
+    const dayAgo = new Date(now - DAY_MS).toISOString();
+    return db.prepare('UPDATE open_joins SET ip_hash = NULL WHERE ip_hash IS NOT NULL AND joined_at < ?').run(dayAgo).changes
+        + db.prepare('UPDATE join_requests SET ip_hash = NULL WHERE ip_hash IS NOT NULL AND created_at < ?').run(dayAgo).changes;
 }
 
 let addressSweep: ReturnType<typeof setInterval> | null = null;

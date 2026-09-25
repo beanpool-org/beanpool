@@ -83,9 +83,9 @@ function watcher(ctx: any): string | null {
 }
 
 /**
- * The caller's open knock on a local community, for the card (design §3.1). G6 builds the knock, and by its design the
- * knock lives on the LOCAL node the app writes to directly (§3.3: "global: nothing"), so until G6 decides this node
- * records one, there is nothing here to report and the card reads the knock's status from the local node itself.
+ * The caller's open knock on a local community, for the card (design §3.1). Always null: G6 keeps a knock on the LOCAL
+ * node the app writes to directly (§3.3: "global: nothing", routes/knocks.ts), and this node records none, so the
+ * card reads a knock's status from that community (`GET /api/join/knock/status`, signed by the applicant).
  */
 function openKnockFor(_actor: string | undefined): null {
     return null;

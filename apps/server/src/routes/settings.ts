@@ -22,6 +22,7 @@ import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCod
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, type AdminRole } from '../admin-auth.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
+import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import type { RouteDeps } from './types.js';
@@ -231,9 +232,17 @@ router.get('/', async (ctx) => {
 
 // ===================== NODE CONFIG =====================
 
+// `acceptKnocks`: whether this community takes "ask to join" requests (G6, D4: on unless the operator turns it off). It is
+// the `knocks` profile switch as configured, so it travels with the profile record (config/node-profile.ts), and it
+// is said here beside the directory settings because Settings shows them together. Public, like the switch itself in
+// /api/community/info; how many requests are waiting is the operator's only (/api/local/admin/knocks).
+function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: boolean } {
+    return { ...config, acceptKnocks: getConfiguredSwitches().knocks };
+}
+
 router.get('/api/node/config', async (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    ctx.body = getNodeConfig();
+    ctx.body = withKnockSetting(getNodeConfig());
 });
 
 router.post('/api/local/admin/node/config', async (ctx) => {
@@ -242,9 +251,16 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         console.log("Auth failed for updateNodeConfig");
         return;
     }
-    const { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours } = (ctx as any).requestBody || {};
-    console.log("Updating node config:", { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours });
-    ctx.body = updateNodeConfig({ publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours });
+    const { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks } = (ctx as any).requestBody || {};
+    // Only when sent, and only true or false: a Settings page from before G6 doesn't send it, and must not turn it back on.
+    if (acceptKnocks !== undefined && typeof acceptKnocks !== 'boolean') {
+        ctx.status = 400;
+        ctx.body = { error: 'acceptKnocks must be true or false' };
+        return;
+    }
+    console.log("Updating node config:", { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks });
+    if (typeof acceptKnocks === 'boolean') setSwitchOverride('knocks', acceptKnocks);
+    ctx.body = withKnockSetting(updateNodeConfig({ publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours }));
     
     // Re-initialize the publisher with the new interval
     if (directoryPushIntervalHours !== undefined) {

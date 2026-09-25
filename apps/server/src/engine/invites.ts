@@ -88,6 +88,15 @@ export function redeemInvite(
         return { success: false, error: 'This invite code has expired (maximum 30 days validation)' };
     }
 
+    // An invite that answers a request to join (engine/knocks.ts) admits the key that asked and no other, whoever
+    // holds the code. Checked before anything else can answer, so another key learns nothing from it. (Every other
+    // invite admits whoever holds it: `intended_for` is a note for the inviter, below.)
+    const knock = db.prepare('SELECT pubkey FROM join_requests WHERE invite_code = ?').get(invite.code) as { pubkey: string } | undefined;
+    if (knock && knock.pubkey !== String(publicKey).toLowerCase()) {
+        recordFunnelEvent('invite_failed', 'wrong_key');
+        return { success: false, error: 'This invite was made for someone else, so it can’t be used here. Ask a member for your own invite.' };
+    }
+
     // Check if identity is ALREADY a member before "already used" check
     const existingMember = getMember(db, publicKey);
     if (existingMember) {

@@ -290,6 +290,7 @@ run_federation_suites() {
       test-distance-search
       test-distance-search-perf
       test-global-directory
+      test-knock
       test-commons-conservation
       test-ledger-rollback
       test-treasury-keepership

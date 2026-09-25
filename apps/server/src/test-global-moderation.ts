@@ -876,12 +876,14 @@ async function main(): Promise<void> {
     // so a route that let the note through would store it for the other side to read.
     const hens = crypto.randomUUID();
     createCrowdfundProject(hens, kim.pk, 'Hen house', 'Wire and timber', [], 50, null);
+    const barn = member('Barn', 60); // a bounded enterprise raising Beans, which takes pledges (Hub doesn't)
+    db.prepare(`UPDATE members SET is_treasury = 1, lifecycle = 'bounded', purpose = 'A new barn', goal_amount = 50 WHERE public_key = ?`).run(barn.pk);
     db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run('9999-12-31T23:59:59.999Z', bob.pk);
     const digits = 412345678;
     const numeric: [string, Res][] = [
         ['with Beans', await call('POST', bob, '/api/ledger/transfer', { to: zed.pk, amount: 1, memo: digits })],
         ['with a crowdfund pledge', await call('POST', bob, `/api/crowdfund/projects/${hens}/pledge`, { amount: 1, memo: digits })],
-        ['with an enterprise pledge', await call('POST', bob, `/api/enterprise/${hub.pk}/pledge`, { amount: 1, memo: digits })],
+        ['with an enterprise pledge', await call('POST', bob, `/api/enterprise/${barn.pk}/pledge`, { amount: 1, memo: digits })],
     ];
     for (const [what, r] of numeric) assert(refused(r), `muted: a note that is a number, ${what} → 403 moderation_muted (got ${r.status} ${JSON.stringify(r.body)?.slice(0, 140)})`);
     const digitNotes = one(`SELECT COUNT(*) AS c FROM transactions WHERE CAST(memo AS TEXT) LIKE '${digits}%'`);

@@ -246,9 +246,11 @@ async function run() {
         const requestTags = new Set(allTags.map((t) => t.request));
         const attestTags = new Set(allTags.map((t) => t.attest));
         assert([...requestTags].every((t) => !attestTags.has(t)), 'no request tag is an attestation tag, in any version on either side (domain separation, #542)');
-        assert(new Set(Object.values(worker.sign.PROTOCOLS).map((t) => t.request)).size === Object.keys(worker.sign.PROTOCOLS).length
-            && new Set(Object.values(worker.sign.PROTOCOLS).map((t) => t.attest)).size === Object.keys(worker.sign.PROTOCOLS).length,
-            'every version\'s tags are its own (no two versions share a tag)');
+        const ownTags = (table: Record<string, Tags>) => {
+            const versions = Object.values(table);
+            return new Set(versions.map((t) => t.request)).size === versions.length && new Set(versions.map((t) => t.attest)).size === versions.length;
+        };
+        assert(ownTags(worker.sign.PROTOCOLS) && ownTags(node.PROTOCOLS), 'on each side, every version\'s tags are its own (no two versions share a tag)');
         assert([...requestTags, ...attestTags].every((t) => !t.includes('\n')), 'no tag contains a newline');
 
         // ── 2. v1 on the wire is unchanged ──

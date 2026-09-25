@@ -18,6 +18,7 @@ import { retryPendingReports } from '../utils/blocklist';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
+import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
@@ -226,8 +227,10 @@ function RootLayoutNav() {
         // Immediately clear state to prevent double execution or infinite loops
         setDeepLinkUrl(null);
 
-        // Ignore OAuth authentication callback deep links (handled by openAuthSessionAsync in pulse-oauth.ts)
-        if (currentUrl.includes('/auth/instagram') || currentUrl.includes('/auth/tiktok') || currentUrl.startsWith('beanpool://auth/')) {
+        // Ignore OAuth authentication callback deep links (sign-in: utils/sso-signin.ts; the Pulse: pulse-oauth.ts).
+        // Android's https://beanpool.org/auth/... returns too: read as an invite, Facebook's cancel was the code
+        // INV-FACE-BOOK, which offered "Switch Nodes?" or put a new welcome over the screen waiting for the sign-in.
+        if (isAuthReturnLink(currentUrl) || currentUrl.includes('/auth/instagram') || currentUrl.includes('/auth/tiktok')) {
             return;
         }
         // "Take over with this phone" (app/unlock-keys.tsx) is routed by expo-router. Not an invite: its server address
@@ -500,11 +503,14 @@ function RootLayoutNav() {
         // welcome flow and the guardian-recovery screen. Guardian recovery runs
         // on a fresh device that holds no local identity yet — the screen mints
         // the new identity itself at the "Submit Request" step — so it must be
-        // reachable without one. Any other route → back to welcome.
+        // reachable without one. Any other route → back to welcome, except a
+        // sign-in return screen (app/auth/*), which goes back by itself to the
+        // screen waiting for that sign-in — see utils/auth-return.ts.
         if (!identity) {
-            if (root !== 'welcome' && root !== 'recover-identity') {
+            const to = setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false });
+            if (to) {
                 setTimeout(() => {
-                    router.replace('/welcome');
+                    router.replace(to);
                 }, 50);
             }
             return;
@@ -517,7 +523,8 @@ function RootLayoutNav() {
         // "my account is gone". Don't route at all until the flag has loaded.
         if (pendingOnboarding === null) return;
         if (pendingOnboarding) {
-            if (root !== 'welcome') router.replace('/welcome');
+            const to = setupRedirect(segments, { hasIdentity: true, pendingOnboarding: true });
+            if (to) router.replace(to);
             return;
         }
 

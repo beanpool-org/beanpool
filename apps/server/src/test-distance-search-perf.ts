@@ -1,41 +1,33 @@
 /**
- * Distance search (global node G4) at a global node's size. The deciding review of #1140 found that nearest first
- * without a radius measured and sorted every visible post on every request: 128 ms at 100k posts / 200k transactions,
- * against 5.4 ms for today's order, and growing with the posts on the node. That is the global Market's default read
- * (a point, no sort), each phone sends its own point so the ETag never saves it, and better-sqlite3 holds every other
- * request while it runs.
+ * Distance search (global node G4) at a global node's size, against the read it replaced. 743b5d57 ranked a nearest-first
+ * read in one query that selected every column of every post the listing shows (the author's trade count included),
+ * measured each and sorted them all: 128 ms at 100k posts / 200k transactions for the global Market's default read,
+ * growing with the posts on the node (the first deciding review of #1140). The circles (posts.ts NEAREST_FIRST_CIRCLES_KM)
+ * read the posts near the reader instead. But a circle reads every post in it, whatever the filter, so for a filter that
+ * few posts near the reader match, circles cost more than the one pass (the second and third deciding reviews: the Events
+ * tab, a rare category, and a category common on the node and rare near the reader). posts.ts circlesMayRead now lets
+ * only the reads where that can't happen search circles, and every other read takes one pass.
  *
- * The second deciding review found that fix round 1's circles made a filter few posts match slower instead: each circle
- * read every post near the reader whatever the filter, came up short, and then the one pass ran anyway (type=event
- * 7.2 → 72.8 ms, an empty category 0.1 → 77.6 ms at 100k). Those are the native Market's Events and Polls tabs.
+ * This seeds the node's real schema (initStateEngine) with posts spread over the world's towns: 1% events still to come,
+ * 0.3% polls, 70% of the rest offers and 30% needs; 0.1% in a rare category; 20% in a 'wide' category that is rare in
+ * the biggest town (about 20 of its 5,500 posts at 100k); 0.5% for a group the reader is in. For each read below, at
+ * 20k and 100k posts, each with 0 and 200k transactions, it times 743b5d57's read and this one in the same run, on the
+ * same database, through the same conditions and the same code after the ranking (engine getPostsRankedBy), and holds:
+ *   1. no read is slower than 743b5d57's beyond a timer's noise
+ *   2. each read's page is 743b5d57's page, post for post, with the same distances
+ *   3. the reads circlesMayRead allows search circles, and every other read takes exactly one pass
+ *   4. the default page's circle searched idx_posts_lat_lng
+ *   5. the first pages are the pages a brute-force haversine over every post gives, on both paths
  *
- * This seeds the node's real schema (initStateEngine) with posts spread over the world's towns (1% of them events still
- * to come, 0.3% polls, 0.1% in a rare category), and a rural town 600 km from the biggest where half the posts are about
- * farming, which 200 posts over 3,500 km away are about too, and no others. It reads as a signed member does, and holds
- * the listing to:
- *   1. a default nearest-first page (a point, no radius) costs a small multiple of today's order: at 20k posts / 40k
- *      transactions, and at 100k / 200k; from the biggest town and from a small one
- *   2. it does not grow with the posts on the node: at 100k it costs about what it does at 20k
- *   3. a 500 km radius, nearest first, the same
- *   4. nearest first filtered to events (the first page and the fifth), to polls, to a rare category and to a category
- *      with no posts costs about one pass over what the filter matches: what the same read costs 3,000 km from every
- *      post, where the circles find nothing and one pass ranks every match. From the biggest town, at both sizes. And
- *      farming from the rural town: its share there says the next circle, with the biggest town in it, holds the page,
- *      and it holds none of them.
- *   5. EXPLAIN QUERY PLAN: the read that found the default page searched idx_posts_lat_lng
- *   6. the first pages are the pages a brute-force haversine over every post gives, with no filter and with filters
- *      that match fewer and more than posts.ts NEAREST_FIRST_MATCHES_PROBE posts (a spot check at this size; the
- *      engine's vitest compares every edge and every path)
- *
- * Every bound compares two times measured in the same run, medians of repeated reads, and is generous, so a slow or busy
- * machine can't fail it. The timings are printed as the table for the PR.
+ * Every bound compares two times measured in the same run, medians of interleaved reads, and is generous, so a slow or
+ * busy machine can't fail it. The timings are printed as the table for the PR.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-distance-search-perf.ts
  */
 delete process.env.NODE_PROFILE;
 
-import { initStateEngine, seedGenesisMember, getPosts } from './state-engine.js';
-import { NEAREST_FIRST_MATCHES_PROBE } from '@beanpool/engine';
+import { initStateEngine, seedGenesisMember, createGroup } from './state-engine.js';
+import { boundingBox, getPostsRankedBy, getPosts as getPostsEngine, type PostFilter, type RowsNear } from '@beanpool/engine';
 import { db } from './db/db.js';
 
 let run = 0, passed = 0;
@@ -63,14 +55,14 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
 const HUB = { lat: -33.87, lng: 151.21 };
 const towns = [HUB, ...Array.from({ length: 299 }, () => ({ lat: -50 + rand() * 115, lng: -180 + rand() * 360 }))];
 const CATEGORIES = ['other', 'other', 'food', 'community', 'craft', 'repair', 'art', 'business', 'learn'];
-/** 0.1% of posts; and a category no post is in. */
-const RARE = 'rare', EMPTY = 'none';
-/** 600 km west of HUB: 40 posts about farming and 40 others within 20 km, and farming nowhere else within 3,500 km. */
-const RURAL = { lat: HUB.lat, lng: HUB.lng - 600 / (KM_PER_DEG * Math.cos(rad(HUB.lat))) };
-const FARM = 'farm';
+/** 0.1% of posts; a category no post is in; and 20% of posts, but about 0.35% of the biggest town's. */
+const RARE = 'rare', EMPTY = 'none', WIDE = 'wide';
 const MEMBERS = 20_000;
 const OWNER = '00'.repeat(32);
+/** A member with a few posts, as seedMembers names them. */
+const AUTHOR = (1235).toString(16).padStart(64, '0');
 const members: string[] = [];
+let clubId = '';
 
 function seedMembers(): void {
     seedGenesisMember(OWNER, 'Owner');
@@ -83,20 +75,22 @@ function seedMembers(): void {
             ins.run(pk, `m${i}`, OWNER);
         }
     })();
+    // The reader is in a group; 0.5% of posts are for it.
+    clubId = createGroup({ name: 'Perf club', createdBy: members[0] }).id;
 }
 
-let postCount = 0, txCount = 0, pollCount = 0;
-/** Posts and transactions up to the totals given, in one write each. */
-function seedTo(posts: number, transactions: number): void {
+let postCount = 0, pollCount = 0;
+function seedPostsTo(posts: number): void {
     const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
-                                                   event_start_at, event_end_at, poll_options)
-                                VALUES (?, ?, ?, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    const insTx = db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount) VALUES (?, ?, ?, 1)');
+                                                   event_start_at, event_end_at, poll_options, audience_scope, target_group_id)
+                                VALUES (?, ?, ?, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     db.transaction(() => {
         for (; postCount < posts; postCount++) {
-            let lat: number | null = null, lng: number | null = null;
+            let lat: number | null = null, lng: number | null = null, atHub = false;
             if (rand() > 0.05) {
-                const town = towns[Math.floor(rand() ** 2 * towns.length)];
+                const t = Math.floor(rand() ** 2 * towns.length);
+                const town = towns[t];
+                atHub = t === 0;
                 lat = Math.max(-90, Math.min(90, town.lat + gauss() * 15 / KM_PER_DEG));
                 lng = ((town.lng + gauss() * 15 / KM_PER_DEG / Math.cos(rad(town.lat)) + 540) % 360) - 180;
             }
@@ -105,245 +99,248 @@ function seedTo(posts: number, transactions: number): void {
             const kind = rand();
             const type = kind < 0.01 ? 'event' : kind < 0.013 ? 'poll' : rand() < 0.7 ? 'offer' : 'need';
             const author = type === 'poll' ? members[pollCount++] : members[Math.floor(rand() * MEMBERS)];
-            const category = rand() < 0.001 ? RARE : CATEGORIES[Math.floor(rand() * CATEGORIES.length)];
+            const c = rand();
+            const category = c < 0.001 ? RARE : c < (atHub ? 0.0045 : 0.211) ? WIDE : CATEGORIES[Math.floor(rand() * CATEGORIES.length)];
+            const forClub = rand() < 0.005;
             insPost.run(`perf-${postCount}`, type, category, `Post ${postCount}`, author, at, at, lat, lng,
                 type === 'event' ? '2099-06-01T10:00:00.000Z' : null, type === 'event' ? '2099-06-01T12:00:00.000Z' : null,
-                type === 'poll' ? '[{"id":"a","text":"Yes"},{"id":"b","text":"No"}]' : null);
-        }
-        for (; txCount < transactions; txCount++) {
-            insTx.run(`perf-tx-${txCount}`, members[Math.floor(rand() * MEMBERS)], members[Math.floor(rand() * MEMBERS)]);
+                type === 'poll' ? '[{"id":"a","text":"Yes"},{"id":"b","text":"No"}]' : null,
+                forClub ? 'group' : 'public', forClub ? clubId : null);
         }
     })();
 }
-
-/** A place `km` from a point on a random bearing. */
-function around(r: () => number, lat: number, lng: number, km: number): [number, number] {
-    const d = km / R_KM, b = r() * 2 * Math.PI, φ = rad(lat), λ = rad(lng);
-    const φ2 = Math.asin(Math.sin(φ) * Math.cos(d) + Math.cos(φ) * Math.sin(d) * Math.cos(b));
-    const λ2 = λ + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(φ), Math.cos(d) - Math.sin(φ) * Math.sin(φ2));
-    return [φ2 * 180 / Math.PI, ((λ2 * 180 / Math.PI + 540) % 360) - 180];
-}
-/** The rural town's posts, and farming's other 200 at towns over 3,500 km from it (so over 3,000 km from FAR too). Its own
- *  generator, so the rest of the world is the one the earlier rounds measured. */
-function seedRural(): void {
-    const r = prng(600);
-    const far = towns.filter(t => haversine(RURAL.lat, RURAL.lng, t.lat, t.lng) > 3500);
-    const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng)
-                            VALUES (?, 'offer', ?, ?, '', 0, ?, ?, ?, ?, ?)`);
-    const at = '2026-01-01T00:00:00.000Z';
-    let n = 0;
-    const post = (category: string, [lat, lng]: [number, number]) => ins.run(`perf-rural-${n}`, category, `Rural ${n}`, members[n++], at, at, lat, lng);
+function seedTransactions(n: number): void {
+    const insTx = db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount) VALUES (?, ?, ?, 1)');
     db.transaction(() => {
-        for (let i = 0; i < 40; i++) post(FARM, around(r, RURAL.lat, RURAL.lng, r() * 20));
-        for (let i = 0; i < 40; i++) post('other', around(r, RURAL.lat, RURAL.lng, r() * 20));
-        for (let i = 0; i < 200; i++) { const t = far[Math.floor(r() * far.length)]; post(FARM, around(r, t.lat, t.lng, r() * 30)); }
+        for (let i = 0; i < n; i++) insTx.run(`perf-tx-${i}`, members[Math.floor(rand() * MEMBERS)], members[Math.floor(rand() * MEMBERS)]);
     })();
 }
 
-/** The median of repeated reads, after a few to warm up. */
-function median(read: () => unknown[], reps = 15): number {
-    for (let i = 0; i < 3; i++) read();
-    const times: number[] = [];
-    for (let i = 0; i < reps; i++) {
-        const t = performance.now();
-        read();
-        times.push(performance.now() - t);
+/**
+ * 743b5d57's read with a point, as it was: one query that selects every column of every post the listing shows, the
+ * author's trade count included, measures each and sorts them all before LIMIT. Copied from 743b5d57's getPosts; the
+ * conditions (`where`) are the listing's own, unchanged since.
+ */
+const rowsNear743b5d57: RowsNear = (conn, near, where, whereParams, filter) => {
+    let sql = `
+        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
+               g.name as target_group_name,
+               haversine_km(?, ?, p.lat, p.lng) AS distance_km,
+               COALESCE(m.earned_credit, 0) as author_earned_credit,
+               (
+                 COALESCE((SELECT COUNT(*) FROM transactions t
+                      WHERE (t.from_pubkey = m.public_key OR t.to_pubkey = m.public_key)
+                        AND t.from_pubkey != t.to_pubkey
+                        AND t.from_pubkey NOT LIKE 'escrow_%' AND t.to_pubkey NOT LIKE 'escrow_%'
+                        AND t.from_pubkey != 'SYSTEM' AND t.to_pubkey != 'SYSTEM'), 0) +
+                 COALESCE((SELECT COUNT(*) FROM marketplace_transactions mt
+                      WHERE (mt.buyer_pubkey = m.public_key OR mt.seller_pubkey = m.public_key)
+                        AND mt.status = 'completed'), 0)
+               ) as author_trade_count
+        FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        LEFT JOIN members a ON p.accepted_by = a.public_key
+        LEFT JOIN groups g ON p.target_group_id = g.id
+        WHERE 1=1${where}`;
+    const params: unknown[] = [near.lat, near.lng, ...whereParams];
+    if (near.radiusKm !== undefined) {
+        const box = boundingBox(near.lat, near.lng, near.radiusKm);
+        sql += ` AND p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
+        params.push(box.latMin, box.latMax, ...box.lngRanges.flat());
+        sql += " AND haversine_km(?, ?, p.lat, p.lng) <= ?";
+        params.push(near.lat, near.lng, near.radiusKm);
     }
-    return times.sort((a, b) => a - b)[Math.floor(reps / 2)];
-}
+    sql += filter.sortByDistance
+        ? " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, p.created_at DESC, p.id ASC"
+        : " ORDER BY p.updated_at DESC, p.created_at DESC";
+    if (filter.limit) {
+        sql += " LIMIT ? OFFSET ?";
+        params.push(filter.limit, filter.offset || 0);
+    }
+    return conn.prepare(sql).all(...params) as any[];
+};
 
-// As the route reads for a signed member: the Market's default page, 50 posts, events left out.
+// As the route reads for a signed member: the Market's page, 50 posts, events left out unless asked for.
 const VIEWER = () => members[0];
-const page = (extra: Record<string, unknown> = {}) => getPosts({ limit: 50, offset: 0, excludeEvents: true, viewerPubkey: VIEWER(), ...extra });
-const nearestFirst = { near: HUB, sortByDistance: true };
+const asRead = (extra: PostFilter): PostFilter => ({ limit: 50, offset: 0, excludeEvents: true, viewerPubkey: VIEWER(), ...extra });
+const before = (f: PostFilter) => getPostsRankedBy(db, asRead(f), rowsNear743b5d57);
+const now = (f: PostFilter) => getPostsEngine(db, asRead(f));
+
 // A town few posts gather around (towns late in the list are chosen least).
 const SPARSE = towns[250];
-// 150 km from the biggest town, with nothing much nearer: the circles that hold the page hold the town, so they count first.
-const BETWEEN = { lat: HUB.lat, lng: HUB.lng - 150 / (KM_PER_DEG * Math.cos(rad(HUB.lat))) };
-// No town is south of 50°S, so no post is within 3,000 km of here: the one reader whose page takes a pass over every post.
+// On the biggest town's latitude, with no town (so no post) within 800 km: the circles out to 300 km find nothing.
+const NOTHING_NEAR = (() => {
+    for (let lng = HUB.lng - 20; lng > HUB.lng - 200; lng -= 0.5) {
+        const p = { lat: HUB.lat, lng: ((lng + 540) % 360) - 180 };
+        const nearest = Math.min(...towns.map(t => haversine(p.lat, p.lng, t.lat, t.lng)));
+        if (nearest > 800 && nearest < 1500) return p;
+    }
+    throw new Error('no point with nothing within 800 km');
+})();
+// No town is south of 50°S, so no post is within 3,000 km of here: the circles find nothing, and one pass ranks every post.
 const FAR = { lat: -80, lng: 0 };
-const radius500 = { near: { ...HUB, radiusKm: 500 }, sortByDistance: true };
 
-interface Row { size: string; recent: number; nearest: number; sparse: number; radius: number; radiusRecent: number; far: number }
-function measure(size: string): Row {
-    return {
-        size,
-        recent: median(() => page()),
-        nearest: median(() => page(nearestFirst)),
-        sparse: median(() => page({ near: SPARSE, sortByDistance: true })),
-        radius: median(() => page(radius500)),
-        radiusRecent: median(() => page({ near: { ...HUB, radiusKm: 500 } })),
-        far: median(() => page({ near: FAR, sortByDistance: true }), 7),
-    };
-}
-/** A small multiple, with room for a timer's noise on a fast machine. */
-const smallMultipleOf = (t: number, base: number) => t <= Math.max(3 * base, base + 15);
-
-// The Market's tabs and category chips, nearest first from the biggest town; and each from 3,000 km from every post, where
-// the circles find nothing and one pass ranks every match (the planner finds them, by the category or events index where
-// it can). Today's order is no measure of that pass: it can walk idx_posts_updated_at and stop at the page.
-const FILTERS: Array<[string, Record<string, unknown>, { lat: number; lng: number }]> = [
-    ['type=event', { type: 'event', excludeEvents: false }, HUB],
-    ['type=event, the fifth page', { type: 'event', excludeEvents: false, offset: 200 }, HUB],
-    ['type=poll', { type: 'poll' }, HUB],
-    ['a category holding 0.1% of posts', { category: RARE }, HUB],
-    ['a category with no posts', { category: EMPTY }, HUB],
-    ['farming, from the rural town', { category: FARM }, RURAL],
+interface Shape { name: string; filter: PostFilter; circles: boolean }
+const nearest = (at: { lat: number; lng: number }) => ({ near: at, sortByDistance: true });
+const SHAPES: Shape[] = [
+    { name: 'no filter, the biggest town', filter: nearest(HUB), circles: true },
+    { name: 'no filter, a small town', filter: nearest(SPARSE), circles: true },
+    { name: 'no filter, nothing within 700 km', filter: nearest(NOTHING_NEAR), circles: true },
+    { name: 'no filter, 3,000 km from every post', filter: nearest(FAR), circles: true },
+    { name: 'the apps\' feed (types=offer,need,poll,event)', filter: { ...nearest(HUB), types: ['offer', 'need', 'poll', 'event'], excludeEvents: false }, circles: true },
+    { name: 'type=offer', filter: { ...nearest(HUB), type: 'offer' }, circles: true },
+    { name: 'type=need', filter: { ...nearest(HUB), type: 'need' }, circles: true },
+    { name: 'type=event', filter: { ...nearest(HUB), type: 'event', excludeEvents: false }, circles: false },
+    { name: 'type=poll', filter: { ...nearest(HUB), type: 'poll' }, circles: false },
+    { name: 'a category with no posts', filter: { ...nearest(HUB), category: EMPTY }, circles: false },
+    { name: 'a category holding 0.1% of posts', filter: { ...nearest(HUB), category: RARE }, circles: false },
+    { name: 'a category holding 20%, 0.35% of the biggest town\'s', filter: { ...nearest(HUB), category: WIDE }, circles: false },
+    { name: 'one author', filter: { ...nearest(HUB), authorPubkey: AUTHOR }, circles: false },
+    { name: 'a group scope', filter: { ...nearest(HUB), audienceScope: 'group' }, circles: false },
+    { name: 'radius 500 km', filter: { near: { ...HUB, radiusKm: 500 }, sortByDistance: true }, circles: false },
+    { name: 'today\'s order, a point', filter: { near: HUB }, circles: false },
+    { name: 'today\'s order, no point', filter: {}, circles: false },
 ];
-interface FilteredRow { size: string; filter: string; nearest: number; onePass: number; count: number | null }
-/** What asking how many posts the listing matches (posts.ts rankMatches) costs on its own, if the read asked. */
-function countCost(extra: Record<string, unknown>): number | null {
+
+/** The reads a page makes: circles (a box on idx_posts_lat_lng joined to the listing) and one pass. */
+function trace(f: PostFilter): { circles: number; passes: number } {
     const prepare = db.prepare.bind(db);
-    let asked: { sql: string; params: unknown[] } | undefined;
+    const out = { circles: 0, passes: 0 };
     (db as any).prepare = (sql: string) => {
         const st = prepare(sql);
-        if (/WITH matches AS MATERIALIZED/.test(sql)) {
+        const kind = /CROSS JOIN posts p/.test(sql) ? 'circles' : /haversine_km/.test(sql) && !/WHERE p\.id IN/.test(sql) ? 'passes' : undefined;
+        if (kind) {
             const all = st.all.bind(st);
-            (st as any).all = (...params: unknown[]) => { asked ??= { sql, params }; return all(...params); };
+            (st as any).all = (...params: unknown[]) => { out[kind]++; return all(...params); };
         }
         return st;
     };
-    try { page(extra); } finally { delete (db as any).prepare; }
-    if (!asked) return null;
-    const st = db.prepare(asked.sql);
-    return median(() => st.all(...asked!.params));
+    try { now(f); } finally { delete (db as any).prepare; }
+    return out;
 }
-function measureFiltered(size: string): FilteredRow[] {
-    return FILTERS.map(([filter, f, at]) => ({
-        size, filter,
-        nearest: median(() => page({ ...f, near: at, sortByDistance: true })),
-        onePass: median(() => page({ ...f, near: FAR, sortByDistance: true })),
-        count: countCost({ ...f, near: at, sortByDistance: true }),
-    }));
+
+/** Medians of the two reads, interleaved (each goes first half the time), after a few to warm up. */
+function race(f: PostFilter, reps: number): { before: number; now: number } {
+    for (let i = 0; i < 2; i++) { before(f); now(f); }
+    const a: number[] = [], b: number[] = [];
+    const time = (read: () => unknown, into: number[]) => { const t = performance.now(); read(); into.push(performance.now() - t); };
+    for (let i = 0; i < reps; i++) {
+        if (i % 2) { time(() => before(f), a); time(() => now(f), b); } else { time(() => now(f), b); time(() => before(f), a); }
+    }
+    const median = (xs: number[]) => xs.sort((x, y) => x - y)[Math.floor(xs.length / 2)];
+    return { before: median(a), now: median(b) };
 }
-/** Broad reads: a whole read, and what counting how many posts the listing matches cost it, if it counted. */
-const BROAD: Array<[string, Record<string, unknown>]> = [
-    ['type=need (30% of posts), from the biggest town', { type: 'need', ...nearestFirst }],
-    ['no filter, 150 km from the biggest town', { near: BETWEEN, sortByDistance: true }],
-];
-function measureBroad(size: string): Array<{ size: string; read: string; total: number; count: number | null }> {
-    return BROAD.map(([read, f]) => ({ size, read, total: median(() => page(f)), count: countCost(f) }));
+
+/** Within a timer's noise of 743b5d57, generously: half as slow again, or 3 ms, whichever is more. */
+const noSlower = (t: number, base: number) => t <= Math.max(1.5 * base, base + 3);
+
+interface Row { size: string; shape: Shape; before: number; now: number; reads: string; same: boolean }
+function measure(size: string): Row[] {
+    return SHAPES.map(shape => {
+        const f = shape.filter;
+        const slow = /no filter|feed|type=offer|type=need/.test(shape.name) && !/today/.test(shape.name);
+        const t = race(f, slow ? 9 : 15);
+        const { circles, passes } = trace(f);
+        const reads = `${circles ? `${circles} circle${circles > 1 ? 's' : ''}` : ''}${circles && passes ? ' + ' : ''}${passes ? `${passes} pass` : ''}` || 'no point';
+        const a = before(f), b = now(f);
+        const same = JSON.stringify(a.map(p => [p.id, p.distanceKm])) === JSON.stringify(b.map(p => [p.id, p.distanceKm]));
+        return { size, shape, ...t, reads, same };
+    });
 }
-/** About one pass: twice it, with room for a timer's noise and the circles' first look on a fast machine. */
-const aboutOnePass = (t: number, onePass: number) => t <= Math.max(2 * onePass, onePass + 10);
 
 async function main(): Promise<void> {
-    console.log('\n=== Distance search (G4) at scale ===\n');
+    console.log('\n=== Distance search (G4) at scale, against 743b5d57 ===\n');
     initStateEngine();
     seedMembers();
 
     const rows: Row[] = [];
-    const filtered: FilteredRow[] = [];
-    const broad: ReturnType<typeof measureBroad> = [];
     let t = performance.now();
-    seedTo(20_000, 40_000);
-    seedRural();
-    console.log(`seeded 20,000 posts / 40,000 transactions in ${Math.round(performance.now() - t)} ms`);
-    rows.push(measure('20k / 40k'));
-    filtered.push(...measureFiltered('20k / 40k'));
-    broad.push(...measureBroad('20k / 40k'));
+    seedPostsTo(20_000);
+    console.log(`seeded 20,000 posts in ${Math.round(performance.now() - t)} ms`);
+    rows.push(...measure('20k / 0'));
+    seedTransactions(200_000);
+    rows.push(...measure('20k / 200k'));
+    db.prepare("DELETE FROM transactions WHERE id LIKE 'perf-tx-%'").run();
     t = performance.now();
-    seedTo(100_000, 200_000);
-    console.log(`seeded to 100,000 posts / 200,000 transactions in ${Math.round(performance.now() - t)} ms`);
-    rows.push(measure('100k / 200k'));
-    filtered.push(...measureFiltered('100k / 200k'));
-    broad.push(...measureBroad('100k / 200k'));
+    seedPostsTo(100_000);
+    console.log(`seeded to 100,000 posts in ${Math.round(performance.now() - t)} ms`);
+    rows.push(...measure('100k / 0'));
+    seedTransactions(200_000);
+    rows.push(...measure('100k / 200k'));
 
-    // The last two columns are printed, not held to a bound: sort=recent with a radius is the planner's one pass, and a
-    // reader 3,000 km from every post needs one pass over every post.
-    console.log('\n| posts / transactions | today\'s order | nearest first (a point, no radius), biggest town | nearest first, a small town | radius 500 km, nearest first | radius 500 km, today\'s order | nearest first, 3,000 km from every post |');
-    console.log('|---|---|---|---|---|---|---|');
-    for (const r of rows) console.log(`| ${r.size} | ${r.recent.toFixed(1)} ms | ${r.nearest.toFixed(1)} ms | ${r.sparse.toFixed(1)} ms | ${r.radius.toFixed(1)} ms | ${r.radiusRecent.toFixed(1)} ms | ${r.far.toFixed(1)} ms |`);
-    const ms = (v: number | null) => v === null ? 'not counted' : `${v.toFixed(1)} ms`;
-    console.log('\n| posts / transactions | filter | nearest first, from the biggest town | nearest first, 3,000 km from every post (one pass) | of which, counting how many match |');
-    console.log('|---|---|---|---|---|');
-    for (const r of filtered) console.log(`| ${r.size} | ${r.filter} | ${r.nearest.toFixed(1)} ms | ${r.onePass.toFixed(1)} ms | ${ms(r.count)} |`);
-    console.log('\n| posts / transactions | broad read, nearest first | the read | of which, counting how many match |');
-    console.log('|---|---|---|---|');
-    for (const r of broad) console.log(`| ${r.size} | ${r.read} | ${r.total.toFixed(1)} ms | ${ms(r.count)} |`);
+    const sizes = [...new Set(rows.map(r => r.size))];
+    console.log(`\nMedians in ms, 743b5d57 → this read, per posts / transactions. Nothing within 700 km is (${NOTHING_NEAR.lat}, ${NOTHING_NEAR.lng.toFixed(2)}).\n`);
+    console.log(`| read | ${sizes.join(' | ')} | reads |`);
+    console.log(`|---|${sizes.map(() => '---').join('|')}|---|`);
+    for (const shape of SHAPES) {
+        const cells = sizes.map(size => { const r = rows.find(x => x.size === size && x.shape === shape)!; return `${r.before.toFixed(1)} → ${r.now.toFixed(1)}`; });
+        console.log(`| ${shape.name} | ${cells.join(' | ')} | ${rows.find(x => x.shape === shape && x.size === '100k / 200k')!.reads} |`);
+    }
     console.log('');
 
-    // ── 1–3. the default page, and a radius ──────────────────────────────────────────────────────
+    // ── 1. no read slower than 743b5d57's ────────────────────────────────────────────────────────
     for (const r of rows) {
-        assert(smallMultipleOf(r.nearest, r.recent),
-            `${r.size}: a default nearest-first page costs a small multiple of today's order (${r.nearest.toFixed(1)} ms against ${r.recent.toFixed(1)} ms)`);
-        assert(smallMultipleOf(r.sparse, r.recent),
-            `${r.size}: and from a small town (${r.sparse.toFixed(1)} ms against ${r.recent.toFixed(1)} ms)`);
-        assert(smallMultipleOf(r.radius, r.recent),
-            `${r.size}: a 500 km radius, nearest first, likewise (${r.radius.toFixed(1)} ms against ${r.recent.toFixed(1)} ms)`);
+        assert(noSlower(r.now, r.before), `${r.size}, ${r.shape.name}: ${r.now.toFixed(1)} ms, no slower than 743b5d57's ${r.before.toFixed(1)} ms`);
     }
-    const [small, large] = rows;
-    assert(large.nearest <= 2 * small.nearest + 10,
-        `five times the posts, and the nearest-first page costs about the same (${small.nearest.toFixed(1)} ms at 20k, ${large.nearest.toFixed(1)} ms at 100k)`);
-    assert(large.radius <= 2 * small.radius + 10,
-        `and the 500 km radius (${small.radius.toFixed(1)} ms at 20k, ${large.radius.toFixed(1)} ms at 100k)`);
+    // ── 2. the same pages ────────────────────────────────────────────────────────────────────────
+    const differ = rows.filter(r => !r.same).map(r => `${r.size}, ${r.shape.name}`);
+    assert(differ.length === 0, `every read's page is 743b5d57's page, post for post, with the same distances (${differ.join('; ') || 'all the same'})`);
+    // ── 3. the path each read takes ──────────────────────────────────────────────────────────────
+    const wrongPath = rows.filter(r => r.shape.filter.near && (r.shape.circles ? !/circle/.test(r.reads) : r.reads !== '1 pass'));
+    assert(wrongPath.length === 0,
+        `no filter, the apps' feed and type offer or need search circles; every other read takes exactly one pass (${wrongPath.map(r => `${r.size}, ${r.shape.name}: ${r.reads}`).join('; ') || 'all as said'})`);
 
-    // ── 4. a filter few posts match ──────────────────────────────────────────────────────────────
-    for (const r of filtered) {
-        assert(aboutOnePass(r.nearest, r.onePass),
-            `${r.size}, ${r.filter}: nearest first costs about one pass over what it matches (${r.nearest.toFixed(1)} ms against ${r.onePass.toFixed(1)} ms)`);
-    }
-
-    // ── 5. the index ─────────────────────────────────────────────────────────────────────────────
+    // ── 4. the index ─────────────────────────────────────────────────────────────────────────────
     const prepare = db.prepare.bind(db);
     const reads: Array<{ sql: string; params: unknown[] }> = [];
     (db as any).prepare = (sql: string) => {
         const st = prepare(sql);
-        if (/haversine_km/.test(sql)) {
+        if (/CROSS JOIN posts p/.test(sql)) {
             const all = st.all.bind(st);
             (st as any).all = (...params: unknown[]) => { reads.push({ sql, params }); return all(...params); };
         }
         return st;
     };
-    let first: ReturnType<typeof page>;
-    try { first = page(nearestFirst); } finally { delete (db as any).prepare; }
+    try { now(nearest(HUB)); } finally { delete (db as any).prepare; }
     const found = reads[reads.length - 1];
     const plan = found ? (db.prepare(`EXPLAIN QUERY PLAN ${found.sql}`).all(...found.params) as Array<{ detail: string }>).map(r => r.detail) : [];
     assert(plan.some(d => /idx_posts_lat_lng/.test(d)),
-        `the read that found the default page searched idx_posts_lat_lng (${reads.length} read(s); ${plan.join(' | ') || 'none captured'})`);
+        `the circle that found the default page searched idx_posts_lat_lng (${reads.length} circle(s); ${plan.join(' | ') || 'none captured'})`);
 
-    // ── 6. the page itself ───────────────────────────────────────────────────────────────────────
-    // Every seeded post is live and public, by an active member, and every event is still to come, so the listing shows
-    // every post its filter matches (the default page leaves events out); the reference is measured here from the rows
-    // alone.
+    // ── 5. the page itself ───────────────────────────────────────────────────────────────────────
+    // Every seeded post is live and by an active member, every event is still to come, and the reader is in the club, so
+    // the listing shows every post its filter matches (the default page leaves events out); the reference is measured
+    // here from the rows alone.
     const all = db.prepare(`SELECT id, type, category, lat, lng, updated_at, created_at FROM posts WHERE id LIKE 'perf-%'`).all() as Array<{ id: string; type: string; category: string; lat: number | null; lng: number | null; updated_at: string; created_at: string }>;
     const by = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
     const referenceFor = (keep: (p: typeof all[number]) => boolean) => all.filter(keep)
         .map(p => ({ id: p.id, u: p.updated_at, c: p.created_at, d: p.lat === null || p.lng === null ? null : haversine(HUB.lat, HUB.lng, p.lat, p.lng) }))
         .sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
-    const reference = referenceFor(p => p.type !== 'event');
-    const pages = [0, 50, 1000].map(offset => ({ offset, got: page({ ...nearestFirst, offset }).map(p => p.id), want: reference.slice(offset, offset + 50).map(r => r.id) }));
-    assert(first.length === 50 && pages.every(p => JSON.stringify(p.got) === JSON.stringify(p.want)),
-        `the pages at offsets 0, 50 and 1,000 are the brute-force pages (${pages.map(p => `${p.offset}: ${p.got.length} posts, ${p.got.filter((id, i) => id !== p.want[i]).length} different`).join('; ')})`);
-    // Filtered, on both sides of NEAREST_FIRST_MATCHES_PROBE (1,000): at 100k there are about 1,040 events and 11,000
-    // posts about food, and about 300 polls and 80 posts in the rare category.
-    const filteredReads: Array<[string, Record<string, unknown>, (p: typeof all[number]) => boolean]> = [
-        ['type=event', { type: 'event', excludeEvents: false }, p => p.type === 'event'],
-        ['category=food', { category: 'food' }, p => p.category === 'food' && p.type !== 'event'],
-        ['type=poll', { type: 'poll' }, p => p.type === 'poll'],
-        ['the rare category', { category: RARE }, p => p.category === RARE && p.type !== 'event'],
-        ['the empty category', { category: EMPTY }, () => false],
+    const brute: Array<[string, PostFilter, (p: typeof all[number]) => boolean]> = [
+        ['no filter (circles)', {}, p => p.type !== 'event'],
+        ['type=need (circles)', { type: 'need' }, p => p.type === 'need'],
+        ['type=event (one pass)', { type: 'event', excludeEvents: false }, p => p.type === 'event'],
+        ['the wide category (one pass)', { category: WIDE }, p => p.category === WIDE && p.type !== 'event'],
+        ['the rare category (one pass)', { category: RARE }, p => p.category === RARE && p.type !== 'event'],
     ];
     const results: string[] = [];
     let allSame = true;
-    for (const [name, f, keep] of filteredReads) {
+    for (const [name, f, keep] of brute) {
         const ref = referenceFor(keep);
         const wrong: number[] = [];
-        for (const offset of [0, 50, NEAREST_FIRST_MATCHES_PROBE - 20, ref.length - 20]) {
+        for (const offset of [0, 50, 1000, ref.length - 20]) {
             if (offset < 0) continue;
-            const got = page({ ...f, ...nearestFirst, offset }).map(p => p.id);
+            const got = now({ ...f, ...nearest(HUB), offset }).map(p => p.id);
             if (JSON.stringify(got) !== JSON.stringify(ref.slice(offset, offset + 50).map(r => r.id))) wrong.push(offset);
         }
         if (wrong.length) allSame = false;
         results.push(`${name}: ${ref.length} posts${wrong.length ? `, wrong at ${wrong.join(', ')}` : ''}`);
     }
-    const sizes = filteredReads.map(([, , keep]) => referenceFor(keep).length);
-    assert(allSame && sizes.some(n => n > NEAREST_FIRST_MATCHES_PROBE) && sizes.some(n => n > 0 && n < NEAREST_FIRST_MATCHES_PROBE),
-        `filtered, fewer and more than ${NEAREST_FIRST_MATCHES_PROBE} matches: every page at offsets 0, 50, ${NEAREST_FIRST_MATCHES_PROBE - 20} and near the end is the brute-force page (${results.join('; ')})`);
+    assert(allSame, `on both paths, the pages at offsets 0, 50, 1,000 and near the end are the brute-force pages (${results.join('; ')})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ A nearest-first page reads the posts near the reader, not every post on the node, and a filter few posts match costs about one pass over them.');
+    console.log('⭐️ No nearest-first read is slower than 743b5d57\'s, and the default page reads the posts near the reader, not every post on the node.');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

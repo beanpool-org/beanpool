@@ -593,6 +593,18 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
 }
 
 export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
+    return getPostsRankedBy(db, filter, postRowsNear);
+}
+
+/** How a read with a point finds its page's rows, in order, each with its `distance_km` (postRowsNear). */
+export type RowsNear = (db: Db, near: NonNullable<PostFilter['near']>, where: string, whereParams: unknown[], filter: PostFilter) => any[];
+
+/**
+ * getPosts, with a read with a point ranked by `rowsNear` in place of postRowsNear. Only the perf suite
+ * (apps/server test-distance-search-perf.ts) passes another: the one query nearest first was before the circles, so the
+ * two are timed through the same conditions and the same code after them, on one database, in one run.
+ */
+export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNear: RowsNear): MarketplacePost[] {
     // `haversine_km` is registered on the connection (geo.ts registerGeoFunctions); asked only when a point is given, so
     // every read without one runs exactly the query it always has.
     const near = filter?.near;
@@ -718,7 +730,7 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
 
     let rows: any[];
     if (near) {
-        rows = postRowsNear(db, near, where, params, filter!);
+        rows = rowsNear(db, near, where, params, filter!);
     } else {
         let query = `${POST_ROW_SELECT}
         WHERE 1=1${where}${RECENT_ORDER}`;

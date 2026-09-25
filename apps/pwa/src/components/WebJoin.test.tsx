@@ -853,6 +853,18 @@ describe('one browser, one account: a join in a second tab never replaces the ac
         expect(peekPending()?.identity.publicKey).toBe(bea!.identity.publicKey);
     });
 
+    it('a key brought here after another tab saved an account: said at once, and nothing is saved or asked for', async () => {
+        await completePendingJoin(identity); // another tab's join
+        const brought = await generateIdentity('Phoebe');
+        const node = stubNode({ '/api/join/sso-nonce': () => nonceAnswer() });
+        renderJoin({ restored: brought });
+        expect(await screen.findByTestId('join-taken')).toHaveTextContent('Alice');
+        expect(screen.getByTestId('join-screen-taken')).toHaveTextContent('Nothing was sent from this page');
+        expect(peekPending()).toBeUndefined();
+        expect((await loadIdentity())?.publicKey).toBe(identity.publicKey);
+        expect(node.calls).toHaveLength(0);
+    });
+
     it('a sign-in coming back after another tab saved an account: nothing is sent, and the key that never went is let go', async () => {
         const other = await generateIdentity('Bea');
         await seedPending({ identity: other });

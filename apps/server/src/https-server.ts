@@ -118,7 +118,7 @@ import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createAppleReturnRoutes } from './routes/apple-return.js';
-import { APP_DOCUMENT_CSP, APP_DOCUMENT_REFERRER_POLICY, DOCUMENT_CSP, isAppDocument } from './app-document-csp.js';
+import { isDocumentPolicyFile, isNonCanonicalSpelling, useAppDocumentPolicy, useDocumentPolicy } from './app-document-csp.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
@@ -532,6 +532,12 @@ function untrackConnection(ws: any) {
  */
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/** /api and /ws, ignoring case: answers that are never documents, so they carry no document headers. */
+function isApiOrWsPath(requestPath: string): boolean {
+    const lower = requestPath.toLowerCase();
+    return lower === '/api' || lower.startsWith('/api/') || lower === '/ws' || lower.startsWith('/ws/');
+}
+
 /**
  * @koa/router matches routes ignoring letter case, but every path-based security decision in this file
  * (signature enforcement, its bypass list, the public-read allowlist, the admin IP allowlist, feature
@@ -723,19 +729,24 @@ export async function startHttpsServer(port: number): Promise<number> {
         // evaluated by browsers during HTML document navigation or iframe embedding.
         // They are omitted on API routes and WebSocket paths to eliminate protocol overhead (~450 bytes)
         // on JSON fetch and 304 responses, while ensuring HTML documents and static assets retain them.
-        const lowerPath = ctx.path.toLowerCase();
-        const isApiOrWs = lowerPath === '/api' || lowerPath.startsWith('/api/') || lowerPath === '/ws' || lowerPath.startsWith('/ws/');
-        if (!isApiOrWs) {
+        if (!isApiOrWsPath(ctx.path)) {
             ctx.set('X-Frame-Options', 'DENY');
             ctx.set('X-XSS-Protection', '1; mode=block');
-            // The web app runs its own scripts and nothing else; every other document keeps its header
-            // (app-document-csp.ts). The invite page is `/` with an invite code (routes/settings.ts).
-            if (isAppDocument(ctx.path, ctx.path === '/' && !!ctx.query.invite)) {
-                ctx.set('Content-Security-Policy', APP_DOCUMENT_CSP);
-                ctx.set('Referrer-Policy', APP_DOCUMENT_REFERRER_POLICY);
-            } else {
-                ctx.set('Content-Security-Policy', DOCUMENT_CSP);
-            }
+            // The web app's policy, under which it runs its own scripts and nothing else, is every document's
+            // (app-document-csp.ts). The few pages that need the older one ask for it where they are rendered.
+            useAppDocumentPolicy(ctx);
+        }
+        await next();
+    });
+
+    // A path outside /api and /ws that the static server would read as another path (`/a/..%2findex.html` is the web
+    // app's index.html to it) is refused before any page or file handler sees it: nothing lives at such a spelling.
+    // See isNonCanonicalSpelling.
+    app.use(async (ctx, next) => {
+        if (!isApiOrWsPath(ctx.path) && isNonCanonicalSpelling(ctx.path)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Not found' };
+            return;
         }
         await next();
     });
@@ -1274,11 +1285,18 @@ export async function startHttpsServer(port: number): Promise<number> {
     app.use(router.routes());
     app.use(router.allowedMethods());
 
-    // Serve the PWA static files (assets, JS, CSS — but not index.html at root)
-    app.use(serve(PUBLIC_DIR, {
+    // Serve the PWA static files (assets, JS, CSS — but not index.html at root). Never for /api or /ws, where no file
+    // lives and no document policy is set. A file's policy follows the file koa-send resolved, not the path's spelling.
+    const servePublic = serve(PUBLIC_DIR, {
         index: false,
         gzip: true,
-    }));
+        setHeaders: (res, filePath) => {
+            const headers = { set: (f: string, v: string) => res.setHeader(f, v), remove: (f: string) => res.removeHeader(f) };
+            if (isDocumentPolicyFile(path.relative(PUBLIC_DIR, filePath))) useDocumentPolicy(headers);
+            else useAppDocumentPolicy(headers);
+        },
+    });
+    app.use(async (ctx, next) => (isApiOrWsPath(ctx.path) ? next() : servePublic(ctx, next)));
 
     // SPA fallback — return index.html for /settings/*, /manager/* and /app/* routes
     app.use(async (ctx) => {
@@ -1286,6 +1304,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path === '/settings' || ctx.path.startsWith('/settings/')) {
                 const settingsIndexPath = path.join(PUBLIC_DIR, 'settings', 'index.html');
                 if (fs.existsSync(settingsIndexPath)) {
+                    useDocumentPolicy(ctx);
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
@@ -1297,6 +1316,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path.startsWith('/manager')) {
                 const managerIndexPath = path.join(PUBLIC_DIR, 'manager', 'index.html');
                 if (fs.existsSync(managerIndexPath)) {
+                    useDocumentPolicy(ctx);
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
@@ -1308,6 +1328,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path.startsWith('/app') || ctx.path === '/') {
                 const indexPath = path.join(PUBLIC_DIR, 'index.html');
                 if (fs.existsSync(indexPath)) {
+                    useAppDocumentPolicy(ctx);
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
     getTreasuries, getBalance, type Treasury, type BalanceInfo,
     createEnterprise,
@@ -27,6 +27,9 @@ interface Props {
      */
     isMember?: boolean | null;
 }
+
+/** Shown when the browser cannot read or decode the picked photo (resizePhotoFile rejected). */
+const PHOTO_READ_ERROR = 'That photo could not be read. Please choose another one.';
 
 export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember }: Props) {
     const canLoadBalance = !!identity?.publicKey && isMember !== false && isMember !== null;
@@ -66,6 +69,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [newGoal, setNewGoal] = useState<number | ''>('');
     const [newDeadline, setNewDeadline] = useState('');
     const [newPhotos, setNewPhotos] = useState<string[]>([]);
+    // A picked photo is being resized; the form waits for it (handlePhotoUpload). Only the latest pick counts.
+    const [preparingPhoto, setPreparingPhoto] = useState(false);
+    const photoPick = useRef(0);
     const [creating, setCreating] = useState(false);
     const [createError, setCreateError] = useState<string | null>(null);
 
@@ -140,17 +146,31 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         Array.from(files).forEach((file) => {
             if (!file.type.startsWith('image/')) return;
             // Through the marketplace's canvas resize, never the raw file: 800px at most, and the camera's
-            // GPS and serial number stay on the device (G9a-3).
+            // GPS and serial number stay on the device (G9a-3). The resize can take a second or two on an old
+            // phone, and the photo is the last field before the button, so the form waits for it: sent sooner,
+            // the enterprise would be created without the photo the member chose.
+            const pick = ++photoPick.current;
+            setPreparingPhoto(true);
             resizePhotoFile(file)
-                .then((resized) => setNewPhotos([resized])) // Single avatar
-                .catch((err) => console.warn('[ProjectsPage] Could not read the picked photo:', err));
+                .then((resized) => {
+                    if (pick !== photoPick.current) return;
+                    setNewPhotos([resized]); // Single avatar
+                    setCreateError((shown) => (shown === PHOTO_READ_ERROR ? null : shown));
+                })
+                .catch((err) => {
+                    console.warn('[ProjectsPage] Could not read the picked photo:', err);
+                    if (pick === photoPick.current) setCreateError(PHOTO_READ_ERROR);
+                })
+                .finally(() => {
+                    if (pick === photoPick.current) setPreparingPhoto(false);
+                });
         });
         e.target.value = '';
     };
 
     const submitNewEnterprise = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!identity || creating) return;
+        if (!identity || creating || preparingPhoto) return;
         if (!newTitle.trim()) {
             setCreateError('Title is required');
             return;
@@ -861,10 +881,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={creating}
+                                    disabled={creating || preparingPhoto}
                                     className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm disabled:opacity-50"
                                 >
-                                    {creating ? 'Submitting…' : 'Propose Enterprise 🌱'}
+                                    {creating ? 'Submitting…' : preparingPhoto ? 'Preparing photo…' : 'Propose Enterprise 🌱'}
                                 </button>
                             </div>
                         </form>

@@ -105,6 +105,10 @@ async function runTests() {
     // Record commons balance before purge
     const commonsBefore = getCommonsBalance();
 
+    // A place watch (G5): hers alone, and nothing she can remove once her account is gone.
+    db.prepare("INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES ('alice-watch', ?, -28.6, 153.6, 50, ?)")
+        .run(alice.pubKeyHex, new Date().toISOString());
+
     // 2. Perform self-purge for Alice
     const purgeResult = purgeMemberSelf(alice.pubKeyHex);
     assert(purgeResult.ok === true, 'purgeMemberSelf returned success');
@@ -129,6 +133,8 @@ async function runTests() {
     // 6. Verify push tokens and friend links deleted
     const pushTokenRow = db.prepare("SELECT * FROM push_tokens WHERE public_key = ?").get(alice.pubKeyHex);
     assert(!pushTokenRow, 'Alice push tokens were deleted');
+    const watchRow = db.prepare("SELECT * FROM place_watches WHERE pubkey = ?").get(alice.pubKeyHex);
+    assert(!watchRow, 'Alice place watches were deleted (G5)');
     const friendRow = db.prepare("SELECT * FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").get(alice.pubKeyHex, alice.pubKeyHex);
     assert(!friendRow, 'Alice friend relationships were deleted');
 

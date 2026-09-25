@@ -316,6 +316,45 @@ export interface SyncOpenJoin {
     updatedAt: string;
 }
 
+/**
+ * A member's place watch on the global node (G5, apps/server engine/place-watches.ts): "tell me when a community starts
+ * near here". The 0.1° cell, never the spot. Replicated because nothing re-creates a watch: the member set it once.
+ * `lastNotifiedAt` is the member's quiet day, so a server that takes over doesn't tell them twice in a day. Watermarked
+ * on `updatedAt`; a removal travels as a `place_watches` tombstone keyed by `id`.
+ */
+export interface SyncPlaceWatch {
+    id: string;
+    pubkey: string;
+    lat: number;
+    lng: number;
+    radiusKm: number;
+    createdAt: string;
+    lastNotifiedAt: string | null;
+    updatedAt: string;
+}
+
+/**
+ * One community in the global node's mirror of the public directory registry (G5, apps/server engine/directory-cache.ts),
+ * as its hourly run last wrote it: public data, checked field by field. Replicated so a server that takes over knows
+ * which communities the old one had already seen (`firstSeenAt`), and tells no watcher about them again. Never deleted:
+ * a community that leaves the registry is `listed: false` with every published field null.
+ */
+export interface SyncDirectoryCommunity {
+    key: string;
+    listed: boolean;
+    name: string | null;
+    url: string | null;
+    lat: number | null;
+    lng: number | null;
+    radiusKm: number | null;
+    memberCount: number | null;
+    contactEmail: string | null;
+    contactPhone: string | null;
+    registryUpdatedAt: string | null;
+    firstSeenAt: string;
+    updatedAt: string;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -346,6 +385,10 @@ export interface SyncPayload {
     groupMembers?: SyncGroupMember[];
     /** Watermarked on `updated_at`, which a join, a release and a re-key all stamp. */
     openJoins?: SyncOpenJoin[];
+    /** Watermarked on `updated_at`, which a set, a radius change, a notice and a re-key all stamp. Empty on a local node. */
+    placeWatches?: SyncPlaceWatch[];
+    /** Watermarked on `updated_at`, which the mirror stamps only on a row it changed. Empty on a local node. */
+    directoryCache?: SyncDirectoryCommunity[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     /**
      * `post_id|order_num` for every photo row the exporter left OUT because it could not read the object the
@@ -808,6 +851,44 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
+    // The global node's place watches and its mirror of the directory (G5). Both tables exist on every node and are
+    // empty on a local one.
+    let placeWatches: SyncPlaceWatch[] = [];
+    try {
+        placeWatches = sel('place_watches', 'updated_at').map((r: any) => ({
+            id: r.id,
+            pubkey: r.pubkey,
+            lat: r.lat,
+            lng: r.lng,
+            radiusKm: r.radius_km,
+            createdAt: r.created_at,
+            lastNotifiedAt: r.last_notified_at ?? null,
+            updatedAt: r.updated_at,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+    let directoryCache: SyncDirectoryCommunity[] = [];
+    try {
+        directoryCache = sel('directory_cache', 'updated_at').map((r: any) => ({
+            key: r.community_key,
+            listed: r.listed === 1,
+            name: r.name ?? null,
+            url: r.node_url ?? null,
+            lat: r.lat ?? null,
+            lng: r.lng ?? null,
+            radiusKm: r.radius_km ?? null,
+            memberCount: r.member_count ?? null,
+            contactEmail: r.contact_email ?? null,
+            contactPhone: r.contact_phone ?? null,
+            registryUpdatedAt: r.registry_updated_at ?? null,
+            firstSeenAt: r.first_seen_at,
+            updatedAt: r.updated_at,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
@@ -846,6 +927,8 @@ export function exportSyncState(
         groups,
         groupMembers,
         openJoins,
+        placeWatches,
+        directoryCache,
         tombstones,
     };
 }

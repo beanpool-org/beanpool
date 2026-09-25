@@ -1,32 +1,44 @@
 import { getDirectoryInfo, getNodeConfig, updateNodeConfig, getNodeRole } from '../state-engine.js';
 import { getLocalConfig } from '../config/local-config.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import { getP2PNode, getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
 
-// The URL of the directory registry Edge Function
-const DIRECTORY_REGISTRY_URL = process.env.DIRECTORY_REGISTRY_URL || 'https://dpemwoermzkaxoctafzg.supabase.co/functions/v1/directory-register';
+// The URL of the directory registry Edge Function. Read at every push, so a test can point it at a fixture.
+function directoryRegistryUrl(): string {
+    return process.env.DIRECTORY_REGISTRY_URL || 'https://dpemwoermzkaxoctafzg.supabase.co/functions/v1/directory-register';
+}
+
+/** Why a node whose profile switch `publishToDirectory` is off sends nothing (the global profile's default). */
+export const NOT_LISTED_MESSAGE = 'This node is not listed in the directory: its publishToDirectory switch is off (the global profile\'s default: the lobby is not a place on the map).';
 
 let pushTimer: ReturnType<typeof setInterval> | null = null;
 
 // Guarded here, not just at the index.ts boot call site — /api/local/admin/node/config
 // and /api/local/admin/directory/push can also reach these, and a backup replica must
-// never advertise itself in the public directory regardless of caller.
-export function initDirectoryPublisher() {
+// never advertise itself in the public directory regardless of caller. Nor must a node
+// whose profile switch `publishToDirectory` is off (config/node-profile.ts): the global
+// node is the lobby, not a community with a place, so it is never a pin on the map.
+// Returns whether the timer is set.
+export function initDirectoryPublisher(): boolean {
     if (getNodeRole() !== 'primary') {
         console.log('[Directory] 🔒 Skipping — backup replicas do not publish to the directory.');
-        return;
+        return false;
     }
-    const config = getNodeConfig();
-    const intervalHours = config.directoryPushIntervalHours !== undefined ? config.directoryPushIntervalHours : 12;
-    
     if (pushTimer) {
         clearInterval(pushTimer);
         pushTimer = null;
     }
+    if (!getProfileSwitches().publishToDirectory) {
+        console.log(`[Directory] 📴 ${NOT_LISTED_MESSAGE}`);
+        return false;
+    }
+    const config = getNodeConfig();
+    const intervalHours = config.directoryPushIntervalHours !== undefined ? config.directoryPushIntervalHours : 12;
     
     if (intervalHours === 0) {
         console.log(`[Directory] 📴 Push publisher is disabled.`);
-        return;
+        return false;
     }
     
     // Convert hours to milliseconds
@@ -43,11 +55,17 @@ export function initDirectoryPublisher() {
     // Initial push 30s after boot
     setTimeout(safePush, 30_000);
     console.log(`[Directory] 📡 Push publisher initialized (Interval: ${intervalHours}h)`);
+    return true;
 }
 
 export async function pushDirectoryNow() {
     if (getNodeRole() !== 'primary') {
         return { success: false, error: 'Directory push is only allowed on primary nodes' };
+    }
+    // Read at every push, the timer's included: an operator's override switching it off takes effect at the next push.
+    // Switched on at runtime, the timer starts at the next boot, or when Settings saves the push interval.
+    if (!getProfileSwitches().publishToDirectory) {
+        return { success: false, error: NOT_LISTED_MESSAGE };
     }
     try {
         const directoryInfo = getDirectoryInfo();
@@ -76,7 +94,7 @@ export async function pushDirectoryNow() {
         const signatureHex = Buffer.from(signatureBytes).toString('hex');
         const pubKeyHex = Buffer.from(publicKeyToProtobuf(privateKey.publicKey)).toString('hex');
 
-        const res = await fetch(DIRECTORY_REGISTRY_URL, {
+        const res = await fetch(directoryRegistryUrl(), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

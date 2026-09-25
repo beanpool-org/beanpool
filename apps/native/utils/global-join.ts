@@ -187,10 +187,21 @@ export interface JoinKey {
     createdHere: boolean;
 }
 
-/** The phone's own key when it has one (never a second), otherwise a new one in memory, not yet saved. */
-export async function joinKeyForThisPhone(): Promise<JoinKey> {
+/**
+ * The phone's own key when it has one (never a second), otherwise `held` when it is a key this door made,
+ * otherwise a new one in memory, not yet saved.
+ *
+ * Asked again at every sign-in, with the key the door already holds. A key made on an earlier visit and never
+ * written never outranks one the phone has stored since (an invite join started in between): `commitJoinKey`
+ * would write it over that account. A held key the phone has stored stays marked as this door's.
+ */
+export async function joinKeyForThisPhone(held: JoinKey | null = null): Promise<JoinKey> {
     const stored = await loadIdentity();
-    if (stored) return { identity: stored, createdHere: false };
+    if (stored) {
+        const madeHere = held?.createdHere === true && held.identity.publicKey === stored.publicKey;
+        return { identity: stored, createdHere: madeHere };
+    }
+    if (held?.createdHere) return held;
     return { identity: await draftIdentity(), createdHere: true };
 }
 

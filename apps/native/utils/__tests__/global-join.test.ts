@@ -358,6 +358,33 @@ describe('one identity per device', () => {
         });
     });
 
+    it('back at the door: a key made here and never written gives way to one the phone stored since, and is never written over it', async () => {
+        const held = await joinKeyForThisPhone();
+        // Meanwhile an invite join, with no key on the phone, made and stored its own.
+        const inviteKey = await draftIdentity('Kim');
+        await importIdentity(inviteKey);
+
+        const key = await joinKeyForThisPhone(held);
+        expect(key).toMatchObject({ createdHere: false });
+        expect(key.identity.publicKey).toBe(inviteKey.publicKey);
+        await commitJoinKey(key, 'Kim');
+        expect((await loadIdentity())?.publicKey).toBe(inviteKey.publicKey);
+        expect((await getPendingOnboarding())?.freshKey).toBeUndefined();
+    });
+
+    it('back at the door with the key this door made: the same key, still marked as this join\'s', async () => {
+        const held = await joinKeyForThisPhone();
+        expect(await joinKeyForThisPhone(held)).toBe(held);
+
+        await commitJoinKey(held, 'Sam');
+        const again = await joinKeyForThisPhone(held);
+        expect(again).toMatchObject({ createdHere: true });
+        expect(again.identity).toMatchObject({ publicKey: held.identity.publicKey, callsign: 'Sam' });
+        // Still this join's, so a door that then refuses for good takes it off again.
+        expect(await releaseJoinKey(again)).toBe(true);
+        expect(await loadIdentity()).toBeNull();
+    });
+
     it('a key the phone already had is not written again, and is never marked as this join\'s', async () => {
         const phoneKey = await draftIdentity('Kim');
         await importIdentity(phoneKey);

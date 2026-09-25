@@ -928,7 +928,10 @@ export default function WelcomeScreen() {
         setMode('globalJoin');
     }
 
-    /** Back home from the door. The key stays in hand, so coming back (or an invite) uses the same one. */
+    /**
+     * Back home from the door. The key stays in hand, so coming back uses the same one, unless the phone has
+     * stored one since (an invite join makes its own when the phone has none): then that one (`joinKeyForThisPhone`).
+     */
     function leaveGlobalDoor() {
         globalAbortRef.current?.abort();
         setDoorSignIn(null);
@@ -955,7 +958,8 @@ export default function WelcomeScreen() {
         const abort = new AbortController();
         globalAbortRef.current = abort;
         try {
-            const key = globalKey ?? await joinKeyForThisPhone();
+            // Asked again each time: the phone may have stored a key since this door made one (an invite join).
+            const key = await joinKeyForThisPhone(globalKey);
             setGlobalKey(key);
             const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity, {
                 // As GitHub recovery does: Android opens GitHub from the button; iOS at once.

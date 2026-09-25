@@ -291,6 +291,17 @@ describe('iPhone: the Google web sign-in page', () => {
         redirectSystemPath({ path: `beanpool://auth/google#state=${NODE_NONCE}&id_token=x.y.z`, initial: false });
         expect(received).toEqual([`beanpool://auth/google#state=${NODE_NONCE}&id_token=x.y.z`]);
     });
+
+    it('the return link lands on a screen, not Unmatched Route', () => {
+        // `redirectSystemPath` broadcasts the callback and then lets Expo Router navigate to the
+        // same path, so every provider it recognises needs a screen at app/auth/<provider>.tsx.
+        const intent = fs.readFileSync(path.resolve(__dirname, '../../app/+native-intent.ts'), 'utf-8');
+        const providers = [...intent.matchAll(/path\.includes\('auth\/(\w+)'\)/g)].map((m) => m[1]);
+        expect(providers).toContain('google');
+        for (const provider of providers) {
+            expect(fs.existsSync(path.resolve(__dirname, `../../app/auth/${provider}.tsx`)), provider).toBe(true);
+        }
+    });
 });
 
 describe('Android: Credential Manager with the nonce', () => {

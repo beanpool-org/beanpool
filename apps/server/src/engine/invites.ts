@@ -9,6 +9,7 @@ import { recordFunnelEvent } from './funnel.js';
 import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
 import {
     getMember,
+    isNodeMember,
     generateShortCode,
     verifyOfflineTicket,
     type Member,
@@ -17,11 +18,22 @@ import {
 } from '@beanpool/engine';
 
 /**
+ * Whether a code's maker can still bring someone in: a member of this node (isNodeMember), not just a row. A pruned
+ * account keeps its row, and so does the old key of a member being re-keyed (a lost or stolen phone); a code from
+ * either would let its holder straight back in as someone new, so neither makes one, and one made before is refused.
+ */
+function canInvite(inviterPubkey: string): boolean {
+    return isNodeMember(db, inviterPubkey);
+}
+
+const INVITER_GONE = 'The member who made this invite is no longer in this community, so it can’t be used. Ask a member for a fresh one.';
+
+/**
  * Creates standard online invite code for an active member.
  */
 export function generateInvite(inviterPubkey: string, intendedFor?: string): InviteCode | null {
     const inviter = getMember(db, inviterPubkey);
-    if (!inviter) return null;
+    if (!inviter || !canInvite(inviterPubkey)) return null;
 
     recordActivity(inviterPubkey);
 
@@ -45,8 +57,11 @@ export function adminGenerateInvite(
     intendedFor?: string,
     issuedBy?: string
 ): InviteCode | null {
+    // `adminPubkey` is the member the code hangs off in the invite tree (the genesis member, routes/community.ts), not
+    // the admin: the admin is `issuedBy`, already checked by the route (checkAdminAuth and a node role, which a prune
+    // takes away). Held to the same rule, or the code would never redeem.
     const admin = getMember(db, adminPubkey);
-    if (!admin) return null;
+    if (!admin || !canInvite(adminPubkey)) return null;
 
     recordActivity(adminPubkey);
 
@@ -102,6 +117,11 @@ export function redeemInvite(
     if (invite.used_by) {
         recordFunnelEvent('invite_failed', 'already_used');
         return { success: false, error: 'This invite has already been used' };
+    }
+
+    if (!canInvite(invite.created_by)) {
+        recordFunnelEvent('invite_failed', 'inviter_gone');
+        return { success: false, error: INVITER_GONE };
     }
 
     // Register member FIRST — invite_codes.used_by has FK to members(public_key)

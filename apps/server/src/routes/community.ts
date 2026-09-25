@@ -193,8 +193,9 @@ router.post('/api/admin/seed-invite', async (ctx) => {
     // Check if there are already members
     const info = getCommunityInfo();
     if (info.memberCount > 0) {
-        // Already have members — generate a tiered invite from the genesis member
-        const members = getAllMembers();
+        // Already have members — generate a tiered invite from the genesis member. Only a live member: a code hung off
+        // a pruned or re-keyed one never redeems (engine/invites.ts), so past one the fallbacks below pick another.
+        const members = getAllMembers().filter(m => isNodeMember(m.publicKey));
         let genesisMember = members.find(m => m.invitedBy === 'genesis');
         if (!genesisMember) {
             // Restored DB fallback: find the 'Admin' or first non-system member to act as genesis

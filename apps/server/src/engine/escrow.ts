@@ -10,6 +10,7 @@ import { recordActivity } from '../db/activity-feed-db.js';
 import { adminActorName } from './admin-actor-name.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
 import { assertFeatureOn } from '../config/node-profile.js';
+import { assertNodeMember } from './members.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -475,6 +476,8 @@ export function rejectPostRequest(
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
     if (expectedAuthorRole !== authorPublicKey) return null;
+    // Closing a trade answers with the other party: a pruned account or a re-keyed phone's old key closes nothing.
+    assertNodeMember(authorPublicKey);
 
     const res = db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(transactionId);
     if (res.changes === 0) return null;
@@ -510,6 +513,7 @@ export function cancelPostRequest(
     const isOffer = post.type === 'offer';
     const expectedRequesterRole = isOffer ? row.buyer_pubkey : row.seller_pubkey;
     if (expectedRequesterRole !== requesterPublicKey) return null;
+    assertNodeMember(requesterPublicKey);
 
     db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(transactionId);
     db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'").run(transactionId);
@@ -734,6 +738,8 @@ export function completePostTransaction(
     if (!row) {
         const completedRow = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='completed'").get(transactionId) as any;
         if (completedRow && completedRow.buyer_pubkey === confirmerPublicKey) {
+            // The replay answer names the seller too.
+            assertNodeMember(confirmerPublicKey);
             const existing = getMarketplaceTransaction(db, transactionId);
             if (existing) return { ...existing, alreadyCompleted: true };
         }
@@ -741,6 +747,7 @@ export function completePostTransaction(
     }
     
     if (row.buyer_pubkey !== confirmerPublicKey) return null;
+    assertNodeMember(confirmerPublicKey);
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator completing the deal
@@ -869,7 +876,8 @@ export function completePostTransaction(
         if (post && !post.repeatable) {
             db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
         } else if (post && post.repeatable) {
-            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+            // Not a listing a prune cancelled under an open trade (adminPruneUser): it stays down.
+            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
         }
     });
 
@@ -944,6 +952,7 @@ export function cancelPostTransaction(
     const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='pending'").get(transactionId) as any;
     if (!row) return null;
     if (row.buyer_pubkey !== cancellerPublicKey && row.seller_pubkey !== cancellerPublicKey) return null;
+    assertNodeMember(cancellerPublicKey);
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event')) return null;
@@ -971,8 +980,10 @@ export function cancelPostTransaction(
             }
         }
 
+        // Back on the board, unless a prune cancelled the listing under this trade (adminPruneUser leaves its
+        // open trades for the other party to close): a pruned member's listing stays down.
         if (post) {
-            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
         }
     });
 

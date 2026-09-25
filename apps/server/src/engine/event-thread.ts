@@ -22,6 +22,7 @@ import {
     type EventRsvpStatus,
 } from '@beanpool/engine';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
+import { assertNodeMember } from './members.js';
 import type { MessagingCallbacks } from './messaging.js';
 import { avatarUrlFor } from '@beanpool/core';
 
@@ -343,7 +344,7 @@ export function postEventThreadMessage(
                 return toThreadMessage({
                     ...existing,
                     author_callsign: senderMember?.callsign,
-                    author_avatar: senderMember?.avatar_url,
+                    author_avatar: senderMember?.avatarUrl,
                 }, postId);
             }
             throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
@@ -365,7 +366,7 @@ export function postEventThreadMessage(
         id: msgId,
         author_pubkey: authorPubkey,
         author_callsign: senderMember?.callsign,
-        author_avatar: senderMember?.avatar_url,
+        author_avatar: senderMember?.avatarUrl,
         ciphertext,
         nonce,
         type: 'text',
@@ -388,6 +389,9 @@ export function removeEventThreadMessage(
     if (!isEventHost(db, row, actorPubkey)) {
         throw new Error('Only the host can remove messages from this event chat');
     }
+    // isEventHost goes by the post's author and the group's convenor row, and a prune keeps both: a pruned account,
+    // or the old key of a member being re-keyed, removes nobody's line (and is answered with nobody).
+    assertNodeMember(actorPubkey);
 
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?')
         .get(messageId, postId) as any;
@@ -416,7 +420,7 @@ export function removeEventThreadMessage(
         type: 'removed',
         metadata: metadataStr,
         author_callsign: authorMember?.callsign,
-        author_avatar: authorMember?.avatar_url,
+        author_avatar: authorMember?.avatarUrl,
     }, postId);
 
     broadcastEventThreadMessage(cb, postId, updated, 'removed');

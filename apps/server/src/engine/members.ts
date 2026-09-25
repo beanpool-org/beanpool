@@ -4,7 +4,7 @@
 
 import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
 import { ledger } from './ledger.js';
-import { getMember, getProfile, publicMemberCard, type Member, type MemberProfile } from '@beanpool/engine';
+import { getMember, getProfile, isNodeMember, publicMemberCard, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
@@ -320,6 +320,24 @@ export function registerVisitor(publicKey: string, callsign?: string, homeNodeUr
     ledger.initializeGenesisAccount(publicKey);
     bumpMembersVersion();
     console.log(`🌐 Visitor registered: ${generatedCallsign} (federation${homeNodeUrl ? ` from ${homeNodeUrl}` : ''})`);
+}
+
+export const NOT_A_MEMBER_ERROR = 'Only members of this community can do this.';
+export const NOT_A_MEMBER_CODE = 'not_a_member';
+
+/**
+ * For a write that reaches another member (their message, a trade with them) and answers with them: the signer must
+ * still be a member of this node, the engine's isNodeMember (a member row, not pruned, for a key no re-key has
+ * invalidated), the same test as every member-only read. A pruned account keeps its row, its group roles and its open
+ * trades, and the old key of a member being re-keyed (a lost or stolen phone) keeps its row too, and both can still
+ * sign. Refused 403 before anything is written or anyone is returned.
+ *
+ * Deliberately not state-engine's assertMemberActive, which also refuses 'suspended' and 'disabled': a suspended
+ * member keeps what suspension already allows them (closing their own trades, running their own event's chat).
+ */
+export function assertNodeMember(publicKey: string): void {
+    if (isNodeMember(db, publicKey)) return;
+    throw Object.assign(new Error(NOT_A_MEMBER_ERROR), { status: 403, statusCode: 403, code: NOT_A_MEMBER_CODE });
 }
 
 /**

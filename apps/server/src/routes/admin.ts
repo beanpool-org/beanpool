@@ -627,9 +627,10 @@ router.post('/api/local/admin/data', async (ctx) => {
             // shown by canVouch, not a tier.
             const tier = getMemberTrustProfile(m.publicKey).tier.name;
             // An admin sees no more of a member's contact details than any member does: the choice reads "Hidden —
-            // only you can see it", and the manager never shows them. `profiles` below carries them by the same rule
-            // as the profile page (contactVisibleTo, no viewer). The rest of the row stays: the manager draws the
-            // invite tree, pruning and roles from it.
+            // only you can see it", and the manager never shows them. `profiles` below goes through the same rule as
+            // the profile page (contactVisibleTo) with no viewer, and a password proves no member, so it carries no
+            // contact details at all. The rest of the row stays: the manager draws the invite tree, pruning and roles
+            // from it.
             const { contactValue, contactVisibility, ...row } = m;
             void contactValue; void contactVisibility;
             return {
@@ -644,7 +645,8 @@ router.post('/api/local/admin/data', async (ctx) => {
             };
         }),
         profiles: getAllProfiles(),
-        // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt.
+        // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt. Polls carry their counts and not
+        // who voted for what: that is for members (includeVoters), and the manager never shows it.
         posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled'),
         health: getCommunityHealth(),
         reports: getReports().reports,

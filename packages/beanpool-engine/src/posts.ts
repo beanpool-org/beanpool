@@ -149,6 +149,12 @@ export interface PostFilter {
      */
     includeHidden?: boolean;
     /**
+     * Who voted for what in each poll (`pollVotes`), for a reader who is a member of this node (isNodeMember) only:
+     * the open ballot is open to members. Without it a poll carries its counts (`totalVotes`, each option's `votes`
+     * and `percentage`) and no voters, so a read nobody vouched for can never leak them.
+     */
+    includeVoters?: boolean;
+    /**
      * Distance search (global node G4, design §3.2). Every post read carries `distanceKm` from this point. With
      * `radiusKm`, only posts within it (great-circle) are read, and a post with no place is left out. Every other filter
      * applies as without it.
@@ -441,6 +447,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     offset: () => true,
     viewerPubkey: () => true,
     includeHidden: () => true,
+    includeVoters: () => true,
     excludeEvents: () => true,
     type: f => f.type === 'all' || f.type === 'offer' || f.type === 'need',
     types: f => f.types!.includes('offer') || f.types!.includes('need'),
@@ -692,7 +699,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         photosByPost.get(p.post_id)!.push(p);
     }
 
-    // Community Polls: batch fetch votes for all poll rows
+    // Community Polls: batch fetch votes for all poll rows. Every reader gets the counts; only a member
+    // (`includeVoters`) gets who voted for what, below.
     const pollRows = rows.filter(r => r.type === 'poll');
     const pollVotesByPost = new Map<string, any[]>();
     if (pollRows.length > 0) {
@@ -813,17 +821,29 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                     return { ...opt, votes: count, percentage };
                 });
             }
-            post.pollVotes = votes.map((v: any) => ({
-                voterPubkey: v.voter_pubkey,
-                voterCallsign: v.voter_callsign || 'Anonymous',
-                optionId: v.option_id,
-                createdAt: v.created_at
-            }));
+            if (filter?.includeVoters) {
+                post.pollVotes = votes.map((v: any) => ({
+                    voterPubkey: v.voter_pubkey,
+                    voterCallsign: v.voter_callsign || 'Anonymous',
+                    optionId: v.option_id,
+                    createdAt: v.created_at
+                }));
+            }
         }
 
         out.push(post);
     }
     return out;
+}
+
+/**
+ * The post without who voted for what (`pollVotes`), for a reader or a socket that is not a member of this node. The
+ * counts stay. Any other post comes back as it was.
+ */
+export function withoutPollVoters(post: MarketplacePost): MarketplacePost {
+    if (!('pollVotes' in post)) return post;
+    const { pollVotes: _voters, ...rest } = post;
+    return rest;
 }
 
 /**

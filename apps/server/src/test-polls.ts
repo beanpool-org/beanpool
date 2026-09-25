@@ -530,7 +530,9 @@ async function main() {
         replicaDb.prepare(`INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at)
                     VALUES (?, ?, ?, ?, ?)`).run(pv.postId, pv.voterPubkey, pv.optionId, pv.signature || '', pv.createdAt);
     }
-    const replicaPolls = getPostsEngine(replicaDb as any, { id: poll1!.id, includeInactive: true });
+    // Read as a member would (includeVoters): who voted for what is for members only, and it is the ballots the
+    // replica must have kept.
+    const replicaPolls = getPostsEngine(replicaDb as any, { id: poll1!.id, includeInactive: true, includeVoters: true });
     assert(replicaPolls.length === 1, 'Replication replica contains restored poll');
     assert(Array.isArray(replicaPolls[0].pollOptions) && replicaPolls[0].pollOptions.length === 2, 'Replica preserves poll options');
     assert(replicaPolls[0].totalVotes === 1, 'Replica preserves vote turnout');

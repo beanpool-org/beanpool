@@ -406,6 +406,9 @@ CREATE TABLE IF NOT EXISTS friends (
     PRIMARY KEY (owner_pubkey, friend_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_friends_updated_at ON friends(updated_at);
+-- "Who has added me as a friend?" (ownersWhoAddedAsFriend) runs on every member-list and profile read, keyed on
+-- the viewer. The primary key leads with owner_pubkey, so without this it scanned the whole table.
+CREATE INDEX IF NOT EXISTS idx_friends_friend_pubkey ON friends(friend_pubkey);
 
 CREATE TABLE IF NOT EXISTS ratings (
     id TEXT PRIMARY KEY,

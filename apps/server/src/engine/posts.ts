@@ -16,6 +16,8 @@ import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type Photo
 import {
     getMember,
     getPosts,
+    isNodeMember,
+    withoutPollVoters,
     validatePostPhotos,
     generateSearchKeywords,
     hasListedOffer,
@@ -28,6 +30,15 @@ import {
 } from '@beanpool/engine';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
+
+/**
+ * The post as the member who acted gets it back in the route's response. Each write below reads its post WITH the
+ * voters, because the broadcast goes to member sockets (deliverBroadcast takes them off for any other socket); the one
+ * who acted keeps them only if they are a member of this node — a pruned author can still sign a close.
+ */
+function forActor(post: MarketplacePost, actorPubkey: string | undefined): MarketplacePost {
+    return isNodeMember(db, actorPubkey) ? post : withoutPollVoters(post);
+}
 
 /**
  * Put a post's photo bytes in the image store and return the columns for each row (storage design §7).
@@ -494,7 +505,7 @@ export function createPost(
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
     bumpPostsVersion();
-    const post = getPosts(db, { id: finalId, viewerPubkey: authorPublicKey })[0]!;
+    const post = getPosts(db, { id: finalId, viewerPubkey: authorPublicKey, includeVoters: true })[0]!;
 
     let recipients: string[] | undefined;
     if (audienceScope === 'group') {
@@ -515,7 +526,7 @@ export function createPost(
             console.warn('[ActivityFeed] Could not record post_created:', e);
         }
     }
-    return post;
+    return forActor(post, authorPublicKey);
 }
 
 export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: string, push?: PushFn): boolean {
@@ -842,7 +853,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
     bumpPostsVersion();
-    const updated = getPosts(db, { id, viewerPubkey: authorPublicKey })[0] ?? null;
+    const updated = getPosts(db, { id, viewerPubkey: authorPublicKey, includeVoters: true })[0] ?? null;
     if (updated) {
         let recipients: string[] | undefined;
         if (updated.audienceScope === 'group' && updated.targetGroupId) {
@@ -858,7 +869,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             notifyEventChange(push, 'updated', id, updated.title, actorPublicKey);
         }
     }
-    return updated;
+    return updated ? forActor(updated, actorPublicKey) : null;
 }
 
 /**
@@ -963,7 +974,7 @@ export function rsvpEvent(
 }
 
 export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKey: string): MarketplacePost | null {
-    const post = getPosts(db, { id: postId, includeAllScopes: true })[0];
+    const post = getPosts(db, { id: postId, includeAllScopes: true, includeVoters: true })[0];
     if (!post || post.type !== 'poll') {
         throw new Error('Poll not found');
     }
@@ -971,12 +982,12 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
         throw new Error('Only the author can close a poll');
     }
     if (post.status === 'completed') {
-        return post;
+        return forActor(post, authorPublicKey);
     }
     const now = new Date().toISOString();
     db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE id = ?").run(now, postId);
     bumpPostsVersion();
-    const updated = getPosts(db, { id: postId, viewerPubkey: authorPublicKey, includeAllScopes: true })[0] ?? null;
+    const updated = getPosts(db, { id: postId, viewerPubkey: authorPublicKey, includeAllScopes: true, includeVoters: true })[0] ?? null;
     if (updated) {
         let recipients: string[] | undefined;
         if (updated.audienceScope === 'group' && updated.targetGroupId) {
@@ -987,7 +998,7 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
         }
         broadcast({ type: 'post_updated', post: publicBroadcastPost(updated) }, recipients);
     }
-    return updated;
+    return updated ? forActor(updated, authorPublicKey) : null;
 }
 
 export function votePoll(
@@ -1087,7 +1098,7 @@ export function votePoll(
     })();
 
     bumpPostsVersion();
-    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey, includeAllScopes: true })[0]!;
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey, includeAllScopes: true, includeVoters: true })[0]!;
     let recipients: string[] | undefined;
     if (updatedPost.audienceScope === 'group' && updatedPost.targetGroupId) {
         const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(updatedPost.targetGroupId) as any[];
@@ -1096,7 +1107,7 @@ export function votePoll(
         recipients = Array.from(new Set([updatedPost.authorPublicKey, updatedPost.targetPubkey, updatedPost.assignedTo].filter(Boolean) as string[]));
     }
     broadcast({ type: 'post_updated', post: publicBroadcastPost(updatedPost) }, recipients);
-    return { success: true, post: updatedPost };
+    return { success: true, post: forActor(updatedPost, voterPublicKey) };
 }
 
 export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string): boolean {

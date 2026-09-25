@@ -276,6 +276,14 @@ describe('iPhone: the Google web sign-in page', () => {
         await expect(signInWithGoogle(NODE_NONCE)).rejects.toThrow('Sign-in was cancelled.');
     });
 
+    it('a page that cannot open says so, rather than passing for a cancel', async () => {
+        vi.mocked(WebBrowser.openAuthSessionAsync).mockRejectedValueOnce(new Error('Another authentication session is already in progress'));
+        const err = await signInWithGoogle(NODE_NONCE).then(() => null, (e) => e);
+        expect(err).toBeInstanceOf(SsoSignInError);
+        expect(err.reason).toBe('provider');
+        expect(err.message).toBe("Google's sign-in page could not open on this phone. Try again.");
+    });
+
     it("refuses a token that does not carry this attempt's nonce, before the node sees it", async () => {
         const noNonce = fakeJwt({ sub: 's', aud: GOOGLE_WEB_CLIENT_ID });
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
@@ -351,12 +359,10 @@ describe('Android: Credential Manager with the nonce', () => {
         await expect(signInWithGoogle(NODE_NONCE)).rejects.toMatchObject({ reason: 'provider' });
     });
 
+    // The sheet failures that open Google's web page instead (NO_CREDENTIALS and no Play services)
+    // are covered in the next block.
     const failures: Array<[string, string, string, RegExp]> = [
         ['SIGN_IN_CANCELLED', 'User cancelled the sign-in flow', 'cancelled', /cancelled/],
-        ['NO_CREDENTIALS', 'No credentials available on this device', 'unsupported', /Google found no account to use on this phone/],
-        ['PLAY_SERVICES_NOT_AVAILABLE', 'Play Services missing', 'unsupported', /Google Play services/],
-        // Credential Manager's own words when no provider (Play services) is on the phone.
-        ['SIGN_IN_FAILED', 'getCredentialAsync no provider dependencies found - please ensure the desired provider dependencies are added', 'unsupported', /Google Play services/],
         ['NETWORK_ERROR', 'Unable to reach Google', 'provider', /Google could not sign you in/],
         ['SIGN_IN_FAILED', '[28444] Developer console is not set up correctly.', 'provider', /28444/],
         ['ERR_NO_ACTIVITY', 'No current activity available', 'provider', /Google could not sign you in/],
@@ -367,6 +373,7 @@ describe('Android: Credential Manager with the nonce', () => {
         expect(err).toBeInstanceOf(SsoSignInError);
         expect(err.reason).toBe(reason);
         expect(err.message).toMatch(text);
+        expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
     });
 
     it('a build without the native module says so instead of crashing', async () => {
@@ -375,6 +382,144 @@ describe('Android: Credential Manager with the nonce', () => {
         expect(err).toBeInstanceOf(SsoSignInError);
         expect(err.reason).toBe('unsupported');
         expect(err.message).toMatch(/update BeanPool/i);
+    });
+});
+
+describe("Android: Google's web page when Credential Manager's sheet cannot appear", () => {
+    beforeEach(() => { rn.Platform.OS = 'android'; });
+
+    // Credential Manager answers without showing anything when "Sign-in prompts" is off for any
+    // Google account on the phone, when there is no Google account on it, or when the phone has no
+    // Play services (it then names the missing "provider dependencies").
+    const sheetCannotShow: Array<[string, string]> = [
+        ['NO_CREDENTIALS', 'No credentials available on this device'],
+        ['PLAY_SERVICES_NOT_AVAILABLE', 'Play Services missing'],
+        ['SIGN_IN_FAILED', 'getCredentialAsync no provider dependencies found - please ensure the desired provider dependencies are added'],
+    ];
+
+    const pageToken = (nonce: string) =>
+        fakeJwt({ iss: 'https://accounts.google.com', aud: GOOGLE_WEB_CLIENT_ID, sub: 's', nonce, email: 'a@example.com' });
+
+    /**
+     * Google's answer as Android delivers it. `beanpool.org/auth/` is a verified App Link, so the
+     * redirect opens the app directly and the browser reports a cancel, the way Facebook's does
+     * (MEASURED 2026-08-28).
+     */
+    function returnsThroughAppLink(idToken: string, state = NODE_NONCE): void {
+        vi.mocked(WebBrowser.openAuthSessionAsync).mockImplementationOnce(async () => {
+            const url = `https://beanpool.org/auth/google#state=${state}&id_token=${idToken}&authuser=0&prompt=consent`;
+            rn.linkingListeners.forEach((fn) => fn({ url }));
+            return { type: 'cancel' } as any;
+        });
+    }
+
+    it.each(sheetCannotShow)("%s (%s): opens Google's page with this attempt's nonce, and its token completes the sign-in", async (code, message) => {
+        tb.state.failWith = { code, message };
+        const token = pageToken(NODE_NONCE);
+        returnsThroughAppLink(token);
+
+        const res = await signInWithGoogle(NODE_NONCE);
+
+        // The sheet was asked first, with the same nonce.
+        expect(tb.state.calls).toEqual(['configure', 'signOut', 'signIn']);
+        expect(tb.state.configured).toMatchObject({ nonce: NODE_NONCE });
+        expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalledTimes(1);
+        const [authUrl, completion] = vi.mocked(WebBrowser.openAuthSessionAsync).mock.calls[0];
+        const q = new URL(authUrl).searchParams;
+        expect(q.get('client_id')).toBe(GOOGLE_WEB_CLIENT_ID);
+        expect(q.get('nonce')).toBe(NODE_NONCE);
+        expect(q.get('state')).toBe(NODE_NONCE);
+        expect(completion).toBe('beanpool://auth/google');
+        expect(res).toEqual({ idToken: token, nonce: NODE_NONCE, email: 'a@example.com' });
+    });
+
+    it('asks the node for one nonce only: the sheet that never appeared spent nothing', async () => {
+        vi.mocked(signedPost).mockResolvedValueOnce({
+            ok: true, status: 200,
+            json: async () => ({ nonce: NODE_NONCE, providers: ['google', 'apple'] }),
+        } as any);
+        tb.state.failWith = { code: 'NO_CREDENTIALS', message: 'No credentials available on this device' };
+        returnsThroughAppLink(pageToken(NODE_NONCE));
+
+        const res = await startSsoSignIn('google', 'https://test.example', identity);
+
+        expect(signedPost).toHaveBeenCalledTimes(1);
+        expect(res.provider).toBe('google');
+        expect(res.nonce).toBe(NODE_NONCE);
+        expect(decode(res.idToken).nonce).toBe(NODE_NONCE);
+    });
+
+    it('a member who cancels the sheet gets a cancel, and no web page', async () => {
+        tb.state.failWith = { code: 'SIGN_IN_CANCELLED', message: 'User cancelled the sign-in flow' };
+        const err = await signInWithGoogle(NODE_NONCE).then(() => null, (e) => e);
+        expect(err).toBeInstanceOf(SsoSignInError);
+        expect(err.reason).toBe('cancelled');
+        expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+    });
+
+    it('never opens the page once the sheet has returned something, even something refused', async () => {
+        await signInWithGoogle(NODE_NONCE);
+
+        tb.state.dropNonce = true;
+        await expect(signInWithGoogle(NODE_NONCE)).rejects.toMatchObject({ reason: 'provider' });
+
+        tb.GoogleSignIn.signIn.mockResolvedValueOnce({ idToken: null, accessToken: null, serverAuthCode: null, user: null } as any);
+        await expect(signInWithGoogle(NODE_NONCE)).rejects.toMatchObject({ reason: 'no-token' });
+
+        expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+    });
+
+    it('a build without the native module still says "Update BeanPool", and opens no page', async () => {
+        tb.state.missing = true;
+        const err = await signInWithGoogle(NODE_NONCE).then(() => null, (e) => e);
+        expect(err).toBeInstanceOf(SsoSignInError);
+        expect(err.reason).toBe('unsupported');
+        expect(err.message).toMatch(/update BeanPool/i);
+        expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+    });
+
+    describe('when the page itself fails, the member reads a plain message', () => {
+        beforeEach(() => {
+            tb.state.failWith = { code: 'NO_CREDENTIALS', message: 'No credentials available on this device' };
+        });
+
+        const sheetMessages = /found no account|Play services|try again in a few minutes/i;
+
+        it('Google refuses the sign-in', async () => {
+            vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
+                type: 'success',
+                url: `beanpool://auth/google#error=invalid_request&error_description=Bad+redirect&state=${NODE_NONCE}`,
+            } as any);
+            const err = await signInWithGoogle(NODE_NONCE).then(() => null, (e) => e);
+            expect(err).toBeInstanceOf(SsoSignInError);
+            expect(err.reason).toBe('provider');
+            expect(err.message).toBe('Google could not sign you in: Bad redirect');
+        });
+
+        it('the page returns a token without this attempt\'s nonce', async () => {
+            returnsThroughAppLink(fakeJwt({ sub: 's', aud: GOOGLE_WEB_CLIENT_ID }));
+            const err = await signInWithGoogle(NODE_NONCE).then(() => null, (e) => e);
+            expect(err).toBeInstanceOf(SsoSignInError);
+            expect(err.reason).toBe('provider');
+            expect(err.message).toMatch(/did not include this sign-in's security code/);
+        });
+
+        it('the phone cannot open the page at all', async () => {
+            // expo-web-browser's NoMatchingActivityException: nothing on the phone can show a Custom Tab.
+            vi.mocked(WebBrowser.openAuthSessionAsync).mockRejectedValueOnce(new Error('No matching browser activity found'));
+            const err = await signInWithGoogle(NODE_NONCE).then(() => null, (e) => e);
+            expect(err).toBeInstanceOf(SsoSignInError);
+            expect(err.reason).toBe('provider');
+            expect(err.message).toBe("Google's sign-in page could not open on this phone. Try again.");
+            expect(err.message).not.toMatch(sheetMessages);
+        });
+
+        it('a member who closes the page gets a cancel, not an error', async () => {
+            vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'cancel' } as any);
+            const err = await signInWithGoogle(NODE_NONCE).then(() => null, (e) => e);
+            expect(err).toBeInstanceOf(SsoSignInError);
+            expect(err.reason).toBe('cancelled');
+        });
     });
 });
 

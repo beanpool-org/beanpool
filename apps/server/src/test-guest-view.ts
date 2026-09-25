@@ -25,7 +25,12 @@
  *      whole km from the area, the order the order of the areas' distances, a radius holds exactly the areas inside
  *      it, and no place appears. Counted: how often the place itself would have answered differently
  *   8. a local node (NODE_PROFILE unset, in a child process): nothing changes; a guest's body is the engine's read for
- *      that reader, names, keys and places included, and no view header is sent
+ *      that reader, names, keys and places included, and no view header is sent; faces are public by key, avatar URLs
+ *      carry no `k=`, and the recovery lookup matches a prefix with photos
+ *   9. faces and names (G9a-2): /api/avatar/:pk without its key is 404 to anyone; the member-only key a member's
+ *      members list carries opens it, unsigned as an <img> asks; a wrong key, another member's, or the key of a photo
+ *      since changed is 404, as is a conditional request without one; a member's listings carry keyed URLs, a guest's
+ *      none. The recovery lookup matches the typed name exactly (case forgiven) with no photo or join date
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-guest-view.ts
  */
@@ -228,6 +233,9 @@ async function main(): Promise<void> {
     db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type) VALUES ('msg-sentinel', 'conv-sentinel', ?, 'Y2lwaGVy', 'bm9uY2U=', 'image')`).run(alice.pk);
     db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime) VALUES ('msg-sentinel', 'ZW5jcnlwdGVk', 'bm9uY2U=', 'image/jpeg')`).run();
     db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(pruned.pk);
+    // Alice can be recovered with a sign-in, so the recovery lookup finds her.
+    db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag)
+                VALUES (?, 'sso', 'google', 1, 'c2hhcmU=', 'aXY=', 'dGFn')`).run(alice.pk);
 
     // Posts spread over the world for the precision checks (§7): the antimeridian and both poles among them, and a
     // few sharing one area. Each with a place worked out to 7 decimals.
@@ -300,6 +308,8 @@ async function main(): Promise<void> {
         { path: `/api/enterprise/${alice.pk}`, echoes: [alice.pk] },
         { path: '/api/commons/decisions/dec-sentinel' },
         { path: '/api/recovery/lookup/sentinel' },
+        // The exact name: the lookup names who was asked for, by the name typed and the key recovery may need.
+        { path: '/api/recovery/lookup/SentinelAlice', echoes: ['SentinelAlice', alice.pk] },
         { path: `/api/marketplace/posts/${offer.id}/photos/0` },
         { path: '/api/messages/msg-sentinel/attachment' },
         { path: '/api/pulse/items/item_sentinel/thumbnail' },
@@ -316,7 +326,8 @@ async function main(): Promise<void> {
         // tree's branch is a fixed placeholder (state-engine getCommunityHealth), never a member.
         (route === '/api/node/info' && /^\$\.peerNodes\[\d+\]\.callsign$/.test(p))
         || (route.startsWith('/api/members/callsign-available/') && p === '$.callsign')
-        || (route === '/api/community/health' && p === '$.tree.widestBranch.callsign');
+        || (route === '/api/community/health' && p === '$.tree.widestBranch.callsign')
+        || (route === '/api/recovery/lookup/SentinelAlice' && /^\$\[0\]\.(publicKey|callsign)$/.test(p));
     for (const [who, id] of guests) {
         const failures: string[] = [];
         const persons: string[] = [];
@@ -565,6 +576,64 @@ async function main(): Promise<void> {
             `a member's distances are still from the place, to 0.1 km (${o?.distanceKm})`);
     }
 
+    // ── 9. faces and names (G9a-2) ─────────────────────────────────────────────────────────────
+    console.log('\n── 9. faces behind a member-only key, and the recovery lookup ──');
+    {
+        const PNG_BYTES = Buffer.from(TINY_PNG.split(',')[1], 'base64');
+        const avatarOf = async (who: Id, route: '/api/community/members' | '/api/members', of: Id) => {
+            const r = await call('GET', who, route);
+            return { url: ((r.body as any[]) ?? []).find(m => m.publicKey === of.pk)?.avatarUrl as string | undefined, cache: r.headers.get('cache-control') };
+        };
+        const direct = await avatarOf(bob, '/api/community/members', alice);
+        const plain = await avatarOf(bob, '/api/members', alice);
+        assert(!!direct.url && /[?&]k=[A-Za-z0-9_-]{22}$/.test(direct.url) && direct.url === plain.url,
+            `a member's members lists carry Alice's face with its member-only key (${direct.url})`);
+        assert(!!plain.cache?.startsWith('private'), `and /api/members, holding those keys, is private to a shared cache (${plain.cache})`);
+        const keyless = `/api/avatar/${alice.pk}?size=thumb&v=${new URL(`https://x${direct.url}`).searchParams.get('v')}`;
+        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider], ['a pruned account', pruned], ['a member', bob]] as const) {
+            const r = await call('GET', id, keyless);
+            assert(r.status === 404 && r.body?.error === 'Avatar not found', `${who}: Alice's face without its key is 404 Avatar not found (got ${r.status})`);
+        }
+        const img = await call('GET', null, direct.url!);
+        assert(img.status === 200 && img.headers.get('content-type') === 'image/png' && Buffer.from(img.text, 'utf8').length > 0,
+            `the keyed URL opens it unsigned, as an <img> asks (got ${img.status} ${img.headers.get('content-type')})`);
+        const res = await fetch(`${BASE}${direct.url}`);
+        assert(Buffer.from(await res.arrayBuffer()).equals(PNG_BYTES), 'and serves her photo');
+        const etag = img.headers.get('etag')!;
+        const conditional = await call('GET', null, keyless, undefined, { 'If-None-Match': etag });
+        assert(conditional.status === 404, `a conditional request without the key is 404, not 304 (got ${conditional.status})`);
+        const k = new URL(`https://x${direct.url}`).searchParams.get('k') ?? '';
+        const wrong = direct.url!.replace(`k=${k}`, `k=${k[0] === 'A' ? 'B' : 'A'}${k.slice(1)}`);
+        assert((await call('GET', null, wrong)).status === 404, 'a key one character wrong is 404');
+        const bobUrl = (await avatarOf(bob, '/api/community/members', bob)).url!;
+        const bobKey = new URL(`https://x${bobUrl}`).searchParams.get('k') ?? '';
+        assert((await call('GET', null, direct.url!.replace(`k=${k}`, `k=${bobKey}`))).status === 404, "another member's key is 404 for Alice's face");
+        assert((await call('GET', null, `/api/avatar/${outsider.pk}?k=${k}`)).status === 404, 'a key for a key with no member is 404');
+        // Alice changes her photo: the old URL and its key open nothing; the new ones do.
+        const NEW_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        db.prepare('UPDATE members SET avatar_url = ?, profile_updated_at = ? WHERE public_key = ?').run(NEW_PNG, new Date().toISOString(), alice.pk);
+        assert((await call('GET', null, direct.url!)).status === 404, 'after a photo change, the old URL and its key are 404');
+        const changed = await avatarOf(bob, '/api/community/members', alice);
+        assert(!!changed.url && changed.url !== direct.url && (await call('GET', null, changed.url)).status === 200,
+            `and the members list's new URL opens the new photo (${changed.url})`);
+        const memberPosts = await call('GET', bob, `${POSTS}?${ALL_TYPES}`);
+        const aliceOffer = (memberPosts.body as any[]).find(p => p.id === offer.id);
+        assert(aliceOffer?.authorAvatarUrl === changed.url, "a member's listings carry the same keyed URL");
+        const guestPosts = await call('GET', null, `${POSTS}?${ALL_TYPES}`);
+        assert((guestPosts.body as any[]).every(p => p.authorAvatarUrl === null) && !guestPosts.text.includes('k='),
+            "a guest's carry no face at all");
+        // The recovery lookup: a stranger there can't list members by typing a letter, or see their faces.
+        for (const [q, want] of [['sentinel', 0], ['S', 0], ['SentinelAl', 0], ['SentinelAlice', 1], ['sentinelalice', 1], [' SENTINELALICE ', 1]] as const) {
+            const r = await call('GET', null, `/api/recovery/lookup/${encodeURIComponent(q)}`);
+            const found = Array.isArray(r.body) ? r.body : [];
+            assert(r.status === 200 && found.length === want, `the recovery lookup for "${q}" finds ${want} (got ${r.status} ${found.length})`);
+            if (want) {
+                assert(found[0].publicKey === alice.pk && found[0].callsign === 'SentinelAlice' && found[0].avatarUrl === null && found[0].joinedAt === null
+                    && found[0].canRecoverBySso === true, `the exact match names her by the name typed and her key, with no photo or join date (${JSON.stringify(found[0])})`);
+            }
+        }
+    }
+
     // ── 8. a local node ────────────────────────────────────────────────────────────────────────
     console.log('\n── 8. a local node: nothing changes (a fresh process, NODE_PROFILE unset) ──');
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-guest-view-local-'));
@@ -603,7 +672,17 @@ async function main(): Promise<void> {
                 const r = await call('GET', id, p);
                 assert(r.status === 200, `${who}: ${p} is public (${r.status})`);
             }
+            const face = await call('GET', id, `/api/avatar/${alice.pk}?size=thumb`);
+            assert(face.status === 200 && face.headers.get('content-type') === 'image/png', `${who}: a face is public by key, as before (${face.status})`);
+            const lookup = await call('GET', id, '/api/recovery/lookup/sentinel');
+            assert(Array.isArray(lookup.body) && lookup.body.length === 1 && lookup.body[0].publicKey === alice.pk && lookup.body[0].avatarUrl === TINY_PNG && !!lookup.body[0].joinedAt,
+                `${who}: the recovery lookup matches a prefix, with the photo and join date, as before`);
         }
+        const members = await call('GET', bob, '/api/members');
+        const posts = await call('GET', bob, `${POSTS}?${ALL_TYPES}`);
+        assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !members.text.includes('&k=') && !posts.text.includes('&k='),
+            'avatar URLs carry no key here');
+        assert(!!members.headers.get('cache-control')?.startsWith('public'), `/api/members keeps its cache header (${members.headers.get('cache-control')})`);
     }
 }
 

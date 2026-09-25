@@ -1,6 +1,7 @@
 import Router from '@koa/router';
 import type { RouteDeps } from './types.js';
 import { getAvatarService, AvatarService } from '../engine/avatar.js';
+import { avatarKeyMatches, avatarKeysRequired } from '../engine/avatar-keys.js';
 
 export interface AvatarRouteDeps extends Partial<RouteDeps> {
     avatarService?: AvatarService;
@@ -15,6 +16,15 @@ export function createAvatarRoutes(deps?: AvatarRouteDeps) {
         if (!pubkey || typeof pubkey !== 'string') {
             ctx.status = 400;
             ctx.body = { error: 'invalid_pubkey', message: 'Public key is required' };
+            return;
+        }
+
+        // On a node that shows visitors the listings and not the people (G9a-2), a face goes only to a URL carrying the
+        // member-only key for this photo as it is now (engine/avatar-keys.ts). Anything else is answered as no photo,
+        // before a conditional request can be answered either, so neither says whether there is one.
+        if (avatarKeysRequired() && !avatarKeyMatches(pubkey, ctx.query.k)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Avatar not found' };
             return;
         }
 

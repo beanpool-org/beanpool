@@ -62,6 +62,7 @@ import { logger } from '../logger.js';
 import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { avatarKeysRequired } from '../engine/avatar-keys.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
@@ -1593,6 +1594,13 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
     // predicates cannot drift apart — see the note there for why that matters on a public
     // endpoint. It already returns public-safe fields only.
     ctx.status = 200;
+    // On a node that shows visitors the listings and not the people (G9a-2), whoever asks is a stranger until they
+    // are recovered: the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by.
+    // The key stays, as the recovery flow may need it; alone it opens nothing there (engine/avatar-keys.ts).
+    if (getProfileSwitches().guestListingsOnly) {
+        ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
+        return;
+    }
     ctx.body = findRecoveryCandidates(callsign);
 });
 
@@ -1619,7 +1627,9 @@ router.get('/api/members', async (ctx) => {
     const etag = `W/"members-${getMembersVersion()}${querySig}"`;
 
     ctx.set('ETag', etag);
-    ctx.set('Cache-Control', point ? 'private, max-age=0, must-revalidate' : 'public, max-age=0, must-revalidate');
+    // With faces behind a member-only key (G9a-2, engine/avatar-keys.ts) the body holds those keys, so no shared cache
+    // may keep it either.
+    ctx.set('Cache-Control', point || avatarKeysRequired() ? 'private, max-age=0, must-revalidate' : 'public, max-age=0, must-revalidate');
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch) {

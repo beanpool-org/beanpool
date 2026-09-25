@@ -89,7 +89,8 @@ export interface ProfileSwitches {
     /** A reader who is not a member here (unsigned, or signed by a key that isn't a member) sees the listings and
      *  their rough area, and not the people: no author, name, face, trade, voter or exact place (routes/viewer.ts,
      *  the engine's guestPost). The Commons decisions, pool balance and Pulse feed are members-only, and the membership
-     *  probe names only the signer. */
+     *  probe names only the signer. Faces are served only to URLs carrying a member-only key (engine/avatar-keys.ts,
+     *  read at boot), and the recovery lookup matches the typed name exactly, with no photo or join date. */
     guestListingsOnly: boolean;
 }
 

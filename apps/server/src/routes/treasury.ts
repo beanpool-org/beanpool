@@ -34,7 +34,7 @@ import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { createEventFromBody } from './event-post.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { respondProfileRefusal, respondIfMuted } from './profile-feature-gate.js';
+import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor } from '@beanpool/core';
 
@@ -475,7 +475,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         // A note with a pledge is words the keepers read: a muted member (G3) pledges without one.
-        if (typeof memo === 'string' && memo.trim() && respondIfMuted(ctx, actor)) return;
+        if (isNote(memo) && respondIfMuted(ctx, actor)) return;
         try {
             const txId = crypto.randomUUID();
             pledgeToProject(txId, treasury, actor, parsedAmount, memo || 'Enterprise Pledge', (ctx.state as any)?.authSig);

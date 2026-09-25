@@ -129,3 +129,12 @@ export function respondIfMuted(ctx: { status: number; body: unknown }, pubkey: s
         throw e;
     }
 }
+
+/**
+ * Is this memo, sent with Beans or a pledge, a note the other side will read? Anything non-empty, whatever its JSON
+ * type: the ledger stores a number as text, so `412345678` is a phone number like `'412345678'` is. For the mute
+ * check (G3) on the three routes that take one; a memo of any type is still accepted from everyone else.
+ */
+export function isNote(memo: unknown): boolean {
+    return memo != null && String(memo).trim() !== '';
+}

@@ -57,7 +57,7 @@ import {
     payFromCommons, createGroup,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { db } from './db/db.js';
+import { db, createCrowdfundProject } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { startP2P } from './p2p.js';
@@ -782,6 +782,21 @@ async function main(): Promise<void> {
     assert(Object.values(stored).every(v => v === 0), `and none of it is stored (${JSON.stringify(stored)})`);
     const unnoted = await call('POST', max, '/api/ledger/transfer', { to: zed.pk, amount: 1 });
     assert(unnoted.body?.code !== 'moderation_muted', `a send without a note is not refused for the mute (${unnoted.status} ${unnoted.body?.error})`);
+    // A note that is a number is words too (a phone number), on all three routes. Bob has Beans and a finished trade,
+    // so a route that let the note through would store it for the other side to read.
+    const hens = crypto.randomUUID();
+    createCrowdfundProject(hens, kim.pk, 'Hen house', 'Wire and timber', [], 50, null);
+    db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run('9999-12-31T23:59:59.999Z', bob.pk);
+    const digits = 412345678;
+    const numeric: [string, Res][] = [
+        ['with Beans', await call('POST', bob, '/api/ledger/transfer', { to: zed.pk, amount: 1, memo: digits })],
+        ['with a crowdfund pledge', await call('POST', bob, `/api/crowdfund/projects/${hens}/pledge`, { amount: 1, memo: digits })],
+        ['with an enterprise pledge', await call('POST', bob, `/api/enterprise/${hub.pk}/pledge`, { amount: 1, memo: digits })],
+    ];
+    for (const [what, r] of numeric) assert(refused(r), `muted: a note that is a number, ${what} → 403 moderation_muted (got ${r.status} ${JSON.stringify(r.body)?.slice(0, 140)})`);
+    const digitNotes = one(`SELECT COUNT(*) AS c FROM transactions WHERE CAST(memo AS TEXT) LIKE '${digits}%'`);
+    assert(digitNotes === 0, `and none of them is stored (${digitNotes})`);
+    db.prepare('UPDATE members SET moderation_muted_until = NULL WHERE public_key = ?').run(bob.pk);
     const reads = [await call('GET', max, '/api/marketplace/posts'), await call('GET', max, `/api/enterprise/${hub.pk}/thread`), await call('GET', max, `/api/groups/${openClub.id}/chat`)];
     const left = await call('DELETE', max, `/api/groups/${openClub.id}/members/${max.pk}`);
     assert(reads.every(r => r.status === 200) && left.status === 200,

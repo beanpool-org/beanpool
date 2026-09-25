@@ -23,7 +23,7 @@ import { getThresholds } from '../config/local-config.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
-import { respondProfileRefusal, respondIfMuted } from './profile-feature-gate.js';
+import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
@@ -405,7 +405,7 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     // on this node. Refuse until charge-home settlement exists (#104).
     if (blockCrossNodeSettlement(ctx, actor)) return;
     // A note with a pledge is words the project's creator reads: a muted member (G3) pledges without one.
-    if (typeof memo === 'string' && memo.trim() && respondIfMuted(ctx, actor)) return;
+    if (isNote(memo) && respondIfMuted(ctx, actor)) return;
 
     try {
         const txId = crypto.randomUUID();

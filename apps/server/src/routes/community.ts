@@ -52,7 +52,7 @@ import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { getProfileSwitches, getNodeProfile, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
 import { probationSummary } from '../engine/probation.js';
 import { muteOf } from '../engine/auto-moderation.js';
-import { respondIfMuted } from './profile-feature-gate.js';
+import { respondIfMuted, isNote } from './profile-feature-gate.js';
 import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
@@ -1188,7 +1188,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
     }
     // G3: the note rides to the recipient with the Beans (their history and live feed), so it is a message. A
     // muted member still pays what they owe, without one.
-    if (typeof memo === 'string' && memo.trim() && respondIfMuted(ctx, from)) return;
+    if (isNote(memo) && respondIfMuted(ctx, from)) return;
 
     // A visitor's beans live on their home node's ledger, so this node cannot settle
     // a send for them until charge-home settlement exists (#102 / #104). The previous

@@ -126,6 +126,22 @@ describe('whose words these are', () => {
         }
     });
 
+    it('is false, never a throw, for words that are missing or not text (stored words read back wrong)', () => {
+        // The type says text or a list of text; stored words are parsed JSON and may be neither (CR #1150).
+        const account = accountFrom(VALID);
+        const notWords = [
+            null, undefined, {}, 32, true, [null], [...VALID.split(' '), null], [...VALID.split(' ').slice(0, 11), 32],
+        ] as unknown as string[];
+        for (const input of notWords) {
+            expect(() => recoveryWordsMatchPublicKey(input, account.publicKeyHex)).not.toThrow();
+            expect(recoveryWordsMatchPublicKey(input, account.publicKeyHex)).toBe(false);
+            expect(recoveryWordsMatchSeed(input, account.seed)).toBe(false);
+            expect(isWellFormedRecoveryPhrase(input)).toBe(false);
+            expect(normaliseRecoveryWords(input)).toEqual([]);
+            expect(unknownRecoveryWords(input)).toEqual([]);
+        }
+    });
+
     it('matches a stored private key in either format, by its public key', () => {
         const account = accountFrom(VALID);
         expect(recoveryWordsMatchSeed(VALID, account.seed)).toBe(true);

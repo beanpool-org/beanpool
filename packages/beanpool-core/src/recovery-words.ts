@@ -47,9 +47,14 @@ function wordIndex(word: string): number | undefined {
 /**
  * What was typed or stored, as words: any whitespace, any case, surrounding space ignored. The same split the
  * owners' words check uses, so "the words" means one thing everywhere.
+ *
+ * Not only the typed shapes: stored words are parsed JSON. Anything that is not text or a list of text is no
+ * words, never a throw, so every check built on this answers false for it.
  */
 export function normaliseRecoveryWords(input: string | readonly string[]): string[] {
-    return splitTypedWords(Array.isArray(input) ? [...input] : (input as string));
+    if (typeof input === 'string') return splitTypedWords(input);
+    if (Array.isArray(input) && input.every((w) => typeof w === 'string')) return splitTypedWords([...input]);
+    return [];
 }
 
 /** The words that are not on the list, in the order typed, for a screen that checks as the member types. */

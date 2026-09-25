@@ -164,6 +164,8 @@ describe('saving the words', () => {
         ['a word not on the list', [...WORDS.slice(0, 11), 'yelow']],
         ['the right words in the wrong order', [WORDS[1], WORDS[0], ...WORDS.slice(2)]],
         ['nothing', ''],
+        ['no words at all (null)', null],
+        ['no words at all (undefined)', undefined],
     ])('changes nothing for %s', async (_label, typed) => {
         putIdentity(WORDLESS);
 

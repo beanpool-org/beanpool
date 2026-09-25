@@ -31,6 +31,7 @@ import {
     purgeMemberSelf,
     getMembersVersion,
     lastActiveForViewer,
+    contactVisibleTo, ownersWhoAddedAsFriend,
 } from '../state-engine.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
@@ -754,11 +755,20 @@ router.get('/api/community/membership/:publicKey', async (ctx) => {
 });
 
 router.get('/api/community/members', async (ctx) => {
-    const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
-    const etag = `W/"community-members-${getMembersVersion()}${querySig}"`;
+    // Contact details follow each member's choice (contactVisibleTo), so two members asking for this URL get
+    // different bodies. The viewer is the verified signer only, and it goes into the ETag together with who
+    // has added them as a friend: being added changes what they may see without changing any member row, so
+    // the members version alone would confirm a stale copy with a 304.
+    const viewer = ctx.state.actor as string | undefined;
+    const friendOwners = ownersWhoAddedAsFriend(viewer);
+    const viewerSig = crypto.createHash('sha256')
+        .update(`${ctx.querystring || ''}:${viewer || ''}:${[...friendOwners].sort().join(',')}`)
+        .digest('hex').slice(0, 8);
+    const etag = `W/"community-members-${getMembersVersion()}-${viewerSig}"`;
 
     ctx.set('ETag', etag);
-    ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
+    // `private`: this response varies by viewer, so a shared cache must never store it.
+    ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch) {
@@ -771,15 +781,32 @@ router.get('/api/community/members', async (ctx) => {
     }
 
     // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
+    // An allowlist, never a spread of the row: the spread sent every member's contact details whatever they
+    // chose, the invite code they joined with, and updatedAt (which moves when a moderator mutes someone or
+    // an admin freezes their credit) to every reader, and would have sent any column added to the row later.
+    // The apps read publicKey, callsign, avatarUrl, joinedAt and status; the rest is public on the profile page.
     const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
     const members = getMembers()
         .filter(m => !m.isTreasury)
-        .map(m => ({
-            ...m,
-            lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
-            nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-            avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
-        }));
+        .map(m => {
+            const showContact = !!m.contactValue && contactVisibleTo(m.publicKey, m.contactVisibility, viewer, friendOwners.has(m.publicKey));
+            return {
+                publicKey: m.publicKey,
+                callsign: m.callsign,
+                joinedAt: m.joinedAt,
+                avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
+                profileUpdatedAt: m.profileUpdatedAt,
+                bio: m.bio,
+                contactValue: showContact ? m.contactValue : null,
+                contactVisibility: showContact ? m.contactVisibility : null,
+                status: m.status,
+                lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
+                earnedCredit: m.earnedCredit,
+                elderVouchedBy: m.elderVouchedBy,
+                archetype: m.archetype,
+                nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
+            };
+        });
 
     const bodyStr = JSON.stringify(members);
 

@@ -170,8 +170,9 @@ import {
     getInvitesByMember as getInvitesByMemberEngine,
     getInviteTree as getInviteTreeEngine,
     getProfile as getProfileEngine,
-    getProfiles as getProfilesEngine,
     getAllProfiles as getAllProfilesEngine,
+    contactVisibleTo,
+    ownersWhoAddedAsFriend as ownersWhoAddedAsFriendEngine,
     rowToMember,
     rowToProfile,
     type Member,
@@ -1195,12 +1196,16 @@ export function getProfile(publicKey: string, requesterPubkey?: string): MemberP
     return getProfileEngine(db, publicKey, requesterPubkey);
 }
 
-export function getProfiles(): Record<string, MemberProfile> {
-    return getProfilesEngine(db);
-}
-
 export function getAllProfiles(requesterPubkey?: string): MemberProfile[] {
     return getAllProfilesEngine(db, requesterPubkey);
+}
+
+// Who may see a member's contact details: THE rule, shared by the profile page and every list that sends member
+// rows (see contactVisibleTo in the engine). A route never decides it itself.
+export { contactVisibleTo };
+
+export function ownersWhoAddedAsFriend(viewerPubkey: string | null | undefined): Set<string> {
+    return ownersWhoAddedAsFriendEngine(db, viewerPubkey);
 }
 
 export function updateProfile(publicKey: string, update: any): MemberProfile | null {

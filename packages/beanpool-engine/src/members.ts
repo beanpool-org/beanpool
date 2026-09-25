@@ -281,6 +281,51 @@ export function getInviteTree(db: Db, rootPubkey?: string): InviteTreeNode[] {
     return roots.map(buildNode).sort((a, b) => a.callsign.localeCompare(b.callsign));
 }
 
+/**
+ * Whether `viewerPubkey` may see the contact details of `ownerPubkey`, who chose `visibility` for them
+ * (Settings → "Who can see this?").
+ *
+ * THE rule, for every route that sends a member's contact details: the profile page, the member list,
+ * and any route added later. A route never decides this itself. They drifted once: the profile page
+ * honoured the choice while GET /api/community/members sent every member's contact to every reader.
+ *
+ *  - The owner always sees their own.
+ *  - 'hidden', no visibility stored, or a value this node doesn't know: nobody else.
+ *  - 'friends': a viewer the OWNER has added as a friend (a `friends` row owner → viewer). One-way on
+ *    purpose: adding someone as your friend does not reveal their contact to you.
+ *  - 'community' and 'trade_partners': any viewer the route already lets read members. Nothing on the
+ *    node records who counts as a trade partner, so the profile page has always read 'trade_partners'
+ *    like 'community'; this keeps that rule rather than inventing one.
+ *
+ * `viewerPubkey` must be the verified signer (the route's ctx.state.actor), never a value from the
+ * request — anyone can name a friend's key. `ownerAddedViewer` answers "has the owner added the viewer
+ * as a friend?"; for a whole list, look it up once with ownersWhoAddedAsFriend().
+ */
+export function contactVisibleTo(
+    ownerPubkey: string,
+    visibility: string | null | undefined,
+    viewerPubkey: string | null | undefined,
+    ownerAddedViewer: boolean,
+): boolean {
+    if (viewerPubkey && viewerPubkey === ownerPubkey) return true;
+    switch (visibility) {
+        case 'community':
+        case 'trade_partners':
+            return true;
+        case 'friends':
+            return !!viewerPubkey && ownerAddedViewer;
+        default:
+            return false;
+    }
+}
+
+/** Every member who has added `viewerPubkey` as a friend: contactVisibleTo's friends check for many owners at once. */
+export function ownersWhoAddedAsFriend(db: Db, viewerPubkey: string | null | undefined): Set<string> {
+    if (!viewerPubkey) return new Set();
+    const rows = db.prepare("SELECT owner_pubkey FROM friends WHERE friend_pubkey = ?").all(viewerPubkey) as any[];
+    return new Set(rows.map(r => r.owner_pubkey));
+}
+
 export function getProfile(db: Db, publicKey: string, requesterPubkey?: string): MemberProfile | null {
     const row = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!row) return null;
@@ -290,52 +335,23 @@ export function getProfile(db: Db, publicKey: string, requesterPubkey?: string):
         const voucher = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(row.elder_vouched_by) as any;
         profile.elderVouchedByCallsign = voucher?.callsign || null;
     }
-    if (profile.contact && profile.contact.visibility === 'hidden' && requesterPubkey !== publicKey) {
-        profile.contact = null;
-    } else if (profile.contact && profile.contact.visibility === 'friends' && requesterPubkey !== publicKey) {
-        if (!requesterPubkey) {
-            profile.contact = null;
-        } else {
-            const isFriend = db.prepare("SELECT 1 FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(publicKey, requesterPubkey);
-            if (!isFriend) profile.contact = null;
-        }
+    if (profile.contact) {
+        const ownerAddedViewer = !!requesterPubkey && requesterPubkey !== publicKey &&
+            !!db.prepare("SELECT 1 FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(publicKey, requesterPubkey);
+        if (!contactVisibleTo(publicKey, row.contact_visibility, requesterPubkey, ownerAddedViewer)) profile.contact = null;
     }
     return profile;
 }
 
-export function getProfiles(db: Db): Record<string, MemberProfile> {
-    const rows = db.prepare("SELECT * FROM members WHERE status != 'pruned'").all() as any[];
-    const result: Record<string, MemberProfile> = {};
-    for (const r of rows) {
-        const prof = rowToProfile(r);
-        if (prof.contact && prof.contact.visibility !== 'community') prof.contact = null;
-        result[prof.publicKey] = prof;
-    }
-    return result;
-}
-
 export function getAllProfiles(db: Db, requesterPubkey?: string): MemberProfile[] {
     const rows = db.prepare("SELECT * FROM members WHERE status != 'pruned'").all() as any[];
-    
-    // Batch fetch friends where friend_pubkey is the requesterPubkey
-    let friendOwners = new Set<string>();
-    if (requesterPubkey) {
-        const friendRows = db.prepare("SELECT owner_pubkey FROM friends WHERE friend_pubkey = ?").all(requesterPubkey) as any[];
-        friendOwners = new Set(friendRows.map(f => f.owner_pubkey));
-    }
+    const friendOwners = ownersWhoAddedAsFriend(db, requesterPubkey);
 
     const profiles: MemberProfile[] = [];
     for (const row of rows) {
         const profile = rowToProfile(row);
-        const publicKey = profile.publicKey;
-        if (profile.contact && requesterPubkey !== publicKey) {
-            if (profile.contact.visibility === 'hidden') {
-                profile.contact = null;
-            } else if (profile.contact.visibility === 'friends') {
-                if (!requesterPubkey || !friendOwners.has(publicKey)) {
-                    profile.contact = null;
-                }
-            }
+        if (profile.contact && !contactVisibleTo(profile.publicKey, row.contact_visibility, requesterPubkey, friendOwners.has(profile.publicKey))) {
+            profile.contact = null;
         }
         profiles.push(profile);
     }

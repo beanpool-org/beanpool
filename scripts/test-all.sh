@@ -383,6 +383,7 @@ run_federation_suites() {
       test-apple-return
       test-recovery-backup-durability
       test-public-address
+      test-node-config-public
       test-registrar-contract
       test-invite-trampoline
       test-request-body

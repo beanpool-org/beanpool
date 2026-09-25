@@ -17,6 +17,8 @@ import {
 } from '../lib/identity';
 import { readAuthReturn, resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
+import { openSeedFromSso } from '@beanpool/core';
+import { bytesToHex } from '@noble/hashes/utils.js';
 
 const ORIGIN = 'https://global.beanpool.org';
 const NONCE = 'node-nonce-1';
@@ -68,6 +70,19 @@ async function seedPending(overrides: Partial<PendingJoin> = {}): Promise<Pendin
 
 function googleReturn(nonce = NONCE, sub = 'g-sub-1') {
     return readAuthReturn('/app/auth/google', `#state=${nonce}&id_token=${fakeJwt({ sub, nonce })}`);
+}
+
+/**
+ * The sign-in recovery copy a join carried (G11-c): one piece for this sign-in, which opens with its `sub` to the
+ * joining key's raw seed and its 12 words.
+ */
+async function expectRecoveryOpens(body: any, provider: string, sub: string) {
+    expect(body.recovery.shares).toHaveLength(1);
+    const [share] = body.recovery.shares;
+    expect(share).toMatchObject({ holderType: 'sso', holderRef: provider, shareIndex: 1 });
+    const opened = await openSeedFromSso(share, provider, sub);
+    expect(bytesToHex(opened.seed)).toBe(identity.privateKey.slice(32));
+    expect(opened.words).toEqual(identity.mnemonic);
 }
 
 function renderJoin(props: Partial<React.ComponentProps<typeof WebJoin>> = {}) {
@@ -200,10 +215,12 @@ describe('screen 4: the return, and each door answer → its screen', () => {
         expect(result.identity).toMatchObject({ publicKey: identity.publicKey, callsign: 'Alice2' });
         expect(await loadIdentity()).toMatchObject({ publicKey: identity.publicKey, callsign: 'Alice2', mnemonic: identity.mnemonic });
         expect(await loadPendingJoin()).toBeNull();
-        // One join, signed by the pending key, carrying the token and the nonce the page sent it with.
+        // One join, signed by the pending key, carrying the token and the nonce the page sent it with, and (G11-c) the
+        // key sealed to the same sign-in as its way back.
         const [sent] = node.joins();
         expect(sent.headers['X-Public-Key']).toBe(identity.publicKey);
-        expect(sent.body).toEqual({ callsign: 'Alice', provider: 'google', idToken: expect.stringContaining('.'), nonce: NONCE });
+        expect(sent.body).toEqual({ callsign: 'Alice', provider: 'google', idToken: expect.stringContaining('.'), nonce: NONCE, recovery: { shares: [expect.any(Object)] } });
+        await expectRecoveryOpens(sent.body, 'google', 'g-sub-1');
     });
 
     it("200, but this browser can't keep the key: it says so rather than hanging, and the pending join is kept to finish from", async () => {
@@ -451,7 +468,9 @@ describe('screen 3b: GitHub', () => {
         expect(navigate).not.toHaveBeenCalled();
         const poll = node.calls.find((c) => c.path === '/api/join/github/poll')!;
         expect(poll.body).toEqual({ sessionId: 'sess-1' });
-        expect(node.joins()[0].body).toEqual({ callsign: 'Alice', provider: 'github', proof: { sessionId: 'sess-1' } });
+        expect(node.joins()[0].body).toEqual({ callsign: 'Alice', provider: 'github', proof: { sessionId: 'sess-1' }, recovery: { shares: [expect.any(Object)] } });
+        // Sealed to GitHub's own answer for the account, which the page never sends.
+        await expectRecoveryOpens(node.joins()[0].body, 'github', 'gh-77');
     });
 
     it('a 429 on the poll is still waiting, then denied says so', async () => {

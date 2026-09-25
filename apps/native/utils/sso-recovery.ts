@@ -15,15 +15,21 @@
  * 9. Reads the Hub share (A) via readHubShare(hub).
  * 10. Reconstructs seed = combineHubAndWhole(A, B) and derives the Ed25519 keypair.
  * 11. Validates and saves the restored identity and node anchor URL.
+ *
+ * A single-blob fragment (the only kind the app deposits now) skips 9 and 10: it holds the whole seed, and
+ * the 12 words too when the sign-in was connected from a phone that had them. The words are saved only if
+ * they make the restored key; a copy without them restores the key alone, as it always did.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import {
     openShareFromSso,
+    openSeedFromSso,
     readHubShare,
     combineHubAndWhole,
     isSingleBlobSso,
+    recoveryWordsMatchPublicKey,
 } from '@beanpool/core';
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
@@ -259,11 +265,14 @@ export async function recoverAccountWithSso(options: {
     }
 
     let restoredSeed: Uint8Array;
+    /** The 12 words, when the copy carried them (a sign-in connected from a phone that had them). */
+    let restoredWords: string[] | null = null;
 
     if (isSingleBlobSso(ssoFrag.kdfParams)) {
-        // New-format single-blob SSO: entire seed is sealed in this one fragment.
+        // New-format single-blob SSO: entire seed is sealed in this one fragment, and the 12 words with
+        // it when the phone that connected the sign-in had them.
         options.onProgress?.({ step: 'reconstructing', message: 'Reconstructing account identity...' });
-        restoredSeed = await openShareFromSso(
+        const opened = await openSeedFromSso(
             {
                 encryptedShare: ssoFrag.payload,
                 shareIv: ssoFrag.payloadIv,
@@ -273,8 +282,16 @@ export async function recoverAccountWithSso(options: {
             options.provider,
             sub,
         );
+        restoredSeed = opened.seed;
         if (restoredSeed.length !== 32) {
             throw new Error('Decrypted recovery seed has invalid length.');
+        }
+        restoredWords = opened.words;
+        // Why a copy gave no words, never the words themselves. 'absent' is every copy made before copies
+        // carried them, and every copy from a phone without them: the ordinary case, and not a problem.
+        if (opened.wordsStatus === 'unreadable' || opened.wordsStatus === 'mismatch') {
+            console.log(`[SSO-RECOVERY] ${options.provider}: the copy's 12 words ${opened.wordsStatus === 'mismatch'
+                ? 'make a different key' : 'did not open'}; restoring the key alone`);
         }
     } else {
         // Old-format two-layer split (seed = A ⊕ B): request hub fragment (A), then combine with B.
@@ -345,11 +362,23 @@ export async function recoverAccountWithSso(options: {
 
     const restoredKeypair = await seedToKeypair(restoredSeed);
 
+    // The words are kept only if they make the key being saved, compared by public key. openSeedFromSso
+    // already checked them against the seed; this checks them against the identity actually written.
+    let mnemonic: string[] | undefined;
+    if (restoredWords) {
+        if (recoveryWordsMatchPublicKey(restoredWords, restoredKeypair.publicKeyHex)) {
+            mnemonic = restoredWords;
+        } else {
+            console.log(`[SSO-RECOVERY] ${options.provider}: the copy's 12 words do not make the restored key; restoring the key alone`);
+        }
+    }
+
     const restoredIdentity: BeanPoolIdentity = {
         publicKey: restoredKeypair.publicKeyHex,
         privateKey: restoredKeypair.privateKeyHex,
         callsign: rawCallsign,
         createdAt: new Date().toISOString(),
+        ...(mnemonic ? { mnemonic } : {}),
     };
 
     // 9. Save Anchor URL and Identity

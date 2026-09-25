@@ -18,6 +18,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db } from '../db/db.js';
+import { isSelfAvatarUrl } from '@beanpool/core';
 
 
 /**
@@ -54,6 +55,26 @@ export function isAcceptableAvatarValue(value: unknown): boolean {
     if (!m) return false;
     return sniffRasterImageType(Buffer.from(m[2], 'base64')) !== null;
 }
+
+/**
+ * The avatar rule, for a photo the node also hands out exactly as it is stored: a crowdfund project's photos in
+ * its JSON, a group's picture in every group listing, an enterprise's photo in its projects row. The route above
+ * serves nothing it cannot sniff as a raster image; those do not look. So a value written in base64 without a
+ * `data:` prefix (the legacy bare form) is judged as well: its bytes must be a JPEG, PNG, WebP or GIF, the
+ * formats the metadata strip handles (G9a-3). A bare HEIC, GPS inside, would otherwise be stored and served as
+ * sent. Any other string (a URL, a `bundled://` name, this node's own `/api/avatar/…` address sent back by an
+ * editor) is not image bytes and passes as before.
+ */
+export function isAcceptablePhotoValue(value: unknown): boolean {
+    if (!isAcceptableAvatarValue(value)) return false;
+    if (typeof value !== 'string') return true;
+    const trimmed = value.trim();
+    if (/^data:/i.test(trimmed) || isSelfAvatarUrl(trimmed) || !BASE64_TEXT.test(trimmed)) return true;
+    return sniffRasterImageType(Buffer.from(trimmed, 'base64')) !== null;
+}
+
+/** Standard or URL-safe base64, wrapped or not: text that Buffer.from(…, 'base64') reads whole. */
+const BASE64_TEXT = /^[A-Za-z0-9+/=_\-\s]+$/;
 
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 export const DEFAULT_MAX_AVATAR_CACHE_TOTAL_BYTES = 10 * 1024 * 1024; // 10 MB RAM

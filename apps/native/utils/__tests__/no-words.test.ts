@@ -27,7 +27,7 @@ import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { protectionFrom } from '../protection-state';
 import {
-    NO_WORDS_WAY_BACK, NO_WORDS_MENU, NO_WORDS_SIGN_OUT_ALERT, NO_WORDS_CONNECT, noWordsBeforeWipe,
+    NO_WORDS_WAY_BACK, NO_WORDS_MENU, NO_WORDS_SIGN_OUT_ALERT, NO_WORDS_CONNECT, SSO_WORDS_NOTE, noWordsBeforeWipe,
 } from '../no-words-copy';
 
 type Host = { type: string; props: Record<string, any>; children: Node[] };
@@ -119,14 +119,34 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         expect(text).toContain('It only works while your hub is running.');
     });
 
-    it('a phone with words reads exactly as before', () => {
+    // Was "reads exactly as before", pinning "It does not hand your 12 words back". A sign-in connected from a
+    // phone with the words now seals them too (keeper-enrolment.ts), so that sentence became untrue; the panel
+    // now says which sign-ins give the words back, and everything else a member with words reads is unchanged.
+    it('a phone with words is told which sign-ins give the words back, and otherwise reads as before', () => {
         const text = textOf(panel(WORDS_ONLY, true));
         expect(text).toContain('🔑 Your 12 words are your primary recovery');
         expect(text).toContain('Your 12 words are your primary key to your account. Write them down safely.');
-        expect(text).toContain('It does not hand your 12 words back, and it only works while your hub is running — so keep the words written down.');
+        expect(text).toContain(`restores your account on a new phone. ${SSO_WORDS_NOTE} It only works while your hub is running — so keep the words written down.`);
+        expect(SSO_WORDS_NOTE).toBe('A sign-in connected on this version of the app brings your 12 words back too. One connected on an earlier version brings back your account without them: tap Connect again to include them.');
+        expect(text).not.toMatch(/does not hand your 12 words back/);
         expect(text).not.toContain(NO_WORDS_WAY_BACK);
 
         expect(textOf(panel(COVERED, true))).toContain('so keep the words written down');
+    });
+
+    it('a connected sign-in can be connected again on a phone with words, to include them; never on one without', () => {
+        const onProtectSso = vi.fn();
+        const withWords = findAll(panel(COVERED, true, onProtectSso), 'TouchableOpacity');
+        const again = withWords.find(b => b.props.accessibilityLabel === 'Connect Facebook again, to include your 12 words');
+        expect(again).toBeDefined();
+        expect(textOf([again!])).toBe('Connect again');
+        again!.props.onPress();
+        expect(onProtectSso).toHaveBeenCalledWith('facebook');
+        // Disconnect is still there beside it.
+        expect(withWords.map(b => b.props.accessibilityLabel)).toContain('Disconnect Facebook');
+
+        const withoutWords = findAll(panel(COVERED, false), 'TouchableOpacity');
+        expect(withoutWords.map(b => b.props.accessibilityLabel)).toEqual(['Disconnect Facebook']);
     });
 });
 

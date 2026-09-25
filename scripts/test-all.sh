@@ -447,6 +447,7 @@ run_federation_suites() {
       test-image-store-s3
       test-image-store-s3-http
       test-image-evacuation
+      test-photo-metadata
       test-snapshot-completeness
       test-groups-isolation
       test-groups-routes

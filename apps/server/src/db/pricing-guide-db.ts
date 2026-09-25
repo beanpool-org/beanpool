@@ -3,6 +3,7 @@
  */
 
 import { db } from './db.js';
+import { stripImageValue } from '../storage/image-metadata.js';
 import {
     DEFAULT_PRICING_CATALOG,
     DEFAULT_PRICING_CONFIG,
@@ -123,6 +124,9 @@ export function savePricingGuideItem(item: {
 }): PricingGuideItem {
     const id = item.id || `custom-${crypto.randomBytes(6).toString('hex')}`;
     const existing = getPricingGuideItem(id);
+    // An operator's thumbnail is any string, a photo's data URL included, and the guide is read by every member:
+    // stored without its metadata like every other photo on the node (G9a-3). A link comes back as given.
+    const thumbnailUrl = stripImageValue(item.thumbnailUrl) || null;
 
     if (existing) {
         db.prepare(`
@@ -147,7 +151,7 @@ export function savePricingGuideItem(item: {
             item.unit || null,
             item.isPinned !== undefined ? (item.isPinned ? 1 : 0) : (existing.isPinned ? 1 : 0),
             item.seasonalityHint || null,
-            item.thumbnailUrl || null,
+            thumbnailUrl,
             id
         );
     } else {
@@ -166,7 +170,7 @@ export function savePricingGuideItem(item: {
             item.unit || null,
             item.isPinned ? 1 : 0,
             item.seasonalityHint || null,
-            item.thumbnailUrl || null
+            thumbnailUrl
         );
     }
 

@@ -130,6 +130,26 @@ function cannotSeeGroupPost(scope: string | null | undefined, groupId: string | 
     return !db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(groupId, caller);
 }
 
+/**
+ * A post hidden by reports (G3) is not there for anyone but its author, here as when read by id (getPosts): a
+ * request or an accept would start a deal, and put Beans in escrow, on a post waiting for a moderator (most likely
+ * one reported as a scam), and its answer would name the post. So the trade routes answer as for an id nobody has.
+ */
+function hiddenFromCaller(hiddenAt: string | null | undefined, authorPubkey: string, caller: string): boolean {
+    return !!hiddenAt && authorPubkey !== caller;
+}
+
+/**
+ * Approving a request opens an escrow, funded (on an Offer) by a requester the post is now hidden from. The author
+ * knows it is hidden, so they are told why; the request waits, and either side can still back out of it.
+ */
+function postHiddenNoNewDeal(): Error {
+    return Object.assign(
+        new Error('This post is hidden while a moderator looks at reports about it, so no new deal can start on it. You can approve this request once it is restored.'),
+        { status: 409, statusCode: 409, code: 'post_hidden' },
+    );
+}
+
 export function requestPost(
     cb: EscrowCallbacks,
     postId: string,
@@ -143,7 +163,8 @@ export function requestPost(
     assertProfileComplete(requesterPublicKey);
     assertNotOnHoliday(requesterPublicKey);
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
-    if (!post || cannotSeeGroupPost(post.audience_scope, post.target_group_id, post.author_pubkey, requesterPublicKey)) {
+    if (!post || cannotSeeGroupPost(post.audience_scope, post.target_group_id, post.author_pubkey, requesterPublicKey)
+        || hiddenFromCaller(post.hidden_by_reports_at, post.author_pubkey, requesterPublicKey)) {
         throw new Error('Post not found');
     }
     if (post.status !== 'active') throw new Error('Post is not active');
@@ -274,6 +295,7 @@ export function approvePostRequest(
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
     if (expectedAuthorRole !== authorPublicKey) return null;
+    if (post.hidden_by_reports_at) throw postHiddenNoNewDeal();
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator approving the bid
@@ -508,7 +530,8 @@ export function acceptPost(
     assertMemberActive(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
-    if (!post || cannotSeeGroupPost(post.audienceScope, post.targetGroupId, post.authorPublicKey, buyerPublicKey)) {
+    if (!post || cannotSeeGroupPost(post.audienceScope, post.targetGroupId, post.authorPublicKey, buyerPublicKey)
+        || hiddenFromCaller(post.hiddenByReportsAt, post.authorPublicKey, buyerPublicKey)) {
         throw new Error('Post not found or not active');
     }
     assertMemberActive(post.authorPublicKey);

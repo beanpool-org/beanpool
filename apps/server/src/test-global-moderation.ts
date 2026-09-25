@@ -28,6 +28,15 @@
  *      a muted enterprise's post through the marketplace route
  *   6. replication: the export carries hidden_by_reports_at, removed_by_moderator_at and moderation_muted_until, and
  *      a standby importing it (insert and update) holds all three
+ *   7. with Beans, escrow and enterprises on (a live community switched to global keeps them; forced on here with the
+ *      overrides): a request or an accept on a hidden offer is answered as for an id nobody has, writes no trade and
+ *      moves no Beans; its author can't approve a request into a new escrow while it is hidden, but can decline one,
+ *      and an escrow opened before the hide can still finish or be called off; a hidden listing can't be commissioned;
+ *      after a restore it all works again
+ *
+ * Section 1 also shows a request on a reported local post going through on the local profile; section 3 shows a
+ * hidden event's chat closed to everyone but its author (who reads it but can't post into it), and open again once
+ * it is un-hidden.
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-global-moderation.ts
  */
@@ -41,6 +50,7 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, grantNodeRole, createPost, exportSyncState, importRemoteState, setNodeRole,
+    payFromCommons,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -48,6 +58,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { originOfCachedPost } from './federation-commission.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -195,6 +206,14 @@ async function main(): Promise<void> {
     const localPost = oldPost(localAuthor, 'Local listing');
     for (const r of R.slice(0, 3)) assert((await report(r, localPost, localAuthor)).status === 200, `local: ${r.name} reports it (200)`);
     assert(hiddenAt(localPost) === null && (await listIds(viewer)).includes(localPost), 'local: 3 established reporters hide nothing; the post is still listed for everyone');
+    // Nor is it closed to a deal. The trade row is taken out again, so the ledger has never moved and the global
+    // sections below run as a fresh global node does, with Beans off.
+    const lena = member('Lena', 30);
+    oldPost(lena, 'Lena listing'); // a listed offer: the contribution rule
+    const localReq = await call('POST', lena, '/api/marketplace/posts/request', { postId: localPost, buyerPublicKey: lena.pk });
+    assert(localReq.status === 200 && localReq.body?.transaction?.status === 'requested',
+        `local: a request on that reported post goes through (${localReq.status} ${localReq.body?.error ?? ''})`);
+    if (localReq.body?.transaction?.id) db.prepare('DELETE FROM marketplace_transactions WHERE id = ?').run(localReq.body.transaction.id);
     const localNew = member('Lenny', 0);
     const localPosts = [];
     for (let i = 0; i < 4; i++) localPosts.push((await post(localNew)).status);
@@ -242,6 +261,11 @@ async function main(): Promise<void> {
     const ev = createPost('event', 'other', 'Hidden gathering', 'An event to hide', 0, 'fixed', ava.pk, -28.55, 153.5, [], false, undefined, false,
         { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Hall' })!.id;
     await call('POST', viewer, `/api/marketplace/posts/${ev}/rsvp`, { status: 'going' });
+    const vicChatBefore = await call('GET', viewer, `/api/marketplace/posts/${ev}/chat`);
+    const vicListBefore = (await call('GET', viewer, `/api/messages/conversations/${viewer.pk}`)).body?.conversations ?? [];
+    const vicYoursBefore = (await call('GET', viewer, '/api/your-groups')).body?.items ?? [];
+    assert(vicChatBefore.status === 200 && vicListBefore.some((c: any) => c.id === ev) && vicYoursBefore.some((c: any) => c.id === ev),
+        `before: someone Going opens the event's chat, and it is in both their chat lists (${vicChatBefore.status})`);
     const feedBefore = (await call('GET', viewer, '/api/activity/feed')).body?.feed ?? [];
     assert(feedBefore.some((e: any) => e.eventType === 'post_created' && e.metadata?.postId === target), 'before: the activity feed announces the post');
     const photoUrl = `/api/marketplace/posts/${target}/photos/0`;
@@ -310,6 +334,22 @@ async function main(): Promise<void> {
     const votes = (db.prepare('SELECT COUNT(*) AS c FROM poll_votes WHERE post_id = ?').get(poll) as any).c;
     const viewerRsvp = db.prepare('SELECT status FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(ev, viewer.pk) as any;
     assert(votes === 0 && viewerRsvp?.status === 'going', 'and neither is recorded');
+    // The event's chat is the event's own: not there for anyone but its author, who still reads it but can't post a
+    // line, which would reach the people Going.
+    const vicChat = await call('GET', viewer, `/api/marketplace/posts/${ev}/chat`);
+    const vicLine = await call('POST', viewer, `/api/marketplace/posts/${ev}/chat/message`, { text: 'Still on?' });
+    const vicConv = await call('GET', viewer, `/api/messages/${ev}`);
+    assert(vicChat.status === 404 && vicChat.body?.error === 'Event not found' && vicLine.status === 404 && vicConv.status === 404
+        && !JSON.stringify([vicChat.body, vicLine.body, vicConv.body]).includes('Hidden gathering'),
+        `its chat is "not found" to someone Going: read, post, and read as a conversation (${vicChat.status}, ${vicLine.status}, ${vicConv.status})`);
+    const vicList = (await call('GET', viewer, `/api/messages/conversations/${viewer.pk}`)).body?.conversations ?? [];
+    const vicYours = (await call('GET', viewer, '/api/your-groups')).body?.items ?? [];
+    assert(!vicList.some((c: any) => c.id === ev) && !vicYours.some((c: any) => c.id === ev), 'and it is gone from both their chat lists');
+    const avaChat = await call('GET', ava, `/api/marketplace/posts/${ev}/chat`);
+    const avaLine = await call('POST', ava, `/api/marketplace/posts/${ev}/chat/message`, { text: 'Bring cash' });
+    const evLines = (db.prepare('SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ?').get(ev) as any).c;
+    assert(avaChat.status === 200 && avaChat.body?.title === 'Hidden gathering' && avaLine.status === 409 && evLines === 0,
+        `its author still reads it, but can't post into it while it is hidden, and nothing is stored (${avaChat.status}, ${avaLine.status} ${avaLine.body?.error})`);
     const ownVote = await call('POST', ava, `/api/marketplace/posts/${poll}/vote`, { optionId: 'b' });
     assert(ownVote.status === 200 && ownVote.body?.post?.id === poll, `its author can still vote in it (${ownVote.status})`);
 
@@ -334,6 +374,9 @@ async function main(): Promise<void> {
     assert((await admin('POST', `/api/local/admin/reports/${evReports[0].id}/dismiss`)).status === 200 && hiddenAt(ev) === null,
         'dismissing one of the event\'s 3 reports un-hides it (2 left is not enough)');
     assert((await listIds(viewer, '?type=event')).includes(ev), 'and it is back on the events list');
+    const vicBack = await call('GET', viewer, `/api/marketplace/posts/${ev}/chat`);
+    const vicLineBack = await call('POST', viewer, `/api/marketplace/posts/${ev}/chat/message`, { text: 'See you there' });
+    assert(vicBack.status === 200 && vicLineBack.status === 201, `and its chat is open again to the people Going (${vicBack.status}, ${vicLineBack.status})`);
 
     // A moderator removal of a hidden post works as always.
     const openOnTarget = db.prepare(`SELECT id FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).get(target) as { id: string };
@@ -545,6 +588,116 @@ async function main(): Promise<void> {
     assert(!!hideInsertAt && back(hideInsert)?.hidden_by_reports_at === hideInsertAt, 'and the hide on a post it never had (insert)');
     assert(mutedUntil(max) === muteMax, 'and the mute');
     await p2p.stop();
+
+    // ── 7. Beans, escrow and enterprises on ──────────────────────────────────────────────────────
+    // A live community switched to global keeps them (the ledger lock), and an operator can override them on. Forced
+    // on here with the overrides, as the reviewer did; on a fresh global node the routes below answer 404.
+    console.log('\n── 7. global with Beans, escrow and enterprises on ──');
+    const setOverride = (name: string, value: string) =>
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(`nodeProfile.${name}`, value);
+    for (const k of ['beans', 'escrow', 'enterprises', 'treasuries', 'crowdfund']) setOverride(k, 'true');
+    f = (await info()).features ?? {};
+    assert(f.beans === true && f.escrow === true && f.enterprises === true && f.autoHideReports === true && f.autoMute === true,
+        `setup: global, with Beans, escrow and enterprises on (${JSON.stringify(f)})`);
+
+    // 7a. Acting on a hidden post.
+    console.log('\n── 7a. a deal on a hidden post ──');
+    const U = [1, 2, 3].map(i => member(`Una${i}`, 20)); // reporters of their own, under the hourly report limit
+    const hide = async (postId: string, author: Id) => { for (const r of U) await report(r, postId, author); };
+    const [bob, cat, dan] = ['Bob', 'Cat', 'Dan'].map(name => member(name, 40));
+    for (const m of [bob, cat, dan]) {
+        oldPost(m, `${m.name} listing`); // a listed offer: the contribution rule
+        payFromCommons(m.pk, 100, 'Test: Beans to trade with', { allowDeficit: true });
+    }
+    const offer = (title: string) => createPost('offer', 'other', title, `${title}, for Beans`, 10, 'fixed', ava.pk)!.id;
+    const balanceOf = async (id: Id) => Number((await call('GET', id, `/api/ledger/balance/${id.pk}`)).body?.balance);
+    const near = (a: number, b: number) => Math.abs(a - b) < 0.01; // demurrage moves a balance by a hair between reads
+    const trades = (postId: string) => db.prepare('SELECT id, buyer_pubkey, status FROM marketplace_transactions WHERE post_id = ?').all(postId) as { id: string; buyer_pubkey: string; status: string }[];
+    const tradeStatus = (txId: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(txId) as any)?.status;
+
+    const lamp = offer('Lamp for Beans');
+    const catAsks = await call('POST', cat, '/api/marketplace/posts/request', { postId: lamp, buyerPublicKey: cat.pk });
+    const danAsks = await call('POST', dan, '/api/marketplace/posts/request', { postId: lamp, buyerPublicKey: dan.pk });
+    const kettle = offer('Kettle for Beans');
+    const chair = offer('Chair for Beans');
+    const bobTakesChair = await call('POST', bob, '/api/marketplace/posts/accept', { postId: chair, buyerPublicKey: bob.pk });
+    const table = offer('Table for Beans');
+    const catTakesTable = await call('POST', cat, '/api/marketplace/posts/accept', { postId: table, buyerPublicKey: cat.pk });
+    assert(catAsks.status === 200 && danAsks.status === 200 && bobTakesChair.status === 200 && catTakesTable.status === 200,
+        `setup: before the hide, Cat and Dan ask for Ava's lamp, and Bob and Cat take her chair and table into escrow (${[catAsks, danAsks, bobTakesChair, catTakesTable].map(r => `${r.status} ${r.body?.error ?? ''}`).join(', ')})`);
+    for (const p of [lamp, kettle, chair, table]) await hide(p, ava);
+    assert([lamp, kettle, chair, table].every(p => !!hiddenAt(p)), 'setup: 3 established reporters hide all four');
+
+    const bobBefore = await balanceOf(bob);
+    const nobodyAsks = await call('POST', bob, '/api/marketplace/posts/request', { postId: crypto.randomUUID(), buyerPublicKey: bob.pk });
+    const bobAsks = await call('POST', bob, '/api/marketplace/posts/request', { postId: lamp, buyerPublicKey: bob.pk });
+    assert(bobAsks.status === nobodyAsks.status && bobAsks.body?.error === 'Post not found' && JSON.stringify(bobAsks.body) === JSON.stringify(nobodyAsks.body),
+        `a request on a hidden offer is answered as for an id nobody has (got ${bobAsks.status} ${JSON.stringify(bobAsks.body)?.slice(0, 160)})`);
+    assert(!trades(lamp).some(t => t.buyer_pubkey === bob.pk) && !JSON.stringify(bobAsks.body ?? '').includes('Lamp'),
+        'no trade row is written, and nothing of the post comes back');
+    const nobodyTakes = await call('POST', bob, '/api/marketplace/posts/accept', { postId: crypto.randomUUID(), buyerPublicKey: bob.pk });
+    const bobTakesKettle = await call('POST', bob, '/api/marketplace/posts/accept', { postId: kettle, buyerPublicKey: bob.pk });
+    assert(bobTakesKettle.status === nobodyTakes.status && JSON.stringify(bobTakesKettle.body) === JSON.stringify(nobodyTakes.body)
+        && !JSON.stringify(bobTakesKettle.body ?? '').includes('Kettle'),
+        `accepting a hidden offer: the same answer as for an id nobody has (got ${bobTakesKettle.status} ${JSON.stringify(bobTakesKettle.body)?.slice(0, 160)})`);
+    assert(trades(kettle).length === 0 && near(await balanceOf(bob), bobBefore), 'no escrow opens, and Bob\'s Beans stay where they were');
+    const avaAsksOwn = await call('POST', ava, '/api/marketplace/posts/request', { postId: lamp, buyerPublicKey: ava.pk });
+    assert(avaAsksOwn.status === 400 && /your own post/.test(avaAsksOwn.body?.error ?? ''),
+        `its author is not told "not found": they get the answers they always did (${avaAsksOwn.body?.error})`);
+    const catTx = catAsks.body?.transaction?.id as string, danTx = danAsks.body?.transaction?.id as string;
+    const catBefore = await balanceOf(cat);
+    const approveHidden = await call('POST', ava, '/api/marketplace/transactions/approve', { transactionId: catTx, authorPublicKey: ava.pk });
+    assert(approveHidden.status === 409 && /hidden while a moderator/.test(approveHidden.body?.error ?? '') && tradeStatus(catTx) === 'requested'
+        && near(await balanceOf(cat), catBefore),
+        `its author can't approve a request into a new escrow while it is hidden: 409, the request waits, Cat's Beans stay put (got ${approveHidden.status} ${approveHidden.body?.error})`);
+    const declined = await call('POST', ava, '/api/marketplace/transactions/reject', { transactionId: danTx, authorPublicKey: ava.pk });
+    assert(declined.status === 200 && tradeStatus(danTx) === 'rejected', `but can decline one made before the hide (${declined.status} ${declined.body?.error ?? ''})`);
+    const avaBefore = await balanceOf(ava);
+    const chairDone = await call('POST', bob, '/api/marketplace/transactions/complete', { transactionId: bobTakesChair.body?.transaction?.id, confirmerPublicKey: bob.pk });
+    assert(chairDone.status === 200 && (await balanceOf(ava)) > avaBefore,
+        `an escrow opened before the hide can still finish: Bob confirms, and Ava is paid (${chairDone.status} ${chairDone.body?.error ?? ''})`);
+    const catBeforeCancel = await balanceOf(cat);
+    const tableOff = await call('POST', cat, '/api/marketplace/transactions/cancel', { transactionId: catTakesTable.body?.transaction?.id, cancellerPublicKey: cat.pk });
+    assert(tableOff.status === 200 && near(await balanceOf(cat), catBeforeCancel + 10),
+        `or be called off: Cat cancels and has her 10 Beans back (${tableOff.status} ${tableOff.body?.error ?? ''})`);
+
+    // An enterprise's Need, approved through its own route: the same refusal.
+    const hub = member('Hub', 60);
+    const kim = member('Kim', 60);
+    db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(hub.pk);
+    db.prepare('UPDATE members SET can_operate = 1 WHERE public_key IN (?, ?)').run(kim.pk, max.pk);
+    for (const keeper of [kim, max]) {
+        db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'keeper', ?)`).run(hub.pk, keeper.pk, owner.pk);
+    }
+    oldPost(hub, 'Hub eggs'); // the offer covenant: an enterprise's Need needs a live Offer
+    payFromCommons(hub.pk, 100, 'Test: Beans for the Need', { allowDeficit: true }); // on a Need the author pays
+    const hubNeed = createPost('need', 'other', 'Tend the hens', 'Mornings', 10, 'fixed', hub.pk)!.id;
+    const danHelps = await call('POST', dan, '/api/marketplace/posts/request', { postId: hubNeed, buyerPublicKey: dan.pk });
+    await hide(hubNeed, hub);
+    const kimApproves = await call('POST', kim, `/api/treasury/${hub.pk}/approve`, { transactionId: danHelps.body?.transaction?.id });
+    assert(danHelps.status === 200 && !!hiddenAt(hubNeed) && kimApproves.status === 409 && tradeStatus(danHelps.body?.transaction?.id) === 'requested',
+        `a keeper can't approve a request on the enterprise's hidden Need either (${danHelps.status}, ${kimApproves.status} ${kimApproves.body?.error})`);
+
+    // A partner's listing on this board, hidden here, is not a live listing to commission. (The route itself needs
+    // FEDERATION_SETTLEMENT=true at boot; its lookup is this.)
+    const cached = offer('A partner community\'s listing');
+    db.prepare("UPDATE posts SET origin_node = 'https://partner.example' WHERE id = ?").run(cached);
+    const resolvable = originOfCachedPost(cached)?.originNode === 'https://partner.example';
+    await hide(cached, ava);
+    assert(resolvable && !!hiddenAt(cached) && originOfCachedPost(cached) === null,
+        'a partner\'s listing hidden here by reports can\'t be commissioned (its lookup finds no live listing)');
+
+    for (const p of [lamp, kettle]) assert((await admin('POST', `/api/local/admin/posts/${p}/restore`)).status === 200 && hiddenAt(p) === null, 'a moderator restores it');
+    const bobAsksAgain = await call('POST', bob, '/api/marketplace/posts/request', { postId: lamp, buyerPublicKey: bob.pk });
+    assert(bobAsksAgain.status === 200 && trades(lamp).some(t => t.buyer_pubkey === bob.pk && t.status === 'requested'),
+        `after the restore, Bob's request goes through (${bobAsksAgain.status} ${bobAsksAgain.body?.error ?? ''})`);
+    const catBeforeApprove = await balanceOf(cat);
+    const approveBack = await call('POST', ava, '/api/marketplace/transactions/approve', { transactionId: catTx, authorPublicKey: ava.pk });
+    assert(approveBack.status === 200 && tradeStatus(catTx) === 'pending' && near(await balanceOf(cat), catBeforeApprove - 10),
+        `Ava approves Cat's request, and 10 of Cat's Beans go into escrow (${approveBack.status} ${approveBack.body?.error ?? ''})`);
+    const bobTakesKettleAgain = await call('POST', bob, '/api/marketplace/posts/accept', { postId: kettle, buyerPublicKey: bob.pk });
+    assert(bobTakesKettleAgain.status === 200 && trades(kettle).some(t => t.buyer_pubkey === bob.pk && t.status === 'pending'),
+        `and Bob's accept opens an escrow (${bobTakesKettleAgain.status} ${bobTakesKettleAgain.body?.error ?? ''})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

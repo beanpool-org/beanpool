@@ -29,6 +29,7 @@ import { respondSettlementAware } from '../federation-settlement.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody } from './event-post.js';
+import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
@@ -600,6 +601,7 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 function eventChatStatus(msg: string): number {
     if (msg.includes('Event not found')) return 404;
     if (msg.includes('no longer available')) return 410;
+    if (msg === EVENT_CHAT_HIDDEN) return 409;
     if (msg.includes('Only the host and people going') || msg.includes('Only the host can remove')) return 403;
     if (msg.includes('Frozen') || msg.includes('disabled') || msg.includes('suspended')
         || msg.includes('pruned') || msg.includes('Account closed')

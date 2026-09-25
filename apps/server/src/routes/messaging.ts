@@ -12,7 +12,7 @@ import {
     getMember,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage } from '../engine/messaging.js';
-import { canReadEventThread, loadEventForThread, isEventThreadExpired, EVENT_CHAT_GONE } from '../engine/event-thread.js';
+import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
@@ -51,6 +51,10 @@ function refuseGroupChat(ctx: any, groupId: string, actor: string | undefined, n
     ctx.status = refusal.status === 404 ? notFound.status : refusal.status;
     ctx.body = { error: refusal.status === 404 ? notFound.error : refusal.error };
     return true;
+}
+
+function eventChatHiddenFrom(conversationId: string, pubkey: string | undefined): boolean {
+    try { return eventHiddenFrom(loadEventForThread(conversationId), pubkey); } catch { return false; }
 }
 
 const CONVERSATION_NOT_FOUND = { status: 404, error: 'Conversation not found' };
@@ -324,7 +328,8 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
         ctx.body = { error: 'You may only read your own conversations' };
         return;
     }
-    const convs = getConversationsByMember(publicKey);
+    // An event hidden by reports (G3) is not there for anyone but its author, and its chat is named after it.
+    const convs = getConversationsByMember(publicKey).filter(c => c.type !== 'event_thread' || !eventChatHiddenFrom(c.id, publicKey));
     const unreadCounts = getUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
     ctx.body = {
@@ -451,6 +456,12 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         let gone = false;
         try {
             const eventRow = loadEventForThread(conversationId);
+            // Hidden by reports (G3): not there for anyone but its author, as the event chat route answers.
+            if (eventHiddenFrom(eventRow, ctx.state.actor as string | undefined)) {
+                ctx.status = CONVERSATION_NOT_FOUND.status;
+                ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+                return;
+            }
             // The 30-day window is the chat's, not the event-chat route's: past it the event chat route
             // answers 410 and this one has to agree, or a host or a Going member could keep reading a
             // chat the scrub is about to take — and, between the window closing and the next scheduler

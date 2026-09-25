@@ -31,6 +31,7 @@ import { blockUser } from '../../utils/blocklist';
 import { colors, palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EventDetail } from '../../components/EventDetail';
+import { isHiddenAuthor } from '../../utils/posts-view';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
@@ -977,7 +978,13 @@ export default function PostDetailModal() {
                         </View>
                     </Pressable>
                 ) : (
-                    <Pressable accessibilityRole="button" style={styles.authorCard} onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: post.author_pubkey, callsign: cardAuthor } })}>
+                    <Pressable
+                        accessibilityRole="button"
+                        style={styles.authorCard}
+                        // A visitors' view hides who posted (utils/posts-view.ts): there is no profile to open.
+                        disabled={isHiddenAuthor(post.author_pubkey)}
+                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: post.author_pubkey, callsign: cardAuthor } })}
+                    >
                         <Text style={styles.authorCardLabel}>POSTED BY</Text>
                         <View style={styles.authorRow}>
                             <View style={styles.avatar}>

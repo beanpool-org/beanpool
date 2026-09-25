@@ -22,6 +22,11 @@
  * returns immediately with `enrolled: []` and `generation: null`. The caller
  * (`welcome.tsx`) renders the words-only screen, which is correct.
  *
+ * The one exception is joining the global community (utils/global-join.ts): its door needs a
+ * sign-in anyway, so the join carries the sealed seed ({@link sealSsoShares}) and the node
+ * stores it from the sign-in it has just verified. {@link enrolmentFromJoin} reads the answer,
+ * and the Safety Backup step shows that sign-in as protecting the member without asking again.
+ *
  ## Entry point
  *
  * An SSO sign-in triggers a split which calls `POST /api/recovery/shares/sso` — the node
@@ -168,39 +173,13 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
     const url = await anchorUrl();
     if (!url) return nothing('no node configured yet');
 
-    // The identity's privateKey is either a raw 32-byte Ed25519 seed or a
-    // 48-byte PKCS8 envelope (as created by the PWA), hex-encoded.
-    let seed: Uint8Array;
+    let sealed: SealedSsoShares;
     try {
-        seed = toEd25519Seed(hexToBytes(identity.privateKey));
+        sealed = await sealSsoShares(identity, provider, sub);
     } catch (e) {
-        return nothing(`could not read the private key: ${(e as Error).message}`);
+        return nothing((e as Error).message);
     }
-
-    // When this phone has the 12 words, they travel with the seed, so a sign-in restore gives them back
-    // (keeper-crypto.ts sealSeedToSso). Only words that make this seed's key: anything else would be
-    // thrown away at restore, so it is left out here and the seed goes alone. Never the words in a log.
-    const words = await getMnemonic(identity);
-    const sealWords = words && recoveryWordsMatchSeed(words, seed) ? words : null;
-    if (words && !sealWords) {
-        console.log(`[KEEPER] ${provider}: this phone's 12 words do not make its key; sealing the key alone`);
-    }
-
-    // Seal the entire 32-byte Ed25519 seed to the SSO provider under scrypt(provider:sub).
-    // The server will independently verify the token and derive the same key during recovery.
-    let ssoSealed: SealedShare;
-    try {
-        ssoSealed = await sealSeedToSso(seed, provider, sub, { words: sealWords });
-    } catch (e) {
-        return nothing(`could not seal the SSO fragment: ${(e as Error).message}`);
-    }
-
-    const shares = [
-        {
-            holderType: 'sso' as const, holderRef: provider, shareIndex: 1,
-            ...ssoSealed,
-        },
-    ];
+    const { shares, wordsSealed } = sealed;
 
     try {
         const res = await signedPost(url, '/api/recovery/shares/sso', {
@@ -223,11 +202,90 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
             enrolledSso,
             threshold: body.threshold ?? 1,
             isSingleBlob: true,
-            wordsSealed: !!sealWords,
+            wordsSealed,
         };
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);
     }
+}
+
+/** The deposit's one piece: the whole seed (and the words, when they make it) sealed to a sign-in. */
+export interface SealedSsoShares {
+    shares: Array<SealedShare & { holderType: 'sso'; holderRef: SsoProvider; shareIndex: 1 }>;
+    /** Whether the 12 words travel with the seed, so a sign-in restore gives them back. */
+    wordsSealed: boolean;
+}
+
+/**
+ * Seal the member's entire seed (and the 12 words, when this phone has them) into a single
+ * device-encrypted AEAD blob under scrypt(provider:sub): the shares a deposit carries.
+ *
+ * Shared by the two deposits: `enrolSsoKeeper` (the protection sheet, its own sign-in) and the global
+ * community's join (utils/global-join.ts), which carries these in the join itself so one sign-in
+ * both joins and protects. Throws with a reason for a log, never words or keys.
+ */
+export async function sealSsoShares(identity: BeanPoolIdentity, provider: SsoProvider, sub: string): Promise<SealedSsoShares> {
+    // The identity's privateKey is either a raw 32-byte Ed25519 seed or a
+    // 48-byte PKCS8 envelope (as created by the PWA), hex-encoded.
+    let seed: Uint8Array;
+    try {
+        seed = toEd25519Seed(hexToBytes(identity.privateKey));
+    } catch (e) {
+        throw new Error(`could not read the private key: ${(e as Error).message}`);
+    }
+
+    // When this phone has the 12 words, they travel with the seed, so a sign-in restore gives them back
+    // (keeper-crypto.ts sealSeedToSso). Only words that make this seed's key: anything else would be
+    // thrown away at restore, so it is left out here and the seed goes alone. Never the words in a log.
+    const words = await getMnemonic(identity);
+    const sealWords = words && recoveryWordsMatchSeed(words, seed) ? words : null;
+    if (words && !sealWords) {
+        console.log(`[KEEPER] ${provider}: this phone's 12 words do not make its key; sealing the key alone`);
+    }
+
+    // Seal the entire 32-byte Ed25519 seed to the SSO provider under scrypt(provider:sub).
+    // The server will independently verify the token and derive the same key during recovery.
+    let ssoSealed: SealedShare;
+    try {
+        ssoSealed = await sealSeedToSso(seed, provider, sub, { words: sealWords });
+    } catch (e) {
+        throw new Error(`could not seal the SSO fragment: ${(e as Error).message}`);
+    }
+
+    return {
+        shares: [{ holderType: 'sso', holderRef: provider, shareIndex: 1, ...ssoSealed }],
+        wordsSealed: !!sealWords,
+    };
+}
+
+/**
+ * The join's recovery answer (`POST /api/join` with `recovery: { shares }`, apps/server/src/routes/open-join.ts)
+ * as an enrolment result, so the Safety Backup step shows the sign-in the member joined with as already
+ * protecting them. Null when the node did not store it: the step then offers the ordinary connect, and the
+ * member signs in a second time only in that case.
+ */
+export function enrolmentFromJoin(
+    recovery: unknown, provider: SsoProvider, wordsSealed: boolean,
+): KeeperEnrolmentResult | null {
+    if (!recovery || typeof recovery !== 'object') return null;
+    const r = recovery as { enrolled?: unknown; generation?: unknown; enrolledSso?: unknown; threshold?: unknown; error?: unknown };
+    if (r.enrolled !== true) {
+        console.log(`[KEEPER] ${provider}: the join did not store the recovery copy — ${typeof r.error === 'string' ? r.error.slice(0, 200) : 'no reason given'}`);
+        return null;
+    }
+    const enrolledSso = Array.isArray(r.enrolledSso) && r.enrolledSso.every(p => typeof p === 'string')
+        ? r.enrolledSso as string[]
+        : [provider];
+    return {
+        enrolled: enrolledSso.map(() => 'sso' as const),
+        generation: typeof r.generation === 'number' ? r.generation : null,
+        skipped: [],
+        available: enrolledSso.length,
+        enrolledSso,
+        threshold: typeof r.threshold === 'number' ? r.threshold : 1,
+        isSingleBlob: true,
+        wordsSealed,
+    };
 }
 
 /**

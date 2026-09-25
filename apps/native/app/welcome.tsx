@@ -7,8 +7,15 @@ import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
 import {
-    getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding,
+    getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding, resumePlan,
+    type OnboardingFlow, type PendingOnboarding,
 } from '../utils/onboarding-state';
+import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile } from '../utils/node-profile';
+import {
+    MAX_JOIN_NAME, commitJoinKey, doorMessage, joinKeyForThisPhone, nextStepFor, recordBeforeTheDoor, releaseJoinKey,
+    signInAtDoor, submitJoin, type DoorAnswer, type DoorSignIn, type JoinKey,
+} from '../utils/global-join';
+import { addSavedNode, clearGuestNode } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useGlobalSearchParams, router } from 'expo-router';
@@ -89,7 +96,7 @@ export default function WelcomeScreen() {
     const initialMode = (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string))
         ? (params.mode as any)
         : 'home';
-    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>(initialMode);
+    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>(initialMode);
     useEffect(() => {
         if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string)) {
             setMode(params.mode as any);
@@ -184,6 +191,26 @@ export default function WelcomeScreen() {
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
+
+    // --- The global community's open door (utils/global-join.ts; design §2.3). Sign in once, choose a
+    // name, join; then the same steps as an invite. `joinFlow` says which door this wizard came in by. ---
+    const [joinFlow, setJoinFlow] = useState<OnboardingFlow>('invite');
+    const [globalPhase, setGlobalPhase] = useState<'checking' | 'unavailable' | 'signIn' | 'name' | 'joining' | 'restore' | 'closed'>('checking');
+    /** What the member reads on the `unavailable`, `restore` and `closed` screens. */
+    const [globalMessage, setGlobalMessage] = useState<string | null>(null);
+    /** The key the door's sign-in is bound to: the phone's own, or one made for this join. */
+    const [globalKey, setGlobalKey] = useState<JoinKey | null>(null);
+    /** The sign-in the join will spend. Dropped once sent: a nonce is spent once. */
+    const [doorSignIn, setDoorSignIn] = useState<DoorSignIn | null>(null);
+    /** The record the phone had before the door, given back if the door refuses for good. */
+    const beforeDoorRef = useRef<PendingOnboarding | null | undefined>(undefined);
+    /** Whether the community being joined trades in Beans: the How it Works step leaves them out if not. */
+    const [joinBeansOn, setJoinBeansOn] = useState(true);
+    const [globalCode, setGlobalCode] = useState<GithubDevicePrompt | null>(null);
+    const [globalCodeCopied, setGlobalCodeCopied] = useState(false);
+    /** Stops a GitHub sign-in at the door that is waiting on the member at GitHub. */
+    const globalAbortRef = useRef<AbortController | null>(null);
+    useEffect(() => () => globalAbortRef.current?.abort(), []);
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone
     // that already holds one). Rare, but destructive: the phone can only hold one
@@ -473,26 +500,66 @@ export default function WelcomeScreen() {
         (async () => {
             const pending = await getPendingOnboarding();
             if (!pending || !mounted) return;
-            const incomingInvite = params?.invite || inviteLink;
-            if (incomingInvite && pending.inviteCode !== params?.invite) return;
-            const stored = await loadIdentity();
-            if (!stored) {
+            // The decision is utils/onboarding-state.ts `resumePlan`, where it is tested.
+            const plan = resumePlan(pending, await loadIdentity(), {
+                incomingInvite: (params?.invite as string | undefined) || inviteLink,
+                paramsInvite: params?.invite as string | undefined,
+            });
+            if (plan.action === 'none') return;
+            if (plan.action === 'clear') {
                 // Keypair never made it to storage — nothing to resume.
                 await clearPendingOnboarding();
                 return;
             }
             if (!mounted) return;
-            setCallsign(pending.callsign || stored.callsign);
-            setInviteCode(pending.inviteCode);
-            setPendingInviteCode(pending.inviteCode);
-            setInviteRedeemed(pending.redeemed === true);
-            if (pending.anchorUrl) setCreateAnchorUrl(pending.anchorUrl);
-            if (pending.avatar) setPendingAvatar(pending.avatar);
-            if (pending.step !== 'create') setPendingIdentity(stored);
-            setMode(pending.step);
+            setCallsign(plan.callsign);
+            setInviteCode(plan.inviteCode);
+            setPendingInviteCode(plan.inviteCode);
+            setInviteRedeemed(plan.redeemed);
+            if (plan.anchorUrl) setCreateAnchorUrl(plan.anchorUrl);
+            if (plan.avatar) setPendingAvatar(plan.avatar);
+            setJoinFlow(plan.flow);
+            if (plan.flow === 'global') {
+                if (plan.joinEnrolment) setEnrolment(plan.joinEnrolment);
+                getCachedNodeProfile(plan.anchorUrl)
+                    .then(p => { if (mounted) setJoinBeansOn(beansOn(p?.features)); })
+                    .catch(() => {});
+            }
+            if (plan.mode === 'globalJoin' && plan.identity) {
+                // Back to the door with the same key: the node says whether the join landed.
+                setGlobalKey({ identity: plan.identity, createdHere: plan.freshKey });
+                setGlobalPhase('checking');
+            } else if (plan.identity) {
+                setPendingIdentity(plan.identity);
+            }
+            setMode(plan.mode);
         })();
         return () => { mounted = false; };
     }, [params?.invite, inviteLink]);
+
+    // Arriving at the global community's door (or Try again): is it the global community, with its door open?
+    // Asked fresh each time; never a hard gate, invites work whatever it says.
+    useEffect(() => {
+        if (mode !== 'globalJoin' || globalPhase !== 'checking') return;
+        let cancelled = false;
+        checkGlobalDoor()
+            .then(check => {
+                if (cancelled) return;
+                if (!check.ok) {
+                    setGlobalMessage(GLOBAL_DOOR_MESSAGES[check.reason]);
+                    setGlobalPhase('unavailable');
+                    return;
+                }
+                setJoinBeansOn(beansOn(check.profile.features));
+                setGlobalPhase('signIn');
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setGlobalMessage(GLOBAL_DOOR_MESSAGES.unreachable);
+                setGlobalPhase('unavailable');
+            });
+        return () => { cancelled = true; };
+    }, [mode, globalPhase]);
 
     async function handleCreate() {
         if (!inviteCode.trim()) {
@@ -851,6 +918,166 @@ export default function WelcomeScreen() {
         );
     }
 
+    // --- THE GLOBAL COMMUNITY'S DOOR (utils/global-join.ts; design §2.3) ---
+
+    /** "Explore BeanPool worldwide": to the door, which first asks the node whether it is open. */
+    function openGlobalDoor() {
+        setError(null);
+        setGlobalMessage(null);
+        setDoorSignIn(null);
+        setCallsignSuggestions([]);
+        setGlobalPhase('checking');
+        setMode('globalJoin');
+    }
+
+    /** Back home from the door. The key stays in hand, so coming back (or an invite) uses the same one. */
+    function leaveGlobalDoor() {
+        globalAbortRef.current?.abort();
+        setDoorSignIn(null);
+        setGlobalCode(null);
+        setCallsignSuggestions([]);
+        goBack();
+    }
+
+    /** Dash stripped: GitHub renders eight separate cells (see SsoEnrolSheet). */
+    function copyGlobalCode(prompt: GithubDevicePrompt) {
+        Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
+            () => setGlobalCodeCopied(true),
+            () => setGlobalCodeCopied(false),
+        );
+    }
+
+    /** Step one at the door: sign in, with the key the join will be signed by. */
+    async function handleGlobalSignIn(provider: SsoProvider) {
+        setLoading(true);
+        setError(null);
+        setGlobalCode(null);
+        setGlobalCodeCopied(false);
+        globalAbortRef.current?.abort();
+        const abort = new AbortController();
+        globalAbortRef.current = abort;
+        try {
+            const key = globalKey ?? await joinKeyForThisPhone();
+            setGlobalKey(key);
+            if (beforeDoorRef.current === undefined) beforeDoorRef.current = await recordBeforeTheDoor();
+            const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity, {
+                // As GitHub recovery does: Android opens GitHub from the button; iOS at once.
+                onGithubPrompt: (prompt) => {
+                    setGlobalCode(prompt);
+                    copyGlobalCode(prompt);
+                    if (Platform.OS === 'ios') WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
+                },
+                signal: abort.signal,
+            });
+            if (provider === 'github') await returnToApp();
+            if (result.kind === 'answered') {
+                await afterDoorAnswer(result.answer, key, { ...key.identity, callsign: callsign.trim() || key.identity.callsign });
+                return;
+            }
+            setDoorSignIn(result.signin);
+            if (!callsign.trim() && key.identity.callsign) setCallsign(key.identity.callsign);
+            setGlobalPhase('name');
+        } catch (e: any) {
+            // A cancel is not an error: the member thought better of it.
+            setError(e?.reason === 'cancelled' ? null : (e?.message || 'Sign-in failed. Try again.'));
+        } finally {
+            if (globalAbortRef.current === abort) globalAbortRef.current = null;
+            setLoading(false);
+            setGlobalCode(null);
+        }
+    }
+
+    /** Step two: the name, then the key goes onto the phone and the join is sent. */
+    async function handleGlobalJoin() {
+        const key = globalKey;
+        const signin = doorSignIn;
+        if (!key || !signin) {
+            setGlobalPhase('signIn');
+            return;
+        }
+        const name = callsign.trim().slice(0, MAX_JOIN_NAME).trim();
+        if (name.length < 2) {
+            setError('Please choose a name of at least 2 characters.');
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+            // As an invite join does: a name that is free there, before joining, rather than a quiet rename.
+            // 'unknown' (couldn't tell) goes ahead; the node makes a taken name unique anyway.
+            const availability = await checkCallsignAvailable(name, key.createdHere ? undefined : key.identity.publicKey, GLOBAL_NODE_URL);
+            if (availability === 'taken') {
+                setCallsignSuggestions(await suggestCallsigns(name, undefined, 3, GLOBAL_NODE_URL));
+                setError(`"${name}" is already taken in the global community. Pick one of the suggestions below, or choose another name.`);
+                return;
+            }
+            setCallsignSuggestions([]);
+            const identity = await commitJoinKey(key, name);
+            setGlobalPhase('joining');
+            const answer = await submitJoin(GLOBAL_NODE_URL, identity, name, signin);
+            setDoorSignIn(null);
+            await afterDoorAnswer(answer, key, identity);
+        } catch (err: any) {
+            setDoorSignIn(null);
+            setError(err?.message || 'Your join could not be completed. Please sign in and try again.');
+            setGlobalPhase('signIn');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    /** Where each answer from the door takes the member (utils/global-join.ts `nextStepFor`). */
+    async function afterDoorAnswer(answer: DoorAnswer, key: JoinKey, identity: BeanPoolIdentity) {
+        if (answer.kind === 'joined') {
+            await finishGlobalJoin(answer.callsign ? { ...identity, callsign: answer.callsign } : identity, answer.enrolment);
+            return;
+        }
+        const next = nextStepFor(answer);
+        if (next === 'retry') {
+            // The sign-in is spent or stale: the member signs in again to retry.
+            setError(doorMessage(answer));
+            setGlobalPhase('signIn');
+            return;
+        }
+        // Refused for good. A key this join made comes off the phone again; one the phone had stays.
+        const removed = await releaseJoinKey(key, beforeDoorRef.current ?? null);
+        if (removed) setIdentity(null);
+        setGlobalKey(null);
+        setDoorSignIn(null);
+        beforeDoorRef.current = undefined;
+        setGlobalMessage(doorMessage(answer));
+        setGlobalPhase(next === 'restore' ? 'restore' : 'closed');
+    }
+
+    /** In. From here it is an invite join's steps: photo, Safety Backup, How it Works, then the Market. */
+    async function finishGlobalJoin(identity: BeanPoolIdentity, joinEnrolment: KeeperEnrolmentResult | null) {
+        await AsyncStorage.setItem('beanpool_anchor_url', GLOBAL_NODE_URL);
+        await addSavedNode(GLOBAL_NODE_URL, 'Global community').catch(() => {});
+        await clearGuestNode(GLOBAL_NODE_URL);
+        await setPendingOnboarding({
+            step: 'profileSetup',
+            flow: 'global',
+            inviteCode: '',
+            anchorUrl: GLOBAL_NODE_URL,
+            callsign: identity.callsign,
+            redeemed: true,
+            joinEnrolment,
+        });
+        setJoinFlow('global');
+        setCallsign(identity.callsign);
+        setInviteCode('');
+        setPendingInviteCode('');
+        setInviteRedeemed(true);
+        setCreateAnchorUrl(GLOBAL_NODE_URL);
+        // The sign-in the member joined with already protects them: Safety Backup says so, with no second sign-in.
+        setEnrolment(joinEnrolment);
+        setPendingIdentity(identity);
+        setGlobalKey(null);
+        setDoorSignIn(null);
+        beforeDoorRef.current = undefined;
+        setMode('profileSetup');
+    }
+
     // --- Copy the OUTGOING account's seed to the clipboard (confirm-replace) ---
     async function handleCopyOutgoingSeed() {
         const words = await getMnemonic(outgoingIdentity);
@@ -916,6 +1143,13 @@ export default function WelcomeScreen() {
 
     // --- Back-button guard for seed phrase screen ---
     function handleSeedBackPress() {
+        // A global join is already done: back is the photo step, and nothing is discarded.
+        if (joinFlow === 'global') {
+            updatePendingOnboarding({ step: 'profileSetup' }).catch(() => {});
+            setMode('profileSetup');
+            setError(null);
+            return;
+        }
         Alert.alert(
             hasMnemonic(pendingIdentity) ? 'Have you saved your words?' : 'Go back?',
             'If you go back now, you\'ll need to start over.',
@@ -954,7 +1188,7 @@ export default function WelcomeScreen() {
             return true; // Prevent default back
         });
         return () => sub.remove();
-    }, [mode]);
+    }, [mode, joinFlow]);
 
     // --- Profile image picker helpers for "Who Are You?" gate ---
     // Moved to AvatarPickerSheet component
@@ -1082,6 +1316,9 @@ export default function WelcomeScreen() {
                             )}
                         </Pressable>
 
+                        {/* A global join is done by this step (the node has the member), so there is nothing to go
+                            back to: the door would only say "already a member". */}
+                        {joinFlow !== 'global' && (
                         <Pressable
                             style={styles.backBtn}
                             onPress={() => {
@@ -1094,6 +1331,7 @@ export default function WelcomeScreen() {
                         >
                             <Text style={styles.backBtnText}>← Back</Text>
                         </Pressable>
+                        )}
                     </View>
                 </ScrollView>
                 
@@ -1290,9 +1528,12 @@ export default function WelcomeScreen() {
                     <View style={styles.card}>
                         <Text style={styles.title}>🫘 Welcome to BeanPool</Text>
                         <Text style={styles.subtitle}>
-                            Let's look at how this community economy works.
+                            {joinBeansOn ? "Let's look at how this community economy works." : "Here's how BeanPool works."}
                         </Text>
 
+                        {/* Cards 1-3 are Beans. A community with Beans off (the global one) gets one card that says so. */}
+                        {joinBeansOn ? (
+                        <>
                         {/* Card 1: Energy Exchange */}
                         <View style={guideStyles.card}>
                             <Text style={guideStyles.cardTitle}>⚡ Energy Exchange Marketplace</Text>
@@ -1353,6 +1594,15 @@ export default function WelcomeScreen() {
                                 To ensure fairness, when you accept an offer or request a job, your credits are safely held in a temporary Trust Wallet. They are only released to the provider once you confirm delivery.
                             </Text>
                         </View>
+                        </>
+                        ) : (
+                        <View style={guideStyles.card}>
+                            <Text style={guideStyles.cardTitle}>🌍 A place to meet</Text>
+                            <Text style={guideStyles.cardText}>
+                                The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.
+                            </Text>
+                        </View>
+                        )}
 
                         {/*
                           Card 4: how you get back in.
@@ -1394,7 +1644,9 @@ export default function WelcomeScreen() {
                             <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (blue) and needs (orange) near you.</Text>
                             <Text style={guideStyles.bulletItem}>💬 Tap <Text style={{ fontWeight: 'bold' }}>Message</Text> on any post to chat securely (E2E encrypted) with neighbors.</Text>
                             <Text style={guideStyles.bulletItem}>➕ Click <Text style={{ fontWeight: 'bold' }}>Post</Text> to list what you need or what you can offer to the community.</Text>
-                            <Text style={guideStyles.bulletItem}>💳 Use the <Text style={{ fontWeight: 'bold' }}>Ledger</Text> tab to send credits to neighbors instantly.</Text>
+                            {joinBeansOn && (
+                                <Text style={guideStyles.bulletItem}>💳 Use the <Text style={{ fontWeight: 'bold' }}>Ledger</Text> tab to send credits to neighbors instantly.</Text>
+                            )}
                         </View>
 
                         {error && <Text style={styles.error}>{error}</Text>}
@@ -1580,6 +1832,240 @@ export default function WelcomeScreen() {
                         </Text>
                     </View>
                 </ScrollView>
+                </KeyboardAvoidingView>
+            </SafeAreaView>
+        );
+    }
+
+    // --- THE GLOBAL COMMUNITY'S DOOR: sign in once, choose a name, join (utils/global-join.ts) ---
+    if (mode === 'globalJoin') {
+        const signedInWith = doorSignIn
+            ? { apple: 'Apple', google: 'Google', facebook: 'Facebook', github: 'GitHub' }[doorSignIn.provider]
+            : null;
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style="dark" />
+                <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+                    <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                        <OnboardingStepper step={1} />
+                        <View style={styles.card}>
+                            <Text style={styles.title} accessibilityRole="header">🌍 Explore BeanPool worldwide</Text>
+
+                            {globalPhase === 'checking' && (
+                                <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
+                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                        Connecting to the global community…
+                                    </Text>
+                                </View>
+                            )}
+
+                            {(globalPhase === 'unavailable' || globalPhase === 'closed') && (
+                                <>
+                                    <Text style={styles.subtitle} accessibilityLiveRegion="polite">{globalMessage}</Text>
+                                    {globalPhase === 'unavailable' && (
+                                        <Pressable style={styles.primaryBtn} onPress={() => { setError(null); setGlobalPhase('checking'); }} accessibilityRole="button">
+                                            <Text style={styles.primaryBtnText}>Try again</Text>
+                                        </Pressable>
+                                    )}
+                                    <Pressable
+                                        style={[styles.secondaryBtn, { marginTop: 12 }]}
+                                        onPress={() => { setError(null); setMode('create'); }}
+                                        accessibilityRole="button"
+                                    >
+                                        <Text style={styles.secondaryBtnText}>🎟️ Join with an invite</Text>
+                                    </Pressable>
+                                </>
+                            )}
+
+                            {globalPhase === 'restore' && (
+                                <>
+                                    <Text style={styles.subtitle} accessibilityLiveRegion="polite">{globalMessage}</Text>
+                                    <Pressable
+                                        style={styles.primaryBtn}
+                                        onPress={() => { setRecoveryAnchorUrl(GLOBAL_NODE_URL); setError(null); setMode('member'); }}
+                                        accessibilityRole="button"
+                                    >
+                                        <Text style={styles.primaryBtnText}>🔑 Restore my account</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        style={[styles.secondaryBtn, { marginTop: 12 }]}
+                                        onPress={() => { setError(null); setGlobalPhase('signIn'); }}
+                                        accessibilityRole="button"
+                                    >
+                                        <Text style={styles.secondaryBtnText}>Use a different sign-in</Text>
+                                    </Pressable>
+                                </>
+                            )}
+
+                            {globalPhase === 'signIn' && (
+                                <>
+                                    <Text style={styles.subtitle}>
+                                        Meet people from everywhere and find a community near you. No invite needed.
+                                    </Text>
+                                    <Text style={[styles.subtitle, { marginTop: -12 }]}>
+                                        To keep out fake accounts, sign in once with an account you already have. That sign-in
+                                        also becomes a way back into BeanPool if you lose this phone. BeanPool never sees your
+                                        password and never posts anything for you.
+                                    </Text>
+
+                                    {loading && (
+                                        <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
+                                            {globalCode ? (
+                                                <>
+                                                    <GithubCodeSteps />
+                                                    <Text style={{ color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                                        Enter this code at{' '}
+                                                        <Text style={{ fontWeight: 'bold', color: colors.text.heading }}>
+                                                            {globalCode.verificationUri.replace(/^https:\/\//, '')}
+                                                        </Text>
+                                                        {' '}to finish:
+                                                    </Text>
+                                                    <View style={{
+                                                        marginTop: 14, paddingVertical: 16, paddingHorizontal: 24,
+                                                        borderRadius: 12, borderWidth: 2, borderColor: palette.blue600,
+                                                        backgroundColor: colors.surface.subtle, alignSelf: 'stretch',
+                                                        alignItems: 'center',
+                                                    }}>
+                                                        {/* One line, shrunk to fit at 320dp and 1.3x, as on the recovery screen. */}
+                                                        <Text
+                                                            selectable
+                                                            numberOfLines={1}
+                                                            adjustsFontSizeToFit
+                                                            minimumFontScale={0.5}
+                                                            accessibilityLabel={`Code ${globalCode.userCode.split('').join(' ')}`}
+                                                            style={{ fontSize: 30, fontWeight: 'bold', letterSpacing: 5, color: colors.text.heading, textAlign: 'center' }}
+                                                        >{globalCode.userCode}</Text>
+                                                        <Pressable
+                                                            onPress={() => copyGlobalCode(globalCode)}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={globalCodeCopied ? 'Code copied. Copy it again.' : 'Copy the code'}
+                                                            hitSlop={8}
+                                                            style={{ marginTop: 10, paddingVertical: 8, paddingHorizontal: 22, borderRadius: 8, borderWidth: 1, borderColor: palette.blue600 }}
+                                                        >
+                                                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: palette.blue600 }}>
+                                                                {globalCodeCopied ? '✓ Copied' : 'Copy'}
+                                                            </Text>
+                                                        </Pressable>
+                                                    </View>
+                                                    <Pressable
+                                                        onPress={() => { WebBrowser.openBrowserAsync(globalCode.verificationUri).catch(() => {}); }}
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel="Open GitHub to enter the code"
+                                                        style={[styles.primaryBtn, { marginTop: 14, alignSelf: 'stretch' }]}
+                                                    >
+                                                        <Text style={styles.primaryBtnText}>Open GitHub →</Text>
+                                                    </Pressable>
+                                                    <ActivityIndicator color={palette.blue600} style={{ marginTop: 14 }} />
+                                                    {/* Stops waiting here; the node's unfinished session runs out on its own. */}
+                                                    <Pressable
+                                                        onPress={() => globalAbortRef.current?.abort()}
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel="Cancel the GitHub sign-in"
+                                                        hitSlop={8}
+                                                        style={{ marginTop: 10, paddingVertical: 12, alignSelf: 'stretch', alignItems: 'center' }}
+                                                    >
+                                                        <Text style={{ color: colors.text.secondary, fontSize: 16 }}>Cancel</Text>
+                                                    </Pressable>
+                                                </>
+                                            ) : (
+                                                <ActivityIndicator size="large" color={palette.blue600} />
+                                            )}
+                                        </View>
+                                    )}
+
+                                    {error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
+
+                                    {!loading && (
+                                        <>
+                                            {Platform.OS === 'ios' && (
+                                                <AppleButton title="Continue with Apple" onPress={() => handleGlobalSignIn('apple')} style={{ marginBottom: 10, width: '100%' }} />
+                                            )}
+                                            <GoogleButton title="Continue with Google" onPress={() => handleGlobalSignIn('google')} style={{ marginBottom: 10, width: '100%' }} />
+                                            <FacebookButton title="Continue with Facebook" onPress={() => handleGlobalSignIn('facebook')} style={{ marginBottom: 10, width: '100%' }} />
+                                            <GitHubButton title="Continue with GitHub" onPress={() => handleGlobalSignIn('github')} style={{ marginBottom: 10, width: '100%' }} />
+                                        </>
+                                    )}
+                                </>
+                            )}
+
+                            {globalPhase === 'name' && (
+                                <>
+                                    {signedInWith && (
+                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>✅ Signed in with {signedInWith}</Text>
+                                    )}
+                                    <Text style={styles.callsignLabel}>What should we call you?</Text>
+                                    <TextInput
+                                        style={styles.callsignInput}
+                                        placeholder="Your name or nickname"
+                                        placeholderTextColor={colors.text.muted}
+                                        value={callsign}
+                                        onChangeText={(t) => { setCallsign(t); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
+                                        maxLength={MAX_JOIN_NAME}
+                                        autoFocus={true}
+                                        autoCapitalize="words"
+                                        editable={!loading}
+                                        accessibilityLabel="Your name or nickname"
+                                    />
+                                    <Text style={styles.callsignHelper}>
+                                        This is how people see you, e.g. Sarah. You can change it later.
+                                    </Text>
+
+                                    {callsignSuggestions.length > 0 && (
+                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, marginBottom: 12 }}>
+                                            {callsignSuggestions.map((s) => (
+                                                <Pressable
+                                                    key={s}
+                                                    style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8 }}
+                                                    onPress={() => { setCallsign(s); setCallsignSuggestions([]); setError(null); }}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`Use the name ${s}`}
+                                                >
+                                                    <Text style={{ color: colors.text.body, fontSize: 14, fontWeight: '600' }}>{s}</Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                    )}
+
+                                    {error && <Text style={[styles.error, { marginTop: 12 }]} accessibilityLiveRegion="polite">{error}</Text>}
+
+                                    <Pressable style={[styles.primaryBtn, { marginTop: 16 }]} onPress={handleGlobalJoin} disabled={loading} accessibilityRole="button">
+                                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Join →</Text>}
+                                    </Pressable>
+                                    <Pressable
+                                        style={styles.backBtn}
+                                        onPress={() => { setDoorSignIn(null); setCallsignSuggestions([]); setError(null); setGlobalPhase('signIn'); }}
+                                        disabled={loading}
+                                        accessibilityRole="button"
+                                    >
+                                        <Text style={styles.backBtnText}>Use a different sign-in</Text>
+                                    </Pressable>
+                                </>
+                            )}
+
+                            {globalPhase === 'joining' && (
+                                <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
+                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                        Joining the global community…
+                                    </Text>
+                                </View>
+                            )}
+
+                            {globalPhase !== 'joining' && (
+                                <Pressable style={styles.backBtn} onPress={leaveGlobalDoor} disabled={loading && !globalCode} accessibilityRole="button" accessibilityLabel="Back to Home">
+                                    <Text style={styles.backBtnText}>← Back to Home</Text>
+                                </Pressable>
+                            )}
+
+                            <Text style={styles.tosText}>
+                                By joining you agree to our{' '}
+                                <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>Terms of Service & EULA</Text>
+                                {' '}and{' '}
+                                <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/privacy')}>Privacy Policy</Text>.
+                            </Text>
+                        </View>
+                    </ScrollView>
                 </KeyboardAvoidingView>
             </SafeAreaView>
         );
@@ -2095,24 +2581,27 @@ export default function WelcomeScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style="dark" />
-            <View style={{ flex: 1, justifyContent: 'center', padding: 24, alignItems: 'center' }}>
+            {/* Scrolls: at 320dp and 1.3x text, two buttons, the hint and the paste offer are taller than a small phone. */}
+            <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, alignItems: 'center' }}>
                 <Text style={styles.headerTitle}>Welcome to BeanPool</Text>
                 <Text style={styles.headerSubtitle}>
                     Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.
                 </Text>
 
-                {/* Nearly every first launch is a new user (or someone who
-                    downloaded the app without realising it's invite-only), so
-                    joining is THE primary action; restoring an account on a
-                    new phone is the rare case and lives as a quiet link below. */}
-                <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button">
-                    <Text style={styles.memberBtnText}>🎟️ I'm New Here</Text>
+                {/* Nearly every first launch is a new user, so joining is THE primary action, and there are two
+                    doors: a community, with an invite from a member, or the global community, with one sign-in.
+                    Restoring an account on a new phone is the rare case and lives as a quiet link below.
+                    One line each at 320dp and 1.3x text: the label shrinks rather than wraps. */}
+                <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button" accessibilityLabel="Join with an invite">
+                    <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>🎟️ Join with an invite</Text>
+                </Pressable>
+                <Pressable style={styles.memberBtn} onPress={openGlobalDoor} accessibilityRole="button" accessibilityLabel="Explore BeanPool worldwide">
+                    <Text style={styles.memberBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>🌍 Explore BeanPool worldwide</Text>
                 </Pressable>
 
                 <Text style={styles.inviteOnlyHint}>
-                    BeanPool is invite-only — you join with an invite from a member.{'\n'}
-                    No invite yet? Ask a friend on BeanPool, or find a community near you at{' '}
-                    <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org')}>beanpool.org</Text>.
+                    Have an invite? Join your community.{'\n'}
+                    No invite? Explore BeanPool worldwide and find a community near you.
                 </Text>
 
                 {clipboardMayHaveInvite && (Clipboard.isPasteButtonAvailable ? (
@@ -2142,7 +2631,7 @@ export default function WelcomeScreen() {
                 >
                     <Text style={styles.restoreSecondaryBtnText}>🔑 Already a Member? Restore Account →</Text>
                 </Pressable>
-            </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -2238,7 +2727,7 @@ const styles = StyleSheet.create({
     callsignTip: { fontSize: 13, color: colors.text.muted, marginBottom: 20, fontStyle: 'italic' },
 
     // Main welcome buttons
-    memberBtn: { backgroundColor: palette.blue600, padding: 18, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12, shadowColor: palette.blue600, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 14, elevation: 6 },
+    memberBtn: { backgroundColor: palette.blue600, paddingVertical: 18, paddingHorizontal: 12, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12, shadowColor: palette.blue600, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 14, elevation: 6 },
     memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700' },
     secondaryBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border.strong, padding: 16, borderRadius: 14, alignItems: 'center', width: '100%' },
     secondaryBtnText: { color: palette.gray600, fontSize: 16, fontWeight: '600' },

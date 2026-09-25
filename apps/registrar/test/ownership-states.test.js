@@ -21,7 +21,7 @@ const DAY = 86400;
 const COOLOFF = 30 * DAY;
 
 // D1's prepare/bind/first/all/run over node:sqlite (run() reports meta.changes, as D1 does).
-function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql']) {
+function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql']) {
     const sqlite = new DatabaseSync(':memory:');
     for (const m of migrations) sqlite.exec(migration(m));
     const d1 = {
@@ -43,7 +43,8 @@ function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql']) {
 // Cloudflare as far as the registrar uses it. A duplicate live tunnel name and a second record at a hostname are
 // refused, as Cloudflare refuses them — so a POST-collision or a second tunnel shows up as a failure here.
 // `during(re, run)`: once, just before Cloudflare answers the first call matching `re` (`${method} ${path}`),
-// `run` runs to completion — an admin action landing between two of a request's Cloudflare calls.
+// `run` runs to completion — an admin action landing between two of a request's Cloudflare calls. `at(n, run)`:
+// the same, just before Cloudflare answers the n-th call from now.
 function fakeCloudflare() {
     const calls = [];
     const tunnels = new Map();   // id → { id, name, deleted_at, ingress }
@@ -56,7 +57,7 @@ function fakeCloudflare() {
     async function handle(method, url, body) {
         const p = url.pathname.replace('/client/v4', '');
         calls.push(`${method} ${p}`);
-        const h = hooks.findIndex((x) => x.re.test(`${method} ${p}`));
+        const h = hooks.findIndex((x) => (x.re ? x.re.test(`${method} ${p}`) : x.n === calls.length));
         if (h >= 0) await hooks.splice(h, 1)[0].run();
         let m;
         if (method === 'POST' && p === '/accounts/acct/cfd_tunnel') {
@@ -111,7 +112,8 @@ function fakeCloudflare() {
     const recordAt = (fqdn) => [...dns.values()].find((r) => r.name === fqdn) || null;
     const liveTunnel = (id) => { const t = tunnels.get(id); return t && !t.deleted_at ? t : null; };
     const during = (re, run) => hooks.push({ re, run });
-    return { calls, tunnels, dns, fail, hooks, during, handle, recordAt, liveTunnel };
+    const at = (n, run) => hooks.push({ n: calls.length + n, run });
+    return { calls, tunnels, dns, fail, hooks, during, at, handle, recordAt, liveTunnel };
 }
 
 async function makeKey() {
@@ -1237,6 +1239,75 @@ test('race: an admin block landing during a resume\'s edge re-attest stands; the
     } finally { w.restore(); }
 });
 
+// ── A decision that changes no status still stands ───────────────────────────────────────────────────────────
+// Blocking a blocked name, or pausing a paused one, lands while the admin's resume is at Cloudflare — before each
+// of the resume's Cloudflare calls in turn, and during its edge re-attest. The resume must not route over it.
+const DIRECT = { mode: 'direct', public_ip: '198.51.100.7' };
+
+// A live name the admin then blocked or paused; its owner's node answers at it (while it is routed).
+async function heldByAdmin(w, name, action, mode) {
+    const owner = await makeKey();
+    const r = await w.claim(owner, { name, ...(mode === 'direct' ? DIRECT : {}) });
+    assert.equal(r.body.status, 'live', JSON.stringify(r.body));
+    w.nodes[`${name}.beanpool.org`] = attestsAs(owner);
+    assert.equal((await w.admin(name, action)).status, 200);
+    return owner;
+}
+
+for (const [action, mode] of [['block', 'tunnel'], ['block', 'direct'], ['pause', 'tunnel'], ['pause', 'direct']]) {
+    const state = action === 'block' ? 'blocked' : 'paused';
+    test(`race: a second ${action} landing mid-resume (${mode}) stands, at every Cloudflare call and during the re-attest`, async () => {
+        const name = `again-${action}-${mode}`;
+        const host = `${name}.beanpool.org`;
+        // The resume undisturbed, for its Cloudflare calls and whether it re-attests.
+        let calls, attests = 0;
+        {
+            const w = await world();
+            try {
+                const owner = await heldByAdmin(w, name, action, mode);
+                w.nodes[host] = async (nonce) => { attests++; return attestsAs(owner)(nonce); };
+                const n0 = w.cf.calls.length;
+                const r = await w.admin(name, 'resume');
+                assert.equal(r.body.status, 'live', JSON.stringify(r.body));
+                calls = w.cf.calls.slice(n0);
+            } finally { w.restore(); }
+        }
+        const points = [...calls.map((c, i) => ({ at: `before ${c}`, n: i + 1 })), ...(attests ? [{ at: 'during the re-attest' }] : [])];
+        assert.ok(points.length >= 3, JSON.stringify(points));
+        for (const p of points) {
+            const w = await world();
+            try {
+                const owner = await heldByAdmin(w, name, action, mode);
+                let again;
+                const decide = async () => { again = await w.admin(name, action); };
+                if (p.n) w.cf.at(p.n, decide);
+                else w.nodes[host] = async (nonce) => { await decide(); return attestsAs(owner)(nonce); };
+                const r = await w.admin(name, 'resume');
+                const why = `second ${action} ${p.at}: resume answered ${r.status} ${JSON.stringify(r.body)}`;
+                assert.equal(again?.status, 200, `the second ${action} landed — ${why}`);
+                assert.equal(again.body.status, state, why);
+                assert.equal(r.status, 409, why);
+                assert.equal(r.body.status, state, why);
+                const row = await w.row(name);
+                assert.deepEqual([row.status, row.pause_reason], [state, 'admin'], why);
+                assert.equal(routing(w, name).dns, null, `not routed — ${why}`);
+                if (action === 'block') assert.deepEqual(routing(w, name).tunnels, [], why);
+                else if (mode === 'tunnel') assert.deepEqual(routing(w, name).tunnels, [row.tunnel_id], `the pause keeps its tunnel — ${why}`);
+
+                // The owner's next heal, and its next claim (today's nodes heal with one), don't route it.
+                w.nodes[host] = attestsAs(owner);
+                const body = mode === 'direct' ? DIRECT : {};
+                for (const h of [await w.heal(owner, body), await w.claim(owner, { name, ...body })]) {
+                    if (action === 'block') assert.equal(h.status, 403, `${why}; then ${JSON.stringify(h.body)}`);
+                    else assert.deepEqual([h.body.status, h.body.reason, h.body.tunnelToken], ['paused', 'admin', undefined], why);
+                }
+                assert.equal(routing(w, name).dns, null, `still not routed after the owner's heal — ${why}`);
+                assert.equal((await w.row(name)).status, state, why);
+            } finally { w.restore(); }
+        }
+    });
+}
+
 // ── Migration 0002 ────────────────────────────────────────────────────────────────────────────────────────────
 const CUTOFF = 1790233200;          // 2026-09-24 17:00 AEST
 const WINDOW = 1788134400;          // 2026-08-31
@@ -1315,6 +1386,7 @@ test('migration 0002: incident victims go back to their original key, paused; a 
         const before = snapshot();
         assert.throws(() => w.sqlite.exec(migration('0002_states.sql')), /duplicate column/);
         assert.equal(snapshot(), before);
+        w.sqlite.exec(migration('0003_decision_seq.sql'));   // the Worker below reads 0003's column
 
         // And the Worker on top: the victim's own node heals it (today's nodes do so with a claim) on a fresh
         // tunnel; the taker's key cannot have it; the taker keeps `test`.

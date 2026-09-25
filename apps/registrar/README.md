@@ -76,6 +76,8 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
 2. `npx wrangler d1 execute beanpool-registrar --remote --file migrations/0002_states.sql` — **before**
    deploying the Worker that reads the new columns. The old Worker keeps working on the new schema (a
    `paused` row is just "not revoked" to it). A second run stops at its first ALTER and changes nothing.
+   Then `--file migrations/0003_decision_seq.sql` (one column, `decision_seq`: the count of decisions a
+   request in flight must not overwrite). Same rule: before the Worker; a rerun stops at the ALTER.
 3. Deploy the Worker. Until the migrations table is bootstrapped with 0001 marked applied (design PR 4),
    don't use `wrangler d1 migrations apply --remote` — it would run 0001.
 

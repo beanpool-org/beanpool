@@ -153,7 +153,12 @@ const provisionFailed = (e) => {
 //     while the row's tenure and state are as read (db.updateIfUnchanged). On a miss the request undoes what it
 //     did (undo) and answers with the row as it now is.
 //   - taking routing down (the admin's pause and block, a release, the sweep's pause): the row is written FIRST,
-//     then Cloudflare (stopRouting), so a request that read the row earlier misses its own write.
+//     then Cloudflare (stopRouting), so a request that read the row earlier misses its own write. That write always
+//     counts a decision (decision_seq), so one that changes no status — blocking a blocked name, pausing a paused
+//     one — is missed by a request in flight all the same.
+
+// The decision counter a write carries: the row's, plus one. NULL (a row no decision has touched) counts as 0.
+const decision = (a) => ({ decision_seq: (a.decision_seq ?? 0) + 1 });
 
 // A request whose conditional write missed: the row changed while it was at Cloudflare. Undone as far as the row,
 // as it now is, allows: a tunnel it made goes unless the row is now live on it (nobody else was given its token,
@@ -186,13 +191,15 @@ async function dnsOffAt(env, hostname, known) {
 // Routing down, row first: `to` is written over `a` — the row as just read, ids and all — only if nothing changed
 // it since; then Cloudflare loses what `a` recorded (the tunnel too, unless `keepTunnel`; with `byHostname`, any
 // record at the hostname as well); then the row keeps only what Cloudflare refused to delete. `to` null: the state
-// stands (a block repeated) and only the clean-up runs. False, having touched nothing, if the row changed.
+// stands (a block repeated), but the decision is still counted — a request in flight must not route over it — and
+// the clean-up runs. False, having touched nothing, if the row changed.
 async function stopRouting(env, a, to, { keepTunnel = false, byHostname = false } = {}) {
-    if (to && !(await db.updateIfUnchanged(env, a.name, a, to, { withIds: true }))) return false;
+    const written = { ...to, ...decision(a) };
+    if (!(await db.updateIfUnchanged(env, a.name, a, written, { withIds: true }))) return false;
     const left = keepTunnel ? { tunnel_id: a.tunnel_id ?? null, dns_record_id: await dnsOff(env, a) } : await deprovision(env, a);
     if (byHostname) left.dns_record_id = await dnsOffAt(env, a.hostname, left.dns_record_id);
     if (left.tunnel_id !== (a.tunnel_id ?? null) || left.dns_record_id !== (a.dns_record_id ?? null))
-        await db.updateIfUnchanged(env, a.name, { ...a, ...to }, left, { withIds: true });
+        await db.updateIfUnchanged(env, a.name, { ...a, ...written }, left, { withIds: true });
     return true;
 }
 
@@ -330,6 +337,7 @@ async function takeName(env, existing, pubkey, b, now) {
         // Its own key taking back its release: a tunnel the release could not delete goes now, so the take-back is
         // on a fresh one; one Cloudflare still won't delete is kept, and routes only after a re-attest.
         if (sameKey && existing.tunnel_id) fields.tunnel_id = (await deprovision(env, { tunnel_id: existing.tunnel_id })).tunnel_id;
+        Object.assign(fields, decision(existing));   // a new tenure counts as a decision; `a` below carries it
         if (!(await db.replaceAllocation(env, name, existing, fields))) return json({ error: 'name taken' }, 409); // raced
         // Another key taking a freed name: whatever the old holder left at Cloudflare goes — once this claim has won.
         if (!sameKey) await deprovision(env, existing);
@@ -610,9 +618,10 @@ async function adminAction(env, a, action, now) {
         case 'revoke': {
             // The kill switch. Routing and tunnel go; the name is held, never free — an impostor must not inherit a
             // name the admin killed (design §2.1). `revoke` is its old name. Blocking a blocked name again removes
-            // whatever routing is still there.
+            // whatever routing is still there, and stands against a resume in flight.
             if (a.status === 'blocked') {
-                await stopRouting(env, a, null, { byHostname: true });
+                if (!(await stopRouting(env, a, null, { byHostname: true }))) return null;
+                await logEvent(env, name, 'blocked', 'blocked again by the admin: any routing left removed');
                 return json({ status: 'blocked', name });
             }
             if (!(await stopRouting(env, a, { status: 'blocked', pause_reason: 'admin', paused_at: now }, { byHostname: true }))) return null;

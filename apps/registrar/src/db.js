@@ -52,8 +52,9 @@ export const updateAllocation = async (env, name, fields) => {
         .bind(...keys.map((k) => fields[k]), name).run();
 };
 
-// A row's tenure (key, claim time) and state (status, pause reason): what a request that read it acted on.
-const STATE = ['node_pubkey', 'requested_at', 'status', 'pause_reason'];
+// A row's tenure (key, claim time), state (status, pause reason) and the decisions taken on it (decision_seq,
+// migration 0003 — a repeat pause or block changes nothing else): what a request that read it acted on.
+const STATE = ['node_pubkey', 'requested_at', 'status', 'pause_reason', 'decision_seq'];
 const IDS = ['tunnel_id', 'dns_record_id'];
 
 // Write `fields` over `expected` — the row as this request read it, or last wrote it — only if its tenure and

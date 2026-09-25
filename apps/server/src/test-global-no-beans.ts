@@ -127,9 +127,9 @@ async function main() {
     const boot2 = await capture(() => mirrorNodeProfileAtBoot());
     assert(!boot2.error, `the global node boots (${String(boot2.error ?? 'ok')})`);
     const pinnedLine = boot2.logs.find(l => l.includes('Not built yet, so these run as on any node today')) ?? '';
-    assert(['knocks=false', 'directoryMirror=false (global wants true)',
-        'publishToDirectory=true (global wants false)', 'ssoRequiredForJoin=true'].every(p => pinnedLine.includes(p)),
+    assert(['knocks=false', 'ssoRequiredForJoin=true'].every(p => pinnedLine.includes(p)),
         `the boot log lists every switch still pinned, and what the profile wants (${pinnedLine})`);
+    assert(!/\bdirectoryMirror=|publishToDirectory=/.test(pinnedLine), 'nor the directory mirror and publishToDirectory, which G5 built');
     assert(!/\bbeans=|\bescrow=|enterprises=|treasuries=|crowdfund=/.test(pinnedLine), 'and the money switches are no longer among them');
     assert(!/\bopenJoin=/.test(pinnedLine), 'nor open join, which G2 built');
     assert(!/\bprobation=|autoHideReports=|autoMute=/.test(pinnedLine), 'nor probation, auto-hide or auto-mute, which G3 built');

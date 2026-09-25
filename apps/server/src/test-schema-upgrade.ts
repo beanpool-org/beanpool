@@ -632,6 +632,48 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 12. The communities directory cache and place watches (G5) ─────────────────────────────────────────────────
+    // Every node from before G5 has neither table. The fixture is a booted node with both dropped, holding a member; it
+    // must boot onto exactly a fresh install's two tables (columns and indexes), empty, with their checks in force.
+    console.log('\n--- 12. Legacy node without directory_cache and place_watches (G5) ---');
+    {
+        const G5_TABLES = ['directory_cache', 'place_watches'];
+        const dir = tmp('legacy-g5');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const freshShape = G5_TABLES.map(t => ({ t, cols: columns(d, t), idx: indexes(d, t) }));
+        assert(freshShape.every(s => s.cols.length > 0), `a fresh install has both tables (${JSON.stringify(freshShape.map(s => [s.t, s.cols.length]))})`);
+        d.pragma('foreign_keys = OFF');
+        d.exec('DROP TABLE directory_cache; DROP TABLE place_watches;');
+        const pk = 'ab'.repeat(32);
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at, updated_at) VALUES (?, 'Legacy', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')`).run(pk);
+        const gone = (d.prepare(`SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN ('directory_cache', 'place_watches')`).get() as any).n;
+        assert(gone === 0, 'the fixture genuinely lacks both tables');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the pre-G5 node boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        for (const s of freshShape) {
+            assert(JSON.stringify(columns(after, s.t)) === JSON.stringify(s.cols) && JSON.stringify(indexes(after, s.t)) === JSON.stringify(s.idx),
+                `${s.t}: exactly the columns and indexes a fresh install has (${columns(after, s.t).join(', ')})`);
+        }
+        const empty = G5_TABLES.every(t => (after.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as any).n === 0);
+        assert(empty, 'both empty: a local node keeps them empty, the global node\'s mirror fills one');
+        after.prepare(`INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES ('w1', ?, -28.6, 153.6, 50, '2026-09-26T00:00:00.000Z')`).run(pk);
+        let dup = false;
+        try { after.prepare(`INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES ('w2', ?, -28.6, 153.6, 80, '2026-09-26T00:00:00.000Z')`).run(pk); } catch { dup = true; }
+        let wide = false;
+        try { after.prepare(`INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES ('w3', ?, -27.5, 153.0, 500, '2026-09-26T00:00:00.000Z')`).run(pk); } catch { wide = true; }
+        let offEarth = false;
+        try { after.prepare(`INSERT INTO directory_cache (community_key, lat, lng, first_seen_at, updated_at) VALUES ('k', 91, 0, 'x', 'x')`).run(); } catch { offEarth = true; }
+        assert(dup && wide && offEarth, `the checks hold: one watch per member per cell, a radius of at most 200 km, no place off the Earth (${dup}, ${wide}, ${offEarth})`);
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

@@ -35,6 +35,7 @@ import { type SsoProvider } from '../utils/sso-signin';
 
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
+import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 
@@ -73,6 +74,14 @@ function joinedLabel(joinedAt: string | null | undefined): string {
 export default function WelcomeScreen() {
     const params = useGlobalSearchParams();
     const incomingUrl = Linking.useURL();
+    // Only a link that carries an invite concerns this screen (utils/welcome-invite.ts). `useURL()` also changes on a
+    // sign-in provider's return and on the `beanpool://foreground` after every Android sign-in, and the invite and
+    // resume effects below used to re-run for those in the middle of a recovery or of step 3.
+    const [inviteLink, setInviteLink] = useState<string | null>(null);
+    const latestLink = latestInviteLink(inviteLink, incomingUrl);
+    if (latestLink !== inviteLink) setInviteLink(latestLink);
+    /** Invites already applied on this screen, so a focus change or a re-render never applies one again. */
+    const appliedInvites = useRef(new Set<string>());
     const { setIdentity } = useIdentity();
     const { recheck: recheckNodeStatus } = useNodeStatus();
     const initialMode = (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string))
@@ -367,14 +376,23 @@ export default function WelcomeScreen() {
         let mounted = true;
 
         const checkAutoIntercept = async () => {
+            // Each invite that arrives is applied once. The params come back whenever another screen closes over this
+            // one, and applying them again switched a recovery, or onboarding's step 3, to the join form.
+            const { arrival, seen } = inviteToApply(inviteLink, {
+                invite: params?.invite as string | undefined,
+                server: params?.server as string | undefined,
+                t: params?.t as string | undefined,
+            }, appliedInvites.current);
+            seen.forEach(key => appliedInvites.current.add(key));
+
             // Priority 1: Raw Expo Linking Intent (bypasses router segment hydration issues)
-            if (incomingUrl) {
-                const parsed = Linking.parse(incomingUrl);
+            if (arrival?.from === 'link') {
+                const parsed = Linking.parse(arrival.url);
                 if (parsed.queryParams?.invite) {
                     if (mounted) {
-                        if (incomingUrl.startsWith('http')) {
+                        if (arrival.url.startsWith('http')) {
                             // Universal link - process fully
-                            await processFullUrl(incomingUrl);
+                            await processFullUrl(arrival.url);
                         } else {
                             // Deep link (beanpool://)
                             setInviteCode(parsed.queryParams.invite as string);
@@ -389,17 +407,20 @@ export default function WelcomeScreen() {
             }
 
             // Priority 2: Standard Router Params
-            if (params?.invite) {
+            if (arrival?.from === 'params') {
                 if (mounted) {
-                    setInviteCode(params.invite as string);
-                    if (params?.server) {
-                        setCreateAnchorUrl(params.server as string);
-                        setRecoveryAnchorUrl(params.server as string);
+                    setInviteCode(arrival.invite);
+                    if (arrival.server) {
+                        setCreateAnchorUrl(arrival.server);
+                        setRecoveryAnchorUrl(arrival.server);
                     }
                     setMode('create');
                 }
                 return;
             }
+
+            // An invite came with this screen and has been applied already: the install referrer's never replaces it.
+            if (seen.length > 0) return;
 
             // Priority 3 (Android, once ever): Play Install Referrer. An invite
             // link tapped WITHOUT the app installed detours via the Play Store;
@@ -437,7 +458,7 @@ export default function WelcomeScreen() {
         checkAutoIntercept();
 
         return () => { mounted = false; };
-    }, [params?.invite, params?.t, incomingUrl]);
+    }, [params?.invite, params?.t, inviteLink]);
 
     // Resume a join wizard that was interrupted after the keypair was created
     // (Step 1). A fresh incoming invite link outranks a stale half-done wizard,
@@ -447,7 +468,7 @@ export default function WelcomeScreen() {
         (async () => {
             const pending = await getPendingOnboarding();
             if (!pending || !mounted) return;
-            const incomingInvite = params?.invite || (incomingUrl && incomingUrl.includes('invite='));
+            const incomingInvite = params?.invite || inviteLink;
             if (incomingInvite && pending.inviteCode !== params?.invite) return;
             const stored = await loadIdentity();
             if (!stored) {
@@ -466,7 +487,7 @@ export default function WelcomeScreen() {
             setMode(pending.step);
         })();
         return () => { mounted = false; };
-    }, [params?.invite, incomingUrl]);
+    }, [params?.invite, inviteLink]);
 
     async function handleCreate() {
         if (!inviteCode.trim()) {

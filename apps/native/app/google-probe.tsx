@@ -12,26 +12,22 @@
 
 import React, { useEffect, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-let GoogleSigninModule: any = null;
-try {
-    GoogleSigninModule = require('@react-native-google-signin/google-signin');
-} catch (e) {
-    console.warn('[Probe] GoogleSignin native module unavailable:', e);
-}
 import * as Clipboard from 'expo-clipboard';
 import * as Crypto from 'expo-crypto';
 import { Stack } from 'expo-router';
 import { useIdentity } from './IdentityContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
-import { SsoSignInError, fetchSsoNonce, GOOGLE_WEB_CLIENT_ID } from '../utils/sso-signin';
+import { SsoSignInError, fetchSsoNonce, signInWithGoogle } from '../utils/sso-signin';
+import { encodeBase64 } from '../utils/crypto';
 import type { BeanPoolIdentity } from '../utils/identity';
 
 /**
  * Which form of the nonce Google echoed — and this is a measurement, not a check.
  *
- * NOTE: The free GoogleSignin.signIn() API does NOT support passing a custom nonce.
- * Nonce support requires the premium GoogleOneTapSignIn API. This probe measures
- * whether the id_token contains a nonce claim at all, and if so what form it takes.
+ * The probe signs in through `signInWithGoogle`, the same nonce-bearing path as enrolment and
+ * recovery (Credential Manager on Android, Google's web page on the iPhone), which already refuses a
+ * token without the verbatim nonce. So a success here reads VERBATIM; anything else surfaces as
+ * that refusal in the error line.
  */
 async function describeNonceEcho(sent: string, echoed: string): Promise<string> {
     if (echoed === sent) return 'VERBATIM — Google echoed the nonce unchanged. The node accepts this.';
@@ -156,52 +152,29 @@ export default function GoogleProbeScreen() {
         setVerifyResult(null);
         setSentDigest(null);
         
-        const nonce = chain.stage === 'ready' ? chain.nonce : undefined;
+        // Without a node nonce the probe still measures the sub, with a local one standing in.
+        const nonce = chain.stage === 'ready'
+            ? chain.nonce
+            : encodeBase64(Crypto.getRandomBytes(32)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         try {
-            const GoogleSignin = GoogleSigninModule?.GoogleSignin;
-            if (!GoogleSignin) {
-                setError('Google Sign-In native module is not available in this build.');
-                return;
-            }
-            await GoogleSignin.hasPlayServices();
-            
-            // Configure with webClientId to get an idToken back.
-            GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
+            const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, nonce);
+            setSentDigest(digest);
 
-            // The free API does not support custom nonce. We still compute the digest
-            // to show what WOULD be sent, so the probe can check if Google echoes anything.
-            let digest: string | undefined;
-            if (nonce) {
-                digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, nonce);
-                setSentDigest(digest);
-            }
-            
-            // v16 signIn() returns { type: 'success', data: User } | { type: 'cancelled', data: null }
-            const result = await GoogleSignin.signIn();
-
-            if (result.type === 'cancelled') {
-                setError('Sign-in was cancelled.');
-                return;
-            }
-
-            const token = result.data?.idToken ?? null;
+            const { idToken: token } = await signInWithGoogle(nonce);
             setIdToken(token);
 
-            const claims = token ? decodeJwtPayload(token) : null;
+            const claims = decodeJwtPayload(token);
             setTokenSub(claims?.sub ? String(claims.sub) : null);
             setAudience(claims?.aud ? String(claims.aud) : null);
             setIssuer(claims?.iss ? String(claims.iss) : null);
             setEmail(claims?.email ? String(claims.email) : null);
 
-            if (nonce && claims?.nonce) {
+            if (claims?.nonce) {
                 setNonceEcho(await describeNonceEcho(nonce, String(claims.nonce)));
-            } else if (nonce && !claims?.nonce) {
-                setNonceEcho('NO NONCE CLAIM — Google returned no nonce in the id_token. '
-                    + 'The free GoogleSignin.signIn() API does not support custom nonce. '
-                    + 'The premium GoogleOneTapSignIn API is needed for nonce binding.');
             }
         } catch (e: any) {
-            setError(String(e?.message || e));
+            const reason = e instanceof SsoSignInError ? ` (${e.reason})` : '';
+            setError(`${String(e?.message || e)}${reason}`);
         }
     };
 
@@ -240,7 +213,7 @@ export default function GoogleProbeScreen() {
                     <Text style={styles.mono}>{chain.nonce}</Text>
                     {sentDigest && (
                         <>
-                            <Text style={styles.label}>SHA-256 Digest sent to Google</Text>
+                            <Text style={styles.label}>SHA-256 of the nonce (what a hashed echo would be)</Text>
                             <Text style={styles.mono}>{sentDigest}</Text>
                         </>
                     )}

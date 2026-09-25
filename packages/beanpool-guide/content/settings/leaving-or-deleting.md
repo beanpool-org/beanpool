@@ -22,7 +22,7 @@ Going away for a while? Holiday Mode may be what you want. See "Going away".
 
 Your account and every community you saved are removed from this phone. A few settings stay, such as your block list. **Without your 12 words you cannot get back in.** Check you have them first.
 
-A phone restored with a sign-in account has no 12 words. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there.
+A phone restored with a sign-in account may have no 12 words. Settings says so. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there. If you have the words written down, add them to the phone first (see "Your 12 words").
 
 ## Deleting your account
 

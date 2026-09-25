@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 26,
-  "hash": "12529c8f08cf8bc2543ea52c7ea3f6e0cd0f538031c12b5ab2f62dcf5368af09",
+  "version": 28,
+  "hash": "6bc1fabbcab29b63001d65a008b8e291eab411d9504a38d9b8851d8e0bfd85b9",
   "sections": [
     {
       "id": "about",
@@ -4531,7 +4531,8 @@
           "items": [
             "Type your name in the community. The app may suggest \"Is this you?\".",
             "Type your community's name or address.",
-            "Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone."
+            "Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone.",
+            "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead."
           ]
         },
         {
@@ -4542,7 +4543,8 @@
           "type": "ul",
           "items": [
             "Open **Settings** and tap **Account Protection**.",
-            "Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account."
+            "Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.",
+            "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool."
           ]
         },
         {

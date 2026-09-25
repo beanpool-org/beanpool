@@ -23,6 +23,7 @@ import { identify } from '@libp2p/identify';
 import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import fs from 'node:fs';
 import path from 'node:path';
+import { announceAddrsFor } from './p2p-announce.js';
 
 import type { Libp2p } from 'libp2p';
 
@@ -61,12 +62,8 @@ async function loadOrCreateIdentity() {
 export async function startP2P(tcpPort: number, wsPort: number): Promise<Libp2p> {
     _privateKey = await loadOrCreateIdentity();
 
-    // If PUBLIC_IP is set, announce those addresses to bypass Docker NAT
-    const publicIp = process.env.PUBLIC_IP;
-    const announceAddrs = publicIp ? [
-        `/ip4/${publicIp}/tcp/${tcpPort}`,
-        `/ip4/${publicIp}/tcp/${wsPort}/ws`,
-    ] : undefined;
+    // If PUBLIC_IP is set, announce those addresses to bypass Docker NAT (IPv4 or IPv6; see p2p-announce.ts)
+    const announceAddrs = announceAddrsFor(process.env.PUBLIC_IP, tcpPort, wsPort);
 
     node = await createLibp2p({
         privateKey: _privateKey,

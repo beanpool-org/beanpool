@@ -1,5 +1,9 @@
 -- Beanpool node-address registrar — D1 schema.
 -- One row per claimed name; policy table drives auto/gated/blocked tiers.
+--
+-- 0001 = the schema as deployed before ownership states (was apps/registrar/schema.sql). The live database
+-- already has it. NEVER run this file against the live database: its policy seed would re-add rows the live
+-- table has since dropped (e.g. `test`, which its own node must be able to claim). New databases only.
 
 CREATE TABLE IF NOT EXISTS name_allocations (
     name           TEXT PRIMARY KEY,          -- 'cairns' (label; ^[a-z0-9-]{3,32}$)

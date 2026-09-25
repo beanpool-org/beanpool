@@ -7,6 +7,7 @@ import { anchorUrl } from '../utils/node-post';
 import { startSsoSignIn, SsoSignInError, returnToApp } from '../utils/sso-signin';
 import type { SsoProvider, GithubDevicePrompt } from '../utils/sso-signin';
 import { enrolSsoKeeper, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
+import { signInOnOpen } from '../utils/sso-sheet-opening';
 import { useIdentity } from '../app/IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
 
@@ -164,9 +165,13 @@ export function SsoEnrolSheet({
         }
     };
 
-    // Auto-trigger sign-in when opened
+    // Start the sign-in when the sheet opens, once (utils/sso-sheet-opening.ts). A new copy of the identity while it
+    // is open, which welcome's resume effect hands over after an Android sign-in, started a second one.
+    const startedThisOpening = React.useRef(false);
     React.useEffect(() => {
-        if (visible && identity) {
+        const next = signInOnOpen(startedThisOpening.current, visible, !!identity);
+        startedThisOpening.current = next.started;
+        if (next.start) {
             setStep('processing');
             setErrorMessage('');
             setEnrolResult(null);

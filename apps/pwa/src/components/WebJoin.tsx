@@ -99,13 +99,13 @@ const NONCE_FRESH_MS = 5 * 60 * 1000;
 const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
 
 const primaryButton: React.CSSProperties = {
-    width: '100%', padding: '0.85rem', borderRadius: '10px', border: 'none',
+    width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
     background: '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700,
     cursor: 'pointer', fontFamily: 'inherit', marginBottom: '0.75rem',
 };
 
 const secondaryButton: React.CSSProperties = {
-    width: '100%', padding: '0.8rem', borderRadius: '10px',
+    width: '100%', padding: '0.8rem 0.5rem', borderRadius: '10px',
     border: '1px solid var(--border-primary, #334155)', background: 'transparent',
     color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 600,
     cursor: 'pointer', fontFamily: 'inherit', marginBottom: '0.75rem',
@@ -677,7 +677,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, navigate, origin
                     <h3 style={heading}>Your GitHub code</h3>
                     <p style={lede}>Enter this code at GitHub, then come back here. We'll notice.</p>
                     <p data-testid="join-github-code" style={{
-                        fontFamily: 'monospace', fontSize: '1.4rem', fontWeight: 800, letterSpacing: '0.08em',
+                        fontFamily: 'monospace', fontSize: 'min(1.4rem, 7.5vw)', fontWeight: 800, letterSpacing: '0.08em',
                         margin: '0 0 0.75rem', overflowWrap: 'anywhere',
                     }}>
                         {start.userCode}

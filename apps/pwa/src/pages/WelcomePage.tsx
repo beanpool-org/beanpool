@@ -1150,8 +1150,13 @@ export function WelcomePage({ onComplete }: Props) {
                                 </p>
                             </div>
 
-                            <div style={{
-                                display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+                            {/*
+                              As many columns as whole words fit: three on a laptop, as before, one on a 320px phone at
+                              1.3x text, where three fixed columns left each word about 29px and pushed the page 50px
+                              sideways. A word someone copies onto paper is never broken across lines to fit.
+                            */}
+                            <div data-testid="backup-words" style={{
+                                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
                                 gap: '0.4rem', marginBottom: '1rem',
                             }}>
                                 {pendingWords?.map((word, i) => (
@@ -1159,7 +1164,7 @@ export function WelcomePage({ onComplete }: Props) {
                                         background: 'var(--bg-secondary, #1e293b)',
                                         borderRadius: 8, padding: '0.5rem 0.4rem',
                                         fontSize: '0.8rem', fontFamily: 'monospace',
-                                        textAlign: 'center',
+                                        textAlign: 'center', minWidth: 0,
                                     }}>
                                         <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{i + 1}. </span>
                                         <strong>{word}</strong>

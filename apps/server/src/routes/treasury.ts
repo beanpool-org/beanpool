@@ -33,6 +33,8 @@ import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { createEventFromBody } from './event-post.js';
+import { assertNotMuted } from '../engine/auto-moderation.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor } from '@beanpool/core';
 
@@ -697,10 +699,16 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
+            // A muted keeper (G3) posts nothing, and nobody posts for a muted enterprise.
+            assertNotMuted(actor);
+            assertNotMuted(treasury);
             const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
+            ctx.status = 400; ctx.body = { error: e.message };
+        }
     });
 
     // Post the treasury's Need (e.g. "tend the chickens"). Requires the treasury to already hold a
@@ -712,10 +720,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
+            assertNotMuted(actor);
+            assertNotMuted(treasury);
             const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
+            ctx.status = 400; ctx.body = { error: e.message };
+        }
     });
 
     // Host an event AS the enterprise (events §3, "Post as"). Shaped like the Offer and Need above, and for
@@ -738,10 +751,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title) { ctx.status = 400; ctx.body = { error: 'title is required' }; return; }
         try {
+            assertNotMuted(actor);
+            assertNotMuted(treasury);
             const post = createEventFromBody(b, treasury, actor);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            if (respondProfileRefusal(ctx, e)) return;
+            ctx.status = 400; ctx.body = { error: e.message };
+        }
     });
 
     // Approve a bid on the treasury's Need — funds escrow from the treasury (its credit line).

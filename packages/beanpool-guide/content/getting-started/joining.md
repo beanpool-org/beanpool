@@ -56,6 +56,7 @@ If you close the app halfway, it carries on from the same step next time.
 ## If joining the global community does not work
 
 - **Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.
+- **The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Use a different sign-in** and **← Back to Home** still work.
 - **This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.
 - **Too many new accounts from this network:** there is a limit on new accounts from one internet connection. Try again later.
 - **Not taking new members right now:** join a community with an invite instead.

@@ -11,10 +11,12 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 
 ## Joining another community
 
-- You need an invite from a member of that community.
+- A community needs an invite from one of its members.
 - Tap the invite icon (a person with a plus) at the top right of the screen to open **Invites**.
 - Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.
 - Tap **Join Community**.
+
+The global community needs no invite, but for now it is joined from the app's first screen, before you have an account: tap **Explore BeanPool worldwide** there. See "Joining BeanPool". Joining it from an account you already have is not possible yet.
 
 ## Switching
 

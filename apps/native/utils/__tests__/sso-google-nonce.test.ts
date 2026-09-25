@@ -342,7 +342,7 @@ describe('Android: Credential Manager with the nonce', () => {
 
     const failures: Array<[string, string, string, RegExp]> = [
         ['SIGN_IN_CANCELLED', 'User cancelled the sign-in flow', 'cancelled', /cancelled/],
-        ['NO_CREDENTIALS', 'No credentials available on this device', 'unsupported', /no Google account on this phone/],
+        ['NO_CREDENTIALS', 'No credentials available on this device', 'unsupported', /Google found no account to use on this phone/],
         ['PLAY_SERVICES_NOT_AVAILABLE', 'Play Services missing', 'unsupported', /Google Play services/],
         // Credential Manager's own words when no provider (Play services) is on the phone.
         ['SIGN_IN_FAILED', 'getCredentialAsync no provider dependencies found - please ensure the desired provider dependencies are added', 'unsupported', /Google Play services/],

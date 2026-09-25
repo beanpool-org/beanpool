@@ -48,19 +48,13 @@ import { encodeBase64 } from './crypto';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 
-let GoogleSigninModule: any = null;
-try {
-    GoogleSigninModule = require('@react-native-google-signin/google-signin');
-} catch (e) {
-    console.warn('[SSO] Native GoogleSignin module unavailable:', e);
-}
-
 /**
  * Web client ID — the `aud` claim the node expects in a Google id_token.
  *
- * This is the "Web application" client ID from the Google Cloud project. The Android and iOS
- * client IDs are implicit (derived from package name + signing key + google-services.json).
- * The web client ID is what makes the SDK return an `idToken` rather than just an access token.
+ * This is the "Web application" client ID from the Google Cloud project, and it is the audience on
+ * both platforms: Android hands it to Credential Manager as the server client id, and the iPhone
+ * signs in on Google's web page as this client. The Android client IDs stay implicit (matched on
+ * package name + signing key); the first entry in the node's audience list is this one (`sso.ts`).
  */
 export const GOOGLE_WEB_CLIENT_ID = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 export const FACEBOOK_APP_ID = '818892721251369';
@@ -314,8 +308,8 @@ export async function signInWithApple(nonce: string): Promise<Omit<SsoSignIn, 'p
 /**
  * Can this device offer Sign in with Google?
  *
- * Google Sign-In works on both Android and iOS native, but not on web.
- * On iOS it is a secondary option (Apple is native there); on Android it is the primary.
+ * Both native platforms, never the web. Android uses Credential Manager; the iPhone uses Google's
+ * web sign-in page (see `signInWithGoogle`), where it is a secondary option to Apple.
  */
 export function googleSignInAvailable(): boolean {
     if (Platform.OS === 'web') return false;
@@ -327,83 +321,139 @@ function isErrorWithCode(e: unknown): e is { code: string } {
 }
 
 /**
- * Map Google Sign-In errors to SsoFailure reasons.
- *
- * Same pattern as describeAppleError: a discriminant the caller can act on.
- * SIGN_IN_CANCELLED is the one that matters — the member opened the sheet, looked, and
- * decided not to. Not a failure.
+ * Credential Manager has no dedicated code for a phone without Google Play services: it fails
+ * generically, naming the missing "provider dependencies". So that case is read from the message.
  */
-export function describeGoogleError(e: unknown): SsoFailure {
-    if (isErrorWithCode(e)) {
-        const sc = GoogleSigninModule?.statusCodes;
-        if (e.code === 'SIGN_IN_CANCELLED' || (sc && e.code === sc.SIGN_IN_CANCELLED)) return 'cancelled';
-        if (e.code === 'PLAY_SERVICES_NOT_AVAILABLE' || (sc && e.code === sc.PLAY_SERVICES_NOT_AVAILABLE)) return 'unsupported';
-    }
-    return 'provider';
+function lacksPlayServices(e: unknown): boolean {
+    if (isErrorWithCode(e) && e.code === 'PLAY_SERVICES_NOT_AVAILABLE') return true;
+    return /provider dependencies|play services/i.test(extractErrorMessage(e));
 }
 
 /**
- * Run the Google Sign-In sheet.
+ * Map Google Sign-In errors to SsoFailure reasons.
  *
- * NONCE HANDLING — not available in the free `GoogleSignin.signIn()` API.
+ * Same pattern as describeAppleError: a discriminant the caller can act on. The codes are the ones
+ * @thoughtbot/react-native-social-auth's Android module rejects with. SIGN_IN_CANCELLED is the one
+ * that matters — the member opened the sheet, looked, and decided not to. Not a failure.
  *
- * The "Original Google Sign In" API (`GoogleSignin.signIn()`) does not accept a custom nonce.
- * Nonce support requires the premium "Universal Sign In" API (`GoogleOneTapSignIn`). The server's
- * `verifyIdToken` checks the nonce claim, and if none is present the nonce check will fail.
+ * `unsupported` is a phone that cannot do Google sign-in as it stands: no Google account on it
+ * (NO_CREDENTIALS, once the module has already fallen back to every account), or no Play services.
+ */
+export function describeGoogleError(e: unknown): SsoFailure {
+    if (isErrorWithCode(e)) {
+        if (e.code === 'SIGN_IN_CANCELLED') return 'cancelled';
+        if (e.code === 'NO_CREDENTIALS') return 'unsupported';
+    }
+    if (lacksPlayServices(e)) return 'unsupported';
+    return 'provider';
+}
+
+/** The error a failed Google sign-in surfaces as, with a message a member can act on. */
+function googleSignInFailure(e: unknown): SsoSignInError {
+    const reason = describeGoogleError(e);
+    if (reason === 'cancelled') return new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    if (reason === 'unsupported') {
+        // Credential Manager can also answer NO_CREDENTIALS while it holds its sheet back after a few
+        // dismissals, so the message does not claim the phone has no account at all.
+        return new SsoSignInError('unsupported', lacksPlayServices(e)
+            ? 'Google sign-in needs Google Play services, which this phone does not have or needs to update.'
+            : "Google found no account to use on this phone. Check that a Google account is added in the phone's settings, then try again in a few minutes.");
+    }
+    return new SsoSignInError('provider', formatGoogleErrorMessage(e));
+}
+
+/** Decode a JWT payload without verifying it. Only for reading claims back; the node verifies. */
+function jwtClaims(token: string): Record<string, unknown> | null {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    try {
+        const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+        const claims = JSON.parse(globalThis.atob(pad));
+        return claims && typeof claims === 'object' ? claims as Record<string, unknown> : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Sign in with Google, getting back an id_token that carries the node's nonce.
  *
- * Two paths forward:
- *   1. Use the premium API (licence cost, but full nonce binding like Apple).
- *   2. Skip the nonce for Google and instead have the server issue + verify a challenge via a
- *      different channel (e.g. the signed request body).
+ * The nonce is the whole point. The node refuses a Google token without it (S1), because a token
+ * bound to no request is replayable: any node it was once shown to could present it to another
+ * within the hour and release the member's sealed seed. The old library's free `signIn()` cannot
+ * set a nonce, so neither platform uses it any more:
  *
- * For now, `signInWithGoogle` obtains the `idToken` without nonce binding. The probe screen
- * exists to measure what the token contains and whether the server can verify it (which requires
- * the server to tolerate a missing nonce for Google, or an alternative binding).
+ * - Android: Credential Manager, through @thoughtbot/react-native-social-auth, which passes the
+ *   nonce to `GetGoogleIdOption.setNonce()`.
+ * - iPhone: Google's own web sign-in page. The same library's iOS side does not pass the nonce
+ *   yet (its own comment in `ios/GoogleSignIn.mm`), so it is not even linked there
+ *   (`react-native.config.js`).
  *
- * The raw nonce is still passed through so the caller's signature stays unchanged and the server
- * can log it even though the token won't contain it.
+ * Either way the audience is our Web client, which every node already accepts.
  */
 export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
     if (!googleSignInAvailable()) {
         throw new SsoSignInError('unsupported', 'This device or build cannot sign in with Google.');
     }
+    const { idToken, email } = Platform.OS === 'ios'
+        ? await signInWithGoogleWebPage(nonce)
+        : await signInWithGoogleCredentialManager(nonce);
+    requireGoogleNonce(idToken, nonce);
+    return { idToken, nonce, email };
+}
 
-    const { GoogleSignin } = GoogleSigninModule;
-
-    GoogleSignin.configure({
-        webClientId: GOOGLE_WEB_CLIENT_ID,
-    });
-
-    let result;
-    try {
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-        result = await GoogleSignin.signIn();
-    } catch (e) {
-        const reason = describeGoogleError(e);
+/**
+ * Refuse a token that does not carry this attempt's nonce, before it is sent anywhere.
+ *
+ * The node would refuse it too, but as "could not be matched to this request", which reads like an
+ * attack rather than a sign-in that came back unbound. Verbatim, like the node: `sso.ts` does not
+ * accept a hashed nonce from Google.
+ */
+function requireGoogleNonce(idToken: string, nonce: string): void {
+    if (jwtClaims(idToken)?.nonce !== nonce) {
         throw new SsoSignInError(
-            reason,
-            reason === 'cancelled'
-                ? 'Sign-in was cancelled.'
-                : reason === 'unsupported'
-                    ? 'Google Play Services is not available on this device.'
-                    : formatGoogleErrorMessage(e),
+            'provider',
+            "Google signed you in but did not include this sign-in's security code, so your community would refuse it. Try again.",
         );
     }
+}
 
-    if (result.type === 'cancelled') {
-        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+/** Android: Credential Manager, with the nonce and our Web client as the server client id. */
+async function signInWithGoogleCredentialManager(nonce: string): Promise<{ idToken: string; email?: string }> {
+    let GoogleSignIn: typeof import('@thoughtbot/react-native-social-auth').GoogleSignIn;
+    try {
+        // Loaded here, not at the top: its native half is linked on Android only, and it throws on
+        // first use in a build that lacks it.
+        ({ GoogleSignIn } = await import('@thoughtbot/react-native-social-auth'));
+        // On every attempt: the nonce is per sign-in, and the module keeps whatever it was last given.
+        GoogleSignIn.configure({ webClientId: GOOGLE_WEB_CLIENT_ID, nonce });
+    } catch (e) {
+        console.warn('[SSO] Google sign-in module unavailable:', e);
+        throw new SsoSignInError('unsupported', 'This version of BeanPool cannot sign in with Google. Update BeanPool and try again.');
     }
 
-    const idToken = result.data?.idToken;
-    if (!idToken) {
+    // Forget the account used last time. The module first tries a silent sign-in with a previously
+    // used account; after this, Credential Manager shows its sheet instead, so the member sees which
+    // Google account is about to protect or restore their account. The iPhone page asks the same
+    // way (`prompt=select_account`). Not fatal if it fails: the sign-in still carries the nonce.
+    try {
+        await GoogleSignIn.signOut();
+    } catch (e) {
+        console.warn('[SSO] Could not clear the remembered Google account:', e);
+    }
+
+    let credential: Awaited<ReturnType<typeof GoogleSignIn.signIn>>;
+    try {
+        credential = await GoogleSignIn.signIn();
+    } catch (e) {
+        throw googleSignInFailure(e);
+    }
+    if (!credential?.idToken) {
         throw new SsoSignInError('no-token', 'Google completed the sign-in but returned no token.');
     }
-
-    return {
-        idToken,
-        nonce,
-        email: result.data?.user?.email ?? undefined,
-    };
+    const email = jwtClaims(credential.idToken)?.email ?? credential.user?.email;
+    return { idToken: credential.idToken, email: typeof email === 'string' && email ? email : undefined };
 }
 
 /** How long to wait for a provider callback before giving up entirely. */
@@ -551,6 +601,72 @@ async function openAuthSessionWithLinkingFallback(
             WebBrowser.dismissAuthSession();
         } catch {}
     }
+}
+
+/**
+ * Where Google sends the iPhone back. Registered as an authorised redirect URI on the Web client.
+ *
+ * `apps/website/auth/google.html` answers it and bounces to `beanpool://auth/google`, which
+ * `ASWebAuthenticationSession` catches: the iOS associated domains cover only `/` and `/app*`, so
+ * this https page is loaded, not claimed by the app. On Android `beanpool.org/auth/*` is an App
+ * Link, but Android does not use this flow.
+ */
+export const GOOGLE_REDIRECT_URI = 'https://beanpool.org/auth/google';
+const GOOGLE_COMPLETION_URI = 'beanpool://auth/google';
+
+/**
+ * Google's web sign-in page, asking for an id_token for our Web client with the node's nonce in it.
+ *
+ * The nonce doubles as `state`, as for Facebook: it is what `openAuthSessionWithLinkingFallback`
+ * matches, so a stale callback from an earlier attempt cannot finish this one.
+ * `prompt=select_account` shows the account chooser even when one account is signed in, so the
+ * member sees which Google account they are linking.
+ */
+export function googleAuthUrl(nonce: string): string {
+    const params: Array<[string, string]> = [
+        ['client_id', GOOGLE_WEB_CLIENT_ID],
+        ['redirect_uri', GOOGLE_REDIRECT_URI],
+        ['response_type', 'id_token'],
+        ['scope', 'openid email'],
+        ['nonce', nonce],
+        ['state', nonce],
+        ['prompt', 'select_account'],
+    ];
+    return 'https://accounts.google.com/o/oauth2/v2/auth?'
+        + params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+}
+
+/**
+ * Read the id_token out of Google's callback, or say why there is none.
+ *
+ * Only an id_token will do. An access token proves nothing a node can check without a secret, so a
+ * callback carrying one and nothing else is refused rather than passed on. `state` is checked again
+ * here even though the race already matched it, so this function is safe on its own.
+ */
+export function readGoogleCallback(url: string, expectedState: string): { idToken: string; email?: string } {
+    const params = new URLSearchParams(callbackParams(url));
+    if (params.get('state') !== expectedState) {
+        throw new SsoSignInError('provider', "Google's answer did not belong to this sign-in. Try again.");
+    }
+    const error = params.get('error');
+    if (error === 'access_denied') {
+        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    }
+    if (error) {
+        throw new SsoSignInError('provider', `Google could not sign you in: ${params.get('error_description') || error}`);
+    }
+    const idToken = params.get('id_token');
+    if (!idToken) {
+        throw new SsoSignInError('no-token', 'Google completed the sign-in but returned no token.');
+    }
+    const email = jwtClaims(idToken)?.email;
+    return { idToken, email: typeof email === 'string' && email ? email : undefined };
+}
+
+/** iPhone: Google's web sign-in page, returning through the website's bounce page. */
+async function signInWithGoogleWebPage(nonce: string): Promise<{ idToken: string; email?: string }> {
+    const url = await openAuthSessionWithLinkingFallback(googleAuthUrl(nonce), GOOGLE_COMPLETION_URI, nonce, 'google');
+    return readGoogleCallback(url, nonce);
 }
 
 export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {

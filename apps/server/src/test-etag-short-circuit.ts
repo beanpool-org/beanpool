@@ -4,8 +4,9 @@
  * Verifies that:
  * 1. GET /api/marketplace/posts, GET /api/community/members, and GET /api/members
  *    emit weak ETags and a max-age=0, must-revalidate Cache-Control — `private` for
- *    /api/marketplace/posts, which varies by viewer, `public` for the members lists, which
- *    do not.
+ *    /api/marketplace/posts and /api/community/members, which vary by viewer (a member's own
+ *    paused posts; the contact details each member lets this viewer see), `public` for
+ *    /api/members, which does not.
  * 2. When If-None-Match matches, all three endpoints return 304 Not Modified immediately
  *    WITHOUT executing SQLite queries against posts or members tables and without serializing JSON.
  * 3. Any mutation (createPost, updatePost, pausePost, resumePost, removePost,
@@ -234,8 +235,8 @@ async function main() {
     assert(membersQueries > 0, `Initial 200 touched SQLite members table (${membersQueries} query)`);
     const mEtag1 = mRes1.headers['etag'];
     assert(!!mEtag1 && mEtag1.startsWith('W/"'), `Returned weak ETag: ${mEtag1}`);
-    assert(mRes1.headers['cache-control'] === 'public, max-age=0, must-revalidate',
-        `Cache-Control header is public, max-age=0, must-revalidate (got: ${mRes1.headers['cache-control']})`);
+    assert(mRes1.headers['cache-control'] === 'private, max-age=0, must-revalidate',
+        `Cache-Control is private (contact details vary by viewer) (got: ${mRes1.headers['cache-control']})`);
 
     // 2.2 Matching ETag -> 304 WITHOUT TOUCHING SQLITE
     membersQueries = 0;

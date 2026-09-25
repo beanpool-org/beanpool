@@ -367,6 +367,7 @@ run_federation_suites() {
       test-api-path-auth
       test-read-auth-default
       test-activity-feed-members-only
+      test-members-contact-visibility
       test-sync-signature
       test-trust-value-curve
       test-trust-tiers-one-source

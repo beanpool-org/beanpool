@@ -170,8 +170,10 @@ import {
     getInvitesByMember as getInvitesByMemberEngine,
     getInviteTree as getInviteTreeEngine,
     getProfile as getProfileEngine,
-    getProfiles as getProfilesEngine,
     getAllProfiles as getAllProfilesEngine,
+    contactVisibleTo,
+    ownersWhoAddedAsFriend as ownersWhoAddedAsFriendEngine,
+    publicMemberCard,
     rowToMember,
     rowToProfile,
     type Member,
@@ -1195,12 +1197,16 @@ export function getProfile(publicKey: string, requesterPubkey?: string): MemberP
     return getProfileEngine(db, publicKey, requesterPubkey);
 }
 
-export function getProfiles(): Record<string, MemberProfile> {
-    return getProfilesEngine(db);
-}
-
 export function getAllProfiles(requesterPubkey?: string): MemberProfile[] {
     return getAllProfilesEngine(db, requesterPubkey);
+}
+
+// Who may see a member's contact details: THE rule, shared by the profile page and every list that sends member
+// rows (see contactVisibleTo in the engine). A route never decides it itself.
+export { contactVisibleTo, publicMemberCard };
+
+export function ownersWhoAddedAsFriend(viewerPubkey: string | null | undefined): Set<string> {
+    return ownersWhoAddedAsFriendEngine(db, viewerPubkey);
 }
 
 export function updateProfile(publicKey: string, update: any): MemberProfile | null {
@@ -6157,7 +6163,8 @@ export function createTreasury(
     clearEnterpriseFloorCache(pubKeyHex);
     ledger.initializeGenesisAccount(pubKeyHex);
     ledger.setDecayExempt(pubKeyHex);
-    broadcast({ type: 'member_joined', member: getMember(pubKeyHex) });
+    // The card, never the whole row: every member socket gets this (engine/members.ts registerMemberInternal).
+    broadcast({ type: 'member_joined', member: publicMemberCard(getMember(pubKeyHex)!) });
     broadcast({ type: 'treasury_created', publicKey: pubKeyHex, name: trimmed });
     console.log(`🏛️ Treasury created: "${trimmed}" (${pubKeyHex.substring(0, 12)}…) creditLine=${line}`);
     return { publicKey: pubKeyHex };

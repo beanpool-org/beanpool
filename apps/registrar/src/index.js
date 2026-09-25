@@ -589,15 +589,34 @@ async function adminMissed(env, name, ids) {
 // still won't delete is re-attested. The admin's own pause keeps its tunnel: its node is still on it. Not routed:
 // the admin's hold is lifted all the same, and the name stays paused for its key until its heal passes the
 // re-attest.
+// Row first, as the other admin actions: resume is recorded (decision_seq) only over the row as read, so a request
+// that read it earlier misses its writes, and an owner's heal that went live first makes resume decide again on the
+// row as it now is (onFreshRow) rather than delete the tunnel that heal is live on. The same write takes a tunnel
+// about to be deleted off the row, so a heal reading it meanwhile can't go live on it; one Cloudflare won't delete
+// goes back on the row.
 async function adminResume(env, a, was, now) {
-    const r = { ...a };
-    if (a.tunnel_id && !(a.status === 'paused' && a.pause_reason === 'admin'))
-        r.tunnel_id = (await deprovision(env, { tunnel_id: a.tunnel_id })).tunnel_id;
+    const drop = !!a.tunnel_id && !(a.status === 'paused' && a.pause_reason === 'admin');
+    const first = { ...decision(a), ...(drop ? { tunnel_id: null } : {}) };
+    if (!(await db.updateIfUnchanged(env, a.name, a, first, { withIds: true }))) return null;
+    const cur = { ...a, ...first };
+    const left = drop ? (await deprovision(env, { tunnel_id: a.tunnel_id })).tunnel_id : null;
+    if (left) {
+        if (!(await db.updateIfUnchanged(env, a.name, cur, { tunnel_id: left }, { withIds: true }))) {
+            // Changed meanwhile: resume stops. The tunnel is recorded on the row as it now is, while that is still
+            // this tenure and records none — a tunnel nobody records would block every fresh one for the name.
+            const fresh = await db.getAllocation(env, a.name);
+            const kept = fresh?.node_pubkey === a.node_pubkey && fresh.requested_at === a.requested_at && !fresh.tunnel_id
+                && await db.updateIfUnchanged(env, a.name, fresh, { tunnel_id: left }, { withIds: true });
+            if (!kept) console.error('[RESUME_ORPHAN]', a.name, left, 'Cloudflare refused its delete and no row records it');
+            return adminMissed(env, a.name, NOTHING);
+        }
+        cur.tunnel_id = left;
+    }
     let ids;
-    try { ids = await ensure(env, r, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
+    try { ids = await ensure(env, cur, cur); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
     const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
-    if (!(await db.updateIfUnchanged(env, a.name, a, made))) return adminMissed(env, a.name, ids);
-    const g = await routeIfOnlyOwner(env, a, { ...r, ...made }, ids, now);
+    if (!(await db.updateIfUnchanged(env, a.name, cur, made))) return adminMissed(env, a.name, ids);
+    const g = await routeIfOnlyOwner(env, cur, { ...cur, ...made }, ids, now);
     if (g.missed) return adminMissed(env, a.name, ids);
     if (g.live) {
         await logEvent(env, a.name, 'resumed', `resumed by the admin (was ${was})${g.attest ? ': edge re-attest ok' : ': on a fresh tunnel'}`);
@@ -605,7 +624,7 @@ async function adminResume(env, a, was, now) {
     }
     const reason = g.verdict === 'impostor' ? 'impostor' : 'unverified';
     const held = { status: 'paused', pause_reason: reason, paused_at: a.status === 'paused' ? a.paused_at : now, dns_record_id: g.dns_record_id };
-    if (!(await db.updateIfUnchanged(env, a.name, a, held))) return adminMissed(env, a.name, ids);
+    if (!(await db.updateIfUnchanged(env, a.name, cur, held))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, 'resume-refused', `resumed by the admin (was ${was}), but not routed: edge re-attest ${g.verdict} (${g.why}); paused/${reason} for ${key16(a.node_pubkey)}, whose heal re-attests`);
     return json({ status: 'paused', name: a.name, reason, attest: g.verdict, why: g.why });
 }

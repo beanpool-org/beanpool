@@ -20,24 +20,33 @@ const migration = (m) => readFileSync(new URL(`../migrations/${m}`, import.meta.
 const DAY = 86400;
 const COOLOFF = 30 * DAY;
 
-// D1's prepare/bind/first/all/run over node:sqlite (run() reports meta.changes, as D1 does).
+// D1's prepare/bind/first/all/run over node:sqlite (run() reports meta.changes, as D1 does). `afterRead(re, run)`:
+// once, just after the first first() whose SQL matches `re` has read its row, `run` runs to completion before the
+// caller gets that row — a request landing between another request's read and its first write.
 function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql']) {
     const sqlite = new DatabaseSync(':memory:');
     for (const m of migrations) sqlite.exec(migration(m));
+    const readHooks = [];
     const d1 = {
         prepare(sql) {
             const stmt = sqlite.prepare(sql);
             let args = [];
             return {
                 bind(...a) { args = a; return this; },
-                async first() { const r = stmt.get(...args); return r ? { ...r } : null; },
+                async first() {
+                    const r = stmt.get(...args);
+                    const h = readHooks.findIndex((x) => x.re.test(sql));
+                    if (h >= 0) await readHooks.splice(h, 1)[0].run();
+                    return r ? { ...r } : null;
+                },
                 async all() { return { results: stmt.all(...args).map((r) => ({ ...r })) }; },
                 async run() { const r = stmt.run(...args); return { success: true, meta: { changes: Number(r.changes) } }; },
             };
         },
     };
     const all = (sql, ...a) => sqlite.prepare(sql).all(...a).map((r) => ({ ...r }));
-    return { sqlite, d1, all };
+    const afterRead = (re, run) => readHooks.push({ re, run });
+    return { sqlite, d1, all, afterRead };
 }
 
 // Cloudflare as far as the registrar uses it. A duplicate live tunnel name and a second record at a hostname are
@@ -133,7 +142,7 @@ const attestsAs = (key) => async (nonce) => {
 // One world per test: D1, fake Cloudflare, and nodes answering at hostnames — but only while Cloudflare routes the
 // hostname (a DNS record exists), so an edge attest can only pass once the registrar has routing back up.
 async function world({ migrations, env: extra } = {}) {
-    const { sqlite, d1, all } = sqliteD1(migrations);
+    const { sqlite, d1, all, afterRead } = sqliteD1(migrations);
     const cf = fakeCloudflare();
     const nodes = {};
     const env = {
@@ -162,7 +171,7 @@ async function world({ migrations, env: extra } = {}) {
     };
     const call = async (req) => { const res = await worker.fetch(req, env); return { status: res.status, body: await res.json() }; };
     const w = {
-        env, cf, nodes, sqlite,
+        env, cf, nodes, sqlite, afterRead,
         restore: () => { globalThis.fetch = original; },
         row: async (name) => db.getAllocation(env, name),
         events: (name) => all('SELECT event, detail FROM name_events WHERE name=? ORDER BY id', name),
@@ -1237,6 +1246,66 @@ test('race: an admin block landing during a resume\'s edge re-attest stands; the
         assert.equal((await w.row('resumeblock')).status, 'blocked');
         assert.deepEqual(routing(w, 'resumeblock'), { dns: null, tunnels: [] });
         await stillAdministrable(w, 'resumeblock', 'block');
+    } finally { w.restore(); }
+});
+
+test('race: the owner\'s heal going live on the kept tunnel as the admin resumes it: resume stands down, the name stays routed', async () => {
+    const w = await world();
+    try {
+        const { owner, row: before } = await impostorPaused(w, 'keptlive', { keptTunnel: true });
+        w.nodes['keptlive.beanpool.org'] = attestsAs(owner);   // the owner's node is back on the kept tunnel
+        // The heal runs, and goes live, just after the resume has read the row.
+        let healed;
+        w.afterRead(/^SELECT \* FROM name_allocations WHERE name=\?$/, async () => { healed = await w.heal(owner); });
+        const r = await w.admin('keptlive', 'resume');
+        assert.deepEqual([healed?.body.status, healed.body.attest], ['live', 'ok'], JSON.stringify(healed?.body));
+        assert.equal(r.status, 400, JSON.stringify(r.body));
+        assert.match(r.body.error, /cannot resume a live name/);
+        const row = await w.row('keptlive');
+        assert.deepEqual([row.status, row.tunnel_id], ['live', before.tunnel_id]);
+        assert.ok(w.cf.liveTunnel(before.tunnel_id), 'the tunnel the owner\'s node is live on is not deleted');
+        assert.deepEqual(routing(w, 'keptlive'), { dns: `${before.tunnel_id}.cfargotunnel.com`, tunnels: [before.tunnel_id] });
+    } finally { w.restore(); }
+});
+
+test('race: the owner\'s heal landing while resume deletes the kept tunnel does not go live on it; the resume routes the name', async () => {
+    const w = await world();
+    try {
+        const { owner, row: before } = await impostorPaused(w, 'keptdel', { keptTunnel: true });
+        w.nodes['keptdel.beanpool.org'] = attestsAs(owner);
+        let healed;
+        w.cf.during(/^DELETE \/accounts\/acct\/cfd_tunnel\//, async () => { healed = await w.heal(owner); });
+        const r = await w.admin('keptdel', 'resume');
+        assert.ok(healed, 'the heal landed');
+        assert.notEqual(healed.body.status, 'live', `not on the tunnel being deleted: ${JSON.stringify(healed.body)}`);
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.status, 'live');
+        const row = await w.row('keptdel');
+        assert.equal(row.status, 'live');
+        assert.notEqual(row.tunnel_id, before.tunnel_id);
+        assert.equal(w.cf.liveTunnel(before.tunnel_id), null);
+        assert.deepEqual(routing(w, 'keptdel'), { dns: `${row.tunnel_id}.cfargotunnel.com`, tunnels: [row.tunnel_id] });
+        assert.equal((await w.status(owner)).body.tunnelToken, `token-${row.tunnel_id}`, 'the owner\'s node hears the fresh tunnel');
+    } finally { w.restore(); }
+});
+
+test('a kept tunnel Cloudflare won\'t delete stays on the row when a pause lands while resume tries to delete it', async () => {
+    const w = await world();
+    try {
+        const { row: before } = await impostorPaused(w, 'keptpause', { keptTunnel: true });
+        w.cf.fail.deleteTunnel = true;
+        let paused;
+        w.cf.during(/^DELETE \/accounts\/acct\/cfd_tunnel\//, async () => { paused = await w.admin('keptpause', 'pause'); });
+        const r = await w.admin('keptpause', 'resume');
+        assert.equal(paused?.body.status, 'paused');
+        assert.equal(r.status, 409, JSON.stringify(r.body));
+        const row = await w.row('keptpause');
+        assert.deepEqual([row.status, row.pause_reason, row.tunnel_id], ['paused', 'admin', before.tunnel_id], 'the tunnel is still recorded');
+        assert.equal(routing(w, 'keptpause').dns, null);
+        // So a later block can still remove it.
+        w.cf.fail.deleteTunnel = false;
+        assert.equal((await w.admin('keptpause', 'block')).body.status, 'blocked');
+        assert.deepEqual(routing(w, 'keptpause'), { dns: null, tunnels: [] });
     } finally { w.restore(); }
 });
 

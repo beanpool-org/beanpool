@@ -4,33 +4,13 @@ import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../constants/colors';
 import { anchorUrl } from '../utils/node-post';
-import { startSsoSignIn, SsoSignInError, returnToApp } from '../utils/sso-signin';
+import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import type { SsoProvider, GithubDevicePrompt } from '../utils/sso-signin';
-import { enrolSsoKeeper, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
+import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
+import { connectAndDeposit } from '../utils/sso-sheet-connect';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
 import { useIdentity } from '../app/IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
-
-/**
- * Decode the `sub` claim from a JWT id_token without signature verification,
- * or use the directly-resolved `fallbackSub` (Facebook, when its token is not a JWT).
- */
-function extractSub(idToken: string, fallbackSub?: string): string {
-    if (fallbackSub) return fallbackSub;
-    const parts = idToken?.split('.');
-    if (!parts || parts.length < 2 || !parts[1]) {
-        throw new Error('Could not determine user identifier for this sign-in.');
-    }
-    try {
-        const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-        const payload = JSON.parse(globalThis.atob(pad)) as Record<string, unknown>;
-        if (typeof payload?.sub === 'string' && payload.sub) {
-            return payload.sub;
-        }
-    } catch {}
-    throw new Error('ID token missing subject claim (sub).');
-}
 
 export function SsoEnrolSheet({
     visible,
@@ -53,7 +33,8 @@ export function SsoEnrolSheet({
         : 'GitHub';
     const { identity: contextIdentity } = useIdentity();
     const identity = passedIdentity ?? contextIdentity;
-    const [step, setStep] = useState<'processing' | 'success' | 'error'>('processing');
+    /** `saving`: the provider is done and the deposit is going ahead, so no Cancel (utils/sso-sheet-connect.ts). */
+    const [step, setStep] = useState<'processing' | 'saving' | 'success' | 'error'>('processing');
     const [errorMessage, setErrorMessage] = useState('');
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);
     /**
@@ -117,28 +98,27 @@ export function SsoEnrolSheet({
                 return;
             }
 
-            const signin = await startSsoSignIn(provider, url, identity, (prompt) => {
-                setDevicePrompt(prompt);
-                // Copied before the member has done anything. The whole friction was having to
-                // return to the app for the code once GitHub was on screen.
-                copyCode(prompt);
-            }, abort.signal);
-
-            // Get them back here. GitHub's success page says nothing about returning, and
-            // `dismissBrowser` is iOS-only — on Android the tab sat on "you're all set" while the
-            // account was already connected behind it. `returnToApp` handles both platforms.
-            await returnToApp();
-
-            // GitHub's proof is the node's own session, never a token (keeper-enrolment.ts).
-            const result = await enrolSsoKeeper(signin.provider === 'github'
-                ? { identity, provider: 'github', sub: signin.sub, proof: { sessionId: signin.sessionId } }
-                : {
-                    identity,
-                    provider: signin.provider,
-                    sub: extractSub(signin.idToken, signin.sub),
-                    idToken: signin.idToken,
-                    nonce: signin.nonce,
-                });
+            const result = await connectAndDeposit({
+                provider,
+                url,
+                identity,
+                onGithubPrompt: (prompt) => {
+                    setDevicePrompt(prompt);
+                    // Copied before the member has done anything. The whole friction was having to
+                    // return to the app for the code once GitHub was on screen.
+                    copyCode(prompt);
+                },
+                // The provider is done: the code and Cancel come down, and the deposit goes ahead.
+                onSignedIn: async () => {
+                    setDevicePrompt(null);
+                    setStep('saving');
+                    // Get them back here. GitHub's success page says nothing about returning, and
+                    // `dismissBrowser` is iOS-only — on Android the tab sat on "you're all set" while the
+                    // account was already connected behind it. `returnToApp` handles both platforms.
+                    await returnToApp();
+                },
+                signal: abort.signal,
+            });
 
             if (result.error) {
                 setErrorMessage(result.error);
@@ -294,6 +274,16 @@ export function SsoEnrolSheet({
                             >
                                 <Text style={styles.secondaryButtonText}>Cancel</Text>
                             </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* No Cancel: the deposit is going ahead and cannot be called back once sent.
+                        Android's back still closes the sheet, and a deposit that lands is still
+                        reported (onEnrolled), because the node has it. */}
+                    {step === 'saving' && (
+                        <View style={styles.centerContent} accessibilityLiveRegion="polite">
+                            <ActivityIndicator size="large" color={colors.brand.primary} />
+                            <Text style={styles.processingText}>Linking your {PROVIDER_NAME} sign-in...</Text>
                         </View>
                     )}
 

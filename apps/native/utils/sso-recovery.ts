@@ -29,7 +29,7 @@ import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
 import { importIdentity, type BeanPoolIdentity } from './identity';
 import {
-    signInWithGoogle, signInWithApple, signInWithFacebook, signInWithGithubViaNode,
+    signInWithGoogle, signInWithApple, signInWithFacebook, signInWithGithubViaNode, SsoSignInError,
     type SsoProvider, type GithubDevicePrompt,
 } from './sso-signin';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
@@ -46,6 +46,17 @@ export interface SsoRecoveryProgress {
 export interface SsoRecoveryResult {
     identity: BeanPoolIdentity;
     provider: SsoProvider;
+}
+
+/**
+ * Whether recovery is waiting on the member at GitHub: the one time welcome.tsx shows the code, Copy,
+ * Open GitHub and Cancel. It takes them down at the first step past it. From the release on a cancel
+ * cannot be honoured, so none is offered, and the steps that follow show instead.
+ *
+ * `onDeviceCode` runs before the `awaiting-sso` progress, so the panel still goes up when it should.
+ */
+export function waitingOnGithub(step: SsoRecoveryProgress['step']): boolean {
+    return step === 'awaiting-sso';
 }
 
 function parseJwtSub(idToken: string, fallbackSub?: string): string {
@@ -87,7 +98,8 @@ export async function recoverAccountWithSso(options: {
      */
     onDeviceCode: (prompt: GithubDevicePrompt) => void;
     /**
-     * Stops a GitHub sign-in that is waiting for the member to finish at GitHub. The other
+     * Stops a GitHub sign-in that is waiting for the member to finish at GitHub, or that has just
+     * finished there and not yet been released. Not after the release: see below. The other
      * providers' own sheets have their own cancel.
      */
     signal?: AbortSignal;
@@ -201,6 +213,15 @@ export async function recoverAccountWithSso(options: {
         }
         sub = parseJwtSub(signInResult.idToken, signInResult.sub);
         credential = { idToken: signInResult.idToken, nonce: signInResult.nonce };
+    }
+
+    // The last point a cancel can be honoured. A member can tap Cancel after GitHub has said yes but
+    // before the poll carrying it has been acted on, and nothing has been released yet, so nothing is.
+    // The release cannot be taken back: the node lets the piece go and tells the owner it did. So
+    // welcome.tsx takes Cancel down at the progress step below (`waitingOnGithub`), rather than
+    // leaving one up that does nothing.
+    if (options.signal?.aborted) {
+        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
     }
 
     // 5. Submit SSO verification to Node

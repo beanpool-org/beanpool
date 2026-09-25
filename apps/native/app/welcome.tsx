@@ -26,7 +26,7 @@ import { protectionFrom } from '../utils/protection-state';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
-import { recoverAccountWithSso } from '../utils/sso-recovery';
+import { recoverAccountWithSso, waitingOnGithub } from '../utils/sso-recovery';
 import { returnToApp, type GithubDevicePrompt } from '../utils/sso-signin';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
@@ -801,10 +801,15 @@ export default function WelcomeScreen() {
                 callsign: trimmedCallsign,
                 anchorUrl: finalAnchorUrl,
                 provider,
-                onProgress: (p) => setSsoProgressMessage(p.message),
+                onProgress: (p) => {
+                    setSsoProgressMessage(p.message);
+                    // Past GitHub the code, Open GitHub and Cancel no longer apply: from the
+                    // release on a cancel can't be honoured. The steps that follow show instead.
+                    if (!waitingOnGithub(p.step)) setRecoveryCode(null);
+                },
                 // GitHub's device flow cannot finish unless the member sees this. Copy it and open
                 // GitHub for them. The code, a Copy button and a way back to GitHub stay on this
-                // screen behind the browser.
+                // screen behind the browser until GitHub says yes.
                 onDeviceCode: (prompt) => {
                     setRecoveryCode(prompt);
                     copyRecoveryCode(prompt);

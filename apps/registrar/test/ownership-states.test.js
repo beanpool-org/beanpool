@@ -67,7 +67,7 @@ function fakeCloudflare() {
     const calls = [];
     const tunnels = new Map();   // id → { id, name, created_at, deleted_at, ingress }
     const dns = new Map();       // id → { id, type, name (fqdn), content, proxied }
-    const fail = { deleteTunnel: false, ingress: false, deleteDns: false };
+    const fail = { deleteTunnel: false, ingress: false, deleteDns: false, patchDns: false, postDns: false };
     const hooks = [];
     let seq = 0;
     const ok = (result) => Response.json({ success: true, result });
@@ -113,6 +113,7 @@ function fakeCloudflare() {
         if (p === '/zones/zone/dns_records' && method === 'GET')
             return ok([...dns.values()].filter((r) => r.name === url.searchParams.get('name')));
         if (p === '/zones/zone/dns_records' && method === 'POST') {
+            if (fail.postDns) return err(500, 1000, 'internal error');
             const fqdn = `${body.name}.beanpool.org`;
             if ([...dns.values()].some((r) => r.name === fqdn)) return err(400, 81053, 'An A, AAAA, or CNAME record with that host already exists.');
             const r = { id: `dns-${++seq}`, type: body.type, name: fqdn, content: body.content, proxied: body.proxied };
@@ -122,6 +123,7 @@ function fakeCloudflare() {
         if ((m = p.match(/^\/zones\/zone\/dns_records\/([^/]+)$/))) {
             const r = dns.get(m[1]);
             if (method === 'DELETE' && fail.deleteDns) return err(500, 1000, 'internal error');
+            if (method === 'PATCH' && fail.patchDns) return err(500, 1000, 'internal error');
             if (!r) return err(404, 81044, 'Record does not exist.');
             if (method === 'PATCH') {
                 // A record's type can't be changed in place (CNAME ↔ A): the caller must delete and re-create it.
@@ -1966,6 +1968,38 @@ for (const via of ['heal', 'take-back', 'resume']) {
             await attestSweep(w.env);
             await routedAsRow(w, name, `after the ${via}, Cloudflare recovered, and a sweep`);
             assert.equal((await w.row(name)).node_pubkey, owner.pubHex, 'still the owner\'s');
+        } finally { w.restore(); }
+    });
+}
+
+// ── An owed record is settled only once nothing routes it wrongly ────────────────────────────────────────────
+// The sweep settles an owed record that a live row records by repairing that row's routing (settleOwed). The entry
+// goes only once the hostname routes as the row says, and only while the row is still the one it repaired: a
+// take-down landing meanwhile owes the same id onto this entry (INSERT OR IGNORE, a no-op), and a repair Cloudflare
+// refused leaves the record pointing wherever a missed request left it. Either way, dropping the entry then would
+// leave nothing to remove or re-point the record once Cloudflare recovers.
+for (const mode of ['tunnel', 'direct']) {
+    test(`a block landing while the sweep settles the name's owed record, deletes refused: nothing routes it once Cloudflare recovers (${mode})`, async () => {
+        const w = await world();
+        try {
+            const name = `killswitch-${mode}`;
+            const [owner, n1, n2] = await Promise.all([makeKey(), makeKey(), makeKey()]);
+            assert.equal((await w.claim(owner, { name, ...modeBody(mode, OLD_IP) })).body.status, 'live');
+            w.nodes[`${name}.beanpool.org`] = attestsAs(owner);
+            await liveName(w, `${name}-a`, n1); await liveName(w, `${name}-b`, n2);
+            // An outage refusing deletes: a pause (its record owed), then a resume, live again on that record.
+            w.cf.fail.deleteDns = true; w.cf.fail.deleteTunnel = true;
+            assert.equal((await w.admin(name, 'pause')).body.status, 'paused');
+            assert.equal((await w.admin(name, 'resume')).body.status, 'live');
+            // The sweep settles that entry; as its repair looks the record up, the admin blocks the name.
+            let blocked;
+            w.cf.during(/^GET \/zones\/zone\/dns_records$/, async () => { blocked = await w.admin(name, 'block'); });
+            await attestSweep(w.env);
+            assert.equal(blocked?.body.status, 'blocked');
+            assert.ok(w.sqlite.prepare('SELECT 1 FROM teardown WHERE kind=\'dns\' AND name=?').get(name), 'the block\'s refused record is still owed');
+            w.cf.fail.deleteDns = false; w.cf.fail.deleteTunnel = false;
+            await attestSweep(w.env);
+            assert.equal(routing(w, name).dns, null, 'a blocked name has nothing at its hostname');
         } finally { w.restore(); }
     });
 }

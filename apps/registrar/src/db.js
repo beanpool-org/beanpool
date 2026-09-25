@@ -127,6 +127,18 @@ export const listTeardown = async (env, name) =>
 export const dropTeardown = (env, kind, cfId) =>
     env.DB.prepare('DELETE FROM teardown WHERE kind=? AND cf_id=?').bind(kind, cfId).run();
 
+// Drop an owed deletion only while the name's row is still `expected` (tenure, state, decisions, ids), in one statement:
+// a take-down writes its row before it owes, so one that landed first keeps the entry (its own owe onto it was a
+// no-op), and one landing after owes it anew. True if dropped.
+export const dropTeardownIfUnchanged = async (env, kind, cfId, name, expected) => {
+    const cols = [...STATE, ...IDS];
+    const r = await env.DB.prepare(
+        `DELETE FROM teardown WHERE kind=? AND cf_id=?
+           AND EXISTS (SELECT 1 FROM name_allocations WHERE name=? AND ${cols.map((c) => `${c} IS ?`).join(' AND ')})`
+    ).bind(kind, cfId, name, ...cols.map((c) => expected[c] ?? null)).run();
+    return (r?.meta?.changes ?? 0) > 0;
+};
+
 export const teardownRefused = (env, kind, cfId, error) =>
     env.DB.prepare('UPDATE teardown SET tries = tries + 1, last_error=? WHERE kind=? AND cf_id=?').bind(error, kind, cfId).run();
 

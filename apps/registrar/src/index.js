@@ -217,15 +217,17 @@ async function owe(env, tag, name, kind, id, err) {
 // One owed deletion, retried — unless it is the name's routing now:
 //   - a record at a live name's hostname is the live row's to keep: the row's repair runs first (it adopts the record,
 //     or points it back where the row says — an undo whose PATCH-back Cloudflare refused leaves one pointing
-//     elsewhere), and a record the live row then records is owed no more;
+//     elsewhere), and a record the live row, read again after it, records is owed no more — dropped only while that
+//     row is unchanged: a pause, block or release landing during the repair wrote its row, then owed this same record
+//     onto this entry (a no-op), and dropping it then would leave the take-down's record up for good;
 //   - a tunnel the row still routes on, or an admin pause keeps for its node, is left for now but stays owed: a request
 //     moving the row off it (a heal to a direct address) may be in flight. It goes once no row keeps it.
 // True once it is gone (deleted now, or a 404) or owed no more.
 async function settleOwed(env, t) {
     let row = await db.getAllocation(env, t.name);
     if (t.kind === 'dns') {
-        if (row?.status === 'live') row = await repairLive(env, t.name);
-        if (row?.status === 'live' && row.dns_record_id === t.cf_id) { await db.dropTeardown(env, t.kind, t.cf_id); return true; }
+        if (row?.status === 'live') { await repairLive(env, t.name); row = await db.getAllocation(env, t.name); }
+        if (row?.status === 'live' && row.dns_record_id === t.cf_id) return db.dropTeardownIfUnchanged(env, t.kind, t.cf_id, t.name, row);
     } else if (row?.tunnel_id === t.cf_id && (row.status === 'live' || (row.status === 'paused' && row.pause_reason === 'admin'))) {
         return false;
     }

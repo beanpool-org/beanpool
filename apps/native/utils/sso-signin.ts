@@ -473,6 +473,18 @@ async function signInWithGoogleCredentialManager(nonce: string): Promise<{ idTok
 const AUTH_CALLBACK_TIMEOUT_MS = 120_000;
 
 /**
+ * How long Google's web page may stay open: just under the node's nonce, which lives ten minutes
+ * (`NONCE_TTL_MS`, apps/server/src/sso.ts).
+ *
+ * The page holds the whole Google sign-in: email, password, 2-Step Verification and the first-time
+ * consent screen. On a new phone that can mean waiting for an SMS code because the prompt went to the
+ * phone that was lost, and 120 s would close the page under a member still doing it. This deadline only has
+ * to catch a session that never settles. A member who closes the page is told at once: iOS reports
+ * that cancel itself, and Android waits only SPURIOUS_CANCEL_GRACE_MS.
+ */
+const GOOGLE_PAGE_TIMEOUT_MS = 9 * 60_000;
+
+/**
  * How long to keep listening after the browser claims the member cancelled.
  *
  * On Android that cancel is frequently a lie. `beanpool.org` is a verified App Link with no path
@@ -498,6 +510,8 @@ const EXCHANGE_TIMEOUT_MS = 20_000;
 const TIMED_OUT = Symbol('sso-timeout');
 
 interface AuthSessionOptions {
+    /** How long the page may stay open with no callback. AUTH_CALLBACK_TIMEOUT_MS unless given. */
+    timeoutMs?: number;
     /**
      * What to tell the member when the browser cannot open the page at all. Without it a browser
      * that throws ends the sign-in as a cancel, as it always has for Facebook.
@@ -560,7 +574,7 @@ async function openAuthSessionWithLinkingFallback(
     completionUri: string,
     expectedState: string,
     provider: SsoProvider,
-    { browserFailure }: AuthSessionOptions = {},
+    { timeoutMs = AUTH_CALLBACK_TIMEOUT_MS, browserFailure }: AuthSessionOptions = {},
 ): Promise<string> {
     let resolveArrival: (url: string) => void = () => {};
     const arrival = new Promise<string>((resolve) => {
@@ -585,7 +599,7 @@ async function openAuthSessionWithLinkingFallback(
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<typeof TIMED_OUT>((resolve) => {
-        timer = setTimeout(() => resolve(TIMED_OUT), AUTH_CALLBACK_TIMEOUT_MS);
+        timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
     });
 
     // Never fails the sign-in on the browser's word alone — it only stops being a candidate once
@@ -611,7 +625,7 @@ async function openAuthSessionWithLinkingFallback(
         if (typeof outcome === 'string') return outcome;
         if (outcome instanceof SsoSignInError) throw outcome;
         if (outcome === TIMED_OUT) {
-            console.log(`[SSO] ${provider}: no callback within ${AUTH_CALLBACK_TIMEOUT_MS}ms`);
+            console.log(`[SSO] ${provider}: no callback within ${timeoutMs}ms`);
             throw new SsoSignInError('provider', `${provider} sign-in timed out.`);
         }
         console.log(`[SSO] ${provider}: no valid callback after browser closed`);
@@ -697,10 +711,12 @@ export function readGoogleCallback(url: string, expectedState: string): { idToke
  * callback from the link rather than from the browser's spurious cancel.
  *
  * A page that cannot open at all is said so plainly. For a member who got here because the sheet
- * could not appear, reading that as a cancel would mean tapping and seeing nothing happen.
+ * could not appear, reading that as a cancel would mean tapping and seeing nothing happen. The page
+ * gets GOOGLE_PAGE_TIMEOUT_MS, not the 120 s every other provider gets.
  */
 async function signInWithGoogleWebPage(nonce: string): Promise<{ idToken: string; email?: string }> {
     const url = await openAuthSessionWithLinkingFallback(googleAuthUrl(nonce), GOOGLE_COMPLETION_URI, nonce, 'google', {
+        timeoutMs: GOOGLE_PAGE_TIMEOUT_MS,
         browserFailure: "Google's sign-in page could not open on this phone. Try again.",
     });
     return readGoogleCallback(url, nonce);

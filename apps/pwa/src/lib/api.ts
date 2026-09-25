@@ -319,7 +319,8 @@ export async function getMembers(): Promise<Member[]> {
 export interface NewAccountLimit {
     limit: number;
     used: number;
-    remaining: number;
+    /** Absent from a node older than this field (#1133 sent only limit/used/resetsAt): work it out from those. */
+    remaining?: number;
     resetsAt: string | null;
 }
 

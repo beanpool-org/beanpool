@@ -69,6 +69,30 @@ describe('NewAccountCard: "Your account is new" (G11-e)', () => {
             .toBe('New accounts have these limits for their first 3 days, and until 3 of their posts have stayed up.');
     });
 
+    it('an older node without `remaining` (#1133): what is left comes from limit less used, and none left still reads as none', async () => {
+        vi.spyOn(api, 'getCommunityMe').mockResolvedValue(standing({
+            limits: {
+                posts: { limit: 3, used: 1, resetsAt: inHours(5) },
+                photos: { limit: 5, used: 5, resetsAt: inHours(5) },
+                new_dm_recipients: { limit: 10, used: 0, resetsAt: null },
+            },
+        }));
+        render(<NewAccountCard />);
+        const card = await screen.findByTestId('new-account-card');
+
+        const posts = within(card).getByTestId('new-account-limit-posts');
+        expect(posts).toHaveTextContent('2 of 3 left');
+        expect(posts).toHaveTextContent('One more comes back in about 5 hours.');
+
+        const photos = within(card).getByTestId('new-account-limit-photos');
+        expect(photos).toHaveTextContent('0 of 5 left');
+        expect(photos).toHaveTextContent('You can add more in about 5 hours.');
+        expect(photos).not.toHaveTextContent('One more comes back');
+        expect(photos.querySelector('.whitespace-nowrap')).toHaveClass('font-bold', 'text-amber-700');
+
+        expect(within(card).getByTestId('new-account-limit-new_dm_recipients')).toHaveTextContent('10 of 10 left');
+    });
+
     it('says the first days are over once they are, while the kept posts still hold it', async () => {
         vi.spyOn(api, 'getCommunityMe').mockResolvedValue(standing({ ageEndsAt: inHours(-1), keptPosts: 2 }));
         render(<NewAccountCard />);

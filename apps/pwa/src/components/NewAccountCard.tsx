@@ -28,10 +28,15 @@ const ROWS: { key: keyof Probation['limits']; label: string; again: string }[] =
     { key: 'new_dm_recipients', label: 'New people to message', again: 'You can message someone new again' },
 ];
 
+/** What is left: the node's `remaining`, or on an older node that doesn't send it, the allowance less what is used (the server's own sum). */
+export function leftOf(l: NewAccountLimit): number {
+    return typeof l.remaining === 'number' ? l.remaining : Math.max(0, l.limit - l.used);
+}
+
 function comesBack(row: typeof ROWS[number], l: NewAccountLimit, now: number): string | null {
     if (l.used <= 0 || !l.resetsAt || !Number.isFinite(Date.parse(l.resetsAt))) return null;
     const when = inAbout(l.resetsAt, now);
-    return l.remaining <= 0 ? `${row.again} ${when}.` : `One more comes back ${when}.`;
+    return leftOf(l) <= 0 ? `${row.again} ${when}.` : `One more comes back ${when}.`;
 }
 
 /** The rule, in #1133's words, from the node's numbers (an older node without `endsWhen`: its fixed 72 hours). */
@@ -104,12 +109,13 @@ export function NewAccountCard({ refreshKey, onClose }: NewAccountCardProps) {
                     const l = probation.limits[row.key];
                     if (!l) return null;
                     const back = comesBack(row, l, now);
+                    const left = leftOf(l);
                     return (
                         <li key={row.key} data-testid={`new-account-limit-${row.key}`} className="min-w-0">
                             <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                                 <span className="text-sm font-semibold text-nature-800 dark:text-nature-100 break-words min-w-0">{row.label}</span>
-                                <span className={`text-sm whitespace-nowrap ${l.remaining <= 0 ? 'font-bold text-amber-700 dark:text-amber-400' : 'text-nature-700 dark:text-nature-200'}`}>
-                                    {l.remaining} of {l.limit} left
+                                <span className={`text-sm whitespace-nowrap ${left <= 0 ? 'font-bold text-amber-700 dark:text-amber-400' : 'text-nature-700 dark:text-nature-200'}`}>
+                                    {left} of {l.limit} left
                                 </span>
                             </div>
                             {back && <div className="text-xs text-nature-500 dark:text-nature-400 break-words">{back}</div>}

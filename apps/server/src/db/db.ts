@@ -269,6 +269,9 @@ export function initSchema() {
     // schema.sql) and NULL on new inserts (stamped by the AFTER INSERT triggers).
     try { db.prepare(`ALTER TABLE messages ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE friends ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // "Who has added me as a friend?", keyed on the viewer on every member-list and profile read (schema.sql has it
+    // too). A fresh install has no friends table yet here, so this throws and schema.sql creates the index.
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_friends_friend_pubkey ON friends(friend_pubkey)`).run(); } catch { }
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // Moderation status. MUST be before the schema.sql exec below: schema.sql declares
     // idx_abuse_reports_status_created ON abuse_reports(status, ...), and on a node whose

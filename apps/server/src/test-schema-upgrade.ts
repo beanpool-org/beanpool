@@ -28,6 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { OWNERS_WHO_ADDED_AS_FRIEND_SQL, TRADE_PARTNERS_SQL } from '@beanpool/engine';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = path.join(__dirname, 'db', 'schema.sql');
@@ -584,6 +585,48 @@ END`;
         let refused = false;
         try { after.prepare('UPDATE members SET area_lat = 91 WHERE public_key = ?').run(pk); } catch { refused = true; }
         assert(refused, 'and the column refuses a latitude past the pole');
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // ── 11. friends(friend_pubkey), and the contact lookups search indexes ─────────────────────────
+    // contactVisibleTo's two lookups run on every member-list and profile read, keyed on the VIEWER: who has added
+    // them as a friend (ownersWhoAddedAsFriend) and who they have a trade with (tradePartnersOf). friends' primary key
+    // leads with owner_pubkey, so the first scanned the whole table on every node from before idx_friends_friend_pubkey
+    // (1–2 ms at 50k rows, #1145's review). The fixture is a booted node with that index dropped, holding a friend
+    // row; it must boot onto exactly a fresh install's friends indexes, and both lookups, the engine's own SQL, must
+    // search an index rather than scan.
+    console.log('\n--- 11. idx_friends_friend_pubkey, and the contact lookups search indexes ---');
+    {
+        const dir = tmp('friends-index');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const freshFriendIndexes = indexes(d, 'friends');
+        assert(freshFriendIndexes.includes('idx_friends_friend_pubkey'), `a fresh install has idx_friends_friend_pubkey (friends indexes: ${freshFriendIndexes.join(', ')})`);
+        d.pragma('foreign_keys = OFF');
+        d.exec('DROP INDEX idx_friends_friend_pubkey');
+        d.prepare(`INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)`).run('ee'.repeat(32), 'ff'.repeat(32));
+        assert(!indexes(d, 'friends').includes('idx_friends_friend_pubkey'), 'the fixture genuinely lacks the index');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before the index boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(indexes(after, 'friends')) === JSON.stringify(freshFriendIndexes),
+            `ending up with exactly the friends indexes a fresh install has (${indexes(after, 'friends').join(', ')})`);
+        const plan = (sql: string, ...params: string[]): string[] =>
+            (after.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as any[]).map(r => String(r.detail));
+        const viewer = 'ff'.repeat(32);
+        const friendsPlan = plan(OWNERS_WHO_ADDED_AS_FRIEND_SQL, viewer);
+        assert(friendsPlan.some(p => /\bUSING (COVERING )?INDEX idx_friends_friend_pubkey\b/.test(p)) && !friendsPlan.some(p => /^SCAN friends\b/.test(p)),
+            `"who has added me" searches idx_friends_friend_pubkey (plan: ${friendsPlan.join(' | ')})`);
+        const tradePlan = plan(TRADE_PARTNERS_SQL, viewer, viewer);
+        assert(tradePlan.some(p => /\bUSING (COVERING )?INDEX idx_marketplace_transactions_buyer_/.test(p))
+            && tradePlan.some(p => /\bUSING (COVERING )?INDEX idx_marketplace_transactions_seller_/.test(p))
+            && !tradePlan.some(p => /^SCAN marketplace_transactions\b/.test(p)),
+            `"who have I traded with" searches the buyer and seller indexes (plan: ${tradePlan.join(' | ')})`);
         after.close();
         assert(bootInto(dir).ok, 'booting it again is a no-op');
         fs.rmSync(dir, { recursive: true, force: true });

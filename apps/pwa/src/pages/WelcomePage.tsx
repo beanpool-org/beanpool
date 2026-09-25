@@ -9,7 +9,10 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { clearUnsentPendingJoin, createIdentity, createIdentityFromMnemonic, identityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
+import {
+    clearUnsentPendingJoin, createIdentity, createIdentityFromMnemonic, identityFromMnemonic, importIdentity, updateCallsign, getMnemonic,
+    hasMnemonic, lastSentAt, loadPendingJoin, pendingJoinSent, seedViewedKey, IdentityHeldError, type BeanPoolIdentity,
+} from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
 import {
@@ -225,9 +228,64 @@ export function WelcomePage({ onComplete }: Props) {
     // there is no going back to a name screen.
     const [joinedByDoor, setJoinedByDoor] = useState(false);
     const [joinedAsNote, setJoinedAsNote] = useState<string | null>(null);
-    // A key restored here (phone or 12 words) that is not a member of this open community yet: it joins as it is.
+    // A key restored here (phone or 12 words) that is not a member of this open community yet: it joins as it is. Also
+    // a member's key, while a join that went out from this browser is settled first (below).
     const [restoredForDoor, setRestoredForDoor] = useState<BeanPoolIdentity | null>(null);
     const doorOpen = door === 'open';
+    // WebJoin for joining (not only for settling a sent join, below).
+    const webJoinForDoor = doorOpen || !!restoredForDoor || (!!authReturn && door !== 'invite');
+
+    /*
+     * A join that went out from this browser is settled wherever the page lands, the door open or shut (#1154 follow-up,
+     * review 4106962311). While a sent pending join is stored, WebJoin is shown whatever the door says, and asks the node
+     * about it (the membership probe, which the door doesn't gate): a member is in. With the door open it carries on as
+     * ever. With the door shut it only settles (`settleOnly`): a join that may still land is waited for, and one the node
+     * says never landed and can no longer land hands the page back (`settledNotLanded`), its key kept as it is. And
+     * nothing here writes an identity (an invite, a restore) while such a join is unsettled: `noSentJoinWaiting` first.
+     */
+    const [sentJoin, setSentJoin] = useState<'checking' | 'none' | 'settle'>('checking');
+    const settledNotLanded = useRef<{ publicKey: string; sentAt: number } | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        loadPendingJoin()
+            .then((p) => { if (!cancelled) setSentJoin(p && pendingJoinSent(p) ? 'settle' : 'none'); })
+            .catch((e) => {
+                // Unreadable: every write below reads it again first, and fails the same way rather than going ahead.
+                console.warn('[Welcome] could not read a pending join:', e);
+                if (!cancelled) setSentJoin('none');
+            });
+        return () => { cancelled = true; };
+    }, []);
+
+    /**
+     * True when no join that went out from this browser waits to be settled: none is stored, or the node has said the
+     * one stored never landed and can no longer land. Read from the store every time, never from this page's memory.
+     */
+    async function noSentJoinWaiting(): Promise<boolean> {
+        const p = await loadPendingJoin();
+        if (!p || !pendingJoinSent(p)) return true;
+        const cleared = settledNotLanded.current;
+        return !!cleared && cleared.publicKey === p.identity.publicKey && cleared.sentAt === lastSentAt(p);
+    }
+
+    /** Hand the page to WebJoin to settle the sent join first; the member comes back here once it is. */
+    function settleSentJoinFirst() {
+        setShowRecovery(false);
+        setShowQrPairing(false);
+        setError(null);
+        setSentJoin('settle');
+    }
+
+    function handleSettled(cleared: { publicKey: string; sentAt: number } | null) {
+        settledNotLanded.current = cleared;
+        setSentJoin('none');
+    }
+
+    /*
+     * One browser, one account (review 4106962020): identity.ts refuses to write a different key over the one stored.
+     * Another tab can save one while this page is open; then nothing here replaces it, and the page offers to open it.
+     */
+    const [heldIdentity, setHeldIdentity] = useState<BeanPoolIdentity | null>(null);
 
     const [callsign, setCallsign] = useState('');
     const [inviteCode, setInviteCode] = useState(() => {
@@ -339,12 +397,23 @@ export function WelcomePage({ onComplete }: Props) {
                             await finishRestoreAtDoor(decrypted);
                             return;
                         }
+                        if (!(await noSentJoinWaiting())) {
+                            setPairingStatus('idle');
+                            settleSentJoinFirst();
+                            return;
+                        }
                         await importIdentity(decrypted);
                         setPairingStatus('success');
                         setTimeout(() => {
                             onComplete(decrypted);
                         }, 600);
                     } catch (decryptErr: any) {
+                        if (decryptErr instanceof IdentityHeldError) {
+                            setPairingStatus('idle');
+                            setShowQrPairing(false);
+                            setHeldIdentity(decryptErr.held);
+                            return;
+                        }
                         console.error('[Pairing] Decryption/import failure:', decryptErr);
                         setError(decryptErr.message || 'Failed to decrypt paired identity');
                         setPairingStatus('expired');
@@ -433,6 +502,12 @@ export function WelcomePage({ onComplete }: Props) {
                 return;
             }
 
+            // No identity is made while a join that went out from this browser is unsettled: that one is asked about first.
+            if (!pendingIdentity && !(await noSentJoinWaiting())) {
+                setLoading(false);
+                settleSentJoinFirst();
+                return;
+            }
             const identity = pendingIdentity
                 ? { ...pendingIdentity, callsign: trimmedCallsign }
                 : await createIdentity(trimmedCallsign);
@@ -460,9 +535,14 @@ export function WelcomePage({ onComplete }: Props) {
             setShowAvatarSetup(true);
             setLoading(false);
         } catch (err) {
+            setLoading(false);
+            if (err instanceof IdentityHeldError) {
+                // Another tab saved an account here meanwhile. The key just made was never saved or sent.
+                setHeldIdentity(err.held);
+                return;
+            }
             setError('Failed to generate identity. Please try again.');
             console.error(err);
-            setLoading(false);
         }
     }
 
@@ -603,9 +683,12 @@ export function WelcomePage({ onComplete }: Props) {
         }
         setJoinedByDoor(true);
         setInviteRedeemed(true);
-        setJoinedAsNote(joined.requestedCallsign
-            ? `You're ${joined.identity.callsign} here: ${joined.requestedCallsign} was taken. You can change it in Settings.`
-            : null);
+        setJoinedAsNote(joined.earlierJoinKept
+            // A key was brought here, but the join this browser sent earlier had landed: that one is the account.
+            ? `This browser had already joined as ${joined.identity.callsign}, so that's your account here, not the one you brought. Its 12 words come next.`
+            : joined.requestedCallsign
+                ? `You're ${joined.identity.callsign} here: ${joined.requestedCallsign} was taken. You can change it in Settings.`
+                : null);
         setPendingIdentity(joined.identity);
         setShowAvatarSetup(true);
         setError(null);
@@ -628,7 +711,24 @@ export function WelcomePage({ onComplete }: Props) {
         }
         if (membership.isMember) {
             const member = { ...identity, callsign: membership.callsign || identity.callsign };
-            await importIdentity(member);
+            if (!(await noSentJoinWaiting())) {
+                // A join that went out from this browser comes first (review 4106962311): the node may have that key as
+                // a member, and this browser its only copy. WebJoin asks about it with this key waiting, says what it
+                // found, and lets the member choose once that join can no longer land.
+                setShowQrPairing(false);
+                setShowRecovery(false);
+                setRestoredForDoor(member);
+                return;
+            }
+            try {
+                await importIdentity(member);
+            } catch (e) {
+                if (!(e instanceof IdentityHeldError)) throw e;
+                setShowQrPairing(false);
+                setShowRecovery(false);
+                setHeldIdentity(e.held);
+                return;
+            }
             // A join started here and never sent is not needed now. One that went out stays (identity.ts
             // pendingJoinSent): the node may have that key as a member, and this browser its only copy.
             await clearUnsentPendingJoin().catch((e) => console.warn('[Welcome] leftover pending join not cleared:', e));
@@ -662,6 +762,11 @@ export function WelcomePage({ onComplete }: Props) {
             return;
         }
         try {
+            // Not while a join that went out from this browser is unsettled: that one is asked about first.
+            if (!(await noSentJoinWaiting())) {
+                settleSentJoinFirst();
+                return;
+            }
             // The 12 words ARE the identity. The callsign and avatar are just
             // node-held profile data that travel with the key, so we pull the
             // callsign down rather than asking for it (the avatar is read live
@@ -681,7 +786,12 @@ export function WelcomePage({ onComplete }: Props) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
             }
             onComplete(identity);
-        } catch {
+        } catch (e) {
+            if (e instanceof IdentityHeldError) {
+                setShowRecovery(false);
+                setHeldIdentity(e.held);
+                return;
+            }
             setError('Recovery failed. Check your words and try again.');
         } finally {
             setLoading(false);
@@ -728,7 +838,7 @@ export function WelcomePage({ onComplete }: Props) {
                     borderRadius: '16px',
                     padding: '2rem',
                 }}>
-                    {door === 'unreachable' && !hasMnemonic(pendingIdentity) && (
+                    {door === 'unreachable' && !hasMnemonic(pendingIdentity) && !heldIdentity && (
                         <div role="alert" data-testid="door-unreachable" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                             Can't reach the community right now. Try again in a minute.{' '}
                             <button type="button" onClick={() => setDoorCheck((n) => n + 1)}
@@ -738,7 +848,32 @@ export function WelcomePage({ onComplete }: Props) {
                         </div>
                     )}
                     {/* ===== SEED PHRASE DISPLAY (after create, before confirm) ===== */}
-                    {hasMnemonic(pendingIdentity) && showAvatarSetup ? (
+                    {heldIdentity ? (
+                        /* ===== ANOTHER TAB SAVED AN ACCOUNT HERE: never replaced (review 4106962020) ===== */
+                        <>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                This browser already has an account
+                            </h3>
+                            <p role="alert" data-testid="welcome-held" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '0.75rem', overflowWrap: 'anywhere' }}>
+                                {heldIdentity.callsign.trim() || 'An account'} was saved in this browser from another tab or window,
+                                so nothing here replaced it. A browser holds one account.
+                            </p>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1.25rem', overflowWrap: 'anywhere' }}>
+                                To use a different account here, sign out of this one in Settings, then restore the other one.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => onComplete(heldIdentity)}
+                                style={{
+                                    width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
+                                    background: '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700,
+                                    cursor: 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
+                                }}
+                            >
+                                {heldIdentity.callsign.trim() ? `Open ${heldIdentity.callsign.trim()}` : 'Open it'}
+                            </button>
+                        </>
+                    ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
                         <>
                             <OnboardingStepper step={2} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
@@ -1523,9 +1658,10 @@ export function WelcomePage({ onComplete }: Props) {
                                 ← Back to Options
                             </button>
                         </>
-                    ) : doorOpen || restoredForDoor || (authReturn && door !== 'invite') ? (
+                    ) : webJoinForDoor || sentJoin === 'settle' ? (
                         /* A sign-in coming back is met at once, before the node has said what it is; on a node that
-                           turns out to be invite-only it is dropped, and the invite page shows as always. */
+                           turns out to be invite-only it is dropped, and the invite page shows as always. A join that
+                           went out from this browser is settled here first, whatever the door says (review 4106962311). */
                         /* ===== THE OPEN DOOR: join with a sign-in, no invite (design G11) ===== */
                         <>
                             {error && (
@@ -1535,8 +1671,13 @@ export function WelcomePage({ onComplete }: Props) {
                                 </div>
                             )}
                             <WebJoin
-                                key={restoredForDoor?.publicKey ?? 'new'}
+                                // Settling only is a mode for the life of one WebJoin: when the door's answer moves the
+                                // page from one to the other, it starts again in the right one.
+                                key={!webJoinForDoor ? 'settle' : restoredForDoor?.publicKey ?? 'new'}
                                 restored={restoredForDoor}
+                                settleOnly={!webJoinForDoor}
+                                onSettled={handleSettled}
+                                onExisting={onComplete}
                                 onJoined={handleJoined}
                                 onRestore={(how) => {
                                     setError(null);
@@ -1546,7 +1687,7 @@ export function WelcomePage({ onComplete }: Props) {
                                 }}
                             />
                         </>
-                    ) : door === 'checking' ? (
+                    ) : door === 'checking' || sentJoin === 'checking' ? (
                         <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>One moment…</p>
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */

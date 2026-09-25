@@ -65,8 +65,12 @@ class Failure extends Error {}
  * saw is kept for the checks.
  */
 async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, github } = {}) {
-    // membershipDown: the membership probe gets no answer, as when the node can't be reached.
-    const seen = { nonces: [], joins: [], providerVisits: [], violations: [], unexpectedHosts: new Set(), members: new Set(), membershipDown: false };
+    // membershipDown: the membership probe gets no answer, as when the node can't be reached. doorShut: an operator has
+    // shut the door (open-join.ts reads it per request). probes: every key the membership probe was asked about.
+    const seen = {
+        nonces: [], joins: [], providerVisits: [], violations: [], unexpectedHosts: new Set(), members: new Set(), membershipDown: false,
+        doorShut: false, probes: [],
+    };
     const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce' });
     await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
     await context.addInitScript(([scale]) => {
@@ -138,7 +142,7 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
         const reply = (status, body, headers = {}) => route.fulfill({ status, contentType: 'application/json', headers, body: JSON.stringify(body) });
         const p = url.pathname;
         if (p === '/api/community/info') {
-            return reply(200, { memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, beans: false } });
+            return reply(200, { memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: !seen.doorShut, beans: false } });
         }
         if (p.startsWith('/api/members/callsign-available/')) return reply(200, { callsign: decodeURIComponent(p.split('/').pop()), available: true, tooShort: false });
         if (p === '/api/join/sso-nonce') {
@@ -169,6 +173,7 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
         if (p.startsWith('/api/community/membership/')) {
             if (seen.membershipDown) return route.abort('internetdisconnected');
             const k = decodeURIComponent(p.split('/').pop());
+            seen.probes.push(k);
             return reply(200, { isMember: seen.members.has(k), callsign: seen.members.has(k) ? 'Alice' : null });
         }
         if (p === '/api/community/health') return reply(200, { status: 'ok', memberCount: 4, version: 'harness' });
@@ -257,6 +262,26 @@ async function agePendingJoin(page, minutes) {
             tx.onabort = () => reject(tx.error);
         };
     }), minutes * 60_000);
+}
+
+/** An account another tab saved in this browser, written where identity.ts keeps it. A fixture key: nobody holds it. */
+const OTHER_TAB_ACCOUNT = {
+    publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(64), callsign: 'Alice', createdAt: '2026-09-26T00:00:00.000Z', mnemonic: RESTORED_WORDS.split(' '),
+};
+
+async function saveIdentityElsewhere(page, identity) {
+    return page.evaluate((id) => new Promise((resolve, reject) => {
+        const open = indexedDB.open('beanpool-identity', 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('keys');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const tx = open.result.transaction('keys', 'readwrite');
+            tx.objectStore('keys').put(id, 'sovereign-identity');
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        };
+    }), identity);
 }
 
 async function storedIdentityKey(page) {
@@ -608,6 +633,101 @@ const SCENARIOS = [
             await noSideScroll(page, 'restore with words');
         },
         join: async () => ({ status: 409, body: { code: 'already_joined', error: 'This Google account already has a BeanPool identity here. Restore it with your 12 words or your sign-in instead.' } }),
+    },
+    {
+        name: 'two tabs (review 4106962020): tab A joins, then tab B, still on the lobby, starts a join: B says so, sends nothing, and opens A',
+        async run(page, origin, view, seen) {
+            // Tab B opens first and waits on the lobby, as when the link is clicked twice.
+            await page.goto(`${origin}/app`, { waitUntil: 'load' });
+            await screenIs(page, 'lobby', 'tab B on arrival');
+            const tabA = await page.context().newPage();
+            await toSignIn(tabA, origin, view, 'Alice');
+            const key = await pendingKey(tabA);
+            await tabA.getByTestId('join-provider-google').click();
+            await tabA.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
+            if ((await storedIdentityKey(page)) !== key) throw new Failure("tab A's account was not saved");
+
+            await page.waitForFunction(() => !document.querySelector('[data-testid="join-start"]')?.hasAttribute('disabled'), null, { timeout: 10_000 });
+            await page.getByTestId('join-start').click();
+            await page.getByTestId('join-new').click();
+            await page.getByTestId('join-callsign').fill('Bea');
+            await page.getByTestId('join-name-next').click();
+            await screenIs(page, 'taken', 'tab B, after tab A joined');
+            const text = await page.getByTestId('join-taken').innerText();
+            if (!/Alice/.test(text)) throw new Failure(`the taken screen says "${text}"`);
+            await noSideScroll(page, 'taken');
+            await shot(page, view, 'taken');
+            if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
+            if ((await storedIdentityKey(page)) !== key) throw new Failure("tab B replaced tab A's account");
+            if ((await pendingKey(page)) !== null) throw new Failure('tab B kept a key it never sent');
+            await page.getByRole('button', { name: 'Open Alice' }).click();
+            await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 20_000 });
+        },
+        join: joinOk(),
+    },
+    {
+        name: "the race (review 4106962020): another tab saves an account while this tab's join is at the node, which takes it: kept, said, its 12 words one tap away",
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Bea');
+            const bea = await pendingKey(page);
+            seen.beforeJoinAnswer = () => saveIdentityElsewhere(page, OTHER_TAB_ACCOUNT);
+            await page.getByTestId('join-provider-google').click();
+            await screenIs(page, 'taken', 'the node took the join after another tab saved an account');
+            await page.getByText('The community took Bea too', { exact: false }).waitFor();
+            await page.getByRole('button', { name: "Show Bea's 12 words" }).click();
+            await page.getByTestId('join-taken-words').waitFor();
+            await noSideScroll(page, 'taken, its 12 words shown');
+            // A word copied onto paper is never broken across lines (an inline box that wraps has a rect per line).
+            const broken = await page.getByTestId('join-taken-words').evaluate((ol) => [...ol.querySelectorAll('strong')]
+                .filter((s) => s.getClientRects().length > 1).map((s) => s.textContent));
+            if (broken.length) throw new Failure(`12 words broken across lines: ${broken.length}`);
+            await shot(page, view, 'taken-words');
+            if ((await storedIdentityKey(page)) !== OTHER_TAB_ACCOUNT.publicKey) throw new Failure("this browser's account was replaced");
+            const kept = await pendingJoin(page);
+            if (kept?.identity.publicKey !== bea || typeof kept.sentAt !== 'number') throw new Failure('the key the node took was not kept, marked sent');
+        },
+        join: async (body, key, seen) => {
+            await seen.beforeJoinAnswer?.();
+            return { status: 200, body: { success: true, member: { publicKey: key, callsign: body.callsign } } };
+        },
+    },
+    {
+        name: 'the door shuts while a join is out (review 4106962311): asked first, waited for with no way to join again, then the invite page, where nothing replaces another tab\'s account',
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Alice');
+            const key = await pendingKey(page);
+            await page.getByTestId('join-provider-google').click();
+            await page.getByTestId('join-joining').waitFor({ timeout: 20_000 });
+            // The join never answers (the node has not taken it), and an operator shuts the door.
+            seen.doorShut = true;
+            await page.reload({ waitUntil: 'load' });
+            await screenIs(page, 'held', 'reopened with the door shut');
+            const text = await page.getByTestId('join-held').innerText();
+            if (!/may still go through/.test(text) || !/about \d+ minutes?/.test(text)) throw new Failure(`the held screen says "${text}"`);
+            if (await page.getByRole('button', { name: /Finish joining/ }).count()) throw new Failure('the shut door offers to join again');
+            if (await page.getByText('Join with Invite Code').count()) throw new Failure('the invite page showed before the join was settled');
+            if (!seen.probes.includes(key)) throw new Failure('the node was not asked about the sent join');
+            await noSideScroll(page, 'held, door shut');
+            await shot(page, view, 'held-door-shut');
+
+            // Half an hour on, that join can no longer land: the invite page, and the key kept as it was.
+            await agePendingJoin(page, 30);
+            await page.getByRole('button', { name: 'Check again' }).click();
+            await page.getByText('Join with Invite Code').waitFor({ timeout: 20_000 });
+            if ((await pendingKey(page)) !== key) throw new Failure('the sent join was dropped');
+
+            // Another tab saves an account; an invite here never replaces it.
+            await saveIdentityElsewhere(page, OTHER_TAB_ACCOUNT);
+            await page.getByLabel('Invite Code').fill('BP-7K3X-9M2W');
+            await page.getByLabel('Your Callsign (Name)').fill('Rowan');
+            await page.getByRole('button', { name: 'Create Identity & Join →' }).click();
+            await page.getByTestId('welcome-held').waitFor({ timeout: 20_000 });
+            await noSideScroll(page, 'welcome: this browser already has an account');
+            await shot(page, view, 'welcome-held');
+            if ((await storedIdentityKey(page)) !== OTHER_TAB_ACCOUNT.publicKey) throw new Failure('the invite replaced the account here');
+            if (seen.joins.length !== 1) throw new Failure(`${seen.joins.length} joins were sent`);
+        },
+        join: async () => ({ hang: true }),
     },
 ];
 

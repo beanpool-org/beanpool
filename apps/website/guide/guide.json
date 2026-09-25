@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 36,
-  "hash": "9110b069c761ca605cdc47667cc3975bf2835da7f761d3e734a4e277fabda3db",
+  "version": 37,
+  "hash": "8a622db238557e5cffbe84e769cca03407b3649acb4e9bf3124362c3300ce0ad",
   "sections": [
     {
       "id": "about",
@@ -1573,6 +1573,18 @@
         {
           "type": "p",
           "text": "If you close the page halfway, open it again within 10 minutes and it carries on with the same name."
+        },
+        {
+          "type": "p",
+          "text": "**One account per browser.** If you join in two tabs at once, the second one says **This browser already has an account** and offers **Open** with that account's name. Nothing replaces it. If the second tab's join had gone through too, that account is kept on this browser as well, and **Show** (its name) **12 words** shows its words: write them down if you want to keep it. To use it instead, sign out in Settings (**Remove from This Device Only**), then restore it with those words."
+        },
+        {
+          "type": "p",
+          "text": "**A join that went out comes first.** If this browser sent a join that may have gone through, the page asks the community about it before anything else, even an invite or restoring another account. If you are in, you carry on. If it may still go through, the page asks you to wait a few minutes, then **Check again**. This holds even when the community has stopped taking new members."
+        },
+        {
+          "type": "p",
+          "text": "If something goes wrong on the page after your join went out, it says so and offers **Reload page**. Your join is kept on this browser, and the reload checks whether you are in."
         },
         {
           "type": "h2",

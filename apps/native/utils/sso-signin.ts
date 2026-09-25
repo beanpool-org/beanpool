@@ -966,10 +966,15 @@ function githubStartRefused(status: number, body: Record<string, unknown>): SsoS
     return new SsoSignInError('nonce', `Your node would not start a GitHub sign-in (${status})${said ? `: ${said}` : ''}`);
 }
 
+/** GitHub's device-flow page, the one `verification_uri` it ever sends (RFC 8628 §3.2). */
+const GITHUB_DEVICE_PAGE = 'https://github.com/login/device';
+
 /**
  * The node's `start` answer, checked before the member sees any of it. The address is opened on the
- * member's phone, so it has to be GitHub's own page: the node checks that too, and a phone should not
- * open whatever a server names.
+ * member's phone, so it has to be GitHub's device page and nothing else: a phone should not open
+ * whatever a server names. Any github.com page is not enough. A node is run by someone else, and
+ * github.com also hosts other apps' "Authorize" buttons and repo pages that can say anything,
+ * "paste your 12 words here" included.
  */
 function readGithubStart(body: Record<string, unknown>): {
     sessionId: string; prompt: GithubDevicePrompt; intervalMs: number; expiresMs: number;
@@ -977,7 +982,7 @@ function readGithubStart(body: Record<string, unknown>): {
     const { sessionId, userCode, verificationUri } = body;
     if (typeof sessionId !== 'string' || !sessionId
         || typeof userCode !== 'string' || !userCode || userCode.length > 64
-        || typeof verificationUri !== 'string' || !verificationUri.startsWith('https://github.com/')) {
+        || verificationUri !== GITHUB_DEVICE_PAGE) {
         throw new SsoSignInError('provider', 'Your node did not send a usable GitHub code. Try again.');
     }
     return {

@@ -440,6 +440,25 @@ describe("a member's GitHub sign-in runs through the node", () => {
         expect(error).toBeInstanceOf(SsoSignInError);
         expect(prompts).toEqual([]);
     });
+
+    // A node is run by someone else. Any github.com page would let one send a member mid-sign-in to
+    // another app's "Authorize" button, or to a repo page with instructions to paste their 12 words.
+    it.each([
+        'https://github.com/login/oauth/authorize?client_id=Iv1.attacker&scope=repo',
+        'https://github.com/someone/some-repo#paste-your-12-words-here',
+        'https://github.com/login/device/../../someone/some-repo',
+    ])('opens only the device page itself, not another github.com page: %s', async (verificationUri) => {
+        installNode({
+            '/api/recovery/sso-nonce': NONCE,
+            [MEMBER_START]: { status: 200, body: { ...START, verificationUri } },
+        });
+
+        const { prompts, outcome } = await memberSignIn(1_000);
+        const { error } = await outcome;
+
+        expect(error).toBeInstanceOf(SsoSignInError);
+        expect(prompts).toEqual([]);
+    });
 });
 
 // ---------------------------------------------------------------------------------------------------

@@ -117,6 +117,8 @@ import { profileFeatureGate } from './routes/profile-feature-gate.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
+import { createAppleReturnRoutes } from './routes/apple-return.js';
+import { APP_DOCUMENT_CSP, APP_DOCUMENT_REFERRER_POLICY, DOCUMENT_CSP, isAppDocument } from './app-document-csp.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
@@ -726,8 +728,14 @@ export async function startHttpsServer(port: number): Promise<number> {
         if (!isApiOrWs) {
             ctx.set('X-Frame-Options', 'DENY');
             ctx.set('X-XSS-Protection', '1; mode=block');
-            // #131: Removed connect-src wildcard; https: permits PWA→peer-node fetch calls, wss: permits encrypted WebSockets only
-            ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'");
+            // The web app runs its own scripts and nothing else; every other document keeps its header
+            // (app-document-csp.ts). The invite page is `/` with an invite code (routes/settings.ts).
+            if (isAppDocument(ctx.path, ctx.path === '/' && !!ctx.query.invite)) {
+                ctx.set('Content-Security-Policy', APP_DOCUMENT_CSP);
+                ctx.set('Referrer-Policy', APP_DOCUMENT_REFERRER_POLICY);
+            } else {
+                ctx.set('Content-Security-Policy', DOCUMENT_CSP);
+            }
         }
         await next();
     });
@@ -1214,6 +1222,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
         createOpenJoinRoutes(deps),
+        createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
         createSettingsSigninRoutes(deps),

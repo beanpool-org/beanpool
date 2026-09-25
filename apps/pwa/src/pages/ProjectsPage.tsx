@@ -9,6 +9,7 @@ import {
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { resizePhotoFile } from '../lib/photo-resize';
 import { DecideSection } from '../components/DecideSection';
 import { ProposeDecisionModal } from '../components/ProposeDecisionModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
@@ -135,17 +136,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files) return;
-        
+
         Array.from(files).forEach((file) => {
             if (!file.type.startsWith('image/')) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const base64 = event.target?.result as string;
-                if (base64) {
-                    setNewPhotos([base64]); // Single avatar
-                }
-            };
-            reader.readAsDataURL(file); 
+            // Through the marketplace's canvas resize, never the raw file: 800px at most, and the camera's
+            // GPS and serial number stay on the device (G9a-3).
+            resizePhotoFile(file)
+                .then((resized) => setNewPhotos([resized])) // Single avatar
+                .catch((err) => console.warn('[ProjectsPage] Could not read the picked photo:', err));
         });
         e.target.value = '';
     };

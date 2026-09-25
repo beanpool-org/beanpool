@@ -39,8 +39,9 @@ import path from 'node:path';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, createPost, removePost, createGroup, getPosts,
-    exportSyncState, importRemoteState, setNodeRole, adminPruneUser,
+    exportSyncState, importRemoteState, setNodeRole, adminPruneUser, bumpPostsVersion,
 } from './state-engine.js';
+import { NEAREST_FIRST_MATCHES_PROBE } from '@beanpool/engine';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -572,6 +573,116 @@ async function main(): Promise<void> {
     const withRemoved: string[] = [];
     for (const v of [bea, cal, eve, ann]) if ((await firstPage(v)).includes(removed)) withRemoved.push(v.name);
     assert(withRemoved.length === 0, `the removed post is on nobody's first page, its author's included (${withRemoved.join(', ') || 'nobody'})`);
+    delete process.env.NODE_PROFILE;
+
+    // ── 13. a filter, on either side of the count ────────────────────────────────────────────────
+    // With a filter, the circles ask how many posts the listing matches before reading posts near the reader the filter
+    // may not match (engine posts.ts, the second deciding review of #1140): fewer than NEAREST_FIRST_MATCHES_PROBE, and
+    // that read is the page; as many, and the circles or one pass give it. Through the route, each reader's pages are the
+    // brute-force pages of what that reader may see, on both sides of it: 'bikes' is 460 posts to Bea, and 510 to Eve
+    // (her 50 hidden by reports) and to Cal (his club's 50); 'garden' is over 600 to everyone, all near Mullumbimby.
+    // 150 of the gardens are within 600 m, so the first circle holds more than a page and the count is asked; what it
+    // finds is what the route shows each reader.
+    console.log('\n── 13. global, a point and a filter: each page is the brute-force page, on either side of the count ──');
+    process.env.NODE_PROFILE = 'global';
+    const K = NEAREST_FIRST_MATCHES_PROBE;
+    let seedState = 13;
+    const rand13 = () => { seedState = (seedState * 1664525 + 1013904223) >>> 0; return seedState / 4294967296; };
+    /** `km` from a point on a random bearing, on the sphere. */
+    const toward = (lat: number, lng: number, km: number): [number, number] => {
+        const d = km / R_KM, b = rand13() * 2 * Math.PI, φ = lat * Math.PI / 180, λ = lng * Math.PI / 180;
+        const φ2 = Math.asin(Math.sin(φ) * Math.cos(d) + Math.cos(φ) * Math.sin(d) * Math.cos(b));
+        const λ2 = λ + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(φ), Math.cos(d) - Math.sin(φ) * Math.sin(φ2));
+        return [φ2 * 180 / Math.PI, ((λ2 * 180 / Math.PI + 540) % 360) - 180];
+    };
+    const insFiltered = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
+                                                       audience_scope, target_group_id, hidden_by_reports_at, event_start_at, event_end_at)
+                                    VALUES (?, ?, ?, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    let seeded = 0;
+    const seedFiltered = (author: Id, type: string, category: string, [lat, lng]: [number, number], extra: { group?: string; hidden?: boolean; ended?: boolean } = {}) => {
+        const at = new Date(Date.UTC(2026, 5, 1, 0, seeded % 29)).toISOString();
+        insFiltered.run(`g4-filtered-${seeded++}`, type, category, `Filtered ${seeded}`, author.pk, at, at, lat, lng,
+            extra.group ? 'group' : 'public', extra.group ?? null, extra.hidden ? at : null,
+            type === 'event' ? '2099-01-01T10:00:00.000Z' : null, type === 'event' ? (extra.ended ? '2020-01-01T12:00:00.000Z' : '2099-01-01T12:00:00.000Z') : null);
+    };
+    db.transaction(() => {
+        for (let i = 0; i < 150; i++) seedFiltered(ann, 'offer', 'garden', toward(hLat, hLng, rand13() * 0.6));
+        for (let i = 0; i < 470; i++) seedFiltered(ann, 'offer', 'garden', toward(hLat, hLng, 1 + rand13() * 24));
+        for (let i = 0; i < 30; i++) seedFiltered(eve, 'offer', 'garden', toward(hLat, hLng, rand13() * 25), { hidden: true });
+        for (let i = 0; i < 460; i++) seedFiltered(ann, 'offer', 'bikes', toward(hLat, hLng, 5 + rand13() * 3000));
+        for (let i = 0; i < 50; i++) seedFiltered(eve, 'offer', 'bikes', toward(hLat, hLng, 5 + rand13() * 3000), { hidden: true });
+        for (let i = 0; i < 50; i++) seedFiltered(cal, 'offer', 'bikes', toward(hLat, hLng, 5 + rand13() * 3000), { group: group.id });
+        for (let i = 0; i < 40; i++) seedFiltered(ann, 'event', 'community', toward(hLat, hLng, rand13() * 4000));
+        for (let i = 0; i < 10; i++) seedFiltered(ann, 'event', 'community', toward(hLat, hLng, rand13() * 40), { ended: true });
+    })();
+    bumpPostsVersion();
+    const filteredFor = (viewer: Id, filter: { type?: string; category?: string }, lat: number, lng: number) =>
+        getPosts({ viewerPubkey: viewer.pk, excludeEvents: filter.type !== 'event', ...filter })
+            .map(p => ({ id: p.id, u: p.updatedAt ?? '', c: p.createdAt, d: typeof p.lat === 'number' && typeof p.lng === 'number' ? haversine(lat, lng, p.lat, p.lng) : null }))
+            .sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
+    const filters: Array<[string, { type?: string; category?: string }, string]> = [
+        ['garden', { category: 'garden' }, 'category=garden'],
+        ['bikes', { category: 'bikes' }, 'category=bikes'],
+        ['events', { type: 'event' }, 'type=event'],
+        ['a category with no posts', { category: 'nothing' }, 'category=nothing'],
+    ];
+    const filteredReaders: Array<[Id, Array<[string, number, number]>]> = [
+        [bea, [['Mullumbimby', hLat, hLng], ['Fiji', -17.7, 178]]],
+        [cal, [['Mullumbimby', hLat, hLng]]],
+        [eve, [['Mullumbimby', hLat, hLng]]],
+    ];
+    for (const [viewer, places] of filteredReaders) {
+        for (const [where, lat, lng] of places) {
+            for (const [name, filter, query] of filters) {
+                const ref = filteredFor(viewer, filter, lat, lng);
+                const pages: Array<[number, number]> = [[50, 0], [7, 0], [7, 7], [7, 49], [7, ref.length - 3], [7, ref.length + 2]];
+                for (const o of [K - 56, K - 7, K - 1, K]) pages.push([7, o]);
+                pages.push([50, K - 50]);
+                const wrong: string[] = [];
+                for (const [limit, offset] of pages) {
+                    if (offset < 0) continue;
+                    const got = await list(viewer, `lat=${lat}&lng=${lng}&${query}&limit=${limit}&offset=${offset}`);
+                    const want = ref.slice(offset, offset + limit);
+                    if (!same(ids(got), want.map(r => r.id)) || !same(got.map(p => p.distanceKm), want.map(r => r.d === null ? null : Math.round(r.d * 10) / 10))) wrong.push(`${limit}@${offset}`);
+                }
+                assert(wrong.length === 0,
+                    `${viewer.name} at ${where}, ${name} (${ref.length} ${ref.length < K ? 'fewer' : 'no fewer'} than ${K}): every page is the brute-force page (${wrong.length ? `wrong: ${wrong.join(', ')}` : 'none wrong'})`);
+            }
+        }
+    }
+    // What the count found, read by read, from Mullumbimby.
+    const counted = async (viewer: Id, query: string) => {
+        const prepare = db.prepare.bind(db);
+        const found: Array<{ cap: number; matched: number | undefined }> = [];
+        (db as any).prepare = (sql: string) => {
+            const st = prepare(sql);
+            if (/WITH matches AS MATERIALIZED/.test(sql)) {
+                const all = st.all.bind(st);
+                (st as any).all = (...params: unknown[]) => {
+                    const out = all(...params) as Array<{ matched: number }>;
+                    found.push({ cap: params[params.length - 5] as number, matched: out[0]?.matched });
+                    return out;
+                };
+            }
+            return st;
+        };
+        try { await list(viewer, `${hub}&${query}&limit=50`); } finally { delete (db as any).prepare; }
+        return found;
+    };
+    const told = (f: Array<{ cap: number; matched: number | undefined }>) => f.map(c => `asked for ${c.cap}, found ${c.matched === undefined ? 'none' : c.matched === c.cap ? `${c.cap} (as many)` : c.matched}`).join('; ') || 'not asked';
+    const beaBikes = await counted(bea, 'category=bikes'), eveBikes = await counted(eve, 'category=bikes'), calBikes = await counted(cal, 'category=bikes');
+    assert(beaBikes.length === 1 && beaBikes[0].cap === K && beaBikes[0].matched === 460,
+        `the count sees what the route shows Bea: 460 bikes, fewer than ${K}, so that read is her page (${told(beaBikes)})`);
+    assert([eveBikes, calBikes].every(f => f.length === 1 && f[0].matched === K),
+        `and Eve's hidden posts and Cal's club posts are in theirs: it stops at ${K} (Eve: ${told(eveBikes)}; Cal: ${told(calBikes)})`);
+    const garden = await counted(bea, 'category=garden'), events = await counted(bea, 'type=event'), nothing = await counted(bea, 'category=nothing');
+    assert(garden.length === 1 && garden[0].matched === K && events.length === 1 && events[0].matched === 40 && nothing.length === 1 && nothing[0].matched === undefined,
+        `garden stops at ${K}, the events still to come are 40, and the empty category is none (${told(garden)}; ${told(events)}; ${told(nothing)})`);
+    const bikesFor = (viewer: Id) => filteredFor(viewer, { category: 'bikes' }, hLat, hLng).length;
+    assert(bikesFor(bea) < K && bikesFor(eve) >= K && bikesFor(cal) >= K && filteredFor(bea, { category: 'garden' }, hLat, hLng).length >= K,
+        `the reads fall on both sides of ${K}: bikes is ${bikesFor(bea)} to Bea, ${bikesFor(eve)} to Eve and ${bikesFor(cal)} to Cal; garden is ${filteredFor(bea, { category: 'garden' }, hLat, hLng).length}`);
+    const eventsSeen = filteredFor(bea, { type: 'event' }, hLat, hLng).length;
+    assert(eventsSeen === 40, `the events that have ended are in no page (${eventsSeen} of the 50 seeded)`);
     delete process.env.NODE_PROFILE;
 
     console.log(`\n${passed}/${run} checks passed.`);

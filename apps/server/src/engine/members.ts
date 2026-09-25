@@ -8,6 +8,7 @@ import { getMember, getProfile, publicMemberCard, type Member, type MemberProfil
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptableAvatarValue } from './avatar.js';
+import { stripImageValue } from '../storage/image-metadata.js';
 import { isSelfAvatarUrl } from '@beanpool/core';
 
 /**
@@ -351,7 +352,8 @@ export function updateProfile(
     // every bio or name edit; rejecting it would mean they could no longer save a bio or a
     // name at all. Read as "avatar unchanged" instead, which is what the sender meant.
     const avatarUnchanged = update.avatar === undefined || isSelfAvatarUrl(update.avatar);
-    const avatar = avatarUnchanged ? existing.avatar_url : update.avatar;
+    // A new photo is stored without its metadata (G9a-3): /api/avatar/<pk> serves it to anyone who asks.
+    const avatar = avatarUnchanged ? existing.avatar_url : stripImageValue(update.avatar);
     const bio = typeof update.bio === 'string' ? update.bio.slice(0, 200) : (update.bio === null ? null : existing.bio);
     // Rename gate: enforce per-node uniqueness, but ONLY when the callsign actually
     // changes — re-saving your own name (e.g. the background profile push) must not

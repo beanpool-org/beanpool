@@ -11,7 +11,7 @@ import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
-import { deleteStoredObjects, photoDataOf, storePhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
+import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
     getMember,
     getPosts,
@@ -36,11 +36,15 @@ type BroadcastFn = (event: any, recipients?: string[]) => void;
  * transaction which then rolls back leaves objects nothing points at — harmless (the content-addressed key
  * is re-used verbatim on the retry) and swept up by the storage-health orphan pass. The opposite order
  * would be the unsafe one: a committed row pointing at bytes that were never written.
+ *
+ * Every photo is written without its metadata (G9a-3). A photo an edit hands back unchanged re-stores as the
+ * same object when it carries none — every photo stored since stripping began — and as its stripped copy, under
+ * a new key, when it was stored before: the author re-saving their post's photos is a write like any other.
  */
 function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
     const store = getImageStore();
     return photos.map((p, idx) =>
-        storePhotoColumns(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p));
+        storeUploadedPhotoColumns(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p));
 }
 
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';

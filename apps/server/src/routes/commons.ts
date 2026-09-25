@@ -274,8 +274,9 @@ router.post('/api/crowdfund/projects', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey.
-        if (photos.length > 0 && !isAcceptableAvatarValue(photos[0])) {
+        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the avatar rule.
+        if (!photos.every((p: unknown) => isAcceptableAvatarValue(p))) {
             ctx.status = 400;
             ctx.body = { error: AVATAR_FORMAT_ERROR };
             return;
@@ -336,8 +337,9 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey.
-        if (photos.length > 0 && !isAcceptableAvatarValue(photos[0])) {
+        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the avatar rule.
+        if (!photos.every((p: unknown) => isAcceptableAvatarValue(p))) {
             ctx.status = 400;
             ctx.body = { error: AVATAR_FORMAT_ERROR };
             return;

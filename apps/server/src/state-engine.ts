@@ -23,6 +23,7 @@ import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { releaseOpenJoin } from './engine/open-join.js';
 import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
+import { stripImageValue } from './storage/image-metadata.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { getUnhandledRejectionSummary } from './process-handlers.js';
@@ -6087,6 +6088,8 @@ export function createTreasury(
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
     if (!avatar && !opts.systemCreated) throw new Error('Treasury needs an avatar image');
     if (!isAcceptableAvatarValue(avatar)) throw new Error(AVATAR_FORMAT_ERROR);
+    // Served by /api/avatar/<enterprise key> to anyone who asks, so it is stored without its metadata (G9a-3).
+    avatar = stripImageValue(avatar);
     // Same predicate as idx_members_callsign_unique (`status NOT IN ('migrated', 'pruned')`),
     // so this pre-check agrees with the index that will actually enforce it on INSERT. Under
     // the old `status!='migrated'` a pruned member's callsign still read as taken here, while
@@ -7436,8 +7439,18 @@ function getGroupActiveMemberRecipients(groupId: string, extraPubkeys: string[] 
     return Array.from(new Set([...rows.map(r => r.member_pubkey), ...extraPubkeys.filter(Boolean)]));
 }
 
+/**
+ * A group's picture as it is stored: it rides in every group listing, so without its metadata (G9a-3). Held to the
+ * avatar rule first (a JPEG, PNG, WebP or GIF whose bytes really are one), because a format the strip does not
+ * know — HEIC, AVIF, TIFF — would keep its GPS, and no app sends one. Anything that is not a data URL is unchanged.
+ */
+function storableGroupPicture(avatarUrl: string | undefined): string | undefined {
+    if (!isAcceptableAvatarValue(avatarUrl)) throw new Error(AVATAR_FORMAT_ERROR);
+    return stripImageValue(avatarUrl);
+}
+
 export function createGroup(params: CreateGroupParams): Group {
-    const res = createGroupEngine(db, params);
+    const res = createGroupEngine(db, { ...params, avatarUrl: storableGroupPicture(params.avatarUrl) });
     // Every group owns its chat from the start, with its convenor in it (decision 3).
     ensureGroupThread(res.id);
     bumpGroupsVersion();
@@ -7591,7 +7604,7 @@ export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinP
 }
 
 export function updateGroup(groupId: string, convenorPubkey: string, updates: UpdateGroupParams): Group {
-    const res = updateGroupEngine(db, groupId, convenorPubkey, updates);
+    const res = updateGroupEngine(db, groupId, convenorPubkey, { ...updates, avatarUrl: storableGroupPicture(updates.avatarUrl) });
     // The chat is titled by the group's name; a rename carries over (and replicates: the conversations import
     // updates name on conflict).
     db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'group_thread'").run(res.name, groupId);

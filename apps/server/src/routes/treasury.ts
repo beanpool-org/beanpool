@@ -33,6 +33,7 @@ import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { createEventFromBody } from './event-post.js';
+import { stripImageValue } from '../storage/image-metadata.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
@@ -520,6 +521,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         let photoUrl = avatar;
         if (!photoUrl && Array.isArray(photos) && photos.length > 0) photoUrl = photos[0];
+        photoUrl = stripImageValue(photoUrl); // G9a-3: the projects row below stores it too, not only createTreasury
         const enterprisePurpose = String(purpose || description || enterpriseName).trim();
         const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || deadlineAt) ? 'bounded' : 'ongoing';
         const parsedGoal = goalAmount != null ? Number(goalAmount) : null;

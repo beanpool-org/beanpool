@@ -18,10 +18,18 @@
  *
  * ## What it must never do
  *
- * Throw, grow the bytes, or lose the picture. A file whose structure does not parse from its first byte to its
- * end marker — truncated, corrupt, a format this does not know — is returned exactly as given, which is how the
- * node stored every image before this existed. It is only ever stripping a file it has walked completely and found
- * a picture in (a JPEG scan, a PNG IDAT chunk before IEND, a WebP image chunk inside the RIFF, a GIF image block).
+ * Throw, grow the bytes, or lose the picture. It only ever rewrites a file it has walked to the end and found a
+ * picture in (a JPEG scan, a PNG IDAT chunk before IEND, a WebP image chunk inside the RIFF, a GIF image block). A
+ * JPEG is walked the way libjpeg reads one, so the two defects of a camera file that every decoder accepts do not
+ * stop it: bytes between two segments are skipped, and the end of the data after a scan is the end of the image.
+ *
+ * Anything else it cannot vouch for — a structure that does not parse, a PNG, WebP or GIF cut short, a file with
+ * metadata in it and no picture to keep — is returned exactly as given, and `isStorableImageValue` says so: every
+ * route that stores a photo refuses it with a 400 rather than store its metadata. Neither app can send one: both
+ * re-encode every photo as a JPEG (expo-image-manipulator on the phone, a canvas in the web app), and those encoders
+ * write whole files. A file cut short with nothing to strip in it — a JPEG before its scan with no metadata segment
+ * (a JFIF header), a PNG, WebP or GIF at a block boundary with nothing but picture blocks (a bare PNG signature) — is
+ * stored as given, as before.
  *
  * ## Formats
  *
@@ -52,12 +60,24 @@
  * bytes are not an image this can walk safely. Never throws; the result is never longer than the input.
  */
 export function stripImageMetadata(bytes: Buffer): Buffer {
+    const walked = walkImage(bytes);
+    return Buffer.isBuffer(walked) ? walked : bytes;
+}
+
+/** What a walk makes of a file: the file without its metadata, nothing to remove, or a file it cannot vouch for. */
+type Walked = Buffer | 'clean' | 'unsafe';
+
+function walkImage(bytes: Buffer): Walked {
     try {
-        const stripped = stripByFormat(bytes);
-        if (!stripped || stripped.length > bytes.length) return bytes;
-        return stripped;
+        const walked = stripByFormat(bytes);
+        // Every block the strip writes is shorter than the one it replaces except a JPEG's orientation: a 36-byte
+        // Exif segment in place of the one it was read from, which needs only 32 bytes to hold it. So a longer result
+        // means everything removed came to less than 36 bytes: an orientation, and no room for anything else (a GPS
+        // pointer is another 12-byte entry, a segment of its own at least 4). Nothing to take off: stored as given.
+        if (Buffer.isBuffer(walked) && walked.length > bytes.length) return 'clean';
+        return walked;
     } catch {
-        return bytes;
+        return 'unsafe';
     }
 }
 
@@ -77,30 +97,43 @@ export function stripImageMetadata(bytes: Buffer): Buffer {
  */
 export function stripImageValue<T>(value: T): T {
     if (typeof value !== 'string') return value;
-    const trimmed = value.trim();
-    const m = trimmed.match(DATA_URL);
-    if (m) {
-        const bytes = Buffer.from(m[2], 'base64');
-        const stripped = stripImageMetadata(bytes);
-        if (stripped === bytes) return value;
-        return `data:${m[1]};base64,${stripped.toString('base64')}` as T;
-    }
-    if (/^data:/i.test(trimmed)) return value;
-    const bytes = Buffer.from(trimmed, 'base64'); // a URL or a name decodes to bytes that are no image: returned as given
-    const stripped = stripImageMetadata(bytes);
-    if (stripped === bytes) return value;
-    return stripped.toString('base64') as T;
+    const read = readImageValue(value);
+    if (!read) return value;
+    const walked = walkImage(read.bytes);
+    return Buffer.isBuffer(walked) ? read.write(walked) as T : value;
+}
+
+/**
+ * Whether a node may store this value as a photo. False when, read the way `stripImageValue` reads it, it is a JPEG,
+ * PNG, WebP or GIF the strip cannot vouch for ("What it must never do" above): storing it would store whatever
+ * metadata it holds. True for everything else — an image that strips, one with nothing to strip, and anything that
+ * is not a JPEG, PNG, WebP or GIF (a URL, a `bundled://` name, text, a HEIC), which the routes judge for themselves.
+ */
+export function isStorableImageValue(value: unknown): boolean {
+    if (typeof value !== 'string') return true;
+    const read = readImageValue(value);
+    return read === null || walkImage(read.bytes) !== 'unsafe';
 }
 
 const DATA_URL = /^data:([^;,]+);base64,([\s\S]*)$/i;
 
-function stripByFormat(buf: Buffer): Buffer | null {
+/** The bytes a stored value holds, read as the avatar route reads them, and how to write stripped bytes back in its form. */
+function readImageValue(value: string): { bytes: Buffer; write: (stripped: Buffer) => string } | null {
+    const trimmed = value.trim();
+    const m = trimmed.match(DATA_URL);
+    if (m) return { bytes: Buffer.from(m[2], 'base64'), write: stripped => `data:${m[1]};base64,${stripped.toString('base64')}` };
+    if (/^data:/i.test(trimmed)) return null;
+    // A URL or a name decodes to bytes that are no image, which the walk leaves alone.
+    return { bytes: Buffer.from(trimmed, 'base64'), write: stripped => stripped.toString('base64') };
+}
+
+function stripByFormat(buf: Buffer): Walked {
     if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return stripJpeg(buf);
     if (buf.length >= 8 && buf.subarray(0, 8).equals(PNG_SIGNATURE)) return stripPng(buf);
     if (buf.length >= 12 && buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') return stripWebp(buf);
     const head = buf.toString('latin1', 0, 6);
     if (head === 'GIF87a' || head === 'GIF89a') return stripGif(buf);
-    return null;
+    return 'clean';
 }
 
 // ── JPEG ───────────────────────────────────────────────────────────────────────────────────────
@@ -109,6 +142,14 @@ function stripByFormat(buf: Buffer): Buffer | null {
 // after each SOS the entropy-coded scan runs to the next marker that is not a stuffed 0xFF00 or a restart
 // marker (either may follow fill bytes, a run of 0xFF); a progressive file has several scans with tables between
 // them; EOI ends the image.
+//
+// Read the way libjpeg reads it (jdmarker.c), so two defects that decoders accept, and cameras write, do not stop
+// the walk. Bytes between two segments that are not a marker (libjpeg: "N extraneous bytes before marker") are
+// skipped, as its next_marker skips them, and left out. And the end of the data is the end of the image, where
+// libjpeg's source manager puts a fake EOI: a file cut short, or missing only its EOI, keeps every scan byte it has
+// and gets nothing added, and a segment the end cuts off is kept if it draws the picture and left out if it is
+// metadata. A second SOI, or a marker code T.81 reserves (which libjpeg refuses), stops the walk: nothing past it
+// can be vouched for.
 //
 // Kept: every segment that is not APPn or COM (frame, tables, scans), APP0 JFIF (without the optional thumbnail),
 // APP2 ICC_PROFILE (colour, possibly split over several segments), and APP14 Adobe — twelve bytes that say how
@@ -127,38 +168,61 @@ function startsWith(payload: Buffer, prefix: Buffer): boolean {
     return payload.length >= prefix.length && payload.subarray(0, prefix.length).equals(prefix);
 }
 
-function stripJpeg(buf: Buffer): Buffer | null {
+/**
+ * Where the next marker starts (its first 0xFF, fill bytes included) at or after `pos`, skipping what libjpeg's
+ * next_marker skips: any byte that is not 0xFF, and an 0xFF run followed by 0x00. -1 when the data ends first.
+ */
+function nextJpegMarker(buf: Buffer, pos: number): number {
+    for (;;) {
+        const i = buf.indexOf(0xff, pos);
+        if (i < 0) return -1;
+        let m = i + 1;
+        while (m < buf.length && buf[m] === 0xff) m++;
+        if (m >= buf.length) return -1;
+        if (buf[m] !== 0x00) return i;
+        pos = m + 1;
+    }
+}
+
+/** A marker code T.81 defines (table B.1). The others — 0x02–0xBF, JPG (0xC8), JPGn (0xF0–0xFD) — are reserved. */
+function isDefinedJpegMarker(code: number): boolean {
+    return code === 0x01 || (code >= 0xc0 && code <= 0xef && code !== 0xc8) || code === 0xfe;
+}
+
+function stripJpeg(buf: Buffer): Walked {
     const parts: Buffer[] = [buf.subarray(0, 2)];
     let changed = false;
     let orientationKept = false;
     let hasPicture = false;
     let pos = 2;
     for (;;) {
-        // A marker must start here; running out of bytes before EOI means a truncated file.
-        if (pos >= buf.length || buf[pos] !== 0xff) return null;
-        const start = pos;
-        while (pos + 1 < buf.length && buf[pos + 1] === 0xff) pos++; // fill bytes before a marker
-        if (pos + 1 >= buf.length) return null;
-        const marker = buf[pos + 1];
+        const start = nextJpegMarker(buf, pos);
+        if (start < 0) break; // the end of the data: the end of the image
+        let at = start;
+        while (buf[at + 1] === 0xff) at++; // fill bytes before the marker, kept with it
+        const marker = buf[at + 1];
         if (marker === 0xd9) { // EOI
-            parts.push(buf.subarray(start, pos + 2));
-            pos += 2;
+            parts.push(buf.subarray(start, at + 2));
+            if (at + 2 < buf.length) changed = true; // bytes after EOI
             break;
         }
-        if (marker === 0x00 || marker === 0xd8) return null; // a stuffed byte outside a scan, or a second SOI
+        if (marker === 0xd8 || !isDefinedJpegMarker(marker)) return 'unsafe';
         if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) { // RSTn, TEM: no length
-            parts.push(buf.subarray(start, pos + 2));
-            pos += 2;
+            parts.push(buf.subarray(start, at + 2));
+            pos = at + 2;
             continue;
         }
-        if (pos + 4 > buf.length) return null;
-        const length = buf.readUInt16BE(pos + 2);
-        const end = pos + 2 + length;
-        if (length < 2 || end > buf.length) return null;
-        const payload = buf.subarray(pos + 4, end);
+        // A segment the end of the data cuts off, even inside its length, is read as far as it goes.
+        const length = at + 4 <= buf.length ? buf.readUInt16BE(at + 2) : -1;
+        if (length !== -1 && length < 2) return 'unsafe';
+        const cut = length === -1 || at + 2 + length > buf.length;
+        const end = cut ? buf.length : at + 2 + length;
+        const payload = buf.subarray(Math.min(at + 4, end), end);
+        // Cut off inside its identifier, a segment is judged by as much of the identifier as there is.
+        const kind = (id: Buffer) => startsWith(payload, id) || (cut && id.subarray(0, payload.length).equals(payload));
 
         if ((marker >= 0xe0 && marker <= 0xef) || marker === 0xfe) {
-            if (marker === 0xe0 && startsWith(payload, JFIF)) {
+            if (marker === 0xe0 && kind(JFIF)) {
                 if (payload.length <= 14) {
                     parts.push(buf.subarray(start, end));
                 } else {
@@ -167,7 +231,7 @@ function stripJpeg(buf: Buffer): Buffer | null {
                     parts.push(header);
                     changed = true;
                 }
-            } else if ((marker === 0xe2 && startsWith(payload, ICC_PROFILE)) || (marker === 0xee && startsWith(payload, ADOBE))) {
+            } else if ((marker === 0xe2 && kind(ICC_PROFILE)) || (marker === 0xee && kind(ADOBE))) {
                 parts.push(buf.subarray(start, end));
             } else {
                 const orientation = marker === 0xe1 && !orientationKept && startsWith(payload, EXIF)
@@ -177,7 +241,7 @@ function stripJpeg(buf: Buffer): Buffer | null {
                     orientationKept = true;
                     // Already nothing but the orientation (a photo this stripped before): kept as it is, so a
                     // second strip changes nothing and hands back the very same Buffer.
-                    if (buf.subarray(pos, end).equals(minimal)) parts.push(buf.subarray(start, end));
+                    if (buf.subarray(at, end).equals(minimal)) parts.push(buf.subarray(start, end));
                     else { parts.push(minimal); changed = true; }
                 } else {
                     changed = true;
@@ -187,18 +251,19 @@ function stripJpeg(buf: Buffer): Buffer | null {
             parts.push(buf.subarray(start, end));
         }
         pos = end;
+        if (cut) break;
 
         if (marker === 0xda) { // SOS: the entropy-coded scan follows its header
             hasPicture = true;
             let i = pos;
             for (;;) {
                 i = buf.indexOf(0xff, i);
-                if (i < 0) return null; // the scan runs off the end: truncated
+                if (i < 0) { i = buf.length; break; } // the data ends inside the scan: every byte of it is kept
                 // Any number of fill bytes (0xFF) may come before a marker, a restart marker inside the scan
                 // included (T.81 B.1.1.2); the byte after them decides what this is.
                 let m = i + 1;
                 while (m < buf.length && buf[m] === 0xff) m++;
-                if (m >= buf.length) return null;
+                if (m >= buf.length) break; // the data ends in 0xFF bytes whose next byte never came: fill, left out
                 const next = buf[m];
                 if (next === 0x00 || (next >= 0xd0 && next <= 0xd7)) { i = m + 1; continue; }
                 break; // i is still at the first 0xFF: the walk above reads the fill bytes and the marker
@@ -207,8 +272,8 @@ function stripJpeg(buf: Buffer): Buffer | null {
             pos = i;
         }
     }
-    if (pos < buf.length) changed = true; // bytes after EOI
-    return changed && hasPicture ? Buffer.concat(parts) : null;
+    if (!changed) return 'clean';
+    return hasPicture ? Buffer.concat(parts) : 'unsafe';
 }
 
 /**
@@ -265,18 +330,21 @@ const PNG_DRAWING_CHUNKS = new Set([
     'acTL', 'fcTL', 'fdAT',
 ]);
 
-function stripPng(buf: Buffer): Buffer | null {
+function stripPng(buf: Buffer): Walked {
     const parts: Buffer[] = [buf.subarray(0, 8)];
     let changed = false;
     let hasPicture = false;
     let pos = 8;
     for (;;) {
-        if (pos + 12 > buf.length) return null; // no IEND before the end: truncated
+        // No IEND before the end: a file cut short, which holds nothing to strip only if nothing was left out so far
+        // (a bare signature, say). Cut inside a chunk, it cannot be vouched for.
+        if (pos === buf.length) return changed ? 'unsafe' : 'clean';
+        if (pos + 12 > buf.length) return 'unsafe';
         const length = buf.readUInt32BE(pos);
         const type = buf.toString('latin1', pos + 4, pos + 8);
-        if (!/^[A-Za-z]{4}$/.test(type) || length > 0x7fffffff) return null;
+        if (!/^[A-Za-z]{4}$/.test(type) || length > 0x7fffffff) return 'unsafe';
         const end = pos + 12 + length;
-        if (end > buf.length) return null;
+        if (end > buf.length) return 'unsafe';
         if (type === 'IDAT') hasPicture = true;
         const critical = type.charCodeAt(0) < 0x61;
         if (critical || PNG_DRAWING_CHUNKS.has(type)) parts.push(buf.subarray(pos, end));
@@ -285,7 +353,8 @@ function stripPng(buf: Buffer): Buffer | null {
         if (type === 'IEND') break;
     }
     if (pos < buf.length) changed = true;
-    return changed && hasPicture ? Buffer.concat(parts) : null;
+    if (!changed) return 'clean';
+    return hasPicture ? Buffer.concat(parts) : 'unsafe';
 }
 
 // ── WebP ───────────────────────────────────────────────────────────────────────────────────────
@@ -301,24 +370,27 @@ const WEBP_PICTURE_CHUNKS = new Set(['VP8 ', 'VP8L', 'ANMF']);
 const VP8X_EXIF_FLAG = 0x08;
 const VP8X_XMP_FLAG = 0x04;
 
-function stripWebp(buf: Buffer): Buffer | null {
+function stripWebp(buf: Buffer): Walked {
     const riffEnd = 8 + buf.readUInt32LE(4);
-    if (riffEnd < 12 || riffEnd > buf.length) return null;
+    if (riffEnd < 12) return 'unsafe';
+    // A RIFF size past the end of the data: a file cut short, walked as far as it goes.
+    const cutShort = riffEnd > buf.length;
+    const limit = cutShort ? buf.length : riffEnd;
     const parts: Buffer[] = [];
     let changed = false;
     let vp8xIndex = -1;
     let hasPicture = false;
     let pos = 12;
-    while (pos < riffEnd) {
-        if (pos + 8 > riffEnd) return null;
+    while (pos < limit) {
+        if (pos + 8 > limit) return 'unsafe';
         const fourcc = buf.toString('latin1', pos, pos + 4);
         const size = buf.readUInt32LE(pos + 4);
         const end = pos + 8 + size + (size & 1);
-        if (end > riffEnd) return null;
+        if (end > limit) return 'unsafe'; // a chunk that runs past the RIFF, or one the end of the data cuts off
         if (WEBP_PICTURE_CHUNKS.has(fourcc)) hasPicture = true;
         if (WEBP_DRAWING_CHUNKS.has(fourcc)) {
             if (fourcc === 'VP8X') {
-                if (size < 10 || vp8xIndex !== -1) return null;
+                if (size < 10 || vp8xIndex !== -1) return 'unsafe';
                 vp8xIndex = parts.length;
             }
             parts.push(buf.subarray(pos, end));
@@ -327,9 +399,12 @@ function stripWebp(buf: Buffer): Buffer | null {
         }
         pos = end;
     }
+    // Cut short at a chunk boundary: as for a PNG, nothing to strip only if nothing was left out so far.
+    if (cutShort) return changed ? 'unsafe' : 'clean';
     if (riffEnd < buf.length) changed = true;
+    if (!changed) return 'clean';
     // No picture inside the RIFF (a size field that stops short of it, say): nothing here to keep safely.
-    if (!changed || !hasPicture) return null;
+    if (!hasPicture) return 'unsafe';
     if (vp8xIndex !== -1) {
         const vp8x = Buffer.from(parts[vp8xIndex]);
         vp8x[8] &= ~(VP8X_EXIF_FLAG | VP8X_XMP_FLAG) & 0xff;
@@ -369,15 +444,16 @@ function colourTableBytes(packed: number): number {
     return packed & 0x80 ? 3 * (1 << ((packed & 0x07) + 1)) : 0;
 }
 
-function stripGif(buf: Buffer): Buffer | null {
-    if (buf.length < 13) return null;
+function stripGif(buf: Buffer): Walked {
+    if (buf.length < 13) return 'unsafe';
     let pos = 13 + colourTableBytes(buf[10]);
-    if (pos > buf.length) return null;
+    if (pos > buf.length) return 'unsafe';
     const parts: Buffer[] = [buf.subarray(0, pos)];
     let changed = false;
     let hasPicture = false;
     for (;;) {
-        if (pos >= buf.length) return null; // no trailer before the end: truncated
+        // No trailer before the end: as for a PNG, nothing to strip only if nothing was left out so far.
+        if (pos >= buf.length) return changed ? 'unsafe' : 'clean';
         const introducer = buf[pos];
         if (introducer === 0x3b) { // trailer
             parts.push(buf.subarray(pos, pos + 1));
@@ -385,20 +461,20 @@ function stripGif(buf: Buffer): Buffer | null {
             break;
         }
         if (introducer === 0x2c) { // image descriptor
-            if (pos + 10 > buf.length) return null;
+            if (pos + 10 > buf.length) return 'unsafe';
             const data = pos + 10 + colourTableBytes(buf[pos + 9]) + 1; // + the LZW minimum code size byte
             const end = data > buf.length ? -1 : skipGifSubBlocks(buf, data);
-            if (end < 0) return null;
+            if (end < 0) return 'unsafe';
             parts.push(buf.subarray(pos, end));
             hasPicture = true;
             pos = end;
             continue;
         }
         if (introducer === 0x21) { // extension
-            if (pos + 2 > buf.length) return null;
+            if (pos + 2 > buf.length) return 'unsafe';
             const label = buf[pos + 1];
             const end = skipGifSubBlocks(buf, pos + 2);
-            if (end < 0) return null;
+            if (end < 0) return 'unsafe';
             const application = label === 0xff && buf[pos + 2] === 11 && pos + 14 <= end
                 ? buf.toString('latin1', pos + 3, pos + 14) : null;
             const keep = label === 0xf9 || label === 0x01 || (application !== null && GIF_KEPT_APPLICATIONS.has(application));
@@ -407,8 +483,9 @@ function stripGif(buf: Buffer): Buffer | null {
             pos = end;
             continue;
         }
-        return null;
+        return 'unsafe';
     }
     if (pos < buf.length) changed = true;
-    return changed && hasPicture ? Buffer.concat(parts) : null;
+    if (!changed) return 'clean';
+    return hasPicture ? Buffer.concat(parts) : 'unsafe';
 }

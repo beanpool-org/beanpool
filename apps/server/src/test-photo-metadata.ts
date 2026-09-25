@@ -507,6 +507,7 @@ async function partOne(m: StripModule): Promise<void> {
     assert(noEoi.equals(CAMERA_JPEG_NO_EOI_STRIPPED),
         'JPEG with no EOI after its scan: every metadata block goes, the scan is kept to its last byte and nothing is added');
     assert(leak(noEoi) === null, `JPEG with no EOI: no canary and no GPS coordinate survives (${leak(noEoi) ?? 'clean'})`);
+    assert(strip(padded) === padded && strip(noEoi) === noEoi, 'both: stripping twice changes nothing (idempotent)');
     assert(stripImageValue(dataUrl('image/jpeg', PADDED_CAMERA_JPEG)) === dataUrl('image/jpeg', CAMERA_JPEG_STRIPPED)
         && stripImageValue(CAMERA_JPEG_NO_EOI.toString('base64')) === CAMERA_JPEG_NO_EOI_STRIPPED.toString('base64'),
         'the same, as a data URL and as bare base64');
@@ -566,6 +567,8 @@ async function partOne(m: StripModule): Promise<void> {
         ['this node\'s post-photo address', `/api/marketplace/posts/${crypto.randomUUID()}/photos/0`],
     ] as const) {
         assert(storable(value), `stored: ${name}`);
+        // What the node stores is what an editor sends back unchanged: it must pass again.
+        if (typeof value === 'string') assert(storable(stripImageValue(value)), `stored again as the node stored it: ${name}`);
     }
 }
 
@@ -1036,7 +1039,7 @@ async function partTwo(): Promise<void> {
     const photoLink = `/api/marketplace/posts/${listingId}/photos/0`;
     assert(readBack?.thumbnailUrl === photoLink, `the aggregator gave the item the listing's photo link (${readBack?.thumbnailUrl})`);
     if (readBack) {
-        const { id, category, emoji, name, description, priceBeans, unit, isPinned, seasonalityHint, thumbnailUrl } = readBack;
+        const { id, category, emoji, name, description, priceBeans, unit, seasonalityHint, thumbnailUrl } = readBack;
         const resaved = await fetch(`${BASE}/api/pricing-guide/admin/item`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },

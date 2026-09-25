@@ -7555,9 +7555,10 @@ export function isGroupLead(groupId: string, memberPubkey: string): boolean {
  * quiet database change.
  */
 /**
- * A convenor's or lead's action on a group, or a say in who convenes it: only from a member of this node
- * (isNodeMember). The group's own role tests read group_members alone, which a prune and a pending re-key both leave
- * as they were, so a pruned convenor, or the old key of one being re-keyed, would otherwise still run the group.
+ * A convenor's or lead's action on a group: only from a member of this node (isNodeMember). The group's own role tests
+ * read group_members alone, which a prune and a pending re-key both leave as they were, so a pruned convenor, or the
+ * old key of one being re-keyed, would otherwise still run the group. (Succession needs nothing more: its electorate
+ * already asks for members.status = 'active', engine/group-succession.ts.)
  */
 function assertGroupActorIsMember(actorPubkey: string): void {
     if (!isNodeMember(actorPubkey)) throw new Error(`UNAUTHORIZED: ${NOT_A_MEMBER_ERROR}`);
@@ -7727,14 +7728,12 @@ export function removeGroupThreadMessage(groupId: string, messageId: string, act
 }
 
 export function proposeGroupConvenor(groupId: string, proposerPubkey: string, candidatePubkey: string) {
-    assertGroupActorIsMember(proposerPubkey);
     const res = proposeGroupConvenorEngine(getMessagingCb(), groupId, proposerPubkey, candidatePubkey);
     bumpGroupsVersion();
     return res;
 }
 
 export function voteGroupConvenor(proposalId: string, voterPubkey: string, choice: 'yes' | 'no') {
-    assertGroupActorIsMember(voterPubkey);
     const res = voteGroupConvenorEngine(getMessagingCb(), proposalId, voterPubkey, choice);
     bumpGroupsVersion();
     return res;

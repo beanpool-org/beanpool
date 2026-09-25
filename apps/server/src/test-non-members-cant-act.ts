@@ -396,15 +396,15 @@ async function main(): Promise<void> {
         refused("nor remove it from the market",
             await signedFetch('POST', '/api/marketplace/posts/remove', pruney, { id: bobGroupPost.id, authorPublicKey: pruney.pubKeyHex }));
         assert(postStatus(bobGroupPost.id) === 'active', "Bob's group post is kept");
-        const propose = await signedFetch('POST', `/api/groups/${group.id}/succession/propose`, pruney, { candidatePubkey: bob.pubKeyHex });
-        assert(propose.status === 403 && propose.body?.error?.includes('Only members of this community'),
-            `nor propose a new convenor (got ${propose.status} ${JSON.stringify(propose.body)})`);
+        // Succession was already closed to them (its electorate asks for members.status = 'active'); kept as a check.
         const quietSince = new Date(Date.now() - 40 * 86_400_000).toISOString();
         db.prepare('UPDATE members SET last_active_at = ?, joined_at = ? WHERE public_key = ?').run(quietSince, quietSince, operator.pubKeyHex);
+        refused('nor propose a new convenor where the convenor has gone quiet',
+            await signedFetch('POST', `/api/groups/${quietGroup.id}/succession/propose`, pruney, { candidatePubkey: bob.pubKeyHex }));
         const opened = proposeGroupConvenor(quietGroup.id, bob.pubKeyHex, alice.pubKeyHex);
-        const vote = await signedFetch('POST', `/api/groups/${quietGroup.id}/succession/${opened.proposal.id}/vote`, pruney, { choice: 'no' });
-        assert(vote.status === 403 && vote.body?.error?.includes('Only members of this community'),
-            `nor vote on one (got ${vote.status} ${JSON.stringify(vote.body)})`);
+        refused('nor vote on the proposal a live member opened',
+            await signedFetch('POST', `/api/groups/${quietGroup.id}/succession/${opened.proposal.id}/vote`, pruney, { choice: 'no' }));
+        assert(!db.prepare('SELECT 1 FROM group_convenor_votes WHERE voter_pubkey = ?').get(pruney.pubKeyHex), 'and no vote is recorded');
 
         // Vouching hands out a credit floor; a pruned voucher's can_vouch outlasts the prune.
         const vouchOf = (pk: string) => db.prepare('SELECT elder_vouched_by, vouch_credit FROM members WHERE public_key = ?').get(pk) as any;

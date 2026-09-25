@@ -227,9 +227,16 @@ export function SsoEnrolSheet({
                                         {' '}to finish:
                                     </Text>
                                     <View style={styles.deviceCodeBox}>
+                                        {/* One line, shrunk to fit. MEASURED (Roboto Bold widths): at 320dp the
+                                            box is 212dp inside, and WDJB-MJHT needs 254dp at 1.0x and 330dp at
+                                            1.3x, so it broke at the dash. Android shrinks until it fits (Fabric
+                                            ignores minimumFontScale); iOS stops at 0.5, which fits MMMM-WWWW. */}
                                         <Text
                                             style={styles.deviceCodeText}
                                             selectable
+                                            numberOfLines={1}
+                                            adjustsFontSizeToFit
+                                            minimumFontScale={0.5}
                                             accessibilityLabel={`Code ${devicePrompt.userCode.split('').join(' ')}`}
                                         >
                                             {devicePrompt.userCode}

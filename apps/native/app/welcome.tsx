@@ -1959,8 +1959,15 @@ export default function WelcomeScreen() {
                                                 backgroundColor: colors.surface.subtle, alignSelf: 'stretch',
                                                 alignItems: 'center',
                                             }}>
+                                                {/* One line, shrunk to fit: at 320dp this box is 170dp inside and
+                                                    WDJB-MJHT needs 221dp at 1.0x, 287dp at 1.3x (see SsoEnrolSheet).
+                                                    Android shrinks until it fits; iOS stops at 0.5, which fits any
+                                                    code but an all-M/W one at 1.3x (needs 0.49). */}
                                                 <Text
                                                     selectable
+                                                    numberOfLines={1}
+                                                    adjustsFontSizeToFit
+                                                    minimumFontScale={0.5}
                                                     accessibilityLabel={`Code ${recoveryCode.userCode.split('').join(' ')}`}
                                                     style={{
                                                         fontSize: 30, fontWeight: 'bold', letterSpacing: 5,

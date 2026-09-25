@@ -29,7 +29,7 @@ vi.mock('../sso-signin', () => ({
     signInWithGoogle: vi.fn(),
     signInWithApple: vi.fn(),
     signInWithFacebook: vi.fn(),
-    signInWithGithub: vi.fn(),
+    signInWithGithubViaNode: vi.fn(),
 }));
 
 vi.mock('../node-post', () => ({
@@ -37,7 +37,7 @@ vi.mock('../node-post', () => ({
 }));
 
 import { signedPost } from '../node-post';
-import { signInWithGoogle, signInWithGithub } from '../sso-signin';
+import { signInWithGoogle, signInWithGithubViaNode } from '../sso-signin';
 import { recoverAccountWithSso } from '../sso-recovery';
 import { seedToKeypair } from '../crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -279,7 +279,7 @@ describe('SSO Recovery Service', () => {
         ]);
     });
 
-    it('successfully recovers account using GitHub OAuth (with direct sub)', async () => {
+    it('successfully recovers account using GitHub run by the node (the sub the node read)', async () => {
         const originalSeed = new Uint8Array(32).fill(42);
         const originalKeypair = await seedToKeypair(originalSeed);
         const memberCallsign = 'test-github-pilot';
@@ -289,23 +289,24 @@ describe('SSO Recovery Service', () => {
         const ssoSealed = await sealShareToSso(otherHalf, 'github', githubSub);
         const hubRecorded = recordShareForHub(hubShare);
 
-        (signInWithGithub as any).mockResolvedValue({
-            idToken: 'gho_oauth_token_xyz',
-            nonce: 'github-eph-nonce-456',
-            sub: githubSub,
-            email: 'damo@github.com',
+        // The node ran GitHub's device flow: the app holds its session id and the `sub` it read,
+        // never a GitHub token. (The phone-run flow handed the node `gho_…` here, which is the hole
+        // S2/A2a close: a node cannot tell which app a GitHub token was minted for.)
+        (signInWithGithubViaNode as any).mockImplementation(async (opts: any) => {
+            opts.onPrompt({ userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device' });
+            return { sessionId: 'node-session-gh', sub: githubSub, email: 'damo@github.com' };
         });
 
+        let released: any;
         (signedPost as any).mockImplementation(async (_url: string, path: string, body: any) => {
             if (path === '/api/recovery/collect') {
                 return { ok: true, status: 200, json: async () => ({ collectionId: 'coll-gh-1' }) };
             }
             if (path === '/api/recovery/collect/sso-nonce') {
-                return { ok: true, status: 200, json: async () => ({ nonce: 'github-eph-nonce-456' }) };
+                return { ok: true, status: 200, json: async () => ({ nonce: 'github-eph-nonce-456', githubFlow: 'node' }) };
             }
             if (path === '/api/recovery/collect/sso') {
-                expect(body.idToken).toBe('gho_oauth_token_xyz');
-                expect(body.provider).toBe('github');
+                released = body;
                 return { ok: true, status: 200, json: async () => ({ status: 'sso_verified' }) };
             }
             if (path === '/api/recovery/collect/hub') {
@@ -344,9 +345,9 @@ describe('SSO Recovery Service', () => {
         });
 
         // Asserted, not a formality: this is the GitHub path, and the device flow cannot finish
-        // unless the member is shown the code. Recovery previously called signInWithGithub with no
-        // handler at all and polled silently for fifteen minutes; this suite passed throughout,
-        // because signInWithGithub is mocked here. The type now makes the omission impossible.
+        // unless the member is shown the code. Recovery previously called the sign-in with no
+        // handler at all and waited silently for fifteen minutes; this suite passed throughout,
+        // because the sign-in is mocked here. The type now makes the omission impossible.
         const shown: string[] = [];
         const result = await recoverAccountWithSso({
             callsign: memberCallsign,
@@ -359,6 +360,18 @@ describe('SSO Recovery Service', () => {
         expect(result.identity.privateKey).toEqual(originalKeypair.privateKeyHex);
         expect(result.identity.callsign).toEqual(memberCallsign);
         expect(result.provider).toBe('github');
+        expect(shown).toEqual(['ABCD-1234']);
+        // The recovering device's own routes, carrying its collection, and what the node said.
+        expect(signInWithGithubViaNode).toHaveBeenCalledWith(expect.objectContaining({
+            routes: {
+                start: '/api/recovery/collect/github/start',
+                poll: '/api/recovery/collect/github/poll',
+                body: { collectionId: 'coll-gh-1' },
+            },
+            githubFlow: 'node',
+        }));
+        // The release proves the sign-in with the node's session: no token, no nonce.
+        expect(released).toEqual({ collectionId: 'coll-gh-1', provider: 'github', proof: { sessionId: 'node-session-gh' } });
     });
 
     it('survives a malformed checksum (not 4 bytes) in kdfParams during legacy recovery', async () => {

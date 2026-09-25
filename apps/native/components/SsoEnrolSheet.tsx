@@ -13,7 +13,7 @@ import type { BeanPoolIdentity } from '../utils/identity';
 
 /**
  * Decode the `sub` claim from a JWT id_token without signature verification,
- * or use the directly-resolved `fallbackSub` for OAuth providers (like GitHub).
+ * or use the directly-resolved `fallbackSub` (Facebook, when its token is not a JWT).
  */
 function extractSub(idToken: string, fallbackSub?: string): string {
     if (fallbackSub) return fallbackSub;
@@ -56,9 +56,12 @@ export function SsoEnrolSheet({
     const [step, setStep] = useState<'processing' | 'success' | 'error'>('processing');
     const [errorMessage, setErrorMessage] = useState('');
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);
-    /** GitHub's device flow has no redirect — the member types this code at github.com/login/device. */
+    /**
+     * GitHub's device flow has no redirect — the member types this code at github.com/login/device.
+     * Both come from the node, which runs the flow (`signInWithGithubViaNode`).
+     */
     const [devicePrompt, setDevicePrompt] = useState<GithubDevicePrompt | null>(null);
-    /** Aborts an in-flight device-flow poll: closing the sheet must stop it, not orphan it. */
+    /** Aborts the wait on the node's GitHub sign-in: closing the sheet must stop it, not orphan it. */
     const abortRef = React.useRef<AbortController | null>(null);
     const [codeCopied, setCodeCopied] = useState(false);
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,13 +76,25 @@ export function SsoEnrolSheet({
     /**
      * Close, and stop what is running.
      *
-     * The device flow polls GitHub on a timer, and the modal stays mounted with `visible={false}`,
+     * A GitHub sign-in polls the node on a timer, and the modal stays mounted with `visible={false}`,
      * so unmount cleanup alone would leave a poll running unseen until the code expired.
      */
     const closeAndStop = React.useCallback(() => {
         abortRef.current?.abort();
         onClose();
     }, [onClose]);
+
+    /**
+     * Dash stripped deliberately. GitHub renders eight separate cells; handing them nine characters
+     * is the likeliest reason the paste chip flashed and vanished. MEASURED 2026-08-28: ~5 failed
+     * paste attempts before one landed.
+     */
+    const copyCode = (prompt: GithubDevicePrompt) => {
+        Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
+            () => setCodeCopied(true),
+            () => setCodeCopied(false),
+        );
+    };
 
     const handleConnect = async () => {
         if (!identity) {
@@ -106,13 +121,7 @@ export function SsoEnrolSheet({
                 setDevicePrompt(prompt);
                 // Copied before the member has done anything. The whole friction was having to
                 // return to the app for the code once GitHub was on screen.
-                // Dash stripped deliberately. GitHub renders eight separate cells; handing them
-                // nine characters is the likeliest reason the paste chip flashed and vanished.
-                // MEASURED 2026-08-28: ~5 failed paste attempts before one landed.
-                Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
-                    () => setCodeCopied(true),
-                    () => setCodeCopied(false),
-                );
+                copyCode(prompt);
             }, abort.signal);
 
             // Get them back here. GitHub's success page says nothing about returning, and
@@ -120,15 +129,16 @@ export function SsoEnrolSheet({
             // account was already connected behind it. `returnToApp` handles both platforms.
             await returnToApp();
 
-            const sub = extractSub(signin.idToken, signin.sub);
-
-            const result = await enrolSsoKeeper({
-                identity,
-                provider: signin.provider,
-                sub,
-                idToken: signin.idToken,
-                nonce: signin.nonce,
-            });
+            // GitHub's proof is the node's own session, never a token (keeper-enrolment.ts).
+            const result = await enrolSsoKeeper(signin.provider === 'github'
+                ? { identity, provider: 'github', sub: signin.sub, proof: { sessionId: signin.sessionId } }
+                : {
+                    identity,
+                    provider: signin.provider,
+                    sub: extractSub(signin.idToken, signin.sub),
+                    idToken: signin.idToken,
+                    nonce: signin.nonce,
+                });
 
             if (result.error) {
                 setErrorMessage(result.error);
@@ -149,7 +159,11 @@ export function SsoEnrolSheet({
                     onClose();
                     return;
                 }
-                if (e.reason === 'unsupported') {
+                if (e.reason === 'unsupported' && provider === 'github') {
+                    // Not this device: the community's server has to run GitHub's sign-in, and says
+                    // so in full.
+                    setErrorMessage(e.message);
+                } else if (e.reason === 'unsupported') {
                     setErrorMessage(`This device can't sign in with ${PROVIDER_NAME}. (${e.message})`);
                 } else if (e.reason === 'no-token' || e.reason === 'provider') {
                     setErrorMessage(`${PROVIDER_NAME} sign-in failed: ${e.message}`);
@@ -204,27 +218,32 @@ export function SsoEnrolSheet({
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             {devicePrompt ? (
                                 <>
+                                    {/* The code and the address both come from the node's answer. */}
                                     <Text style={styles.processingText}>
-                                        Enter this code on GitHub to finish:
-                                    </Text>
-                                    <Pressable
-                                        onPress={() => {
-                                            Clipboard.setStringAsync(devicePrompt.userCode.replace(/-/g, '')).then(
-                                                () => setCodeCopied(true),
-                                                () => setCodeCopied(false),
-                                            );
-                                        }}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={codeCopied
-                                            ? `Code ${devicePrompt.userCode.split('').join(' ')}, copied to clipboard. Tap to copy again.`
-                                            : `Code ${devicePrompt.userCode.split('').join(' ')}. Tap to copy.`}
-                                        style={styles.deviceCodeBox}
-                                    >
-                                        <Text style={styles.deviceCodeText} selectable>{devicePrompt.userCode}</Text>
-                                        <Text style={styles.deviceCodeHint}>
-                                            {codeCopied ? '✓ copied — or just type it, it is 8 characters' : 'tap to copy'}
+                                        Enter this code at{' '}
+                                        <Text style={styles.deviceCodeEmphasis}>
+                                            {devicePrompt.verificationUri.replace(/^https:\/\//, '')}
                                         </Text>
-                                    </Pressable>
+                                        {' '}to finish:
+                                    </Text>
+                                    <View style={styles.deviceCodeBox}>
+                                        <Text
+                                            style={styles.deviceCodeText}
+                                            selectable
+                                            accessibilityLabel={`Code ${devicePrompt.userCode.split('').join(' ')}`}
+                                        >
+                                            {devicePrompt.userCode}
+                                        </Text>
+                                        <Pressable
+                                            onPress={() => copyCode(devicePrompt)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={codeCopied ? 'Code copied. Copy it again.' : 'Copy the code'}
+                                            style={styles.copyButton}
+                                            hitSlop={8}
+                                        >
+                                            <Text style={styles.copyButtonText}>{codeCopied ? '✓ Copied' : 'Copy'}</Text>
+                                        </Pressable>
+                                    </View>
                                     {/* The member taps when they have read the code, rather than the
                                         browser covering it the instant it appears. */}
                                     {/* Above the button, not below it. Android floats a clipboard
@@ -401,10 +420,18 @@ const styles = StyleSheet.create({
         fontVariant: ['tabular-nums'],
         textAlign: 'center',
     },
-    deviceCodeHint: {
-        fontSize: 12,
-        color: colors.text.secondary,
-        marginTop: 8,
+    copyButton: {
+        marginTop: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 22,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: colors.brand.primary,
+    },
+    copyButtonText: {
+        fontSize: 15,
+        fontWeight: 'bold',
+        color: colors.brand.primary,
     },
     deviceCodeEmphasis: {
         fontWeight: 'bold',

@@ -13,7 +13,7 @@
  * distinction. The tests below cover its error mapping the same way Apple's are covered.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // react-native and expo-apple-authentication have no life outside a device, so they are stubbed
 // at the module boundary. Platform defaults to ios; the one test that cares overrides it.
@@ -70,7 +70,8 @@ import {
     readAppleCredential,
     readNonceResponse,
     signInWithFacebook,
-    signInWithGithub,
+    signInWithGithubViaNode,
+    GITHUB_MEMBER_ROUTES,
 } from '../sso-signin';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -94,6 +95,13 @@ describe('the nonce the node sends back', () => {
 
     it('treats absent providers as "the node did not say", not as "none"', () => {
         expect(readNonceResponse({ nonce: 'n' }).providers).toEqual([]);
+    });
+
+    it('keeps githubFlow only when the node says it runs GitHub sign-in itself', () => {
+        expect(readNonceResponse({ nonce: 'n', githubFlow: 'node' }).githubFlow).toBe('node');
+        for (const githubFlow of [undefined, 'phone', true, 1, null]) {
+            expect(readNonceResponse({ nonce: 'n', githubFlow }), String(githubFlow)).not.toHaveProperty('githubFlow');
+        }
     });
 });
 
@@ -167,7 +175,7 @@ describe('SsoSignInError', () => {
     });
 });
 
-describe('Facebook and GitHub WebBrowser OAuth flows', () => {
+describe('Facebook WebBrowser OAuth flow', () => {
     it('handles Facebook OAuth token redirect', async () => {
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
             type: 'success',
@@ -193,115 +201,116 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
             vi.useRealTimers();
         }
     });
+});
 
-    // GitHub is the device flow now: no redirect, no code exchange, no client secret. See the
-    // rationale on `signInWithGithub` — GitHub OAuth Apps are not OIDC, so the web flow needs a
-    // secret on every node, which a federated network cannot have.
-    const githubDeviceFetch = (poll: object[], user: object = { id: 987654, email: 'dev@github.com' }) => {
-        const queue = [...poll];
-        return vi.fn(async (url: any) => {
-            const u = String(url);
-            if (u.includes('login/device/code')) {
-                return { ok: true, json: async () => ({
-                    device_code: 'dev_code_1', user_code: 'ABCD-1234',
-                    verification_uri: 'https://github.com/login/device',
-                    expires_in: 900, interval: 0,
-                }) } as any;
+// GitHub is the device flow, and since S2 (#1115) the NODE runs it: the app asks the node to start,
+// shows the code, and polls the node. No redirect, no code exchange, no client secret, and no request
+// from the app to GitHub at all. These were the phone-run flow's tests, each kept for the same
+// property on the node-run one; sso-github-node.test.ts runs the same flow through the real request
+// signing, with `fetch` as the node.
+describe('GitHub sign-in, run by the node', () => {
+    const START = {
+        sessionId: 'node-session-1', userCode: 'ABCD-1234',
+        verificationUri: 'https://github.com/login/device',
+        expiresInSeconds: 900, intervalSeconds: 5,
+    };
+    const nodeGithub = (polls: object[], start: { status: number; body: object } = { status: 200, body: START }) => {
+        const queue = [...polls];
+        return vi.fn(async (path: string, _body: Record<string, unknown>) => {
+            if (path === GITHUB_MEMBER_ROUTES.start) {
+                return { ok: start.status === 200, status: start.status, json: async () => start.body } as any;
             }
-            if (u.includes('login/oauth/access_token')) {
-                return { ok: true, json: async () => queue.shift() ?? { error: 'expired_token' } } as any;
+            if (path === GITHUB_MEMBER_ROUTES.poll) {
+                return { ok: true, status: 200, json: async () => queue.shift() ?? { status: 'expired' } } as any;
             }
-            if (u.includes('api.github.com/user')) {
-                return { ok: true, json: async () => user } as any;
-            }
-            return { ok: false, status: 404 } as any;
+            return { ok: false, status: 404, json: async () => ({}) } as any;
         });
     };
+    const viaNode = (post: ReturnType<typeof nodeGithub>, onPrompt: (p: any) => void = () => {}, signal?: AbortSignal) =>
+        signInWithGithubViaNode({ post, routes: GITHUB_MEMBER_ROUTES, githubFlow: 'node', onPrompt, signal });
+    const pollsOf = (post: ReturnType<typeof nodeGithub>) =>
+        post.mock.calls.filter((c: any[]) => c[0] === GITHUB_MEMBER_ROUTES.poll).length;
 
-    it('polls past authorization_pending and returns the profile', async () => {
-        const originalFetch = globalThis.fetch;
-        globalThis.fetch = githubDeviceFetch([
-            { error: 'authorization_pending' },
-            { access_token: 'gho_device_token' },
-        ]) as any;
-        try {
-            const prompts: any[] = [];
-            const res = await signInWithGithub('test-nonce-gh', (p) => prompts.push(p));
-            expect(res.idToken).toBe('gho_device_token');
-            expect(res.sub).toBe('987654');
-            expect(res.email).toBe('dev@github.com');
-            // The member cannot finish without seeing the code, so surfacing it is part of the contract.
-            expect(prompts).toHaveLength(1);
-            expect(prompts[0].userCode).toBe('ABCD-1234');
-            expect(prompts[0].verificationUri).toBe('https://github.com/login/device');
-        } finally {
-            globalThis.fetch = originalFetch;
-        }
+    let originalFetch: typeof fetch;
+    beforeEach(() => {
+        vi.useFakeTimers();
+        originalFetch = globalThis.fetch;
+        globalThis.fetch = vi.fn(async () => { throw new Error('the app made a request of its own'); }) as any;
+    });
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+        vi.useRealTimers();
     });
 
-    it('treats access_denied as a cancel, not an error', async () => {
-        const originalFetch = globalThis.fetch;
-        globalThis.fetch = githubDeviceFetch([{ error: 'access_denied' }]) as any;
-        try {
-            await expect(signInWithGithub('test-nonce-gh')).rejects.toThrow('Sign-in was cancelled.');
-        } finally {
-            globalThis.fetch = originalFetch;
-        }
+    it('polls past pending and returns who the node says signed in', async () => {
+        const post = nodeGithub([
+            { status: 'pending', intervalSeconds: 5 },
+            { status: 'ok', sub: '987654', email: 'dev@github.com' },
+        ]);
+        const prompts: any[] = [];
+        const p = viaNode(post, (pr) => prompts.push(pr));
+        await vi.advanceTimersByTimeAsync(10_000);
+        const res = await p;
+
+        expect(res).toEqual({ sessionId: 'node-session-1', sub: '987654', email: 'dev@github.com' });
+        // The member cannot finish without seeing the code, so surfacing it is part of the contract.
+        expect(prompts).toHaveLength(1);
+        expect(prompts[0].userCode).toBe('ABCD-1234');
+        expect(prompts[0].verificationUri).toBe('https://github.com/login/device');
+        expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
-    it('surfaces the code to a caller that supplies no prompt handler — no silent hang', async () => {
+    it('treats denied as a cancel, not an error', async () => {
+        const post = nodeGithub([{ status: 'denied' }]);
+        const assertion = expect(viaNode(post)).rejects.toThrow('Sign-in was cancelled.');
+        await vi.advanceTimersByTimeAsync(5_000);
+        await assertion;
+    });
+
+    it('surfaces the code before the first poll — no silent hang', async () => {
         // Recovery calls this without a sheet. Before onDeviceCode existed, the code went nowhere:
-        // no prompt, no browser, and a fifteen-minute silent poll on the one path these fragments
+        // no prompt, no browser, and a fifteen-minute silent wait on the one path these fragments
         // exist for.
-        const originalFetch = globalThis.fetch;
-        globalThis.fetch = githubDeviceFetch([{ access_token: 'gho_device_token' }]) as any;
-        try {
-            const seen: any[] = [];
-            const res = await signInWithGithub('test-nonce-gh', (p) => seen.push(p));
-            expect(res.idToken).toBe('gho_device_token');
-            expect(seen[0].userCode).toBe('ABCD-1234');
-        } finally {
-            globalThis.fetch = originalFetch;
-        }
+        const post = nodeGithub([{ status: 'ok', sub: '987654' }]);
+        const seen: any[] = [];
+        const p = viaNode(post, (pr) => seen.push({ ...pr, pollsSoFar: pollsOf(post) }));
+        await vi.advanceTimersByTimeAsync(5_000);
+        const res = await p;
+        expect(res.sessionId).toBe('node-session-1');
+        expect(seen).toEqual([{ userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device', pollsSoFar: 0 }]);
     });
 
     it('stops polling when the caller aborts', async () => {
-        const originalFetch = globalThis.fetch;
         // Always pending: without an abort this would poll until the code expired, which is
         // exactly what closing the sheet used to leave running unseen.
-        globalThis.fetch = githubDeviceFetch(
-            Array.from({ length: 500 }, () => ({ error: 'authorization_pending' })),
-        ) as any;
+        const post = nodeGithub(Array.from({ length: 500 }, () => ({ status: 'pending', intervalSeconds: 5 })));
         const abort = new AbortController();
-        try {
-            const p = signInWithGithub('test-nonce-gh', () => abort.abort(), abort.signal);
-            await expect(p).rejects.toThrow('Sign-in was cancelled.');
-        } finally {
-            globalThis.fetch = originalFetch;
-        }
+        const assertion = expect(viaNode(post, () => abort.abort(), abort.signal)).rejects.toThrow('Sign-in was cancelled.');
+        await vi.advanceTimersByTimeAsync(60_000);
+        await assertion;
+        expect(pollsOf(post)).toBe(0);
     });
 
-    it('names device_flow_disabled rather than reporting an outage', async () => {
-        const originalFetch = globalThis.fetch;
-        globalThis.fetch = vi.fn(async () => ({
-            ok: true, json: async () => ({ error: 'device_flow_disabled' }),
-        })) as any;
-        try {
-            await expect(signInWithGithub('test-nonce-gh')).rejects.toThrow('not enabled for this app');
-        } finally {
-            globalThis.fetch = originalFetch;
-        }
+    it("names GitHub's device flow being switched off rather than reporting an outage", async () => {
+        const post = nodeGithub([], { status: 400, body: { error: 'GitHub sign-in is not enabled for this app yet.' } });
+        await expect(viaNode(post)).rejects.toThrow('not enabled for this app');
     });
 
-    it('refuses to enrol when GitHub returns no user id', async () => {
-        const originalFetch = globalThis.fetch;
-        // sealShareToSso keys on `provider:sub`; an undefined sub seals to `github:undefined`,
-        // which deposits fine and can never be recovered through.
-        globalThis.fetch = githubDeviceFetch([{ access_token: 'gho_device_token' }], { email: 'dev@github.com' }) as any;
-        try {
-            await expect(signInWithGithub('test-nonce-gh')).rejects.toThrow('did not return a user id');
-        } finally {
-            globalThis.fetch = originalFetch;
-        }
+    it('refuses when the node names no GitHub user id', async () => {
+        // sealSeedToSso keys on `provider:sub`; a missing sub seals to a key recovery can never
+        // derive, which deposits fine and can never be recovered through.
+        const post = nodeGithub([{ status: 'ok', email: 'dev@github.com' }]);
+        const assertion = expect(viaNode(post)).rejects.toThrow('did not return a user id');
+        await vi.advanceTimersByTimeAsync(5_000);
+        await assertion;
+    });
+
+    it('refuses a node that does not run the flow, before asking it anything', async () => {
+        const post = nodeGithub([{ status: 'ok', sub: '987654' }]);
+        await expect(signInWithGithubViaNode({
+            post, routes: GITHUB_MEMBER_ROUTES, githubFlow: undefined, onPrompt: () => {},
+        })).rejects.toMatchObject({ reason: 'unsupported' });
+        expect(post).not.toHaveBeenCalled();
+        expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 });

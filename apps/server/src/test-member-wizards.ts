@@ -272,6 +272,16 @@ async function main() {
     db.prepare("INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES ('alice-watch', ?, -28.6, 153.6, 50, ?)")
         .run(oldAliceKey, new Date().toISOString());
 
+    // 18. Alice asked to join before she came in another way (G6, engine/knocks.ts), and has since declined a
+    // stranger's request as a member
+    const knockStamp = new Date(Date.now() - 60_000).toISOString();
+    const strangerKey = generateValidPubkey();
+    db.prepare("INSERT INTO join_requests (id, pubkey, callsign, message, status, created_at, updated_at) VALUES ('alice-knock', ?, 'Alice', 'Hello', 'pending', ?, ?)")
+        .run(oldAliceKey, knockStamp, knockStamp);
+    db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, status, created_at, decided_by, decided_at, updated_at)
+                VALUES ('stranger-knock', ?, 'Stranger', 'Hi', 'declined', ?, ?, ?, ?)`)
+        .run(strangerKey, knockStamp, oldAliceKey, knockStamp, knockStamp);
+
     // Step A: Issue re-key code (tested with uppercase key to verify case normalization)
     const rekeyIssue = issueRekeyCode(oldAliceKey.toUpperCase(), operatorPubkey);
     assert(Boolean(rekeyIssue.code), `Re-enrolment code generated: ${rekeyIssue.code}`);
@@ -425,6 +435,17 @@ async function main() {
     const watchNew = db.prepare('SELECT id FROM place_watches WHERE pubkey = ?').all(newAliceKey) as any[];
     const watchOld = db.prepare('SELECT 1 FROM place_watches WHERE pubkey = ?').get(oldAliceKey);
     assert(watchNew.length === 1 && watchNew[0].id === 'alice-watch' && !watchOld, 'place watch moved to newAliceKey');
+
+    // Requests to join (G6): her own knock, and the one she answered, follow her to the new key. Left on the old key,
+    // her knock would be back on the members' list for the replaced key, and deleting her account would miss it.
+    // Stamped, so a standby gets the move.
+    const knocksNew = db.prepare('SELECT id, updated_at FROM join_requests WHERE pubkey = ?').all(newAliceKey) as any[];
+    const answeredKnock = db.prepare("SELECT decided_by, updated_at FROM join_requests WHERE id = 'stranger-knock'").get() as any;
+    const knockOld = db.prepare('SELECT 1 FROM join_requests WHERE pubkey = ? OR decided_by = ?').get(oldAliceKey, oldAliceKey);
+    assert(knocksNew.length === 1 && knocksNew[0].id === 'alice-knock' && knocksNew[0].updated_at > knockStamp && !knockOld,
+        'join_requests: her knock moved to newAliceKey, stamped');
+    assert(answeredKnock?.decided_by === newAliceKey && answeredKnock?.updated_at > knockStamp,
+        'join_requests: the knock she answered names newAliceKey as the member who answered, stamped');
 
     // Case-insensitive assertMemberActive check
     throws(() => assertMemberActive(oldAliceKey.toUpperCase()), new RegExp(newAliceKey), 'assertMemberActive on uppercase old key reports rekeyed_to new key');

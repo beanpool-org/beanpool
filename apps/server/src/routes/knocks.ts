@@ -2,7 +2,8 @@
  * "Ask to join" (G6, design §3.3): a stranger asks a local community to let them in, and any member answers.
  * The rules and what is kept: engine/knocks.ts.
  *
- * The applicant, signed with their own key (the same key on every node), not a member here:
+ * The applicant, signed with their own key (the same key on every node), not a member here (a key a re-key replaced
+ * gets 403 `key_invalidated` from both):
  *   POST /api/join/knock          { message, callsign, avatar?, fromNode? }  → 201 { knock: { status: 'pending' } }
  *   GET  /api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt }
  * Any member (tiers gate nothing), signed:
@@ -43,6 +44,7 @@ import {
     KNOCK_RULES, submitKnock, knockStatusFor, listOpenKnocks, openKnockCount, approveKnock, declineKnock, knockerRefusal,
     type KnockRefusal, type AnswerRefusal,
 } from '../engine/knocks.js';
+import { openJoinKeyInvalidated } from '../engine/open-join.js';
 import type { RouteDeps } from './types.js';
 
 const DEFAULT_LIST_LIMIT = 20;
@@ -165,6 +167,8 @@ function refuseAnswer(ctx: any, reason: AnswerRefusal): void {
             return answer(ctx, 409, 'This request is more than 30 days old and has lapsed. They can ask again.', reason);
         case 'already_member':
             return answer(ctx, 409, 'They have already joined this community.', reason);
+        case 'key_invalidated':
+            return answer(ctx, 409, 'This request came from a key that has since been replaced by a new one, so there is nothing to answer.', reason);
     }
 }
 
@@ -214,6 +218,8 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'no-store');
         const applicant = signer(ctx, 'Sign this request with the key you asked to join with.');
         if (!applicant) return;
+        // A key a re-key replaced gets the knock's own refusal, and never an invite (engine/knocks.ts, "A re-key").
+        if (openJoinKeyInvalidated(applicant)) return refuseKnock(ctx, 'key_invalidated');
         ctx.body = knockStatusFor(applicant);
     });
 

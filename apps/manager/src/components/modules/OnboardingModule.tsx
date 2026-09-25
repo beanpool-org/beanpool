@@ -54,6 +54,7 @@ const FAILURE_LABELS: Record<string, string> = {
     registration_failed: 'Registration failed',
     malformed: 'Broken offline ticket',
     wrong_key: 'Invite made for someone else',
+    key_invalidated: 'Key replaced by a re-key',
 };
 
 function sum(rows: FunnelRow[]): number {

@@ -9,6 +9,7 @@ import { recordFunnelEvent } from './funnel.js';
 import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
 import {
     getMember,
+    isInvalidatedKey,
     generateShortCode,
     verifyOfflineTicket,
     type Member,
@@ -95,6 +96,14 @@ export function redeemInvite(
     if (knock && knock.pubkey !== String(publicKey).toLowerCase()) {
         recordFunnelEvent('invite_failed', 'wrong_key');
         return { success: false, error: 'This invite was made for someone else, so it can’t be used here. Ask a member for your own invite.' };
+    }
+    // Nor a key a re-key replaced (engine/member-wizards.ts), even the one the knock names. A re-key moves the knock to
+    // the new key (engine/knocks.ts `moveKnocks`), so the check above already refuses the old one; this is the second
+    // lock, for a knock left on a replaced key however it got there. Admitted, the replaced key would be a second
+    // member, the thing the re-key was for stopping.
+    if (knock && isInvalidatedKey(db, String(publicKey))) {
+        recordFunnelEvent('invite_failed', 'key_invalidated');
+        return { success: false, error: 'This key was replaced by a new one, so it can’t join with this invite. Use the device or the 12 words that hold the new key.' };
     }
 
     // Check if identity is ALREADY a member before "already used" check

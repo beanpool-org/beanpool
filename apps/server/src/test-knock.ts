@@ -31,6 +31,12 @@
  *      (invite codes don't replicate) so the applicant can still redeem it after a take-over; one redeemed on the main
  *      still reads approved on the standby once its 30 days are up; the replica audit counts join_requests; and two of
  *      a key's knocks changed at one moment merge whatever order the copy lists them in
+ *  14. a re-key (the lost-phone flow) moves the member's knocks to the new key, as applicant and as the member who
+ *      answered: the deciding pass's reproduction (knock, let in by an ordinary invite, re-keyed, approve) gives the
+ *      old key nothing; when the new key had knocked too, the old key's knock is closed; self-deletion and removal
+ *      after a re-key wipe what they wrote, on the main server and a standby; an approver's and then the applicant's
+ *      re-key keep the applicant's status approved through a take-over; and a knock on a replaced key is refused at
+ *      every step (list, count, approve, decline, status, redeem, knock)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-knock.ts
  */
@@ -522,6 +528,185 @@ async function main(): Promise<void> {
     assert(gilMerge.written === 2 && gilMerge.invalid === 0 && gilRows.length === 2
         && gilRows.find((r) => r.id === gilOld)?.status === 'declined' && gilRows.find((r) => r.id === gilNew)?.status === 'pending',
         `two of a key's knocks changed at one moment: the decided one is written first, so the open one fits (${JSON.stringify(gilMerge)})`);
+
+    console.log('\n── 14. a re-key moves the member\'s knocks to the new key ──');
+    /** The lost-phone flow, as the operator runs it. False (and logged) if it was refused. */
+    const reKey = (from: Id, to: Id): boolean => {
+        try { completeRekey(from.pk, to.pk, issueRekeyCode(from.pk, 'owner:password').code, 'owner:password'); return true; } catch (e: any) {
+            console.error(`  (the re-key of ${from.name} failed: ${e?.message || e})`);
+            return false;
+        }
+    };
+    const memberRow = (pk: string) => db.prepare('SELECT status, invited_by, invite_code FROM members WHERE public_key = ?').get(pk) as any;
+    const knockById = (id: string) => db.prepare('SELECT * FROM join_requests WHERE id = ?').get(id) as any;
+    const redeem = (code: string, id: Id) => call(null, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
+    /** This database becomes a standby holding `copy`: the replicated tables cleared, then imported. */
+    async function becomeCopyOf(copy: any, dropCodes: string[] = []): Promise<void> {
+        clearReplicatedTables();
+        // Invite codes don't replicate: a standby has none of the main server's.
+        for (const c of dropCodes) db.prepare('DELETE FROM invite_codes WHERE code = ?').run(c);
+        setNodeRole('backup');
+        await importRemoteState(copy);
+        setNodeRole('primary');
+    }
+
+    // The deciding pass's reproduction: Kit knocks, gets in through a member's ordinary invite while the knock waits,
+    // then loses the phone and is re-keyed. The old knock must not come back for the old key.
+    freshAddress();
+    const kit = newId('Kit');
+    const kitNew = newId('KitNew');
+    assert((await knock(kit)).status === 201, 'Kit knocks');
+    const kitId = rowsFor(kit.pk)[0]?.id as string;
+    const ordinary = await call(max, 'POST', '/api/invite/generate', { publicKey: max.pk });
+    const kitJoins = await redeem(ordinary.body?.invite?.code, kit);
+    assert(kitJoins.status === 200 && memberRow(kit.pk)?.status === 'active', `and joins through Max's ordinary invite while it waits (${kitJoins.status})`);
+    assert(reKey(kit, kitNew), 'Kit loses the phone and is re-keyed');
+    const kitRows = rowsFor(kitNew.pk);
+    assert(rowsFor(kit.pk).length === 0 && kitRows.length === 1 && kitRows[0].id === kitId && kitRows[0].callsign === 'Kit',
+        'the knock moved to the new key with the member: the old key has none');
+    assert(!(await list(mia)).body?.knocks?.some((k: any) => k.id === kitId), 'it is not back on the members\' list');
+    const kitApprove = await approve(mia, kitId);
+    assert(kitApprove.status === 409 && kitApprove.body?.code === 'already_member' && !kitApprove.body?.invite,
+        `approving it → 409 already_member, and no invite (${kitApprove.status} ${kitApprove.body?.code})`);
+    assert(rowsFor(kitNew.pk)[0]?.status === 'pending' && !db.prepare('SELECT 1 FROM invite_codes WHERE intended_for = ?').get(kit.pk),
+        'nothing is made for the old key');
+    const kitOldStatus = await status(kit);
+    assert(kitOldStatus.status === 403 && kitOldStatus.body?.code === 'key_invalidated' && !/INV-/.test(kitOldStatus.text),
+        `the old key's status read → 403 key_invalidated, and no invite (${kitOldStatus.status} ${kitOldStatus.text})`);
+    // Before this fix the approval above made an invite for the old key, which its status read handed over.
+    const kitCode = (kitApprove.body?.invite?.code ?? kitOldStatus.body?.invite) as string | undefined;
+    if (kitCode) await redeem(kitCode, kit);
+    assert(!memberRow(kit.pk) && memberRow(kitNew.pk)?.status === 'active', 'one member, on the new key: the old key never joins again');
+
+    // The new phone asked to join as a stranger before the operator re-keyed: two open knocks meet on one key, and
+    // only one may be open. The old key's is closed (declined, by nobody): the key is a member, so neither is answered.
+    freshAddress();
+    const lou = newId('Lou');
+    const louNew = newId('LouNew');
+    await knock(lou);
+    makeMember(lou, max.pk);
+    const louNewKnock = await knock(louNew);
+    const louOld = rowsFor(lou.pk)[0]?.id as string;
+    const louOwn = rowsFor(louNew.pk)[0]?.id as string;
+    assert(louNewKnock.status === 201 && !!louOld && !!louOwn, 'Lou knocked, joined, and the new phone knocked too');
+    const louMoved = reKey(lou, louNew);
+    const louRows = rowsFor(louNew.pk);
+    const louClosed = louRows.find((r) => r.id === louOld);
+    assert(louMoved && rowsFor(lou.pk).length === 0 && louRows.length === 2 && louRows.find((r) => r.id === louOwn)?.status === 'pending'
+        && louClosed?.status === 'declined' && louClosed?.decided_by === null && typeof louClosed?.decided_at === 'string',
+        'the re-key moves both: the new key\'s own stays open, the old key\'s is closed (declined, by nobody)');
+    assert(!(await list(mia)).body?.knocks?.some((k: any) => k.pubkey === lou.pk || k.pubkey === louNew.pk), 'neither is listed: Lou is a member');
+
+    // Privacy: a member re-keys, then deletes their account (Lia) or is removed (Ned). What they wrote when they knocked
+    // goes, on the main server and on a standby.
+    freshAddress();
+    const lia = newId('Lia');
+    const liaNew = newId('LiaNew');
+    const ned = newId('Ned');
+    const nedNew = newId('NedNew');
+    await knock(lia, { message: 'Lia here, 12 Smith St', avatar: jpegWithXmp('LIA') });
+    await knock(ned, { message: 'Ned here, 3 Jones Rd' });
+    const liaId = rowsFor(lia.pk)[0]?.id as string;
+    const nedId = rowsFor(ned.pk)[0]?.id as string;
+    const liaCode = (await approve(max, liaId)).body?.invite?.code as string;
+    const nedCode = (await approve(mia, nedId)).body?.invite?.code as string;
+    const liaJoins = await redeem(liaCode, lia);
+    const nedJoins = await redeem(nedCode, ned);
+    assert(liaJoins.status === 200 && nedJoins.status === 200 && knockById(liaId)?.avatar?.startsWith('data:image/') && !!knockById(nedId)?.from_node,
+        'Lia and Ned knocked (with a photo and where they came from), were approved and joined');
+    // A standby's copy from before the re-keys: both knocks, with what they wrote, on the old keys.
+    const beforeRekeys: any = await exportSyncState(nodeId);
+    assert(reKey(lia, liaNew) && reKey(ned, nedNew), 'both lose their phones and are re-keyed');
+    const liaDeleted = purgeMemberSelf(liaNew.pk);
+    adminPruneUser(nedNew.pk, 'owner:password');
+    const wiped = (r: any, pk: string) => r?.pubkey === pk && r?.callsign === 'Deleted Member' && r?.message === '' && r?.avatar === null && r?.from_node === null;
+    const theirWords = () => (db.prepare(`SELECT COUNT(*) AS n FROM join_requests
+        WHERE pubkey IN (?, ?) OR callsign IN ('Lia', 'Ned') OR message LIKE '%Smith St%' OR message LIKE '%Jones Rd%'`).get(lia.pk, ned.pk) as { n: number }).n;
+    assert(liaDeleted.ok && wiped(knockById(liaId), liaNew.pk), 'Lia deletes her account after the re-key: what she wrote when she knocked is gone');
+    assert(wiped(knockById(nedId), nedNew.pk), 'Ned is removed after the re-key: what he wrote is gone');
+    assert(knockById(liaId)?.status === 'approved' && knockById(liaId)?.invite_code === liaCode && knockById(nedId)?.invite_code === nedCode,
+        'the records stay');
+    assert(theirWords() === 0, 'no knock is left on the old keys, and their words are nowhere');
+    const afterRemoval: any = await exportSyncState(nodeId);
+    await becomeCopyOf(afterRemoval);
+    assert(wiped(knockById(liaId), liaNew.pk) && wiped(knockById(nedId), nedNew.pk) && theirWords() === 0,
+        'a standby set up after it has none of it');
+    await becomeCopyOf(beforeRekeys);
+    assert(knockById(liaId)?.message === 'Lia here, 12 Smith St', 'a standby that holds the copy from before has her words');
+    const scrubMerge = mergeReplicatedKnocks(afterRemoval.joinRequests);
+    assert(wiped(knockById(liaId), liaNew.pk) && wiped(knockById(nedId), nedNew.pk) && theirWords() === 0 && scrubMerge.invalid === 0,
+        `and the next copy's knocks take them away there: the move and the scrub are stamped, so they travel (${JSON.stringify(scrubMerge)})`);
+    await becomeCopyOf(afterRemoval);
+
+    // The approver re-keys before the applicant redeems; later the applicant re-keys too. A standby set up after each
+    // still makes the invite, so after a take-over the applicant still reads approved.
+    freshAddress();
+    const ola = newId('Ola');
+    const olaNew = newId('OlaNew');
+    const pam = newId('Pam');
+    const pamNew = newId('PamNew');
+    makeMember(pam, mia.pk);
+    await knock(ola);
+    const olaId = rowsFor(ola.pk)[0]?.id as string;
+    const olaCode = (await approve(pam, olaId)).body?.invite?.code as string;
+    assert(typeof olaCode === 'string' && reKey(pam, pamNew), 'Pam approves Ola, then loses her phone and is re-keyed');
+    assert(knockById(olaId)?.decided_by === pamNew.pk, 'the approval now names Pam\'s new key');
+    await becomeCopyOf(await exportSyncState(nodeId), [olaCode]);
+    const olaInvite = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(olaCode) as any;
+    assert(olaInvite?.created_by === pamNew.pk && olaInvite?.intended_for === ola.pk && !olaInvite?.used_by,
+        'a standby set up after the re-key makes the invite again, by Pam\'s new key, for Ola');
+    const olaTakeover = await status(ola);
+    assert(olaTakeover.body?.status === 'approved' && olaTakeover.body?.invite === olaCode,
+        `after a take-over Ola's status still reads approved (${olaTakeover.text})`);
+    const olaJoins = await redeem(olaCode, ola);
+    assert(olaJoins.status === 200 && memberRow(ola.pk)?.invited_by === pamNew.pk, `and the invite admits her, invited by Pam's new key (${olaJoins.status})`);
+    assert(reKey(ola, olaNew), 'then Ola loses her phone and is re-keyed');
+    await becomeCopyOf(await exportSyncState(nodeId), [olaCode]);
+    const olaRow = knockById(olaId);
+    const olaInviteAgain = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(olaCode) as any;
+    assert(olaRow?.pubkey === olaNew.pk && olaRow?.decided_by === pamNew.pk && rowsFor(ola.pk).length === 0
+        && olaInviteAgain?.created_by === pamNew.pk && olaInviteAgain?.intended_for === olaNew.pk,
+        'a standby set up after both re-keys has the knock on Ola\'s new key, decided by Pam\'s, and makes the invite for her new key');
+    const olaNewStatus = await status(olaNew);
+    assert(olaNewStatus.body?.status === 'approved' && olaNewStatus.body?.invite === olaCode, `her new key reads approved there (${olaNewStatus.text})`);
+    const olaOldRedeem = await redeem(olaCode, ola);
+    assert(olaOldRedeem.status === 400 && !memberRow(ola.pk), `and her old key can't use the invite (${olaOldRedeem.status})`);
+
+    // The second lock: a knock on a key a re-key replaced, however it got there (the move leaves none; a node that ran
+    // the code before it has them), is refused at every step, and its invite admits nobody.
+    const staleId = crypto.randomUUID();
+    db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, status, created_at, updated_at) VALUES (?, ?, 'Rekeyed', 'An old knock', 'pending', ?, ?)`)
+        .run(staleId, rekeyed.pk, ago(60_000), ago(60_000));
+    const staleList = await list(mia);
+    assert(staleList.status === 200 && !staleList.body?.knocks?.some((k: any) => k.id === staleId), 'a replaced key\'s knock is not on the members\' list');
+    const staleCount = await admin('GET', '/api/local/admin/knocks');
+    assert(staleCount.body?.open === staleList.body?.total, `nor in the operator's count (${staleCount.body?.open})`);
+    const staleApprove = await approve(mia, staleId);
+    assert(staleApprove.status === 409 && staleApprove.body?.code === 'key_invalidated' && !staleApprove.body?.invite,
+        `approving it → 409 key_invalidated (${staleApprove.status} ${staleApprove.body?.code})`);
+    const staleDecline = await decline(mia, staleId);
+    assert(staleDecline.status === 409 && staleDecline.body?.code === 'key_invalidated', `declining it → 409 key_invalidated (${staleDecline.status} ${staleDecline.body?.code})`);
+    const staleCodes = () => (db.prepare('SELECT code FROM invite_codes WHERE intended_for = ?').all(rekeyed.pk) as any[]).map((r) => r.code as string);
+    const staleMade = staleCodes();
+    assert(knockById(staleId)?.status === 'pending' && staleMade.length === 0, 'nothing is written: still pending, and no invite for the old key');
+    const staleStatus = await status(rekeyed);
+    assert(staleStatus.status === 403 && staleStatus.body?.code === 'key_invalidated' && !/INV-/.test(staleStatus.text),
+        `its status read → 403 key_invalidated (${staleStatus.status} ${staleStatus.text})`);
+    // As a node before this fix would have it: approved, with an invite for the old key.
+    const staleInvite = await call(mia, 'POST', '/api/invite/generate', { publicKey: mia.pk, intendedFor: rekeyed.pk });
+    const staleCode = staleInvite.body?.invite?.code as string;
+    setKnock(staleId, { status: 'approved', decided_by: mia.pk, decided_at: new Date().toISOString(), invite_code: staleCode });
+    const staleApproved = await status(rekeyed);
+    assert(staleApproved.status === 403 && !staleApproved.text.includes(staleCode), `approved, its status read still gives the old key nothing (${staleApproved.status})`);
+    const staleRedeems = [staleCode, ...staleMade];
+    for (const c of staleRedeems) {
+        const r = await redeem(c, rekeyed);
+        assert(r.status === 400 && /replaced/.test(r.body?.error ?? ''), `the old key redeeming that invite → refused (${r.status} ${r.body?.error})`);
+    }
+    const staleUsed = db.prepare('SELECT 1 FROM invite_codes WHERE code = ? AND used_by IS NOT NULL').get(staleCode);
+    assert(!memberRow(rekeyed.pk) && !staleUsed, 'the old key is no member, and the invite is not used');
+    const staleKnock = await knock(rekeyed);
+    assert(staleKnock.status === 403 && staleKnock.body?.code === 'key_invalidated', 'and it can\'t knock again (403 key_invalidated)');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

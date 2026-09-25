@@ -738,7 +738,8 @@ CREATE INDEX IF NOT EXISTS idx_place_watches_updated_at ON place_watches(updated
 -- Only members read the rest (the callsign, message and avatar the applicant sent); nothing here is in a public read.
 -- An approved knock's invite admits the applicant's key and no other (`redeemInvite` looks the code up here).
 -- Replicated to a standby (SyncPayload.joinRequests, watermarked on `updated_at`, which every write stamps; never
--- deleted, so no tombstones) and carried in file and sealed backups. A prune or a self-deletion of the member the
+-- deleted, so no tombstones) and carried in file and sealed backups. A re-key moves a member's rows, as applicant and
+-- as `decided_by`, to the new key (stamped, so the move replicates). A prune or a self-deletion of the member the
 -- applicant became scrubs what they wrote and keeps the record.
 CREATE TABLE IF NOT EXISTS join_requests (
     id TEXT PRIMARY KEY,

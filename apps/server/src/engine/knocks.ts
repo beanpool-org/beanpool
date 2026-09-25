@@ -35,8 +35,19 @@
  *
  * `generateInvite(approver, applicantKey)` writes an ordinary invite row, made by the approver, with the applicant's
  * key as `intended_for`, and the knock row keeps the code. `redeemInvite` (engine/invites.ts) looks every code up
- * here: a code that answers a knock is refused for any other key, before anything is written. (`intended_for` alone
- * enforces nothing: on every other invite it is a free-text note for the inviter.)
+ * here: a code that answers a knock is refused for any other key than the row's `pubkey`, and for a key a re-key
+ * replaced, before anything is written. (`intended_for` alone enforces nothing: on every other invite it is a
+ * free-text note for the inviter.)
+ *
+ * ## A re-key
+ *
+ * The lost-phone flow (`completeRekey`, engine/member-wizards.ts) moves a member's knocks, and their answers to other
+ * people's, to the new key like every other row of theirs (`moveKnocks`). A member's knock is one they made before
+ * they joined, by this knock or some other way. Left on the old key, it would be back on the members' list (no member
+ * has that key any more) and an approval would let the replaced key in as a second member; a prune or self-deletion
+ * would miss what they wrote; and an answer would name a key that is no member, so a standby would not make its invite.
+ * The second lock: a key a re-key replaced (`invalidated_keys`) is refused wherever a knock is listed, answered, read or
+ * redeemed, whatever put a knock on it.
  *
  * ## Who sees what
  *
@@ -220,7 +231,10 @@ export type KnockStatusAnswer =
     | { status: 'approved'; invite: string; expiresAt: string | null };
 
 export function knockStatusFor(pubkey: string, now = Date.now()): KnockStatusAnswer {
-    const standing = standingOf(latestKnock(pubkey.toLowerCase()), now);
+    const key = pubkey.toLowerCase();
+    // A key a re-key replaced is told nothing, least of all an invite (the route refuses it before this).
+    if (openJoinKeyInvalidated(key)) return { status: 'none' };
+    const standing = standingOf(latestKnock(key), now);
     switch (standing.kind) {
         case 'waiting': return { status: 'pending' };
         case 'invited': return { status: 'approved', invite: standing.row.invite_code!, expiresAt: standing.expiresAt === null ? null : iso(standing.expiresAt) };
@@ -241,10 +255,12 @@ export interface OpenKnock {
     createdAt: string;
 }
 
-/** Open knocks from keys that are not members here: newest first, and how many in all. */
+/** Open knocks from keys that are neither members here nor replaced by a re-key: newest first, and how many in all. */
 export function listOpenKnocks(limit: number, offset: number, now = Date.now()): { knocks: OpenKnock[]; total: number } {
     const since = iso(now - KNOCK_RULES.openDays * DAY_MS);
-    const where = `status = 'pending' AND created_at >= ? AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey)`;
+    const where = `status = 'pending' AND created_at >= ?
+        AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey)
+        AND NOT EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = join_requests.pubkey)`;
     const total = (db.prepare(`SELECT COUNT(*) AS n FROM join_requests WHERE ${where}`).get(since) as { n: number }).n;
     const rows = db.prepare(`SELECT * FROM join_requests WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`)
         .all(since, limit, offset) as KnockRow[];
@@ -261,7 +277,7 @@ export function openKnockCount(now = Date.now()): number {
     return listOpenKnocks(0, 0, now).total;
 }
 
-export type AnswerRefusal = 'not_found' | 'answered' | 'lapsed' | 'already_member';
+export type AnswerRefusal = 'not_found' | 'answered' | 'lapsed' | 'already_member' | 'key_invalidated';
 
 export type AnswerOutcome =
     | { ok: true; knockId: string; status: 'approved'; invite: { code: string; expiresAt: string } }
@@ -276,6 +292,9 @@ function answerable(id: string, now: number): { row: KnockRow } | { reason: Answ
     if (!isOpen(row, now)) return { reason: 'lapsed' };
     // They joined some other way meanwhile (a member's invite): there is nothing left to answer.
     if (getMember(db, row.pubkey)) return { reason: 'already_member' };
+    // A key a re-key replaced. A re-key moves the knock with the member (`moveKnocks`), so this is the second lock: an
+    // invite for the old key would let it back in as a second member, the thing the re-key was for stopping.
+    if (openJoinKeyInvalidated(row.pubkey)) return { reason: 'key_invalidated' };
     return { row };
 }
 
@@ -312,12 +331,32 @@ export function declineKnock(id: string, member: string, now = Date.now()): Answ
 
 /**
  * A prune, or the member deleting their own account: what they wrote when they knocked goes (the name, the message,
- * the picture, where they came from). The record stays, so the invite it names still admits only their key.
+ * the picture, where they came from). The record stays, so the invite it names still admits only their key. By the
+ * member's key: a re-key has moved their knocks to it (`moveKnocks`).
  */
 export function scrubKnocksOf(pubkey: string): void {
     db.prepare(`UPDATE join_requests SET callsign = 'Deleted Member', message = '', avatar = NULL, from_node = NULL, updated_at = ?
                 WHERE pubkey = ? AND (callsign != 'Deleted Member' OR message != '' OR avatar IS NOT NULL OR from_node IS NOT NULL)`)
         .run(iso(Date.now()), pubkey.toLowerCase());
+}
+
+/**
+ * A re-key (`completeRekey`, engine/member-wizards.ts, inside its transaction): the member's knocks, and the knocks
+ * they answered, move from the old key to the new one, stamped at `at` so a standby gets the move (see "A re-key",
+ * above). One knock per key may be open: when the new key has an open one too (the new phone asked to join before the
+ * operator re-keyed), the old key's is closed first, declined by nobody (no `decided_by`). The key is a member's now,
+ * so neither is ever answered.
+ */
+export function moveKnocks(oldKey: string, newKey: string, at: string): void {
+    const from = oldKey.toLowerCase();
+    const to = newKey.toLowerCase();
+    db.transaction(() => {
+        db.prepare(`UPDATE join_requests SET status = 'declined', decided_at = ?, updated_at = ?
+                    WHERE pubkey = ? AND status = 'pending' AND EXISTS (SELECT 1 FROM join_requests o WHERE o.pubkey = ? AND o.status = 'pending')`)
+            .run(at, at, from, to);
+        db.prepare('UPDATE join_requests SET pubkey = ?, updated_at = ? WHERE pubkey = ?').run(to, at, from);
+        db.prepare('UPDATE join_requests SET decided_by = ?, updated_at = ? WHERE decided_by = ?').run(to, at, from);
+    })();
 }
 
 // ── What travels ─────────────────────────────────────────────────────────────────────────────────────────────────

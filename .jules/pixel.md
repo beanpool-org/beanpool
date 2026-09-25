@@ -134,3 +134,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-09-25 - Add accessibilityLabel, hint, and busy state to ProposeDecisionModal submit button
 **Learning:** Action buttons whose text child is conditionally replaced by an ActivityIndicator during submission leave screen reader users without accessible text during async operations unless an explicit dynamic accessibilityLabel is provided.
 **Action:** Always supply dynamic accessibilityLabel, accessibilityHint, and accessibilityState={{ disabled, busy }} on buttons that conditionally render ActivityIndicator in place of text.
+
+## 2026-09-25 - Remove incorrect accessibilityRole="button" from modal sheet inner container
+**Learning:** Container Pressable elements used solely to capture taps and stop event propagation (`e.stopPropagation()`) inside modal sheets should not have `accessibilityRole="button"`, as screen readers will announce the entire sheet container as a single button.
+**Action:** Ensure container Pressable elements used for event propagation stopping do not carry `accessibilityRole="button"`.

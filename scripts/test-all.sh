@@ -287,6 +287,7 @@ run_federation_suites() {
       test-open-join
       test-web-door
       test-global-moderation
+      test-community-me
       test-distance-search
       test-distance-search-perf
       test-global-directory

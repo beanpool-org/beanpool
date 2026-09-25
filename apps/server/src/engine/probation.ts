@@ -251,9 +251,14 @@ export function knockRefusal(pubkey: string, knockTimes: readonly string[], now:
 }
 
 export interface ProbationSummary extends ProbationState {
-    /** Per limit: the allowance, what is used in the last 24 hours, and when the oldest use leaves the window. */
-    limits: Record<Exclude<ProbationLimit, 'knocks'>, { limit: number; used: number; resetsAt: string | null }>
+    /**
+     * Per limit: the allowance, what is used in the last 24 hours, what is left, and when the oldest use leaves the
+     * window (one more comes back then; null when nothing is used). Knocks are G6's and kept elsewhere: the allowance only.
+     */
+    limits: Record<Exclude<ProbationLimit, 'knocks'>, { limit: number; used: number; remaining: number; resetsAt: string | null }>
         & { knocks: { limit: number } };
+    /** The rule itself, as data: probation ends once the first `hours` are over AND `keptPosts` posts have stayed up. */
+    endsWhen: { hours: number; keptPosts: number };
 }
 
 /** A member's own probation, for `GET /api/community/me`: whether, until when, and what is left today. */
@@ -263,13 +268,16 @@ export function probationSummary(pubkey: string, now: number = Date.now()): Prob
     const photos = inWindow(photoTimes(pubkey, now), now);
     const dms = inWindow(newRecipientTimes(dmContacts(pubkey)), now);
     const at = (ms: number | null) => (ms === null ? null : iso(ms));
+    const limit = (allowance: number, w: { used: number; resetsAtMs: number | null }) =>
+        ({ limit: allowance, used: w.used, remaining: Math.max(0, allowance - w.used), resetsAt: at(w.resetsAtMs) });
     return {
         ...state,
         limits: {
-            posts: { limit: PROBATION.posts, used: posts.used, resetsAt: at(posts.resetsAtMs) },
-            photos: { limit: PROBATION.photos, used: photos.used, resetsAt: at(photos.resetsAtMs) },
-            new_dm_recipients: { limit: PROBATION.newDmRecipients, used: dms.used, resetsAt: at(dms.resetsAtMs) },
+            posts: limit(PROBATION.posts, posts),
+            photos: limit(PROBATION.photos, photos),
+            new_dm_recipients: limit(PROBATION.newDmRecipients, dms),
             knocks: { limit: PROBATION.knocks },
         },
+        endsWhen: { hours: PROBATION.hours, keptPosts: PROBATION.keptPosts },
     };
 }

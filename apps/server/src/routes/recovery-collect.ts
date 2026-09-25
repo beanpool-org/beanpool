@@ -60,6 +60,7 @@ import {
     isSsoProvider,
     ssoProviderLabel,
     SsoVerificationError,
+    webClientIds,
     type SsoProvider,
 } from '../sso.js';
 import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
@@ -282,6 +283,8 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             nonce: issueNonce(collection.requesterEphemeralPubkey),
             expiresInSeconds: 600,
             githubFlow: GITHUB_FLOW,
+            // The id a browser puts in its request to each provider it leaves the page for (sso.ts webClientId).
+            clientIds: webClientIds(),
         };
     });
 

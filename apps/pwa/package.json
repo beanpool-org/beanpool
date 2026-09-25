@@ -11,7 +11,8 @@
     "lint": "eslint src/",
     "test": "vitest run",
     "event-card-shots": "node e2e/event-card-shots.mjs",
-    "screenshots:market-grid": "node e2e/market-grid-shots.mjs"
+    "screenshots:market-grid": "node e2e/market-grid-shots.mjs",
+    "app-csp-check": "node e2e/app-csp-check.mjs"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",

@@ -5,17 +5,21 @@
  *
  *   1. local profile: both routes 404 "invite-only" (signed), an unsigned POST never reaches them, and
  *      /api/community/info says openJoin false
- *   2. global profile: openJoin true; unsigned → 401; a body publicKey naming someone else → refused
+ *   2. global profile: openJoin true; unsigned → 401; a body publicKey naming someone else → refused; the nonce
+ *      answer names the client id a browser puts in its request to each redirecting provider (`clientIds`: the Web
+ *      client, the Services ID, the Facebook app id), and an operator's own ids change it
  *   3. the sign-in: forged, expired, wrong-audience, wrong-issuer, wrong-nonce, unissued-nonce, another key's
  *      nonce → 401 and nothing written; the other key's nonce still works for them afterwards; the provider's
  *      keys failing (HTTP 503, or no usable keys) → 503 sign_in_unavailable, not 401, and the nonce is kept
  *   4. a good join: member with invited_by open:google and no invite code, the open_joins row, the funnel counts,
  *      and neither the raw sub nor the email anywhere in the database
  *   5. the same sign-in account again → 409 with the restore hint; a replayed nonce → 401; the joined key
- *      again → 409; a join nonce cannot be spent on the recovery routes
+ *      again → 409; a join nonce cannot be spent on the recovery routes; the member's recovery nonce answers the
+ *      same `clientIds`
  *   6. one sign-in, two jobs: the recovery body enrols the same account from the one verification; the
  *      lookup hash is the node's, from the verified sub, and the stored blob opens with it; a malformed
- *      recovery body, or a two-layer split with no hub fragment, is refused before the nonce is spent
+ *      recovery body, or a two-layer split with no hub fragment, is refused before the nonce is spent; a device
+ *      collecting that keeper gets the same `clientIds` with its nonce
  *   7. sign-ups per address: 5 an hour and 20 a day → 429 without spending the nonce; the address hash is
  *      cleared once a day old, by the next join or by the timer when nobody joins; the auth limiter still applies
  *   8. deleting your own account frees the sign-in account; one deleted while suspended, or a member the community
@@ -34,6 +38,8 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.GOOGLE_CLIENT_IDS;
 delete process.env.APPLE_CLIENT_IDS;
+delete process.env.FACEBOOK_CLIENT_IDS;
+delete process.env.APPLE_SERVICES_ID;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -62,6 +68,9 @@ const GOOGLE_KID = 'test-open-join-google';
 const GOOGLE_AUD = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 const APPLE_KID = 'test-open-join-apple';
 const APPLE_AUD = 'org.beanpool.pillar';
+/** What a browser is told to put in its request to each provider on a node with BeanPool's own ids (design G11 §3.6). */
+const WEB_CLIENT_IDS = { google: GOOGLE_AUD, apple: 'org.beanpool.web', facebook: '818892721251369' };
+const sameIds = (got: unknown, want: unknown) => JSON.stringify(got) === JSON.stringify(want);
 const google = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
 const apple = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
 const impostor = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -184,6 +193,29 @@ async function main(): Promise<void> {
     assert(nonceBody.status === 200 && nonceBody.body.expiresInSeconds === 600
         && JSON.stringify(nonceBody.body.providers) === JSON.stringify(['google', 'apple', 'facebook', 'github']),
         'global: the nonce answer has the recovery nonce shape (nonce, expiresInSeconds, providers)');
+    assert(sameIds(nonceBody.body.clientIds, WEB_CLIENT_IDS),
+        `the nonce answer names the id a browser puts in its request: Google's Web client, Apple's Services ID, the Facebook app id, and none for GitHub (got ${JSON.stringify(nonceBody.body.clientIds)})`);
+
+    // An operator's own ids are what their node tells a browser, so a self-hosted node serves web sign-in with no
+    // web app build of its own. Their Google list names their web client first; their Services ID is Apple's.
+    process.env.GOOGLE_CLIENT_IDS = `operator-web.apps.googleusercontent.com, ${GOOGLE_AUD}`;
+    process.env.APPLE_SERVICES_ID = 'org.example.web';
+    process.env.FACEBOOK_CLIENT_IDS = '123456789012345,818892721251369';
+    try {
+        const operator = await call(newId(), '/api/join/sso-nonce', {});
+        assert(operator.status === 200 && sameIds(operator.body.clientIds, { google: 'operator-web.apps.googleusercontent.com', apple: 'org.example.web', facebook: '123456789012345' }),
+            `an operator's GOOGLE_CLIENT_IDS, APPLE_SERVICES_ID and FACEBOOK_CLIENT_IDS change it: the first Google and Facebook id, and the Services ID (got ${operator.status} ${JSON.stringify(operator.body?.clientIds)})`);
+        // An Apple list that leaves the Services ID out: tokens for it would be refused here, so no browser is told to use it.
+        process.env.APPLE_CLIENT_IDS = 'org.example.app';
+        const noWebApple = await call(newId(), '/api/join/sso-nonce', {});
+        assert(noWebApple.status === 200 && noWebApple.body.clientIds?.apple === null && noWebApple.body.clientIds?.google === 'operator-web.apps.googleusercontent.com',
+            `an APPLE_CLIENT_IDS without the Services ID → apple: null, never an id this node would refuse (got ${JSON.stringify(noWebApple.body?.clientIds)})`);
+    } finally {
+        delete process.env.GOOGLE_CLIENT_IDS;
+        delete process.env.APPLE_SERVICES_ID;
+        delete process.env.FACEBOOK_CLIENT_IDS;
+        delete process.env.APPLE_CLIENT_IDS;
+    }
 
     const unsignedJoin = await call(null, '/api/join', { callsign: 'Ada', provider: 'google', idToken: mint('google', { sub: GOOGLE_SUB, nonce: n }), nonce: n });
     assert(unsignedJoin.status === 401, `global: an unsigned POST /api/join → 401 (got ${unsignedJoin.status})`);
@@ -283,6 +315,9 @@ async function main(): Promise<void> {
     assert(again.status === 409 && again.body?.code === 'already_member', `a member asking for a join nonce → 409 already_member (got ${again.status})`);
     const againJoin = await join(ada, { callsign: 'Ada', provider: 'google', idToken: mint('google', { sub: 'other', nonce: 'x' }), nonce: 'x' });
     assert(againJoin.status === 409 && againJoin.body?.code === 'already_member', `a member joining again → 409 already_member (got ${againJoin.status})`);
+    const adaRecoveryNonce = await call(ada, '/api/recovery/sso-nonce', {});
+    assert(adaRecoveryNonce.status === 200 && sameIds(adaRecoveryNonce.body?.clientIds, WEB_CLIENT_IDS),
+        `the member's recovery nonce answers the same clientIds (got ${adaRecoveryNonce.status} ${JSON.stringify(adaRecoveryNonce.body?.clientIds)})`);
 
     // A join nonce is not a recovery nonce. Dee takes two join nonces, joins with one, and tries the other on the
     // recovery deposit route as the member she now is.
@@ -348,6 +383,14 @@ async function main(): Promise<void> {
         provider: 'apple', idToken: eveToken, nonce: eveNonce, shares: [{ holderType: 'sso', holderRef: 'apple', shareIndex: 1, ...sealedEve }],
     });
     assert(twice.status === 400, `the one nonce is spent: it cannot enrol again on the recovery route (got ${twice.status})`);
+    // A device collecting that keeper (a cleared browser, later) is told the same ids with its nonce.
+    const evesNewDevice = newId();
+    const collection = await call(evesNewDevice, '/api/recovery/collect', { callsign: 'Eve' });
+    assert(collection.status === 200 && typeof collection.body?.collectionId === 'string',
+        `setup: a new device opens a collection for Eve's keeper (got ${collection.status} ${JSON.stringify(collection.body)})`);
+    const collectNonce = await call(evesNewDevice, '/api/recovery/collect/sso-nonce', { collectionId: collection.body?.collectionId });
+    assert(collectNonce.status === 200 && sameIds(collectNonce.body?.clientIds, WEB_CLIENT_IDS),
+        `the collect nonce answers the same clientIds (got ${collectNonce.status} ${JSON.stringify(collectNonce.body?.clientIds)})`);
 
     // ── 7. sign-ups per address ──────────────────────────────────────────────────────────────────
     console.log('\n── 7. sign-ups per address ──');

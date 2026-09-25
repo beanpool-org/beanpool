@@ -113,7 +113,7 @@ import { createFederationCommissionRoutes } from './routes/federation-commission
 import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
-import { profileFeatureGate } from './routes/profile-feature-gate.js';
+import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
@@ -302,32 +302,58 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
 ];
 
-// Public reads that name members, on a node that shows visitors the listings and not the people (the global profile's
-// `guestListingsOnly`, G9a): off the allowlist there, so the ordinary gate answers them for members only. Each names
-// people: a decision carries its author's key and can name a member in its params (a suspension), the pool balance
-// belongs to a ledger a visitor has no part in, and the Pulse feed carries each member's key, name, face and their
-// own pages elsewhere. The lobby has nothing of them to be transparent about. Everywhere else they stay public.
+// Public reads that name members, on a node that shows visitors the listings and not the people (`guestListingsOnly`,
+// on the global profile by default and overridable anywhere, G9a): off the allowlist there, so the ordinary gate
+// answers them for members only, whatever else is switched on. Each names people: a decision carries its author's key
+// and can name a member in its params (a suspension), the pool balance belongs to a ledger a visitor has no part in,
+// and the Pulse feed carries each member's key, name, face and their own pages elsewhere. The lobby has nothing of
+// them to be transparent about. Everywhere else they stay public.
 export const MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/commons/decisions',
     '/api/commons/balance',
     '/api/pulse/feed',
 ]);
+// And every public read of the Beans constructs, the enterprises and treasuries (one construct), crowdfunds and Commons
+// projects, wherever those are switched on with the visitors' view (a global node with Beans back on, a local node
+// with the view overridden on). Members only rather than stripped for a visitor, as a post is: each is people and
+// money through and through. An enterprise names its keepers and their backing pledges (key, name, face), who paused
+// it, who is winding it up and who placed it, and its flow carries members' memos; a crowdfund names its creator, a
+// project its proposer; each carries balances from a ledger a visitor has no part in, and an enterprise its own face
+// and exact place. A visitor's copy would be a second guestPost over some fifty fields, every new one a leak until
+// someone decides; off the allowlist, a new field or a new public read under these prefixes is members-only already.
+// The apps read a refused one as "none", as they do on a node with them off. (The phone reads the treasuries list and
+// its crowdfund sync unsigned, native db.ts getTreasuries and pillar-sync, so on such a node a member's phone lists
+// none of them until those two reads are signed.)
 export const MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
     /^\/api\/commons\/decisions\/[^/]+$/,
+    /^\/api\/(treasury|treasuries|enterprise|enterprises)(\/|$)/,
+    /^\/api\/map\/enterprises$/,
+    /^\/api\/crowdfund(\/|$)/,
+    /^\/api\/commons\/projects(\/|$)/,
 ];
+
+function isAllowlisted(path: string): boolean {
+    return PUBLIC_READ_EXACT.has(path) || PUBLIC_READ_PATTERNS.some(re => re.test(path));
+}
 
 // The router answers a path with one trailing slash as the path itself (@koa/router's default, strict: false), so this
 // test does too. Otherwise `/api/pulse/feed/` would miss it, be held only to the gate's usual live-member test, and
-// reach the feed as a pruned account.
+// reach the feed as a pruned account. Only a public read: the gated reads under the same prefixes (an enterprise's
+// ledger, its thread) keep the gate's usual test.
 function namesMembers(path: string): boolean {
     const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
-    return MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed));
+    return isAllowlisted(routed)
+        && (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed)));
 }
 
 function isPublicRead(path: string): boolean {
-    if (!PUBLIC_READ_EXACT.has(path) && !PUBLIC_READ_PATTERNS.some(re => re.test(path))) return false;
-    // The switch is read only for these few paths, so no other request pays for it.
-    return !namesMembers(path) || !getProfileSwitches().guestListingsOnly;
+    if (!isAllowlisted(path)) return false;
+    // The switches are read only for these few paths, so no other request pays for them.
+    if (!namesMembers(path)) return true;
+    const switches = getProfileSwitches();
+    // A Beans read that is switched off names nobody: it answers 404 feature_off to everyone (profileFeatureGate), a
+    // visitor as a member, as it did before this switch existed.
+    return !switches.guestListingsOnly || featureOffFor(path, switches) !== null;
 }
 
 // A2-22: clamp client-supplied pagination. An unclamped `?limit=` (e.g. limit=-1,

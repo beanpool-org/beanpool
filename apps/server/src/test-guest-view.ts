@@ -24,13 +24,22 @@
  *      and one pass with a radius or a filter): each guest lat/lng is roundToArea of the place, each distance the
  *      whole km from the area, the order the order of the areas' distances, a radius holds exactly the areas inside
  *      it, and no place appears. Counted: how often the place itself would have answered differently
- *   8. a local node (NODE_PROFILE unset, in a child process): nothing changes; a guest's body is the engine's read for
- *      that reader, names, keys and places included, and no view header is sent; faces are public by key, avatar URLs
+ *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset): nothing
+ *      changes; a guest's body is the engine's read for that reader, names, keys and places included, and no view
+ *      header is sent; an enterprise names its keepers; faces are public by key, avatar URLs
  *      carry no `k=`, and the recovery lookup matches a prefix with photos
  *   9. faces and names (G9a-2): /api/avatar/:pk without its key is 404 to anyone; the member-only key a member's
  *      members list carries opens it, unsigned as an <img> asks; a wrong key, another member's, or the key of a photo
  *      since changed is 404, as is a conditional request without one; a member's listings carry keyed URLs, a guest's
  *      none. The recovery lookup matches the typed name exactly (case forgiven) with no photo or join date
+ *  10. the Beans constructs (an enterprise Alice leads and Bob keeps and backs, a crowdfund Bob runs, a Commons project
+ *      Alice proposed): where they are switched on and so is the visitors' view, every read of them is for members
+ *      only, trailing slash or not, and a member reads them naming their people; where they are off, 404 to everyone
+ *
+ * The rule is the switch's, whatever else is switched on, so a switch can't hide a leak from this suite: sections 1, 2
+ * and 10 run again in a child process for each other combination that matters (§8's local run is one of them):
+ *   - global with the Beans switched back on (beans, escrow, enterprises, treasuries, crowdfund), as an operator may
+ *   - local with `guestListingsOnly` overridden on
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-guest-view.ts
  */
@@ -41,9 +50,20 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
-const LOCAL_RUN = process.env.GUEST_VIEW_LOCAL === '1';
-if (LOCAL_RUN) delete process.env.NODE_PROFILE;
+/** Which node this run is: the global node as it ships, or one of the child runs (the header's list). */
+type Combo = 'global' | 'global+money' | 'local+guest' | 'local';
+const COMBO: Combo = (process.env.GUEST_VIEW_COMBO as Combo | undefined) || 'global';
+const LOCAL_RUN = COMBO === 'local';
+if (COMBO === 'local' || COMBO === 'local+guest') delete process.env.NODE_PROFILE;
 else process.env.NODE_PROFILE = 'global';
+/** A visitor gets the listings and not the people here. */
+const GUEST_VIEW = COMBO !== 'local';
+/** Beans, and the enterprises, treasuries and crowdfunds that hold them, are on here. */
+const MONEY_ON = COMBO !== 'global';
+/** The operator's `node_config` overrides that make this combination, written before boot as an operator's would be. */
+const OVERRIDES: Record<string, string> = COMBO === 'global+money'
+    ? { beans: 'true', escrow: 'true', enterprises: 'true', treasuries: 'true', crowdfund: 'true' }
+    : COMBO === 'local+guest' ? { guestListingsOnly: 'true' } : {};
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -53,7 +73,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 
-const MODE = LOCAL_RUN ? '[local]' : '[global]';
+const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -139,10 +159,16 @@ const TRADE_AT = { lat: -28.70061, lng: 153.40389 };
 const PENDING_AT = { lat: -28.51977, lng: 153.55519 };
 const KEEPER_AT = { lat: -28.61803, lng: 153.47777 };
 const BOB_AT = { lat: -28.58821, lng: 153.52263 };
+const ENTERPRISE_AT = { lat: -28.57731, lng: 153.44129 };
 
 /** The fields that name a person, and may hold only nothing, `''` or `'hidden'` for a guest. */
 const PERSON_FIELDS = new Set(['authorPublicKey', 'acceptedBy', 'createdBy', 'voterPubkey', 'memberPubkey', 'ownerPubkey', 'publicKey', 'callsign',
-    'authorCallsign', 'acceptedByCallsign', 'voterCallsign', 'memberCallsign', 'targetPubkey', 'assignedTo', 'authorPubkey']);
+    'authorCallsign', 'acceptedByCallsign', 'voterCallsign', 'memberCallsign', 'targetPubkey', 'assignedTo', 'authorPubkey',
+    // The Beans constructs': a keeper's pledge, a crowdfund's creator, a project's proposer, who paused or wound one up
+    // and who placed it.
+    'keeper', 'creator_pubkey', 'proposerPubkey', 'proposerCallsign', 'pausedBy', 'windUpInitiatedBy', 'locationAuthSigner']);
+/** A face URL with its member-only key (G9a-2): never in a guest's body, on any route. */
+const KEYED_FACE = /[?&]k=[A-Za-z0-9_-]{22}/;
 
 /** Every place in the body where a person field holds a real value, as `path=value`. `allow(path)` lets a route's own. */
 function personValues(value: unknown, allow: (p: string) => boolean, at = '$'): string[] {
@@ -163,7 +189,11 @@ async function main(): Promise<void> {
     const se = await import('./state-engine.js');
     const { initStateEngine, createPost, createGroup, getPosts } = se;
     const https = await import('./https-server.js') as any;
-    const { db } = await import('./db/db.js');
+    const { db, createCrowdfundProject, initSchema } = await import('./db/db.js');
+    const { getProfileSwitches } = await import('./config/node-profile.js');
+    // Before boot, where the faces' keys are decided (engine/avatar-keys.ts); the schema first, as boot would lay it.
+    initSchema();
+    for (const [k, v] of Object.entries(OVERRIDES)) db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(`nodeProfile.${k}`, v);
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
@@ -236,6 +266,19 @@ async function main(): Promise<void> {
     // Alice can be recovered with a sign-in, so the recovery lookup finds her.
     db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag)
                 VALUES (?, 'sso', 'google', 1, 'c2hhcmU=', 'aXY=', 'dGFn')`).run(alice.pk);
+    // The Beans constructs (§10), seeded on every run, switched on or not: an enterprise Alice leads and Bob keeps, placed
+    // to the metre, that Alice paused and Bob started winding up; a crowdfund Bob runs; a Commons project Alice proposed.
+    const enterprise = se.createTreasury('Sentinel Tool Library', TINY_PNG, 0, {
+        leadKeeperPubkey: alice.pk, purpose: 'Sentinel tools to borrow', lat: ENTERPRISE_AT.lat, lng: ENTERPRISE_AT.lng,
+    }).publicKey;
+    se.adminAssignTreasuryOperator(enterprise, bob.pk);
+    db.prepare('UPDATE members SET paused_by = ?, wind_up_initiated_by = ? WHERE public_key = ?').run(alice.pk, bob.pk, enterprise);
+    // Bob backs it. A pledge is ledger history, which keeps the money switches on (node-profile lockToLedger), so only
+    // where they are on already: the global node as it ships stays as it ships.
+    if (MONEY_ON) db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES ('pledge-sentinel', ?, ?, 5)").run(bob.pk, enterprise);
+    const crowdfund = newId().pk;
+    createCrowdfundProject(crowdfund, bob.pk, 'Sentinel roof fund', 'Sentinel roof for the hall', [TINY_PNG], 100, null);
+    const commonsProject = se.createProject(alice.pk, 'Sentinel community garden', 'Sentinel beds by the hall', 50)!;
 
     // Posts spread over the world for the precision checks (§7): the antimeridian and both poles among them, and a
     // few sharing one area. Each with a place worked out to 7 decimals.
@@ -261,7 +304,7 @@ async function main(): Promise<void> {
     const sentinels: string[] = [
         ...memberRows.flatMap(m => [m.public_key, m.callsign]),
         PLACE_NAME, 'Quartzite', 'side gate code',
-        ...placed.flatMap(p => [String(p.lat), String(p.lng), p.lat.toFixed(3), p.lng.toFixed(3)])
+        ...[...placed, ENTERPRISE_AT].flatMap(p => [String(p.lat), String(p.lng), p.lat.toFixed(3), p.lng.toFixed(3)])
             .filter(s => !/^-?\d+\.\d?0*$/.test(s)),
     ];
     // Times are left out of the search for places: 03:58:26.135Z holds "26.135", and a time is nobody's place.
@@ -278,8 +321,12 @@ async function main(): Promise<void> {
     assert(EXACT instanceof Set && EXACT.size > 10 && Array.isArray(PATTERNS) && PATTERNS.length > 5,
         `https-server exports PUBLIC_READ_EXACT and PUBLIC_READ_PATTERNS for this sweep (got ${EXACT?.size ?? 'none'} / ${PATTERNS?.length ?? 'none'})`);
     const info = await call('GET', null, '/api/community/info');
-    assert(info.status === 200 && info.body?.features?.guestListingsOnly === !LOCAL_RUN,
-        `/api/community/info reports features.guestListingsOnly ${!LOCAL_RUN} (got ${JSON.stringify(info.body?.features?.guestListingsOnly)})`);
+    assert(info.status === 200 && info.body?.features?.guestListingsOnly === GUEST_VIEW,
+        `/api/community/info reports features.guestListingsOnly ${GUEST_VIEW} (got ${JSON.stringify(info.body?.features?.guestListingsOnly)})`);
+    // The combination is real, not pinned back by a lock: what this run means to test is what the node does.
+    const money = { beans: info.body?.features?.beans, enterprises: info.body?.features?.enterprises, crowdfund: getProfileSwitches().crowdfund };
+    assert(money.beans === MONEY_ON && money.enterprises === MONEY_ON && money.crowdfund === MONEY_ON,
+        `Beans, enterprises and crowdfunds are ${MONEY_ON ? 'on' : 'off'} here (got ${JSON.stringify(money)})`);
 
     const POSTS = '/api/marketplace/posts';
     // Every type, and a page that holds every post seeded here.
@@ -308,9 +355,9 @@ async function main(): Promise<void> {
     const patternExamples: Array<{ path: string; echoes?: string[] }> = [
         { path: `/api/community/membership/${alice.pk}`, echoes: [alice.pk] },
         { path: '/api/members/callsign-available/SentinelAlice', echoes: ['SentinelAlice'] },
-        { path: '/api/crowdfund/projects/proj-sentinel' },
-        { path: `/api/treasury/${alice.pk}`, echoes: [alice.pk] },
-        { path: `/api/enterprise/${alice.pk}`, echoes: [alice.pk] },
+        { path: `/api/crowdfund/projects/${crowdfund}` },
+        { path: `/api/treasury/${enterprise}` },
+        { path: `/api/enterprise/${enterprise}` },
         { path: '/api/commons/decisions/dec-sentinel' },
         { path: '/api/recovery/lookup/sentinel' },
         // The exact name: the lookup names who was asked for, by the name typed and the key recovery may need.
@@ -343,11 +390,54 @@ async function main(): Promise<void> {
             const found = leaks(r.text, echoes);
             if (found.length) failures.push(`${p} → ${r.status}: ${found.slice(0, 3).join(', ')}`);
             if (r.text.includes('/api/avatar/')) failures.push(`${p} → ${r.status}: an /api/avatar/ URL`);
+            if (KEYED_FACE.test(r.text)) failures.push(`${p} → ${r.status}: a face's member-only key`);
             if (typeof r.body === 'object' && r.body) persons.push(...personValues(r.body, allowPerson(p.split('?')[0])).map(v => `${p}: ${v}`));
         }
         assert(failures.length === 0, `${who}: none of ${n} public reads holds a member's key or name, a face URL, the typed place or a place finer than its area${failures.length ? ` — ${failures.slice(0, 6).join(' | ')}` : ''}`);
         assert(persons.length === 0, `${who}: no person field holds a real value in any of them${persons.length ? ` — ${persons.slice(0, 6).join(' | ')}` : ''}`);
     }
+
+    // ── 10. the Beans constructs ───────────────────────────────────────────────────────────────
+    console.log(`\n── 10. the enterprise, treasury, crowdfund and Commons project reads (${MONEY_ON ? 'switched on' : 'switched off'}) ──`);
+    const MONEY_READS = ['/api/enterprises', '/api/treasuries', '/api/enterprises/map', '/api/map/enterprises', '/api/treasuries/map',
+        `/api/enterprise/${enterprise}`, `/api/treasury/${enterprise}`, '/api/crowdfund/projects', `/api/crowdfund/projects/${crowdfund}`, '/api/commons/projects'];
+    for (const [who, id] of guests) {
+        const wrong: string[] = [];
+        for (const p of MONEY_READS.flatMap(p => [p, `${p}/`])) {
+            const r = await call('GET', id, p);
+            // Switched off, the feature gate's 404; but a trailing slash is not on the allowlist, so the read gate,
+            // which comes first, refuses it as it refuses any gated read.
+            const want = MONEY_ON || p.endsWith('/') ? (id ? 403 : 401) : 404;
+            if (r.status !== want || KEYED_FACE.test(r.text) || leaks(r.text).length) wrong.push(`${p} → ${r.status} ${r.text.slice(0, 80)}`);
+        }
+        assert(wrong.length === 0, `${who}: every one of them, trailing slash or not, is ${MONEY_ON ? 'for members only' : 'refused, switched off'} `
+            + `and names nobody (${MONEY_READS.length * 2} reads)${wrong.length ? ` — ${wrong.slice(0, 4).join(' | ')}` : ''}`);
+    }
+    {
+        const r = Object.fromEntries(await Promise.all(MONEY_READS.map(async p => [p, await call('GET', bob, p)] as const)));
+        const statuses = MONEY_READS.map(p => r[p].status);
+        assert(statuses.every(st => st === (MONEY_ON ? 200 : 404)), `a member reads them: ${MONEY_ON ? '200' : '404, switched off'} (got ${statuses.join(' ')})`);
+        if (MONEY_ON) {
+            // What a guest would have been sent: the people behind each one, by key, name and a face that opens.
+            const detail = r[`/api/enterprise/${enterprise}`].body;
+            const keepers = new Map((detail?.keepers ?? []).map((k: any) => [k.publicKey, k]));
+            const face = (keepers.get(alice.pk) as any)?.avatarUrl as string | undefined;
+            assert((keepers.get(alice.pk) as any)?.callsign === 'SentinelAlice' && keepers.has(bob.pk) && detail?.pledges?.[0]?.keeper === bob.pk
+                && detail?.pausedBy === alice.pk && detail?.windUpInitiatedBy === bob.pk && detail?.lat === ENTERPRISE_AT.lat,
+                "the enterprise names its keepers, Bob's pledge, who paused it and who is winding it up, at its exact place");
+            assert(!!face && KEYED_FACE.test(face) && (await call('GET', null, face)).status === 200, `with a keeper's face that opens (${face})`);
+            const listed = (r['/api/enterprises'].body?.treasuries ?? []).find((e: any) => e.publicKey === enterprise);
+            assert(listed?.keepers?.some((k: any) => k.publicKey === alice.pk), 'the enterprises list names its keepers too');
+            const cf = (r['/api/crowdfund/projects'].body?.projects ?? []).find((p: any) => p.id === crowdfund);
+            assert(cf?.creator_pubkey === bob.pk && r[`/api/crowdfund/projects/${crowdfund}`].body?.project?.creator_pubkey === bob.pk,
+                'the crowdfund names Bob, who runs it');
+            const proj = (r['/api/commons/projects'].body?.projects ?? []).find((p: any) => p.id === commonsProject.id);
+            assert(proj?.proposerPubkey === alice.pk && proj?.proposerCallsign === 'SentinelAlice', 'the Commons project names Alice, who proposed it');
+            const pin = (r['/api/enterprises/map'].body?.enterprises ?? []).find((e: any) => e.publicKey === enterprise);
+            assert(pin?.lat === ENTERPRISE_AT.lat && KEYED_FACE.test(pin?.avatar ?? ''), "the map pin holds the enterprise's exact place and its keyed face");
+        }
+    }
+    if (COMBO !== 'global') return;
 
     // ── 3. the guest shape ─────────────────────────────────────────────────────────────────────
     console.log('\n── 3. what a guest gets ──');
@@ -644,14 +734,20 @@ async function main(): Promise<void> {
         }
     }
 
-    // ── 8. a local node ────────────────────────────────────────────────────────────────────────
-    console.log('\n── 8. a local node: nothing changes (a fresh process, NODE_PROFILE unset) ──');
-    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-guest-view-local-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, GUEST_VIEW_LOCAL: '1', BEANPOOL_DATA_DIR: dataDir };
-    delete env.NODE_PROFILE;
-    const child = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], { env, stdio: 'inherit' });
-    fs.rmSync(dataDir, { recursive: true, force: true });
-    assert(child.status === 0, `the local run passed (exit ${child.status})`);
+    // ── 8. the other combinations, each in a fresh process ─────────────────────────────────────
+    for (const [combo, what] of [
+        ['global+money', 'the global node with the Beans switched back on: sections 1, 2 and 10'],
+        ['local+guest', 'a local node with guestListingsOnly overridden on: sections 1, 2 and 10'],
+        ['local', 'a local node: nothing changes (NODE_PROFILE unset)'],
+    ] as const) {
+        console.log(`\n── 8. ${what} ──`);
+        const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `beanpool-guest-view-${combo.replace('+', '-')}-`));
+        const env: NodeJS.ProcessEnv = { ...process.env, GUEST_VIEW_COMBO: combo, BEANPOOL_DATA_DIR: dataDir };
+        delete env.NODE_PROFILE;
+        const child = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], { env, stdio: 'inherit' });
+        fs.rmSync(dataDir, { recursive: true, force: true });
+        assert(child.status === 0, `the ${combo} run passed (exit ${child.status})`);
+    }
 
     async function localChecks(): Promise<void> {
         console.log('── a local node: a guest reads what the engine gives that reader, as before G9a ──');
@@ -684,6 +780,9 @@ async function main(): Promise<void> {
             }
             const face = await call('GET', id, `/api/avatar/${alice.pk}?size=thumb`);
             assert(face.status === 200 && face.headers.get('content-type') === 'image/png', `${who}: a face is public by key, as before (${face.status})`);
+            const ent = await call('GET', id, `/api/enterprise/${enterprise}`);
+            assert(ent.status === 200 && ent.body?.keepers?.some((k: any) => k.publicKey === alice.pk) && !KEYED_FACE.test(ent.text),
+                `${who}: an enterprise is public and names its keepers, as before (${ent.status})`);
             const lookup = await call('GET', id, '/api/recovery/lookup/sentinel');
             assert(Array.isArray(lookup.body) && lookup.body.length === 1 && lookup.body[0].publicKey === alice.pk && lookup.body[0].avatarUrl === TINY_PNG && !!lookup.body[0].joinedAt,
                 `${who}: the recovery lookup matches a prefix, with the photo and join date, as before`);

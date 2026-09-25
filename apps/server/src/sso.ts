@@ -759,11 +759,15 @@ const CLIENT_ID_ENV: Record<SsoProvider, string> = {
     github: 'GITHUB_CLIENT_IDS',
 };
 
+/** The Apple client a browser signs in with: this node's `APPLE_SERVICES_ID`, else BeanPool's. */
+function appleServicesId(): string {
+    return process.env.APPLE_SERVICES_ID?.trim() || BEANPOOL_APPLE_SERVICES_ID;
+}
+
 function defaultAudiences(provider: SsoProvider): string[] {
     if (provider === 'google') return [...BEANPOOL_GOOGLE_CLIENT_IDS];
     if (provider === 'apple') {
-        const servicesId = process.env.APPLE_SERVICES_ID?.trim() || BEANPOOL_APPLE_SERVICES_ID;
-        return [...new Set([BEANPOOL_APPLE_BUNDLE_ID, servicesId])];
+        return [...new Set([BEANPOOL_APPLE_BUNDLE_ID, appleServicesId()])];
     }
     if (provider === 'facebook') return [...BEANPOOL_FACEBOOK_APP_IDS];
     if (provider === 'github') return [...BEANPOOL_GITHUB_CLIENT_IDS];
@@ -789,4 +793,34 @@ export function getConfiguredAudiences(provider: SsoProvider): string[] {
     const raw = process.env[CLIENT_ID_ENV[provider]];
     if (!raw?.trim()) return defaultAudiences(provider);
     return raw.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/** The providers a browser signs in with by leaving the page for the provider's own (design G11 §3). */
+export type WebSignInProvider = 'google' | 'apple' | 'facebook';
+
+/**
+ * The client id a BROWSER puts in its sign-in request to `provider`, or null when this node accepts none a browser
+ * can use. Answered beside every sign-in nonce (`clientIds`), so the web app learns it from the node it is on, not
+ * from its build: a self-hosted node with its own ids serves web sign-in with the same web app.
+ *
+ *   google    the first audience this node accepts. BeanPool's list starts with its Web client; an operator who
+ *             replaces the list with GOOGLE_CLIENT_IDS lists their web client first.
+ *   apple     the Services ID (appleServicesId), only while this node accepts it: an APPLE_CLIENT_IDS that leaves
+ *             it out gets null, never an id whose tokens this node would then refuse.
+ *   facebook  the first app id this node accepts.
+ *
+ * GitHub has none: the node runs its sign-in itself (engine/github-device.ts).
+ */
+export function webClientId(provider: WebSignInProvider): string | null {
+    const accepted = getConfiguredAudiences(provider);
+    if (provider === 'apple') {
+        const servicesId = appleServicesId();
+        return accepted.includes(servicesId) ? servicesId : null;
+    }
+    return accepted[0] ?? null;
+}
+
+/** `webClientId` for each provider a browser redirects to, as the nonce answers carry it. */
+export function webClientIds(): Record<WebSignInProvider, string | null> {
+    return { google: webClientId('google'), apple: webClientId('apple'), facebook: webClientId('facebook') };
 }

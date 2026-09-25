@@ -23,6 +23,7 @@ import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, typ
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
+import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 
@@ -112,6 +113,8 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     if (ctx.path !== '/settings' && ctx.path !== '/settings/' && path.extname(ctx.path)) {
         return next();
     }
+    // The Settings UI and its sign-in pages run inline scripts (app-document-csp.ts).
+    useDocumentPolicy(ctx);
 
     // 1. Deep-link Handshake Token Exchange (phone button flow)
     const token = ctx.query.token as string | undefined;
@@ -174,6 +177,7 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
 });
 
 router.get('/settings-legacy', async (ctx) => {
+    useDocumentPolicy(ctx);
     const staticPath = resolveServerPath('static/settings.html');
     const publicPath = resolveServerPath('public/settings.html');
     const resolvedPath = fs.existsSync(staticPath) ? staticPath : publicPath;
@@ -215,6 +219,7 @@ router.get('/', async (ctx) => {
     // PWA bundle; it creates no identity and redeems nothing.
     if (ctx.query.invite) {
         const webJoin = getGatewayConfig().features?.servePwa !== false;
+        useDocumentPolicy(ctx); // its install steps are an inline script
         ctx.type = 'html';
         ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         ctx.body = renderInviteTrampoline({ webJoin });
@@ -633,6 +638,7 @@ router.post('/api/local/admin/2fa/disable', async (ctx) => {
 router.get('/app', async (ctx) => {
     const indexPath = path.join(PUBLIC_DIR, 'index.html');
     if (fs.existsSync(indexPath)) {
+        useAppDocumentPolicy(ctx);
         ctx.type = 'html';
         ctx.body = fs.createReadStream(indexPath);
     }

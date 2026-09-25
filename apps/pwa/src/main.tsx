@@ -7,6 +7,21 @@ import './index.css';
 // Before the first paint, so "plain background" never flashes the pattern in.
 applyPatternPreference();
 
+/**
+ * Inter, from Google Fonts. Added from here rather than as a <link> in index.html: a stylesheet the page's <head>
+ * names holds the first paint until Google answers (on a slow or filtered network, for a long time), and the old way
+ * around that, an inline `onload`, is script the app document's CSP refuses (apps/server/src/app-document-csp.ts).
+ * A stylesheet added by script never holds the paint: the app draws in the system font and switches when Inter
+ * arrives (display=swap), as it did before.
+ */
+function loadWebFont(): void {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
+    document.head.appendChild(link);
+}
+loadWebFont();
+
 // Error boundary to catch and display React rendering errors
 class ErrorBoundary extends Component<
     { children: ReactNode },

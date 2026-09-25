@@ -24,6 +24,8 @@ export interface AuditSyncPayload {
     eventRsvps?: any[];
     groups?: any[];
     groupMembers?: any[];
+    placeWatches?: any[];
+    directoryCache?: any[];
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -188,6 +190,10 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // let the person back into an open group after failover.
         ['groups', payload.groups?.length ?? 0],
         ['group_members', payload.groupMembers?.length ?? 0],
+        // The global node's place watches and directory mirror (G5). A watch the replica lost is a member never told
+        // when a community starts near them after a take-over; a community it lost is a watcher told twice.
+        ['place_watches', payload.placeWatches?.length ?? 0],
+        ['directory_cache', payload.directoryCache?.length ?? 0],
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

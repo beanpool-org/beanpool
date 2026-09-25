@@ -23,9 +23,16 @@
  * shown changed; one that has left the registry is kept as its key and `first_seen_at` only (`listed` 0, everything
  * it published cleared, so an unlisted community's contacts don't linger here). A row is never deleted, so a
  * community is new to this node once in the life of its database: that is what makes a watcher's notice once only.
+ *
+ * ## A standby holds the same rows (mergeReplicatedDirectory)
+ *
+ * The table travels to a standby (SyncPayload.directoryCache, watermarked on `updated_at`, which a run stamps only on a
+ * row it changed), so a server that takes over knows every community the old one had already seen and its first run
+ * tells no watcher about them again (engine/place-watches.ts). It also lists the directory from its first minute. A
+ * standby never fetches; a copy is its only writer until it takes over.
  */
 import { db } from '../db/db.js';
-import { haversineKm } from '@beanpool/engine';
+import { haversineKm, type SyncDirectoryCommunity } from '@beanpool/engine';
 
 /** What a registry row holds once checked. */
 export interface DirectoryRow {
@@ -256,6 +263,62 @@ export function writeDirectoryRows(rows: readonly DirectoryRow[], now: string): 
     })();
     listedRows = null;
     return out;
+}
+
+// ── on a standby ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+export interface DirectoryMerge { written: number; kept: number; invalid: number }
+
+const isStamp = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 40;
+
+/**
+ * The main server's cache as a copy carries it, merged into this standby's database inside the import's transaction
+ * (engine/sync.ts). Per community, the newer `updated_at` wins, and the main server's row is taken as it is, its first
+ * sighting included. Every field goes through the same checks a registry row does (normaliseRegistryRow), so a copy
+ * can't put here what a fetch couldn't. A row that fails them, or that this database refuses, is left out and counted.
+ * It never fails the copy it came in.
+ */
+export function mergeReplicatedDirectory(communities: unknown): DirectoryMerge {
+    const merge: DirectoryMerge = { written: 0, kept: 0, invalid: 0 };
+    if (!Array.isArray(communities) || communities.length === 0) return merge;
+    const current = db.prepare('SELECT updated_at FROM directory_cache WHERE community_key = ?');
+    const upsert = db.prepare(`INSERT INTO directory_cache (community_key, listed, name, node_url, lat, lng, radius_km, member_count,
+        contact_email, contact_phone, registry_updated_at, first_seen_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(community_key) DO UPDATE SET listed = excluded.listed, name = excluded.name, node_url = excluded.node_url,
+            lat = excluded.lat, lng = excluded.lng, radius_km = excluded.radius_km, member_count = excluded.member_count,
+            contact_email = excluded.contact_email, contact_phone = excluded.contact_phone,
+            registry_updated_at = excluded.registry_updated_at, first_seen_at = excluded.first_seen_at, updated_at = excluded.updated_at`);
+    db.transaction(() => {
+        for (const raw of communities) {
+            const c = raw as Partial<SyncDirectoryCommunity> | null;
+            if (!c || typeof c.key !== 'string' || typeof c.listed !== 'boolean' || !isStamp(c.firstSeenAt) || !isStamp(c.updatedAt)) {
+                merge.invalid++;
+                continue;
+            }
+            const row = normaliseRegistryRow({
+                node_id: c.key, community_name: c.name, node_url: c.url,
+                service_radius: { lat: c.lat, lng: c.lng, radiusKm: c.radiusKm },
+                member_count: c.memberCount, contact_email: c.contactEmail, contact_phone: c.contactPhone, updated_at: c.registryUpdatedAt,
+            });
+            if (!row || row.key !== c.key) { merge.invalid++; continue; }
+            const here = current.get(row.key) as { updated_at: string } | undefined;
+            if (here && here.updated_at > c.updatedAt) { merge.kept++; continue; }
+            try {
+                upsert.run(row.key, c.listed ? 1 : 0, ...columns(row), c.firstSeenAt, c.updatedAt);
+                merge.written++;
+            } catch (e: any) {
+                console.warn(`[Directory] A copied community could not be stored here, left out: ${e?.message || e}`);
+                merge.invalid++;
+            }
+        }
+    })();
+    listedRows = null;
+    return merge;
+}
+
+/** The listed communities are read again at the next request. For a force-resync, which empties the table. */
+export function forgetListedCommunities(): void {
+    listedRows = null;
 }
 
 // ── reading ──────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -12,7 +12,19 @@
  *   watch one of them reaches hears once for the run: one push and one live announcement to their own sockets. A
  *   community is new once in the life of the database, so nobody hears about it twice; a watch set after a community
  *   was first seen never hears about it (it was already there to find).
- * - Node-local, like push tokens. Gone with the member on a prune or a self-deletion, moved on a re-key.
+ * - Gone with the member on a prune or a self-deletion, moved on a re-key.
+ *
+ * ## A standby holds every watch (mergeReplicatedWatches)
+ *
+ * Nothing re-creates a watch: the member set it once. So watches travel to a standby with the rest of the member's
+ * data (SyncPayload.placeWatches), watermarked on `updated_at`, which every change stamps: a set, a radius change, a
+ * notice (`last_notified_at`) and a re-key. Each removal (the member's own, a prune, a self-deletion, a cell both keys
+ * of a re-key watched) writes a `place_watches` tombstone keyed by the watch's id, which is never used again. A
+ * server that takes over therefore has every watch as of its last copy, each member's quiet day with it. And it knows
+ * which communities the old one had already seen (directory_cache travels too), so its first mirror run tells a
+ * watcher only about communities that are new to both. The one gap is the copy's own: a community the old main server
+ * first saw after the standby's last copy (a pull a minute) is new again to the new one, so a watcher it reaches can
+ * hear about it a second time, once.
  *
  * ## The registry is open, so a notice is plain and rare
  *
@@ -27,8 +39,8 @@
  * Verified listings (the registrar vouching for an address) would let a notice name the community; not built here.
  */
 import crypto from 'node:crypto';
-import { db } from '../db/db.js';
-import { haversineKm } from '@beanpool/engine';
+import { db, writeTombstone } from '../db/db.js';
+import { haversineKm, type SyncPlaceWatch } from '@beanpool/engine';
 import { roundToArea } from './member-area.js';
 import type { DirectoryRow } from './directory-cache.js';
 
@@ -52,7 +64,7 @@ export interface PlaceWatch {
     createdAt: string;
 }
 
-interface WatchRecord { id: string; pubkey: string; lat: number; lng: number; radius_km: number; created_at: string; last_notified_at: string | null }
+interface WatchRecord { id: string; pubkey: string; lat: number; lng: number; radius_km: number; created_at: string; last_notified_at: string | null; updated_at: string }
 
 const toWatch = (w: WatchRecord): PlaceWatch => ({ id: w.id, lat: w.lat, lng: w.lng, radiusKm: w.radius_km, createdAt: w.created_at });
 
@@ -79,34 +91,113 @@ export function setPlaceWatch(pubkey: string, point: { lat: number; lng: number 
     const lat = roundToArea(point.lat);
     const lng = roundToArea(point.lng);
     return db.transaction(() => {
+        const now = new Date().toISOString();
         const same = db.prepare('SELECT * FROM place_watches WHERE pubkey = ? AND lat = ? AND lng = ?').get(pubkey, lat, lng) as WatchRecord | undefined;
         if (same) {
-            if (same.radius_km !== radiusKm) db.prepare('UPDATE place_watches SET radius_km = ? WHERE id = ?').run(radiusKm, same.id);
+            if (same.radius_km !== radiusKm) db.prepare('UPDATE place_watches SET radius_km = ?, updated_at = ? WHERE id = ?').run(radiusKm, now, same.id);
             return { watch: toWatch({ ...same, radius_km: radiusKm }), created: false };
         }
         const count = (db.prepare('SELECT COUNT(*) AS n FROM place_watches WHERE pubkey = ?').get(pubkey) as { n: number }).n;
         if (count >= PLACE_WATCH_LIMIT) throw new PlaceWatchLimitError();
-        const row: WatchRecord = { id: crypto.randomUUID(), pubkey, lat, lng, radius_km: radiusKm, created_at: new Date().toISOString(), last_notified_at: null };
-        db.prepare('INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(row.id, row.pubkey, row.lat, row.lng, row.radius_km, row.created_at);
+        const row: WatchRecord = { id: crypto.randomUUID(), pubkey, lat, lng, radius_km: radiusKm, created_at: now, last_notified_at: null, updated_at: now };
+        db.prepare('INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(row.id, row.pubkey, row.lat, row.lng, row.radius_km, row.created_at, row.updated_at);
         return { watch: toWatch(row), created: true };
     })();
 }
 
+/** Deletes these watches, each with its tombstone, so the standby deletes them too. */
+function deleteWatches(ids: string[]): void {
+    const del = db.prepare('DELETE FROM place_watches WHERE id = ?');
+    for (const id of ids) {
+        del.run(id);
+        writeTombstone('place_watches', id);
+    }
+}
+
+const idsOf = (pubkey: string): string[] =>
+    (db.prepare('SELECT id FROM place_watches WHERE pubkey = ?').all(pubkey) as { id: string }[]).map(r => r.id);
+
 /** Removes a member's own watch. False when they have no watch with that id (another member's included). */
 export function removePlaceWatch(pubkey: string, id: string): boolean {
-    return db.prepare('DELETE FROM place_watches WHERE id = ? AND pubkey = ?').run(id, pubkey).changes > 0;
+    return db.transaction(() => {
+        if (!db.prepare('SELECT 1 FROM place_watches WHERE id = ? AND pubkey = ?').get(id, pubkey)) return false;
+        deleteWatches([id]);
+        return true;
+    })();
 }
 
 /** A prune or a self-deletion: the member's watches go with them. */
 export function dropPlaceWatches(pubkey: string): void {
-    db.prepare('DELETE FROM place_watches WHERE pubkey = ?').run(pubkey);
+    db.transaction(() => deleteWatches(idsOf(pubkey)))();
 }
 
 /** A re-key: the member's watches move to their new key (a cell both keys watch is kept once), their quiet day with them. */
 export function movePlaceWatches(oldPubkey: string, newPubkey: string): void {
-    db.prepare('UPDATE OR IGNORE place_watches SET pubkey = ? WHERE pubkey = ?').run(newPubkey, oldPubkey);
-    db.prepare('DELETE FROM place_watches WHERE pubkey = ?').run(oldPubkey);
+    db.transaction(() => {
+        db.prepare('UPDATE OR IGNORE place_watches SET pubkey = ?, updated_at = ? WHERE pubkey = ?').run(newPubkey, new Date().toISOString(), oldPubkey);
+        deleteWatches(idsOf(oldPubkey));
+    })();
+}
+
+// ── on a standby ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+export interface WatchMerge { written: number; kept: number; skipped: number; invalid: number }
+
+const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
+const isIn = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
+
+/**
+ * The main server's watches as a copy carries them (SyncPayload.placeWatches), merged into this standby's database
+ * inside the import's transaction (engine/sync.ts), after the members. Per watch, the newer `updated_at` wins, and
+ * everything the main server's row says is taken as it is: member (a re-key moved it), radius, and last notice.
+ *
+ * - A watch whose member this database doesn't have is skipped: nobody here could hear from it or remove it.
+ * - A watch this database has a tombstone for was removed, and ids are never used again: it stays removed.
+ * - The cell is rounded again, so the spot never reaches this disk either, whatever arrives.
+ * - The main server holds one watch per member and cell, so another watch of this member on the same cell is gone
+ *   there (its tombstone may be later in this copy): it goes, or the unique cell would refuse the newer one.
+ * - A row that is malformed, or that this database refuses for any reason, is left out and counted. It never fails
+ *   the copy it came in.
+ */
+export function mergeReplicatedWatches(watches: unknown): WatchMerge {
+    const merge: WatchMerge = { written: 0, kept: 0, skipped: 0, invalid: 0 };
+    if (!Array.isArray(watches) || watches.length === 0) return merge;
+    const memberExists = db.prepare('SELECT 1 FROM members WHERE public_key = ?');
+    const current = db.prepare('SELECT updated_at FROM place_watches WHERE id = ?');
+    const removed = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'place_watches' AND row_key = ?");
+    const sameCell = db.prepare('DELETE FROM place_watches WHERE pubkey = ? AND lat = ? AND lng = ? AND id != ?');
+    const upsert = db.prepare(`INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at, last_notified_at, updated_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                               ON CONFLICT(id) DO UPDATE SET
+                                   pubkey = excluded.pubkey, lat = excluded.lat, lng = excluded.lng, radius_km = excluded.radius_km,
+                                   created_at = excluded.created_at, last_notified_at = excluded.last_notified_at,
+                                   updated_at = excluded.updated_at`);
+    db.transaction(() => {
+        for (const raw of watches) {
+            const w = raw as Partial<SyncPlaceWatch> | null;
+            if (!w || !isText(w.id, 64) || !isText(w.pubkey, 128) || !isIn(w.lat, -90, 90) || !isIn(w.lng, -180, 180)
+                || !isIn(w.radiusKm, Number.MIN_VALUE, PLACE_WATCH_RADIUS_KM.max) || !isText(w.createdAt, 40) || !isText(w.updatedAt, 40)
+                || !(w.lastNotifiedAt === null || w.lastNotifiedAt === undefined || isText(w.lastNotifiedAt, 40))) {
+                merge.invalid++;
+                continue;
+            }
+            if (!memberExists.get(w.pubkey) || removed.get(w.id)) { merge.skipped++; continue; }
+            const here = current.get(w.id) as { updated_at: string | null } | undefined;
+            if (here?.updated_at && here.updated_at > w.updatedAt) { merge.kept++; continue; }
+            const lat = roundToArea(w.lat);
+            const lng = roundToArea(w.lng);
+            try {
+                sameCell.run(w.pubkey, lat, lng, w.id);
+                upsert.run(w.id, w.pubkey, lat, lng, w.radiusKm, w.createdAt, w.lastNotifiedAt ?? null, w.updatedAt);
+                merge.written++;
+            } catch (e: any) {
+                console.warn(`[Place watches] A copied watch could not be stored here, left out: ${e?.message || e}`);
+                merge.invalid++;
+            }
+        }
+    })();
+    return merge;
 }
 
 // ── telling watchers ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -165,7 +256,8 @@ export function notifyPlaceWatchers(cb: PlaceWatchNoticeCallbacks, added: readon
             byMember.set(w.pubkey, found);
         }
     }
-    const heard = db.prepare('UPDATE place_watches SET last_notified_at = ? WHERE pubkey = ?');
+    // Stamped, so the quiet day travels to a standby with the watch.
+    const heard = db.prepare('UPDATE place_watches SET last_notified_at = ?, updated_at = ? WHERE pubkey = ?');
     let told = 0;
     for (const [pubkey, found] of byMember) {
         if (!cb.isMember(pubkey)) continue;
@@ -176,7 +268,7 @@ export function notifyPlaceWatchers(cb: PlaceWatchNoticeCallbacks, added: readon
         const title = near.length === 1 ? COMMUNITY_NEAR_TITLE : COMMUNITIES_NEAR_TITLE;
         const body = near.length === 1 ? communityNearBody(km) : communitiesNearBody(near.length, km);
         // Stamped before sending: a notice that throws below still starts the member's quiet day.
-        heard.run(now, pubkey);
+        heard.run(now, new Date().toISOString(), pubkey);
         const data = { kind: 'community_near_you', communities: near.slice(0, KEYS_IN_NOTICE).map(n => n.c.key) };
         try {
             cb.broadcast({ type: 'system_announcement', title, body, severity: 'info', ...data }, [pubkey]);

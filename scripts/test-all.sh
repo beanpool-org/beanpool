@@ -352,6 +352,7 @@ run_federation_suites() {
       test-takeover-split-brain
       test-profile-takeover
       test-open-join-failover
+      test-place-watch-failover
       test-unlock-cancel
       test-cash-also-needed
       test-posts-ignore-archetypes

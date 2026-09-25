@@ -31,6 +31,7 @@ import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
+import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
@@ -7109,7 +7110,7 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
         'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'open_joins', 'tombstones',
+        'open_joins', 'place_watches', 'directory_cache', 'tombstones',
     ];
     // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
     // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.
@@ -7152,6 +7153,8 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
             `DELETE FROM post_photos WHERE (post_id || '|' || order_num) NOT IN (SELECT value FROM json_each(?))`,
         ).run(keepJson);
     })();
+    // The directory's listed communities are kept in memory for the reads; the table is empty now.
+    forgetListedCommunities();
     if (keep.length > 0) {
         console.log(
             `🧹 [Resync] Cleared replicated tables, KEEPING ${kept} of the ${keep.length} photo row(s) the primary `

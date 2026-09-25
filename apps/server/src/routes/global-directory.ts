@@ -7,7 +7,8 @@
  *          card needs in one request (session-cost-baselines). → { point, communities, communityCount, nearbyPosts,
  *          watches, knock, directoryFetchedAt }
  *   GET    /api/global/watches                                a member's own watches. → { watches, limit }
- *   POST   /api/global/watches  { lat, lng, radiusKm? }       set one (the 0.1° cell; the same cell again: its radius)
+ *   POST   /api/global/watches  { lat, lng, radiusKm? }       set one (the 0.1° cell; the same cell again: its radius;
+ *                                                            radiusKm left out or null: the default)
  *   DELETE /api/global/watches/:id                            remove one's own
  *
  * Every route is 404 `feature_off` unless the profile switch `directoryMirror` is on (the global profile's default),
@@ -176,11 +177,13 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
             return badRequest(ctx, 'Send lat (-90 to 90) and lng (-180 to 180) as numbers: the place to watch.');
         }
         const { min, max } = PLACE_WATCH_RADIUS_KM;
-        if (radiusKm !== undefined && (typeof radiusKm !== 'number' || !Number.isFinite(radiusKm) || radiusKm < min || radiusKm > max)) {
+        // Left out or null: the default.
+        const radius = radiusKm ?? PLACE_WATCH_RADIUS_KM.default;
+        if (typeof radius !== 'number' || !Number.isFinite(radius) || radius < min || radius > max) {
             return badRequest(ctx, `radiusKm must be a number from ${min} to ${max}, or left out for ${PLACE_WATCH_RADIUS_KM.default}.`);
         }
         try {
-            const r = setPlaceWatch(actor, { lat, lng }, radiusKm === undefined ? PLACE_WATCH_RADIUS_KM.default : Math.round(radiusKm));
+            const r = setPlaceWatch(actor, { lat, lng }, Math.round(radius));
             ctx.set('Cache-Control', 'private, no-store');
             ctx.body = { success: true, watch: r.watch, created: r.created };
         } catch (e) {

@@ -411,6 +411,9 @@ async function main(): Promise<void> {
         const r = await call('POST', theo, '/api/global/watches', body);
         assert(r.status === 400, `${why} → 400 (got ${r.status})`);
     }
+    const nullRadius = await call('POST', theo, '/api/global/watches', { lat: -31.95, lng: 115.86, radiusKm: null });
+    assert(nullRadius.status === 200 && nullRadius.body?.created === true && nullRadius.body?.watch?.radiusKm === 50,
+        `a radius of null means the default, 50 km, not a 400 (${nullRadius.status} ${JSON.stringify(nullRadius.body)})`);
     const setT = await call('POST', theo, '/api/global/watches', { lat: -31.95, lng: 115.86 });
     assert(setT.status === 200, `Theo watches Perth (${setT.status})`);
 

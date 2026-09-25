@@ -42,9 +42,10 @@
  *      and a muted member stays muted (`members.moderation_muted_until`).
  *  14. And a person's coarse area (G4: `members.area_lat`, `area_lng`, `area_updated_at`), so a restored node still
  *      measures the People list from it.
- *  15. And the communities directory (G5): a member's place watch (`place_watches`), so a restored global node still
- *      tells them, and `directory_cache` with each community's first sighting, so a restored node never tells a
- *      watcher twice about a community it had already seen.
+ *  15. And the communities directory (G5): a member's place watch (`place_watches`, with when they last heard and its
+ *      replication stamp), so a restored global node still tells them and keeps their quiet day, and `directory_cache`
+ *      with each community's first sighting, so a restored node never tells a watcher twice about a community it had
+ *      already seen.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -273,8 +274,9 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET area_lat = ?, area_lng = ?, area_updated_at = ? WHERE public_key = ?').run(-28.6, 153.5, areaAtT, mutedMember);
     // The communities directory (G5), as engine/place-watches.ts and engine/directory-cache.ts write it.
     const watchAtT = new Date(Date.now() - 240_000).toISOString();
-    db.prepare('INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .run('watch-at-t', mutedMember, -28.6, 153.6, 50, watchAtT);
+    const watchHeardAtT = new Date(Date.now() - 230_000).toISOString();
+    db.prepare('INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at, last_notified_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run('watch-at-t', mutedMember, -28.6, 153.6, 50, watchAtT, watchHeardAtT, watchHeardAtT);
     const seenAtT = new Date(Date.now() - 300_000).toISOString();
     db.prepare(`INSERT INTO directory_cache (community_key, listed, name, node_url, lat, lng, radius_km, member_count, first_seen_at, updated_at)
                 VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`).run('peer-at-t', 'Snapshot Commons', 'https://snapshot.beanpool.org', -28.55, 153.5, 25, 40, seenAtT, seenAtT);
@@ -364,9 +366,11 @@ async function main(): Promise<void> {
             const area = archived.prepare('SELECT area_lat, area_lng, area_updated_at FROM members WHERE public_key = ?').get(mutedMember) as any;
             assert(area?.area_lat === -28.6 && area?.area_lng === 153.5 && area?.area_updated_at === areaAtT,
                 'and a person\'s coarse area, so a restored node still measures the People list from it');
-            const watch = archived.prepare('SELECT pubkey, lat, lng, radius_km, created_at FROM place_watches WHERE id = ?').get('watch-at-t') as any;
+            const watch = archived.prepare('SELECT pubkey, lat, lng, radius_km, created_at, last_notified_at, updated_at FROM place_watches WHERE id = ?').get('watch-at-t') as any;
             assert(watch?.pubkey === mutedMember && watch?.lat === -28.6 && watch?.lng === 153.6 && watch?.radius_km === 50 && watch?.created_at === watchAtT,
                 'and a member\'s place watch, so a restored global node still tells them when a community starts near it');
+            assert(watch?.last_notified_at === watchHeardAtT && watch?.updated_at === watchHeardAtT,
+                'with when its member last heard (their quiet day) and its replication stamp');
             const seen = archived.prepare('SELECT listed, name, first_seen_at FROM directory_cache WHERE community_key = ?').get('peer-at-t') as any;
             assert(seen?.listed === 1 && seen?.name === 'Snapshot Commons' && seen?.first_seen_at === seenAtT,
                 'and the directory cache with each community\'s first sighting, so a restored node never tells a watcher twice');

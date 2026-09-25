@@ -684,7 +684,8 @@ CREATE INDEX IF NOT EXISTS idx_open_joins_updated_at ON open_joins(updated_at);
 -- failed its check is NULL, never a guess: a row with no `node_url` is a community shown with no link and no knock
 -- target. A row is never deleted: a community that leaves the registry is kept as its key and `first_seen_at` only
 -- (`listed` 0, every published field cleared), so a community is new to this node once, and a watcher is told
--- about it once. Not replicated to a standby: a cache the next fetch rebuilds.
+-- about it once. Replicated to a standby (`updated_at`, stamped only when a row changes), so a server that takes over
+-- knows what the old one had already seen and tells nobody about it again.
 CREATE TABLE IF NOT EXISTS directory_cache (
     community_key TEXT PRIMARY KEY,
     listed INTEGER NOT NULL DEFAULT 1 CHECK (listed IN (0, 1)),
@@ -700,15 +701,17 @@ CREATE TABLE IF NOT EXISTS directory_cache (
     first_seen_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_directory_cache_updated_at ON directory_cache(updated_at);
 
 -- 14e. Place watches (global profile G5, engine/place-watches.ts): "tell me when a community starts near here".
 --
 -- A member's own, set and removed only by their signed request, at most 3 each. `lat`/`lng` is the 0.1° cell the
 -- member asked about, rounded BEFORE it is written, never the spot. When the mirror first sees a community that
 -- reaches a watch, its member hears once (a push and a live announcement), and at most once a day
--- (`last_notified_at`, on every one of the member's watches). Node-local like `push_tokens`, the only way a watch
--- reaches anyone: not replicated to a standby, carried in file and sealed backups. Goes with the member on a prune
--- or a self-deletion, and moves with them on a re-key.
+-- (`last_notified_at`, on every one of the member's watches). Replicated to a standby, watermarked on `updated_at`
+-- (stamped by a set, a radius change, a notice and a re-key), with a `place_watches` tombstone keyed by `id` for each
+-- removal, so a server that takes over has every watch and each member's quiet day. Carried in file and sealed
+-- backups. Goes with the member on a prune or a self-deletion, and moves with them on a re-key.
 CREATE TABLE IF NOT EXISTS place_watches (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL REFERENCES members(public_key),
@@ -717,8 +720,10 @@ CREATE TABLE IF NOT EXISTS place_watches (
     radius_km REAL NOT NULL CHECK (radius_km > 0 AND radius_km <= 200),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     last_notified_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (pubkey, lat, lng)
 );
+CREATE INDEX IF NOT EXISTS idx_place_watches_updated_at ON place_watches(updated_at);
 
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (

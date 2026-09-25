@@ -57,6 +57,12 @@ export const updateAllocation = async (env, name, fields) => {
 const STATE = ['node_pubkey', 'requested_at', 'status', 'pause_reason', 'decision_seq'];
 const IDS = ['tunnel_id', 'dns_record_id'];
 
+// Is the row still `expected` (tenure, state, decisions)? Asked before touching a record found by hostname, which
+// is another tenure's once the row has changed.
+export const isUnchanged = async (env, name, expected) =>
+    !!(await env.DB.prepare(`SELECT 1 AS yes FROM name_allocations WHERE name=? AND ${STATE.map((c) => `${c} IS ?`).join(' AND ')}`)
+        .bind(name, ...STATE.map((c) => expected[c] ?? null)).first());
+
 // Write `fields` over `expected` — the row as this request read it, or last wrote it — only if its tenure and
 // state are unchanged (and, `withIds`, the tunnel and DNS ids it recorded): a request that worked at Cloudflare
 // meanwhile must not overwrite an admin's pause or block, the sweep's pause, a release or another claim. False =

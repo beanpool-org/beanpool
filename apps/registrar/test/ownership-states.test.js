@@ -49,7 +49,7 @@ function fakeCloudflare() {
     const calls = [];
     const tunnels = new Map();   // id → { id, name, deleted_at, ingress }
     const dns = new Map();       // id → { id, type, name (fqdn), content, proxied }
-    const fail = { deleteTunnel: false, ingress: false };
+    const fail = { deleteTunnel: false, ingress: false, deleteDns: false };
     const hooks = [];
     let seq = 0;
     const ok = (result) => Response.json({ success: true, result });
@@ -98,6 +98,7 @@ function fakeCloudflare() {
         }
         if ((m = p.match(/^\/zones\/zone\/dns_records\/([^/]+)$/))) {
             const r = dns.get(m[1]);
+            if (method === 'DELETE' && fail.deleteDns) return err(500, 1000, 'internal error');
             if (!r) return err(404, 81044, 'Record does not exist.');
             if (method === 'PATCH') {
                 // A record's type can't be changed in place (CNAME ↔ A): the caller must delete and re-create it.
@@ -1307,6 +1308,104 @@ for (const [action, mode] of [['block', 'tunnel'], ['block', 'direct'], ['pause'
         }
     });
 }
+
+// ── A request that lost the name leaves the new owner's record alone ─────────────────────────────────────────
+// The admin releases a name while its old key's heal is at Cloudflare, and a new key claims it and goes live before
+// the heal finds the record at the hostname — which is now the new owner's.
+const OLD_IP = '198.51.100.1';
+const NEW_IP = '203.0.113.9';
+const MOVED_IP = '198.51.100.2';
+const modeBody = (mode, ip) => (mode === 'direct' ? { mode, public_ip: ip } : { mode });
+
+for (const [was, next] of [['tunnel', 'tunnel'], ['direct', 'direct'], ['direct', 'tunnel'], ['tunnel', 'direct']]) {
+    test(`race: released mid-heal and claimed by another key: the old heal leaves the new owner's record alone (${was} → ${next})`, async () => {
+        const w = await world();
+        try {
+            const name = `handover-${was}-${next}`;
+            const host = `${name}.beanpool.org`;
+            const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
+            assert.equal((await w.claim(oldKey, { name, ...modeBody(was, OLD_IP) })).body.status, 'live');
+            let released, claimed, theirs, mark;
+            w.cf.during(/^GET \/zones\/zone\/dns_records$/, async () => {
+                released = await w.admin(name, 'release');
+                claimed = await w.claim(newKey, { name, ...modeBody(next, NEW_IP) });
+                theirs = { ...w.cf.recordAt(host) };
+                mark = w.cf.calls.length;
+            });
+            const r = await w.heal(oldKey, modeBody(was, OLD_IP));
+            assert.equal(released?.body.status, 'released');
+            assert.equal(claimed.body.status, 'live', JSON.stringify(claimed.body));
+            assert.equal(r.status, 409, JSON.stringify(r.body));
+            const row = await w.row(name);
+            assert.deepEqual([row.node_pubkey, row.status], [newKey.pubHex, 'live']);
+            const target = next === 'direct' ? NEW_IP : `${row.tunnel_id}.cfargotunnel.com`;
+            assert.deepEqual([theirs.id, theirs.content], [row.dns_record_id, target], 'the new owner\'s claim put up its record');
+            assert.deepEqual(w.cf.recordAt(host), theirs, 'the new owner\'s record, as its claim left it');
+            assert.deepEqual(w.cf.calls.slice(mark).filter((c) => c.includes(theirs.id)), [], 'the old heal made no call on it');
+            assert.deepEqual(routing(w, name), { dns: target, tunnels: next === 'tunnel' ? [row.tunnel_id] : [] });
+            if (next === 'tunnel') assert.equal((await w.status(newKey)).body.tunnelToken, `token-${row.tunnel_id}`);
+        } finally { w.restore(); }
+    });
+}
+
+test('race: a record the new owner adopted, re-pointed by the old key\'s heal just after, is pointed back at the new owner (direct)', async () => {
+    const w = await world();
+    try {
+        const name = 'adopted';
+        const host = `${name}.beanpool.org`;
+        const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
+        assert.equal((await w.claim(oldKey, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+        const mine = w.cf.recordAt(host).id;
+        // The old key's node moved: its heal re-points its record. As that PATCH goes out, the admin releases the name
+        // (Cloudflare refuses the record's delete, so the record stays), and a new key claims it, adopting the record.
+        let released, claimed;
+        w.cf.during(/^PATCH \/zones\/zone\/dns_records\//, async () => {
+            w.cf.fail.deleteDns = true;
+            released = await w.admin(name, 'release');
+            claimed = await w.claim(newKey, { name, ...modeBody('direct', NEW_IP) });
+            w.cf.fail.deleteDns = false;
+        });
+        const r = await w.heal(oldKey, modeBody('direct', MOVED_IP));
+        assert.equal(released?.body.status, 'released');
+        assert.equal(claimed.body.status, 'live', JSON.stringify(claimed.body));
+        assert.equal(r.status, 409, JSON.stringify(r.body));
+        const row = await w.row(name);
+        assert.deepEqual([row.node_pubkey, row.status, row.dns_record_id], [newKey.pubHex, 'live', mine]);
+        assert.deepEqual([w.cf.recordAt(host)?.id, w.cf.recordAt(host)?.content], [mine, NEW_IP], 'the new owner\'s address, not the old key\'s');
+    } finally { w.restore(); }
+});
+
+test('race: a record the old key\'s heal put up that the new owner\'s row doesn\'t know goes; the new owner\'s heal routes it', async () => {
+    const w = await world();
+    try {
+        const name = 'unknown-record';
+        const host = `${name}.beanpool.org`;
+        const [oldKey, newKey] = await Promise.all([makeKey(), makeKey()]);
+        assert.equal((await w.claim(oldKey, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+        // The old key moves to a tunnel: its heal replaces its A record with a CNAME. As it deletes the A record, the
+        // admin releases the name (the record's delete refused) and a new key claims it, adopting that record; then
+        // the heal's delete lands on it and the heal puts up its CNAME.
+        let claimed;
+        w.cf.during(/^DELETE \/zones\/zone\/dns_records\//, async () => {
+            w.cf.fail.deleteDns = true;
+            await w.admin(name, 'release');
+            claimed = await w.claim(newKey, { name, ...modeBody('direct', NEW_IP) });
+            w.cf.fail.deleteDns = false;
+        });
+        const r = await w.heal(oldKey, { mode: 'tunnel' });
+        assert.equal(claimed.body.status, 'live', JSON.stringify(claimed.body));
+        assert.equal(r.status, 409, JSON.stringify(r.body));
+        assert.equal((await w.row(name)).node_pubkey, newKey.pubHex);
+        assert.deepEqual(routing(w, name), { dns: null, tunnels: [] }, 'nothing routes the name to the old key');
+
+        // The new owner's next heal puts its record back, and the row knows it.
+        w.nodes[host] = attestsAs(newKey);
+        const h = await w.heal(newKey, modeBody('direct', NEW_IP));
+        assert.equal(h.body.status, 'live', JSON.stringify(h.body));
+        const row = await w.row(name);
+        assert.deepEqual([w.cf.recordAt(host)?.id, w.cf.recordAt(host)?.content], [row.dns_record_id, NEW_IP]);
+    } finally { w.restore(); }
+});
 
 // ── Migration 0002 ────────────────────────────────────────────────────────────────────────────────────────────
 const CUTOFF = 1790233200;          // 2026-09-24 17:00 AEST

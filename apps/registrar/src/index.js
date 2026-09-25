@@ -71,7 +71,10 @@ const dnsTarget = (a) => a.mode === 'direct'
 // (or the record is the wrong type for the mode, which Cloudflare can't PATCH: then it is replaced).
 // Never deprovisions first. Returns the ids and what had to be (re)made: changed ⊆ ['tunnel', 'dns']; a new tunnel
 // means a new token. Throws on a Cloudflare failure, having written nothing to the row and removed any tunnel it made.
-async function ensure(env, a) {
+// The record is found by hostname, so once the row has changed it may be another tenure's: it is changed only while
+// the row is still `expected` (the row as the caller read or last wrote it); otherwise ensure throws `raced`,
+// having changed no record.
+async function ensure(env, a, expected) {
     const changed = [];
     let tunnel_id = null;
     if (a.mode === 'tunnel') {
@@ -91,6 +94,9 @@ async function ensure(env, a) {
         if (a.mode === 'tunnel') await cf.setTunnelIngress(env, tunnel_id, a.hostname, a.origin || DEFAULT_ORIGIN);
         const want = dnsTarget({ ...a, tunnel_id });
         let rec = await cf.findDnsRecord(env, a.hostname);
+        const intact = rec && rec.type === want.type && rec.content === want.content && rec.proxied === want.proxied;
+        if (!intact && !(await db.isUnchanged(env, a.name, expected)))
+            throw Object.assign(new Error('the name changed meanwhile'), { raced: true });
         if (rec && rec.type !== want.type) {
             // Cloudflare won't change a record's type in place (tunnel ↔ direct is CNAME ↔ A): replace it.
             try { await cf.deleteDnsRecord(env, rec.id); } catch (e) { if (e?.status !== 404) throw e; }
@@ -150,8 +156,9 @@ const provisionFailed = (e) => {
 // A request reads the row, works at Cloudflare (ensure; on a kept tunnel, an edge re-attest of up to 15 s), then
 // writes. Whatever is decided meanwhile stands:
 //   - bringing routing up (heal, claim, take-back, approve, resume): every write after a Cloudflare call holds only
-//     while the row's tenure and state are as read (db.updateIfUnchanged). On a miss the request undoes what it
-//     did (undo) and answers with the row as it now is.
+//     while the row's tenure and state are as read (db.updateIfUnchanged), and ensure() changes the record at the
+//     hostname only while the row is as read. On a miss the request undoes what it did (undo: a record it changed
+//     that is now another tenure's is put back to that tenure) and answers with the row as it now is.
 //   - taking routing down (the admin's pause and block, a release, the sweep's pause): the row is written FIRST,
 //     then Cloudflare (stopRouting), so a request that read the row earlier misses its own write. That write always
 //     counts a decision (decision_seq), so one that changes no status — blocking a blocked name, pausing a paused
@@ -160,21 +167,45 @@ const provisionFailed = (e) => {
 // The decision counter a write carries: the row's, plus one. NULL (a row no decision has touched) counts as 0.
 const decision = (a) => ({ decision_seq: (a.decision_seq ?? 0) + 1 });
 
+// What ensure() made at Cloudflare when it made nothing (it threw `raced`): there is nothing to undo.
+const NOTHING = { tunnel_id: null, dns_record_id: null, changed: [] };
+
+// What a live row routes to, for telling whether it changed between two reads.
+const routeOf = (r) => JSON.stringify(r && [r.status, r.node_pubkey, r.requested_at, r.dns_record_id, r.status === 'live' ? dnsTarget(r) : null]);
+
 // A request whose conditional write missed: the row changed while it was at Cloudflare. Undone as far as the row,
-// as it now is, allows: a tunnel it made goes unless the row is now live on it (nobody else was given its token,
-// and a kept tunnel nobody can connect to would fail every re-attest); the record it pointed goes unless the row
-// is now live — then it is left to that row's own heal, as deleting it would take a live name down. A delete
-// Cloudflare refuses here is logged and left. Returns the row as it now is.
+// as it now is, allows (a Cloudflare call refused here is logged and left):
+//   - a tunnel it made goes unless the row is now live on it (nobody else was given its token, and a kept tunnel
+//     nobody can connect to would fail every re-attest);
+//   - the record it found or made at the hostname goes unless the row is now live. If the row is live and this
+//     request changed that record, it may be another tenure's now (ensure works by hostname): it is put back to
+//     what the live row says — re-pointed at the row's target when it is the record the row knows, deleted when it
+//     isn't (a record the row doesn't know would outlive the row's own release or pause, which delete by id). Then
+//     the row is read again and, if it changed meanwhile, the same again (3 tries). A record this request didn't
+//     change is left to the live row.
+// Returns the row as it now is.
 async function undo(env, name, ids) {
-    const now = await db.getAllocation(env, name);
-    const live = now?.status === 'live';
+    let now = await db.getAllocation(env, name);
     const drop = async (what, id, del) => {
         try { await del(); } catch (e) { if (e?.status !== 404) console.error('[UNDO_FAILED]', name, what, id, e.message || e); }
     };
-    if (ids.changed.includes('tunnel') && !(live && now.tunnel_id === ids.tunnel_id))
+    if (ids.changed.includes('tunnel') && !(now?.status === 'live' && now.tunnel_id === ids.tunnel_id))
         await drop('tunnel', ids.tunnel_id, () => cf.deleteTunnel(env, ids.tunnel_id));
-    if (ids.dns_record_id && !live) await drop('dns', ids.dns_record_id, () => cf.deleteDnsRecord(env, ids.dns_record_id));
-    console.warn('[RACE]', name, `changed under a request (now ${now?.status ?? 'gone'}): what it made at Cloudflare is undone`);
+    const rec = ids.dns_record_id;
+    for (let i = 0; rec && i < 3; i++) {
+        if (now?.status !== 'live') { await drop('dns', rec, () => cf.deleteDnsRecord(env, rec)); break; }
+        if (!ids.changed.includes('dns')) break;
+        if (now.dns_record_id === rec) {
+            try { await cf.patchDnsRecord(env, rec, dnsTarget(now)); }
+            catch (e) { if (e?.status !== 404) await drop('dns', rec, () => cf.deleteDnsRecord(env, rec)); }
+        } else {
+            await drop('dns', rec, () => cf.deleteDnsRecord(env, rec));
+        }
+        const again = await db.getAllocation(env, name);
+        if (routeOf(again) === routeOf(now)) break;
+        now = again;
+    }
+    console.warn('[RACE]', name, `changed under a request (now ${now?.status ?? 'gone'}): what it did at Cloudflare is undone`);
     return now;
 }
 
@@ -272,10 +303,10 @@ async function heal(env, cur, b, now) {
         return reply({ status: 'paused', reason: 'admin', since: cur.paused_at, changed: [] });
     }
 
-    let ids;
-    try { ids = await ensure(env, a); } catch (e) { return provisionFailed(e); }
     // From here every write holds only while the row is as read (`cur`); if it changed, the heal is undone.
+    let ids = NOTHING;
     const missed = async () => asNow(await undo(env, cur.name, ids), cur.node_pubkey);
+    try { ids = await ensure(env, a, cur); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
     if (!(await db.updateIfUnchanged(env, cur.name, cur, { ...fields, tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id })))
         return missed();
     const res = { ...a, tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
@@ -348,12 +379,11 @@ async function takeName(env, existing, pubkey, b, now) {
 
     if (!approved) return json({ status: 'pending', hostname: fields.hostname, note: 'awaiting approval' });
     const a = { name, ...fields };
-    let ids;
-    // A failure leaves the row held by this key ('pending', or a take-back's 'paused'); its next claim retries.
-    try { ids = await ensure(env, a); } catch (e) { return provisionFailed(e); }
     // From here every write holds only while the row is this tenure as written (`a`); if it changed, the claim is
-    // undone.
+    // undone. A failure leaves the row held by this key ('pending', or a take-back's 'paused'); its next claim retries.
+    let ids = NOTHING;
     const missed = async () => claimReply(env, asNow(await undo(env, name, ids), pubkey));
+    try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
     const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
     const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
     if (takeBack) {
@@ -564,7 +594,7 @@ async function adminResume(env, a, was, now) {
     if (a.tunnel_id && !(a.status === 'paused' && a.pause_reason === 'admin'))
         r.tunnel_id = (await deprovision(env, { tunnel_id: a.tunnel_id })).tunnel_id;
     let ids;
-    try { ids = await ensure(env, r); } catch (e) { return provisionFailed(e); }
+    try { ids = await ensure(env, r, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
     const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
     if (!(await db.updateIfUnchanged(env, a.name, a, made))) return adminMissed(env, a.name, ids);
     const g = await routeIfOnlyOwner(env, a, { ...r, ...made }, ids, now);
@@ -583,7 +613,7 @@ async function adminResume(env, a, was, now) {
 // Approve: a pending claim goes live at once, as any new claim does (its tunnel is made now).
 async function adminGoLive(env, a, event, detail, extra = {}) {
     let ids;
-    try { ids = await ensure(env, a); } catch (e) { return provisionFailed(e); }
+    try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
     const live = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id, ...LIVE, ...extra };
     if (!(await db.updateIfUnchanged(env, a.name, a, live))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, event, detail);

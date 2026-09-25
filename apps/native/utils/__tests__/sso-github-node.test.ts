@@ -15,6 +15,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { sealSeedToSso } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
@@ -54,8 +56,10 @@ vi.mock('expo-secure-store', () => ({
     deleteItemAsync: vi.fn(async () => undefined),
 }));
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { SsoSignInError, startSsoSignIn } from '../sso-signin';
-import { recoverAccountWithSso } from '../sso-recovery';
+import { recoverAccountWithSso, waitingOnGithub } from '../sso-recovery';
 import { seedToKeypair } from '../crypto';
 
 const NODE = 'https://test.example';
@@ -468,7 +472,7 @@ describe("a member's GitHub sign-in runs through the node", () => {
 const COLLECT_START = '/api/recovery/collect/github/start';
 const COLLECT_POLL = '/api/recovery/collect/github/poll';
 
-async function recoveryNode(opts: { githubFlow?: string } = {}) {
+async function recoveryNode(opts: { githubFlow?: string; routes?: Record<string, Route> } = {}) {
     const seed = new Uint8Array(32).fill(42);
     const keypair = await seedToKeypair(seed);
     const sealed = await sealSeedToSso(seed, 'github', '987654');
@@ -490,8 +494,31 @@ async function recoveryNode(opts: { githubFlow?: string } = {}) {
                 }],
             },
         },
+        ...opts.routes,
     });
     return { seen, keypair };
+}
+
+const RELEASE = '/api/recovery/collect/sso';
+
+/**
+ * The member taps Cancel just as the node's `ok` arrives: the app has the answer and has not acted on it
+ * yet. The poll itself is over by then, so only a check after the sign-in can see the cancel.
+ */
+function cancelOnOk(abort: AbortController, pollPath: string): void {
+    const nodeFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: any, init?: any) => {
+        const res = await nodeFetch(input, init);
+        if (!String(input).endsWith(pollPath)) return res;
+        const body = await res.json();
+        return {
+            ...res,
+            json: async () => {
+                if (body?.status === 'ok') abort.abort();
+                return body;
+            },
+        };
+    }) as any;
 }
 
 describe('recovering with GitHub runs through the node', () => {
@@ -568,5 +595,90 @@ describe('recovering with GitHub runs through the node', () => {
         expect((error as SsoSignInError).reason).toBe('cancelled');
         expect(polls(seen, COLLECT_POLL)).toHaveLength(0);
         expect(seen.map((s) => s.path)).not.toContain('/api/recovery/collect/sso');
+    });
+
+    // welcome.tsx shows the code, Copy, Open GitHub and Cancel while recovery waits on GitHub. Left up
+    // after GitHub said yes, they hid the steps that followed, and Cancel did nothing: the piece was
+    // released and this phone's identity replaced all the same.
+    it('takes the code and its Cancel down once GitHub says yes, before anything is released, and shows the steps after', async () => {
+        let panel: unknown = null;
+        let panelWhenReleased: unknown = 'never released';
+        const { seen, keypair } = await recoveryNode({
+            githubFlow: 'node',
+            routes: {
+                [RELEASE]: () => {
+                    panelWhenReleased = panel;
+                    return { status: 200, body: { collected: 1, threshold: 1, enough: true } };
+                },
+            },
+        });
+        vi.mocked(SecureStore.setItemAsync).mockClear();
+        const steps: Array<{ step: string; message: string; panelUp: boolean }> = [];
+
+        const outcome = recoverAccountWithSso({
+            callsign: 'member',
+            anchorUrl: NODE,
+            provider: 'github',
+            // As welcome.tsx drives its panel: up with the code, down at the first step past GitHub.
+            onDeviceCode: (p) => { panel = p; },
+            onProgress: (p) => {
+                if (!waitingOnGithub(p.step)) panel = null;
+                steps.push({ step: p.step, message: p.message, panelUp: panel !== null });
+            },
+        }).then((value) => ({ value, error: undefined as unknown }), (error) => ({ value: undefined, error }));
+        await vi.advanceTimersByTimeAsync(20_000);
+        const { value, error } = await outcome;
+
+        expect(error).toBeUndefined();
+        expect(value?.identity.publicKey).toBe(keypair.publicKeyHex);
+        expect(SecureStore.setItemAsync).toHaveBeenCalled();
+        // Up while the member is at GitHub, and already down when the node was asked to release.
+        expect(steps.find((s) => s.step === 'awaiting-sso')?.panelUp).toBe(true);
+        expect(polls(seen, COLLECT_POLL)).toHaveLength(2);
+        expect(panelWhenReleased).toBeNull();
+        const afterGithub = steps.slice(steps.findIndex((s) => s.step === 'awaiting-sso') + 1);
+        expect(afterGithub.map((s) => s.message)).toEqual([
+            'Verifying sign-in with node...',
+            'Downloading recovery fragments...',
+            'Reconstructing account identity...',
+            'Account restored successfully!',
+        ]);
+        expect(afterGithub.filter((s) => s.panelUp)).toEqual([]);
+    });
+
+    it("honours a cancel that lands after GitHub's yes but before the release: nothing released, this phone's identity untouched", async () => {
+        const { seen } = await recoveryNode({ githubFlow: 'node' });
+        const abort = new AbortController();
+        cancelOnOk(abort, COLLECT_POLL);
+        vi.mocked(SecureStore.setItemAsync).mockClear();
+        vi.mocked(AsyncStorage.setItem).mockClear();
+
+        const outcome = recoverAccountWithSso({
+            callsign: 'member',
+            anchorUrl: NODE,
+            provider: 'github',
+            onDeviceCode: () => {},
+            signal: abort.signal,
+        }).then(() => undefined, (error) => error);
+        await vi.advanceTimersByTimeAsync(20_000);
+        const error = await outcome;
+
+        expect(abort.signal.aborted).toBe(true);
+        expect(polls(seen, COLLECT_POLL)).toHaveLength(2);
+        expect(error).toBeInstanceOf(SsoSignInError);
+        expect((error as SsoSignInError).reason).toBe('cancelled');
+        expect(seen.map((s) => s.path)).not.toContain(RELEASE);
+        expect(seen.map((s) => s.path)).not.toContain('/api/recovery/collect/fragments');
+        expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+        expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    });
+});
+
+// The screen cannot be rendered here (see vitest.config.ts). The panel above is driven by the function
+// welcome.tsx calls; this checks that it does call it.
+describe('app/welcome.tsx', () => {
+    it('takes the GitHub code and its Cancel down at the first recovery step past GitHub', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
+        expect(src).toMatch(/if \(!waitingOnGithub\(p\.step\)\) setRecoveryCode\(null\)/);
     });
 });

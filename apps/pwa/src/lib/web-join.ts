@@ -35,11 +35,11 @@
  *     boolean counts; its "not a member" is the evidence a release needs.
  *   - `checkSentJoin`: for a join that went out before this page opened, whether it is in, can still land, or cannot.
  *
- * ## The seam for sign-in recovery (G11-c)
+ * ## Sign-in recovery (G11-c)
  *
- * Every sign-in that reaches `submit` carries the provider's `sub` (the token's claim, or GitHub's poll answer), and
- * `joinBody` takes an optional `recovery`. G11-c seals the seed to that `sub` and passes the shares; nothing here or
- * in the screens changes shape for it.
+ * Every sign-in that reaches `submit` carries the provider's `sub` (the token's claim, or GitHub's poll answer). The
+ * join screens seal the key (and its 12 words) to that `sub` (lib/join-recovery.ts) and pass the shares as `joinBody`'s
+ * `recovery`, so one sign-in both joins and becomes the member's way back, as on the phone.
  */
 
 import { sha256 } from '@noble/hashes/sha2.js';

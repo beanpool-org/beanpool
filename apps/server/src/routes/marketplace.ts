@@ -15,7 +15,7 @@ import {
     canOperateTreasury,
     closePoll, votePoll, rsvpEvent,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
-    nodeRoleOf, isNodeMember,
+    nodeRoleOf,
 } from '../state-engine.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -34,6 +34,8 @@ import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { viewerTier, VIEW_HEADER } from './viewer.js';
+import { guestPost } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -201,9 +203,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
         return;
     }
     const { point, radiusKm, sort } = distance.value;
+    const switches = getProfileSwitches();
     // Nearest first when asked, or when a caller gives a point and no sort on a node whose `distanceSortDefault` is on
     // (the global profile). Without a point, every profile keeps today's order.
-    const byDistance = !!point && (sort === 'distance' || (sort === undefined && getProfileSwitches().distanceSortDefault));
+    const byDistance = !!point && (sort === 'distance' || (sort === undefined && switches.distanceSortDefault));
 
     const id = ctx.query.id as string | undefined;
     const type = ctx.query.type as string | undefined;
@@ -237,15 +240,32 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // public read, so an unsigned reader, a signed non-member and a pruned account all reach it. Membership is in the
     // ETag: joining changes what the board holds without changing any post, so a copy fetched before must not be
     // confirmed with a 304.
-    const includeVoters = isNodeMember(viewerPubkey);
+    const includeVoters = viewerTier(ctx) === 'member';
+    // The listings, not the people (G9a, the global profile's `guestListingsOnly`): anyone who isn't a member gets each
+    // listing with nobody in it (guestPost) and its rough area, and every distance, order and radius worked out from
+    // the area inside the query (`coarse`), so nothing read from any number of points places a post better than that.
+    // Such a reader is served the public scope only, as a reader with no key always was.
+    const guestView = !includeVoters && switches.guestListingsOnly;
+    if (guestView && (author || targetGroupId || assignedTo || (audienceScope !== undefined && audienceScope !== 'public'))) {
+        // One member's listings, or the posts for a group or a person, are people's records: answered as asked or not
+        // at all, never as a quietly empty list.
+        ctx.status = 403;
+        ctx.body = { error: "Sign in to see one member's listings", code: 'members_only' };
+        return;
+    }
 
     // With a point, the order is folded in too: it can change with the operator's switch while the URL and the posts
-    // stay the same, and a 304 then would pin the old order. Without one the ETag is what it always was.
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}`;
+    // stay the same, and a 304 then would pin the old order. Without one the ETag is what it always was. The visitors'
+    // view is a view of its own: a key that becomes a member (same key, same URL) must not have its visitor's copy
+    // confirmed, and a member is never answered 304 for one.
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
     ctx.set('ETag', etag);
+    // A node with two views says which this is; the phone keeps a visitor's view only where it is one
+    // (apps/native utils/posts-view.ts). A node with one says nothing, as before.
+    if (switches.guestListingsOnly) ctx.set(VIEW_HEADER, guestView ? 'guest' : 'member');
     // `private`, not `public`: this response varies by viewer — an author sees their OWN paused
     // posts and nobody else does (see getPosts below). The viewer is folded into the ETag, so a
     // shared cache that revalidates would be corrected, but a response keyed only on URL must
@@ -282,13 +302,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const excludeEvents = !id && !wantsEvents;
 
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
-    // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else.
-    const includeHidden = !!viewerPubkey && !!nodeRoleOf(viewerPubkey);
+    // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else. The visitors' view is read
+    // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
+    const reader = guestView ? undefined : viewerPubkey;
+    const includeHidden = !!reader && !!nodeRoleOf(reader);
     const posts = getPosts({
-        id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
-        includeVoters, near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
+        id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: reader, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
+        includeVoters, near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance, coarse: guestView || undefined,
     });
-    const bodyStr = JSON.stringify(posts);
+    const bodyStr = JSON.stringify(guestView ? posts.map(guestPost) : posts);
 
     ctx.status = 200;
     ctx.type = 'application/json';

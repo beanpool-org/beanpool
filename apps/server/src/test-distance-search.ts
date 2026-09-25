@@ -315,7 +315,15 @@ async function main(): Promise<void> {
     assert(!forBea.includes(groupPost) && !forStranger.includes(groupPost), 'a group post is not in the query of someone outside the group');
     assert(ids(await list(cal, near)).includes(groupPost), 'but is in its convenor\'s');
     assert(![forBea, forStranger, ids(await list(ann, near))].some(l => l.includes(removed)), 'a removed post is in nobody\'s, its author\'s included');
-    assert(same(forBea, [P05, P5, P20]) && same(forStranger, [P05, P5, P20]), 'and nothing else changed in the answer');
+    // On the global node a stranger is measured from each post's 0.1° area, not its place (G9a, test-guest-view): the
+    // same three listings, in the order of their areas' distances, the most recently updated first within one area.
+    const area = (deg: number) => Math.round(deg * 10) / 10 + 0;
+    const byArea = [P05, P5, P20]
+        .map(id => { const p = db.prepare('SELECT lat, lng FROM posts WHERE id = ?').get(id) as { lat: number; lng: number }; return { id, d: haversine(hLat, hLng, area(p.lat), area(p.lng)) }; })
+        .sort((a, b) => a.d - b.d || recency.indexOf(a.id) - recency.indexOf(b.id))
+        .map(p => p.id);
+    assert(same(forBea, [P05, P5, P20]) && same(forStranger, byArea),
+        `and nothing else changed in the answer: nearest first for a member, by area for a stranger (${forStranger.join(', ')})`);
     const beaPinned = ids(await list(bea, `${hub}&radiusKm=50&audienceScope=group&limit=200`));
     assert(beaPinned.length === 0, 'audienceScope=group with a point: still only groups the caller is in (none)');
     delete process.env.NODE_PROFILE;

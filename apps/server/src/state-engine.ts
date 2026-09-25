@@ -6087,6 +6087,8 @@ export function createTreasury(
     const trimmed = (name || '').trim();
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
     if (!avatar && !opts.systemCreated) throw new Error('Treasury needs an avatar image');
+    // Bare base64 is judged by the photo rule in both routes that pass a sender's value (POST /api/treasury and
+    // /api/enterprise, POST /api/local/admin/treasury); the other callers pass a bundled:// name or nothing.
     if (!isAcceptableAvatarValue(avatar)) throw new Error(AVATAR_FORMAT_ERROR);
     // Served by /api/avatar/<enterprise key> to anyone who asks, so it is stored without its metadata (G9a-3).
     avatar = stripImageValue(avatar);

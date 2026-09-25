@@ -596,6 +596,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
+        // G9a-3: the enterprise routes hand members.avatar_url out as stored (avatarUrl), so the photo rule, as above.
+        if (!isAcceptablePhotoValue(String(avatar))) { ctx.status = 400; ctx.body = { error: AVATAR_FORMAT_ERROR }; return; }
         try {
             ctx.body = {
                 success: true,

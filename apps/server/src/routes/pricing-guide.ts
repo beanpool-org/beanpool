@@ -5,6 +5,7 @@
 import Router from '@koa/router';
 import type { RouteDeps } from './types.js';
 import { PRICING_CATEGORIES } from '@beanpool/core';
+import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import {
     getPricingGuideItems,
     getPricingGuideItem,
@@ -125,6 +126,8 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Missing required item fields (category, emoji, name, priceBeans)' };
             return;
         }
+        // G9a-3: every member reads the thumbnail as stored, so a picture must be one the strip knows (a link passes).
+        if (!isAcceptablePhotoValue(thumbnailUrl)) { ctx.status = 400; ctx.body = { error: AVATAR_FORMAT_ERROR }; return; }
 
         const saved = savePricingGuideItem({
             id,

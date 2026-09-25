@@ -10,6 +10,7 @@ import { bumpPostsVersion } from './versions.js';
 import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
+import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
@@ -40,13 +41,20 @@ type BroadcastFn = (event: any, recipients?: string[]) => void;
  * Every photo is written without its metadata (G9a-3). A photo an edit hands back unchanged re-stores as the
  * same object when it carries none — every photo stored since stripping began — and as its stripped copy, under
  * a new key, when it was stored before: the author re-saving their post's photos is a write like any other.
+ *
+ * The photo route serves the stored bytes under the type the data URL declared, without looking at them, and
+ * `validatePostPhotos` reads only that declared type. So the bytes themselves must be a JPEG, PNG, WebP or GIF,
+ * the formats the strip knows: a HEIC labelled image/jpeg would otherwise be stored and served with its GPS.
+ * Checked before the first put, so a refused edit writes nothing. Both apps send JPEGs.
  */
 function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
+    if (!photos.every(p => isAcceptablePhotoValue(p))) throw new Error(POST_PHOTO_FORMAT_ERROR);
     const store = getImageStore();
     return photos.map((p, idx) =>
         storeUploadedPhotoColumns(store, s => postPhotoKey(postId, idx, s.sha256, s.mime), p));
 }
 
+const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
 
 function assertMemberActive(publicKey: string): void {

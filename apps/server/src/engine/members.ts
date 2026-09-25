@@ -7,7 +7,7 @@ import { ledger } from './ledger.js';
 import { getMember, getProfile, publicMemberCard, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
-import { isAcceptableAvatarValue } from './avatar.js';
+import { isAcceptablePhotoValue } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { isSelfAvatarUrl } from '@beanpool/core';
 
@@ -339,7 +339,10 @@ export function updateProfile(
     if (!getMember(db, publicKey)) return null;
     recordActivity(publicKey);
 
-    if (update.avatar !== undefined && !isAcceptableAvatarValue(update.avatar)) throw new Error('AVATAR_INVALID');
+    // The photo rule, bare base64 included (G9a-3): /api/avatar/<pk> sniffs, but the group, group-members and profile
+    // routes hand members.avatar_url out exactly as stored, so a HEIC or any other format the strip does not know would
+    // reach other members with its GPS. Both apps send a JPEG data URL or a bundled:// name, which pass.
+    if (update.avatar !== undefined && !isAcceptablePhotoValue(update.avatar)) throw new Error('AVATAR_INVALID');
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     // The node never stores its OWN avatar URL as an avatar. Installed builds read
     // `members.avatar_url` out of their synced local row — which since #725 holds this node's

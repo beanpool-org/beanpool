@@ -12,13 +12,14 @@
  *
  * Part 2 — over a real HTTPS round trip, signed as a member: each upload route, read back through the route
  * that serves it (post photos, events, avatars, enterprises, crowdfund projects, groups, and the operator's
- * pricing-guide thumbnail). No canary from the metadata survives, the picture's bytes are exactly the clean
- * image's, and the result still decodes. A group picture or crowdfund photo in a format the strip does not know
- * (a HEIC, GPS inside) is refused, as avatars already are, rather than stored with its GPS.
+ * pricing-guide thumbnail). No canary from the metadata survives and the picture's bytes are exactly the clean
+ * image's. A member's photo is also read back the way other members see it: every route that hands out the
+ * stored value (group, group members, profile) and every one that turns it into an avatar address (the group and
+ * event chats). A photo in a format the strip does not know (a HEIC, GPS inside) is refused on every one of those
+ * routes rather than stored with its GPS: with a data: prefix, as bare base64, or labelled image/jpeg.
  *
- * "Still decodes": always checked structurally here (a PNG's CRCs and inflated pixels; the clean image's bytes
- * found verbatim). When `sharp` is installed (it is, as an optional dependency of wrangler), every result is
- * also decoded by libvips and compared pixel for pixel with the clean image.
+ * "Still decodes" is checked structurally: every result is compared byte for byte with the clean image, which
+ * libvips drew, and a PNG's CRCs and inflated pixels are checked on their own.
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  *
@@ -286,20 +287,6 @@ function pngDecodes(bytes: Buffer): boolean {
     return false;
 }
 
-type Sharp = (input: Buffer) => { raw(): { toBuffer(): Promise<Buffer> }; metadata(): Promise<Record<string, any>> };
-let sharp: Sharp | null = null;
-
-/** Decoded by libvips to the same pixels as the clean image, when sharp is here; true (unchecked) when it is not. */
-async function samePixels(bytes: Buffer, clean: Buffer): Promise<boolean> {
-    if (!sharp) return true;
-    try {
-        const [a, b] = await Promise.all([sharp(bytes).raw().toBuffer(), sharp(clean).raw().toBuffer()]);
-        return a.equals(b);
-    } catch {
-        return false;
-    }
-}
-
 // ── Part 1: the strip ─────────────────────────────────────────────────────────────────────────────
 
 type StripModule = typeof import('./storage/image-metadata.js');
@@ -343,19 +330,6 @@ async function partOne(m: StripModule): Promise<void> {
     for (const [name, out] of [['JPEG', jpeg], ['progressive JPEG', progressive], ['PNG', png], ['WebP', webp], ['GIF', gif]] as const) {
         assert(leak(out) === null, `${name}: nothing identifying is left (${leak(out) ?? 'clean'})`);
     }
-    if (sharp) {
-        assert(await samePixels(jpeg, CLEAN_JPEG), 'libvips decodes the stripped JPEG to the clean pixels');
-        assert((await sharp(jpeg).metadata()).orientation === 6, 'libvips reads the kept orientation as 6');
-        assert(await samePixels(progressive, CLEAN_PROGRESSIVE_JPEG), 'libvips decodes the stripped progressive JPEG to the clean pixels');
-        assert(await samePixels(png, CLEAN_PNG), 'libvips decodes the stripped PNG to the clean pixels');
-        assert(await samePixels(webp, CLEAN_WEBP), 'libvips decodes the stripped WebP (extended format) to the clean pixels');
-        assert(await samePixels(gif, CLEAN_GIF), 'libvips decodes the stripped GIF to the clean pixels');
-        const meta = await sharp(webp).metadata();
-        assert(!meta.exif && !meta.xmp, 'libvips finds no EXIF or XMP in the stripped WebP');
-    } else {
-        console.log('  (sharp is not installed here: the libvips pixel comparison was skipped; the byte-exact checks above still ran)');
-    }
-
     console.log('\n── 1b. A photo with nothing to strip is left alone — the same Buffer ──');
     const legacyTestJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9]);
     for (const [name, clean] of [
@@ -514,12 +488,21 @@ function decodeDataUrl(value: unknown): Buffer | null {
     return m ? Buffer.from(m[1], 'base64') : null;
 }
 
+/**
+ * The image an avatar field stands for, however a route hands it out: a data URL or bare base64 (the stored value
+ * as it is), or this node's avatar address (fetched, as an <img> would).
+ */
+async function avatarBytes(value: unknown): Promise<Buffer | null> {
+    if (typeof value !== 'string' || !value) return null;
+    if (/^\/api\/avatar\//.test(value)) return (await fetchBytes(value)).bytes;
+    return decodeDataUrl(value) ?? Buffer.from(value, 'base64');
+}
+
 /** One served image checked against the clean image it must equal. */
-async function served(name: string, bytes: Buffer | null, expected: Buffer, clean: Buffer): Promise<void> {
+async function served(name: string, bytes: Buffer | null, expected: Buffer): Promise<void> {
     if (!bytes) { assert(false, `${name}: nothing was served`); return; }
     assert(leak(bytes) === null, `${name}: no metadata served (${leak(bytes) ?? 'clean'})`);
     assert(bytes.equals(expected), `${name}: the bytes are exactly the clean image's (${bytes.length} served, ${expected.length} expected)`);
-    assert(await samePixels(bytes, clean), `${name}: still decodes, to the clean pixels`);
 }
 
 async function partTwo(): Promise<void> {
@@ -543,11 +526,11 @@ async function partTwo(): Promise<void> {
     const postId = create.json?.post?.id as string | undefined;
     assert(create.status === 200 && !!postId, `the post is created (${create.status} ${create.json?.error ?? ''})`);
     if (postId) {
-        const photos = [[CAMERA_JPEG_STRIPPED, CLEAN_JPEG, 'image/jpeg'], [CLEAN_PNG, CLEAN_PNG, 'image/png'], [CAMERA_WEBP_STRIPPED, CLEAN_WEBP, 'image/webp']] as const;
-        for (const [n, [expected, clean, mime]] of photos.entries()) {
+        const photos = [[CAMERA_JPEG_STRIPPED, 'image/jpeg'], [CLEAN_PNG, 'image/png'], [CAMERA_WEBP_STRIPPED, 'image/webp']] as const;
+        for (const [n, [expected, mime]] of photos.entries()) {
             const got = await fetchBytes(`/api/marketplace/posts/${postId}/photos/${n}`);
             assert(got.status === 200 && got.type.startsWith(mime), `photo ${n} is served as ${mime} (${got.status} ${got.type})`);
-            await served(`post photo ${n} (${mime})`, got.bytes, expected, clean);
+            await served(`post photo ${n} (${mime})`, got.bytes, expected);
         }
 
         console.log('\n── 2b. Editing the post with a new photo: POST /api/marketplace/posts/update ──');
@@ -556,8 +539,8 @@ async function partTwo(): Promise<void> {
             id: postId, authorPublicKey: member.pub, photos: [kept, dataUrl('image/jpeg', CAMERA_PROGRESSIVE_JPEG)],
         }, member);
         assert(edit.status === 200, `the edit is saved (${edit.status} ${edit.json?.error ?? ''})`);
-        await served('the photo the edit kept', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
-        await served('the photo the edit added', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/1`)).bytes, CLEAN_PROGRESSIVE_JPEG, CLEAN_PROGRESSIVE_JPEG);
+        await served('the photo the edit kept', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED);
+        await served('the photo the edit added', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/1`)).bytes, CLEAN_PROGRESSIVE_JPEG);
     }
 
     console.log('\n── 2c. An event\'s photo: POST /api/marketplace/posts (type event) ──');
@@ -568,23 +551,52 @@ async function partTwo(): Promise<void> {
     }, member);
     const eventId = event.json?.post?.id as string | undefined;
     assert(event.status === 200 && !!eventId, `the event is created (${event.status} ${event.json?.error ?? ''})`);
-    if (eventId) await served('event photo', (await fetchBytes(`/api/marketplace/posts/${eventId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
+    if (eventId) await served('event photo', (await fetchBytes(`/api/marketplace/posts/${eventId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED);
+
+    // The photo route serves the stored bytes under the declared type without looking at them, so bytes that are not
+    // a picture the strip knows are refused, whatever the data URL says they are.
+    const mislabelled = dataUrl('image/jpeg', CAMERA_HEIC);
+    const heicPost = await signed('POST', '/api/marketplace/posts', {
+        type: 'offer', category: 'other', title: 'Limes from the tree', description: 'A bag of limes', credits: 0, priceType: 'fixed',
+        authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/jpeg', CLEAN_JPEG), mislabelled],
+    }, member);
+    assert(heicPost.status === 400, `a post photo whose bytes are a HEIC (GPS inside), labelled image/jpeg, is refused (${heicPost.status} ${heicPost.json?.error ?? ''})`);
+    const textPost = await signed('POST', '/api/marketplace/posts', {
+        type: 'offer', category: 'other', title: 'Figs from the tree', description: 'A bag of figs', credits: 0, priceType: 'fixed',
+        authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/png', Buffer.from('plain text, not a picture'))],
+    }, member);
+    assert(textPost.status === 400, `and one whose bytes are no picture at all (${textPost.status} ${textPost.json?.error ?? ''})`);
+    const heicEvent = await signed('POST', '/api/marketplace/posts', {
+        type: 'event', category: 'community', title: 'Working bee', credits: 0, priceType: 'fixed',
+        authorPublicKey: member.pub, lat: -37.06, lng: 144.21, eventStartAt: new Date(Date.now() + 30 * 3600_000).toISOString(),
+        photos: [mislabelled],
+    }, member);
+    assert(heicEvent.status === 400, `and the same HEIC as an event's photo (${heicEvent.status} ${heicEvent.json?.error ?? ''})`);
+    if (postId) {
+        const heicEdit = await signed('POST', '/api/marketplace/posts/update', {
+            id: postId, authorPublicKey: member.pub, photos: [`/api/marketplace/posts/${postId}/photos/0`, mislabelled],
+        }, member);
+        assert(heicEdit.status === 400, `and on an edit (${heicEdit.status} ${heicEdit.json?.error ?? ''})`);
+        await served('the post photo after the refused edit', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED);
+        const second = await fetchBytes(`/api/marketplace/posts/${postId}/photos/1`);
+        assert(leak(second.bytes) === null && second.bytes.equals(CLEAN_PROGRESSIVE_JPEG), `the refused edit left the second photo as it was (${second.status})`);
+    }
 
     console.log('\n── 2d. The member\'s own photo: POST /api/profile/update → GET /api/avatar/:pk ──');
-    for (const [mime, camera, expected, clean] of [
-        ['image/jpeg', CAMERA_JPEG, CAMERA_JPEG_STRIPPED, CLEAN_JPEG], ['image/png', CAMERA_PNG, CLEAN_PNG, CLEAN_PNG],
-        ['image/webp', CAMERA_WEBP, CAMERA_WEBP_STRIPPED, CLEAN_WEBP], ['image/gif', CAMERA_GIF, CAMERA_GIF_STRIPPED, CLEAN_GIF],
+    for (const [mime, camera, expected] of [
+        ['image/jpeg', CAMERA_JPEG, CAMERA_JPEG_STRIPPED], ['image/png', CAMERA_PNG, CLEAN_PNG],
+        ['image/webp', CAMERA_WEBP, CAMERA_WEBP_STRIPPED], ['image/gif', CAMERA_GIF, CAMERA_GIF_STRIPPED],
     ] as const) {
         const upd = await signed('POST', '/api/profile/update', { avatar: dataUrl(mime, camera) }, member);
         assert(upd.status === 200, `a ${mime} avatar is saved (${upd.status} ${upd.json?.error ?? ''})`);
         const got = await fetchBytes(`/api/avatar/${member.pub}`);
         assert(got.status === 200, `GET /api/avatar answers 200 for the ${mime} avatar (${got.status})`);
-        await served(`member avatar (${mime})`, got.bytes, expected, clean);
+        await served(`member avatar (${mime})`, got.bytes, expected);
     }
     {
         const upd = await signed('POST', '/api/profile/update', { avatar: CAMERA_JPEG.toString('base64') }, member);
         assert(upd.status === 200, `a legacy bare-base64 avatar is saved (${upd.status} ${upd.json?.error ?? ''})`);
-        await served('member avatar (legacy bare base64)', (await fetchBytes(`/api/avatar/${member.pub}`)).bytes, CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
+        await served('member avatar (legacy bare base64)', (await fetchBytes(`/api/avatar/${member.pub}`)).bytes, CAMERA_JPEG_STRIPPED);
     }
 
     console.log('\n── 2e. An enterprise, as the web app proposes one: POST /api/treasury → GET /api/avatar/<enterprise> ──');
@@ -595,19 +607,48 @@ async function partTwo(): Promise<void> {
     const entKey = ent.json?.publicKey as string | undefined;
     assert(ent.status === 200 && !!entKey, `the enterprise is created (${ent.status} ${ent.json?.error ?? ''})`);
     if (entKey) {
-        await served('enterprise avatar', (await fetchBytes(`/api/avatar/${entKey}`)).bytes, CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
+        await served('enterprise avatar', (await fetchBytes(`/api/avatar/${entKey}`)).bytes, CAMERA_JPEG_STRIPPED);
         const row = db.prepare('SELECT photos FROM projects WHERE id = ?').get(entKey) as { photos: string } | undefined;
         const stored = row ? (JSON.parse(row.photos) as unknown[]) : [];
-        await served('the bounded enterprise\'s projects row', decodeDataUrl(stored[0]), CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
+        await served('the bounded enterprise\'s projects row', decodeDataUrl(stored[0]), CAMERA_JPEG_STRIPPED);
         const page = await signed('GET', `/api/enterprise/${entKey}`, undefined, member);
         assert(page.status === 200 && leak(Buffer.from(JSON.stringify(page.json ?? {}), 'latin1')) === null,
             `GET /api/enterprise/:id carries no metadata (${page.status})`);
+        await served('GET /api/enterprise/:id avatarUrl (the stored value)', await avatarBytes(page.json?.avatarUrl), CAMERA_JPEG_STRIPPED);
     }
     const bareHeicEnt = await signed('POST', '/api/treasury', {
         name: 'Seed Bank Co-op', purpose: 'We keep seeds', lifecycle: 'bounded', goalAmount: 500,
         photos: [CAMERA_HEIC.toString('base64')],
     }, member);
     assert(bareHeicEnt.status === 400, `an enterprise photo sent as bare base64 of a HEIC (GPS inside) is refused, not stored (${bareHeicEnt.status})`);
+
+    // The operator's form, POST /api/local/admin/treasury, writes the same members.avatar_url, and the enterprise
+    // routes hand it out as stored (avatarUrl): the same photo rule, bare base64 included.
+    const adminTreasury = async (name: string, avatar: string): Promise<{ status: number; json: any }> => {
+        const res = await fetch(`${BASE}/api/local/admin/treasury`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+            body: JSON.stringify({ name, avatar }),
+        });
+        return { status: res.status, json: await res.json().catch(() => null) };
+    };
+    const adminHeic = await adminTreasury('Tool Shed Co-op', CAMERA_HEIC.toString('base64'));
+    assert(adminHeic.status === 400, `the operator's enterprise form refuses a HEIC sent as bare base64 (${adminHeic.status} ${adminHeic.json?.error ?? ''})`);
+    const adminText = await adminTreasury('Bee Keepers Co-op', Buffer.from('plain text, not a picture').toString('base64'));
+    assert(adminText.status === 400, `and bare base64 that is no picture at all (${adminText.status} ${adminText.json?.error ?? ''})`);
+    const adminBare = await adminTreasury('Orchard Co-op', CAMERA_JPEG.toString('base64'));
+    const adminKey = adminBare.json?.publicKey as string | undefined;
+    assert(adminBare.status === 200 && !!adminKey, `the operator's enterprise with a bare-base64 camera JPEG is created (${adminBare.status} ${adminBare.json?.error ?? ''})`);
+    if (adminKey) {
+        await served('the operator\'s enterprise, GET /api/avatar', (await fetchBytes(`/api/avatar/${adminKey}`)).bytes, CAMERA_JPEG_STRIPPED);
+        const detail = await signed('GET', `/api/enterprise/${adminKey}`, undefined, member);
+        await served('the operator\'s enterprise, GET /api/enterprise/:id avatarUrl', await avatarBytes(detail.json?.avatarUrl), CAMERA_JPEG_STRIPPED);
+        const list = await signed('GET', '/api/enterprises', undefined, member);
+        const row = (list.json?.treasuries as any[] | undefined)?.find(t => t.publicKey === adminKey);
+        await served('the operator\'s enterprise, GET /api/enterprises avatarUrl', await avatarBytes(row?.avatarUrl), CAMERA_JPEG_STRIPPED);
+    }
+    const adminBundled = await adminTreasury('Sprout Co-op', 'bundled://sprout');
+    assert(adminBundled.status === 200, `a bundled:// avatar still passes the operator's form (${adminBundled.status} ${adminBundled.json?.error ?? ''})`);
 
     console.log('\n── 2f. A crowdfund project: POST /api/crowdfund/projects (+ /update) → GET /api/crowdfund/projects/:id and /api/avatar ──');
     const projectId = crypto.randomUUID();
@@ -623,17 +664,17 @@ async function partTwo(): Promise<void> {
         return typeof photos === 'string' ? JSON.parse(photos) : (Array.isArray(photos) ? photos : []);
     };
     let listed = await projectPhotos();
-    await served('crowdfund photo 0, as the public project route serves it', decodeDataUrl(listed[0]), CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
-    await served('crowdfund photo 1, as the public project route serves it', decodeDataUrl(listed[1]), CLEAN_PNG, CLEAN_PNG);
-    await served('crowdfund project avatar', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
+    await served('crowdfund photo 0, as the public project route serves it', decodeDataUrl(listed[0]), CAMERA_JPEG_STRIPPED);
+    await served('crowdfund photo 1, as the public project route serves it', decodeDataUrl(listed[1]), CLEAN_PNG);
+    await served('crowdfund project avatar', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_JPEG_STRIPPED);
     const projUpd = await signed('POST', '/api/crowdfund/projects/update', {
         id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
         photos: [dataUrl('image/webp', CAMERA_WEBP)],
     }, member);
     assert(projUpd.status === 200, `the project edit is saved (${projUpd.status} ${projUpd.json?.error ?? ''})`);
     listed = await projectPhotos();
-    await served('crowdfund photo after the edit', decodeDataUrl(listed[0]), CAMERA_WEBP_STRIPPED, CLEAN_WEBP);
-    await served('crowdfund project avatar after the edit', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED, CLEAN_WEBP);
+    await served('crowdfund photo after the edit', decodeDataUrl(listed[0]), CAMERA_WEBP_STRIPPED);
+    await served('crowdfund project avatar after the edit', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED);
     const heicProject = await signed('POST', '/api/crowdfund/projects', {
         id: crypto.randomUUID(), title: 'Tool library', description: 'Shared tools', goalAmount: 200,
         photos: [dataUrl('image/jpeg', CLEAN_JPEG), dataUrl('image/heic', CAMERA_HEIC)],
@@ -667,8 +708,8 @@ async function partTwo(): Promise<void> {
     assert(selfUrlEdit.status === 200, `an edit sending back the node's own avatar address and a bare photo is saved (${selfUrlEdit.status} ${selfUrlEdit.json?.error ?? ''})`);
     listed = await projectPhotos();
     assert(listed[0] === `/api/avatar/${projectId}`, 'the avatar address is kept as sent');
-    await served('crowdfund photo sent as bare URL-safe base64', typeof listed[1] === 'string' ? Buffer.from(listed[1], 'base64') : null, CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
-    await served('crowdfund project avatar after the address edit (unchanged)', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED, CLEAN_WEBP);
+    await served('crowdfund photo sent as bare URL-safe base64', typeof listed[1] === 'string' ? Buffer.from(listed[1], 'base64') : null, CAMERA_JPEG_STRIPPED);
+    await served('crowdfund project avatar after the address edit (unchanged)', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED);
 
     console.log('\n── 2g. A group\'s picture: POST /api/groups, PATCH /api/groups/:id → GET /api/groups/:id ──');
     const group = await signed('POST', '/api/groups', {
@@ -678,19 +719,19 @@ async function partTwo(): Promise<void> {
     assert(group.status === 201 && !!groupId, `the group is created (${group.status} ${group.json?.error ?? ''})`);
     if (groupId) {
         let read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture', decodeDataUrl(read.json?.avatarUrl), CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
+        await served('group picture', decodeDataUrl(read.json?.avatarUrl), CAMERA_JPEG_STRIPPED);
         const patch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: dataUrl('image/png', CAMERA_PNG) }, member);
         assert(patch.status === 200, `the group picture is changed (${patch.status} ${patch.json?.error ?? ''})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture after the edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG, CLEAN_PNG);
+        await served('group picture after the edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG);
         const heicPatch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: dataUrl('image/heic', CAMERA_HEIC) }, member);
         assert(heicPatch.status === 400, `a group picture the node cannot strip (a HEIC, GPS inside) is refused (${heicPatch.status})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture after the refused edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG, CLEAN_PNG);
+        await served('group picture after the refused edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG);
         const bareHeicPatch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: CAMERA_HEIC.toString('base64') }, member);
         assert(bareHeicPatch.status === 400, `a group picture sent as bare base64 of a HEIC is refused (${bareHeicPatch.status})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture after the refused bare edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG, CLEAN_PNG);
+        await served('group picture after the refused bare edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG);
     }
     const heicGroup = await signed('POST', '/api/groups', {
         name: 'Bike Kitchen', description: 'We fix bikes', joinPolicy: 'open', avatarUrl: dataUrl('image/heic', CAMERA_HEIC),
@@ -713,16 +754,104 @@ async function partTwo(): Promise<void> {
     assert(saved.status === 200, `the operator saves an item with a camera photo as its thumbnail (${saved.status})`);
     const guide = await signed('GET', '/api/pricing-guide', undefined, member);
     const item = (guide.json?.items as any[] | undefined)?.find(i => i.id === 'custom-photo-meta');
-    await served('pricing-guide thumbnail', decodeDataUrl(item?.thumbnailUrl), CAMERA_JPEG_STRIPPED, CLEAN_JPEG);
+    await served('pricing-guide thumbnail', decodeDataUrl(item?.thumbnailUrl), CAMERA_JPEG_STRIPPED);
+    const saveThumbnail = (thumbnailUrl: string) => fetch(`${BASE}/api/pricing-guide/admin/item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+        body: JSON.stringify({ id: 'custom-photo-meta', category: 'food', emoji: '🍋', name: 'Lemons (bag)', priceBeans: 5, thumbnailUrl }),
+    });
+    for (const [label, value] of [
+        ['a HEIC (GPS inside) as a data URL', dataUrl('image/heic', CAMERA_HEIC)], ['a HEIC as bare base64', CAMERA_HEIC.toString('base64')],
+    ] as const) {
+        const res = await saveThumbnail(value);
+        assert(res.status === 400, `${label} is refused as a pricing-guide thumbnail (${res.status})`);
+    }
+    const kept = ((await signed('GET', '/api/pricing-guide', undefined, member)).json?.items as any[] | undefined)?.find(i => i.id === 'custom-photo-meta');
+    await served('the pricing-guide thumbnail after the refusals', decodeDataUrl(kept?.thumbnailUrl), CAMERA_JPEG_STRIPPED);
+    const link = await saveThumbnail('https://example.org/lemons.jpg');
+    assert(link.status === 200, `a link as the thumbnail still passes (${link.status})`);
+
+    console.log('\n── 2i. A member\'s photo as other members read it: POST /api/profile/update → groups, profile, chats ──');
+    // members.avatar_url is not only served by /api/avatar/:pk, which sniffs. The group, group-members and profile
+    // routes hand it out exactly as stored; the chats turn it into an avatar address. A second member reads each.
+    const reader = keypair();
+    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
+        .run(reader.pub, `reader-${reader.pub.slice(0, 6)}`, dataUrl('image/jpeg', CLEAN_JPEG));
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(reader.pub);
+    const storedAvatar = () => (db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(member.pub) as { avatar_url: string | null }).avatar_url;
+
+    const bare = await signed('POST', '/api/profile/update', { avatar: CAMERA_JPEG.toString('base64') }, member);
+    assert(bare.status === 200, `a camera JPEG sent as bare base64 is saved (${bare.status} ${bare.json?.error ?? ''})`);
+    await served('the stored member avatar', await avatarBytes(storedAvatar()), CAMERA_JPEG_STRIPPED);
+
+    const open = await signed('POST', '/api/groups', { name: 'Lemon Growers', description: 'We grow lemons', joinPolicy: 'open' }, member);
+    const openId = open.json?.id as string | undefined;
+    assert(open.status === 201 && !!openId, `an open group is created (${open.status} ${open.json?.error ?? ''})`);
+    const invited = await signed('POST', '/api/groups', { name: 'Orchard Keepers', description: 'We keep an orchard', joinPolicy: 'invite_only' }, member);
+    const invitedId = invited.json?.id as string | undefined;
+    assert(invited.status === 201 && !!invitedId, `an invite-only group is created (${invited.status} ${invited.json?.error ?? ''})`);
+    if (openId) {
+        const join = await signed('POST', `/api/groups/${openId}/join`, {}, reader);
+        assert(join.status === 200, `the reader joins the open group (${join.status} ${join.json?.error ?? ''})`);
+        const line = await signed('POST', `/api/groups/${openId}/chat/message`, { text: 'The lemons are ripe' }, member);
+        assert(line.status === 200 || line.status === 201, `the member writes in the group chat (${line.status} ${line.json?.error ?? ''})`);
+    }
+    if (invitedId) {
+        const invite = await signed('POST', `/api/groups/${invitedId}/members`, { targetPubkey: reader.pub }, member);
+        assert(invite.status === 200, `the member invites the reader (${invite.status} ${invite.json?.error ?? ''})`);
+    }
+    if (eventId) {
+        const going = await signed('POST', `/api/marketplace/posts/${eventId}/rsvp`, { status: 'going' }, reader);
+        assert(going.status === 200, `the reader is going to the event (${going.status} ${going.json?.error ?? ''})`);
+        const line = await signed('POST', `/api/marketplace/posts/${eventId}/chat/message`, { text: 'Bring a plate' }, member);
+        assert(line.status === 200 || line.status === 201, `the host writes in the event chat (${line.status} ${line.json?.error ?? ''})`);
+    }
+
+    /** Every route that shows the member's photo to the reader, with the value it shows. */
+    const readsOfTheMember = async (): Promise<Array<[string, unknown]>> => {
+        const fromAuthor = (json: any) => (json?.messages as any[] | undefined)?.find(m => m.authorPubkey === member.pub)?.authorAvatar;
+        return [
+            ['GET /api/groups/:id convenorAvatarUrl', openId && (await signed('GET', `/api/groups/${openId}`, undefined, reader)).json?.convenorAvatarUrl],
+            ['GET /api/groups/:id viewerInvitedBy.avatarUrl', invitedId && (await signed('GET', `/api/groups/${invitedId}`, undefined, reader)).json?.viewerInvitedBy?.avatarUrl],
+            ['GET /api/groups/:id/members avatarUrl', openId && ((await signed('GET', `/api/groups/${openId}/members`, undefined, reader)).json as any[] | undefined)
+                ?.find(m => m.memberPubkey === member.pub)?.avatarUrl],
+            ['GET /api/profile/:publicKey avatar', (await signed('GET', `/api/profile/${member.pub}`, undefined, reader)).json?.avatar],
+            ['GET /api/groups/:id/chat authorAvatar', openId && fromAuthor((await signed('GET', `/api/groups/${openId}/chat`, undefined, reader)).json)],
+            ['GET /api/marketplace/posts/:id/chat authorAvatar', eventId && fromAuthor((await signed('GET', `/api/marketplace/posts/${eventId}/chat`, undefined, reader)).json)],
+            ['GET /api/avatar/:pk', `/api/avatar/${member.pub}`],
+        ];
+    };
+    for (const [route, value] of await readsOfTheMember()) await served(`the member's photo, as ${route} shows it`, await avatarBytes(value), CAMERA_JPEG_STRIPPED);
+
+    // Not a JPEG, PNG, WebP or GIF: refused with a plain 400, and the photo already stored stays. The HEIC comes last,
+    // so on a node that stored it the reads below show its GPS.
+    for (const [label, value] of [
+        ['bare base64 that is no picture at all', Buffer.from('plain text, not a picture').toString('base64')],
+        ['a HEIC (GPS inside) as bare URL-safe base64', CAMERA_HEIC.toString('base64url')],
+        ['a HEIC (GPS inside) as a data URL', dataUrl('image/heic', CAMERA_HEIC)],
+        ['a HEIC (GPS inside) as bare base64', CAMERA_HEIC.toString('base64')],
+    ] as const) {
+        const before = storedAvatar();
+        const upd = await signed('POST', '/api/profile/update', { avatar: value, bio: 'Lemons and limes' }, member);
+        assert(upd.status === 400 && upd.json?.error === 'avatar_invalid', `${label} is refused as a member's photo (${upd.status} ${upd.json?.error ?? ''})`);
+        assert(storedAvatar() === before, `${label}: the stored photo is unchanged`);
+    }
+    for (const [route, value] of await readsOfTheMember()) await served(`after the refusals, ${route}`, await avatarBytes(value), CAMERA_JPEG_STRIPPED);
+
+    // What the apps send besides a new photo passes as it always has: this node's own avatar address (an editor that
+    // loaded the profile sends it back, and it means "unchanged") and a bundled:// name.
+    for (const address of [`/api/avatar/${member.pub}?size=thumb&v=1`, `${BASE}/api/avatar/${member.pub}`]) {
+        const upd = await signed('POST', '/api/profile/update', { avatar: address }, member);
+        assert(upd.status === 200, `this node's avatar address ${address.startsWith('/') ? '(relative)' : '(absolute)'} is accepted (${upd.status} ${upd.json?.error ?? ''})`);
+        await served(`after sending back the ${address.startsWith('/') ? 'relative' : 'absolute'} address, the stored photo`, await avatarBytes(storedAvatar()), CAMERA_JPEG_STRIPPED);
+    }
+    const bundled = await signed('POST', '/api/profile/update', { avatar: 'bundled://sprout' }, member);
+    assert(bundled.status === 200 && storedAvatar() === 'bundled://sprout', `a bundled:// avatar is accepted and stored as sent (${bundled.status} ${bundled.json?.error ?? ''})`);
 }
 
 async function main(): Promise<void> {
     console.log('\n=== No location or camera metadata leaves a node (G9a-3) ===');
-    try {
-        sharp = ((await import('sharp')) as any).default as Sharp;
-    } catch {
-        sharp = null;
-    }
     // Imported here rather than at the top so Part 2 still runs — and shows the leak itself — on a build
     // that does not have the strip yet.
     let strip: StripModule | null = null;

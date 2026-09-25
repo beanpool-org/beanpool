@@ -3,6 +3,7 @@
  * fetch, every provider is a URL the page is asked to go to, and the copies are sealed here with core's own seal, as a
  * join seals them. Nothing leaves the test.
  */
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -212,6 +213,23 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
             expect(await loadIdentity()).toBeNull();
         });
     }
+
+    it('under <StrictMode> (main.tsx): the effect run twice still takes the pending restore once, and finishes', async () => {
+        const eph = makeEphemeralKey();
+        await leftFor('google', eph);
+        const node = recoveryNode(() => copyOf(account, 'google', 'google-sub-1'));
+        const onRestored = vi.fn<(identity: BeanPoolIdentity) => Promise<boolean>>(async () => true);
+        render(
+            <StrictMode>
+                <WebRestore onRestored={onRestored} onHeld={vi.fn()} onExisting={vi.fn()} onBack={vi.fn()} onOtherWay={vi.fn()}
+                    navigate={vi.fn()} origin={ORIGIN} authReturn={returnFrom('google', 'rn-9', 'google-sub-1')} />
+            </StrictMode>,
+        );
+        await waitFor(() => expect(onRestored).toHaveBeenCalledTimes(1));
+        expect(onRestored.mock.calls[0][0].publicKey).toBe(account.publicKey);
+        expect(node.recovery().filter((c) => c.path === '/api/recovery/collect/sso')).toHaveLength(1);
+        expect(screen.queryByText("That sign-in wasn't started here.", { exact: false })).toBeNull();
+    });
 
     it('GitHub: the code, the wait, released with the node\'s session', async () => {
         const node = recoveryNode(() => copyOf(account, 'github', 'gh-sub-1'));

@@ -14,6 +14,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     clearPendingRestore,
     loadIdentity,
+    loadPendingRestore,
     savePendingRestore,
     takePendingRestore,
     PENDING_RESTORE_TTL_MS,
@@ -268,10 +269,14 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                 setScreen({ name: 'name' });
                 return;
             }
-            consumeCapturedAuthReturn();
-            // Taken out of the store as it is read: one return is acted on once.
-            const r = await takePendingRestore(ret.state ?? '');
+            // A read first, which takes nothing: React's StrictMode (main.tsx) runs this effect, cancels it, and runs it
+            // again, and the cancelled run stops here, before it has taken the pending restore from the run that stays.
+            await loadPendingRestore();
             if (cancelled) return;
+            consumeCapturedAuthReturn();
+            // Taken out of the store as it is read: one return is acted on once. From here it is this page's to finish.
+            const r = await takePendingRestore(ret.state ?? '');
+            if (!mounted.current) return;
             if (!r) {
                 setNotice({ tone: 'error', text: refusalMessage('no_pending', ret.provider) });
                 setScreen({ name: 'name' });

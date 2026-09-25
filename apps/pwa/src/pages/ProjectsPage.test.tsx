@@ -1,11 +1,11 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { ProjectsPage } from './ProjectsPage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, BalanceInfo } from '../lib/api';
-import { getTreasuries, getBalance, getDecisions } from '../lib/api';
+import { getTreasuries, getBalance, getDecisions, createEnterprise } from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -440,5 +440,141 @@ describe('ProjectsPage: the viewer balance is a member-only request', () => {
         await screen.findByText('Community Garden Solar Irrigation');
         await waitFor(() => expect(getBalance).toHaveBeenCalled());
         expect(getBalance).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('ProjectsPage: an enterprise photo goes through the canvas resize, never as the raw file (G9a-3)', () => {
+    // jsdom decodes no pictures and draws on no canvas: these stand in for both and record what was asked of them.
+    let restore: Array<() => void> = [];
+    afterEach(() => {
+        restore.forEach((r) => r());
+        restore = [];
+    });
+
+    it('a 4032x3024 camera photo is sent as an 800px re-encoded JPEG, and the raw file is not', async () => {
+        vi.clearAllMocks();
+        const originalImage = window.Image;
+        class FakeImage {
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            width = 4032;
+            height = 3024;
+            set src(_value: string) { setTimeout(() => this.onload?.(), 0); }
+        }
+        (window as any).Image = FakeImage;
+        restore.push(() => { (window as any).Image = originalImage; });
+        const drawn: Array<{ width: number; height: number }> = [];
+        const originalGetContext = window.HTMLCanvasElement.prototype.getContext;
+        const originalToDataUrl = window.HTMLCanvasElement.prototype.toDataURL;
+        (window.HTMLCanvasElement.prototype as any).getContext = function (this: HTMLCanvasElement) {
+            return { drawImage: () => drawn.push({ width: this.width, height: this.height }) };
+        };
+        const toDataURL = vi.fn(() => 'data:image/jpeg;base64,UkVTSVpFRA==');
+        (window.HTMLCanvasElement.prototype as any).toDataURL = toDataURL;
+        restore.push(() => {
+            (window.HTMLCanvasElement.prototype as any).getContext = originalGetContext;
+            (window.HTMLCanvasElement.prototype as any).toDataURL = originalToDataUrl;
+        });
+
+        render(<ProjectsPage identity={backerIdentity} />);
+        await screen.findByText('Community Garden Solar Irrigation');
+        fireEvent.click(screen.getByRole('button', { name: /\+ Propose/i }));
+        const dialog = screen.getByRole('dialog');
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /Ongoing Enterprise/i }));
+        fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Shade House' } });
+        fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'We build a shade house' } });
+
+        // A camera original: SOI then an APP1 Exif segment, which is where a phone puts its GPS.
+        const raw = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x08, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00])], 'IMG_0001.jpg', { type: 'image/jpeg' });
+        const picker = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+        fireEvent.change(picker, { target: { files: [raw] } });
+
+        const preview = await within(dialog).findByAltText('Preview');
+        expect(preview).toHaveAttribute('src', 'data:image/jpeg;base64,UkVTSVpFRA==');
+        expect(drawn).toEqual([{ width: 800, height: 600 }]);
+        expect(toDataURL).toHaveBeenCalledWith('image/jpeg', 0.7);
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /Propose Enterprise/i }));
+        await waitFor(() => expect(createEnterprise).toHaveBeenCalledTimes(1));
+        const sent = vi.mocked(createEnterprise).mock.calls[0][0];
+        expect(sent.avatar).toBe('data:image/jpeg;base64,UkVTSVpFRA==');
+        expect(sent.photos).toEqual(['data:image/jpeg;base64,UkVTSVpFRA==']);
+        // The raw file's own data URL (its Exif segment in base64) is nowhere in what went to the node.
+        expect(JSON.stringify(sent)).not.toContain('/9j/4QAIRXhpZg');
+    });
+
+    /**
+     * A picture the test decides when to finish decoding (`finish()`), or that never decodes (`decodes: false`),
+     * and a canvas that draws nothing and hands back a fixed JPEG.
+     */
+    function stubPictureDecode({ decodes }: { decodes: boolean }): { pending: Array<() => void> } {
+        const pending: Array<() => void> = [];
+        const originalImage = window.Image;
+        class FakeImage {
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            width = 4032;
+            height = 3024;
+            set src(_value: string) {
+                if (decodes) pending.push(() => this.onload?.());
+                else setTimeout(() => this.onerror?.(), 0);
+            }
+        }
+        (window as any).Image = FakeImage;
+        const originalGetContext = window.HTMLCanvasElement.prototype.getContext;
+        const originalToDataUrl = window.HTMLCanvasElement.prototype.toDataURL;
+        (window.HTMLCanvasElement.prototype as any).getContext = () => ({ drawImage: () => undefined });
+        (window.HTMLCanvasElement.prototype as any).toDataURL = () => 'data:image/jpeg;base64,UkVTSVpFRA==';
+        restore.push(() => {
+            (window as any).Image = originalImage;
+            (window.HTMLCanvasElement.prototype as any).getContext = originalGetContext;
+            (window.HTMLCanvasElement.prototype as any).toDataURL = originalToDataUrl;
+        });
+        return { pending };
+    }
+
+    async function openProposeFormAndPick(): Promise<HTMLElement> {
+        render(<ProjectsPage identity={backerIdentity} />);
+        await screen.findByText('Community Garden Solar Irrigation');
+        fireEvent.click(screen.getByRole('button', { name: /\+ Propose/i }));
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: /Ongoing Enterprise/i }));
+        fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Shade House' } });
+        fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'We build a shade house' } });
+        const raw = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x08, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00])], 'IMG_0001.jpg', { type: 'image/jpeg' });
+        fireEvent.change(dialog.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [raw] } });
+        return dialog;
+    }
+
+    it('while the photo is still being resized the form cannot be sent, so the enterprise is never created without it', async () => {
+        vi.clearAllMocks();
+        const { pending } = stubPictureDecode({ decodes: true });
+        const dialog = await openProposeFormAndPick();
+
+        const waiting = within(dialog).getByRole('button', { name: /Preparing photo/i });
+        expect(waiting).toBeDisabled();
+        fireEvent.click(waiting);
+        fireEvent.submit(dialog.querySelector('form') as HTMLFormElement); // Enter in the name field
+        await waitFor(() => expect(pending).toHaveLength(1)); // the file is read; the picture is still decoding
+        expect(createEnterprise).not.toHaveBeenCalled();
+
+        act(() => pending[0]());
+        await within(dialog).findByAltText('Preview');
+        const propose = within(dialog).getByRole('button', { name: /Propose Enterprise/i });
+        expect(propose).toBeEnabled();
+        fireEvent.click(propose);
+        await waitFor(() => expect(createEnterprise).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(createEnterprise).mock.calls[0][0].photos).toEqual(['data:image/jpeg;base64,UkVTSVpFRA==']);
+    });
+
+    it('a photo the browser cannot read says so, instead of vanishing without a word', async () => {
+        vi.clearAllMocks();
+        stubPictureDecode({ decodes: false });
+        const dialog = await openProposeFormAndPick();
+
+        expect(await within(dialog).findByText('That photo could not be read. Please choose another one.')).toBeInTheDocument();
+        expect(within(dialog).queryByAltText('Preview')).toBeNull();
+        expect(within(dialog).getByRole('button', { name: /Propose Enterprise/i })).toBeEnabled();
     });
 });

@@ -22,7 +22,7 @@ import {
 import { getThresholds } from '../config/local-config.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
-import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
 
@@ -274,8 +274,10 @@ router.post('/api/crowdfund/projects', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey.
-        if (photos.length > 0 && !isAcceptableAvatarValue(photos[0])) {
+        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
+        // bare base64 included: the project's JSON hands each one out as stored.
+        if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {
             ctx.status = 400;
             ctx.body = { error: AVATAR_FORMAT_ERROR };
             return;
@@ -336,8 +338,10 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey.
-        if (photos.length > 0 && !isAcceptableAvatarValue(photos[0])) {
+        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
+        // bare base64 included: the project's JSON hands each one out as stored.
+        if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {
             ctx.status = 400;
             ctx.body = { error: AVATAR_FORMAT_ERROR };
             return;

@@ -6,6 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { isSelfAvatarUrl } from '@beanpool/core';
+import { stripImageValue } from '../storage/image-metadata.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1444,6 +1445,9 @@ export function createCrowdfundProject(
 ) {
     if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
+    // Every photo is served to anyone who asks (/api/crowdfund/projects, /api/avatar/:pubkey), so each is stored
+    // without its metadata (G9a-3). Anything that is not an image comes back exactly as given.
+    photos = Array.isArray(photos) ? photos.map(stripImageValue) : photos;
     // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. An
     // editor that read the enterprise back from the node holds THIS node's own avatar URL
     // there, not the photo; storing it would point the avatar at itself. Same rule as
@@ -1503,6 +1507,7 @@ export function updateCrowdfundProject(
     }
 
     const now = new Date().toISOString();
+    photos = Array.isArray(photos) ? photos.map(stripImageValue) : photos; // as in createCrowdfundProject (G9a-3)
     // As in createCrowdfundProject: this node's own avatar URL, sent back by an editor that
     // loaded the enterprise from the node, means "unchanged" — the UPDATEs below COALESCE a
     // null onto the existing avatar_url, so the stored photo survives the edit.

@@ -6,12 +6,13 @@
  * Recovery:   Enter 12-word phrase to recover identity
  * Open door:  On a node whose door is open (the global community), no invite: a name and one sign-in
  *             (components/WebJoin.tsx), then the same photo, 12 words and tour
+ * Sign-in:    There, an account comes back with the sign-in it joined with (components/WebRestore.tsx, G11-d)
  */
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
     clearUnsentPendingJoin, createIdentity, createIdentityFromMnemonic, identityFromMnemonic, importIdentity, updateCallsign, getMnemonic,
-    hasMnemonic, lastSentAt, loadPendingJoin, pendingJoinSent, seedViewedKey, IdentityHeldError, type BeanPoolIdentity,
+    hasMnemonic, lastSentAt, loadPendingJoin, loadPendingRestore, pendingJoinSent, seedViewedKey, IdentityHeldError, type BeanPoolIdentity,
     type JoinProvider,
 } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
@@ -22,6 +23,7 @@ import {
     getCommunityInfo, isRouteMissing,
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
+import { WebRestore } from '../components/WebRestore';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, providerLabel } from '../lib/web-join';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
@@ -237,6 +239,25 @@ export function WelcomePage({ onComplete }: Props) {
     const doorOpen = door === 'open';
     // WebJoin for joining (not only for settling a sent join, below).
     const webJoinForDoor = doorOpen || !!restoredForDoor || (!!authReturn && door !== 'invite');
+
+    /*
+     * Getting an account back with a sign-in (G11-d, components/WebRestore.tsx): shown when the member asks for it on
+     * the open door's screens (`signInRestore`, with the sign-in they just tried, if any), and when a sign-in comes back
+     * whose `state` is the nonce a restore went with (`restoreReturn`). Any other return is the join's, as before.
+     */
+    const [signInRestore, setSignInRestore] = useState<{ provider: JoinProvider | null } | null>(null);
+    const [restoreReturn, setRestoreReturn] = useState<'checking' | 'none' | 'restore'>(() => (authReturn ? 'checking' : 'none'));
+    useEffect(() => {
+        if (!authReturn) return;
+        let cancelled = false;
+        loadPendingRestore()
+            .then((r) => { if (!cancelled) setRestoreReturn(r && !!authReturn.state && r.nonce === authReturn.state ? 'restore' : 'none'); })
+            .catch((e) => {
+                console.warn('[Welcome] could not read a pending restore:', e);
+                if (!cancelled) setRestoreReturn('none');
+            });
+        return () => { cancelled = true; };
+    }, [authReturn]);
 
     /*
      * A join that went out from this browser is settled wherever the page lands, the door open or shut (#1154 follow-up,
@@ -703,7 +724,7 @@ export function WelcomePage({ onComplete }: Props) {
      * goes in, as anywhere; one that is not goes through the door with the same key, never a new one (design G11 §2,
      * screen 1). Nothing is saved until the node has said which: asked with the key itself, which is not stored yet.
      */
-    async function finishRestoreAtDoor(identity: BeanPoolIdentity) {
+    async function finishRestoreAtDoor(identity: BeanPoolIdentity): Promise<boolean> {
         setError(null);
         let membership: { isMember: boolean; callsign: string | null };
         try {
@@ -711,7 +732,7 @@ export function WelcomePage({ onComplete }: Props) {
         } catch {
             setShowQrPairing(false);
             setError("Can't reach the community right now. Try again in a minute.");
-            return;
+            return false;
         }
         if (membership.isMember) {
             const member = { ...identity, callsign: membership.callsign || identity.callsign };
@@ -722,7 +743,7 @@ export function WelcomePage({ onComplete }: Props) {
                 setShowQrPairing(false);
                 setShowRecovery(false);
                 setRestoredForDoor(member);
-                return;
+                return true;
             }
             try {
                 await importIdentity(member);
@@ -731,7 +752,7 @@ export function WelcomePage({ onComplete }: Props) {
                 setShowQrPairing(false);
                 setShowRecovery(false);
                 setHeldIdentity(e.held);
-                return;
+                return true;
             }
             // A join started here and never sent is not needed now. One that went out stays (identity.ts
             // pendingJoinSent): the node may have that key as a member, and this browser its only copy.
@@ -740,11 +761,36 @@ export function WelcomePage({ onComplete }: Props) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
             }
             onComplete(member);
-            return;
+            return true;
         }
         setShowQrPairing(false);
         setShowRecovery(false);
         setRestoredForDoor(identity);
+        return true;
+    }
+
+    /**
+     * An account brought back with a sign-in (WebRestore), already checked to be the one its name belongs to. It goes
+     * the way a key restored with the 12 words does (finishRestoreAtDoor): the node is asked first, a join this browser
+     * sent is settled first, and it is saved only through the guarded write, which never replaces another account.
+     * False when the node could not be asked: WebRestore keeps the account on its screen and offers to try again.
+     */
+    async function handleSignInRestored(identity: BeanPoolIdentity): Promise<boolean> {
+        const done = await finishRestoreAtDoor(identity);
+        if (!done) {
+            setError(null);
+            return false;
+        }
+        setSignInRestore(null);
+        setRestoreReturn('none');
+        return true;
+    }
+
+    function leaveSignInRestore(then?: () => void) {
+        setSignInRestore(null);
+        setRestoreReturn('none');
+        setError(null);
+        then?.();
     }
 
     async function handleRecover() {
@@ -1673,6 +1719,24 @@ export function WelcomePage({ onComplete }: Props) {
                                 ← Back to Options
                             </button>
                         </>
+                    ) : signInRestore || restoreReturn === 'restore' ? (
+                        /* ===== AN ACCOUNT BACK WITH ITS SIGN-IN (G11-d) ===== */
+                        <WebRestore
+                            provider={signInRestore?.provider ?? null}
+                            // Only a return this page matched to a restore; any other went to WebJoin.
+                            authReturn={restoreReturn === 'restore' ? authReturn : null}
+                            onRestored={handleSignInRestored}
+                            onHeld={(held) => leaveSignInRestore(() => setHeldIdentity(held))}
+                            onExisting={onComplete}
+                            onBack={() => leaveSignInRestore()}
+                            onOtherWay={(how) => leaveSignInRestore(() => {
+                                setRestoredForDoor(null);
+                                if (how === 'words') setShowRecovery(true);
+                                else void handleStartQrPairing();
+                            })}
+                        />
+                    ) : restoreReturn === 'checking' ? (
+                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>One moment…</p>
                     ) : webJoinForDoor || sentJoin === 'settle' ? (
                         /* A sign-in coming back is met at once, before the node has said what it is; on a node that
                            turns out to be invite-only it is dropped, and the invite page shows as always. A join that
@@ -1694,10 +1758,11 @@ export function WelcomePage({ onComplete }: Props) {
                                 onSettled={handleSettled}
                                 onExisting={onComplete}
                                 onJoined={handleJoined}
-                                onRestore={(how) => {
+                                onRestore={(how, provider) => {
                                     setError(null);
                                     setRestoredForDoor(null);
-                                    if (how === 'words') setShowRecovery(true);
+                                    if (how === 'signin') setSignInRestore({ provider: provider ?? null });
+                                    else if (how === 'words') setShowRecovery(true);
                                     else void handleStartQrPairing();
                                 }}
                             />

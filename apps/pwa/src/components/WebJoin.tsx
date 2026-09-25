@@ -93,8 +93,11 @@ export interface JoinedResult {
 interface Props {
     /** The node has said yes; the identity is saved. */
     onJoined: (result: JoinedResult) => void;
-    /** "I use BeanPool on my phone" / "I have my 12 words": WelcomePage's own restore screens. */
-    onRestore: (how: 'phone' | 'words') => void;
+    /**
+     * "I use BeanPool on my phone" / "I have my 12 words": WelcomePage's own restore screens. 'signin': the account back
+     * with the sign-in it joined with (components/WebRestore.tsx, G11-d), `provider` offered first when there is one.
+     */
+    onRestore: (how: 'phone' | 'words' | 'signin', provider?: JoinProvider) => void;
     /** A key restored here that is not a member of this community yet: it goes through the door as it is. */
     restored?: BeanPoolIdentity | null;
     /**
@@ -137,7 +140,8 @@ type Screen =
     | { name: 'held'; canLand: boolean; until: number }
     | { name: 'abandon'; until: number }
     | { name: 'unavailable'; message: string }
-    | { name: 'already_joined'; message: string }
+    /** `provider`: the sign-in that already has an account here, which can bring it back (G11-d). */
+    | { name: 'already_joined'; message: string; provider: JoinProvider }
     /**
      * This browser already holds `held`, saved from another tab or window while this page was open, and nothing here
      * replaces it. `joined`: what became of this page's key (`pending`): no join went with it ('none', and it was let
@@ -147,9 +151,9 @@ type Screen =
     /** Something could not be saved or finished: the notice says what, and Reload is the way on. */
     | { name: 'failed' };
 
-type Notice = { tone: 'error' | 'info'; text: string } | null;
+export type Notice = { tone: 'error' | 'info'; text: string } | null;
 
-const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
+export const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
 const WENT_WRONG = 'Something went wrong on this page. Reload it to try again.';
 const WENT_WRONG_KEPT = "Something went wrong on this page before we could finish. Your join is kept on this device: reload the page and it will check whether you're in.";
 /** A nonce lives ten minutes on the node; one older than this is fetched again before it is sent to a provider. */
@@ -172,28 +176,28 @@ async function accountHeldElsewhere(p: PendingJoin | null): Promise<BeanPoolIden
     return held?.publicKey && held.publicKey !== p?.identity.publicKey ? held : null;
 }
 
-const primaryButton: React.CSSProperties = {
+export const primaryButton: React.CSSProperties = {
     width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
     background: '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700,
     cursor: 'pointer', fontFamily: 'inherit', marginBottom: '0.75rem',
 };
 
-const secondaryButton: React.CSSProperties = {
+export const secondaryButton: React.CSSProperties = {
     width: '100%', padding: '0.8rem 0.5rem', borderRadius: '10px',
     border: '1px solid var(--border-primary, #334155)', background: 'transparent',
     color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 600,
     cursor: 'pointer', fontFamily: 'inherit', marginBottom: '0.75rem',
 };
 
-const quietButton: React.CSSProperties = {
+export const quietButton: React.CSSProperties = {
     background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem',
     cursor: 'pointer', marginTop: '0.5rem', fontFamily: 'inherit', padding: '0.25rem',
 };
 
-const heading: React.CSSProperties = { fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' };
-const lede: React.CSSProperties = { color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem', lineHeight: 1.5 };
+export const heading: React.CSSProperties = { fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' };
+export const lede: React.CSSProperties = { color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem', lineHeight: 1.5 };
 
-function NoticeLine({ notice }: { notice: Notice }) {
+export function NoticeLine({ notice }: { notice: Notice }) {
     if (!notice) return null;
     return notice.tone === 'error' ? (
         <div role="alert" data-testid="join-notice"
@@ -361,7 +365,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                 // node answers this only for a key that is not a member (a member's gets already_member).
                 const kept = await clearUnsentPendingJoin(p.identity.publicKey);
                 setPending(kept);
-                setScreen({ name: 'already_joined', message: outcome.message });
+                setScreen({ name: 'already_joined', message: outcome.message, provider: proof.provider });
                 return;
             }
             case 'expired': {
@@ -946,6 +950,9 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                     <button type="button" style={secondaryButton} onClick={() => onRestore('words')}>
                         I have my 12 words
                     </button>
+                    <button type="button" data-testid="join-guard-signin" style={secondaryButton} onClick={() => onRestore('signin')}>
+                        I joined with a sign-in before
+                    </button>
                     <button type="button" style={quietButton} onClick={() => setScreen({ name: 'lobby' })}>← Back</button>
                 </>
             );
@@ -955,7 +962,10 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             body = (
                 <>
                     <h3 style={heading}>Bring your account here</h3>
-                    <p style={lede}>Use the phone app, or your 12 words.</p>
+                    <p style={lede}>Use the sign-in you joined with, the phone app, or your 12 words.</p>
+                    <button type="button" data-testid="join-restore-signin" style={primaryButton} onClick={() => onRestore('signin')}>
+                        Use my sign-in
+                    </button>
                     <button type="button" style={secondaryButton} onClick={() => onRestore('phone')}>
                         Link with my phone
                     </button>
@@ -1192,7 +1202,10 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                 <>
                     <h3 style={heading}>You're already here</h3>
                     <p role="alert" data-testid="join-already-joined" style={{ ...lede, color: 'var(--text-primary)' }}>{screen.message}</p>
-                    <button type="button" data-testid="join-restore-words" style={primaryButton} onClick={() => onRestore('words')}>
+                    <button type="button" data-testid="join-restore-signin" style={primaryButton} onClick={() => onRestore('signin', screen.provider)}>
+                        Restore with {providerLabel(screen.provider)}
+                    </button>
+                    <button type="button" data-testid="join-restore-words" style={secondaryButton} onClick={() => onRestore('words')}>
                         Restore with my 12 words
                     </button>
                     <button type="button" data-testid="join-restore-phone" style={secondaryButton} onClick={() => onRestore('phone')}>

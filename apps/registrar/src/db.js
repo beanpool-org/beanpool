@@ -55,24 +55,27 @@ export const updateAllocation = async (env, name, fields) => {
 // A row's tenure (key, claim time), state (status, pause reason) and the decisions taken on it (decision_seq,
 // migration 0003 — a repeat pause or block changes nothing else): what a request that read it acted on.
 const STATE = ['node_pubkey', 'requested_at', 'status', 'pause_reason', 'decision_seq'];
-const IDS = ['tunnel_id', 'dns_record_id'];
+// The routing a row records: its tunnel and DNS record ids, and the target they route to. A move to a new address
+// keeps the record's id (a PATCH), so the ids alone can't tell a request that it is acting on an address, mode or
+// origin the row no longer records.
+const ROUTING = ['tunnel_id', 'dns_record_id', 'mode', 'public_ip', 'origin'];
 
-// Is the row still `expected` (tenure, state, decisions — and, `withIds`, the tunnel and DNS ids it recorded)? Asked
-// before touching a record found by hostname, which is another tenure's once the row has changed, and before a clean-up
-// removes routing a later request may have put up.
+// Is the row still `expected` (tenure, state, decisions — and, `withIds`, the routing it recorded: ids and target)?
+// Asked before touching a record found by hostname, which is another tenure's once the row has changed, and before a
+// clean-up removes routing a later request may have put up.
 export const isUnchanged = async (env, name, expected, { withIds = false } = {}) => {
-    const cols = withIds ? [...STATE, ...IDS] : STATE;
+    const cols = withIds ? [...STATE, ...ROUTING] : STATE;
     return !!(await env.DB.prepare(`SELECT 1 AS yes FROM name_allocations WHERE name=? AND ${cols.map((c) => `${c} IS ?`).join(' AND ')}`)
         .bind(name, ...cols.map((c) => expected[c] ?? null)).first());
 };
 
 // Write `fields` over `expected` — the row as this request read it, or last wrote it — only if its tenure and
-// state are unchanged (and, `withIds`, the tunnel and DNS ids it recorded): a request that worked at Cloudflare
+// state are unchanged (and, `withIds`, the routing it recorded: ids and target): a request that worked at Cloudflare
 // meanwhile must not overwrite an admin's pause or block, the sweep's pause, a release or another claim. False =
 // the row changed — or the driver didn't say how many rows changed: a lock that can't tell must not report a win.
 export const updateIfUnchanged = async (env, name, expected, fields, { withIds = false } = {}) => {
     const keys = Object.keys(fields);
-    const cols = withIds ? [...STATE, ...IDS] : STATE;
+    const cols = withIds ? [...STATE, ...ROUTING] : STATE;
     const set = keys.length ? keys.map((k) => `${k}=?`).join(', ') : 'name=name';
     const r = await env.DB.prepare(
         `UPDATE name_allocations SET ${set} WHERE name=? AND ${cols.map((c) => `${c} IS ?`).join(' AND ')}`
@@ -127,11 +130,11 @@ export const listTeardown = async (env, name) =>
 export const dropTeardown = (env, kind, cfId) =>
     env.DB.prepare('DELETE FROM teardown WHERE kind=? AND cf_id=?').bind(kind, cfId).run();
 
-// Drop an owed deletion only while the name's row is still `expected` (tenure, state, decisions, ids), in one statement:
-// a take-down writes its row before it owes, so one that landed first keeps the entry (its own owe onto it was a
-// no-op), and one landing after owes it anew. True if dropped.
+// Drop an owed deletion only while the name's row is still `expected` (tenure, state, decisions, routing), in one
+// statement: a take-down writes its row before it owes, so one that landed first keeps the entry (its own owe onto it
+// was a no-op), and one landing after owes it anew. True if dropped.
 export const dropTeardownIfUnchanged = async (env, kind, cfId, name, expected) => {
-    const cols = [...STATE, ...IDS];
+    const cols = [...STATE, ...ROUTING];
     const r = await env.DB.prepare(
         `DELETE FROM teardown WHERE kind=? AND cf_id=?
            AND EXISTS (SELECT 1 FROM name_allocations WHERE name=? AND ${cols.map((c) => `${c} IS ?`).join(' AND ')})`

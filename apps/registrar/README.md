@@ -22,9 +22,9 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   sweep writes one `sweep_log` row, including a count of content-swaps (a 2xx that is no attest at all),
   which are counted only, never acted on yet. Then, applied or suspended alike, **upkeep** (not a verdict: it
   never takes routing away from a live name or routes one that isn't live): a live name whose attest reached no
-  node at all (unreachable, or Cloudflare's 530) is checked at Cloudflare, and if its record or tunnel is gone
-  or points elsewhere it is re-made as its row says (event `repaired`; a new tunnel's token reaches the node
-  through `/status`). Nodes never heal a name `/status` calls live, so this is what keeps any ordering of
+  node at all (unreachable, Cloudflare's 530, or its 52x for a proxied address) is checked at Cloudflare, and if its
+  record or tunnel is gone or points elsewhere it is re-made as its row says (event `repaired`; a new tunnel's
+  token reaches the node through `/status`). Nodes never heal a name `/status` calls live, so this is what keeps any ordering of
   requests from leaving a live name dark. A node merely asleep costs one or two reads; one that answered
   anything costs none. Deletions Cloudflare refused earlier (`teardown`) are retried.
 
@@ -32,7 +32,8 @@ A tunnel or record the registrar lets go of that Cloudflare refuses to delete is
 dropped: another key's take-over of a name, a pause, block or release's record, the record a heal, take-back or
 resume takes back down when its re-attest fails, the old tunnel of a move to a direct address, a failed request's
 tunnel. The sweep retries each one, but not while it is a live name's routing
-(a record at its hostname is the live row's to keep) or the tunnel an admin pause keeps. A live `bp-<name>` tunnel
+(a record at its hostname is the live row's to keep: its repair runs first, and the record stays owed until the
+hostname routes as the row says) or the tunnel an admin pause keeps. A live `bp-<name>` tunnel
 no row records would make Cloudflare refuse every later tunnel for the name (1013), so a claim that meets one
 deletes it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10
 minutes ago. Otherwise the claim answers **503** "cleaning up … try again shortly".

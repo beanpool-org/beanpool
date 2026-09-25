@@ -2030,3 +2030,118 @@ test('an owed record the live row records, re-pointed by a missed heal: the swee
         await routedAsRow(w, name, 'after Cloudflare recovered and a sweep');
     } finally { w.restore(); }
 });
+
+// ── A request whose routing target changed underneath it misses ──────────────────────────────────────────────
+// The conditional writes compare the row's routing target (mode, address, origin) as well as its tunnel and record
+// ids: a move to a new address keeps the record's id (a PATCH), so ids alone can't tell that a request is acting on a
+// target the row no longer records. Left to it, the row and Cloudflare disagree for good: nodes never heal a live name.
+test('race: a bare heal overtaken by the same key\'s heal to a new address: Cloudflare routes the address the row records', async () => {
+    const w = await world();
+    try {
+        const name = 'movedip';
+        const owner = await makeKey();
+        assert.equal((await w.claim(owner, { name, ...modeBody('direct', OLD_IP) })).body.status, 'live');
+        w.cf.during(/^GET \/zones\/zone\/dns_records$/, async () => { await w.heal(owner, modeBody('direct', NEW_IP)); });
+        await w.heal(owner);
+        assert.equal(routing(w, name).dns, (await w.row(name)).public_ip);
+        await routedAsRow(w, name, 'after both heals');
+    } finally { w.restore(); }
+});
+
+// The admin's pause is the admin's to lift, but the owner's heal still records where its node now is (heal's
+// admin-pause branch). That write, too, holds only while the row is as the heal read it.
+for (const [was, next] of [['tunnel', 'direct'], ['direct', 'tunnel']]) {
+    for (const order of ['the heal lands mid-resume', 'the resume lands mid-heal']) {
+        test(`race: the owner's heal moving its admin-paused name (${was} → ${next}) as the admin resumes it, ${order}: the row and Cloudflare agree`, async () => {
+            const w = await world();
+            try {
+                const name = `pausedmove-${was}`;
+                const owner = await makeKey();
+                assert.equal((await w.claim(owner, { name, ...modeBody(was, OLD_IP) })).body.status, 'live');
+                w.nodes[`${name}.beanpool.org`] = attestsAs(owner);
+                assert.equal((await w.admin(name, 'pause')).body.status, 'paused');
+                let healed, resumed;
+                if (order === 'the heal lands mid-resume') {
+                    w.cf.during(/^GET \/zones\/zone\/dns_records$/, async () => { healed = await w.heal(owner, modeBody(next, NEW_IP)); });
+                    resumed = await w.admin(name, 'resume');
+                } else {
+                    // The heal has read the row (paused by the admin); the resume runs whole before the heal writes.
+                    w.afterRead(/FROM name_allocations WHERE node_pubkey=\?/, async () => { resumed = await w.admin(name, 'resume'); });
+                    healed = await w.heal(owner, modeBody(next, NEW_IP));
+                }
+                const why = `${order}: resume ${resumed?.status} ${JSON.stringify(resumed?.body)}; heal ${healed?.status} ${JSON.stringify(healed?.body)}`;
+                assert.ok(resumed && healed, why);
+                const row = await routedAsRow(w, name, why);
+                assert.equal(await w.status(owner).then((s) => s.body.tunnelToken), row.status === 'live' && row.mode === 'tunnel' ? `token-${row.tunnel_id}` : undefined, why);
+
+                // Either way the name ends on its node's new target: the admin resumes it if it is still paused, and the
+                // node heals.
+                if (row.status !== 'live') assert.equal((await w.admin(name, 'resume')).body.status, 'live', why);
+                const h = await w.heal(owner, modeBody(next, NEW_IP));
+                assert.equal(h.body.status, 'live', `${why}; then ${JSON.stringify(h.body)}`);
+                const after = await routedAsRow(w, name, `${why}; then the node's heal`);
+                assert.equal(after.mode, next, why);
+            } finally { w.restore(); }
+        });
+    }
+}
+
+// The same for a gated claim still waiting for the admin: its owner's heal records where its node now is (heal's
+// awaiting-approval branch), and the admin's approval goes live.
+for (const order of ['the heal lands mid-approval', 'the approval lands mid-heal']) {
+    test(`race: the owner's heal moving its gated claim to a direct address as the admin approves it, ${order}: the row and Cloudflare agree`, async () => {
+        const w = await world();
+        try {
+            const owner = await makeKey();
+            assert.equal((await w.claim(owner, { name: 'perth' })).body.status, 'pending');   // gated in the 0001 seed
+            w.nodes['perth.beanpool.org'] = attestsAs(owner);
+            let healed, approved;
+            if (order === 'the heal lands mid-approval') {
+                w.cf.during(/^GET \/zones\/zone\/dns_records$/, async () => { healed = await w.heal(owner, modeBody('direct', NEW_IP)); });
+                approved = await w.admin('perth', 'approve');
+            } else {
+                // The heal has read the row (pending); the approval runs whole before the heal writes.
+                w.afterRead(/FROM name_allocations WHERE node_pubkey=\?/, async () => { approved = await w.admin('perth', 'approve'); });
+                healed = await w.heal(owner, modeBody('direct', NEW_IP));
+            }
+            const why = `${order}: approve ${approved?.status} ${JSON.stringify(approved?.body)}; heal ${healed?.status} ${JSON.stringify(healed?.body)}`;
+            assert.ok(approved && healed, why);
+            await routedAsRow(w, 'perth', why);
+
+            // Either way the name ends on its node's new address: the admin approves it if it is still pending, and
+            // the node heals.
+            if ((await w.row('perth')).status !== 'live') assert.equal((await w.admin('perth', 'approve')).body.status, 'live', why);
+            const h = await w.heal(owner, modeBody('direct', NEW_IP));
+            assert.equal(h.body.status, 'live', `${why}; then ${JSON.stringify(h.body)}`);
+            const after = await routedAsRow(w, 'perth', `${why}; then the node's heal`);
+            assert.deepEqual([after.mode, after.public_ip], ['direct', NEW_IP], why);
+        } finally { w.restore(); }
+    });
+}
+
+// Upkeep looks at a live name nothing answers at. Behind a proxied A record that is Cloudflare's 52x (521–523: the
+// address refuses, times out or is unreachable), as a tunnel with no connector is its 530.
+test('the sweep repairs a live direct name whose record points where nothing answers (Cloudflare\'s 52x); a node merely down is only looked at', async () => {
+    const w = await world();
+    try {
+        const [owner, sleeper, n1] = await Promise.all([makeKey(), makeKey(), makeKey()]);
+        assert.equal((await w.claim(owner, { name: 'strayaddr', ...modeBody('direct', OLD_IP) })).body.status, 'live');
+        assert.equal((await w.claim(sleeper, { name: 'downaddr', ...modeBody('direct', NEW_IP) })).body.status, 'live');
+        await liveName(w, 'strayaddr-a', n1);
+        const nothingThere = async () => new Response('origin unreachable', { status: 522 });
+        w.nodes['strayaddr.beanpool.org'] = nothingThere;
+        w.nodes['downaddr.beanpool.org'] = nothingThere;
+        // strayaddr's record points at an address its row doesn't record, with no request or decision behind it.
+        w.cf.recordAt('strayaddr.beanpool.org').content = MOVED_IP;
+        const asleep = await w.row('downaddr');
+        const mark = w.cf.calls.length;
+        await attestSweep(w.env);
+        const row = await routedAsRow(w, 'strayaddr', 'after the sweep');
+        assert.equal(row.public_ip, OLD_IP);
+        assert.ok(w.events('strayaddr').some((e) => e.event === 'repaired'), JSON.stringify(w.events('strayaddr')));
+        assert.deepEqual(await w.row('downaddr'), asleep, 'the node that is merely down: its row untouched');
+        assert.deepEqual(w.cf.calls.slice(mark).filter((c) => c.includes(asleep.dns_record_id)), [], 'and its record only looked up');
+        w.nodes['strayaddr.beanpool.org'] = attestsAs(owner);
+        assert.equal((await attestSweep(w.env)).ok, 2, 'the next sweep reaches it');
+    } finally { w.restore(); }
+});

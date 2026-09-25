@@ -75,7 +75,7 @@ const dnsTarget = (a) => a.mode === 'direct'
 // means a new token. Throws on a Cloudflare failure, having written nothing to the row and removed any tunnel it made.
 // The record is found by hostname, so once the row has changed it may be another tenure's, or another request's of
 // this one: it is changed only while the row is still `expected` (the row as the caller read or last wrote it, ids
-// included); otherwise ensure throws `raced`, having changed no record.
+// and target included); otherwise ensure throws `raced`, having changed no record.
 async function ensure(env, a, expected) {
     const changed = [];
     let tunnel_id = null;
@@ -250,10 +250,11 @@ async function settleOwed(env, t) {
 // A request reads the row, works at Cloudflare (ensure; on a kept tunnel, an edge re-attest of up to 15 s), then
 // writes. Whatever is decided meanwhile stands:
 //   - bringing routing up (heal, claim, take-back, approve, resume): every write after a Cloudflare call holds only
-//     while the row is as this request read or last wrote it — tenure, state and the tunnel and record ids
-//     (db.updateIfUnchanged withIds) — and ensure() changes the record at the hostname only while it is. So does
-//     taking back routing a failed re-attest put up. On a miss the request undoes what it did (undo: a record it
-//     changed that is now another tenure's is put back to that tenure) and answers with the row as it now is.
+//     while the row is as this request read or last wrote it — tenure, state, the tunnel and record ids and the
+//     target they route to (db.updateIfUnchanged withIds) — and ensure() changes the record at the hostname only
+//     while it is. So does taking back routing a failed re-attest put up. On a miss the request undoes what it did
+//     (undo: a record it changed that is now another tenure's is put back to that tenure) and answers with the row as
+//     it now is.
 //   - taking routing down (the admin's pause and block, a release, the sweep's pause): the row is written FIRST,
 //     then Cloudflare (stopRouting), so a request that read the row earlier misses its own write. That write always
 //     counts a decision (decision_seq), so one that changes no status — blocking a blocked name, pausing a paused
@@ -452,20 +453,23 @@ async function heal(env, cur, b, now) {
     const fields = bodyFields(b);
     const a = { ...cur, ...fields };
     const reply = (extra) => ({ name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact, ...extra });
-
-    if (await awaitingApproval(env, cur)) {
-        await db.updateAllocation(env, cur.name, fields);
-        return reply({ status: 'pending', reason: 'awaiting-approval', since: cur.requested_at, note: 'awaiting approval', changed: [] });
-    }
-    if (cur.status === 'paused' && cur.pause_reason === 'admin') {
-        await db.updateAllocation(env, cur.name, fields);
-        return reply({ status: 'paused', reason: 'admin', since: cur.paused_at, changed: [] });
-    }
-
-    // From here every write holds only while the row is as read (`cur`), then as this heal last wrote it (`res`), ids
+    // Every write holds only while the row is as read (`cur`), then as this heal last wrote it (`res`), ids and target
     // and all; if it changed, the heal is undone.
     let ids = NOTHING;
     const missed = async () => asNow(await undo(env, cur.name, ids), cur.node_pubkey);
+
+    // Not routed by a heal: only where its node now is is recorded, and only over the row as read. Written over an
+    // approval or the admin's resume that went live meanwhile, it would leave a live row naming a target Cloudflare
+    // doesn't route.
+    if (await awaitingApproval(env, cur)) {
+        if (!(await db.updateIfUnchanged(env, cur.name, cur, fields, { withIds: true }))) return missed();
+        return reply({ status: 'pending', reason: 'awaiting-approval', since: cur.requested_at, note: 'awaiting approval', changed: [] });
+    }
+    if (cur.status === 'paused' && cur.pause_reason === 'admin') {
+        if (!(await db.updateIfUnchanged(env, cur.name, cur, fields, { withIds: true }))) return missed();
+        return reply({ status: 'paused', reason: 'admin', since: cur.paused_at, changed: [] });
+    }
+
     try { ids = await ensure(env, a, cur); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
     const made = { tunnel_id: ids.tunnel_id, dns_record_id: ids.dns_record_id };
     if (!(await db.updateIfUnchanged(env, cur.name, cur, { ...fields, ...made }, { withIds: true }))) return missed();
@@ -1049,13 +1053,15 @@ export async function attestSweep(env) {
 
 // Upkeep, every sweep, applied or suspended alike: none of it is a verdict on a node, and none of it takes routing
 // from a live name or routes one that isn't live.
-//   - A live name the attest found dark — it reached no node at all: unreachable, or Cloudflare's 530 for a tunnel
-//     with no connector — is looked at: if Cloudflare no longer routes it as its row says (its record gone or pointing
-//     elsewhere, its tunnel gone), it is repaired (repairLive). Nodes never heal a name /status calls live, so a live
-//     name left dark by any ordering of requests would otherwise stay dark. A node merely asleep costs a read or two;
-//     one that answered anything (even a reply this verifier can't check) costs nothing.
+//   - A live name the attest found dark — it reached no node at all: unreachable, Cloudflare's 530 for a tunnel with
+//     no connector, or its 52x for a proxied address it got no answer from (a direct node down, or a record pointing
+//     where no node is; a tunnel name never sees one while it goes through its tunnel) — is looked at: if Cloudflare no
+//     longer routes it as its row says (its record gone or pointing elsewhere, its tunnel gone), it is repaired
+//     (repairLive). Nodes never heal a name /status calls live, so a live name left dark by any ordering of requests
+//     would otherwise stay dark. A node merely asleep costs a read or two; one that answered anything (even a reply
+//     this verifier can't check) costs nothing.
 //   - Owed deletions (teardown) are retried.
-const dark = (r) => r.verdict === 'unverifiable' && (r.why === 'unreachable' || r.why === 'http 530');
+const dark = (r) => r.verdict === 'unverifiable' && (r.why === 'unreachable' || /^http 5(2\d|30)$/.test(r.why));
 
 async function upkeep(env, results, batch) {
     const look = results.filter(dark);

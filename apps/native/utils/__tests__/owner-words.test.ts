@@ -4,6 +4,16 @@ import { webcrypto } from 'node:crypto';
 vi.mock('expo-crypto', () => ({
     getRandomBytes: (n: number) => webcrypto.getRandomValues(new Uint8Array(n)),
 }));
+// owner-words.ts reaches identity.ts (the one words check, and the save it offers); nothing here stores an identity.
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('expo-secure-store', () => ({
+    getItemAsync: vi.fn(async () => null),
+    setItemAsync: vi.fn(async () => undefined),
+    deleteItemAsync: vi.fn(async () => undefined),
+}));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() },
+}));
 
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';

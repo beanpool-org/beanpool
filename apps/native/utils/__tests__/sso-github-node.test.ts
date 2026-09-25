@@ -21,9 +21,20 @@ import { sealSeedToSso } from '@beanpool/core';
 
 (globalThis as any).__DEV__ = false;
 
+/** A fake AppState: tests say when the app goes to the back (GitHub's tab in front) and comes to the front again. */
+const appState = vi.hoisted(() => {
+    const listeners = new Set<(state: string) => void>();
+    return { listeners, emit: (state: string) => { for (const l of [...listeners]) l(state); } };
+});
 vi.mock('react-native', () => ({
     Platform: { OS: 'android' },
     DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
+    AppState: {
+        addEventListener: vi.fn((_type: string, listener: (state: string) => void) => {
+            appState.listeners.add(listener);
+            return { remove: () => { appState.listeners.delete(listener); } };
+        }),
+    },
 }));
 vi.mock('expo-linking', () => ({
     addEventListener: vi.fn(() => ({ remove: vi.fn() })),
@@ -671,6 +682,129 @@ describe('recovering with GitHub runs through the node', () => {
         expect(seen.map((s) => s.path)).not.toContain('/api/recovery/collect/fragments');
         expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
         expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * Android runs JS timers off the Choreographer and stops them while the app's activity is paused (React
+ * Native's JavaTimerManager.onHostPause), which it is the whole time GitHub's Custom Tab is in front. The wait
+ * between polls does not end until the member comes back, so coming back must poll at once, not finish a wait.
+ */
+describe('coming back from GitHub', () => {
+    afterEach(() => { appState.listeners.clear(); });
+
+    it('polls at once when the app comes to the front, instead of waiting out the interval', async () => {
+        const seen = installNode({
+            '/api/recovery/sso-nonce': NONCE,
+            [MEMBER_START]: { status: 200, body: START },
+            [MEMBER_POLL]: [PENDING, OK],
+        });
+
+        const { outcome } = await memberSignIn(5_000);
+        expect(polls(seen)).toHaveLength(1);
+        appState.emit('background');
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(polls(seen)).toHaveLength(1);
+
+        appState.emit('active');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(polls(seen)).toHaveLength(2);
+        const [first, second] = polls(seen);
+        expect(second.at - first.at).toBe(1_000);
+        const { value, error } = await outcome;
+        expect(error).toBeUndefined();
+        expect(value).toMatchObject({ provider: 'github', sessionId: 'node-session-1', sub: '987654' });
+        // Nothing left listening once the sign-in is over.
+        expect(appState.listeners.size).toBe(0);
+    });
+
+    it('coming to the front while still pending polls once, then waits the interval again', async () => {
+        const seen = installNode({
+            '/api/recovery/sso-nonce': NONCE,
+            [MEMBER_START]: { status: 200, body: START },
+            [MEMBER_POLL]: [PENDING, PENDING, OK],
+        });
+
+        const { outcome } = await memberSignIn(5_000);
+        await vi.advanceTimersByTimeAsync(2_000);
+        appState.emit('active');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(polls(seen)).toHaveLength(2);
+        await vi.advanceTimersByTimeAsync(4_999);
+        expect(polls(seen)).toHaveLength(2);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(polls(seen)).toHaveLength(3);
+        expect((await outcome).error).toBeUndefined();
+    });
+
+    it('a 429 still means pending, and its Retry-After is still waited out when the app comes to the front', async () => {
+        const seen = installNode({
+            '/api/recovery/sso-nonce': NONCE,
+            [MEMBER_START]: { status: 200, body: START },
+            [MEMBER_POLL]: [
+                { status: 429, body: { error: 'Too many GitHub sign-in checks from this address. Try again in 7s' }, headers: { 'Retry-After': '7' } },
+                OK,
+            ],
+        });
+
+        const { outcome } = await memberSignIn(5_000);
+        expect(polls(seen)).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(1_000);
+        appState.emit('active');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(polls(seen)).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(5_999);
+        expect(polls(seen)).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(polls(seen)).toHaveLength(2);
+
+        const { value, error } = await outcome;
+        expect(error).toBeUndefined();
+        expect(value).toMatchObject({ sessionId: 'node-session-1', sub: '987654' });
+    });
+
+    it('a cancel still stops it: coming to the front afterwards polls nothing', async () => {
+        const seen = installNode({
+            '/api/recovery/sso-nonce': NONCE,
+            [MEMBER_START]: { status: 200, body: START },
+            [MEMBER_POLL]: [PENDING],
+        });
+        const abort = new AbortController();
+
+        const { outcome } = await memberSignIn(5_000, abort.signal);
+        expect(polls(seen)).toHaveLength(1);
+        abort.abort();
+        const { error } = await outcome;
+        expect((error as SsoSignInError).reason).toBe('cancelled');
+
+        appState.emit('active');
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(polls(seen)).toHaveLength(1);
+        expect(appState.listeners.size).toBe(0);
+    });
+
+    it('recovering with GitHub polls at once too when the app comes to the front', async () => {
+        const { seen, keypair } = await recoveryNode({ githubFlow: 'node' });
+
+        const outcome = recoverAccountWithSso({
+            callsign: 'member', anchorUrl: NODE, provider: 'github', onDeviceCode: () => {},
+        }).then((value) => ({ value, error: undefined as unknown }), (error) => ({ value: undefined, error }));
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(polls(seen, COLLECT_POLL)).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        appState.emit('active');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(polls(seen, COLLECT_POLL)).toHaveLength(2);
+        const [first, second] = polls(seen, COLLECT_POLL);
+        expect(second.at - first.at).toBe(1_000);
+        await vi.advanceTimersByTimeAsync(1_000);
+        const { value, error } = await outcome;
+        expect(error).toBeUndefined();
+        expect(value?.identity.publicKey).toBe(keypair.publicKeyHex);
+        expect(appState.listeners.size).toBe(0);
     });
 });
 

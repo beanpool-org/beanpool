@@ -91,7 +91,14 @@ describe('what a phone with no 12 words is told', () => {
     it('signing out never promises the words bring the account back', () => {
         expect(NO_WORDS_SIGN_OUT_ALERT).toContain('Without a connected sign-in, you cannot get this account back.');
         expect(NO_WORDS_SIGN_OUT_ALERT).not.toMatch(/restored anytime|recovery phrase/i);
-        expect(`${NO_WORDS_MENU.title} ${NO_WORDS_MENU.sub}`).not.toMatch(/view/i);
+    });
+
+    // Was `not.toMatch(/view/i)`: #1147 hid "View" on a phone without words. Marty, 2026-09-25: the row stays, under
+    // the name it has on a phone with words, and opens the add form (view-words.test.ts). What that assertion was
+    // for still holds, pinned exactly: the line under it says there is no copy here, so it never promises words.
+    it('the Settings row keeps its name, and says this phone has no copy', () => {
+        expect(NO_WORDS_MENU).toEqual({ title: 'View Recovery Phrase', sub: 'No copy on this phone yet. Tap to add your 12 words.' });
+        expect(NO_WORDS_MENU.sub).not.toMatch(/view your|backup seed/i);
     });
 });
 

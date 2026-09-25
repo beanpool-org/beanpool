@@ -30,11 +30,13 @@ It shows a card at the top of the Market (in the web app, at the top of every sc
 
 If they are right, the app says **These are the right words**. If not: **These aren't the words for this account.** It doesn't say which word is wrong, so check the paper and type them all again.
 
-Can't find them? If this phone still has them, **Settings**, then **View Recovery Phrase**, shows them. Write them down again, then check.
+On a phone with no copy of your 12 words (one restored with a sign-in account), right words also bring **Save them on this phone**. Tap it and **View Recovery Phrase** shows them from then on. It is the same check and the same save as **Add your 12 words to this phone** (see "Your 12 words").
+
+Can't find them? If this phone still has them, **Settings**, then **View Recovery Phrase**, shows them. Write them down again, then check. On a phone with no copy, the app says so: when you find them, check them here, then save them.
 
 ## What is sent, and what is not
 
-- The check happens on your phone (or in your browser, in the web app). Your words are never sent anywhere and never saved. The box is emptied as soon as the check answers, and when you leave the screen.
+- The check happens on your phone (or in your browser, in the web app). Your words are never sent anywhere. The box is emptied as soon as the check answers, and when you leave the screen. They are saved only if you tap **Save them on this phone**, and then only on this phone.
 - When the words are right, your phone tells your community's server only that you checked, and when, signed with your account.
 - Owners and admins see, in the server's Settings, each owner's "12 words checked" date, or "not yet". It is your own statement: the server cannot see or check your words.
 

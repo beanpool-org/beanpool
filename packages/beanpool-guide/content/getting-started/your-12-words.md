@@ -26,18 +26,17 @@ Open **Settings** with the sliders button at the top of the screen. Then either:
 - Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.
 - Or tap **Account Protection**, then **Show My 12 Recovery Words**. Tap **Hide** when you are done.
 
-A phone restored with a sign-in account gets your 12 words back only if that sign-in account was linked from a phone that had them, on an up-to-date app. Otherwise it has no 12 words: they can't be rebuilt from a sign-in, and Settings says so instead of showing them. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**.
+A phone restored with a sign-in account gets your 12 words back only if that sign-in account was linked from a phone that had them, on an up-to-date app. Otherwise the phone has no copy of them: they can't be rebuilt from a sign-in. **View Recovery Phrase** is still there, and says **No copy on this phone yet**. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**.
 
 ## Put your 12 words back on this phone
 
-If Settings says this phone has no 12 words, and you have them written down, you can add them:
+If this phone has no copy of your 12 words, and you have them written down, you can add them:
 
-- Open **Settings**. Under **Account & Identity**, tap **Recovery Phrase**. (Or, in **Account Protection**, tap **Have your 12 words written down? Add them to this phone**.)
-- Tap **Add your 12 words to this phone**.
+- Open **Settings**. Under **Account & Identity**, tap **View Recovery Phrase**. (Or, in **Account Protection**, tap **Show My 12 Recovery Words**.) On a phone with no copy, either one opens **Add your 12 words to this phone**.
 - Type the 12 words in order, or tap **Paste**. Capitals and extra spaces don't matter. A word that is not on the list of recovery words is marked as you type.
 - Tap **Add these words**.
 
-Your phone checks that the words belong to your account. They are not sent anywhere. If they belong to a different account, nothing changes and the app says so. Once they are added, **View Recovery Phrase** shows them again, in every community on this phone.
+Your phone checks that the words belong to your account, the same check as **Check your 12 words** for owners. They are not sent anywhere. If they belong to a different account, nothing changes and the app says so. Once they are added, **View Recovery Phrase** shows them, in every community on this phone.
 
 ## A second way back: a sign-in account
 

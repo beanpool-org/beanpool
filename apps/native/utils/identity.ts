@@ -1,8 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 import {
+    checkOwnerWords,
     isWellFormedRecoveryPhrase,
     normaliseRecoveryWords,
-    recoveryWordsMatchPublicKey,
+    type OwnerWordsCheckResult,
 } from '@beanpool/core';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { Platform } from 'react-native';
@@ -133,17 +134,37 @@ export async function importIdentity(identity: BeanPoolIdentity): Promise<void> 
     await saveIdentity(identity);
 }
 
+/**
+ * Are these typed words this phone's account's? The one check behind both places a member types their 12 words:
+ * the owners' "Check your 12 words" (owner-words.ts `checkMyWords`) and "Add your 12 words to this phone"
+ * ({@link addMnemonicToIdentity}), so the two can never give a member two answers.
+ *
+ * It is @beanpool/core `checkOwnerWords`, which decides with `recoveryWordsMatchPublicKey` (12 listed words whose
+ * key has this account's public key: the comparison a sign-in restore and enrolment make too), then checks that
+ * the key this phone signs with is the same account's and that the words open a sealed envelope on this device.
+ *
+ * Reads only the public key and the stored key, never the stored `mnemonic`: a phone that holds the words cannot
+ * pass by comparing them with themselves. The words are never sent, stored or logged here.
+ */
+export function checkWordsForAccount(
+    typed: string | readonly string[],
+    identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>,
+): Promise<OwnerWordsCheckResult> {
+    return checkOwnerWords(normaliseRecoveryWords(typed), { publicKeyHex: identity.publicKey, privateKey: identity.privateKey });
+}
+
 export type AddMnemonicResult =
     | { ok: true; identity: BeanPoolIdentity }
     | { ok: false; reason: 'no-identity' | 'has-words' | 'malformed' | 'mismatch' };
 
 /**
- * Put the 12 words back on a phone that has the key but not the words ("Add your 12 words", Settings).
+ * Put the 12 words back on a phone that has the key but not the words ("Add your 12 words", Settings, and
+ * "Save them on this phone" after the owners' check).
  *
  * A phone restored with a sign-in before the sign-in copy carried the words has none, and they can't be
- * rebuilt from the key. The member who has them written down types them; they are kept only if they are
- * 12 listed words that make THIS account's public key (compared by public key: the stored private key may
- * be raw or PKCS8). Otherwise nothing is written. Nothing is sent anywhere, and the words are never logged.
+ * rebuilt from the key. The member who has them written down types them; they are kept only if
+ * {@link checkWordsForAccount} says they are this account's. Otherwise nothing is written. Nothing is sent
+ * anywhere, and the words are never logged.
  *
  * Refuses a phone that already has words: this adds words that are missing, it never replaces any.
  */
@@ -154,7 +175,7 @@ export async function addMnemonicToIdentity(typed: string | readonly string[]): 
     const alreadyHasWords: boolean = hasMnemonic(identity);
     if (alreadyHasWords) return { ok: false, reason: 'has-words' };
     if (!isWellFormedRecoveryPhrase(typed)) return { ok: false, reason: 'malformed' };
-    if (!recoveryWordsMatchPublicKey(typed, identity.publicKey)) return { ok: false, reason: 'mismatch' };
+    if (!(await checkWordsForAccount(typed, identity)).matches) return { ok: false, reason: 'mismatch' };
     const updated: BeanPoolIdentity = { ...identity, mnemonic: normaliseRecoveryWords(typed) };
     await saveIdentity(updated);
     return { ok: true, identity: updated };

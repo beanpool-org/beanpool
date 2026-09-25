@@ -32,8 +32,11 @@ import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../ut
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
-import { ADD_WORDS_COPY } from '../../utils/add-words';
-import { NO_WORDS_CHECK_FIRST, NO_WORDS_CONNECT, NO_WORDS_MENU, NO_WORDS_SIGN_OUT_ALERT, noWordsBeforeWipe } from '../../utils/no-words-copy';
+import { ADD_WORDS_COPY, viewWordsOpens } from '../../utils/add-words';
+import {
+    NO_WORDS_CHECK_FIRST, NO_WORDS_CONNECT, NO_WORDS_MENU, NO_WORDS_SIGN_OUT_ALERT, NO_WORDS_VIEW_LINE, VIEW_WORDS_MENU,
+    noWordsBeforeWipe,
+} from '../../utils/no-words-copy';
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { protectionFrom } from '../../utils/protection-state';
@@ -803,13 +806,22 @@ export default function SettingsScreen() {
     const [seedConfirm, setSeedConfirm] = useState('');
     const [seedVisible, setSeedVisible] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
-    // "Add your 12 words to this phone", on a phone that has none: the form is open, and the words were just added.
-    const [addingWords, setAddingWords] = useState(false);
+    // "Add your 12 words to this phone" (a phone that has none) just saved them: the seed screen says so once.
     const [wordsJustAdded, setWordsJustAdded] = useState(false);
     // Loaded at the moment of reveal, not when the screen mounts — the words should only be
     // read once the user has typed CONFIRM and passed the biometric check, which is also
     // exactly where the vault read belongs once there is a vault to read from.
     const [seedWords, setSeedWords] = useState<string[] | null>(null);
+
+    // View Recovery Phrase, from the menu and from Account Protection on a phone without words. The seed screen
+    // shows the words, or on a phone with no copy opens "Add your 12 words" under one plain line (Marty, 2026-09-25).
+    const openViewWords = () => {
+        setSeedConfirm('');
+        setSeedVisible(false);
+        setWordsJustAdded(false);
+        setMode('seed');
+    };
+    const viewWordsRow = hasMnemonic(identity) ? VIEW_WORDS_MENU : NO_WORDS_MENU;
     const [advancedLoading, setAdvancedLoading] = useState(false);
     const [resyncing, setResyncing] = useState(false);
     const [resyncModalVisible, setResyncModalVisible] = useState(false);
@@ -1559,12 +1571,12 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
-                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => { setMode('seed'); setSeedConfirm(''); setSeedVisible(false); setAddingWords(false); setWordsJustAdded(false); }} accessibilityRole="button">
+                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={openViewWords} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔑</Text></View>
-                        {/* A phone restored with a sign-in has no words to view; the row says so and still opens the explanation. */}
+                        {/* On every phone. With no copy of the words here, the line under it says so and the row opens the add form. */}
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>{hasMnemonic(identity) ? 'View Recovery Phrase' : NO_WORDS_MENU.title}</Text>
-                            <Text style={styles.menuSub}>{hasMnemonic(identity) ? 'View your 12-word backup seed' : NO_WORDS_MENU.sub}</Text>
+                            <Text style={styles.menuText}>{viewWordsRow.title}</Text>
+                            <Text style={styles.menuSub}>{viewWordsRow.sub}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -1900,29 +1912,19 @@ export default function SettingsScreen() {
                                 onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
                             />
 
-                            {/* No words on a phone restored with a sign-in: the panel above says so, and there is nothing
-                                to show — but a member with them on paper can put them back. */}
-                            {!hasMnemonic(identity) && (
-                                <Pressable
-                                    style={{ marginTop: 8, minHeight: 44, justifyContent: 'center', paddingVertical: 8 }}
-                                    onPress={() => { setSeedConfirm(''); setSeedVisible(false); setWordsJustAdded(false); setAddingWords(true); setMode('seed'); }}
-                                    accessibilityRole="button"
-                                >
-                                    <Text style={{ color: colors.brand.dark, fontSize: 14, fontWeight: '600', lineHeight: 20 }}>
-                                        🔑 {ADD_WORDS_COPY.fromProtection} ›
-                                    </Text>
-                                </Pressable>
-                            )}
-                            {hasMnemonic(identity) && (
+                            {/* On every phone. With the words it shows them here; on a phone with no copy (restored with a
+                                sign-in) it says so in one line and opens "Add your 12 words" (openViewWords). */}
                             <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
                                 <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
                                     🔑 12 Recovery Words
                                 </Text>
                                 <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
-                                    Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.
+                                    {hasMnemonic(identity)
+                                        ? 'Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.'
+                                        : NO_WORDS_VIEW_LINE}
                                 </Text>
 
-                                {!revealWords ? (
+                                {!(hasMnemonic(identity) && revealWords) ? (
                                     <Pressable
                                         style={{
                                             backgroundColor: colors.surface.card,
@@ -1932,10 +1934,11 @@ export default function SettingsScreen() {
                                             padding: 14,
                                             alignItems: 'center',
                                         }}
-                                        onPress={handleRevealWords}
+                                        onPress={hasMnemonic(identity) ? handleRevealWords : openViewWords}
                                         disabled={revealLoading}
                                         accessibilityRole="button"
                                         accessibilityLabel="Show my 12 recovery words"
+                                        accessibilityHint={hasMnemonic(identity) ? undefined : NO_WORDS_MENU.sub}
                                     >
                                         <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
                                             👁️ Show My 12 Recovery Words
@@ -1980,7 +1983,6 @@ export default function SettingsScreen() {
                                     </View>
                                 )}
                             </View>
-                            )}
 
                             {Platform.OS === 'web' && (
                                 <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
@@ -2486,36 +2488,26 @@ export default function SettingsScreen() {
             {mode === 'seed' && (
                 <View style={styles.card}>
                     <Text style={styles.sectionTitle}>🔑 Recovery Phrase</Text>
-                    {!hasMnemonic(identity) ? (
+                    {viewWordsOpens(identity) === 'add-words' ? (
                         <>
-                            <NoWordsNotice
-                                kind="way-back"
+                            {/* No copy on this phone: the form, open, under the one plain line (its intro,
+                                NO_WORDS_VIEW_LINE). Checked on the phone against this account, sent nowhere. */}
+                            <AddWordsForm
                                 colors={colors}
-                                action={{ label: NO_WORDS_CONNECT, onPress: () => setMode('protection') }}
+                                onCancel={() => setMode('menu')}
+                                onAdded={(updated) => {
+                                    setIdentity(updated);
+                                    setWordsJustAdded(true);
+                                }}
                             />
-                            {/* The member who has the words on paper can put them back. Checked on the phone, sent nowhere. */}
-                            {addingWords ? (
-                                <AddWordsForm
+                            {/* For a member without them on paper: the way back is a connected sign-in. */}
+                            <View style={{ marginTop: 16 }}>
+                                <NoWordsNotice
+                                    kind="way-back"
                                     colors={colors}
-                                    onCancel={() => setAddingWords(false)}
-                                    onAdded={(updated) => {
-                                        setIdentity(updated);
-                                        setAddingWords(false);
-                                        setWordsJustAdded(true);
-                                    }}
+                                    action={{ label: NO_WORDS_CONNECT, onPress: () => setMode('protection') }}
                                 />
-                            ) : (
-                                <View style={{ marginTop: 16 }}>
-                                    <Text style={[styles.infoText, { marginBottom: 8 }]}>{ADD_WORDS_COPY.intro}</Text>
-                                    <Pressable
-                                        style={[styles.primaryBtn, { marginTop: 0 }]}
-                                        onPress={() => setAddingWords(true)}
-                                        accessibilityRole="button"
-                                    >
-                                        <Text style={[styles.primaryBtnText, { textAlign: 'center' }]}>{ADD_WORDS_COPY.title}</Text>
-                                    </Pressable>
-                                </View>
-                            )}
+                            </View>
                         </>
                     ) : (
                         <>

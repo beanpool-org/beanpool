@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 31,
-  "hash": "5a48756575d035cc53579c241e55f4c72bef5560c50ce463acfac9b9e0189657",
+  "version": 32,
+  "hash": "5e9877a73249d7bb7184176e8be715543ec700b06589148bc5f7b871ba55fb3f",
   "sections": [
     {
       "id": "about",
@@ -943,7 +943,7 @@
         },
         {
           "type": "p",
-          "text": "A phone restored with a sign-in account gets your 12 words back only if that sign-in account was linked from a phone that had them, on an up-to-date app. Otherwise it has no 12 words: they can't be rebuilt from a sign-in, and Settings says so instead of showing them. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**."
+          "text": "A phone restored with a sign-in account gets your 12 words back only if that sign-in account was linked from a phone that had them, on an up-to-date app. Otherwise the phone has no copy of them: they can't be rebuilt from a sign-in. **View Recovery Phrase** is still there, and says **No copy on this phone yet**. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**."
         },
         {
           "type": "h2",
@@ -951,20 +951,19 @@
         },
         {
           "type": "p",
-          "text": "If Settings says this phone has no 12 words, and you have them written down, you can add them:"
+          "text": "If this phone has no copy of your 12 words, and you have them written down, you can add them:"
         },
         {
           "type": "ul",
           "items": [
-            "Open **Settings**. Under **Account & Identity**, tap **Recovery Phrase**. (Or, in **Account Protection**, tap **Have your 12 words written down? Add them to this phone**.)",
-            "Tap **Add your 12 words to this phone**.",
+            "Open **Settings**. Under **Account & Identity**, tap **View Recovery Phrase**. (Or, in **Account Protection**, tap **Show My 12 Recovery Words**.) On a phone with no copy, either one opens **Add your 12 words to this phone**.",
             "Type the 12 words in order, or tap **Paste**. Capitals and extra spaces don't matter. A word that is not on the list of recovery words is marked as you type.",
             "Tap **Add these words**."
           ]
         },
         {
           "type": "p",
-          "text": "Your phone checks that the words belong to your account. They are not sent anywhere. If they belong to a different account, nothing changes and the app says so. Once they are added, **View Recovery Phrase** shows them again, in every community on this phone."
+          "text": "Your phone checks that the words belong to your account, the same check as **Check your 12 words** for owners. They are not sent anywhere. If they belong to a different account, nothing changes and the app says so. Once they are added, **View Recovery Phrase** shows them, in every community on this phone."
         },
         {
           "type": "h2",
@@ -4562,7 +4561,7 @@
             "Type your community's name or address.",
             "Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone.",
             "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.",
-            "With GitHub, the app shows a code and opens GitHub's page, github.com/login/device. The code is already copied: on GitHub, press and hold the first box and choose **Paste**, then approve. Tap **Copy** to copy it again, or **Open GitHub** to get back to the page. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the code and **Cancel** go away and the app finishes getting your account back."
+            "With GitHub, the app shows a code, already copied, and what to do on GitHub. Tap **Open GitHub** (on an iPhone, GitHub's page opens by itself). On GitHub, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back (an iPhone comes back by itself). Tap **Copy** to copy the code again, or **Open GitHub** to get back to the page. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the code and **Cancel** go away and the app finishes getting your account back."
           ]
         },
         {
@@ -4579,7 +4578,7 @@
             "Open **Settings** and tap **Account Protection**.",
             "Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.",
             "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.",
-            "With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. While the app is waiting for GitHub, **Cancel** stops it. When GitHub confirms, the app links your account by itself."
+            "With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back to BeanPool (an iPhone comes back by itself). The app links your account as soon as you are back. While the app is waiting for GitHub, **Cancel** stops it."
           ]
         },
         {
@@ -4691,7 +4690,11 @@
         },
         {
           "type": "p",
-          "text": "Can't find them? If this phone still has them, **Settings**, then **View Recovery Phrase**, shows them. Write them down again, then check."
+          "text": "On a phone with no copy of your 12 words (one restored with a sign-in account), right words also bring **Save them on this phone**. Tap it and **View Recovery Phrase** shows them from then on. It is the same check and the same save as **Add your 12 words to this phone** (see \"Your 12 words\")."
+        },
+        {
+          "type": "p",
+          "text": "Can't find them? If this phone still has them, **Settings**, then **View Recovery Phrase**, shows them. Write them down again, then check. On a phone with no copy, the app says so: when you find them, check them here, then save them."
         },
         {
           "type": "h2",
@@ -4700,7 +4703,7 @@
         {
           "type": "ul",
           "items": [
-            "The check happens on your phone (or in your browser, in the web app). Your words are never sent anywhere and never saved. The box is emptied as soon as the check answers, and when you leave the screen.",
+            "The check happens on your phone (or in your browser, in the web app). Your words are never sent anywhere. The box is emptied as soon as the check answers, and when you leave the screen. They are saved only if you tap **Save them on this phone**, and then only on this phone.",
             "When the words are right, your phone tells your community's server only that you checked, and when, signed with your account.",
             "Owners and admins see, in the server's Settings, each owner's \"12 words checked\" date, or \"not yet\". It is your own statement: the server cannot see or check your words."
           ]

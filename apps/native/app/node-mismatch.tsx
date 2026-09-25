@@ -11,6 +11,8 @@ import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { wipeIdentity, getMnemonic, hasMnemonic } from '../utils/identity';
 import { requestSync } from '../services/pillar-sync';
+import { NoWordsNotice } from '../components/NoWordsNotice';
+import { noWordsBeforeWipe } from '../utils/no-words-copy';
 import { colors, palette } from '../constants/colors';
 
 /**
@@ -103,9 +105,8 @@ export default function NodeMismatchScreen() {
                 ? "Only do this if you have written your 12 words down. They are the only way back in, " +
                   "apart from a sign-in account linked on a community that holds a recovery piece for you.\n\n" +
                   "This erases the key for every community, not just this one."
-                : "This account has no 12-word phrase stored on this device, so deleting it is PERMANENT " +
-                  "unless a community holds a recovery piece for you.\n\nSwitching communities is almost " +
-                  "certainly what you want instead.",
+                : `${noWordsBeforeWipe()}\n\nThis erases the key for every community, not just this one.\n\n` +
+                  "Switching communities is almost certainly what you want instead.",
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -190,16 +191,15 @@ export default function NodeMismatchScreen() {
                                     </>
                                 ) : (
                                     <>
-                                        <Text style={styles.wipeTitle}>No recovery phrase on this device</Text>
-                                        <Text style={styles.wipeBody}>
-                                            This account has no 12 words stored here, so deleting it is permanent
-                                            unless a community holds a recovery piece for you. Switching
-                                            communities above is almost certainly what you want instead.
+                                        {/* No way on to Account Protection from here: this community doesn't know the member. */}
+                                        <NoWordsNotice kind="before-wipe" />
+                                        <Text style={[styles.wipeBody, { marginTop: 10 }]}>
+                                            Switching communities above is almost certainly what you want instead.
                                         </Text>
                                     </>
                                 )}
                                 <Pressable style={styles.secondaryBtn} onPress={handleConfirmWipe} disabled={loading} accessibilityRole="button">
-                                    <Text style={styles.secondaryBtnText}>I've saved them — delete the account</Text>
+                                    <Text style={styles.secondaryBtnText}>{words ? "I've saved them — delete the account" : 'Delete the account anyway'}</Text>
                                 </Pressable>
                                 <Pressable style={styles.secondaryBtn} onPress={() => { setShowWipe(false); setWords(null); }} accessibilityRole="button">
                                     <Text style={styles.cancelWipeText}>Cancel</Text>

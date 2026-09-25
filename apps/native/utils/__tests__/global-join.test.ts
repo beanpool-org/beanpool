@@ -86,7 +86,12 @@ import {
     keepJoinedIdentity,
     releaseJoinKey,
     adoptJoinKey,
+    checkNameAtDoor,
+    nameCheckMessage,
+    doorWaysOut,
+    joinedUnderNodeName,
     JOIN_TIMEOUT_MS,
+    MAX_JOIN_NAME,
     type DoorAnswer,
     type JoinKey,
 } from '../global-join';
@@ -746,5 +751,189 @@ describe('a key any node may hold is never taken off the phone', () => {
             expect(await releaseJoinKey(last)).toBe(true);
             expect(await loadIdentity()).toBeNull();
         });
+    });
+});
+
+describe('the name step at the door: never a spinner for good, and it can always be left (G7 follow-up, 4106491691)', () => {
+    const AVAILABLE = (name: string) => `/api/members/callsign-available/${encodeURIComponent(name)}`;
+    const doorKey = (): JoinKey => ({ identity: joiner, createdHere: true });
+    /** A node that takes the connection and then never answers, as a stalled one does. */
+    function stalledDoor(): Seen[] {
+        const seen: Seen[] = [];
+        globalThis.fetch = vi.fn((input: any, init?: any) => {
+            const url = String(input);
+            seen.push({ url, path: url.slice(NODE.length), body: undefined, headers: { ...(init?.headers ?? {}) } });
+            if (!url.startsWith(`${NODE}/`)) return Promise.reject(new TypeError(`Network request failed: the app contacted ${url}`));
+            return new Promise<Response>(() => {});
+        }) as any;
+        return seen;
+    }
+
+    it('a free name goes on; a node that answers with an error goes on too, as before (it makes a taken name unique)', async () => {
+        installDoor({ [AVAILABLE('Sam')]: { status: 200, body: { available: true } } });
+        expect(await checkNameAtDoor(NODE, 'Sam', doorKey())).toEqual({ kind: 'free' });
+        installDoor({ [AVAILABLE('Sam')]: 'offline' });
+        expect(await checkNameAtDoor(NODE, 'Sam', doorKey())).toEqual({ kind: 'free' });
+    });
+
+    it('a node that never answers the check: the wait runs out, the screen says so, and nothing is stored or sent', async () => {
+        vi.useFakeTimers();
+        try {
+            const seen = stalledDoor();
+            let settled = false;
+            const pending = checkNameAtDoor(NODE, 'Sam', doorKey()).finally(() => { settled = true; });
+            await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            const result = await pending;
+            expect(result).toEqual({ kind: 'timed_out' });
+            const said = nameCheckMessage('Sam', result);
+            expect(said).toMatch(/didn't answer in time/);
+            expect(said).toMatch(/nothing was sent/);
+            expect(said).toMatch(/try again/);
+            expect(said).toMatch(/go back/);
+            // Only the check went out: no key on the phone, no record, no join.
+            expect(seen.map(s => s.path)).toEqual([AVAILABLE('Sam')]);
+            expect(await loadIdentity()).toBeNull();
+            expect(await getPendingOnboarding()).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('leaving while the check is out (Back to Home, or Use a different sign-in) ends it at once, and the request with it', async () => {
+        stalledDoor();
+        const leave = new AbortController();
+        const pending = checkNameAtDoor(NODE, 'Sam', doorKey(), { signal: leave.signal });
+        await Promise.resolve();
+        leave.abort();
+        expect(await pending).toEqual({ kind: 'cancelled' });
+        const init = vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit;
+        expect(init.signal?.aborted).toBe(true);
+        expect(await loadIdentity()).toBeNull();
+        expect(await getPendingOnboarding()).toBeNull();
+    });
+
+    it('while the check is out, every way off the name step stays open; only the join itself holds the screen', () => {
+        expect(doorWaysOut('name', true, false)).toEqual({ back: true, otherSignIn: true });
+        expect(doorWaysOut('name', false, false)).toEqual({ back: true, otherSignIn: true });
+        expect(doorWaysOut('joining', true, false)).toEqual({ back: false, otherSignIn: false });
+        // Unchanged elsewhere: the sign-in's own wait (bounded since 3e513312), and GitHub's code, which has its Cancel.
+        expect(doorWaysOut('signIn', true, false).back).toBe(false);
+        expect(doorWaysOut('signIn', true, true).back).toBe(true);
+        expect(doorWaysOut('signIn', false, false).back).toBe(true);
+    });
+
+    it('a taken name: the free suggestions, no longer than the join keeps', async () => {
+        globalThis.fetch = vi.fn(async (input: any) => {
+            const url = String(input);
+            if (!url.startsWith(`${NODE}/`)) throw new TypeError(`Network request failed: the app contacted ${url}`);
+            const name = decodeURIComponent(url.slice(`${NODE}/api/members/callsign-available/`.length));
+            return answer({ status: 200, body: { available: name !== 'Samantha Jane Smith' } });
+        }) as any;
+        const result = await checkNameAtDoor(NODE, 'Samantha Jane Smith', doorKey());
+        expect(result.kind).toBe('taken');
+        if (result.kind !== 'taken') return;
+        expect(result.suggestionsTimedOut).toBe(false);
+        expect(result.suggestions).toHaveLength(3);
+        for (const s of result.suggestions) expect(s.length).toBeLessThanOrEqual(MAX_JOIN_NAME);
+        expect(nameCheckMessage('Samantha Jane Smith', result)).toMatch(/already taken in the global community\. Pick one of the suggestions/);
+    });
+
+    it('a taken name whose suggestions never come: still said as taken once the wait runs out, and why there are none', async () => {
+        vi.useFakeTimers();
+        try {
+            globalThis.fetch = vi.fn((input: any) => {
+                const url = String(input);
+                if (url === `${NODE}${AVAILABLE('Sam')}`) return Promise.resolve(answer({ status: 200, body: { available: false } }));
+                return new Promise<Response>(() => {});
+            }) as any;
+            const pending = checkNameAtDoor(NODE, 'Sam', doorKey());
+            await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS);
+            const result = await pending;
+            expect(result).toEqual({ kind: 'taken', suggestions: [], suggestionsTimedOut: true });
+            const said = nameCheckMessage('Sam', result);
+            expect(said).toMatch(/"Sam" is already taken/);
+            expect(said).toMatch(/suggestions didn't load in time/);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe('a join learnt from already_member keeps the name the node holds, not the one typed (G7 follow-up, 4106491871)', () => {
+    const PROFILE = (publicKey: string) => `/api/profile/${publicKey}`;
+    const GOOGLE_SIGNIN = { provider: 'google' as const, idToken: fakeJwt({ sub: 'google-sub-42' }), nonce: 'door-nonce-1', sub: 'google-sub-42' };
+
+    /** The first join went out as "Sam", the node kept "Sam 2", and the answer was lost. */
+    async function lostAnswer(): Promise<BeanPoolIdentity> {
+        return commitJoinKey(await joinKeyForThisPhone(), 'Sam');
+    }
+
+    it('after a restart, at the sign-in: the node is asked, signed by the key, and the phone keeps "Sam 2"', async () => {
+        const typed = await lostAnswer();
+        // The app restarts: the resume brings back the door's key and the name typed at the first Join.
+        const plan = resumePlan(await getPendingOnboarding(), await loadIdentity());
+        if (plan.action !== 'resume' || !plan.identity) throw new Error('expected a resume with the key');
+        expect(plan.callsign).toBe('Sam');
+        const seen = installDoor({
+            [NONCE]: { status: 409, body: { code: 'already_member', error: 'This key is already a member of this community.' } },
+            [PROFILE(typed.publicKey)]: { status: 200, body: { publicKey: typed.publicKey, callsign: 'Sam 2' } },
+        });
+        const result = await signInAtDoor('google', NODE, plan.identity);
+        if (result.kind !== 'answered' || result.answer.kind !== 'joined') throw new Error('expected joined');
+        const joined = await joinedUnderNodeName(NODE, result.answer, { ...plan.identity, callsign: plan.callsign });
+        expect((await keepJoinedIdentity(joined)).callsign).toBe('Sam 2');
+        expect(await loadIdentity()).toMatchObject({ publicKey: typed.publicKey, callsign: 'Sam 2' });
+        const read = seen.find(s => s.path === PROFILE(typed.publicKey));
+        expect(read?.headers['X-Public-Key']).toBe(typed.publicKey);
+        expect(read?.headers['X-Signature']).toBeTruthy();
+    });
+
+    it('at the join itself (409 already_member): the same', async () => {
+        const typed = await lostAnswer();
+        installDoor({
+            [JOIN]: { status: 409, body: { code: 'already_member' } },
+            [PROFILE(typed.publicKey)]: { status: 200, body: { publicKey: typed.publicKey, callsign: 'Sam 2' } },
+        });
+        const answered = await submitJoin(NODE, typed, 'Sam', GOOGLE_SIGNIN);
+        if (answered.kind !== 'joined') throw new Error('expected joined');
+        expect((await keepJoinedIdentity(await joinedUnderNodeName(NODE, answered, typed))).callsign).toBe('Sam 2');
+        expect((await loadIdentity())?.callsign).toBe('Sam 2');
+    });
+
+    for (const [what, reply] of [
+        ['offline', 'offline'],
+        ['refused (403)', { status: 403, body: { error: 'Read access requires a member identity' } }],
+        ['an answer with no name', { status: 200, body: { publicKey: 'x' } }],
+    ] as Array<[string, Answer | 'offline']>) {
+        it(`the node can't say (${what}): the typed name stays, and no other name is made up`, async () => {
+            const typed = await lostAnswer();
+            installDoor({ [PROFILE(typed.publicKey)]: reply });
+            const joined = await joinedUnderNodeName(NODE, { kind: 'joined', enrolment: null }, typed);
+            expect(joined).toEqual(typed);
+            expect((await keepJoinedIdentity(joined)).callsign).toBe('Sam');
+        });
+    }
+
+    it('a node that never answers the name read: the typed name once the wait runs out, never a spinner for good', async () => {
+        const typed = await lostAnswer();
+        vi.useFakeTimers();
+        try {
+            globalThis.fetch = vi.fn(() => new Promise<Response>(() => {})) as any;
+            const pending = joinedUnderNodeName(NODE, { kind: 'joined', enrolment: null }, typed);
+            await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS);
+            expect(await pending).toEqual(typed);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a join whose own answer names the member: that name, and the node is not asked again', async () => {
+        const typed = await lostAnswer();
+        const seen = installDoor({});
+        const joined = await joinedUnderNodeName(NODE, { kind: 'joined', enrolment: null, callsign: 'Sam 3' }, typed);
+        expect(joined.callsign).toBe('Sam 3');
+        expect(seen).toHaveLength(0);
     });
 });

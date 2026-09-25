@@ -29,11 +29,15 @@ const FUN_WORDS = [
  * Ask the active node whether `callsign` is free. `excludePublicKey` lets a rename
  * ignore the caller's own current name (so re-confirming your own name reads as
  * available). Returns 'unknown' when the node can't be reached — never blocks.
+ *
+ * `signal` drops the request (and reads as 'unknown'): the global community's door stops a check
+ * the member has walked away from, or that ran out of time (global-join.ts `checkNameAtDoor`).
  */
 export async function checkCallsignAvailable(
     callsign: string,
     excludePublicKey?: string,
     anchorUrlOverride?: string,
+    options: { signal?: AbortSignal } = {},
 ): Promise<CallsignStatus> {
     const c = callsign.trim();
     if (c.length < 2) return 'too_short';
@@ -43,7 +47,7 @@ export async function checkCallsignAvailable(
         const anchorUrl = anchorUrlOverride || await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return 'unknown';
         const qs = excludePublicKey ? `?exclude=${encodeURIComponent(excludePublicKey)}` : '';
-        const res = await fetch(`${anchorUrl}/api/members/callsign-available/${encodeURIComponent(c)}${qs}`);
+        const res = await fetch(`${anchorUrl}/api/members/callsign-available/${encodeURIComponent(c)}${qs}`, { signal: options.signal });
         if (!res.ok) return 'unknown';
         const data = await res.json();
         if (data?.tooShort) return 'too_short';
@@ -75,6 +79,8 @@ export function suggestionFor(base: string, word: string, maxLength = 32): strin
  * `maxLength` is the longest name the caller will send: the global community's join keeps 20
  * characters, so a longer suggestion would be cut after it was checked, into a name the member
  * never saw.
+ *
+ * `signal` stops it between chunks and drops the checks in flight, as for `checkCallsignAvailable`.
  */
 export async function suggestCallsigns(
     base: string,
@@ -82,6 +88,7 @@ export async function suggestCallsigns(
     count = 3,
     anchorUrlOverride?: string,
     maxLength = 32,
+    options: { signal?: AbortSignal } = {},
 ): Promise<string[]> {
     const clean = base.trim().replace(/\s+/g, ' ');
     if (clean.length < 1) return [];
@@ -92,12 +99,12 @@ export async function suggestCallsigns(
     // enough free names — a single 8-wide Promise.all can trip the node's per-IP
     // rate limiter (429), especially alongside the live typing check.
     const available: string[] = [];
-    for (let i = 0; i < candidates.length && available.length < count; i += 3) {
+    for (let i = 0; i < candidates.length && available.length < count && !options.signal?.aborted; i += 3) {
         const chunk = candidates.slice(i, i + 3);
         const results = await Promise.all(
             chunk.map(async (cand) => ({
                 cand,
-                ok: (await checkCallsignAvailable(cand, excludePublicKey, anchorUrlOverride)) === 'available',
+                ok: (await checkCallsignAvailable(cand, excludePublicKey, anchorUrlOverride, options)) === 'available',
             })),
         );
         for (const r of results) if (r.ok) available.push(r.cand);

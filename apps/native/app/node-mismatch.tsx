@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
@@ -11,6 +11,7 @@ import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { hasMnemonic } from '../utils/identity';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
+import { authenticateUser } from '../utils/LocalAuth';
 import { deleteAccountFromThisPhone } from '../utils/account-leaves-phone';
 import { requestSync } from '../services/pillar-sync';
 import { NoWordsNotice } from '../components/NoWordsNotice';
@@ -48,6 +49,7 @@ export default function NodeMismatchScreen() {
     // the member was ever shown it and wrote it down — so show it instead of claiming it.
     const [words, setWords] = useState<string[] | null>(null);
     const [showWipe, setShowWipe] = useState(false);
+    const lockBusyRef = useRef(false);
 
     const [otherNodes, setOtherNodes] = useState<SavedNode[]>([]);
     useEffect(() => {
@@ -94,15 +96,24 @@ export default function NodeMismatchScreen() {
     }
 
     async function handleStartWipe() {
-        if (hasMnemonic(identity)) {
-            // The phone's lock first, as Settings asks it before the words: a check that does not pass opens nothing.
-            const w = await readWordsBehindLock(identity, 'Confirm your security to view your recovery phrase.');
-            if (!w) return;
-            setWords(w);
-        } else {
-            setWords(null);
+        if (lockBusyRef.current) return;
+        lockBusyRef.current = true;
+        try {
+            // The phone's lock first, with the words or without, as Settings' Sign Out asks it before the same removal: a
+            // check that does not pass opens nothing and reads nothing. An account with no words is the one that can't
+            // come back, so it asks too (PR #1205 review 4112404471). With words, this is also the check before they show.
+            if (hasMnemonic(identity)) {
+                const w = await readWordsBehindLock(identity, 'Confirm authentication to delete this account from this phone.');
+                if (!w) return;
+                setWords(w);
+            } else {
+                if (!(await authenticateUser('Confirm authentication to delete this account from this phone.'))) return;
+                setWords(null);
+            }
+            setShowWipe(true);
+        } finally {
+            lockBusyRef.current = false;
         }
-        setShowWipe(true);
     }
 
     function handleConfirmWipe() {

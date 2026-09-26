@@ -285,6 +285,7 @@ export default function WelcomeScreen() {
     const outgoingIdentityRef = useRef(outgoingIdentity);
     outgoingIdentityRef.current = outgoingIdentity;
     const outgoingLockBusyRef = useRef(false);
+    const replaceLockBusyRef = useRef(false);
     const pendingIdentityRef = useRef(pendingIdentity);
     pendingIdentityRef.current = pendingIdentity;
     const pendingLockBusyRef = useRef(false);
@@ -1245,6 +1246,24 @@ export default function WelcomeScreen() {
         hapticTick();
         setOutgoingSeedCopied(true);
         setTimeout(() => setOutgoingSeedCopied(false), 2000);
+    }
+
+    // --- Replace Account (confirm-replace, typed WIPE): the phone's lock first, as Settings' Sign Out asks it before the
+    // same removal (PR #1205 review 4112404471). A check that doesn't pass replaces nothing: the screen stays, and the
+    // restore that asked keeps waiting for an answer. ---
+    async function handleReplaceAccount() {
+        if (replaceLockBusyRef.current) return;
+        replaceLockBusyRef.current = true;
+        const account = outgoingIdentity;
+        try {
+            const outCallsign = account?.callsign?.trim() || 'your current account';
+            const passed = await authenticateUser(`Confirm authentication to remove ${outCallsign} from this phone.`);
+            // Not passed, or the screen moved on while it asked (Keep, another account, or the restore gone): nothing.
+            if (!passed || outgoingIdentityRef.current !== account || !replaceAnswerRef.current) return;
+            answerReplace(true);
+        } finally {
+            replaceLockBusyRef.current = false;
+        }
     }
 
     // --- Safety Backup's words for a key the phone already had (an established account joining another community): the
@@ -2377,7 +2396,7 @@ export default function WelcomeScreen() {
                             <Pressable
                                 style={[styles.dangerBtn, (loading || replaceConfirmText !== 'WIPE') && styles.disabledBtn]}
                                 disabled={loading || replaceConfirmText !== 'WIPE'}
-                                onPress={() => answerReplace(true)}
+                                onPress={handleReplaceAccount}
                                 accessibilityRole="button"
                                 accessibilityHint="Replaces the account currently stored on this phone"
                             >

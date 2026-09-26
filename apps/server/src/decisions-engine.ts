@@ -824,6 +824,10 @@ export function preflightAssert(decision: Decision): {
         }
         const entAccount = ledger.getAccount(decision.subject);
         const deficit = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+        // A deficit that isn't a finite number is a corrupted balance, not one to queue and wait on for 90 days.
+        if (!Number.isFinite(deficit)) {
+            return { status: 'blocked', reason: 'Invalid enterprise deficit' };
+        }
         if (deficit > 0 && getCommonsBalanceExact() < deficit) {
             return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${deficit}, available ${getCommonsBalanceExact().toFixed(2)}` };
         }
@@ -1621,21 +1625,34 @@ export function tickDecisions(asOfTime?: number): {
             `).run(nowIso, top.id);
             broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(top.id)!) });
         } else {
-            let requiredAmount = 0;
+            // What the queued Decision needs from the pot, and why it can't be waited on if it can't.
+            let requiredAmount: number;
+            let unusable: string | null = null;
             if (top.effect === 'write_off_deficit' && top.subject) {
                 const entAccount = ledger.getAccount(top.subject);
+                // No deficit left is 0: the write-off completes without moving anything.
                 requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+                if (!Number.isFinite(requiredAmount)) unusable = `deficit ${requiredAmount}`;
             } else {
                 let parsed: any = {};
                 try {
                     parsed = JSON.parse(top.params || '{}');
-                } catch {
-                    parsed = {};
+                } catch (e: any) {
+                    unusable = `params unreadable: ${e?.message || e}`;
                 }
-                requiredAmount = Number(parsed?.amount || 0);
+                requiredAmount = Number(parsed?.amount);
+                if (!unusable && !(Number.isFinite(requiredAmount) && requiredAmount > 0)) {
+                    unusable = `amount ${String(parsed?.amount).slice(0, 40)}`;
+                }
             }
 
-            if (requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {
+            // Only a finite amount above 0 is worth waiting for. Anything else goes straight to executeDecision,
+            // whose preflight blocks it and frees the one slot. Left here, it would hold the slot for 90 days
+            // while every other underfunded grant was turned away as "Funding queue is full".
+            if (unusable) {
+                console.warn(`[Decisions] Queued decision ${top.id} can't be funded as stored (${unusable}); handing it to preflight`);
+            }
+            if (unusable || requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {
                 const res = executeDecision(top.id);
                 if (res.success && res.status === 'executed') {
                     executed++;

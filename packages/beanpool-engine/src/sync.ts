@@ -466,6 +466,13 @@ export interface SyncPayload {
      * predates visitors' rows. Signed with the rest.
      */
     visitorsMarked?: boolean;
+    /**
+     * The main server's recovery seal epoch (apps/server services/recovery-seal-key.ts recoverySealEpoch): a random id it
+     * makes each time it records clearing its database after sealing members' sign-in recovery copies, so a new one after
+     * every rollback past the seal. A standby that cleared under another one clears again, whatever order the servers
+     * were updated in. Absent from a main server that predates it or has not recorded its clear. Signed with the rest.
+     */
+    sealEpoch?: string;
     nodeId: string;
     generatedAt?: string;
     signature?: string;

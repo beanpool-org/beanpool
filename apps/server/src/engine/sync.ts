@@ -9,6 +9,7 @@ import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
+import { recoverySealEpoch } from '../services/recovery-seal-key.js';
 import { importedArea } from './member-area.js';
 import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
@@ -298,6 +299,13 @@ export async function exportSyncState(
     // Whether this node's visitors' rows are marked (db.ts markExistingVisitors), so a standby, which marks none itself,
     // knows the marks in its copy are the main server's and a promotion doesn't mark again on less. A node_config row.
     payload.visitorsMarked = visitorsMarked();
+    // The recovery seal's epoch (services/recovery-seal-key.ts): new each time this main server records clearing its
+    // database after sealing, so a standby that cleared under another one clears again after a rollback past the seal,
+    // whichever server was updated first. Only a main server names one. A node_config row.
+    if (getNodeRole() === 'primary') {
+        const sealEpoch = recoverySealEpoch();
+        if (sealEpoch) payload.sealEpoch = sealEpoch;
+    }
     return signSyncPayload(cb, payload);
 }
 

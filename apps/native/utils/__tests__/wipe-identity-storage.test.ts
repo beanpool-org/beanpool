@@ -17,7 +17,7 @@ function fakeStorage(seed: Record<string, string>) {
 }
 
 describe('wipeIdentityScopedStorage', () => {
-    it('clears guest markers so a fresh identity does not inherit them, and keeps saved community addresses', async () => {
+    it('clears guest markers and the communities this key asked to join, and keeps saved community addresses', async () => {
         const storage = fakeStorage({
             beanpool_anchor_url: 'https://test.beanpool.org',
             'beanpool:identity': '{}',
@@ -25,6 +25,8 @@ describe('wipeIdentityScopedStorage', () => {
             beanpool_saved_nodes: JSON.stringify([{ url: 'https://test.beanpool.org', name: 'Test' }]),
             pillar_sync_cursor: '42',
             'pillar:outbox': '[]',
+            // The communities this key asked to join (#1179 review 4109868126): they say where the member lives.
+            beanpool_knocks: JSON.stringify({ pubkey: 'ab'.repeat(32), knocks: [{ node: 'https://near.example', name: 'Near' }] }),
             some_ui_pref: 'dark',
         });
 

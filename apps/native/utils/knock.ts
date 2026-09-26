@@ -33,6 +33,7 @@ import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
+import { KNOCKS_STORE_KEY } from './storage-keys';
 
 export const KNOCK_PATH = '/api/join/knock';
 export const KNOCK_STATUS_PATH = '/api/join/knock/status';
@@ -41,7 +42,7 @@ export const KNOCK_MESSAGE_CHARS = 280;
 export const KNOCK_CALLSIGN_CHARS = 20;
 const KNOCK_AVATAR_CHARS = 150_000;
 const TIMEOUT_MS = 20_000;
-const STORE_KEY = 'beanpool_knocks';
+const STORE_KEY = KNOCKS_STORE_KEY;
 
 /** The host a knock says it came from: shown to the community's members, not checked. */
 export const KNOCK_FROM_NODE = GLOBAL_NODE_URL.replace(/^https:\/\//, '');

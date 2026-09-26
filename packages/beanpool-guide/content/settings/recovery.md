@@ -46,6 +46,12 @@ This is not a way to log in. Your account is still your own key. The linked acco
 
 To remove it, tap **Disconnect**.
 
+## Who can open the copy
+
+A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.
+
+If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account. Disconnecting deletes the copy. It does not delete the copies already in the server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back. The people who run the server can open those too.
+
 ## If someone else tries
 
 If someone starts recovering your account, you get an alert, and Settings shows **Someone is recovering your account**. If it is not you, tap **Stop It Now**. If they used your linked sign-in account, they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password.

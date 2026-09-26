@@ -13,11 +13,12 @@ Everything lives in the **data** folder next to docker-compose.yml:
 - **libp2p_key**: the server's own identity. It signs what your server sends to standbys, to other communities and to the service that gives it its web address. Lose it and the server comes back as a stranger: its address has to be claimed again with help, every link with another community made again by hand on both sides, and every standby set up again. Members, beans and posts are in state.db and survive;
 - **connectors.json**: your links with other communities;
 - **genesis.json** and **community.key**: the community's founding record and a key kept for later. community.key signs nothing today. Keep both anyway;
+- **recovery-seal.key**: the key that opens members' sign-in recovery copies. A member who connects Google, Apple, Facebook or GitHub has a locked copy of their account on the server, so that sign-in can bring it back, and the server locks every such copy again with this key. A main server makes it at its first start; a standby has none of its own. It is never in state.db, so a copy of the database alone opens no member's copy. Lose it and those copies can't be opened: members' 12 words still work, and each member connects their sign-in again. A server that took over or was restored may also hold files named **recovery-seal-retired-** and a number: keys it replaced, kept so that nothing they locked is lost. Keep them;
 - **local-config.json**: the admin password, two-factor sign-in, the replication token (a standby's token, or a primary's scrambled copy of it) and other settings;
 - **takeover-envelope.json**: the server's keys and sign-in settings, locked so that only the community's owners can open them (any one of them alone), or a printed recovery code once one is made. The server makes it and keeps it up to date whenever an owner is added or removed, or those settings change. With no owner and no recovery code there is nobody to lock it to, so the file isn't there. It is a locked copy for taking over on another server later; the server still runs from the files above;
 - **snapshots**, **logs** and **cache**: the automatic snapshots, old logs, and pictures fetched for the Pulse, which can be fetched again.
 
-The simplest complete backup: stop the server, copy the whole data folder somewhere else, start it again. Do it before every update. That copy is not locked: it is everything, in the clear, so keep it somewhere only owners can reach. Until the server has a recovery code it is also the only backup that holds the server's keys.
+The simplest complete backup: stop the server, copy the whole data folder somewhere else, start it again. Do it before every update. That copy is not locked: it is everything, in the clear, recovery-seal.key included, so keep it somewhere only owners can reach. Until the server has a recovery code it is also the only backup that holds the server's keys.
 
 ## Locked or not: the recovery code decides
 
@@ -37,6 +38,7 @@ A server with no recovery code says so every time. The download carries the word
 - A standby says it holds no take-over keys of its own. Make the recovery code on the main server.
 - If an owner is left out of the lock, a line names them and says why.
 - Whether backups are locked, and if not, why.
+- On the main server, whether the locked keys carry the key that opens members' sign-in recovery copies (recovery-seal.key). If they don't, it says so in amber: a server that takes over from them can't open those copies. Members' 12 words still work, and they connect their sign-in again. That happens when data/recovery-seal.key is missing or is not a key.
 - The recovery code's number and the day it was made, or "No printed recovery code".
 - Under it, **Owners' 12 words** lists each owner, and whether their phone opened the current lock (see Owners' 12 words and phones).
 
@@ -72,8 +74,8 @@ curl -k -X POST -H "X-Admin-Password: PASSWORD" -H "Content-Type: application/js
 
 **Download Sovereign Database**:
 
-- **With a recovery code**: a **.bpsealed** file, a locked backup. It holds a clean copy of the database taken while the server runs, the settings, and the server's keys and sign-in settings (libp2p_key, community.key, genesis.json, connectors.json, the scrambled admin password, two-factor sign-in). One file brings back the whole community. It is locked to the recovery code and to the community's owners. Nobody else can open it, including an admin who downloads it or anyone who finds the file. Every download is locked, whoever asks.
-- **Without a recovery code**: a **.tar.gz** file, not locked, exactly as before this update: a clean copy of the database and the settings. It does **not** hold the server's keys. The only copy of the keys is then the data folder itself, so copy that folder too (see What matters).
+- **With a recovery code**: a **.bpsealed** file, a locked backup. It holds a clean copy of the database taken while the server runs, the settings, and the server's keys and sign-in settings (libp2p_key, community.key, genesis.json, connectors.json, recovery-seal.key, the scrambled admin password, two-factor sign-in). One file brings back the whole community, members' sign-in recovery copies included. It is locked to the recovery code and to the community's owners. Nobody else can open it, including an admin who downloads it or anyone who finds the file. Every download is locked, whoever asks.
+- **Without a recovery code**: a **.tar.gz** file, not locked, exactly as before this update: a clean copy of the database and the settings. It does **not** hold the server's keys, and not recovery-seal.key. Restored onto this same server, with its data folder still in place, members' sign-in recovery copies open as before. Restored onto any other server, the copies locked with it don't open: members' 12 words still work, and each member can connect their sign-in again. So make a recovery code first. Until then the only copy of the keys is the data folder itself, so copy that folder too (see What matters).
 
 **Point-in-Time Snapshots**: on by default, one every **24 hours**, keeping the last **7**, in data/snapshots. You can take one now, download one or delete one.
 
@@ -110,6 +112,23 @@ Like the words, this is what the owner's phone reported; the server cannot check
 
 Backups downloaded before this update, and every backup from a server with no recovery code, are **.tar.gz** files (or, for a snapshot, a .db file) and are not locked. They hold the settings, including the scrambled admin password and the two-factor secret. Make a recovery code first. Then find the unlocked ones and delete them: Downloads, other computers, Time Machine, cloud drives, email. Deleting a file does not always wipe it from an SSD. Treat anything that was in one as possibly seen by someone else: change the admin password and set up two-factor sign-in again when you can.
 
+### Backups made before the recovery seal
+
+At its first start after the update that brought the recovery seal, the server locks every member's sign-in recovery copy with recovery-seal.key, and clears the copies it had deleted out of state.db. Files made before that hold the copies as members' apps made them: anyone holding such a file can open every GitHub-linked member's copy with that member's public GitHub id.
+
+On each server, main and standby, check that the seal has finished. Docker's log shows it: docker compose logs beanpool-node | grep "Recovery seal"
+
+- A main server says "Recovery seal: … recovery copies, key present." at every start, and once "Recovery seal: cleared state.db of sign-in recovery copies deleted before the seal … This runs once."
+- A standby says the second line too, once its main server has updated.
+- If a line says clearing needs more free disk, make room: the next start tries again.
+
+Once it has:
+
+- Delete the snapshots made before it, under **Point-in-Time Snapshots**. Or let them age out: data/snapshots keeps the last 7 daily ones, so they are gone in about a week.
+- Delete every backup that is not locked (.tar.gz, or a snapshot's .db) downloaded before the update, wherever it was copied: Downloads, other computers, Time Machine, cloud drives, email, the fleet manager's folder. Then download a new one.
+- The copy of the data folder you made before updating holds the old copies too. Delete it once you are sure you won't go back to it.
+- Think about locked backups (.bpsealed) made before the update as well. They need the recovery code or an owner's phone to open, but inside they hold the same copies.
+
 ### The fleet manager's copies
 
 The fleet manager keeps what each server sends:
@@ -135,9 +154,9 @@ A backup is restored onto a server with that server's admin password. It replace
 - **Or type the printed recovery code**, then press **Open with the code and restore**.
 - Without Settings, on the server's own machine, in the folder that holds the file: curl -k -X POST --data-binary @FILE -H "X-Admin-Password: PASSWORD" -H "X-Recovery-Code: CODE" https://localhost:8443/api/local/admin/restore, putting the file's name for FILE, this server's admin password for PASSWORD and the recovery code for CODE. With two-factor sign-in on, add -H "X-Admin-TOTP: 123456" with the code the authenticator shows. Sent without a recovery code, it answers with who the file is locked to and which code number it needs.
 - This works on a **fresh server** too: install BeanPool, sign in to its Settings with its own admin password, and restore. The whole community comes back onto it.
-- It brings back everything in the file: the database, the server's keys, the community's genesis, its links with other communities, and its admin password and two-factor sign-in. After the restart, sign in with **the community's** admin password, not the one this server had. The server keeps its own replication token and other settings. (Opened with a phone, the wizard follows the restore to the end by itself, and says when the server is restarting.)
+- It brings back everything in the file: the database, the server's keys (the key that opens members' sign-in recovery copies among them), the community's genesis, its links with other communities, and its admin password and two-factor sign-in. If this server had a different recovery-seal.key of its own, it is kept as recovery-seal-retired- and a number. When the backup holds sign-in recovery copies locked with such a key, the server's log then says whether they open on this server. After the restart, sign in with **the community's** admin password, not the one this server had. The server keeps its own replication token and other settings. (Opened with a phone, the wizard follows the restore to the end by itself, and says when the server is restarting.)
 - If the file was locked by a different machine than this community's server, the server refuses it and names that machine. The fleet manager locks old copies with its own key, so its files are named this way. If you know the machine, send the same command again with -H "X-Accept-Signer: NAME", putting the name it gave. A file let through this way brings back its **database only**: the server never takes keys or an admin password from it. Anyone who has seen one of your backup files can make a file like it, locked to your recovery code, so don't let through a machine you don't know.
-- **A backup that is not locked (.tar.gz)** restores with the Restore Database Wizard, as before. It brings back the database only; copy genesis.json, community.key and the other key files back by hand if they were lost.
+- **A backup that is not locked (.tar.gz)** restores with the Restore Database Wizard, as before. It brings back the database only; copy genesis.json, community.key, recovery-seal.key and the other key files back by hand if they were lost. Without this community's recovery-seal.key, the members' sign-in recovery copies locked with it don't open: the server's log says how many, members' 12 words still work, and each member can connect their sign-in again.
 - Stop and think before restoring over a live community: everything since the backup is lost.
 
 ## A standby server
@@ -146,7 +165,7 @@ A second server can follow yours as a read-only standby, copying changes about e
 
 - On your server, **Replication Access** (under Backups & Restore) makes a replication token. It is shown once. There is one token per server: making a new one stops every standby using the old one until you paste the new one in.
 - On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server** (or as BACKUP_REPLICATION_TOKEN in its .env). A standby only takes a token. It never takes your admin password, so its disk and its backups never hold it.
-- The token copies the whole database, and can download a backup and the locked take-over keys. It never gets your server's keys unlocked: a backup that is not locked holds no keys, and nothing on the server hands them out in the clear any more. The copy of the database on the standby is not locked, though: that is what a standby is. Guard the standby's disk like a backup.
+- The token copies the whole database, and can download a backup and the locked take-over keys. It never gets your server's keys unlocked: a backup that is not locked holds no keys, and nothing on the server hands them out in the clear any more. The copy of the database on the standby is not locked, though: that is what a standby is. Guard the standby's disk like a backup. Members' sign-in recovery copies in it stay locked with the main server's recovery-seal.key, which reaches a standby only inside the locked take-over keys.
 - **Token-only** refuses the admin password for copying. A new server starts with it on. A server set up before this change has it off, so an older standby keeps working; Replication Access says so, and tells you when a standby last copied with the admin password. Tick **Require token** once every standby has the token.
 - An older standby that still holds your admin password swaps it for a token by itself when it starts, if your server has no token yet: it uses the password once, keeps the token and deletes the password. If it cannot, it keeps the password, warns in its log at every start, and shows a red notice under **Live Backup Server** saying why and whether it is still copying.
 - That standby is **not copying** if your server has two-factor sign-in on, has token-only on, or no longer takes that password. It still copies with the password only if your server already has a token and token-only is off.
@@ -177,7 +196,7 @@ When one person runs the standby and is also an owner, they do it alone. When a 
 
 On the standby: **Appliance & Data**, then **Backups & Restore**, then **Take over as the main server** at the bottom.
 
-- **Step 1.** The first screen says what will happen and **what will be missing**: Decisions and their votes, enterprise pledges and keeper changes, invites, members' notification settings, settings the main server kept in its own database other than its web address (such as what it lists in the directory), and anything that changed after the standby last copied. Press **I understand: use an owner's phone**, or **I understand, continue** for the recovery code.
+- **Step 1.** The first screen says what will happen and **what will be missing**: Decisions and their votes, enterprise pledges and keeper changes, invites, members' notification settings, settings the main server kept in its own database other than its web address (such as what it lists in the directory), and anything that changed after the standby last copied. If the keys were locked before they carried recovery-seal.key, members' sign-in recovery copies are on that list too. Press **I understand: use an owner's phone**, or **I understand, continue** for the recovery code.
 - **Step 2, with a phone.** A code appears, with the owners who can open the keys. The owner opens the BeanPool app, **Settings**, **Community keys**, **Take over or restore with this phone**, and scans it (or opens the link under it on their phone, or pastes it into the web app). Their phone shows the community, this server, and warns in red if the main server still answers; then it asks for its own unlock. The phone opens its own part of the keys and hands it to the standby, locked so only the standby can read it: **the phone never sees the keys**. Your screen moves on by itself. The code works once, for 10 minutes: **Make a new code** if it runs out. The standby offers only the newest copy of the keys it holds. If that copy has no owner (the main server had none when it last locked them), no phone can open it: use the printed recovery code. An older copy is never offered, because an owner removed since then could still open it. Opened from a link rather than scanned, the owner's app says so in red: open it only if you started this yourself. If the dashboard reaches the server at its own computer's address (localhost), the code points there too and a phone can't reach it: the screen says so. Open the server by its public web address and start again.
 - **Step 2, with the recovery code.** Type the code and press **Open the keys**. A mistyped letter is caught at once. A wrong code counts like a wrong password, and after a few the standby makes you wait before the next try, whatever admin password you signed in with.
 - **Step 3.** The next screen shows what the keys hold: when they were locked and who opened them (the code's number, or the owner's phone), the identity the server will keep, the owners, how many admins, how many links with other communities, the web address, whether the tunnel for it comes back, whether the main server still answers, and when the standby last copied from it. If the main server still answers, it says so in amber: stop and check. Tick **The main server is gone, and nobody will start it again**, then press **Take over now**.
@@ -187,6 +206,7 @@ What the standby does, in order. Each step is written to data/takeover-journal.j
 
 - keeps a copy of its own keys and settings in a folder named pre-takeover- and the date, in its data folder;
 - writes the main server's node key (libp2p_key), so it keeps the main server's identity, and its genesis, community key and links with other communities. Its own link to the old main server goes;
+- writes the key that opens members' sign-in recovery copies (recovery-seal.key). If the standby had a different one of its own, it keeps it as recovery-seal-retired- and a number, and at the next start locks the copies only that key opened again with the community's key. Keys locked before they carried it are still taken over: its log says "No recovery-seal key in this envelope: members' sign-in copies will not open on this server until they reconnect. Their 12 words still work.";
 - installs the community's admin password and two-factor sign-in, and the record of the recovery code;
 - brings back the owners and admins (their member accounts must be in the standby's copy of the database; any that are not are named on the result screen);
 - brings back the web address, with its tunnel token;
@@ -205,7 +225,7 @@ Afterwards:
 - Other standbys trust the new main server already, because it has the same identity. Make a replication token on it and paste it into each of them.
 - Keep making file backups.
 
-If something went wrong, the standby's own files from before are in the pre-takeover- folder. The step that failed is named on the screen and in data/takeover-journal.json.
+If something went wrong, the standby's own files from before are in the pre-takeover- folder, its own recovery-seal.key among them if it had one. The recovery-seal-retired- files are not in it and stay where they are: keep them. The step that failed is named on the screen and in data/takeover-journal.json.
 
 The standby refuses to take over if the keys it holds are for another community, or are not signed by the main server it copies from. It then writes nothing. With a phone it also refuses a phone whose owner the keys are not locked to, an expired or already used code, and, after 5 bad tries, closes the code. The owner's phone refuses too, and says why, if the keys belong to another community than its own, or (once the app has seen its own server's lock) were not locked by its own server.
 

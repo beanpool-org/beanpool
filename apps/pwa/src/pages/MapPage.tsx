@@ -38,6 +38,8 @@ import { ImageLightbox } from '../components/ImageLightbox';
 import { EventCard } from '../components/EventCard';
 import { approximateLocation, tierForCredit, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
+import { NewAccountCard } from '../components/NewAccountCard';
+import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
@@ -174,6 +176,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);
     const [posting, setPosting] = useState(false);
+    // The node refused the post for a new account's limit or a moderation pause (G3): its own words, shown in the
+    // form above the button, and the limits card for a limit. Cleared when the form closes.
+    const [postRefusal, setPostRefusal] = useState<NodeRefusal | null>(null);
+    useEffect(() => { if (!showNewPost) setPostRefusal(null); }, [showNewPost]);
+    /** A failed save: the node's refusal in the form, anything else as before. */
+    function showPostError(e: any, fallback: string) {
+        const refusal = nodeRefusal(e);
+        if (refusal) setPostRefusal(refusal);
+        else alert(e?.message || fallback);
+    }
     const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
     const [postLat, setPostLat] = useState<number | null>(null);
     const [postLng, setPostLng] = useState<number | null>(null);
@@ -700,7 +712,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             refreshPosts();
             onNavigate?.('marketplace', id);
         } catch (e: any) {
-            alert(e.message || 'The event could not be saved.');
+            showPostError(e, 'The event could not be saved.');
         }
         setPosting(false);
     }
@@ -772,12 +784,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', res?.post?.id);
         } catch (e: any) {
-            alert(e.message || 'Failed to create the event.');
+            showPostError(e, 'Failed to create the event.');
         }
         setPosting(false);
     }
 
     async function handleCreatePost() {
+        setPostRefusal(null);
         if (newPostType === 'event' && eventEdit) {
             await handleSaveEvent();
             return;
@@ -828,7 +841,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 refreshPosts();
                 if (onNavigate) onNavigate('marketplace');
             } catch (e: any) {
-                alert(e.message || 'Failed to create poll.');
+                showPostError(e, 'Failed to create poll.');
             }
             setPosting(false);
             return;
@@ -893,7 +906,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', 'deals_active');
         } catch (e: any) {
-            alert(e.message || 'Failed to create post. Are you offline?');
+            showPostError(e, 'Failed to create post. Are you offline?');
         }
         setPosting(false);
     }
@@ -2391,6 +2404,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
                         {renderPhotoPicker(true)}
                     </>
+                )}
+
+                {postRefusal && (
+                    <div className="mb-3 min-w-0">
+                        <div
+                            role="alert"
+                            data-testid="post-refusal"
+                            className="p-3 mb-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-900 dark:text-amber-200 leading-relaxed break-words"
+                        >
+                            {postRefusal.message}
+                        </div>
+                        {postRefusal.code === PROBATION_LIMIT && <NewAccountCard refreshKey={postRefusal} />}
+                    </div>
                 )}
 
                 <button

@@ -11,12 +11,12 @@
  *      changed at runtime changes nothing either
  *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the ten
  *      `features` exactly (open join on the global profile only, since G2; probation, auto-hide and auto-mute since
- *      G3; distance search on both since G4; the visitors' view of the listings on global only since G9a), and every
- *      field it had before
+ *      G3; distance search on both since G4; knocks on a local community only since G6; the visitors' view of the
+ *      listings on global only since G9a), and every field it had before
  *   5. node_config overrides change the configured switch (and the boot log reports them), an override of a built
- *      switch (openJoin, distanceSortDefault, directoryMirror, publishToDirectory) reaches the code, bad ones are
- *      ignored with a log line, and a switch this build doesn't have yet (knocks) stays pinned, so the API never
- *      advertises it
+ *      switch (openJoin, distanceSortDefault, directoryMirror, publishToDirectory, knocks) reaches the code, bad ones
+ *      are ignored with a log line, and a switch this build doesn't have yet (ssoRequiredForJoin=false, a door without
+ *      a sign-in) stays pinned, so the API never advertises it
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-node-profile.ts
  */
@@ -65,11 +65,11 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
 // What this build does on each profile. G2 built open join: on for the global profile, off for local. G1 built Beans
 // off: on global, Beans, escrow and enterprises are off (this database's ledger has never moved; test-global-no-beans
 // covers one that has). G3 built probation, auto-hide and auto-mute: on for global only (test-global-moderation).
-// G4 built distance search: every profile answers it (test-distance-search). G9a built the visitors' view of the
-// listings: global only (test-guest-view). Until G6 (knocks) lands the rest is the same on both. The PR that builds
-// one of these changes its line here, with the test that proves it.
+// G4 built distance search: every profile answers it (test-distance-search). G6 built knocks: on for a local
+// community (D4), off on the lobby (test-knock). G9a built the visitors' view of the listings: global only
+// (test-guest-view). The PR that builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: false, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false },
     global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true },
 };
 
@@ -201,11 +201,13 @@ async function main() {
     assert(getNodeFeatures().openJoin === true && (await getInfo()).body.features.openJoin === true,
         '/api/community/info advertises open join on a local node whose operator opened the door');
 
-    setOverride('knocks', 'true');
-    assert(getConfiguredSwitches().knocks === true, 'local + nodeProfile.knocks=true: the configured switch is on');
-    assert(getProfileSwitches().knocks === false, 'knocks are not built yet (G6), so the switch the code reads stays off');
+    setOverride('knocks', 'false');
+    assert(getConfiguredSwitches().knocks === false, 'local + nodeProfile.knocks=false (the operator\'s opt-out): the configured switch is off');
+    assert(getProfileSwitches().knocks === false, 'knocks are built (G6), so the switch the code reads follows the override');
     assert(getNodeFeatures().knocks === false && (await getInfo()).body.features.knocks === false,
-        '/api/community/info does not advertise knocks because an override asked for them');
+        '/api/community/info says a community that opted out takes no knocks');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.knocks`);
+    assert(getProfileSwitches().knocks === true && (await getInfo()).body.features.knocks === true, 'and without it, a local community takes knocks (D4)');
     assert(getProfileSwitches().distanceSortDefault === false, 'local: a post listing with a point keeps today\'s order by default');
     setOverride('distanceSortDefault', 'true');
     assert(getProfileSwitches().distanceSortDefault === true,
@@ -231,6 +233,7 @@ async function main() {
     process.env.NODE_PROFILE = 'global';
     setOverride('probation', 'false');
     setOverride('knocks', ' TRUE ');
+    setOverride('ssoRequiredForJoin', 'false');
     const tuned = getConfiguredSwitches();
     assert(tuned.probation === false, 'global + nodeProfile.probation=false: the configured default (on) is turned off');
     assert(tuned.knocks === true, 'global + nodeProfile.knocks=" TRUE ": read as true');
@@ -239,12 +242,14 @@ async function main() {
     const overridesLine = reported.logs.find(l => l.includes('Node profile: global')) ?? '';
     assert(/overrides: .*openJoin=true/.test(overridesLine) && /probation=false/.test(overridesLine) && /knocks=true/.test(overridesLine),
         `the boot log reports every override in effect (got ${JSON.stringify(overridesLine)})`);
-    assert(reported.logs.some(l => l.includes('Not built yet') && l.includes('knocks=true')),
-        'the boot log says which overrides ask for something this build does not have yet');
+    const notBuilt = reported.logs.find(l => l.includes('Not built yet, so these overrides do nothing')) ?? '';
+    assert(notBuilt.includes('ssoRequiredForJoin=false') && !notBuilt.includes('knocks'),
+        `the boot log says which overrides ask for something this build does not have yet, and knocks (built in G6) is not one (${notBuilt})`);
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.ssoRequiredForJoin`);
     assert(mirror() === 'global', 'the mirror follows NODE_PROFILE=global at boot');
-    // Probation is built (G3), so the operator's nodeProfile.probation=false reaches the API; knocks=true does not (G6).
-    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify({ ...BUILT_TODAY.global, probation: false }),
-        'global with overrides: /api/community/info reports what this build does, the built override (probation off) included and the unbuilt one (knocks) not');
+    // Probation (G3) and knocks (G6) are built, so the operator's nodeProfile.probation=false and knocks=true reach the API.
+    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify({ ...BUILT_TODAY.global, probation: false, knocks: true }),
+        'global with overrides: /api/community/info reports what this build does, the built overrides (probation off, knocks on) included');
     assert(getProfileSwitches().probation === false && getProfileSwitches().autoHideReports === true,
         'probation is built (G3), so nodeProfile.probation=false turns it off; auto-hide keeps the global default');
     assert(getProfileSwitches().distanceSortDefault === true, 'global: nearest first by default, no longer pinned off (G4)');

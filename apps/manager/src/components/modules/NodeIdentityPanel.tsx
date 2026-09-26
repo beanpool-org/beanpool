@@ -46,6 +46,10 @@ export function NodeIdentityPanel({
     const [directoryPushIntervalHours, setDirectoryPushIntervalHours] = useState(12);
     const [lastDirectoryPush, setLastDirectoryPush] = useState<number | string | null>(null);
 
+    // "Ask to join" (G6): null until the node says it takes requests to join at all (a node from before G6 doesn't).
+    const [acceptKnocks, setAcceptKnocks] = useState<boolean | null>(null);
+    const [openKnocks, setOpenKnocks] = useState<number | null>(null);
+
     // Actions & status
     const [saving, setSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<{ text: string; isError: boolean } | null>(null);
@@ -120,6 +124,18 @@ export function NodeIdentityPanel({
                     }
                     if (cfg.lastDirectoryPush) {
                         setLastDirectoryPush(cfg.lastDirectoryPush);
+                    }
+                    if (typeof cfg.acceptKnocks === 'boolean') {
+                        setAcceptKnocks(cfg.acceptKnocks);
+                        // How many are waiting is the operator's only, so it is its own admin read.
+                        const knocksUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/knocks');
+                        const knocksRes = await fetch(knocksUrl, {
+                            headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                        }).catch(() => null);
+                        if (knocksRes && knocksRes.ok && mounted) {
+                            const knocks = await knocksRes.json().catch(() => ({}));
+                            if (typeof knocks.open === 'number') setOpenKnocks(knocks.open);
+                        }
                     }
                 }
             } catch (err) {
@@ -361,6 +377,8 @@ export function NodeIdentityPanel({
                     serviceRadius: (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
                         ? { lat, lng, radiusKm: Math.max(0, radiusKm) }
                         : null,
+                    // Only to a node that has the setting; it keeps what it had when this is left out.
+                    ...(acceptKnocks === null ? {} : { acceptKnocks }),
                 }),
             });
 
@@ -703,6 +721,29 @@ export function NodeIdentityPanel({
                                 This information is <strong>not published</strong> on the website. It is used exclusively by the BeanPool development team for diagnostics, network health monitoring, and improving the protocol.
                             </p>
                         </div>
+
+                        {acceptKnocks !== null && (
+                            <div>
+                                <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
+                                    <input
+                                        id="accept-knocks"
+                                        type="checkbox"
+                                        checked={acceptKnocks}
+                                        onChange={(e) => setAcceptKnocks(e.target.checked)}
+                                        className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
+                                    />
+                                    <span>🚪 Take Requests to Join</span>
+                                </label>
+                                <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
+                                    People who find your community on the global node can ask to join, with a short message. Any member can answer by inviting them. Turned off, nobody can ask, and members don&apos;t see requests.
+                                </p>
+                                {openKnocks !== null && (
+                                    <p id="open-knocks" className="text-[11px] text-nature-300 ml-6 mt-1 leading-normal">
+                                        {openKnocks === 0 ? 'No requests waiting.' : `${openKnocks} ${openKnocks === 1 ? 'request' : 'requests'} waiting for an answer.`}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 

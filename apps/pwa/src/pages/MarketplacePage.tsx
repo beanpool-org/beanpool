@@ -193,8 +193,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [searchQuery, setSearchQuery] = useState('');
 
     // Federation — multi-toggle (home always on, peers toggled independently)
+    // Never for a visitor: the lobby reads this node's guest list and no other community's (G9a §7), whatever peers a
+    // member once turned on in this browser. Their choice stays stored; it is only not read here.
     const [peerNodes, setPeerNodes] = useState<{ callsign: string; publicUrl: string }[]>([]);
-    const [enabledPeers, setEnabledPeers] = useState<Set<string>>(() => loadEnabledPeers());
+    const [enabledPeers, setEnabledPeers] = useState<Set<string>>(() => visitor ? new Set() : loadEnabledPeers());
 
     // #143 step 5 — the links THIS member keeps, keyed by the peer's URL so a pulled listing's `originNode`
     // matches directly. Empty for almost everyone: a member who keeps no link, and every node without
@@ -508,12 +510,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Fetch peer nodes on mount
     useEffect(() => {
+        if (isVisitor) return;
         getNodeInfo('').then(info => {
             const peers = info.peerNodes
                 .filter((p): p is { callsign: string; publicUrl: string } => !!p.publicUrl);
             setPeerNodes(peers);
         }).catch(() => {});
-    }, []);
+    }, [isVisitor]);
 
     // Track whether the viewer still needs to list an Offer (Gate 1). A guest has no balance on the node, so
     // it is only asked once App knows the viewer is a member.

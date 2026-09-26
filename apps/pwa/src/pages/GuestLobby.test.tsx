@@ -130,8 +130,11 @@ function json(status: number, body: unknown): Response {
 
 type Call = { path: string; headers: Record<string, string> };
 
-/** The node, answering a visitor as the global node does. `members`: keys the membership probe says are members. */
-function stubNode(info: unknown, members: Map<string, string> = new Map()) {
+/**
+ * The node, answering a visitor as the global node does. `members`: keys the membership probe says are members;
+ * `peerNodes`: the peer communities `/api/node/info` names.
+ */
+function stubNode(info: unknown, members: Map<string, string> = new Map(), peerNodes: unknown[] = []) {
     const calls: Call[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
         const url = String(input);
@@ -144,7 +147,7 @@ function stubNode(info: unknown, members: Map<string, string> = new Map()) {
             return json(200, id ? GUEST_POSTS.filter(p => p.id === id) : GUEST_POSTS);
         }
         if (path === '/api/node/config') return json(200, { serviceRadius: null });
-        if (path === '/api/node/info') return json(200, { peerNodes: [] });
+        if (path === '/api/node/info') return json(200, { peerNodes });
         if (path.startsWith('/api/community/membership/')) {
             const key = decodeURIComponent(path.split('/').pop()!);
             return json(200, { isMember: members.has(key), callsign: members.get(key) ?? null });
@@ -324,6 +327,30 @@ describe('a visitor with no key on the global node', () => {
         expect(calls.filter(c => c.headers['X-Public-Key'])).toEqual([]);
         // /api/community/info once, shared by the lobby's decision and everything after it.
         expect(calls.filter(c => c.path === '/api/community/info')).toHaveLength(1);
+    });
+
+    it("reads no other community's listings, even with peers a member once turned on in this browser", async () => {
+        const PEER = 'https://peer.example';
+        localStorage.setItem('beanpool_enabled_peers', JSON.stringify([PEER]));
+        try {
+            const calls = stubNode(GLOBAL, new Map(), [{ callsign: 'Peer', publicUrl: PEER }]);
+            await openLobby();
+            await screen.findByTestId('visitor-list');
+            fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Map/ }));
+            await waitFor(() => expect(markers.length).toBeGreaterThan(0));
+            fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Market/ }));
+            await screen.findByTestId('visitor-list');
+            await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+
+            expect(calls.filter(c => c.path.startsWith(PEER)).map(c => c.path)).toEqual([]);
+            // Nothing to turn a peer on with, either.
+            expect(screen.queryByText(/Internal/)).toBeNull();
+            expect(screen.queryByRole('button', { name: /Peer/ })).toBeNull();
+            // The member's own choice stays as they left it.
+            expect(localStorage.getItem('beanpool_enabled_peers')).toBe(JSON.stringify([PEER]));
+        } finally {
+            localStorage.removeItem('beanpool_enabled_peers');
+        }
     });
 
     it('Join in the header opens screen 1 over the lobby, and ← Back returns to the listings', async () => {

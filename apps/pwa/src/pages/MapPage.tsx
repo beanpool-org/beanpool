@@ -569,8 +569,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 setEnterprises(pinsRes?.enterprises || []);
                 let allPosts: MarketplacePost[] = [...localData];
 
-                // Only fetch from peers the user has toggled on
-                const enabledPeers = loadEnabledPeers();
+                // Only fetch from peers the user has toggled on; never for a visitor, whose lobby reads this node's
+                // guest list and no other community's (G9a §7).
+                const enabledPeers = visitor ? new Set<string>() : loadEnabledPeers();
                 if (enabledPeers.size > 0) {
                     const nodeInfo = await getNodeInfo('');
                     const peersToFetch = (nodeInfo.peerNodes || [])

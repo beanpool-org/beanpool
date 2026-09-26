@@ -19,7 +19,7 @@ import {
     marketShowsBeans, marketExtras, marketSearchDistanceParams, nearestFirst, marketFeedSections, sortsByDistance,
     NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, NEAREST_FIRST_HEADING,
 } from '../market-global';
-import { readNodeProfile, type NodeProfile } from '../node-profile';
+import { readNodeProfile, nodeProfileIsFresh, NODE_PROFILE_FRESH_MS, type NodeProfile } from '../node-profile';
 import { START_COMMUNITY_COPY, communityDetailsText, canCopyDetails } from '../start-community';
 import { KNOCK_MESSAGES } from '../knock';
 import { WANTS_TO_JOIN_HELP } from '../knock-inbox';
@@ -94,6 +94,19 @@ describe('nearest first', () => {
         expect(marketSearchDistanceParams(GLOBAL, null)).toBe('');
         expect(marketSearchDistanceParams(LOCAL, here)).toBe('');
         expect(marketSearchDistanceParams(null as unknown as NodeProfile, here)).toBe('');
+    });
+});
+
+describe('the screens’ copy of the profile', () => {
+    it('is used without asking the node while under an hour old; missing or older, the node is asked', () => {
+        const now = Date.parse('2026-09-26T12:00:00Z');
+        const at = (ms: number) => ({ ...GLOBAL, checkedAt: new Date(now - ms).toISOString() });
+        expect(nodeProfileIsFresh(at(0), now)).toBe(true);
+        expect(nodeProfileIsFresh(at(NODE_PROFILE_FRESH_MS - 1), now)).toBe(true);
+        expect(nodeProfileIsFresh(at(NODE_PROFILE_FRESH_MS), now)).toBe(false);
+        expect(nodeProfileIsFresh(at(-60_000), now)).toBe(false);
+        expect(nodeProfileIsFresh({ ...GLOBAL, checkedAt: 'never' }, now)).toBe(false);
+        expect(nodeProfileIsFresh(null, now)).toBe(false);
     });
 });
 

@@ -108,13 +108,20 @@ export function knockAvatar(value: string | null | undefined): string | undefine
     return undefined;
 }
 
-/** The body a knock sends: no key in it, and `fromNode`, never `from`. */
-export function knockBody(req: KnockRequest): { message: string; callsign: string; fromNode: string; avatar?: string } {
+/**
+ * The body a knock sends: no key in it, and `fromNode`, never `from`. `toNode` names the community it is for, inside
+ * what is signed. The signature covers the method, path, time, nonce and body but not the host, so without it a
+ * community that received a knock could send the same signed request on to another community within the node's
+ * five-minute window. No node checks `toNode` yet (G6 ignores fields it doesn't read); sending it now means a node
+ * that starts refusing a knock addressed elsewhere needs no app update.
+ */
+export function knockBody(req: KnockRequest, toNode?: string): { message: string; callsign: string; fromNode: string; toNode?: string; avatar?: string } {
     const avatar = knockAvatar(req.avatar);
     return {
         message: req.message.trim(),
         callsign: req.callsign.replace(/\s+/g, ' ').trim(),
         fromNode: KNOCK_FROM_NODE,
+        ...(toNode ? { toNode } : {}),
         ...(avatar ? { avatar } : {}),
     };
 }
@@ -146,7 +153,7 @@ export async function sendKnock(communityUrl: string | null, identity: BeanPoolI
     if (!origin) return { kind: 'no_address', message: KNOCK_MESSAGES.noAddress };
     let res: Response;
     try {
-        res = await withTimeout(signedPost(origin, KNOCK_PATH, knockBody(req), identity));
+        res = await withTimeout(signedPost(origin, KNOCK_PATH, knockBody(req, origin.replace(/^https:\/\//, '')), identity));
     } catch {
         return { kind: 'unreachable', message: KNOCK_MESSAGES.unreachable };
     }
@@ -263,7 +270,7 @@ export type KnockCardState =
 
 /**
  * What a community's card shows, from whether this key asked it and what it said. `asked` is from the phone's
- * memory; `status` is the community's answer (null while it's being read, undefined when it wasn't asked).
+ * memory; `status` is the community's answer (null or undefined until it has been read).
  * `memberNote` is set once the community has said this key is a member there already.
  */
 export function knockCardState(
@@ -271,8 +278,9 @@ export function knockCardState(
 ): KnockCardState {
     if (!hasAddress) return { kind: 'no_address', note: KNOCK_MESSAGES.noAddress };
     if (memberNote) return { kind: 'member', note: memberNote };
-    if (!asked || status === undefined) return { kind: 'ask', note: null };
-    if (status === null) return { kind: 'checking' };
+    if (!asked) return { kind: 'ask', note: null };
+    // Asked, and the answer not read yet (or being read).
+    if (status === null || status === undefined) return { kind: 'checking' };
     if (!status.ok) {
         if (status.kind === 'refused') {
             // A community that takes no requests (404) or refuses this key (403) won't take another ask either.

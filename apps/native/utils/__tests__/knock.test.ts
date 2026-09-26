@@ -102,7 +102,7 @@ describe('a knock goes to the community, signed with the member’s own key', ()
         answer = () => ({ status: 201, body: { knock: { status: 'pending' } } });
         await sendKnock(COMMUNITY, me, { callsign: '  Robin  ', message: '  Hi there ', avatar: 'bundled://fox' });
         const body = JSON.parse(sent[0].body);
-        expect(body).toEqual({ message: 'Hi there', callsign: 'Robin', fromNode: 'global.beanpool.org', avatar: 'bundled://fox' });
+        expect(body).toEqual({ message: 'Hi there', callsign: 'Robin', fromNode: 'global.beanpool.org', toNode: 'mullum.beanpool.org', avatar: 'bundled://fox' });
         expect(KNOCK_FROM_NODE).toBe('global.beanpool.org');
         expect(JSON.stringify(body)).not.toContain(me.publicKey);
     });
@@ -115,6 +115,14 @@ describe('a knock goes to the community, signed with the member’s own key', ()
             expect(r.kind).toBe('no_address');
         }
         expect(sent).toHaveLength(0);
+    });
+
+    it('names the community it is for inside what is signed, so it can’t be passed on to another community', async () => {
+        const me = await member();
+        answer = () => ({ status: 201 });
+        await sendKnock('https://node.example.org:8443/x', me, { callsign: 'Robin', message: 'Hi' });
+        expect(JSON.parse(sent[0].body).toNode).toBe('node.example.org:8443');
+        expect(await signedBy(sent[0], me.publicKey)).toBe(true);
     });
 
     it('drops a path from the directory’s address: the knock goes to the origin', async () => {
@@ -216,6 +224,7 @@ describe('what a community’s card shows', () => {
 
     it('asked: checking, then waiting, or invited with the invite', () => {
         expect(knockCardState(true, true, null)).toEqual({ kind: 'checking' });
+        expect(knockCardState(true, true, undefined)).toEqual({ kind: 'checking' });
         expect(knockCardState(true, true, ok({ status: 'pending' }))).toEqual({ kind: 'waiting', note: KNOCK_MESSAGES.waiting });
         expect(knockCardState(true, true, ok({ status: 'approved', invite: 'ABCD2345', expiresAt: null })))
             .toEqual({ kind: 'invited', invite: 'ABCD2345', note: KNOCK_MESSAGES.invited });

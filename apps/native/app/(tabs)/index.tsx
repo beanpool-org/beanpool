@@ -35,7 +35,10 @@ import {
     MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
 } from '../../utils/market-filters';
-import { feedSections, localDaysAgo } from '../../utils/feed-sections';
+import { localDaysAgo } from '../../utils/feed-sections';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedSections } from '../../utils/market-global';
+import { FindCommunityCard } from '../../components/FindCommunityCard';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
@@ -108,6 +111,16 @@ export default function MarketScreen() {
     const { width: winW, fontScale } = useWindowDimensions();
     const searchPlaceholder = winW / Math.min(fontScale, 1.3) < 360 ? 'Search' : 'Search marketplace...';
     const { identity } = useIdentity();
+
+    // What kind of community this is (utils/node-profile.ts): the phone's copy first, then the node's own answer.
+    // On the worldwide community (Beans off) the Market shows no price and no "Beans only" filter, puts the "Find
+    // your community" card on top, and orders listings nearest first (utils/market-global.ts). Local communities
+    // are unchanged: a node that says nothing trades in Beans.
+    const nodeProfile = useNodeProfile();
+    const showsBeans = marketShowsBeans(nodeProfile?.features);
+    const isGlobal = nodeProfile?.profile === 'global';
+    // Deals are escrow: off where escrow is off.
+    const showsDeals = nodeProfile?.features.escrow !== false;
 
     // Contributions-First quest card: shown until the member has listed their
     // first Offer (the gate that unlocks posting Needs / accepting Offers), so
@@ -734,7 +747,9 @@ export default function MarketScreen() {
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
                 const expandedQ = expandSearchTerms(q).join(' ');
                 
-                const res = await fetch(`${anchorUrl}/api/marketplace/posts?q=${encodeURIComponent(expandedQ)}${type}${cat}&limit=50`);
+                // Nearest first where the node sorts by distance and the phone already knows where it is.
+                const near = marketSearchDistanceParams(nodeProfile, myLocation);
+                const res = await fetch(`${anchorUrl}/api/marketplace/posts?q=${encodeURIComponent(expandedQ)}${type}${cat}${near}&limit=50`);
                 if (res.ok) {
                     const data = await res.json();
                     // Server returns camelCase MarketplacePost; the UI reads snake_case
@@ -775,7 +790,7 @@ export default function MarketScreen() {
         }, 300);
 
         return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
-    }, [searchQuery, filter, categoryFilter]);
+    }, [searchQuery, filter, categoryFilter, nodeProfile, myLocation]);
 
     const loadPosts = async (): Promise<boolean> => {
         const queryFilter = marketFeedQuery(filter, groupFilter, identity?.publicKey);
@@ -824,6 +839,8 @@ export default function MarketScreen() {
         type: filter, category: categoryFilter, eventWindow, trust: trustFilter, beansOnly, radiusKm, center: locationCenter, groupId: groupFilter,
     };
     const secondRow = marketSecondRow(filter);
+    // "Beans only" is not offered where there are no Beans.
+    const rowExtras = secondRow.kind === 'filters' ? marketExtras(secondRow.extras, nodeProfile?.features) : [];
     // The second row's chips fill with the type's colour, as the map's category chip does.
     // Fill for the selected type pill, each carrying white text; the map's colours for Offers / Needs / Events.
     const typeColors: Record<MarketTypeFilter, string> = {
@@ -930,7 +947,7 @@ export default function MarketScreen() {
                     />
                 </View>
                 </Pressable>
-                <Pressable
+                {showsDeals && <Pressable
                     onPress={() => setShowDealsSheet(true)}
                     style={styles.dealsIconBtn}
                     accessibilityRole="button"
@@ -944,7 +961,7 @@ export default function MarketScreen() {
                             <Text style={{ color: colors.text.inverse, fontSize: 8, fontWeight: '900' }}>{pendingCount}</Text>
                         </View>
                     )}
-                </Pressable>
+                </Pressable>}
                 <Pressable
                     onPress={() => setViewMode(v => v === 'list' ? 'grid' : (v === 'grid' ? 'compact' : 'list'))}
                     style={styles.iconBtn}
@@ -1004,7 +1021,7 @@ export default function MarketScreen() {
                                 style={styles.filterGrow}
                             />
                         )}
-                        {secondRow.extras.includes('distance') && (
+                        {rowExtras.includes('distance') && (
                             <FilterChipButton
                                 variant="flat"
                                 label={distanceChipLabel(radiusKm)}
@@ -1015,7 +1032,7 @@ export default function MarketScreen() {
                                 style={styles.filterGrow}
                             />
                         )}
-                        {secondRow.extras.includes('trust') && (
+                        {rowExtras.includes('trust') && (
                             <FilterChipButton
                                 variant="flat"
                                 label={trustChipLabel(selectedTrustFilter)}
@@ -1027,7 +1044,7 @@ export default function MarketScreen() {
                             />
                         )}
                         {/* #108 Beans-only filter — a toggle, not a picker, so it needs no sheet. */}
-                        {secondRow.extras.includes('beans') && (
+                        {rowExtras.includes('beans') && (
                             <FilterChipButton
                                 variant="flat"
                                 label={beansChipLabel(beansOnly)}
@@ -1128,7 +1145,10 @@ export default function MarketScreen() {
     // Out of the list's 16dp gutter: these rows bring their own 16dp margins, as they did above the list.
     const ListHeader = (
         <View style={{ marginHorizontal: -16 }}>
-            {showFirstOfferQuest && !categoryPanel.open && (
+            {/* The worldwide community's way out to a local one (design §3.1). */}
+            {isGlobal && !categoryPanel.open && <FindCommunityCard point={myLocation} />}
+            {/* "Unlock trading" is a Beans rule; there is none where Beans are off. */}
+            {showFirstOfferQuest && showsBeans && !categoryPanel.open && (
                 <View style={{ marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.4)', backgroundColor: 'rgba(245, 158, 11, 0.10)', padding: 14 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                         <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.heading, flex: 1 }}>
@@ -1263,7 +1283,8 @@ export default function MarketScreen() {
             }
         } else {
             // Events under their own heading, soonest first; listings by the local day they were posted.
-            for (const section of feedSections(filteredPosts)) {
+            // By the day posted, or nearest first where the node sorts by distance (utils/market-global.ts).
+            for (const section of marketFeedSections(filteredPosts, nodeProfile, myLocation)) {
                 listData.push({ isHeader: true, title: section.title, id: section.id });
                 listData.push(...section.posts);
             }
@@ -1348,7 +1369,7 @@ export default function MarketScreen() {
                                 </Text>
                             </View>
                         )}
-                        {!isPulse && (
+                        {!isPulse && showsBeans && (
                             <View style={styles.gridPriceBadge}>
                                 <CurrencyDisplay
                                     amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
@@ -1432,7 +1453,7 @@ export default function MarketScreen() {
                             )}
                         </View>
                         <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
-                            {!isPulse && (
+                            {!isPulse && showsBeans && (
                                 <CurrencyDisplay
                                     amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
                                     style={styles.compactPrice}
@@ -1531,7 +1552,7 @@ export default function MarketScreen() {
                                     </View>
                                 )}
                             </View>
-                            {!isPulse && (
+                            {!isPulse && showsBeans && (
                                 <CurrencyDisplay
                                     amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
                                     style={[styles.price, { fontSize: 16 }]}

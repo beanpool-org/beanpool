@@ -18,6 +18,11 @@ import { extractNodeOrigin, normaliseInviteCode } from '../../utils/invite-parse
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import { fetchJoinRequests } from '../../utils/knock-inbox';
+import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
+import { WantsToJoin } from '../../components/WantsToJoin';
+import { MyJoinRequests } from '../../components/MyJoinRequests';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -172,6 +177,20 @@ export default function PeopleScreen() {
 
     const [members, setMembers] = useState<any[]>([]);
     const { identity } = useIdentity();
+
+    // Requests to join (design §3.3): members of a local community see "Wants to join (n)"; on the worldwide
+    // community a member sees the communities they asked. The count also rides on the Invites pill.
+    const nodeProfile = useNodeProfile();
+    const isGlobalNode = nodeProfile?.profile === 'global';
+    const takesKnocks = !isGlobalNode && nodeProfile?.features.knocks !== false;
+    const [knockCount, setKnockCount] = useState(0);
+    const profileKnown = nodeProfile !== null;
+    useEffect(() => {
+        if (!identity || !anchorUrl || !profileKnown || !takesKnocks || isGuest) return;
+        let alive = true;
+        fetchJoinRequests(anchorUrl, identity).then(r => { if (alive) setKnockCount(r.ok ? r.total : 0); });
+        return () => { alive = false; };
+    }, [identity, anchorUrl, profileKnown, takesKnocks, isGuest]);
 
     const [searchQuery, setSearchQuery] = useState('');
     const [sortOption, setSortOption] = useState<SortOption>('newest');
@@ -496,48 +515,21 @@ export default function PeopleScreen() {
             }
 
             const parsedCode = normaliseInviteCode(rawInvite);
+            if (!identity) throw new Error('No identity to register');
 
-            const { closeDB, initDB, redeemInvite } = await import('../../utils/db');
-            
-            // Switch DB context temporarily or permanently
-            await closeDB();
-            await AsyncStorage.setItem('beanpool_anchor_url', targetNodeUrl);
-            await initDB();
-
-            try {
-                await redeemInvite(parsedCode, identity?.callsign || 'Unknown', identity);
-                
-                const { requestSync } = await import('../../services/pillar-sync');
-                requestSync().catch(console.error);
-
-                try {
-                    const healthRes = await fetch(`${targetNodeUrl}/api/community/health`, { method: 'GET' });
-                    if (healthRes.ok) {
-                        const healthData = await healthRes.json();
-                        const remoteName = healthData.nodeName || healthData.name || targetNodeUrl;
-                        const cType = healthData.currency?.type || 'image';
-                        const cVal = healthData.currency?.value || 'bean';
-                        const { addSavedNode } = await import('../../utils/nodes');
-                        await addSavedNode(targetNodeUrl, remoteName, cType, cVal);
-                    }
-                } catch (e) {
-                    console.warn('Failed to fetch node details for saving', e);
-                }
-
-                Alert.alert('Success', 'Invite redeemed! You have successfully switched to the new community.');
-                setRedeemCode('');
-                setRedeemNodeUrl('');
-                // Joined a new community → run the profile wizard for THIS node so the
-                // member picks a name that's unique here (callsigns are per-node) and
-                // confirms their photo. Finishing (or cancelling) drops them into the app.
-                router.replace({ pathname: '/profile-setup', params: { redirect: '/(tabs)' } });
-            } catch (err: any) {
-                // Revert DB on failure
-                await closeDB();
-                await AsyncStorage.setItem('beanpool_anchor_url', anchorUrl);
-                await initDB();
-                throw err;
-            }
+            // The same path an approved request to join takes (utils/join-another-community.ts): switch to the
+            // community, redeem there, and go back to this one if the redeem fails.
+            const joined = await joinAnotherCommunity({ targetUrl: targetNodeUrl, code: parsedCode, identity, returnUrl: anchorUrl || null });
+            setRedeemCode('');
+            setRedeemNodeUrl('');
+            // Joined a new community → run the profile wizard for THIS node so the member picks a name that's
+            // unique here (callsigns are per-node) and confirms their photo, then home or, if they choose, to
+            // protect their account here too: sign-in recovery is kept by each community (design §3.6).
+            const nudge = joinedNudge(joined.name);
+            Alert.alert(nudge.title, nudge.body, [
+                { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
+                { text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) },
+            ], { cancelable: false });
         } catch (e: any) {
             Alert.alert('Redemption Failed', e.message);
         } finally {
@@ -664,7 +656,7 @@ export default function PeopleScreen() {
                             <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[styles.pillText, isActive && styles.pillTextActive]}>
                                 {v === 'friends' && '👫 Friends'}
                                 {v === 'community' && '🏘️ Community'}
-                                {v === 'invites' && (isGuest ? '🎟️ Register' : '🎟️ Invites')}
+                                {v === 'invites' && (isGuest ? '🎟️ Register' : knockCount > 0 ? `🎟️ Invites (${knockCount})` : '🎟️ Invites')}
                             </Text>
                         </Pressable>
                     );
@@ -900,6 +892,11 @@ export default function PeopleScreen() {
                         </View>
                     ) : (
                         <>
+                            {identity && anchorUrl && takesKnocks && (
+                                <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} />
+                            )}
+                            {identity && isGlobalNode && <MyJoinRequests identity={identity} />}
+
                             {/* GENERATE INVITE SECTION */}
                             <Text style={styles.sectionHeader}>📤 Invite Someone</Text>
                             <Text style={styles.sectionDesc}>Invite links are single-use and valid for 30 days. If you are offline, a cryptographic voucher ticket will be generated instead.</Text>

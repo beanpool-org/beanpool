@@ -292,9 +292,13 @@ let bothKeysWarned = false;
  * the pull); moving would refuse on the new key's row, so it is left, logged, for a force-resync: the old key is refused
  * everywhere all the same, since its `invalidated_keys` row is here.
  *
+ * `beforeMove` runs just before each re-key it follows, for what the main server did under the old key before it
+ * re-keyed: the import applies there the copy's tombstones that name the old key (engine/sync.ts), or they would match
+ * no row once the move is made and the deleted rows would be back under the new key.
+ *
  * Returns the re-keys it followed, for {@link dropMovedRecoveryCopies} once the copy's recovery rows are in.
  */
-export function followReplicatedRekeys(rekeys: ReplicatedRekey[]): ReplicatedRekey[] {
+export function followReplicatedRekeys(rekeys: ReplicatedRekey[], beforeMove?: (rekey: ReplicatedRekey) => void): ReplicatedRekey[] {
     const followed: ReplicatedRekey[] = [];
     const member = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
     for (const r of rekeys) {
@@ -309,6 +313,7 @@ export function followReplicatedRekeys(rekeys: ReplicatedRekey[]): ReplicatedRek
             }
             continue;
         }
+        beforeMove?.(r);
         moveMemberKeyRows(r.oldKey, r.newKey, r.at, { keepStamps: true });
         followed.push(r);
         console.log(`[Sync] Followed the main server's re-key of ${old.callsign}: ${r.oldKey.slice(0, 10)}… → ${r.newKey.slice(0, 10)}…`);

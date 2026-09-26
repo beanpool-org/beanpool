@@ -188,4 +188,19 @@ describe('A paused member sees it plainly', () => {
         await announce({ type: 'system_announcement', title: '🛡️ You can post again', body: 'A moderator lifted the pause.', severity: 'info', kind: 'moderation_unmuted', noticeId: 'n-unmuted' });
         await waitFor(() => expect(screen.queryByTestId('moderation-pause-card')).toBeNull());
     });
+
+    it('a lift closed unread by "Close all" still takes the card down', async () => {
+        vi.mocked(api.getCommunityMe).mockResolvedValue(PAUSED);
+        render(<App />);
+        expect(await screen.findByTestId('moderation-pause-card')).toBeInTheDocument();
+        await waitFor(() => expect(hooks.announce).not.toBeNull());
+
+        vi.mocked(api.getCommunityMe).mockResolvedValue(NOT_PAUSED);
+        await announce({ type: 'system_announcement', title: REMOVED.title, body: REMOVED.body, severity: 'info', kind: 'post_removed', noticeId: 'n-removed-live' });
+        await announce({ type: 'system_announcement', title: '🛡️ You can post again', body: 'A moderator lifted the pause.', severity: 'info', kind: 'moderation_unmuted', noticeId: 'n-unmuted-behind' });
+        const dialog = await screen.findByRole('alertdialog');
+        expect(dialog).toHaveTextContent(REMOVED.title);
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close all 2' }));
+        await waitFor(() => expect(screen.queryByTestId('moderation-pause-card')).toBeNull());
+    });
 });

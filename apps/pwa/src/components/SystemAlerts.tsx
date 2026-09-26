@@ -75,7 +75,7 @@ export interface SystemAlertsProps {
     memberPubkey?: string | null;
     /** The membership check's answer (null until it comes). Kept notices are read only for a member; a live alert shows either way. */
     isGuest?: boolean | null;
-    /** Each alert as it is shown: the app reads the member's standing again after a pause or a lift. */
+    /** Each alert as it is shown, or closed unread by "Close all": the app reads the member's standing again after a pause or a lift. */
     onShown?: (alert: ShownAlert) => void;
     /** For tests: the gap between two reads of the kept notices. */
     rereadGapMs?: number;
@@ -158,7 +158,10 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
     const colour = COLOURS[head.severity] ?? '#3b82f6';
     const waiting = queue.length;
     const closeAll = () => {
-        const rest = queue.slice(1).map(a => a.noticeId).filter((id): id is string => !!id && !marked.current.has(id));
+        const closed = queue.slice(1);
+        // Closed unread, the app still hears of each: a pause behind another notice still puts "Posting paused" up.
+        for (const a of closed) onShownRef.current?.(a);
+        const rest = closed.map(a => a.noticeId).filter((id): id is string => !!id && !marked.current.has(id));
         for (const id of rest) marked.current.add(id);
         if (rest.length > 0) markSeen(rest);
         setQueue([]);

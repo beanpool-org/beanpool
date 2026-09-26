@@ -122,6 +122,18 @@ describe('SystemAlerts: live and kept alerts, each once', () => {
         await waitFor(() => expect(onShown).toHaveBeenCalledWith(expect.objectContaining({ kind: 'moderation_muted', noticeId: 'm' })));
     });
 
+    it('"Close all" tells the app about each alert it closes unread: a pause behind another notice still reaches it', async () => {
+        const onShown = vi.fn();
+        vi.mocked(api.getUnseenNotices).mockResolvedValue([notice('gone', 'post_removed'), notice('paused', 'moderation_muted')]);
+        render(<SystemAlerts memberPubkey="me" isGuest={false} onShown={onShown} />);
+        const dialog = await screen.findByRole('alertdialog');
+        await waitFor(() => expect(onShown).toHaveBeenCalledTimes(1));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close all 2' }));
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+        expect(onShown.mock.calls.map(c => c[0].noticeId)).toEqual(['gone', 'paused']);
+        expect(onShown).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'moderation_muted' }));
+    });
+
     it('reads nothing for a guest, before the membership check answers, or with no identity', async () => {
         const { rerender } = render(<SystemAlerts memberPubkey="me" isGuest={true} />);
         rerender(<SystemAlerts memberPubkey="me" isGuest={null} />);

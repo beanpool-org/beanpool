@@ -34,6 +34,7 @@ import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
+import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -932,6 +933,14 @@ export function runMarketplaceHygiene(): void {
         if (pruned > 0) console.log(`🌊 Pruned ${pruned} activity feed event(s) older than 30 days`);
     } catch (e) {
         console.warn('[ActivityFeed] Hygiene prune failed:', e);
+    }
+
+    // 4. The moderation notices kept for members (engine/kept-notices.ts): none older than 60 days, each member's newest 50.
+    try {
+        const tidied = tidyKeptNotices();
+        if (tidied > 0) console.log(`🛡️ Tidied ${tidied} kept moderation notice(s) past their bounds`);
+    } catch (e) {
+        console.warn('[Notices] Hygiene tidy failed:', e);
     }
 }
 
@@ -6512,6 +6521,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropPlaceWatches(publicKey);
         // What they wrote when they asked to join (G6) goes with them; the record of the knock stays.
         scrubKnocksOf(publicKey);
+        // The moderation notices kept for them: nobody can read them now (engine/kept-notices.ts).
+        dropKeptNoticesOf(publicKey);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -6633,6 +6644,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
+        dropKeptNoticesOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM chat_mutes WHERE member_pubkey = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM thread_read_cursors WHERE member_pubkey = ?").run(publicKey); } catch { }
@@ -7244,7 +7256,7 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
         'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'tombstones',
+        'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'moderation_notices', 'tombstones',
     ];
     // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
     // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.

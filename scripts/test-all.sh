@@ -435,6 +435,7 @@ run_federation_suites() {
       test-ws-feed-parties
       test-live-post-payloads
       test-moderation-notifications
+      test-moderation-notices-kept
       test-polls
       test-poll-voters-members-only
       test-suspended-and-visitor-reads

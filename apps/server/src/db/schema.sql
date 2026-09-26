@@ -775,6 +775,31 @@ CREATE INDEX IF NOT EXISTS idx_join_requests_status ON join_requests(status, cre
 CREATE INDEX IF NOT EXISTS idx_join_requests_ip ON join_requests(ip_hash, created_at) WHERE ip_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_join_requests_updated_at ON join_requests(updated_at);
 
+-- 14g. Moderation notices kept for the member they are for (engine/kept-notices.ts): every notice
+-- engine/moderation-notices.ts sends (a post hidden by reports or back, removed, cleared; a report's outcome; a pause
+-- and its lift), one row per recipient, so the web app, which has no push, shows it the next time it opens.
+--
+-- `recipient` is the member it is for, and only they read it (GET /api/notices, the signer's own) or mark it seen
+-- (`seen_at`). `title`, `body` and `data` (JSON) are exactly what the live notice carried: never who acted, and never
+-- who reported. Kept only for a member (not an enterprise's key, a closed account or a visitor). Bounded: a member's newest 50,
+-- and nothing older than 60 days (the hourly hygiene job, on the main server); the CHECKs cap a row's size.
+-- Replicated to a standby (SyncPayload.moderationNotices, watermarked on `updated_at`, which a new notice, a seen mark
+-- and a re-key stamp), with a `moderation_notices` tombstone keyed by `id` for each deletion (the bounds, a prune, a
+-- self-deletion), and carried in file and sealed backups. Moves with the member on a re-key.
+CREATE TABLE IF NOT EXISTS moderation_notices (
+    id TEXT PRIMARY KEY,
+    recipient TEXT NOT NULL,
+    title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 80),
+    body TEXT NOT NULL CHECK (length(body) BETWEEN 1 AND 400),
+    data TEXT NOT NULL DEFAULT '{}' CHECK (length(data) <= 300),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    seen_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_moderation_notices_recipient ON moderation_notices(recipient, created_at);
+CREATE INDEX IF NOT EXISTS idx_moderation_notices_created_at ON moderation_notices(created_at);
+CREATE INDEX IF NOT EXISTS idx_moderation_notices_updated_at ON moderation_notices(updated_at);
+
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

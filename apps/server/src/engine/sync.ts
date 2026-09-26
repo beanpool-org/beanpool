@@ -13,6 +13,7 @@ import { importedArea } from './member-area.js';
 import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
+import { mergeReplicatedNotices } from './kept-notices.js';
 import {
     exportSyncState as exportSyncStateEngine,
     type SyncPayload,
@@ -380,6 +381,12 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             const r = db.prepare(`DELETE FROM join_requests WHERE id=?`).run(rowKey);
             return r.changes > 0;
         }
+        // A moderation notice past its member's bounds, or gone with them on a prune or a self-deletion
+        // (engine/kept-notices.ts). Keyed by its id, which is never used again: no newer row to protect, and no lookup below.
+        case 'moderation_notices': {
+            const r = db.prepare(`DELETE FROM moderation_notices WHERE id=?`).run(rowKey);
+            return r.changes > 0;
+        }
         default:
             console.warn(`[Sync] Ignoring tombstone for unknown table: ${tableName}`);
             return false;
@@ -574,7 +581,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -1381,6 +1388,13 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             // copy. A main server older than this sends neither and changes nothing here.
             if (remote.placeWatches) mergeReplicatedWatches(remote.placeWatches);
             if (remote.directoryCache) mergeReplicatedDirectory(remote.directoryCache);
+
+            // The moderation notices kept for each member, and when they saw them (engine/kept-notices.ts), so a server
+            // that takes over still shows a web member what they have not seen, and nothing they have. After the members,
+            // because a notice is kept only for a member this database has; before the tombstones, which delete the ones
+            // past the bounds whatever this copy says of them. A bad row is left out, never the copy. A main server
+            // older than this sends none and changes nothing here.
+            if (remote.moderationNotices) mergeReplicatedNotices(remote.moderationNotices);
 
             const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
                 for (const ts of tombstones) {

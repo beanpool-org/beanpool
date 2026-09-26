@@ -48,6 +48,8 @@
  *      already seen.
  *  16. And the requests to join (G6): an open knock with what the applicant wrote, and a declined one with who declined
  *      it and when, so a restored community still has every request, and a decline still blocks for its 30 days.
+ *  17. And the moderation notices kept for the web app (engine/kept-notices.ts): one unseen and one seen, so a restored
+ *      node still shows a web member what they have not seen, and not what they have.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -290,6 +292,13 @@ async function main(): Promise<void> {
         .run('knock-open-at-t', applicant, 'Newcomer', 'I grow tomatoes two streets away.', 'global.beanpool.org', knockedAtT, knockedAtT);
     db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, status, created_at, decided_by, decided_at, updated_at) VALUES (?, ?, ?, ?, 'declined', ?, ?, ?, ?)`)
         .run('knock-declined-at-t', 'fe'.repeat(32), 'Stranger', 'Let me in.', knockedAtT, author, declinedAtT, declinedAtT);
+    // Moderation notices kept for a member (engine/kept-notices.ts): one they have not seen, one they have.
+    const toldAtT = new Date(Date.now() - 420_000).toISOString();
+    const sawAtT = new Date(Date.now() - 410_000).toISOString();
+    db.prepare(`INSERT INTO moderation_notices (id, recipient, title, body, data, created_at, seen_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`)
+        .run('notice-unseen-at-t', mutedMember, '🛡️ Posting paused', 'You can\'t post or send messages here until a moderator lifts this.', '{"kind":"moderation_muted"}', toldAtT, toldAtT);
+    db.prepare(`INSERT INTO moderation_notices (id, recipient, title, body, data, created_at, seen_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run('notice-seen-at-t', mutedMember, '🛡️ Your post was removed', 'Your post was removed by the community\'s moderators.', '{"kind":"post_removed"}', toldAtT, sawAtT, sawAtT);
 
     /** What every referenced object held at T. The whole suite is about reproducing this map. */
     const atT = new Map<string, Buffer>([
@@ -390,6 +399,13 @@ async function main(): Promise<void> {
             const declined = archived.prepare('SELECT status, decided_by, decided_at, updated_at FROM join_requests WHERE id = ?').get('knock-declined-at-t') as any;
             assert(declined?.status === 'declined' && declined?.decided_by === author && declined?.decided_at === declinedAtT && declined?.updated_at === declinedAtT,
                 'and a declined one with who declined it and when, so the decline still blocks for its 30 days');
+            const unseen = archived.prepare('SELECT recipient, title, data, created_at, seen_at FROM moderation_notices WHERE id = ?').get('notice-unseen-at-t') as any;
+            const seenNotice = archived.prepare('SELECT recipient, seen_at, updated_at FROM moderation_notices WHERE id = ?').get('notice-seen-at-t') as any;
+            assert(unseen?.recipient === mutedMember && unseen?.title === '🛡️ Posting paused' && unseen?.data === '{"kind":"moderation_muted"}'
+                && unseen?.created_at === toldAtT && unseen?.seen_at === null,
+                'and a moderation notice kept for a member and not yet seen, so a restored node still shows it in the web app');
+            assert(seenNotice?.recipient === mutedMember && seenNotice?.seen_at === sawAtT && seenNotice?.updated_at === sawAtT,
+                'and one they have seen, with when, so a restored node never shows it again');
         } finally {
             archived.close();
         }

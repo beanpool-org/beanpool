@@ -42,10 +42,19 @@
  *      and still looks like waiting, an approved one's invite still admits only its key; a standby copy loses them
  *      too; a row past every window is deleted, with its tombstone, on the main server and the standby, and neither a
  *      stale copy nor a full snapshot brings it back; a standby doesn't tidy by itself
- *  16. node-wide ceilings: the 31st knock in 24 hours, from a new address and a new key, and the 51st open knock each
- *      get the per-address limit's own 429; a reopened knock counts as a new one; answering one frees a slot
+ *  16. node-wide ceilings: the 31st knock in 24 hours, from a new address and a new key, and the 51st open knock made in
+ *      the last 3 days each get the same 429 `busy`, "isn't taking new requests right now", which is not the
+ *      per-address answer and doesn't name the network; an older open knock stays listed and isn't counted; a reopened
+ *      knock counts as a new one; answering one frees a slot; three days on the door opens by itself
  *  17. a key a re-key replaced gets nothing from an ordinary invite or an offline ticket (no member row, no invites of
  *      its own), while the new key and newcomers are unaffected
+ *  18. a standby: the reviewer's reproduction (a lapsed knock deleted by the tidy-up, the key's new knock, both in one
+ *      copy to a standby still holding the old row) leaves the new knock there; a knock or an answer sent to a standby
+ *      → 503 `standby` and nothing stored; the applicant's status still reads there
+ *  19. a flood that stops (the reviewer's 50 over two days, engine only, moved clock): a genuine knock is taken within
+ *      3 days of its last knock, refused till then as `busy`, never as its own network; nobody answers anything
+ *  20. a 60-day flood at both ceilings, every knock as large as the route allows: never more than 50 photos, the stored
+ *      bytes within the bound the rules give, and older open knocks keep their name and message without the photo
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-knock.ts
  */
@@ -878,12 +887,18 @@ async function main(): Promise<void> {
     newDay();
     const madeToday = () => (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE created_at >= ?').get(ago(DAY_MS)) as { n: number }).n;
     const listedNow = async () => (await list(mia)).body?.total as number;
+    /** What the open ceiling counts: knocks on the members' list made in the last 3 days. */
+    const countedNow = () => (db.prepare(`SELECT COUNT(*) AS n FROM join_requests WHERE status = 'pending' AND created_at >= ?
+            AND pubkey NOT IN (SELECT public_key FROM members) AND pubkey NOT IN (SELECT public_key FROM invalidated_keys)`)
+        .get(ago(3 * DAY_MS)) as { n: number }).n;
     let lastAddress = 0;
     /** A knock from an address nobody has knocked from (the tunnel's header names it; loopback is a trusted proxy). */
     const knockFromNew = (id: Id) => call(id, 'POST', '/api/join/knock', { callsign: id.name, message: `Hello from ${id.name}.` },
         { headers: { 'CF-Connecting-IP': `198.51.${100 + Math.floor(++lastAddress / 250)}.${lastAddress % 250 + 1}` } });
-    const open0 = await listedNow();
-    assert(madeToday() === 0 && open0 + 30 < 50, `a fresh day: nothing made in 24 hours, ${open0} open`);
+    // Sol's knock is still open from section 15: made four days ago, so on the list and not counted.
+    setKnock(idOf.get(sol.pk)!, { created_at: ago(4 * DAY_MS) });
+    const counted0 = countedNow();
+    assert(madeToday() === 0 && counted0 + 30 < 50, `a fresh day: nothing made in 24 hours, ${counted0} open knocks made in the last 3 days`);
     const flood: Id[] = [];
     let taken = 0;
     for (let i = 0; i < 30; i++) {
@@ -894,16 +909,21 @@ async function main(): Promise<void> {
     assert(taken === 30 && madeToday() === 30, `30 knocks in a day from 30 addresses and 30 keys are taken (${taken})`);
     const thirtyFirstKey = newId('Flood30');
     const thirtyFirst = await knockFromNew(thirtyFirstKey);
-    assert(sameAnswer(thirtyFirst, fourth), `the 31st in 24 hours, from a new address and a new key → the per-address limit's own 429 (${thirtyFirst.status} ${thirtyFirst.text})`);
+    // A full ceiling is nothing the applicant's network did: it says so, and says no more (not which ceiling).
+    const CEILING_FULL = 'This community isn’t taking new requests right now. Try again in a few days.';
+    assert(thirtyFirst.status === 429 && thirtyFirst.body?.code === 'busy' && thirtyFirst.body?.error === CEILING_FULL,
+        `the 31st in 24 hours, from a new address and a new key → 429 busy, "${CEILING_FULL}" (${thirtyFirst.status} ${thirtyFirst.text})`);
+    assert(!sameAnswer(thirtyFirst, fourth) && !/network|today|\d/.test(thirtyFirst.body?.error ?? '') && /network/.test(fourth.body?.error ?? ''),
+        'which is not the per-address answer: only that one names the network');
     assert(rowsFor(thirtyFirstKey.pk).length === 0 && madeToday() === 30, 'and no row');
     // A lapsed knock reopened is a new knock.
     const bobKnockId = rowsFor(bob.pk)[0]?.id as string;
     setKnock(bobKnockId, { created_at: ago(31 * DAY_MS) });
     const bobReopen = await knockFromNew(bob);
-    assert(sameAnswer(bobReopen, fourth) && Date.now() - Date.parse(rowsFor(bob.pk)[0]?.created_at) > 30 * DAY_MS,
+    assert(sameAnswer(bobReopen, thirtyFirst) && Date.now() - Date.parse(rowsFor(bob.pk)[0]?.created_at) > 30 * DAY_MS,
         `reopening a lapsed knock is a new knock: refused too, and the row stays lapsed (${bobReopen.status})`);
 
-    // A day later the node takes knocks again, until 50 are open.
+    // A day later the node takes knocks again, until 50 made in the last 3 days are open.
     for (const f of flood) setKnock(rowsFor(f.pk)[0]?.id, { created_at: ago(DAY_MS + 60 * 60_000) });
     assert(madeToday() === 0, 'a day on, none of the 30 counts');
     const nextDay = await knockFromNew(thirtyFirstKey);
@@ -912,25 +932,35 @@ async function main(): Promise<void> {
     assert(bobReopened.status === 201 && rowsFor(bob.pk).length === 1 && rowsFor(bob.pk)[0].id === bobKnockId && madeToday() === 2,
         `Bob's lapsed knock reopens, and counts as a knock made today (${bobReopened.status}, ${madeToday()} today)`);
     const crowd: Id[] = [];
-    while ((await listedNow()) < 50) {
+    while (countedNow() < 50) {
         const c = newId(`Crowd${crowd.length}`);
         crowd.push(c);
         const r = await knockFromNew(c);
         if (r.status !== 201 || crowd.length > 50) break;
     }
-    assert((await listedNow()) === 50 && madeToday() < 30, `50 knocks are open (${madeToday()} made today, under 30)`);
+    assert(countedNow() === 50 && madeToday() < 30, `50 open knocks made in the last 3 days (${madeToday()} made today, under 30)`);
+    const listedFull = await listedNow();
     const fiftyFirstKey = newId('Crowded');
     const fiftyFirst = await knockFromNew(fiftyFirstKey);
-    assert(sameAnswer(fiftyFirst, fourth) && rowsFor(fiftyFirstKey.pk).length === 0 && (await listedNow()) === 50,
-        `the 51st open knock → the same 429, and no row (${fiftyFirst.status} ${fiftyFirst.text})`);
-    assert((await decline(mia, rowsFor(flood[0].pk)[0]?.id)).status === 200 && (await listedNow()) === 49, 'a member declines one: 49 open');
+    assert(sameAnswer(fiftyFirst, thirtyFirst) && rowsFor(fiftyFirstKey.pk).length === 0 && countedNow() === 50 && (await listedNow()) === listedFull,
+        `the 51st → the same answer as the other ceiling, so a flood can't tell which, and no row (${fiftyFirst.status} ${fiftyFirst.text})`);
+    assert(listedFull > 50, `older open knocks are still on the members' list, not counted (${listedFull} listed)`);
+    assert((await decline(mia, rowsFor(flood[0].pk)[0]?.id)).status === 200 && countedNow() === 49 && (await listedNow()) === listedFull - 1,
+        'a member declines one: 49 counted, one fewer on the list');
     const intoSlot = await knockFromNew(fiftyFirstKey);
-    assert(intoSlot.status === 201 && (await listedNow()) === 50, `and the slot it freed is taken (${intoSlot.status})`);
+    assert(intoSlot.status === 201 && countedNow() === 50, `and the slot it freed is taken (${intoSlot.status})`);
     const overAgain = await knockFromNew(newId('Crowded2'));
-    assert(sameAnswer(overAgain, fourth), 'full again: 429');
-    assert((await approve(max, rowsFor(flood[1].pk)[0]?.id)).status === 200 && (await listedNow()) === 49, 'a member approves one: 49 open');
+    assert(sameAnswer(overAgain, thirtyFirst), 'full again: 429 busy');
+    assert((await approve(max, rowsFor(flood[1].pk)[0]?.id)).status === 200 && countedNow() === 49, 'a member approves one: 49 counted');
     const intoSlot2 = await knockFromNew(newId('Crowded3'));
     assert(intoSlot2.status === 201, `and that slot is taken too (${intoSlot2.status})`);
+    // Three days on, none of those counts: the door opens again by itself, with every one of them still on the list.
+    newDay();
+    newDay();
+    const listedLater = await listedNow();
+    const threeDaysOn = await knockFromNew(newId('ThreeDaysOn'));
+    assert(countedNow() === 1 && threeDaysOn.status === 201 && (await listedNow()) === listedLater + 1,
+        `four days on the open ceiling counts only the new knock, and it is taken; nobody answered anything (${threeDaysOn.status}, ${listedLater + 1} listed)`);
 
     console.log('\n── 17. a key a re-key replaced gets nothing from any invite ──');
     // The reviewer's reproduction: Olga is re-keyed K1 → K2, Mia makes an ordinary invite, and K1 redeems it.
@@ -963,6 +993,190 @@ async function main(): Promise<void> {
     assert(quinnJoins.status === 200 && memberRow(quinn.pk)?.status === 'active' && usedBy(ordinaryCode) === quinn.pk,
         `a newcomer joins with the ordinary invite (${quinnJoins.status})`);
     assert(rosaJoins.status === 200 && memberRow(rosa.pk)?.status === 'active', `and another with the offline ticket (${rosaJoins.status})`);
+
+    console.log('\n── 18. a standby: a copy\'s deletions before its rows, and no knocks of its own ──');
+    // The reviewer's reproduction: Vic's knock lapsed, and 60 days after it was made the tidy-up deleted it; he asks
+    // again, which is a new row. The deletion and the new knock reach a standby that still has the old row in one copy
+    // (one pull, or the first after it was down). The new knock must be there after it. From a table with no knocks,
+    // so what the ceilings hold after section 16 plays no part.
+    const noKnocks = () => { db.prepare('DELETE FROM join_requests').run(); };
+    noKnocks();
+    const vic = newId('Vic');
+    assert((await knock(vic)).status === 201, 'Vic knocks');
+    const vicOld = rowsFor(vic.pk)[0]?.id as string;
+    setKnock(vicOld, { created_at: ago(61 * DAY_MS), updated_at: ago(61 * DAY_MS) });
+    const beforeVic: any = await exportSyncState(nodeId);
+    tidy();
+    const vicTombstone = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'join_requests' AND row_key = ?").get(vicOld);
+    assert(!knockById(vicOld) && !!vicTombstone, 'the tidy-up deletes his lapsed knock 60 days after it was made, with its tombstone');
+    const vicAgain = await knock(vic);
+    const vicNew = rowsFor(vic.pk)[0]?.id as string;
+    assert(vicAgain.status === 201 && !!vicNew && vicNew !== vicOld, `he asks again: a new row (${vicAgain.status})`);
+    const afterVic: any = await exportSyncState(nodeId);
+    assert((afterVic.joinRequests ?? []).some((r: any) => r.id === vicNew)
+        && (afterVic.tombstones ?? []).some((t: any) => t.tableName === 'join_requests' && t.rowKey === vicOld),
+        'one copy carries both: the new knock and the old one\'s tombstone');
+    await becomeCopyOf(beforeVic);
+    assert(knockById(vicOld)?.status === 'pending' && !knockById(vicNew), 'a standby with the copy from before has only the old row, still pending');
+    setNodeRole('backup');
+    await importRemoteState(afterVic);
+    setNodeRole('primary');
+    assert(!knockById(vicOld) && knockById(vicNew)?.status === 'pending' && knockById(vicNew)?.message === 'Hello from Vic, I live nearby.',
+        'after that copy the standby has his new knock, and not the old one');
+
+    // A standby takes no knocks: the tidy-up is the main server's, so it would keep them whole for good, and no member
+    // would see them. The applicant's status still reads there, from the copy.
+    const wes = newId('Wes');
+    setNodeRole('backup');
+    const onStandby = await knock(wes, { avatar: jpegWithXmp('Wes') });
+    const vicStatusOnStandby = await status(vic);
+    const answerOnStandby = await decline(mia, vicNew);
+    setNodeRole('primary');
+    assert(onStandby.status === 503 && onStandby.body?.code === 'standby' && /main server/.test(onStandby.body?.error ?? ''),
+        `a knock sent to a standby → 503 standby (${onStandby.status} ${onStandby.text})`);
+    assert(rowsFor(wes.pk).length === 0, 'and nothing is stored there');
+    assert(vicStatusOnStandby.status === 200 && vicStatusOnStandby.body?.status === 'pending',
+        `the applicant's status still reads on a standby, from its copy (${vicStatusOnStandby.text})`);
+    assert(answerOnStandby.status === 503 && answerOnStandby.body?.code === 'standby' && knockById(vicNew)?.status === 'pending',
+        `a member's answer there is refused the same way: knocks are answered on the main server (${answerOnStandby.status})`);
+    const wesOnMain = await knock(wes);
+    assert(wesOnMain.status === 201 && rowsFor(wes.pk).length === 1, `the same knock on the main server is taken (${wesOnMain.status})`);
+
+    console.log('\n── 19. a flood that stops keeps the door shut for 3 days at most ──');
+    // The reviewer's measurement, reversed. Engine only, on a node of its own (no knocks yet), the clock moved, and the
+    // tidy-up run before every attempt as its timer would. 50 knocks from fresh keys and addresses over two days (30 on
+    // day one, 20 on day two), then a genuine applicant tries every six hours. Nobody answers anything.
+    const HOUR_MS = 60 * 60_000;
+    let simAddress = 0;
+    const simKnock = (at: number, extra: Partial<knockEngine.KnockInput> = {}) => {
+        knockEngine.tidyKnocks(at);
+        return knockEngine.submitKnock({
+            pubkey: crypto.randomBytes(32).toString('hex'), callsign: 'Flood', message: 'Let me in.', avatar: null, fromNode: null,
+            address: `sim-${++simAddress}`, ...extra,
+        }, at);
+    };
+    noKnocks();
+    const t0 = Date.now();
+    let floodTaken = 0;
+    let floodLast = t0;
+    for (let i = 0; i < 50; i++) {
+        floodLast = i < 30 ? t0 + i * 45 * 60_000 : t0 + DAY_MS + 30 * 60_000 + (i - 30) * HOUR_MS;
+        if (simKnock(floodLast).ok) floodTaken++;
+    }
+    assert(floodTaken === 50, `the flood's 50 knocks are taken over two days (${floodTaken})`);
+    const genuine = { pubkey: newId('Genuine').pk, callsign: 'Genuine', message: 'I live two streets away.', avatar: null, fromNode: null, address: 'genuine-home' };
+    let takenAt: number | null = null;
+    const refusals = new Set<string>();
+    for (let at = floodLast + HOUR_MS; at < t0 + 31 * DAY_MS && takenAt === null; at += 6 * HOUR_MS) {
+        knockEngine.tidyKnocks(at);
+        const r = knockEngine.submitKnock(genuine, at);
+        if (r.ok) takenAt = at; else refusals.add(r.reason);
+    }
+    const onDay = takenAt === null ? 'never' : `day ${((takenAt - t0) / DAY_MS).toFixed(2)}`;
+    assert(takenAt !== null && takenAt - t0 <= 5 * DAY_MS && takenAt - floodLast <= 3 * DAY_MS,
+        `the genuine knock is taken by day 5, within 3 days of the flood's last knock (${onDay})`);
+    assert(refusals.size > 0 && [...refusals].every((r) => r === 'busy'),
+        `until then it is refused as a full community, never as its own network (${[...refusals].join(', ')})`);
+    const simListed = knockEngine.listOpenKnocks(0, 0, takenAt ?? Date.now()).total;
+    assert(simListed === 51, `and the flood's 50 are still on the members' list beside it: nobody had to answer them (${simListed} listed)`);
+
+    console.log('\n── 20. a 60-day flood at the ceilings stays within the disk bound ──');
+    // Engine only, a node of its own, the clock moved: a knock every 30 minutes for 60 days (a row lives at most 60), so
+    // both ceilings are full throughout, each from a fresh key and address, and each as large as the route lets it be: a
+    // 20-character name and a 280-character message of 4-byte characters, a 253-character node, and a photo of
+    // KNOCK_RULES.avatarChars. The tidy-up runs before every attempt, as its timer would. Nobody answers anything.
+    noKnocks();
+    const rules = knockEngine.KNOCK_RULES;
+    const photoOf = (n: number) => `data:image/jpeg;base64,${String(n).padStart(8, '0')}${'A'.repeat(rules.avatarChars - 31)}`;
+    const node253 = `${'a'.repeat(63)}.${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(61)}`;
+    const photosNow = () => (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE avatar IS NOT NULL').get() as { n: number }).n;
+    /** What the rows hold, byte for byte: every column, as stored. */
+    const bytesNow = () => db.prepare(`SELECT COUNT(*) AS rows, COALESCE(SUM(LENGTH(CAST(avatar AS BLOB))), 0) AS photos,
+            COALESCE(SUM(LENGTH(CAST(id AS BLOB)) + LENGTH(CAST(pubkey AS BLOB)) + LENGTH(CAST(callsign AS BLOB)) + LENGTH(CAST(message AS BLOB))
+                + COALESCE(LENGTH(CAST(avatar AS BLOB)), 0) + COALESCE(LENGTH(CAST(from_node AS BLOB)), 0) + LENGTH(CAST(status AS BLOB))
+                + LENGTH(CAST(created_at AS BLOB)) + COALESCE(LENGTH(CAST(decided_by AS BLOB)), 0) + COALESCE(LENGTH(CAST(invite_code AS BLOB)), 0)
+                + COALESCE(LENGTH(CAST(decided_at AS BLOB)), 0) + COALESCE(LENGTH(CAST(ip_hash AS BLOB)), 0) + LENGTH(CAST(updated_at AS BLOB))), 0) AS total
+        FROM join_requests`).get() as { rows: number; photos: number; total: number };
+    /** The pages the table and its indexes take in the database file, where SQLite can say (its dbstat table). */
+    const pagesNow = () => {
+        try {
+            return (db.prepare(`SELECT COALESCE(SUM(pgsize), 0) AS n FROM dbstat
+                                WHERE name = 'join_requests' OR name LIKE 'idx_join_requests%' OR name LIKE 'sqlite_autoindex_join_requests%'`).get() as { n: number }).n;
+        } catch { return null; }
+    };
+    const t1 = Date.now();
+    let simTaken = 0, maxPhotos = 0, maxBytes = 0, maxRows = 0, maxPages: number | null = null;
+    for (let i = 0; i < 60 * 48; i++) {
+        const at = t1 + i * 30 * 60_000;
+        if (simKnock(at, { callsign: '😀'.repeat(20), message: '😀'.repeat(280), avatar: photoOf(i), fromNode: node253 }).ok) simTaken++;
+        maxPhotos = Math.max(maxPhotos, photosNow());
+        if (i % 48 === 47) {
+            const b = bytesNow();
+            maxBytes = Math.max(maxBytes, b.total);
+            maxRows = Math.max(maxRows, b.rows);
+            const p = pagesNow();
+            if (p !== null) maxPages = Math.max(maxPages ?? 0, p);
+        }
+    }
+    const simEnd = t1 + (60 * 48 - 1) * 30 * 60_000;
+    const endBytes = bytesNow();
+    const simOpen = knockEngine.listOpenKnocks(0, 0, simEnd).total;
+    console.log(`  (${simTaken} knocks taken over 60 days; at the end ${endBytes.rows} rows, ${simOpen} open, ${endBytes.photos} bytes of photos,`
+        + ` ${endBytes.total} bytes in all; at most ${maxPhotos} photos after any knock, ${maxRows} rows and ${maxBytes} bytes at any day's end,`
+        + ` ${maxPages ?? 'unknown'} bytes of table and index pages)`);
+    assert(maxPhotos <= 50 && rules.photosKept === 50 && endBytes.photos <= 50 * rules.avatarChars,
+        `never more than 50 photos kept, after any knock (${maxPhotos})`);
+    // The bound, from the rules: the photos; a name, message and node on each open knock (at most openAtOnce made in any
+    // openCountedDays, over openDays); and every row's own columns (a row lives at most 60 days, perNodePerDay a day).
+    const textPerKnock = 4 * rules.callsignChars + 4 * rules.messageChars + 253;
+    const openWithText = rules.openAtOnce * Math.ceil(rules.openDays / rules.openCountedDays);
+    const rowsAtMost = (rules.openDays + rules.lapsedKeptDays) * rules.perNodePerDay;
+    const bound = rules.photosKept * rules.avatarChars + openWithText * textPerKnock + rowsAtMost * 400;
+    assert(maxRows <= rowsAtMost && maxBytes <= bound && bound <= 10_000_000,
+        `the stored bytes stay within the bound the rules give, ${bound} (at most ${maxBytes} stored, ${maxRows} rows)`);
+    assert(maxPages === null || maxPages <= 15_000_000, `and the table with its indexes stays under 15 MB on disk (${maxPages ?? 'dbstat unavailable'})`);
+    const oldestOpen = db.prepare(`SELECT * FROM join_requests WHERE status = 'pending' AND created_at >= ? ORDER BY created_at ASC LIMIT 1`)
+        .get(new Date(simEnd - rules.openDays * DAY_MS).toISOString()) as any;
+    const newestFifty = knockEngine.listOpenKnocks(50, 0, simEnd).knocks;
+    assert(simOpen > 50 && newestFifty.length === 50 && newestFifty.every((k) => !!k.avatar),
+        `more open knocks than photos (${simOpen}): the newest 50 on the list keep theirs`);
+    assert(!!oldestOpen && oldestOpen.avatar === null && oldestOpen.message === '😀'.repeat(280) && oldestOpen.callsign === '😀'.repeat(20)
+        && oldestOpen.updated_at > oldestOpen.created_at,
+        'an older open knock keeps its name and message, loses the photo, and is stamped for it, so a standby\'s copy loses it too');
+
+    // The worst mix the rules allow: members answer just enough (declining the newest open knock whenever the open
+    // ceiling is full) that 30 knocks land every day, so the table holds the most rows (60 days of 30) beside the most
+    // open knocks with their words (50 in every 3 days of the open month) and the 50 photos.
+    noKnocks();
+    const t2 = Date.now();
+    let worstRows = 0, worstBytes = 0, worstPhotos = 0, worstPages: number | null = null, worstTaken = 0;
+    const largest = { callsign: '😀'.repeat(20), message: '😀'.repeat(280), fromNode: node253 };
+    for (let i = 0; i < 60 * 30; i++) {
+        const at = t2 + i * (48 * 60_000 + 2_000);
+        let r = simKnock(at, { ...largest, avatar: photoOf(i) });
+        if (!r.ok && r.reason === 'busy') {
+            const newest = knockEngine.listOpenKnocks(1, 0, at).knocks[0];
+            if (newest) knockEngine.declineKnock(newest.id, mia.pk, at);
+            r = simKnock(at, { ...largest, avatar: photoOf(i) });
+        }
+        if (r.ok) worstTaken++;
+        worstPhotos = Math.max(worstPhotos, photosNow());
+        if (i % 30 === 29) {
+            const b = bytesNow();
+            worstBytes = Math.max(worstBytes, b.total);
+            worstRows = Math.max(worstRows, b.rows);
+            const p = pagesNow();
+            if (p !== null) worstPages = Math.max(worstPages ?? 0, p);
+        }
+    }
+    const worstOpen = knockEngine.listOpenKnocks(0, 0, t2 + 60 * 30 * (48 * 60_000 + 2_000)).total;
+    console.log(`  (members answering the rest: ${worstTaken} knocks taken, ${worstOpen} open at the end; at most ${worstPhotos} photos,`
+        + ` ${worstRows} rows, ${worstBytes} bytes stored, ${worstPages ?? 'unknown'} bytes of table and index pages)`);
+    assert(worstTaken >= 1790 && worstOpen >= 490 && worstPhotos <= 50,
+        `with members answering, 30 a day land for 60 days, about 500 stay open, and still at most 50 photos (${worstTaken}, ${worstOpen}, ${worstPhotos})`);
+    assert(worstRows <= rowsAtMost && worstBytes <= bound && (worstPages === null || worstPages <= 15_000_000),
+        `the stored bytes stay within the bound, ${bound}, and the pages under 15 MB (${worstBytes} stored, ${worstPages ?? 'dbstat unavailable'} in pages)`);
+    noKnocks();
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

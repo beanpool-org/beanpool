@@ -23,13 +23,19 @@
  *   - KNOCK_RULES.perAddressPerDay knocks from one address in any 24 hours (429), counted over `ip_hash`, which is
  *     the open door's keyed hash with its own domain (engine/open-join.ts) and is cleared once a day old.
  *   - Node-wide, from every address together: KNOCK_RULES.perNodePerDay knocks made in any 24 hours, and
- *     KNOCK_RULES.openAtOnce open at once (what the members' list shows). A key costs nothing to make and neither does
- *     an address (a free IPv6 /48 is 65,536 /64s), so without these one machine could fill the disk. Over either, the
- *     answer is the address limit's own 429, word for word, so a flood can't tell which one it hit. A reopened knock
- *     counts as a new one. The design's other brake, knocks from SSO-verified accounts only, can't be checked here: a
- *     local node gets a bare signed key. These ceilings and the tidy-up below stand in for it. What is left: a flood
- *     can fill both and crowd out genuine knocks for up to a day. Members can still decline, and the operator can
- *     switch knocks off.
+ *     KNOCK_RULES.openAtOnce open knocks (on the members' list) made in the last KNOCK_RULES.openCountedDays. A key
+ *     costs nothing to make and neither does an address (a free IPv6 /48 is 65,536 /64s), so without these one machine
+ *     could fill the disk. Over either, the answer is 429 `busy`, the same for both so a flood can't tell which: the
+ *     community isn't taking new requests right now. It is not the address limit's answer, which blames the network:
+ *     a genuine applicant turned away by a flood did nothing wrong. A reopened knock counts as a new one. The design's
+ *     other brake, knocks from SSO-verified accounts only, can't be checked here: a local node gets a bare signed key.
+ *     These ceilings, the photo limit and the tidy-up below stand in for it. What is left: while a flood keeps going,
+ *     genuine knocks compete with it for the slots; once it stops, it holds them for at most openCountedDays (its
+ *     knocks then stay on the members' list, uncounted, until they lapse), and nobody has to answer it to open the
+ *     door again. Members can still decline, which frees a slot at once, and the operator can switch knocks off.
+ *   - Photos: only the newest KNOCK_RULES.photosKept open knocks that sent one keep it (`keepNewestPhotos`, run by the
+ *     knock that would make one too many, so the limit holds at every commit and in every copy). An older open knock
+ *     keeps its name and message, and stays on the list without the picture.
  *
  * ## A knock lapses
  *
@@ -78,22 +84,34 @@
  *     applicant's key. A key that joined with it is a member: a knock from it is refused as one;
  *   - lapsed: KNOCK_RULES.lapsedKeptDays after it lapsed. Until then a late answer reads "lapsed" and the applicant's
  *     next knock reopens the row; after, the answer is "no such request", and a knock makes a new row.
- * So no row outlives 60 days from when it was made or reopened, and with the ceilings above the table holds at most
- * openAtOnce rows with what was sent in them and 60 × perNodePerDay cleared ones, whatever a flood sends.
+ * So no row outlives 60 days from when it was made or reopened. With the ceilings above, whatever a flood sends, the
+ * table holds at most photosKept photos (50 × 150 KB = 7.5 MB), a name, message and node on at most openAtOnce ×
+ * openDays / openCountedDays open knocks (every 3 days of the open month let in at most 50 that stay listed: 500 ×
+ * 1.45 KB = 0.73 MB), and 60 × perNodePerDay rows in all (1,800 × 0.4 KB = 0.72 MB): under 9 MB of data, about
+ * 10.6 MB with SQLite's indexes and pages, on the main server, a standby and every backup (test-knock.ts §20 measures
+ * it).
  *
  * It is housekeeping, not a request's job: no rule reads whether a row has been cleared (every answer comes from its
  * times and status), so no request needs it done first, and a node nobody knocks on must tidy too. So it runs on a
  * timer (`startTidyingKnocks`, every minute), beside the sweep that already clears these rows' address hashes
  * (engine/open-join.ts), and only on the main server: a standby takes the clearing and the deletions from the copy.
+ * The photo limit is the one exception: a knock with a photo keeps it itself, or the disk bound would hold only once
+ * a minute (the tidy-up keeps it too, which changes nothing unless a database came from somewhere else).
+ *
+ * Only the main server writes this table: a standby refuses a knock and an answer (503 `standby`, routes/knocks.ts).
+ * A knock taken there would never be tidied (no clearing or tombstone comes for a row the main server never had), and
+ * no member would see it.
  *
  * ## What travels
  *
  * File and sealed backups carry the table. A standby gets every row (SyncPayload.joinRequests), watermarked on
  * `updated_at`, which every write here stamps, the tidy-up's clearing included. The tidy-up's deletions travel as
  * `join_requests` tombstones keyed by the row's id, which is never used again, so a copied row this database has a
- * tombstone for stays deleted: a stale copy can't bring it back. `ip_hash` never leaves this database. Invite codes do
- * not replicate, so a standby that merges an approved row makes that invite too (the same code, by the same member,
- * for the same key), or a server that takes over would tell the applicant about an invite it cannot redeem
+ * tombstone for stays deleted: a stale copy can't bring it back. A standby applies a copy's `join_requests` tombstones
+ * before its rows (engine/sync.ts): a key's lapsed knock deleted and its next knock, a new row, can arrive in one copy,
+ * and the new row fits the one-open index only once the old one is gone. `ip_hash` never leaves this database. Invite
+ * codes do not replicate, so a standby that merges an approved row makes that invite too (the same code, by the same
+ * member, for the same key), or a server that takes over would tell the applicant about an invite it cannot redeem
  * (`mergeReplicatedKnocks`).
  */
 import crypto from 'node:crypto';
@@ -114,8 +132,15 @@ export const KNOCK_RULES = {
     perAddressPerDay: 3,
     /** Knocks made on this node in any 24 hours, from every address together. A reopened knock counts. */
     perNodePerDay: 30,
-    /** Knocks open at once on this node: what the members' list shows. */
+    /**
+     * Open knocks (what the members' list shows) made in the last `openCountedDays`, on this node. An older open knock
+     * stays on the list and no longer counts, so a flood that stops keeps the door shut for `openCountedDays` at most.
+     */
     openAtOnce: 50,
+    /** How far back `openAtOnce` counts. */
+    openCountedDays: 3,
+    /** Open knocks that keep their photo: the newest this many that sent one. Older ones keep the name and message. */
+    photosKept: 50,
     /** A lapsed knock is kept this long after it lapsed, what was sent in it cleared, then deleted. */
     lapsedKeptDays: 30,
     /** The applicant's introduction, in characters (code points). */
@@ -211,7 +236,9 @@ function standingOf(row: KnockRow | undefined, now: number): Standing {
 
 // ── The applicant ────────────────────────────────────────────────────────────────────────────────────────────────
 
-export type KnockRefusal = 'already_member' | 'account_closed' | 'key_invalidated' | 'knock_open' | 'knock_approved' | 'rate_limited';
+/** `rate_limited`: this address's knocks today. `busy`: a node-wide ceiling, whichever (the applicant did nothing). */
+export type KnockRefusal =
+    'already_member' | 'account_closed' | 'key_invalidated' | 'knock_open' | 'knock_approved' | 'rate_limited' | 'busy';
 
 export interface KnockInput {
     /** The key that signed the knock, lower-case hex. Never a body field. */
@@ -254,21 +281,27 @@ export function submitKnock(input: KnockInput, now = Date.now()): KnockOutcome {
             const fromAddress = (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE ip_hash = ? AND created_at >= ?')
                 .get(ipHash, iso(now - DAY_MS)) as { n: number }).n;
             if (fromAddress >= KNOCK_RULES.perAddressPerDay) return { ok: false, reason: 'rate_limited' };
-            // The node-wide ceilings, refused with the same answer. A reopened knock is dated now, so it counts.
+            // The node-wide ceilings, refused with one answer. A reopened knock is dated now, so it counts.
             const madeToday = (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE created_at >= ?').get(iso(now - DAY_MS)) as { n: number }).n;
-            if (madeToday >= KNOCK_RULES.perNodePerDay || listedCount(now) >= KNOCK_RULES.openAtOnce) return { ok: false, reason: 'rate_limited' };
+            const openRecently = (db.prepare(`SELECT COUNT(*) AS n FROM join_requests WHERE ${LISTED}`)
+                .get(iso(now - KNOCK_RULES.openCountedDays * DAY_MS)) as { n: number }).n;
+            if (madeToday >= KNOCK_RULES.perNodePerDay || openRecently >= KNOCK_RULES.openAtOnce) {
+                return { ok: false, reason: 'busy' };
+            }
 
             const at = iso(now);
             if (standing.kind === 'lapsed') {
                 db.prepare(`UPDATE join_requests SET callsign = ?, message = ?, avatar = ?, from_node = ?, created_at = ?, ip_hash = ?, updated_at = ?
                             WHERE id = ? AND status = 'pending'`)
                     .run(input.callsign, input.message, input.avatar, input.fromNode, at, ipHash, at, standing.row.id);
+                if (input.avatar) keepNewestPhotos(now);
                 return { ok: true, id: standing.row.id, reopened: true };
             }
             const id = crypto.randomUUID();
             db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, avatar, from_node, status, created_at, ip_hash, updated_at)
                         VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
                 .run(id, pubkey, input.callsign, input.message, input.avatar, input.fromNode, at, ipHash, at);
+            if (input.avatar) keepNewestPhotos(now);
             return { ok: true, id, reopened: false };
         })();
     } catch (e: any) {
@@ -422,8 +455,33 @@ const UNREAD = `(callsign NOT IN ('', 'Deleted Member') OR message != '' OR avat
     OR (status = 'declined' AND decided_by IS NOT NULL))`;
 
 /**
+ * The stamp for something taken off a row (by the tidy-up or the photo limit): later than the row's own stamp, even in
+ * the millisecond it was written or answered, because a standby keeps its copy on a tie and would keep what went.
+ */
+function laterStamp(updatedAt: string, now: number): string {
+    const stamped = Date.parse(updatedAt);
+    return iso(Number.isFinite(stamped) && stamped >= now ? stamped + 1 : now);
+}
+
+/**
+ * The photo limit (see "Limits", above): the newest KNOCK_RULES.photosKept open knocks with a photo, in the members'
+ * list's order, keep it, and every other row's photo goes; the rest of the row stays. (A row off the list loses the
+ * rest at the next tidy-up.) Stamped, so a standby's copy loses it too. Returns how many rows lost one.
+ */
+function keepNewestPhotos(now: number): number {
+    const older = db.prepare(`SELECT id, updated_at FROM join_requests WHERE avatar IS NOT NULL AND id NOT IN (
+                                  SELECT id FROM join_requests WHERE ${LISTED} AND avatar IS NOT NULL
+                                  ORDER BY created_at DESC, id DESC LIMIT ?)`)
+        .all(openSince(now), KNOCK_RULES.photosKept) as { id: string; updated_at: string }[];
+    const drop = db.prepare('UPDATE join_requests SET avatar = NULL, updated_at = ? WHERE id = ?');
+    for (const row of older) drop.run(laterStamp(row.updated_at, now), row.id);
+    return older.length;
+}
+
+/**
  * See "What is kept", above: clear what was sent in every knock the members' list no longer shows, and delete every
- * row past each of its windows, with its tombstone, in one transaction. On the main server only (`startTidyingKnocks`).
+ * row past each of its windows, with its tombstone, in one transaction; and keep the photo limit, which a knock keeps
+ * already. On the main server only (`startTidyingKnocks`). `cleared` counts the rows that lost anything.
  */
 export function tidyKnocks(now = Date.now()): { cleared: number; deleted: number } {
     const daysAgo = (days: number) => iso(now - days * DAY_MS);
@@ -443,13 +501,8 @@ export function tidyKnocks(now = Date.now()): { cleared: number; deleted: number
         const clear = db.prepare(`UPDATE join_requests SET callsign = '', message = '', avatar = NULL, from_node = NULL,
                                       decided_by = CASE WHEN status = 'approved' THEN decided_by END, updated_at = ?
                                   WHERE id = ?`);
-        for (const row of unread) {
-            // Stamped later than the row's own stamp, even in the millisecond it was answered: a standby keeps its copy
-            // on a tie, and would keep the words.
-            const stamped = Date.parse(row.updated_at);
-            clear.run(iso(Number.isFinite(stamped) && stamped >= now ? stamped + 1 : now), row.id);
-        }
-        return { cleared: unread.length, deleted: past.length };
+        for (const row of unread) clear.run(laterStamp(row.updated_at, now), row.id);
+        return { cleared: unread.length + keepNewestPhotos(now), deleted: past.length };
     })();
 }
 
@@ -485,8 +538,9 @@ const STATUSES = new Set<string>(['pending', 'approved', 'declined']);
  * approved it, for the applicant's key, dated at the approval. Invite codes do not replicate, and a server that takes
  * over must not tell the applicant about an invite it cannot redeem. A row this database has a tombstone for was
  * deleted by the main server's tidy-up, and ids are never used again, so a copy that still carries it is older: it stays
- * deleted (`removed`). A malformed row, or one this database refuses, is left out and counted; it never fails the copy
- * it came in.
+ * deleted (`removed`). The import applies the copy's own `join_requests` tombstones before calling this
+ * (engine/sync.ts), so a key's deleted knock is gone before its newer one arrives. A malformed row, or one this
+ * database refuses, is left out and counted; it never fails the copy it came in.
  */
 export function mergeReplicatedKnocks(rows: unknown): KnockMerge {
     const merge: KnockMerge = { written: 0, kept: 0, removed: 0, invitesMade: 0, invalid: 0 };

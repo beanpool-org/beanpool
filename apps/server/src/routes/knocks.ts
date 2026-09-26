@@ -31,12 +31,21 @@
  * ## Limits
  *
  * The auth limiter (15 a minute per address) on a knock, and the knock rules: one open knock per key, 3 an address a
- * day, 30 a day and 50 open on the whole node (the same 429 as the address limit, so a flood can't tell which), 30 days
+ * day (429 `rate_limited`, which names the network), and on the whole node 30 a day and 50 open made in the last 3
+ * days (429 `busy`, the same for both so a flood can't tell which, and not blaming the applicant's network), 30 days
  * after a decline (engine/knocks.ts). The gateway's `invites` switch covers these routes too (https-server.ts): a node
  * that takes no invites takes no knocks.
+ *
+ * ## The main server only
+ *
+ * A standby refuses a knock and an answer, 503 `standby`, and writes nothing: the tidy-up is the main server's, so a
+ * knock taken on a standby would be kept whole for good and seen by no member, and an answer there would make an invite
+ * the main server never has. The community's address reaches the main server, so the applicant's app meets this only
+ * if it is sent to a standby's own address; after a take-over that server is the main one and takes knocks. The
+ * applicant's status and the members' list still read on a standby, from its copy.
  */
 import Router from '@koa/router';
-import { isNodeMember, assertMemberActive } from '../state-engine.js';
+import { isNodeMember, assertMemberActive, getNodeRole } from '../state-engine.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { getConfiguredSwitches, getProfileSwitches } from '../config/node-profile.js';
 import { isAcceptableAvatarValue } from '../engine/avatar.js';
@@ -155,8 +164,20 @@ function refuseKnock(ctx: any, reason: KnockRefusal): void {
             return answer(ctx, 409, 'A member has already invited you. Your app can join with that invite now.', reason);
         case 'rate_limited':
             return answer(ctx, 429, `Too many requests to join have come from this network today (${KNOCK_RULES.perAddressPerDay}). Please try again tomorrow.`, reason);
+        case 'busy':
+            // A node-wide ceiling, either one: nothing the applicant did, and nothing that tells a flood which.
+            return answer(ctx, 429, 'This community isn’t taking new requests right now. Try again in a few days.', reason);
     }
 }
+
+/** A standby writes no knock and no answer (see "The main server only", above): true once the refusal is written. */
+function refusedOnStandby(ctx: any, message: string): boolean {
+    if (getNodeRole() === 'primary') return false;
+    answer(ctx, 503, message, 'standby');
+    return true;
+}
+const STANDBY_KNOCK = 'This server is a standby copy of the community, not its main server, so it can’t take requests to join. Please ask at the community’s own address.';
+const STANDBY_ANSWER = 'This server is a standby copy of the community, not its main server. Requests to join are answered on the main server.';
 
 function refuseAnswer(ctx: any, reason: AnswerRefusal): void {
     switch (reason) {
@@ -187,6 +208,7 @@ export function createKnockRoutes(deps: RouteDeps): Router {
     router.post('/api/join/knock', async (ctx) => {
         const applicant = signer(ctx, 'This request must be signed by the key you are asking to join with.');
         if (!applicant) return;
+        if (refusedOnStandby(ctx, STANDBY_KNOCK)) return;
         if (!rateLimit(ctx)) return;
         // Who can't knock at all is told before their words are read, so a member's app learns it plainly.
         const refusal = knockerRefusal(applicant);
@@ -239,6 +261,7 @@ export function createKnockRoutes(deps: RouteDeps): Router {
     router.post('/api/join/knocks/:id/approve', async (ctx) => {
         const member = answeringMember(ctx);
         if (!member) return;
+        if (refusedOnStandby(ctx, STANDBY_ANSWER)) return;
         const outcome = approveKnock(String(ctx.params.id), member);
         if (!outcome.ok) return refuseAnswer(ctx, outcome.reason);
         ctx.body = { knock: { id: outcome.knockId, status: outcome.status }, ...(outcome.status === 'approved' ? { invite: outcome.invite } : {}) };
@@ -247,6 +270,7 @@ export function createKnockRoutes(deps: RouteDeps): Router {
     router.post('/api/join/knocks/:id/decline', async (ctx) => {
         const member = answeringMember(ctx);
         if (!member) return;
+        if (refusedOnStandby(ctx, STANDBY_ANSWER)) return;
         const outcome = declineKnock(String(ctx.params.id), member);
         if (!outcome.ok) return refuseAnswer(ctx, outcome.reason);
         ctx.body = { knock: { id: outcome.knockId, status: outcome.status } };

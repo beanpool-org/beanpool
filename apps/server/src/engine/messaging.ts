@@ -10,6 +10,8 @@ import { deleteStoredObjects, storeAttachmentColumns } from '../storage/image-co
 import {
     getMember,
     getConversation,
+    isInvalidatedKey,
+    isNodeMember,
     SystemMessageType,
     type Conversation,
     type Message,
@@ -23,6 +25,7 @@ import {
 } from './group-thread.js';
 import { writeMessageTombstone } from './message-tombstone.js';
 import { unmutedRecipients } from './chat-mutes.js';
+import { NOT_A_MEMBER_ERROR } from './members.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow') => void;
@@ -56,6 +59,9 @@ function assertMemberActive(publicKey: string): void {
     if (!member) throw new MessagingError('Member not found');
     if (member.status === 'disabled') throw new MessagingError('Account is disabled');
     if (member.status === 'pruned') throw new MessagingError('Account has been pruned');
+    // The old key of a member being re-keyed (a lost or stolen phone): its row is 'suspended', which the lines above
+    // let write, so it would go on messaging people as them.
+    if (isInvalidatedKey(db, publicKey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403);
 }
 
 /**
@@ -287,6 +293,8 @@ export function toggleMessageReaction(
         if (!participants.some((p: any) => p.public_key === authorPubkey)) {
             return null;
         }
+        // A participant row outlasts a prune and a pending re-key; a reaction still reaches the other person.
+        if (!isNodeMember(db, authorPubkey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403);
         // An event chat carries text the host can remove and nothing else, and it is read-only once the event
         // ends — a reaction would be a write this route cannot rule on.
         if (convType?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_REACT_ERROR, 403);

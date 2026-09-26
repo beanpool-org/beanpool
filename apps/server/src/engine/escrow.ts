@@ -10,6 +10,7 @@ import { recordActivity } from '../db/activity-feed-db.js';
 import { adminActorName } from './admin-actor-name.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
 import { assertFeatureOn } from '../config/node-profile.js';
+import { assertNodeMember } from './members.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -160,6 +161,9 @@ export function requestPost(
     // on this node (config/node-profile.ts), before a row is written. The routes answer 404 before this.
     assertFeatureOn('escrow');
     assertMemberActive(requesterPublicKey);
+    // The module's own test above passes the old key of a member being re-keyed (a lost or stolen phone): its row
+    // is 'suspended', which that test lets trade. assertNodeMember refuses the invalidated key.
+    assertNodeMember(requesterPublicKey);
     assertProfileComplete(requesterPublicKey);
     assertNotOnHoliday(requesterPublicKey);
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
@@ -312,6 +316,8 @@ export function approvePostRequest(
     }
 
     assertMemberActive(authorPublicKey);
+    // Approving locks the requester's Beans into escrow: never on the word of a re-keyed phone's old key.
+    assertNodeMember(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
     if (isOnHoliday(row.buyer_pubkey) || isOnHoliday(row.seller_pubkey)) {
         throw new Error('Trading is paused while a member is in holiday mode.');
@@ -475,6 +481,8 @@ export function rejectPostRequest(
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
     if (expectedAuthorRole !== authorPublicKey) return null;
+    // Closing a trade answers with the other party: a pruned account or a re-keyed phone's old key closes nothing.
+    assertNodeMember(authorPublicKey);
 
     const res = db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(transactionId);
     if (res.changes === 0) return null;
@@ -510,6 +518,7 @@ export function cancelPostRequest(
     const isOffer = post.type === 'offer';
     const expectedRequesterRole = isOffer ? row.buyer_pubkey : row.seller_pubkey;
     if (expectedRequesterRole !== requesterPublicKey) return null;
+    assertNodeMember(requesterPublicKey);
 
     db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(transactionId);
     db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'").run(transactionId);
@@ -528,6 +537,7 @@ export function acceptPost(
 ): MarketplaceTransaction {
     assertFeatureOn('escrow');
     assertMemberActive(buyerPublicKey);
+    assertNodeMember(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
     if (!post || cannotSeeGroupPost(post.audienceScope, post.targetGroupId, post.authorPublicKey, buyerPublicKey)
@@ -734,6 +744,8 @@ export function completePostTransaction(
     if (!row) {
         const completedRow = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='completed'").get(transactionId) as any;
         if (completedRow && completedRow.buyer_pubkey === confirmerPublicKey) {
+            // The replay answer names the seller too.
+            assertNodeMember(confirmerPublicKey);
             const existing = getMarketplaceTransaction(db, transactionId);
             if (existing) return { ...existing, alreadyCompleted: true };
         }
@@ -741,6 +753,7 @@ export function completePostTransaction(
     }
     
     if (row.buyer_pubkey !== confirmerPublicKey) return null;
+    assertNodeMember(confirmerPublicKey);
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator completing the deal
@@ -869,7 +882,8 @@ export function completePostTransaction(
         if (post && !post.repeatable) {
             db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
         } else if (post && post.repeatable) {
-            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+            // Not a listing a prune cancelled under an open trade (adminPruneUser): it stays down.
+            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
         }
     });
 
@@ -944,6 +958,7 @@ export function cancelPostTransaction(
     const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='pending'").get(transactionId) as any;
     if (!row) return null;
     if (row.buyer_pubkey !== cancellerPublicKey && row.seller_pubkey !== cancellerPublicKey) return null;
+    assertNodeMember(cancellerPublicKey);
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event')) return null;
@@ -971,8 +986,10 @@ export function cancelPostTransaction(
             }
         }
 
+        // Back on the board, unless a prune cancelled the listing under this trade (adminPruneUser leaves its
+        // open trades for the other party to close): a pruned member's listing stays down.
         if (post) {
-            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
         }
     });
 
@@ -1121,7 +1138,8 @@ export function resolveEscrowDispute(
             if (post && !post.repeatable) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
             } else if (post && post.repeatable) {
-                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+                // Not a listing a prune cancelled under this deal, as in completePostTransaction: it stays down.
+                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         } else if (action === 'refund_to_buyer') {
             const refundResult = cb.transfer(
@@ -1148,8 +1166,10 @@ export function resolveEscrowDispute(
                 }
             }
 
+            // Back on the board, unless a prune cancelled the listing under this deal (as in cancelPostTransaction): a
+            // removed member's listing stays down when an admin refunds the buyer.
             if (post) {
-                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         } else if (action === 'split') {
             // Buyer refund half (fee-exempt)
@@ -1207,7 +1227,8 @@ export function resolveEscrowDispute(
             if (post && !post.repeatable) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
             } else if (post && post.repeatable) {
-                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+                // Not a listing a prune cancelled under this deal, as in completePostTransaction: it stays down.
+                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         }
     });

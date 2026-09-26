@@ -409,6 +409,7 @@ run_federation_suites() {
       test-handshake
       test-post-pause-resume
       test-cancel-post-request
+      test-non-members-cant-act
       test-marketplace-auth
       test-escrow-fail-closed
       test-escrow-floor

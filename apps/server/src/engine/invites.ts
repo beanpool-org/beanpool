@@ -9,6 +9,7 @@ import { recordFunnelEvent } from './funnel.js';
 import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
 import {
     getMember,
+    isNodeMember,
     isInvalidatedKey,
     generateShortCode,
     verifyOfflineTicket,
@@ -18,11 +19,22 @@ import {
 } from '@beanpool/engine';
 
 /**
+ * Whether a code's maker can still bring someone in: a member of this node (isNodeMember), not just a row. A pruned
+ * account keeps its row, and so does the old key of a member being re-keyed (a lost or stolen phone); a code from
+ * either would let its holder straight back in as someone new, so neither makes one, and one made before is refused.
+ */
+function canInvite(inviterPubkey: string): boolean {
+    return isNodeMember(db, inviterPubkey);
+}
+
+const INVITER_GONE = 'The member who made this invite is no longer in this community, so it can’t be used. Ask a member for a fresh one.';
+
+/**
  * Creates standard online invite code for an active member.
  */
 export function generateInvite(inviterPubkey: string, intendedFor?: string): InviteCode | null {
     const inviter = getMember(db, inviterPubkey);
-    if (!inviter) return null;
+    if (!inviter || !canInvite(inviterPubkey)) return null;
 
     recordActivity(inviterPubkey);
 
@@ -46,8 +58,11 @@ export function adminGenerateInvite(
     intendedFor?: string,
     issuedBy?: string
 ): InviteCode | null {
+    // `adminPubkey` is the member the code hangs off in the invite tree (the genesis member, routes/community.ts), not
+    // the admin: the admin is `issuedBy`, already checked by the route (checkAdminAuth and a node role, which a prune
+    // takes away). Held to the same rule, or the code would never redeem.
     const admin = getMember(db, adminPubkey);
-    if (!admin) return null;
+    if (!admin || !canInvite(adminPubkey)) return null;
 
     recordActivity(adminPubkey);
 
@@ -64,6 +79,19 @@ export function adminGenerateInvite(
 }
 
 const REPLACED_KEY = 'This key was replaced by a new one, so it can’t join with this invite. Use the device or the 12 words that hold the new key.';
+const CLOSED_ACCOUNT = 'This key’s account in this community was closed, so it can’t join again with this invite.';
+
+/**
+ * A key whose account here was closed (removed, or deleted by its owner: its row is 'pruned') joins with no invite. It
+ * was answered as a member until 4109713263, and its app then carried on into a community that refuses everything that
+ * key signs (https-server.ts CLOSED_ACCOUNT_REFUSAL). The way back from a removal is a community vote, not a code.
+ * Nothing is written and the code stays unused.
+ */
+function closedAccountRefusal(member: Member): { success: false; error: string } | null {
+    if (member.status !== 'pruned') return null;
+    recordFunnelEvent('invite_failed', 'account_closed');
+    return { success: false, error: CLOSED_ACCOUNT };
+}
 
 /**
  * Validates and redeems standard INV- code, registering the member and seeding earned credit.
@@ -111,6 +139,8 @@ export function redeemInvite(
     // Check if identity is ALREADY a member before "already used" check
     const existingMember = getMember(db, publicKey);
     if (existingMember) {
+        const closed = closedAccountRefusal(existingMember);
+        if (closed) return closed;
         // Not a failure and not a new join — someone re-entering. Its own event so it
         // neither inflates signups nor drags down the rejection rate.
         recordFunnelEvent('invite_reentry');
@@ -122,6 +152,11 @@ export function redeemInvite(
     if (invite.used_by) {
         recordFunnelEvent('invite_failed', 'already_used');
         return { success: false, error: 'This invite has already been used' };
+    }
+
+    if (!canInvite(invite.created_by)) {
+        recordFunnelEvent('invite_failed', 'inviter_gone');
+        return { success: false, error: INVITER_GONE };
     }
 
     // Register member FIRST — invite_codes.used_by has FK to members(public_key)
@@ -178,6 +213,8 @@ export function redeemOfflineTicket(
         // Check if identity is ALREADY a member before "already used" check
         const existingMember = getMember(db, joinerPublicKey);
         if (existingMember) {
+            const closed = closedAccountRefusal(existingMember);
+            if (closed) return closed;
             recordFunnelEvent('invite_reentry');
             return { success: true, member: existingMember, alreadyMember: true };
         }

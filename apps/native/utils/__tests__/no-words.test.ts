@@ -23,7 +23,7 @@ vi.mock('../../components/SsoButton', () => {
     };
 });
 
-import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
+import { KeeperProtectionPanel, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { protectionFrom } from '../protection-state';
 import {
@@ -154,6 +154,40 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
 
         const withoutWords = findAll(panel(COVERED, false), 'TouchableOpacity');
         expect(withoutWords.map(b => b.props.accessibilityLabel)).toEqual(['Disconnect Facebook']);
+    });
+});
+
+// Recovery seal S3 (Marty, card sso-copy-lock, D-2 = a): under a connected sign-in, who can open the copy it keeps.
+describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
+    it('the sentences, word for word: the operators can, a stolen database cannot, the words alone keep everyone else out', () => {
+        expect(SIGN_IN_COPY_OPENERS).toBe(
+            "The people who run your community's server can open the copy of your account kept for your sign-in, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.");
+        expect(SIGN_IN_COPY_WORDS_ONLY).toBe('If you would rather nobody but you could get in, use only your 12 words.');
+    });
+
+    it('under a connected sign-in on a phone with words: all of it, after the sign-in and before the not-a-login note', () => {
+        const text = textOf(panel(COVERED, true));
+        const line = `${SIGN_IN_COPY_OPENERS} ${SIGN_IN_COPY_WORDS_ONLY}`;
+        expect(text.split('\n')).toContain(line);
+        expect(text.indexOf('Facebook Connected')).toBeLessThan(text.indexOf(line));
+        expect(text.indexOf(line)).toBeLessThan(text.indexOf('This is not a login'));
+    });
+
+    it('on a phone with no 12 words: who can open it, and never "use only your 12 words"', () => {
+        const text = textOf(panel(COVERED, false));
+        expect(text.split('\n')).toContain(SIGN_IN_COPY_OPENERS);
+        expect(text).not.toContain(SIGN_IN_COPY_WORDS_ONLY);
+    });
+
+    it('with no sign-in connected, nothing: there is no copy to talk about', () => {
+        expect(textOf(panel(WORDS_ONLY, true))).not.toContain(SIGN_IN_COPY_OPENERS);
+        expect(textOf(panel(WORDS_ONLY, false))).not.toContain(SIGN_IN_COPY_OPENERS);
+    });
+
+    it('covered with one sign-in: the footnote no longer says the server cannot open it alone', () => {
+        const text = textOf(panel(COVERED, true));
+        expect(text).not.toMatch(/Neither of them can open/);
+        expect(text).toContain("Your sign-in account can't restore your account alone — it takes your community's server too.");
     });
 });
 

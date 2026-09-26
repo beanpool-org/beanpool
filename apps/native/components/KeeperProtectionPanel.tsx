@@ -19,6 +19,17 @@ const PROVIDER_NAMES: Record<SsoProvider, string> = {
     github: 'GitHub',
 };
 
+/**
+ * Under a connected sign-in: who can open the copy it keeps (recovery seal S3; Marty, card sso-copy-lock, D-2 = a,
+ * 2026-09-26). The server's operators can: their process holds data/recovery-seal.key and receives the sign-in's id
+ * on every sign-in it checks. A copy of the database alone can't, but only on a server with the seal, and this phone
+ * may talk to one that has not updated yet. The 12 words part is for a phone that has them: on one restored with a
+ * sign-in and no words, "use only your 12 words" would talk a member out of their only way back.
+ */
+export const SIGN_IN_COPY_OPENERS =
+    "The people who run your community's server can open the copy of your account kept for your sign-in, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.";
+export const SIGN_IN_COPY_WORDS_ONLY = 'If you would rather nobody but you could get in, use only your 12 words.';
+
 export function formatCommunityName(raw?: string | null): string | null {
     if (!raw) return null;
     const trimmed = raw.trim();
@@ -170,6 +181,11 @@ export function KeeperProtectionPanel({
                         />
                     );
                 })}
+                {allProviders.some(p => enrolledSso.includes(p)) && (
+                    <Text style={styles.copyOpeners}>
+                        {hasWords ? `${SIGN_IN_COPY_OPENERS} ${SIGN_IN_COPY_WORDS_ONLY}` : SIGN_IN_COPY_OPENERS}
+                    </Text>
+                )}
                 <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
             </View>
         );
@@ -188,7 +204,7 @@ export function KeeperProtectionPanel({
                 <Text style={styles.footnote}>
                     {enrolledSso.length > 1
                         ? `Protected by ${enrolledSso.length} sign-in accounts + your community hub. Any single account, together with the hub, restores your account.`
-                        : 'Neither of them can open your account alone — it takes both.'}
+                        : "Your sign-in account can't restore your account alone — it takes your community's server too."}
                 </Text>
 
                 {renderSsoProviders()}
@@ -308,6 +324,13 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: colors.feedback.success.fg,
+    },
+    // Wraps in the column at any width: no fixed height, no numberOfLines, so 320dp at a 1.3x font cuts nothing off.
+    copyOpeners: {
+        fontSize: 12,
+        lineHeight: 16,
+        color: colors.text.secondary,
+        marginTop: 10,
     },
     actionNote: {
         fontSize: 12,

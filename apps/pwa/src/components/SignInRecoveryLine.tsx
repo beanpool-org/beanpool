@@ -6,6 +6,16 @@
  */
 import { signInNames } from '../lib/join-recovery';
 
+/**
+ * Under a connected sign-in: who can open the copy it keeps (recovery seal S3; Marty, card sso-copy-lock, D-2 = a,
+ * 2026-09-26). The server's operators can: their process holds data/recovery-seal.key and receives the sign-in's id on
+ * every sign-in it checks. A copy of its database alone can't. Unlike the phone's line, no "once updated": this page is
+ * served by the server it describes, and a server that serves it has the seal. The web app can't disconnect a sign-in
+ * yet; the guide says the phone app can.
+ */
+export const SIGN_IN_COPY_OPENERS =
+    "The people who run your community's server can open the copy of your account kept for your sign-in, because their server checks your sign-in. A stolen copy of the server's database can't. If you would rather nobody but you could get in, use only your 12 words.";
+
 interface Props {
     /** The node's list of sign-ins; undefined while asking, null when it could not be asked. */
     enrolled: string[] | null | undefined;
@@ -27,6 +37,11 @@ export function SignInRecoveryLine({ enrolled }: Props) {
                         ? `Signing in with ${names} also brings this account back, as your 12 words do.`
                         : 'Your 12 words are the way back to this account. Keep them safe.'}
                 </div>
+                {names && (
+                    <div data-testid="signin-recovery-openers" className="mt-1.5 text-xs font-normal text-nature-500 dark:text-nature-400">
+                        {SIGN_IN_COPY_OPENERS}
+                    </div>
+                )}
             </div>
         </div>
     );

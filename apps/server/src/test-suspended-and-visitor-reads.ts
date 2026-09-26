@@ -587,6 +587,26 @@ async function main() {
         await se.importRemoteState(payload);
         se.setNodeRole('primary');
         assert(marker() !== null, `a standby that copies a main server whose visitors are marked writes the marker: a promotion keeps the main server's marks (${marker()})`);
+
+        // A whole copy gives the main server's mark to a row the standby holds at the same stamp without it: what an import
+        // from before the column left (4110436371). The same version of the row, and the main server is the only writer
+        // of a standby's copy, so its mark is the row's, either way; the row keeps the main server's stamp. (The touch
+        // trigger restamps a change of the mark, so each stamp here is put back by itself.)
+        const holdAtStamp = (pk: string, flag: number, stamp: string) => {
+            db.prepare('UPDATE members SET is_visitor = ? WHERE public_key = ?').run(flag, pk);
+            db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(stamp, pk);
+        };
+        const zedStamp = exported(zed.pubKeyHex)?.updatedAt as string;
+        const deeStamp = exported(dee.pubKeyHex)?.updatedAt as string;
+        holdAtStamp(zed.pubKeyHex, 0, zedStamp);
+        holdAtStamp(dee.pubKeyHex, 1, deeStamp);
+        se.setNodeRole('backup');
+        await se.importRemoteState(payload);
+        se.setNodeRole('primary');
+        assert(visitorFlag(zed.pubKeyHex) === 1 && row(zed.pubKeyHex).updated_at === zedStamp,
+            `a whole copy marks a visitor's row the standby holds unmarked at the same stamp, and keeps the stamp (is_visitor ${visitorFlag(zed.pubKeyHex)}, ${row(zed.pubKeyHex).updated_at} / ${zedStamp})`);
+        assert(visitorFlag(dee.pubKeyHex) === 0 && row(dee.pubKeyHex).updated_at === deeStamp,
+            `…and the other way, a member's row held as a visitor's at the same stamp is a member's again (is_visitor ${visitorFlag(dee.pubKeyHex)}, ${row(dee.pubKeyHex).updated_at} / ${deeStamp})`);
         await p2p.stop();
     }
 

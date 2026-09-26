@@ -183,11 +183,29 @@ export function visitorsMarked(): boolean {
 }
 
 /**
- * A standby's import, when its main server's copy says its visitors are marked: the marks are in this copy, so this node
- * never runs the pass itself, not even once promoted, where it would judge on less than its main server did.
+ * VISITORS_MARKED's value on a standby that has its main server's word but not yet a whole copy since (4110436371): the
+ * rows it copied before it had the column carry no mark, the main server never stamps them again, and only a whole copy
+ * brings them (engine/sync.ts's member import takes the mark at the same stamp). Its puller asks for one; then 'copied'.
+ */
+const MARKS_BEFORE_WHOLE_COPY = 'copied, whole copy to come';
+
+/**
+ * A standby's import, when its main server's copy says its visitors are marked: the marks are the main server's, so this
+ * node never runs the pass itself, not even once promoted, where it would judge on less than its main server did.
  */
 export function noteVisitorsMarkedByMainServer(): void {
-    db.prepare("INSERT OR IGNORE INTO node_config (key, value) VALUES (?, 'copied')").run(VISITORS_MARKED);
+    db.prepare('INSERT OR IGNORE INTO node_config (key, value) VALUES (?, ?)').run(VISITORS_MARKED, MARKS_BEFORE_WHOLE_COPY);
+}
+
+/** A standby's puller, before a pull: whether it still wants a whole copy of its main server's marks (above). */
+export function visitorMarksWantWholeCopy(): boolean {
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(VISITORS_MARKED) as { value: string } | undefined;
+    return row?.value === MARKS_BEFORE_WHOLE_COPY;
+}
+
+/** A standby's puller, after importing a whole copy from a main server whose visitors are marked: every row has its mark. */
+export function noteWholeCopyOfVisitorMarks(): void {
+    db.prepare("UPDATE node_config SET value = 'copied' WHERE key = ? AND value = ?").run(VISITORS_MARKED, MARKS_BEFORE_WHOLE_COPY);
 }
 
 /**
@@ -203,15 +221,22 @@ export function noteVisitorsMarkedByMainServer(): void {
  * Never on a standby (NODE_ROLE=backup, 4110268549): its copy lacks some of what the rule reads (profile_updated_at isn't
  * imported; invite_codes, node_roles and the activity feed don't replicate), and its stamp would outlive its main
  * server's answer. It writes no marker either: its main server's marks reach it by delta sync, with the main's word
- * that they are made (noteVisitorsMarkedByMainServer). A standby promoted without that word (its main server predates
- * the column, so nobody ever marked) runs the pass at its first boot as the main server, or when a take-over finishes
- * at boot (services/takeover.ts), on what it holds: the members' own columns (inviter, code, photo, bio, contact), the
- * open door's record and, after a take-over, the node roles it brings; not profile edits, invites made or used, or the
- * activity feed.
+ * that they are made (noteVisitorsMarkedByMainServer), then one whole copy for the rows it copied before it had the
+ * column (visitorMarksWantWholeCopy); promoted before that whole copy, it logs so at boot. A standby promoted without
+ * that word (its main server predates the column, so nobody ever marked) runs the pass at its first boot as the main
+ * server, or when a take-over finishes at boot (services/takeover.ts), on what it holds: the members' own columns
+ * (inviter, code, photo, bio, contact), the open door's record and, after a take-over, the node roles it brings; not
+ * profile edits, invites made or used, or the activity feed.
  */
 export function markExistingVisitors(): void {
     try {
-        if (visitorsMarked()) return;
+        if (visitorsMarked()) {
+            if (getNodeRole() === 'primary' && visitorMarksWantWholeCopy()) {
+                console.warn("[DB] ⚠️ Visitors' rows: this server was promoted from a standby before it took the whole copy of its main server "
+                    + 'that brings every visitor\'s mark. A visitor whose row it copied before this version may read as a member here.');
+            }
+            return;
+        }
         if (getNodeRole() === 'backup') {
             console.log("[DB] Visitors' rows: a standby marks none itself; its main server's marks arrive with its copies");
             return;

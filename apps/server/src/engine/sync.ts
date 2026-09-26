@@ -634,7 +634,18 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     newMembers++;
                 } else {
                     if (rm.updatedAt && existing.updated_at && existing.updated_at >= rm.updatedAt) {
-                        conflictsSkipped++;
+                        // The same version of the row with another mark: a row an import from before the column copied
+                        // (no mark, the main server's stamp), which the main server never stamps again (4110436371). The
+                        // main server is the only writer of a standby's copy, so its mark is the row's. The touch trigger
+                        // restamps a change of the mark, so the main server's stamp is put back (updated_at fires nothing).
+                        const visitor = importedVisitor(rm);
+                        if (existing.updated_at === rm.updatedAt && visitor !== null && visitor !== existing.is_visitor) {
+                            db.prepare('UPDATE members SET is_visitor = ? WHERE public_key = ?').run(visitor, rm.publicKey);
+                            db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(rm.updatedAt, rm.publicKey);
+                            updatedMembers++;
+                        } else {
+                            conflictsSkipped++;
+                        }
                         continue;
                     }
                     // A visitor who joined on the primary: the row takes the join with it (who invited them, the code and
@@ -1358,7 +1369,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
             // The main server's word that its visitors' rows are marked: its marks are in this copy (each marked row is
             // stamped, so it travels), and this standby, which marks none itself, takes them as its own (db.ts
-            // markExistingVisitors). A main server older than that sends nothing, and the pass is left for a promotion.
+            // markExistingVisitors). Its puller then takes one whole copy, for the rows it copied before it had the
+            // column (db.ts visitorMarksWantWholeCopy). A main server older than that sends nothing, and the pass is
+            // left for a promotion.
             if (remote.visitorsMarked === true) noteVisitorsMarkedByMainServer();
 
             // The global node's place watches and its mirror of the directory (G5), so a server that takes over has every

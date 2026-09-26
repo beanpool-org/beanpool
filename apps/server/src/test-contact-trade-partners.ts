@@ -16,8 +16,9 @@
  * Partners owner in each state, a member with no trade, a member whose trade is with someone else, a pruned member who
  * did trade with them, a signed non-member, nobody, and each owner. Also the old key of a member whose phone was lost
  * or stolen, who traded with the owner and was added as a friend: once an operator issues a re-key code
- * (issueRekeyCode) the node has invalidated that key, though the row stays and the key can still sign, so it is
- * refused like a non-member; the member's NEW key, once the re-key completes (completeRekey), sees all three again.
+ * (issueRekeyCode) the node has invalidated that key, though the row stays and the key can still sign, so the signature
+ * middleware refuses everything it signs, read auth on or off (403 key_invalidated, #1177); the member's NEW key, once
+ * the re-key completes (completeRekey), sees all three again.
  * Then checks the member list's ETag moves when a trade is requested through the real route, which changes no member
  * row.
  *
@@ -212,7 +213,12 @@ async function main() {
         const paths = ['/api/community/members', ...Object.values(owners).map(o => `/api/profile/${o.pubKeyHex}`)];
         for (const p of paths) {
             const r = await get(p, id);
-            if (READ_AUTH_OFF) {
+            if (id === rekeyPending) {
+                // A replaced key is refused whatever it signs, read auth on or off (https-server.ts REPLACED_KEY_REFUSAL).
+                // With read auth off this was a 200 with no contact, as for any non-member; now the key gets nothing at all.
+                assert(r.status === 403 && JSON.parse(r.text)?.code === 'key_invalidated',
+                    `${label} is refused ${p.startsWith('/api/profile') ? 'a profile' : 'the member list'}, 403 key_invalidated (got ${r.status})`);
+            } else if (READ_AUTH_OFF) {
                 assert(r.status === 200, `${label} reads ${p.startsWith('/api/profile') ? 'a profile' : 'the member list'} → 200 with read auth off (got ${r.status})`);
             } else {
                 assert(r.status === (id ? 403 : 401), `${label} is refused ${p.startsWith('/api/profile') ? 'a profile' : 'the member list'} (got ${r.status})`);
@@ -241,8 +247,9 @@ async function main() {
         }
         for (const p of ['/api/community/members', ...Object.values(owners).map(o => `/api/profile/${o.pubKeyHex}`)]) {
             const r = await get(p, rekeyPending);
-            assert(r.status === (READ_AUTH_OFF ? 200 : 403) && secretsIn(r.text).size === 0,
-                `the replaced old key is ${READ_AUTH_OFF ? 'sent' : 'refused'} ${p.startsWith('/api/profile') ? 'a profile' : 'the member list'} with no contact (got ${r.status}, saw ${fmt(secretsIn(r.text))})`);
+            // Read auth on or off: see above (this was a 200 with no contact with read auth off).
+            assert(r.status === 403 && JSON.parse(r.text)?.code === 'key_invalidated' && secretsIn(r.text).size === 0,
+                `the replaced old key is refused ${p.startsWith('/api/profile') ? 'a profile' : 'the member list'}, and sent no contact (got ${r.status}, saw ${fmt(secretsIn(r.text))})`);
         }
     }
 

@@ -182,6 +182,7 @@ import {
     contactViewer as contactViewerEngine,
     isNodeMember as isNodeMemberEngine,
     isLiveMemberKey as isLiveMemberKeyEngine,
+    isInvalidatedKey as isInvalidatedKeyEngine,
     publicMemberCard,
     type ContactViewer,
     rowToMember,
@@ -1248,6 +1249,11 @@ export function isNodeMember(pubkey: string | null | undefined): boolean {
 /** May make a gated read: a member row, for a key not invalidated by a re-key (the engine's isLiveMemberKey). Pass the verified signer. */
 export function isLiveMemberKey(pubkey: string | null | undefined): boolean {
     return isLiveMemberKeyEngine(db, pubkey);
+}
+
+/** A key a re-key replaced, pending or completed (the engine's isInvalidatedKey, which ignores case). Pass the verified signer. */
+export function isInvalidatedKey(pubkey: string | null | undefined): boolean {
+    return isInvalidatedKeyEngine(db, pubkey);
 }
 
 export function updateProfile(publicKey: string, update: any): MemberProfile | null {

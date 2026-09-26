@@ -222,6 +222,13 @@ async function main() {
     for (const path of PATHS) {
         for (const [label, id, isMember] of viewers) {
             const r = await get(path, id);
+            if (id === rekeyed) {
+                // A replaced key is refused whatever it signs, a public read included (https-server.ts
+                // REPLACED_KEY_REFUSAL, #1177). This was a 200 with the counts and no voters, as for any non-member.
+                assert(r.status === 403 && JSON.parse(r.text)?.code === 'key_invalidated' && !namesVoter(r.text),
+                    `${label} is refused ${path}, 403 key_invalidated, and sent nothing that names the voter (got ${r.status})`);
+                continue;
+            }
             assert(r.status === 200, `${label} reads ${path} → 200 (got ${r.status})`);
             let rows: any[] = [];
             try { rows = JSON.parse(r.text); } catch { /* */ }
@@ -250,13 +257,14 @@ async function main() {
             const r = await get(path, id);
             let rows: any[] = [];
             try { rows = JSON.parse(r.text); } catch { /* */ }
-            const p = rows.find(x => x.id === pollId);
+            const p = Array.isArray(rows) ? rows.find(x => x.id === pollId) : undefined;
             if (isMember) {
                 assert(r.status === 200 && Array.isArray(p?.pollVotes) && p.pollVotes.some((v: any) => v.voterPubkey === voter.pubKeyHex),
                     `${label} gets the voter list on ${path} (got ${r.status})`);
             } else {
-                assert(r.status === 200 && !!p && !('pollVotes' in p) && !namesVoter(r.text),
-                    `${label} gets the poll with no voters on ${path} (got ${r.status})`);
+                // Refused outright, as above (this was a 200 with the poll and no voters).
+                assert(r.status === 403 && JSON.parse(r.text)?.code === 'key_invalidated' && !namesVoter(r.text),
+                    `${label} is refused ${path}, 403 key_invalidated, and sent nothing that names the voter (got ${r.status})`);
             }
         }
     }

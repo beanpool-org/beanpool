@@ -48,7 +48,7 @@ import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
 import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
 import {
-    registerMember, getMembers, getAllMembers, isNodeMember, isLiveMemberKey,
+    registerMember, getMembers, getAllMembers, isNodeMember, isLiveMemberKey, isInvalidatedKey,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
     acceptPost, completePostTransaction, cancelPostTransaction,
@@ -756,6 +756,25 @@ function isSignatureBypassed(p: string): boolean {
         p === '/api/invite/redeem-offline';
 }
 
+/**
+ * The answer to every signed request from a key a re-key replaced (`invalidated_keys`: a lost or stolen phone's, from the
+ * moment the operator starts the re-key, and for good once it completes). The same sentence and code as the join doors'
+ * (routes/open-join.ts, routes/knocks.ts), whose own refusals now answer only a direct caller; the phone's door already
+ * shows it word for word (native utils/global-join.ts).
+ *
+ * One place, for every route, rather than a check in each (the lesson of #1154): until the re-key completes, that key's
+ * "own data" is the member's whole account (its Beans, its profile, its posts and messages), which the re-key then hands
+ * to the new phone. Refused whatever the row's status says: a suspension is a separate rule, left to the routes.
+ *
+ * No flow needs a replaced key to sign, so there is no exception. The re-key is completed by the NEW key
+ * (`/api/member/re-enroll` is signed by the key it binds, which the identity check below holds to `newPublicKey`) or by
+ * an operator on the admin surface. A recovering device signs with a fresh ephemeral key (routes/recovery-collect.ts).
+ * The routes this middleware never sees (isSignatureBypassed: the admin surface, which a replaced key can't sign in to,
+ * and invite redemption, which refuses it itself) keep their own checks. A flow that ever must take a replaced key is
+ * named here, with its reason.
+ */
+const REPLACED_KEY_REFUSAL = 'This key was replaced by a new one, so this community no longer accepts it. Use the device or the 12 words that hold the new key.';
+
 // The administrative rate limiter's buckets (its middleware is in startHttpsServer): each client's requests in the last minute.
 const adminRateLimits = new Map<string, number[]>();
 /** Tests only: forget every administrative bucket. */
@@ -1193,6 +1212,14 @@ export async function startHttpsServer(port: number): Promise<number> {
                 return;
             }
 
+            // A key a re-key replaced signs nothing here, write or read (REPLACED_KEY_REFUSAL). Only once the signature
+            // checks out, so a forged request learns nothing about which keys are replaced.
+            if (isInvalidatedKey(pubKeyHex)) {
+                ctx.status = 403;
+                ctx.body = { error: REPLACED_KEY_REFUSAL, code: 'key_invalidated' };
+                return;
+            }
+
             // Bind cryptographically verified public key to state actor
             ctx.state.actor = pubKeyHex;
 
@@ -1204,11 +1231,11 @@ export async function startHttpsServer(port: number): Promise<number> {
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
             // keypair — an attacker can mint one. For gated reads, require the
             // signer to be a known member so the directory, balances, ledger and
-            // social graph aren't readable by an anonymous key, nor by the old key
-            // of a member being re-keyed (a lost or stolen phone), which this node
-            // has invalidated (isLiveMemberKey). (Writes keep their own per-route
-            // authorization; membership isn't required there — e.g. first-time
-            // registration.) Where this node shows visitors the listings and not the
+            // social graph aren't readable by an anonymous key. (The old key of a
+            // member being re-keyed, a lost or stolen phone, was refused above, for
+            // every request. Writes otherwise keep their own per-route authorization;
+            // membership isn't required there — e.g. first-time registration.)
+            // Where this node shows visitors the listings and not the
             // people (G9a), every gated read takes the member test itself
             // (mayMakeGatedRead): a pruned account reads as a visitor would.
             if (isGatedRead && !mayMakeGatedRead(pubKeyHex, ctx.path)) {

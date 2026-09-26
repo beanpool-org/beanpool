@@ -125,6 +125,7 @@ import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
 import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
+import { createNoticeRoutes } from './routes/notices.js';
 import { startTidyingKnocks } from './engine/knocks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { createChannelRoutes } from './routes/channels.js';
@@ -1438,6 +1439,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createOpenJoinRoutes(deps),
         createGlobalDirectoryRoutes(deps),
         createKnockRoutes(deps),
+        createNoticeRoutes(deps),
         createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),

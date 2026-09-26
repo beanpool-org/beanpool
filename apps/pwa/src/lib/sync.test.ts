@@ -16,6 +16,7 @@ import {
     connectToAnchor,
     onSyncActivity,
     onSyncChange,
+    onSocketOpen,
     resetSyncForTest,
     getWatchdogArmedForTest,
     PONG_TIMEOUT_MS,
@@ -90,6 +91,46 @@ describe('PWA WebSocket Pong Watchdog', () => {
         await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
         expect(socket.send).toHaveBeenCalledTimes(2);
         expect(socket.send).toHaveBeenLastCalledWith(JSON.stringify({ type: 'ping', wantPong: true }));
+    });
+
+    it('onSocketOpen fires on every open, the first and each reconnect, and not after unsubscribing', async () => {
+        // What SystemAlerts reads the kept moderation notices on: anything sent while the socket was down never arrived.
+        const opened = vi.fn();
+        const unsubscribe = onSocketOpen(opened);
+        connectToAnchor('ws://localhost:9000/ws');
+        const first = await waitForWs();
+        first.readyState = 1;
+        first.onopen();
+        expect(opened).toHaveBeenCalledTimes(1);
+
+        wsInstance = null;
+        first.onclose({ code: 1006, reason: 'dropped' });
+        await vi.advanceTimersByTimeAsync(30_000);
+        const second = await waitForWs();
+        second.readyState = 1;
+        second.onopen();
+        expect(opened).toHaveBeenCalledTimes(2);
+
+        unsubscribe();
+        wsInstance = null;
+        second.onclose({ code: 1006, reason: 'dropped again' });
+        await vi.advanceTimersByTimeAsync(30_000);
+        const third = await waitForWs();
+        third.readyState = 1;
+        third.onopen();
+        expect(opened).toHaveBeenCalledTimes(2);
+    });
+
+    it('a listener on the socket opening that throws breaks nothing', async () => {
+        onSocketOpen(() => { throw new Error('a listener fails'); });
+        const after = vi.fn();
+        onSocketOpen(after);
+        connectToAnchor('ws://localhost:9000/ws');
+        const socket = await waitForWs();
+        socket.readyState = 1;
+        expect(() => socket.onopen()).not.toThrow();
+        expect(after).toHaveBeenCalledTimes(1);
+        expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'ping', wantPong: true }));
     });
 
     it('a server that never pongs never arms the watchdog', async () => {

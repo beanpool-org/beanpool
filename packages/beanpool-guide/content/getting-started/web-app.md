@@ -20,7 +20,7 @@ The global community at global.beanpool.org is open to anyone, and you can join 
 
 The sign-in stops one person making many accounts. The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once.
 
-The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account together with your community's server can open it, as with a sign-in account linked on the phone app. Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back.
+The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account together with your community's server can open it, as with a sign-in account linked on the phone app. The people who run the server can open it too: see "Getting your account back". Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back.
 
 If you would rather the community did not keep that copy, the web app can't remove it yet. The phone app can, if your account is on your phone too: with the global community open, go to **Settings**, tap **Account Protection**, then **Disconnect** next to the sign-in. Either way, keep your 12 words safe: they are the way back that is yours alone.
 
@@ -44,8 +44,8 @@ On the global community a new account has a few daily limits for its first 3 day
 
 - After you join, a card called **Your account is new** shows how many of each are left and when more come back. Tap **✕** to put it away. It stays in **Settings** until the limits are over.
 - If you reach a limit, **New Post** or the chat says which one and when it lets up, and **New Post** shows the same card.
-- If the moderators have paused your posting, **New Post** and the chat say so.
-- The web app shows these alerts only while it is open. If your posting is paused, **New Post** and the chat tell you the next time you try. If the moderators hide or remove one of your posts while the web app is closed, it doesn't tell you later, so check your posts now and then, or use the phone app, which does.
+- If the moderators have paused your posting, **New Post** and the chat say so, and a card called **Posting paused** says until when. It stays until the pause ends.
+- If the moderators hide or remove one of your posts, or pause your posting, while the web app is closed, the web app shows the alert the next time you open it, for up to 60 days. Each alert stays until you tap **Acknowledge**, and then it doesn't come back. If several are waiting, **Close all** puts them all away. If your account is on your phone too, the web app can show an alert you already saw there.
 
 Your own local community has none of these limits.
 

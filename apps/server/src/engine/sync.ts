@@ -9,10 +9,12 @@ import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
+import { recoverySealEpoch } from '../services/recovery-seal-key.js';
 import { importedArea } from './member-area.js';
 import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
+import { mergeReplicatedNotices } from './kept-notices.js';
 import {
     exportSyncState as exportSyncStateEngine,
     type SyncPayload,
@@ -297,6 +299,13 @@ export async function exportSyncState(
     // Whether this node's visitors' rows are marked (db.ts markExistingVisitors), so a standby, which marks none itself,
     // knows the marks in its copy are the main server's and a promotion doesn't mark again on less. A node_config row.
     payload.visitorsMarked = visitorsMarked();
+    // The recovery seal's epoch (services/recovery-seal-key.ts): new each time this main server records clearing its
+    // database after sealing, so a standby that cleared under another one clears again after a rollback past the seal,
+    // whichever server was updated first. Only a main server names one. A node_config row.
+    if (getNodeRole() === 'primary') {
+        const sealEpoch = recoverySealEpoch();
+        if (sealEpoch) payload.sealEpoch = sealEpoch;
+    }
     return signSyncPayload(cb, payload);
 }
 
@@ -378,6 +387,12 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
         // its id, which is never used again: no newer row to protect, and no lookup below.
         case 'join_requests': {
             const r = db.prepare(`DELETE FROM join_requests WHERE id=?`).run(rowKey);
+            return r.changes > 0;
+        }
+        // A moderation notice past its member's bounds, or gone with them on a prune or a self-deletion
+        // (engine/kept-notices.ts). Keyed by its id, which is never used again: no newer row to protect, and no lookup below.
+        case 'moderation_notices': {
+            const r = db.prepare(`DELETE FROM moderation_notices WHERE id=?`).run(rowKey);
             return r.changes > 0;
         }
         default:
@@ -574,7 +589,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -1381,6 +1396,13 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             // copy. A main server older than this sends neither and changes nothing here.
             if (remote.placeWatches) mergeReplicatedWatches(remote.placeWatches);
             if (remote.directoryCache) mergeReplicatedDirectory(remote.directoryCache);
+
+            // The moderation notices kept for each member, and when they saw them (engine/kept-notices.ts), so a server
+            // that takes over still shows a web member what they have not seen, and nothing they have. After the members,
+            // because a notice is kept only for a member this database has; before the tombstones, which delete the ones
+            // past the bounds whatever this copy says of them. A bad row is left out, never the copy. A main server
+            // older than this sends none and changes nothing here.
+            if (remote.moderationNotices) mergeReplicatedNotices(remote.moderationNotices);
 
             const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
                 for (const ts of tombstones) {

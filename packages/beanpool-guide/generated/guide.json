@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 46,
-  "hash": "0e3d8a0722f7d414f30f5ae17e3e1114ac735a1880bae29dd4f2cc079036a32f",
+  "version": 50,
+  "hash": "e057b6ec7e990b6f0a289d4ed91610d89a14702f89149c56fd26f232303a3d69",
   "sections": [
     {
       "id": "about",
@@ -1720,7 +1720,7 @@
         },
         {
           "type": "p",
-          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account together with your community's server can open it, as with a sign-in account linked on the phone app. Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
+          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account together with your community's server can open it, as with a sign-in account linked on the phone app. The people who run the server can open it too: see \"Getting your account back\". Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
         },
         {
           "type": "p",
@@ -1767,8 +1767,8 @@
           "items": [
             "After you join, a card called **Your account is new** shows how many of each are left and when more come back. Tap **✕** to put it away. It stays in **Settings** until the limits are over.",
             "If you reach a limit, **New Post** or the chat says which one and when it lets up, and **New Post** shows the same card.",
-            "If the moderators have paused your posting, **New Post** and the chat say so.",
-            "The web app shows these alerts only while it is open. If your posting is paused, **New Post** and the chat tell you the next time you try. If the moderators hide or remove one of your posts while the web app is closed, it doesn't tell you later, so check your posts now and then, or use the phone app, which does."
+            "If the moderators have paused your posting, **New Post** and the chat say so, and a card called **Posting paused** says until when. It stays until the pause ends.",
+            "If the moderators hide or remove one of your posts, or pause your posting, while the web app is closed, the web app shows the alert the next time you open it, for up to 60 days. Each alert stays until you tap **Acknowledge**, and then it doesn't come back. If several are waiting, **Close all** puts them all away. If your account is on your phone too, the web app can show an alert you already saw there."
           ]
         },
         {
@@ -4554,7 +4554,7 @@
         },
         {
           "type": "p",
-          "text": "These alerts come under **Marketplace Activity** in your notification settings. See \"Notifications\"."
+          "text": "These alerts come under **Marketplace Activity** in your notification settings. See \"Notifications\". The web app has no notifications: it shows each alert while it is open, or the next time you open it."
         },
         {
           "type": "p",
@@ -4920,6 +4920,18 @@
         {
           "type": "p",
           "text": "To remove it, tap **Disconnect**."
+        },
+        {
+          "type": "h2",
+          "text": "Who can open the copy"
+        },
+        {
+          "type": "p",
+          "text": "A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it."
+        },
+        {
+          "type": "p",
+          "text": "If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account. Disconnecting deletes the copy. It does not delete the copies already in the server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back. The people who run the server can open those too. Nor does it delete the copy on a standby server, the second server some communities keep ready to take over: if that server ever does, a sign-in you disconnected is connected there again and brings your account back, until you disconnect it again."
         },
         {
           "type": "h2",

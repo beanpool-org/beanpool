@@ -5,7 +5,9 @@
 //   2. scripts/bootstrap-d1-migrations.sql, run on a database at ANY stage of that hand path, records exactly the
 //      migrations it has, so `migrations apply` then adds only the rest — never re-running 0001 (proved by a
 //      name_policy row deleted beforehand, as the live table dropped `test`, staying deleted) — and ends at the same
-//      schema;
+//      schema; on an empty database, what it makes (0001's name_policy) still lets `migrations apply` build a new one;
+//      and on the live database, which has two of 0005's three policy rows (put in by hand), it leaves 0005 to
+//      `migrations apply`, which adds only the missing one;
 //   3. the deploy workflow's guard (deploy-checks.mjs `bootstrapped`) refuses a database that was never bootstrapped,
 //      including one whose empty d1_migrations table a `wrangler d1 migrations list` created.
 // Run by the registrar deploy workflow's dry-run job: node scripts/check-migrations.mjs
@@ -89,6 +91,14 @@ try {
             execFile(dir, BOOTSTRAP);
             check(isDeepStrictEqual(recorded(dir), []), 'bootstrap on an empty database records nothing');
             check(guard().length > 0, 'the workflow guard refuses it');
+            // What it made there (name_policy, so 0005's clause can look for rows) is exactly 0001's: applying every
+            // migration after it still builds a new database.
+            wrangler(dir, 'migrations', 'apply', DB);
+            check(isDeepStrictEqual(recorded(dir), MIGRATIONS), `migrations apply then adds ${MIGRATIONS.join(', ')}`, recorded(dir));
+            const got = schema(dir);
+            check(isDeepStrictEqual(got, want.schema), 'the same schema as a new database', diff(got, want.schema));
+            const p = policy(dir);
+            check(isDeepStrictEqual(p, want.policy), 'the same policy seed as a new database', diff(p, want.policy));
             continue;
         }
         rows(dir, "DELETE FROM name_policy WHERE pattern = 'test'");   // the live table dropped `test`; 0001 re-adds it
@@ -109,6 +119,26 @@ try {
         const p = policy(dir);
         check(!p.some((r) => r.pattern === 'test') && isDeepStrictEqual(p, want.policy.filter((r) => r.pattern !== 'test')),
             '0001 did not run again: the policy row deleted beforehand is still gone, nothing else changed', p);
+    }
+
+    // The live database: 0001–0004 by hand, and two of 0005's three rows (global, earth) put in by hand before 0005
+    // existed. The bootstrap must not take that for 0005, so `migrations apply` runs it and it adds only ssh-global.
+    {
+        const dir = 'live';
+        const had = MIGRATIONS.slice(0, MIGRATIONS.indexOf('0005_reserve_global.sql'));
+        for (const m of had) execFile(dir, `migrations/${m}`);
+        console.log(`— the live database: ${had.join(', ')} applied by hand, and global and earth reserved by hand`);
+        rows(dir, "DELETE FROM name_policy WHERE pattern = 'test'");
+        rows(dir, "INSERT INTO name_policy (pattern, tier) VALUES ('global', 'blocked'), ('earth', 'blocked')");
+        execFile(dir, BOOTSTRAP);
+        check(isDeepStrictEqual(recorded(dir), had), `bootstrap records exactly ${had.join(', ')}: not 0005, which it only half has`, recorded(dir));
+        wrangler(dir, 'migrations', 'apply', DB);
+        check(isDeepStrictEqual(recorded(dir), MIGRATIONS), `migrations apply adds ${MIGRATIONS.slice(had.length).join(', ')}`, recorded(dir));
+        const got = schema(dir);
+        check(isDeepStrictEqual(got, want.schema), 'the same schema as a new database', diff(got, want.schema));
+        const p = policy(dir);
+        check(isDeepStrictEqual(p, want.policy.filter((r) => r.pattern !== 'test')),
+            'ssh-global added, 0001 did not run again, nothing else changed', diff(p, want.policy.filter((r) => r.pattern !== 'test')));
     }
 } finally {
     rmSync(TMP, { recursive: true, force: true });

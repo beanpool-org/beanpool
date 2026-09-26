@@ -4,10 +4,13 @@
 //   - a push on the `marketplace` category, so the member's Marketplace notification preference applies;
 //   - a live `system_announcement` event, which the phone app and the PWA already show as an alert. It goes
 //     to the recipient's own sockets only (broadcast with recipients, no doorbell for anyone else).
-// Neither names the admin or moderator who acted, and neither names anyone who reported: the author hears "the
-// community's moderators", and each reporter hears only about their own report.
+// And each recipient's copy is kept (engine/kept-notices.ts), because the web app has no push: it shows what its member
+// has not seen the next time it opens (GET /api/notices).
+// None of them names the admin or moderator who acted, or anyone who reported: the author hears "the community's
+// moderators", and each reporter hears only about their own report.
 
 import { db } from '../db/db.js';
+import { keepNotice } from './kept-notices.js';
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery') => void;
@@ -76,10 +79,16 @@ export function reportedPostsRemovedBody(count: number): string {
 function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string, body: string, data: Record<string, any>): void {
     const to = Array.from(new Set(recipients.filter(pk => typeof pk === 'string' && pk && pk !== 'SYSTEM')));
     if (to.length === 0) return;
-    try {
-        cb.broadcast({ type: 'system_announcement', title, body, severity: 'info', ...data }, to);
-    } catch (e: any) {
-        console.warn('[Moderation] Live notice failed:', e?.message || e);
+    // Each recipient's copy is kept first (engine/kept-notices.ts), so a web app that is closed now shows it when it
+    // next opens; the live notice carries that copy's id, so the web app that shows it live marks it seen and never
+    // shows it twice. One live notice per recipient: each names only their own copy.
+    for (const pk of to) {
+        const noticeId = keepNotice(pk, title, body, data);
+        try {
+            cb.broadcast({ type: 'system_announcement', title, body, severity: 'info', ...data, ...(noticeId ? { noticeId } : {}) }, [pk]);
+        } catch (e: any) {
+            console.warn('[Moderation] Live notice failed:', e?.message || e);
+        }
     }
     try {
         cb.dispatchPushNotification(to, 'SYSTEM', title, body, data, 'marketplace');

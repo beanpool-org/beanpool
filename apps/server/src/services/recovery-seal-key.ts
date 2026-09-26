@@ -75,19 +75,35 @@
  * one before the seal, so no wrapped copy comes) runs the VACUUM then too, without recording it.
  * Deletions after the seal still do not reach a standby; those copies are wrapped, and are left to a tombstone.
  *
- * A standby that has recorded its clear and is then sent a copy in the client's form (its main server rolled back past
- * the seal, or it now copies one that has not sealed) forgets the record, as the rollback command does on a main
- * server, and clears again once an import brings the wrapped copies back ({@link REOPENED_KEY}). When the standby ran
- * the older code too while the rollback lasted, this code saw none of those copies arrive: so at its boot it forgets the
- * record too when it holds a copy in the client's form that was not here, as it is now, when the clear was recorded.
- * Nothing on a standby needs a command for a rollback.
+ * A rollback past the seal (the command below) puts every copy back in the client's form, and each server that copied
+ * them must clear its files again once they are wrapped again. So the main server names each clear it records after
+ * sealing with a new random id, its seal epoch ({@link recoverySealEpoch}). The rollback command deletes that record,
+ * so the next seal names a new one. Every sync payload carries it (`sealEpoch`, a delta and a whole copy alike, signed
+ * with the rest). A standby records the epoch it cleared under and keeps the one its main server last sent. Whenever
+ * the two differ (at an import, or at boot from what it last imported), it forgets its clear ({@link forgetClearIfEpochChanged}),
+ * and clears again at the first import that brings only wrapped copies, or as soon as no copy it holds is in the
+ * client's form. That holds whichever server was updated first, and whichever code imported the copies while the
+ * rollback lasted. A standby that is sent a copy in the client's form after its clear forgets it too
+ * ({@link forgetClearIfSentClientForm}), and so does one that finds such a copy at its boot that was not here when it
+ * cleared ({@link forgetClearIfClientFormArrivedWhileDown}). Those two are all a main server from before the epoch
+ * leaves a standby to go on.
+ *
+ * Nothing on a standby needs a command for a rollback: it clears again by itself once its main server has sealed again
+ * and recorded that server's own clear, at the first pull that brings the new epoch. Until that pull it keeps what it
+ * holds, as long as it stays a standby. A take-over that makes it a main server first ends that wait: a main server
+ * forgets, once, a clear it recorded as a standby, and clears again at its first boot, under a new epoch of its own
+ * ({@link forgetClearMadeAsStandby}). A main server whose own clear waits for disk room names no new epoch yet. Copies
+ * in the client's form that its main server no longer holds (deleted before the seal, or removed by a member while the
+ * rollback lasted) are rows here until a whole copy removes them: when it clears again with any of them left, it asks
+ * for that whole copy ({@link askWholeCopyAfterReseal}).
  *
  * Rolling the server back past this change needs the rows unwrapped first, by the NEW code, with the server stopped:
  *
  *     node dist/services/recovery-seal-key.js --unwrap-recovery-rows          # in the image (/app/apps/server)
  *     pnpm exec tsx src/services/recovery-seal-key.ts --unwrap-recovery-rows  # from a checkout
  *
- * with BEANPOOL_DATA_DIR pointing at the node's data folder (the image sets /data). It prints counts only.
+ * with BEANPOOL_DATA_DIR pointing at the node's data folder (the image sets /data). It prints counts only. It is run on
+ * the main server only: its standbys hold no key, and clear again by themselves once it has sealed again (above).
  *
  * ## What this does not do
  *
@@ -570,7 +586,8 @@ export function rewrapRowsFromRetiredKeys(): { shares: number; releases: number 
  * The reverse, for a rollback past this change: every wrapped row back to the client's bytes. Refuses (and changes
  * nothing) if any wrapped row does not open with this key, because an older server would then serve it as garbage.
  * It also forgets that the database was cleared ({@link clearCopiesDroppedBeforeSeal}): the older server deletes
- * without zeroing, so coming back to this code clears it again.
+ * without zeroing, so coming back to this code clears it again, and that clear names a new seal epoch, which tells
+ * every standby to clear again too.
  */
 export function unwrapRecoveryRows(): { shares: number; releases: number } {
     requireKey();
@@ -584,19 +601,71 @@ export function unwrapRecoveryRows(): { shares: number; releases: number } {
 /**
  * node_config: when this database was cleared of copies deleted before the seal. Written only after the VACUUM and its
  * checkpoint finished, so one that failed or was cut off runs again. node_config is not replicated: each server
- * clears its own file. `clientForm`: a print of each copy in the client's form still here then
- * ({@link clientFormPrints}), what a standby's boot compares with ({@link forgetClearIfClientFormArrivedWhileDown}).
+ * clears its own file. `epoch`: the seal epoch the clear was made under ({@link recoverySealEpoch}): on a main server a
+ * new one, on a standby its main server's as last sent (null when that server names none). `clientForm`: a print of
+ * each copy in the client's form still here then ({@link clientFormPrints}), what a standby's boot compares with
+ * ({@link forgetClearIfClientFormArrivedWhileDown}). `standby`: true when a standby made it, which a main server does
+ * not keep ({@link forgetClearMadeAsStandby}).
  */
 export const CLEARED_KEY = 'recovery_seal_cleared';
 
 /**
- * node_config, on a standby: it had recorded its clear, and was then sent copies in the client's form, so it forgot the
- * record ({@link forgetClearIfSentClientForm}). While this is here the standby clears again only after an import that
- * brings its main server's wrapped copies and none in the client's form: the evidence that server has sealed again.
- * Its copies deleted on the main server after the seal stay wrapped here (no deletion reaches a standby), so "a wrapped
- * copy is here" no longer shows that. Removed with the clear it waits for.
+ * node_config, on a standby: it had recorded its clear and then forgot it, because it was sent copies in the client's
+ * form ({@link forgetClearIfSentClientForm}, {@link forgetClearIfClientFormArrivedWhileDown}) or its main server named
+ * a new seal epoch ({@link forgetClearIfEpochChanged}). While this is here the standby clears again only after an
+ * import that brings wrapped copies and none in the client's form (the main server has sealed again), or once no copy
+ * it holds is in the client's form, at boot or after any import (its wrapped copies have replaced the ones sent in that
+ * form, and a whole copy has removed the ones it no longer holds). Its copies deleted on the main server after the seal
+ * stay wrapped here (no deletion reaches a standby), so "a wrapped copy is here" no longer shows that server has sealed
+ * again. Removed with the clear it waits for.
  */
 export const REOPENED_KEY = 'recovery_seal_reopened';
+
+/**
+ * node_config, on a standby: the seal epoch its main server's last payload named ({@link recoverySealEpoch}), kept so its
+ * boot compares its clear with what it last imported. A payload that names none (a main server from before the epoch,
+ * or one that has not recorded its clear) leaves it as it is.
+ */
+export const MAIN_EPOCH_KEY = 'recovery_seal_main_epoch';
+
+/** A seal epoch as a main server makes it: 16 hex characters. A payload's that is not one is taken as none. */
+const EPOCH = /^[0-9a-f]{16,64}$/;
+
+const epochOf = (v: unknown): string | null => (typeof v === 'string' && EPOCH.test(v) ? v : null);
+
+/** The recorded clear ({@link CLEARED_KEY}) as an object, or null when there is none. One that does not parse is {}. */
+function recordedClear(): Record<string, unknown> | null {
+    const value = db.prepare('SELECT value FROM node_config WHERE key = ?').pluck().get(CLEARED_KEY) as string | undefined;
+    if (value === undefined) return null;
+    try {
+        const parsed = JSON.parse(value) as unknown;
+        return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
+    } catch {
+        return {};
+    }
+}
+
+/**
+ * The seal epoch this server's recorded clear names, or null when it has none (no clear recorded yet, or the rollback
+ * command deleted it). A main server's sync payload carries it (engine/sync.ts), so its standbys clear again after a
+ * rollback past the seal, whichever server is updated first. A new one at each clear a main server records, so a new
+ * one after every rollback; never secret.
+ */
+export function recoverySealEpoch(): string | null {
+    return epochOf(recordedClear()?.epoch);
+}
+
+/** On a standby: the seal epoch its main server last named ({@link MAIN_EPOCH_KEY}), or null. */
+function mainServerEpoch(): string | null {
+    return epochOf(db.prepare('SELECT value FROM node_config WHERE key = ?').pluck().get(MAIN_EPOCH_KEY));
+}
+
+/** On a standby, at an import: keep the seal epoch its main server's payload names. None, or not an epoch: nothing. */
+function noteMainServerEpoch(sent: unknown): void {
+    const epoch = epochOf(sent);
+    if (!epoch || epoch === mainServerEpoch()) return;
+    db.prepare(UPSERT_CONFIG).run(MAIN_EPOCH_KEY, epoch);
+}
 
 const UPSERT_CONFIG = 'INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value';
 
@@ -771,13 +840,13 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
  * code stores re-deposits in the client's form, so all of them come here. Once the main server seals again the wrapped
  * copies replace them, and their old page images would stay in earlier -wal frames with nothing to clear them. A standby
  * re-pointed at a main server that has not sealed is the same case. So it forgets, waits ({@link REOPENED_KEY}), and runs
- * the recorded clear again after the import that brings the wrapped copies back.
+ * the recorded clear again once the wrapped copies have replaced them.
  */
 function forgetClearIfSentClientForm(imported: { kdfParams?: string | null }[]): void {
     const clientForm = imported.filter(r => !isNodeWrapped(r?.kdfParams ?? null)).length;
     if (clientForm === 0) return;
     if (!db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY)) return;
-    forgetClear(clientForm);
+    forgetClear({ copies: clientForm });
     console.warn(`⚠️ Recovery seal: this standby had cleared state.db of sign-in recovery copies deleted before the seal, and was then sent `
         + `${copies(clientForm)} in the client's form (its main server rolled back past the seal, or has not sealed). So it forgets that `
         + 'clear, and clears again once its main server\'s wrapped copies come back.');
@@ -799,6 +868,10 @@ function forgetClearIfSentClientForm(imported: { kdfParams?: string | null }[]):
  * `at` is this server's, and no skew between the two changes what matches. A record made before it kept prints (the
  * first code with the seal) is taken to have held none: every copy in the client's form here then forgets it, once,
  * at the cost of one more VACUUM, and the clear recorded after that keeps them.
+ *
+ * With a main server that names its seal epoch, {@link forgetClearIfEpochChanged} covers this case at the first pull
+ * from it once it has sealed again, and the order this cannot see too: this standby's older code pulled the re-sealed
+ * copies as well, so none in the client's form is here at this boot. This stays for a main server from before the epoch.
  */
 function forgetClearIfClientFormArrivedWhileDown(): void {
     const record = db.prepare('SELECT value FROM node_config WHERE key = ?').pluck().get(CLEARED_KEY) as string | undefined;
@@ -808,18 +881,45 @@ function forgetClearIfClientFormArrivedWhileDown(): void {
     const then = new Set(Array.isArray(kept) ? kept.filter((p): p is string => typeof p === 'string') : []);
     const arrived = clientFormPrints().filter(p => !then.has(p)).length;
     if (arrived === 0) return;
-    forgetClear(arrived);
+    forgetClear({ copies: arrived });
     console.warn(`⚠️ Recovery seal: this standby had cleared state.db of sign-in recovery copies deleted before the seal, and at this boot `
         + `holds ${copies(arrived)} in the client's form that ${arrived === 1 ? 'was' : 'were'} not here when it cleared (its main server `
         + 'rolled back past the seal while this standby ran older code). So it forgets that clear, and clears again once its main '
         + 'server\'s wrapped copies come back.');
 }
 
-/** Forget the recorded clear, and wait for an import that brings the main server's wrapped copies ({@link REOPENED_KEY}). */
-function forgetClear(clientForm: number): void {
+/**
+ * On a standby, at boot and after each import: when its main server's seal epoch ({@link MAIN_EPOCH_KEY}, from the last
+ * payload that named one) is not the one its recorded clear was made under, forget the record. The main server names a
+ * new epoch only when it records a clear after sealing, and the rollback command deleted its last one, so a new epoch
+ * means that server has sealed again since this standby cleared. Its copies went to the client's form in between and
+ * are wrapped again now, and their old page images may be in this standby's files, whichever code imported them and
+ * in whatever order: this standby's older code may even have pulled the re-sealed copies too, which leaves nothing in
+ * the client's form here for the other checks to see. So it forgets and waits ({@link REOPENED_KEY}), and clears again
+ * at the first import that brings only wrapped copies, or as soon as no copy it holds is in the client's form; with the
+ * re-sealed copies here already, that is at once.
+ *
+ * A record with no epoch (made while the main server named none) is forgotten once it names one, at the cost of one
+ * more VACUUM. Once the clear is recorded under the epoch, nothing here forgets it again, at any boot, until the main
+ * server names another. A main server that names none changes nothing here.
+ */
+function forgetClearIfEpochChanged(): void {
+    const main = mainServerEpoch();
+    if (!main) return;
+    const record = recordedClear();
+    if (!record || epochOf(record.epoch) === main) return;
+    forgetClear({ epoch: 'changed' });
+    console.warn('⚠️ Recovery seal: this standby had cleared state.db of sign-in recovery copies deleted before the seal, and its main server '
+        + 'now names a seal epoch it did not clear under (that server sealed again since, after a rollback past the seal, or has just '
+        + 'started naming its seal). So it forgets that clear, and clears again once no sign-in recovery copy it holds is in the '
+        + 'client\'s form.');
+}
+
+/** Forget the recorded clear, and wait until no copy here is in the client's form ({@link REOPENED_KEY}). */
+function forgetClear(why: Record<string, unknown>): void {
     db.transaction(() => {
         db.prepare('DELETE FROM node_config WHERE key = ?').run(CLEARED_KEY);
-        db.prepare(UPSERT_CONFIG).run(REOPENED_KEY, JSON.stringify({ at: new Date().toISOString(), copies: clientForm }));
+        db.prepare(UPSERT_CONFIG).run(REOPENED_KEY, JSON.stringify({ at: new Date().toISOString(), ...why }));
     })();
     clearedSettled = false;
     clearTriedThisProcess = false;
@@ -860,30 +960,47 @@ function clientFormPrints(): string[] {
  * standby, once a whole copy (or a force-resync) has removed the copies it held in the old form, holds none. The copies
  * its re-deposits dropped before the seal are still in its free pages. So a standby whose last look found copies in the
  * old form, and which now holds none, runs the same VACUUM then, and does not record it ({@link clearWithoutRecording}):
- * copies in the old form can still reach it, and the recorded clear still runs when wrapped ones arrive.
+ * copies in the old form can still reach it, and the recorded clear still runs when wrapped ones arrive. (When its main
+ * server names a seal epoch, it records that clear instead: below.)
  *
- * A standby that has recorded its clear and is then sent a copy in the client's form forgets the record
- * ({@link forgetClearIfSentClientForm}), and clears again after an import that brings the wrapped copies back. So does
- * one that finds such a copy at its boot that was not here when it cleared ({@link forgetClearIfClientFormArrivedWhileDown}):
- * it ran the older code while its main server was rolled back.
+ * A standby that has recorded its clear forgets it when its main server names a new seal epoch
+ * ({@link forgetClearIfEpochChanged}), when it is sent a copy in the client's form ({@link forgetClearIfSentClientForm}),
+ * or when it finds such a copy at its boot that was not here when it cleared
+ * ({@link forgetClearIfClientFormArrivedWhileDown}). It then clears again after an import that brings only wrapped
+ * copies, or as soon as no copy it holds is in the client's form, at boot or after any import ({@link REOPENED_KEY}): so
+ * a clear that failed is tried again at the next boot, and copies its older code already replaced with wrapped ones are
+ * cleared at once. Otherwise, while a copy here is in the client's form, it waits: the main server's wrapped copies
+ * replace the ones a rollback sent. A copy in that form the main server no longer holds (deleted before the seal, or
+ * removed by a member while the rollback lasted) stays a row until a whole copy removes it, so a standby that clears
+ * again with one here asks for that whole copy ({@link askWholeCopyAfterReseal}). With the main server's word that it
+ * has sealed (a seal epoch), a standby that holds no copy at all records its clear too: nothing is waiting to arrive,
+ * and a copy in the client's form that does arrive after it, or a new epoch, forgets it again.
+ *
+ * A main server forgets, once, a clear it recorded as a standby, and clears again under a new epoch of its own
+ * ({@link forgetClearMadeAsStandby}).
  *
  * `boot`: called at boot ({@link installRecoverySealAtBoot}), not after an import.
  * `wholeCopy`: on a standby, the rows of the whole copy of its main server just imported; null after a delta or at boot.
  * `imported`: on a standby, the recovery rows the import just wrote, a delta's included; null at boot.
+ * `mainEpoch`: on a standby, the seal epoch the payload it just imported names (`sealEpoch`); absent at boot, and from a
+ * main server that names none.
  * Never throws and never stops a boot. A VACUUM that fails, or that the disks have no room for, is logged and tried again
- * at the next boot; one that finished is recorded ({@link CLEARED_KEY}) and never runs again.
+ * at the next boot; one that finished is recorded ({@link CLEARED_KEY}), and runs again only after a rollback past the
+ * seal.
  */
 export function clearCopiesDroppedBeforeSeal(opts: {
     standby: boolean; boot?: boolean; wholeCopy?: RecoveryRowKey[] | null; imported?: { kdfParams?: string | null }[] | null;
+    mainEpoch?: unknown;
 }): void {
     const imported = Array.isArray(opts.imported) ? opts.imported : null;
     if (opts.standby) {
         try {
+            noteMainServerEpoch(opts.mainEpoch);
+            forgetClearIfEpochChanged();
             if (imported) forgetClearIfSentClientForm(imported);
             else if (opts.boot) forgetClearIfClientFormArrivedWhileDown();
         } catch (e) {
-            console.warn(`⚠️ Recovery seal: checking whether this standby was sent sign-in recovery copies in the client's form failed: `
-                + `${(e as Error)?.message || e}.`);
+            console.warn(`⚠️ Recovery seal: checking whether this standby must clear state.db again failed: ${(e as Error)?.message || e}.`);
         }
         try {
             dropCopiesMainServerDeleted(opts.wholeCopy ?? null);
@@ -894,14 +1011,26 @@ export function clearCopiesDroppedBeforeSeal(opts: {
     }
     if (clearedSettled) return;
     try {
-        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY)) { clearedSettled = true; return; }
+        let record = recordedClear();
+        if (record && !opts.standby && madeAsStandby(record)) {
+            forgetClearMadeAsStandby();
+            record = null;
+        }
+        if (record) {
+            if (!opts.standby && !epochOf(record.epoch)) nameEpochOfRecordedClear(record);
+            clearedSettled = true;
+            return;
+        }
         const kdfs = db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[];
         const old = kdfs.filter(k => !isNodeWrapped(k)).length;
+        const reopened = opts.standby && !!db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(REOPENED_KEY);
         const oldAtLastLook = standbyOldAtLastLook;
         if (opts.standby) standbyOldAtLastLook = old;
         // A main server whose wrap did not run has said why; the next boot tries again.
         if (old > 0 && !opts.standby) return;
-        if (opts.standby && old === kdfs.length) {
+        // The epoch the clear is recorded under: a main server makes a new one; a standby takes its main server's.
+        const epoch = opts.standby ? mainServerEpoch() : crypto.randomBytes(8).toString('hex');
+        if (opts.standby && old === kdfs.length && !(old === 0 && epoch)) {
             // No wrapped copy here, including no copy at all: nothing shows that the main server has sealed, and until it has,
             // copies in the old form can still arrive, into the WAL, after a clear recorded now.
             if (kdfs.length === 0 && oldAtLastLook) {
@@ -918,14 +1047,16 @@ export function clearCopiesDroppedBeforeSeal(opts: {
             }
             return;
         }
-        if (opts.standby && db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(REOPENED_KEY)
-            && !(imported && imported.length > 0 && imported.every(r => isNodeWrapped(r?.kdfParams ?? null)))) {
-            // It forgot its clear: copies in the client's form came after it. Wrapped copies here (the ones its main server
-            // deleted after the seal stay, wrapped) do not show that server has sealed again; an import of wrapped ones does.
+        const importedWrapped = !!imported && imported.length > 0 && imported.every(r => isNodeWrapped(r?.kdfParams ?? null));
+        if (reopened && old > 0 && !importedWrapped) {
+            // It forgot its clear. Wrapped copies here (the ones its main server deleted after the seal stay, wrapped) do not
+            // show that server has sealed again; an import of wrapped ones does, and so does no copy left here in the
+            // client's form.
             if (!standbyWaitLogged) {
                 standbyWaitLogged = true;
-                console.log('🔐 Recovery seal: this standby was sent sign-in recovery copies in the client\'s form after it had cleared '
-                    + 'state.db, so it clears again once an import brings its main server\'s wrapped copies back.');
+                console.log(`🔐 Recovery seal: this standby forgot its clear of state.db, and ${copies(old)} it holds ${old === 1 ? 'is' : 'are'} in `
+                    + 'the client\'s form. It clears again at the first import that brings only wrapped copies, or once none here is in '
+                    + 'that form.');
             }
             return;
         }
@@ -941,19 +1072,78 @@ export function clearCopiesDroppedBeforeSeal(opts: {
         db.transaction(() => {
             db.prepare(UPSERT_CONFIG).run(CLEARED_KEY, JSON.stringify({
                 at: new Date().toISOString(), seconds: Number(seconds.toFixed(2)), bytesBefore: before, bytesAfter: after,
-                clientForm: clientFormPrints(),
+                epoch, clientForm: clientFormPrints(), ...(opts.standby ? { standby: true } : {}),
             }));
             db.prepare('DELETE FROM node_config WHERE key = ?').run(REOPENED_KEY);
+            // A main server names its own epoch: one it kept as a standby means nothing now ({@link madeAsStandby}).
+            if (!opts.standby) db.prepare('DELETE FROM node_config WHERE key = ?').run(MAIN_EPOCH_KEY);
         })();
         clearedSettled = true;
         console.log(`🔐 Recovery seal: cleared state.db of sign-in recovery copies deleted before the seal (one VACUUM, ${seconds.toFixed(1)} s, `
             + `${mb(before)} → ${mb(after)}). This runs once.`
             + (old > 0 ? ` ${copies(old)} in the form stored before the seal ${old === 1 ? 'is' : 'are'} still here as rows: the next whole copy `
                 + 'of the main server removes those it no longer holds.' : ''));
+        if (reopened && old > 0 && !opts.wholeCopy) askWholeCopyAfterReseal(old);
     } catch (e) {
         console.warn(`⚠️ Recovery seal: the one VACUUM that clears sign-in recovery copies deleted before the seal from state.db failed: `
             + `${(e as Error)?.message || e}. The server runs; the next boot tries again.`);
     }
+}
+
+/**
+ * A main server whose clear was recorded before clears named an epoch: name it now, once. A record a main server made
+ * means no rollback past the seal came since (the rollback command deletes it; one made as a standby is forgotten
+ * first, {@link forgetClearMadeAsStandby}). Its standbys' clears name none, so each clears once more: the safe side of
+ * not knowing what came before.
+ */
+function nameEpochOfRecordedClear(record: Record<string, unknown>): void {
+    db.prepare(UPSERT_CONFIG).run(CLEARED_KEY, JSON.stringify({ ...record, epoch: crypto.randomBytes(8).toString('hex') }));
+    console.log('🔐 Recovery seal: this server\'s recorded clear of state.db now names a seal epoch, which its standbys compare with theirs.');
+}
+
+/**
+ * Whether this server recorded its clear while it was a standby: the record says so, or it still keeps an epoch its main
+ * server sent ({@link MAIN_EPOCH_KEY}, which only a standby writes, and which a main server deletes when it forgets or
+ * records its own clear, so it never forgets twice).
+ */
+function madeAsStandby(record: Record<string, unknown>): boolean {
+    return record.standby === true || !!db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(MAIN_EPOCH_KEY);
+}
+
+/**
+ * A main server that holds a clear it recorded as a standby (a take-over promoted it, or a standby's database was
+ * restored as a main server's): forget it, once, and clear again now, under a new epoch of its own. A main server takes
+ * its own record as proof that no rollback past the seal came since, and a standby's record proves nothing of the kind:
+ * the rollback command runs on the main server only, so the record a standby made survives every rollback its main
+ * server goes through. A standby promoted before its first pull of its main server's new epoch (the main server died, or
+ * was retired) would otherwise keep, for good, the page images of every copy the rollback sent it in the client's form,
+ * and name the old epoch to standbys of its own. Costs one VACUUM per take-over, and each of its standbys clears once
+ * more (the new epoch).
+ */
+function forgetClearMadeAsStandby(): void {
+    db.transaction(() => {
+        db.prepare('DELETE FROM node_config WHERE key = ?').run(CLEARED_KEY);
+        db.prepare('DELETE FROM node_config WHERE key = ?').run(MAIN_EPOCH_KEY);
+    })();
+    // As forgetClear does: a standby pass that already tried the clear at this boot must not stop the main pass's clear (#1188 4111161914).
+    clearTriedThisProcess = false;
+    console.log('🔐 Recovery seal: this server recorded its clear of state.db while it was a standby, which does not show that no rollback past '
+        + 'the seal came since. As a main server it clears once more, under a seal epoch of its own.');
+}
+
+/**
+ * On a standby that forgot its clear, when it clears again at an import that brings only wrapped copies and still holds
+ * copies in the client's form: its main server has sealed again, so every copy in that form here is one that server no
+ * longer holds (a member removed it while the rollback lasted, or it was deleted before the seal), which opens with the
+ * `sub` alone. A standby asks for one whole copy once a process ({@link dropCopiesMainServerDeleted}), and may have spent
+ * that ask already, on its main server while it was rolled back. So it asks once more now: the whole copy removes them,
+ * zeroed, at the next pull, not at the next restart. Once per forgotten clear, so once per rollback.
+ */
+function askWholeCopyAfterReseal(old: number): void {
+    wholeCopyAsked = true;
+    wholeCopyWanted = true;
+    console.log(`🔐 Recovery seal: ${copies(old)} here ${old === 1 ? 'is' : 'are'} still in the client's form after its main server sealed again. `
+        + 'This standby asks that server for one whole copy, which removes those it no longer holds.');
 }
 
 /** One VACUUM, then a checkpoint that empties the WAL. Throws if either fails, after giving the disk its space back. */
@@ -1036,6 +1226,8 @@ export function installRecoverySealAtBoot(opts: { standby: boolean }): void {
     const as = opts.standby ? 'standby' : 'main';
     if (installedAs === as) return;
     installedAs = as;
+    // A role that changed at this boot (a take-over step finished) looks at the recorded clear again, as that role.
+    clearedSettled = false;
     try {
         if (opts.standby) {
             console.log(`🔐 Recovery seal: a standby holds no key of its own. A take-over brings its main server's data/${RECOVERY_SEAL_KEY_FILE} `

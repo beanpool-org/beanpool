@@ -5,6 +5,7 @@
  * for an author's profile, ratings or anything else about who posted it.
  */
 
+import { useEffect, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import type { MarketplacePost } from '../lib/api';
 import { formatEventWhen } from '../lib/events';
@@ -89,8 +90,11 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin }: D
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const typeColor = POST_TYPE_COLORS[post.type] || '#888';
     const photos = post.photos ?? [];
+    // Opened from a card far down the list, the sheet starts at its own top, not at the list's scroll.
+    const top = useRef<HTMLDivElement>(null);
+    useEffect(() => { top.current?.scrollIntoView?.({ block: 'start' }); }, [post.id]);
     return (
-        <div data-testid="visitor-detail" className="p-4 max-w-lg mx-auto" style={{ paddingBottom: 'calc(var(--bottom-nav-offset, 0px) + 4rem)' }}>
+        <div ref={top} data-testid="visitor-detail" className="p-4 max-w-lg mx-auto" style={{ paddingBottom: 'calc(var(--bottom-nav-offset, 0px) + 4rem)' }}>
             <button
                 type="button"
                 onClick={onBack}

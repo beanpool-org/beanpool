@@ -97,9 +97,9 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
 
     const joinCard = (
         <section data-testid="lobby-join-card"
-            className="mb-3 p-4 rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/30 text-center">
+            className="mb-3 px-4 py-3 rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/90 dark:bg-blue-950/60 text-center">
             <h2 className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white">Join BeanPool</h2>
-            <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200 leading-relaxed">
+            <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200 leading-snug">
                 {doorOpen
                     ? 'Post what you can offer and what you need, and talk with the people here. It takes a name and one sign-in. No invite needed.'
                     : 'This community takes new members with an invite from one of them.'}
@@ -113,7 +113,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                 </button>
             )}
             <button type="button" data-testid="lobby-have-account" onClick={() => openJoin('restore')}
-                className="mt-2 min-h-[44px] px-2 bg-transparent border-0 text-sm font-semibold text-nature-600 dark:text-nature-300 underline cursor-pointer">
+                className="mt-1 min-h-[44px] px-2 bg-transparent border-0 text-sm font-semibold text-nature-600 dark:text-nature-300 underline cursor-pointer">
                 Already have BeanPool?
             </button>
         </section>
@@ -126,7 +126,8 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
         </button>
     );
 
-    const title = tab === 'marketplace' ? 'Marketplace' : 'Map';
+    // The tab's own name: at 320 px with 1.3x text "Marketplace" runs under the Join button.
+    const title = tab === 'marketplace' ? 'Market' : 'Map';
 
     return (
         <div className="flex h-screen overflow-hidden text-text-primary" data-testid="guest-lobby">
@@ -174,7 +175,8 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                 }}>
                     <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
                     <img src="/bean.png" alt="" aria-hidden="true" className="relative z-10 w-8 h-8 object-contain drop-shadow-sm" />
-                    <h1 className="absolute left-1/2 -translate-x-1/2 z-10 m-0 font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] whitespace-nowrap">
+                    <h1 className="absolute left-1/2 -translate-x-1/2 z-10 m-0 font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] whitespace-nowrap overflow-hidden text-ellipsis"
+                        style={{ maxWidth: 'calc(100% - 190px)' }}>
                         {title}
                     </h1>
                     {headerJoin('relative z-10 min-h-[36px] px-4 rounded-full text-sm shadow-md')}

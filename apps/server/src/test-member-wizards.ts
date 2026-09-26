@@ -282,6 +282,11 @@ async function main() {
                 VALUES ('stranger-knock', ?, 'Stranger', 'Hi', 'declined', ?, ?, ?, ?)`)
         .run(strangerKey, knockStamp, oldAliceKey, knockStamp, knockStamp);
 
+    // 19. Bob addressed a post to Alice alone, and gave her a task: who may read it (engine/posts.ts) and who does it
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to)
+                VALUES ('bob-to-alice', 'request', 'produce', 'Spare jars?', 'For the honey', 0, ?, 'direct', ?, ?)`)
+        .run(bobKey, oldAliceKey, oldAliceKey);
+
     // Step A: Issue re-key code (tested with uppercase key to verify case normalization)
     const rekeyIssue = issueRekeyCode(oldAliceKey.toUpperCase(), operatorPubkey);
     assert(Boolean(rekeyIssue.code), `Re-enrolment code generated: ${rekeyIssue.code}`);
@@ -446,6 +451,12 @@ async function main() {
         'join_requests: her knock moved to newAliceKey, stamped');
     assert(answeredKnock?.decided_by === newAliceKey && answeredKnock?.updated_at > knockStamp,
         'join_requests: the knock she answered names newAliceKey as the member who answered, stamped');
+
+    // A post addressed to her alone, and a task given her: left on the old key, she could read neither on the new one.
+    const forAlice = db.prepare("SELECT target_pubkey, assigned_to FROM posts WHERE id = 'bob-to-alice'").get() as any;
+    const forOldAlice = db.prepare('SELECT 1 FROM posts WHERE target_pubkey = ? OR assigned_to = ?').get(oldAliceKey, oldAliceKey);
+    assert(forAlice?.target_pubkey === newAliceKey && forAlice?.assigned_to === newAliceKey && !forOldAlice,
+        'posts: the post addressed to her and the task given her name newAliceKey');
 
     // Case-insensitive assertMemberActive check
     throws(() => assertMemberActive(oldAliceKey.toUpperCase()), new RegExp(newAliceKey), 'assertMemberActive on uppercase old key reports rekeyed_to new key');

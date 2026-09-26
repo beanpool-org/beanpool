@@ -13,7 +13,8 @@
  * server's real backup routes. No other host is reached.
  *
  *  1. A main server: Anna (owner), Rex, Sue, Tom, Bea and Cat, whom Rex invited. Rex, Sue and Tom each have a post, an
- *     RSVP, friends, a rating, a group, a chat, an open-door record and a recovery copy, and keep another member's.
+ *     RSVP, friends, a rating, a group, a chat, an open-door record and a recovery copy, and keep another member's; another
+ *     member addressed a post to each of them alone and gave each a task.
  *  2. Its standby copies it (a force-resync) and holds the take-over keys. Members trade, and a delta brings the trades:
  *     the standby holds every balance the main server does. (Trades come after the standby's first copy: a first copy
  *     leaves every balance made before it at 0 on the standby, since the import stamps each new member's account with its
@@ -63,6 +64,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const KEY_COLUMNS: [string, string][] = [
     ['members', 'public_key'], ['members', 'invited_by'], ['accounts', 'public_key'],
     ['transactions', 'from_pubkey'], ['transactions', 'to_pubkey'], ['posts', 'author_pubkey'],
+    ['posts', 'target_pubkey'], ['posts', 'assigned_to'],
     ['event_rsvps', 'member_pubkey'], ['friends', 'owner_pubkey'], ['friends', 'friend_pubkey'],
     ['ratings', 'target_pubkey'], ['ratings', 'rater_pubkey'], ['groups', 'created_by'], ['group_members', 'member_pubkey'],
     ['conversations', 'created_by'], ['conversation_participants', 'public_key'], ['messages', 'author_pubkey'],
@@ -117,6 +119,9 @@ async function child(): Promise<void> {
             const t = a.tag;
             db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at)
                         VALUES (?, 'offer', 'general', 'Firewood', 'Split and dry', 5, ?, ?, ?)`).run(`post-${t}`, a.pk, now, now);
+            // A post the peer addressed to them alone, and a task the peer gave them: who may read it and who does it.
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to, created_at, updated_at)
+                        VALUES (?, 'request', 'general', 'Kindling', 'For you', 0, ?, 'direct', ?, ?, ?, ?)`).run(`post-${t}-for`, a.peer, a.pk, a.pk, now, now);
             db.prepare(`INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, updated_at) VALUES (?, ?, 'going', '', ?)`).run(`post-${t}`, a.pk, now);
             db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?), (?, ?, ?)').run(a.pk, a.peer, now, a.peer, a.pk, now);
             db.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment, transaction_id, created_at)

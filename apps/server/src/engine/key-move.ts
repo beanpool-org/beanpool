@@ -86,6 +86,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('posts', 'author_pubkey');
     move('posts', 'accepted_by');
     move('posts', 'created_by');
+    // Who may read a post addressed to one member, and who does a task (engine/posts.ts): left on the old key, the
+    // member could read neither on the new one.
+    move('posts', 'target_pubkey');
+    move('posts', 'assigned_to');
 
     // (g) poll_votes
     move('poll_votes', 'voter_pubkey');

@@ -11,13 +11,15 @@
  *
  * Put away on purpose (the press guard): a press in an alert's first second, or within a second of a typed letter, does
  * nothing, so a Tab that lands on Acknowledge while typing "Fresh eggs" puts nothing away, and a double tap puts away
- * one alert, not the next one too. Modal: Tab and Shift+Tab go round the alert's buttons, and when the last one is put
+ * one alert, not the next one too. Nor does a press in the second after Close all appears: a second notice arriving
+ * live as the member taps Acknowledge on the long one puts Close all where Acknowledge was. Modal: Tab and Shift+Tab go round the alert's buttons, and when the last one is put
  * away focus is back in the text box. Contrast, for each severity in light and dark: the heading, Acknowledge's words
  * on its colour, Close all's words and the "1 of" count at 4.5:1 or more on the dialog, and Close all's border 3:1.
  * Photographs each case to e2e/shots/.
  *
  * Nothing here touches a BeanPool node: /api/notices and /api/community/me are answered by the page route with
  * fixtures, and any other /api or /ws request is aborted and counted, so a stray fetch fails the run instead of escaping.
+ * A live notice is handed to SystemAlerts' listeners by window.__announce (the liveAlerts plugin below), never a socket.
  *
  *   node e2e/moderation-notices-check.mjs     # exits non-zero on any overflow
  *
@@ -142,7 +144,32 @@ const contrastFailures = (shot, c) => {
     return out;
 };
 
-const server = await createServer({ configFile: path.join(PWA_DIR, 'vite.config.ts'), root: PWA_DIR, server: { port: 0 } });
+/**
+ * A live alert's way in, as the socket would hand it over: SystemAlerts' own lib/sync, the real module, with
+ * window.__announce(alert) added to call the listeners SystemAlerts subscribed. The harness never opens a socket.
+ */
+const LIVE_SYNC = '\0moderation-notices-live-sync';
+const liveAlerts = {
+    name: 'moderation-notices-live-alerts',
+    enforce: 'pre',
+    resolveId(source, importer) {
+        return source === '../lib/sync' && importer?.endsWith(path.join('src', 'components', 'SystemAlerts.tsx')) ? LIVE_SYNC : null;
+    },
+    load(id) {
+        if (id !== LIVE_SYNC) return null;
+        return `import { onSystemAnnouncement as subscribe } from '/src/lib/sync.ts';
+export { onSocketOpen } from '/src/lib/sync.ts';
+let subscribed = [];
+export function onSystemAnnouncement(cb) {
+    subscribed.push(cb);
+    const off = subscribe(cb);
+    return () => { subscribed = subscribed.filter((c) => c !== cb); off(); };
+}
+window.__announce = (alert) => subscribed.forEach((cb) => cb(alert));`;
+    },
+};
+
+const server = await createServer({ configFile: path.join(PWA_DIR, 'vite.config.ts'), root: PWA_DIR, server: { port: 0 }, plugins: [liveAlerts] });
 await server.listen();
 const base = `http://localhost:${server.httpServer.address().port}`;
 
@@ -317,6 +344,71 @@ try {
         await context.close();
     }
 
+    // A second notice arriving as the member taps (a moderator acting on several posts in a row): the long notice shows
+    // alone, the member reads past its second, and "Posting paused" arrives live. The count and Close all appear, the
+    // buttons grow upwards, and Close all is drawn where Acknowledge was. A tap at Acknowledge's old place puts nothing
+    // away, and a second later Acknowledge puts away the first only (#1192's review, measured).
+    for (const c of CASES) {
+        const context = await browser.newContext({ viewport: { width: c.width, height: c.height } });
+        const marked = [];
+        await context.route('**/*', (route) => {
+            const req = route.request();
+            const url = req.url();
+            if (url.includes('/api/notices/seen')) {
+                marked.push(...(JSON.parse(req.postData() || '{}').ids ?? []));
+                return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, marked: 1 }) });
+            }
+            if (url.includes('/api/notices')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ notices: [NOTICES[0]] }) });
+            if (url.includes('/api/community/me')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(STANDING) });
+            if (url.includes('/api/') || url.startsWith('ws')) { blocked++; return route.abort(); }
+            return route.continue();
+        });
+        const page = await context.newPage();
+        const pageErrors = [];
+        page.on('pageerror', (e) => pageErrors.push(e.message));
+        await page.goto(`${base}/e2e/moderation-notices-harness.html`, { waitUntil: 'networkidle' });
+        await page.evaluate((scale) => { document.documentElement.style.fontSize = `${scale * 100}%`; }, c.fontScale);
+        await page.waitForSelector('[role="alertdialog"]');
+        await page.evaluate(() => document.fonts.ready);
+        const arriving = `moderation-notices-arriving-${c.name}`;
+        const shown = () => page.evaluate(() => ({
+            title: document.getElementById('system-alert-title')?.textContent ?? null,
+            count: document.querySelector('[data-testid="system-alert-count"]')?.textContent ?? null,
+        }));
+        const span = (b) => `y ${Math.round(b.y)}–${Math.round(b.y + b.height)}`;
+
+        await afterTheGuard(page);
+        const before = await page.getByRole('button', { name: 'Acknowledge' }).boundingBox();
+        const x = before.x + before.width / 2;
+        const y = before.y + before.height / 2;
+        const { id, title, body, severity, data } = NOTICES[1];
+        await page.evaluate((a) => window.__announce(a), { type: 'system_announcement', noticeId: id, title, body, severity, kind: data.kind });
+        await page.getByRole('button', { name: /^Close all/ }).waitFor();
+        const hit = await page.evaluate(([px, py]) => document.elementFromPoint(px, py)?.closest('button')?.textContent ?? null, [x, y]);
+        const ackAfter = await page.getByRole('button', { name: 'Acknowledge' }).boundingBox();
+        const closeAfter = await page.getByRole('button', { name: /^Close all/ }).boundingBox();
+        await page.mouse.click(x, y);
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: path.join(OUT_DIR, `${arriving}.png`) });
+        const tapped = await shown();
+        console.log(`${arriving}: Acknowledge ${span(before)}, then ${span(ackAfter)} with Close all at ${span(closeAfter)}; a tap at Acknowledge's old place hits ${JSON.stringify(hit)}: alert "${tapped.title}" (${tapped.count}), marked ${JSON.stringify(marked)}`);
+        if (marked.length) failures.push(`${arriving}: a tap at Acknowledge's old place as "${title}" arrived marked ${JSON.stringify(marked)} seen, expected nothing`);
+        if (tapped.title !== NOTICES[0].title || tapped.count !== '1 of 2') failures.push(`${arriving}: after the tap the alert shows "${tapped.title}" (${tapped.count}), expected "${NOTICES[0].title}" (1 of 2)`);
+
+        // Only while the first is still up to press (if the tap put it away, that is already a failure above).
+        if (tapped.title === NOTICES[0].title) {
+            await afterTheGuard(page);
+            await page.getByRole('button', { name: 'Acknowledge' }).click();
+            for (let i = 0; i < 20 && marked.length < 1; i++) await page.waitForTimeout(100);
+            const next = await shown();
+            console.log(`${arriving}: Acknowledge a second later: alert "${next.title}" (${next.count}), marked ${JSON.stringify(marked)}`);
+            if (JSON.stringify(marked) !== JSON.stringify([NOTICES[0].id])) failures.push(`${arriving}: Acknowledge a second later marked ${JSON.stringify(marked)}, expected ["${NOTICES[0].id}"]`);
+            if (next.title !== title || next.count !== null) failures.push(`${arriving}: after Acknowledge the alert shows "${next.title}" (${next.count}), expected "${title}" alone`);
+        }
+        if (pageErrors.length) failures.push(`${arriving}: page errors ${JSON.stringify(pageErrors)}`);
+        await context.close();
+    }
+
     // A member typing in a text box when the notices arrive (the open's read answers late): they keep typing, and a
     // Space, an Enter (which sends in the event chat) or the rest of the sentence puts nothing away.
     {
@@ -429,4 +521,4 @@ if (failures.length) {
     console.error(`\n✗ ${failures.length} problem(s):\n  ${failures.join('\n  ')}`);
     process.exit(1);
 }
-console.log('\n✓ nothing reaches past the viewport, nothing scrolls sideways, each alert fits and passes AA contrast in every severity and theme, each notice is marked seen once, when put away on purpose, never by typing on or a double tap, Tab stays in the alert, and focus goes back');
+console.log('\n✓ nothing reaches past the viewport, nothing scrolls sideways, each alert fits and passes AA contrast in every severity and theme, each notice is marked seen once, when put away on purpose, never by typing on, a double tap or a tap as the next notice arrives, Tab stays in the alert, and focus goes back');

@@ -6827,9 +6827,10 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
 export function adminBroadcastAnnouncement(title: string, body: string, severity: 'info'|'warning'|'critical') {
     broadcast({ type: 'system_announcement', title, body, severity });
 
-    // Also dispatch as a native push notification to all active members
+    // Also dispatch as a native push notification to all active members. Not to a visitor's row: the /ws copy never reaches
+    // its socket (visitorMayReceive), and its push token gets what is sent to it, its messages and Beans, and no member's news.
     try {
-        const activeMembers = db.prepare("SELECT public_key FROM members WHERE status != 'disabled' AND status != 'pruned'").all() as { public_key: string }[];
+        const activeMembers = db.prepare("SELECT public_key FROM members WHERE status != 'disabled' AND status != 'pruned' AND is_visitor = 0").all() as { public_key: string }[];
         const targetPubkeys = activeMembers.map(m => m.public_key);
         dispatchPushNotification(targetPubkeys, 'SYSTEM', title, body, { type: 'system_announcement' }, 'marketplace');
     } catch (e: any) {
@@ -7458,6 +7459,12 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
     const row = db.prepare(`SELECT pref_value FROM member_preferences WHERE public_key = ? AND pref_key = ?`).get(publicKey, prefKey) as any;
     return row?.pref_value ?? 'true'; // Default to 'true' (enabled)
 }
+
+/**
+ * The preferences that say which pushes reach a member's phone: one per dispatchPushNotification category (`notify_<category>`)
+ * and the event reminders, as the apps send them. A visitor's row sets these and no other (visitor-allowlist.ts).
+ */
+export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
 
 /**
  * Every preference this member has, with the defaults for the ones they have never touched.

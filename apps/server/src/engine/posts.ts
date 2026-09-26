@@ -18,6 +18,7 @@ import {
     getMember,
     getPosts,
     readsAsMember,
+    isVisitorKey,
     withoutPollVoters,
     validatePostPhotos,
     generateSearchKeywords,
@@ -191,6 +192,10 @@ export function eventGoingPubkeys(postId: string): string[] {
 /**
  * Fire-and-forget: a push failure must never fail the edit or the cancellation that caused it. The
  * dispatcher drops the actor itself, so a host who is also Going does not notify themselves.
+ *
+ * A visitor's row (members.is_visitor) is left out, whatever RSVP it holds from before visitors were refused one: it
+ * reads the event as a key with no row does, its /ws socket gets no event update, and its push token gets what is sent
+ * to it, its messages and Beans.
  */
 function notifyEventChange(
     push: PushFn | undefined,
@@ -201,7 +206,7 @@ function notifyEventChange(
 ): void {
     if (!push) return;
     try {
-        const going = eventGoingPubkeys(postId);
+        const going = eventGoingPubkeys(postId).filter(pk => !isVisitorKey(db, pk));
         if (going.length === 0) return;
         push(
             going,
@@ -533,6 +538,20 @@ export function createPost(
         }
     }
     return forActor(post, authorPublicKey);
+}
+
+/**
+ * Whether `postId` is a listing (an offer or a need) that `publicKey` itself wrote on this node: the author read from the
+ * post, never from a request. A visitor's row may take down such a listing, from before visitors were refused one
+ * (visitor-allowlist.ts), and nothing else it posted then: not an event, whose removal cancels it and tells everyone
+ * Going, nor a poll, nor an enterprise's listing it keeps. Nor the copy of a listing the listing pull keeps from another
+ * community (origin_node), which that community takes down and the next pull replaces.
+ */
+export function isOwnListing(postId: unknown, publicKey: string): boolean {
+    if (typeof postId !== 'string' || !postId || !publicKey) return false;
+    const row = db.prepare('SELECT author_pubkey, type, origin_node FROM posts WHERE id = ?').get(postId) as
+        { author_pubkey: string; type: string; origin_node: string | null } | undefined;
+    return !!row && row.author_pubkey === publicKey && (row.type === 'offer' || row.type === 'need') && row.origin_node == null;
 }
 
 export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: string, push?: PushFn): boolean {

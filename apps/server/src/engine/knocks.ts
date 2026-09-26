@@ -98,7 +98,7 @@
  */
 import crypto from 'node:crypto';
 import { db, writeTombstone } from '../db/db.js';
-import { getMember, type SyncJoinRequest } from '@beanpool/engine';
+import { alreadyJoined, getMember, type SyncJoinRequest } from '@beanpool/engine';
 import { generateInvite } from './invites.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
 import { getNodeRole } from './sync.js';
@@ -228,10 +228,14 @@ export type KnockOutcome =
     | { ok: true; id: string; reopened: boolean }
     | { ok: false; reason: KnockRefusal };
 
-/** Why this key can't knock at all, whatever its knocks: already a member, a closed account, or a replaced key. */
+/**
+ * Why this key can't knock at all, whatever its knocks: already a member, a closed account, or a replaced key. A
+ * visitor's row is no member (alreadyJoined): it knocks like anyone new, and the invite that answers it makes that row
+ * a member's.
+ */
 export function knockerRefusal(pubkey: string): 'already_member' | 'account_closed' | 'key_invalidated' | null {
     const member = getMember(db, pubkey);
-    if (member) return member.status === 'pruned' ? 'account_closed' : 'already_member';
+    if (member && alreadyJoined(db, pubkey)) return member.status === 'pruned' ? 'account_closed' : 'already_member';
     if (openJoinKeyInvalidated(pubkey)) return 'key_invalidated';
     return null;
 }
@@ -342,8 +346,9 @@ function answerable(id: string, now: number): { row: KnockRow } | { reason: Answ
     if (!row) return { reason: 'not_found' };
     if (row.status !== 'pending') return { reason: 'answered' };
     if (!isOpen(row, now)) return { reason: 'lapsed' };
-    // They joined some other way meanwhile (a member's invite): there is nothing left to answer.
-    if (getMember(db, row.pubkey)) return { reason: 'already_member' };
+    // They joined some other way meanwhile (a member's invite): there is nothing left to answer. A visitor's row (a
+    // member messaged them, or sent them Beans) hasn't joined.
+    if (alreadyJoined(db, row.pubkey)) return { reason: 'already_member' };
     // A key a re-key replaced. A re-key moves the knock with the member (`moveKnocks`), so this is the second lock: an
     // invite for the old key would let it back in as a second member, the thing the re-key was for stopping.
     if (openJoinKeyInvalidated(row.pubkey)) return { reason: 'key_invalidated' };

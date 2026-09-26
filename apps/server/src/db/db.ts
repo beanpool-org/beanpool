@@ -144,6 +144,70 @@ export function writeTombstone(tableName: string, rowKey: string): void {
     ).run(tableName, rowKey);
 }
 
+/**
+ * A person's row with no record of joining (members.is_visitor, markExistingVisitors). Every way in writes one: an
+ * invite and an offline ticket write the inviter's key into `invited_by` and the code into `invite_code` (and use the
+ * code, `invite_codes.used_by`), the open door `open:<provider>` and an `open_joins` row, the genesis member `genesis`,
+ * and each joiner has a `member_joined` line in the activity feed. The only row written with none of these is
+ * registerVisitor's, and it has been so since the first public release. Not an enterprise's row (`is_treasury`), which
+ * no key holds, nor the SYSTEM account.
+ */
+const NO_RECORD_OF_JOINING = `
+    COALESCE(m.is_treasury, 0) = 0
+    AND m.public_key NOT IN ('SYSTEM', 'genesis')
+    AND COALESCE(m.invited_by, '') = ''
+    AND COALESCE(m.invite_code, '') = ''
+    AND NOT EXISTS (SELECT 1 FROM invite_codes i WHERE i.used_by = m.public_key)
+    AND NOT EXISTS (SELECT 1 FROM open_joins o WHERE o.member_pubkey = m.public_key)
+    AND NOT EXISTS (SELECT 1 FROM node_roles r WHERE r.member_pubkey = m.public_key)
+    AND NOT EXISTS (SELECT 1 FROM activity_feed a WHERE a.event_type = 'member_joined' AND a.actor_pubkey = m.public_key)`;
+
+/**
+ * Signs that the person behind a row with no record of joining uses this node as their community, which a visitor
+ * never needs: a profile set up here (a photo, a bio, contact details, or any profile edit) or an invite made. A
+ * visitor who took an invite before this version was answered "already a member", kept its visitor row, and then set
+ * up its profile in the join wizard; these keep that person a member.
+ */
+const USED_AS_A_MEMBER = `
+    COALESCE(m.avatar_url, '') != '' OR COALESCE(m.bio, '') != '' OR COALESCE(m.contact_value, '') != ''
+    OR m.profile_updated_at IS NOT NULL
+    OR EXISTS (SELECT 1 FROM invite_codes c WHERE c.created_by = m.public_key)`;
+
+/**
+ * Marks the visitors' rows a node already holds, once: the first boot with members.is_visitor (node_config
+ * `migration_mark_visitors_v1`, written in the same transaction, so a crash leaves it to run again). A row is marked
+ * when it has no record of joining (NO_RECORD_OF_JOINING) and no sign of being used as a member (USED_AS_A_MEMBER).
+ *
+ * The safe side is that no member is ever made a visitor by mistake, so anything ambiguous stays a member: a row with no
+ * record of joining that shows a sign of use is kept, and counted in the log as such. A member wrongly marked would
+ * still hold their account, Beans and history, and joining with an invite makes the same row a member's again. Each
+ * marked row's updated_at is stamped, so delta sync takes the mark to a standby.
+ */
+function markExistingVisitors(): void {
+    try {
+        if (db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_mark_visitors_v1'").get()) return;
+        db.transaction(() => {
+            const marked = db.prepare(`
+                SELECT m.public_key FROM members m WHERE m.is_visitor = 0 AND ${NO_RECORD_OF_JOINING} AND NOT (${USED_AS_A_MEMBER})
+            `).all() as { public_key: string }[];
+            const kept = (db.prepare(`
+                SELECT COUNT(*) AS n FROM members m WHERE m.is_visitor = 0 AND ${NO_RECORD_OF_JOINING} AND (${USED_AS_A_MEMBER})
+            `).get() as { n: number }).n;
+            const mark = db.prepare(`UPDATE members SET is_visitor = 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`);
+            for (const r of marked) mark.run(r.public_key);
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_mark_visitors_v1', '1')").run();
+            if (marked.length > 0 || kept > 0) {
+                console.log(`[DB] Visitors' rows marked: ${marked.length}${marked.length > 0 ? ` (${marked.slice(0, 20).map(r => r.public_key.slice(0, 12)).join(', ')}${marked.length > 20 ? ', …' : ''})` : ''}; `
+                    + `kept as members, with no record of joining but used as a member here: ${kept}`);
+            }
+        })();
+    } catch (e) {
+        // Nobody is marked and the marker isn't written, so the next boot tries again; until then visitors read as
+        // members, as they did before this version.
+        console.error('[DB] ❌ Could not mark visitors\' rows:', e);
+    }
+}
+
 // Function to initialize schema
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
@@ -481,6 +545,10 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN area_lat REAL CHECK (area_lat IS NULL OR (area_lat >= -90 AND area_lat <= 90))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN area_lng REAL CHECK (area_lng IS NULL OR (area_lng >= -180 AND area_lng <= 180))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN area_updated_at TEXT`).run(); } catch { }
+    // A visitor's row (engine isVisitorKey). Before the schema.sql exec, whose members_touch_updated_at (dropped below, so
+    // the exec recreates it) lists it. 0 on every existing row; the node marks its visitors once, after the exec
+    // (markExistingVisitors), when every table that rule reads exists.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN is_visitor INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     // Per-person reminders for one event (docs/events-on-the-map.md §2.1). Here with the other event
     // columns and BEFORE the schema.sql exec, for the same reason they are: schema.sql indexes
     // event_rsvps, and a CREATE INDEX that runs against a table the exec has already refused to re-shape
@@ -707,6 +775,8 @@ export function initSchema() {
             db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_legacy_credit_floor_v1', '1')").run();
         }
     } catch { }
+
+    markExistingVisitors();
 
     // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded
     // activity, falling back to joined_at when last_active_at is NULL. Activity used to be recorded only

@@ -36,7 +36,7 @@
  * that takes no invites takes no knocks.
  */
 import Router from '@koa/router';
-import { isNodeMember, assertMemberActive } from '../state-engine.js';
+import { isNodeMember, readsAsMember, assertMemberActive } from '../state-engine.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { getConfiguredSwitches, getProfileSwitches } from '../config/node-profile.js';
 import { isAcceptableAvatarValue } from '../engine/avatar.js';
@@ -228,6 +228,12 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'no-store');
         const member = answeringMember(ctx);
         if (!member) return;
+        // Who is asking to join, with what they wrote and their photo: a read only members may make (readsAsMember),
+        // whatever ENFORCE_READ_AUTH says. answeringMember has refused a suspended member already; this refuses a
+        // visitor's row too.
+        if (!readsAsMember(member)) {
+            return answer(ctx, 403, 'Only a member of this community can see or answer requests to join.', 'not_member');
+        }
         const limit = wholeQuery(ctx.query.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
         const offset = wholeQuery(ctx.query.offset, 0, 1_000_000);
         if (limit === null || limit < 1) return answer(ctx, 400, `limit must be a whole number from 1 to ${MAX_LIST_LIMIT}.`, 'bad_request');

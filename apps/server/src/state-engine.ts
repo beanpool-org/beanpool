@@ -181,7 +181,10 @@ import {
     contactVisibleTo,
     contactViewer as contactViewerEngine,
     isNodeMember as isNodeMemberEngine,
-    isLiveMemberKey as isLiveMemberKeyEngine,
+    readsAsMember as readsAsMemberEngine,
+    passesReadGate as passesReadGateEngine,
+    isVisitorKey as isVisitorKeyEngine,
+    alreadyJoined as alreadyJoinedEngine,
     isInvalidatedKey as isInvalidatedKeyEngine,
     publicMemberCard,
     type ContactViewer,
@@ -1030,6 +1033,13 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 // get only PUBLIC_WS_EVENTS, as a bare doorbell, unless the operator chose the open
 // feed (ENFORCE_WS_AUTH=false), where they get every event without recipients.
 //
+// Two things a socket's verified key decides, as for an HTTP read:
+//   - `_memberPubkey`, a key that passes the act test (isNodeMember): what is sent TO it as a party (`recipients`),
+//     its own messages, trades and Beans. A suspended or disabled member's and a visitor's socket keep this.
+//   - `_memberFeed`, a key that reads as a member (readsAsMember): the member feed, everything else a member socket
+//     gets (community events, poll voters, the doorbells of other people's private events). A suspended or disabled
+//     member's socket, while that lasts, and a visitor's get only what a stranger's gets here.
+//
 // `othersGetDoorbell`: a private event whose side effect everyone may see (a listing going pending, a
 // completed trade on the activity feed). The recipients get the full event; every other member socket
 // (and an open-feed socket) gets only `{ type }`, so its client re-fetches what it may see. Clients use
@@ -1046,6 +1056,15 @@ export function broadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         return;
     }
     deliverBroadcast(event, recipients, opts);
+}
+
+/** What a /ws socket's verified key gets: what is sent to it as a party (`act`), and the member feed (`feed`). */
+export interface SocketStanding { act: boolean; feed: boolean }
+
+/** A socket key's standing: act is isNodeMember, feed is readsAsMember (which needs act). Pass the verified key. */
+export function socketStanding(pubkey: string): SocketStanding {
+    const act = isNodeMember(pubkey);
+    return { act, feed: act && readsAsMember(pubkey) };
 }
 
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): void {
@@ -1104,38 +1123,50 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     const carriesVoters = (event?.type === 'new_post' || event?.type === 'post_updated')
         && !!event.post && typeof event.post === 'object' && 'pollVotes' in event.post;
     let withoutVoters: string | null = null;
+    // The joined key's standing, asked once, and only if some socket holds that key.
+    let joined: SocketStanding | undefined;
     for (const ws of wsClients) {
-        // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now.
-        if (joinedPubkey && !ws._memberPubkey && ws._pendingMemberPubkey === joinedPubkey) {
-            ws._memberPubkey = event.member.publicKey;
-            ws._pendingMemberPubkey = null;
+        // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
+        // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
+        // member_joined alone never makes one (a replaced key, whatever announced it, stays a stranger's socket).
+        if (joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey
+            || (typeof ws._memberPubkey === 'string' && ws._memberPubkey.toLowerCase() === joinedPubkey))) {
+            joined ??= socketStanding(event.member.publicKey);
+            if (joined.act) {
+                ws._memberPubkey = event.member.publicKey;
+                ws._memberFeed = joined.feed;
+                ws._pendingMemberPubkey = null;
+            }
         }
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
-            if (!ws._memberPubkey && !ws._openFeed && !PUBLIC_WS_EVENTS.has(event?.type)) continue;
+            if (!ws._memberFeed && !ws._openFeed && !PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
-        } else if (!ws._memberPubkey && !ws._openFeed) {
+        } else if (!recipients && !ws._memberFeed && !ws._openFeed) {
             if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
-        } else if (!ws._memberPubkey && carriesVoters) {
+        } else if (!ws._memberFeed && carriesVoters) {
             out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });
         }
         try { ws.send(out); } catch { wsClients.delete(ws); }
     }
-    // A member's open socket stops being a member socket once its key no longer makes a member (isNodeMember): from now
-    // on it gets what a stranger gets, as a fresh connect with that key does. A prune says so outright. A re-key started
-    // for a lost or stolen phone announces profile_updated for the old key (issueRekeyCode), and one completed
-    // announces member_rekeyed, so both are asked.
+    // An open socket's key is asked again whenever that key's standing may have changed, so the socket gets from then on
+    // what a fresh connect with that key would. A key that no longer makes a member (isNodeMember) stops being a member
+    // socket for good: a prune says so outright, a re-key started for a lost or stolen phone announces profile_updated
+    // for the old key (issueRekeyCode), and one completed announces member_rekeyed. A suspension and its end announce
+    // profile_updated too (adminSetUserStatus, a community vote, a report's action), so a suspended member's socket stops
+    // getting the member feed while it lasts and gets it again after, keeping what is sent to it throughout.
     const changedKey = event?.type === 'member_rekeyed' ? event.oldPublicKey
         : event?.type === 'user_pruned' || event?.type === 'profile_updated' ? event.publicKey : null;
     if (typeof changedKey === 'string') {
         const key = changedKey.toLowerCase();
-        let demote: boolean | undefined;
+        let standing: SocketStanding | undefined;
         for (const ws of wsClients) {
             if (typeof ws._memberPubkey !== 'string' || ws._memberPubkey.toLowerCase() !== key) continue;
-            demote ??= event.type === 'user_pruned' || !isNodeMember(ws._memberPubkey);
-            if (demote) ws._memberPubkey = null;
+            standing ??= event.type === 'user_pruned' ? { act: false, feed: false } : socketStanding(ws._memberPubkey);
+            if (!standing.act) ws._memberPubkey = null;
+            ws._memberFeed = standing.feed;
         }
     }
 }
@@ -1241,14 +1272,35 @@ export function contactViewer(viewerPubkey: string | null | undefined): ContactV
     return contactViewerEngine(db, viewerPubkey);
 }
 
-/** A member of this node: a row that exists and isn't pruned, for a key not invalidated by a re-key (the engine's isNodeMember). Pass the verified signer. */
+/**
+ * The act test: a member of this node, a row that exists and isn't pruned, for a key not invalidated by a re-key
+ * (the engine's isNodeMember). Suspended and disabled members and visitors' rows pass. Pass the verified signer.
+ */
 export function isNodeMember(pubkey: string | null | undefined): boolean {
     return isNodeMemberEngine(db, pubkey);
 }
 
-/** May make a gated read: a member row, for a key not invalidated by a re-key (the engine's isLiveMemberKey). Pass the verified signer. */
-export function isLiveMemberKey(pubkey: string | null | undefined): boolean {
-    return isLiveMemberKeyEngine(db, pubkey);
+/**
+ * The read test, for what only members may read: isNodeMember, and not suspended or disabled, and not a visitor's row
+ * (the engine's readsAsMember). Pass the verified signer.
+ */
+export function readsAsMember(pubkey: string | null | undefined): boolean {
+    return readsAsMemberEngine(db, pubkey);
+}
+
+/** Passes the gated-read gate: isNodeMember, and not a visitor's row (the engine's passesReadGate). Pass the verified signer. */
+export function passesReadGate(pubkey: string | null | undefined): boolean {
+    return passesReadGateEngine(db, pubkey);
+}
+
+/** A visitor's row, not a member's (the engine's isVisitorKey; members.is_visitor). */
+export function isVisitorKey(pubkey: string | null | undefined): boolean {
+    return isVisitorKeyEngine(db, pubkey);
+}
+
+/** Has already joined, for the doors: a member row that isn't a visitor's, or a closed one (the engine's alreadyJoined). */
+export function alreadyJoined(pubkey: string | null | undefined): boolean {
+    return alreadyJoinedEngine(db, pubkey);
 }
 
 /** A key a re-key replaced, pending or completed (the engine's isInvalidatedKey, which ignores case). Pass the verified signer. */
@@ -5541,6 +5593,9 @@ export function actionReport(
     // not just the two direct removal routes; a shortfall only `console.warn` knows about is how the
     // rows-vs-ledger discrepancy stays invisible. Reported only once the removal has actually committed.
     const shortfalls: EscrowRefundShortfall[] = [];
+    // The member suspended, announced after the commit as an admin's suspension is (adminSetUserStatus): their standing
+    // changed, and their open sockets are asked again on it (deliverBroadcast), so they stop getting the member feed.
+    let suspended: string | null = null;
     const ok = db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
@@ -5572,9 +5627,12 @@ export function actionReport(
             db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
             bumpMembersVersion();
             bumpPostsVersion();
+            suspended = report.target_pubkey;
         }
         return true;
     })();
+    const suspendedKey = suspended as string | null;
+    if (ok && suspendedKey) broadcast({ type: 'profile_updated', publicKey: suspendedKey });
     const done = takedown as { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null;
     if (ok && done) {
         notifyPostTakedown(moderationNoticeCb, done.post, done.reporters, normaliseRemovalReason(opts?.reasonCategory));

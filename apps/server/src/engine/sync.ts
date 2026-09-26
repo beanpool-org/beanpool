@@ -495,6 +495,16 @@ function mutedUntil(rm: any): string | null {
     return instantOrNull(rm.moderationMutedUntil);
 }
 
+/**
+ * members.is_visitor, as the main server has it: 1 or 0, so a visitor who joins there is a member here too. Null from a
+ * main server that predates the column, which sends no `isVisitor`: an update then keeps this row's own, and a new row
+ * is a member's (the column's default), as every row was there. Once that server upgrades it marks its visitors
+ * (db.ts markExistingVisitors) and stamps each row, so its next copy carries the mark.
+ */
+function importedVisitor(rm: any): 0 | 1 | null {
+    return typeof rm.isVisitor === 'boolean' ? (rm.isVisitor ? 1 : 0) : null;
+}
+
 function instantOrNull(v: unknown): string | null {
     return typeof v === 'string' && v ? v : null;
 }
@@ -614,11 +624,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     try {
         db.transaction(() => {
             for (const rm of remote.members ?? []) {
-                const existing = db.prepare("SELECT updated_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null } | undefined;
+                const existing = db.prepare("SELECT updated_at, is_visitor FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null } | undefined;
                 if (!existing) {
                     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until,
-                                area_lat, area_lng, area_updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                area_lat, area_lng, area_updated_at, is_visitor)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
@@ -635,7 +645,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.archetype || null,
                         rm.updatedAt || rm.joinedAt,
                         mutedUntil(rm),
-                        ...importedArea(rm)
+                        ...importedArea(rm),
+                        importedVisitor(rm) ?? 0
                     );
                     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(rm.publicKey);
                     newMembers++;
@@ -643,6 +654,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     if (rm.updatedAt && existing.updated_at && existing.updated_at >= rm.updatedAt) {
                         conflictsSkipped++;
                         continue;
+                    }
+                    // A visitor who joined on the primary: the row takes the join with it (who invited them, the code and
+                    // when), which the update below otherwise leaves as it was. Before the update, which stamps updated_at.
+                    if (existing.is_visitor && importedVisitor(rm) === 0) {
+                        db.prepare("UPDATE members SET invited_by = ?, invite_code = ?, joined_at = ? WHERE public_key = ?")
+                            .run(rm.invitedBy ?? null, rm.inviteCode ?? null, rm.joinedAt, rm.publicKey);
                     }
                     const res = db.prepare(`UPDATE members SET
                         callsign = ?,
@@ -658,6 +675,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         area_lat = ?,
                         area_lng = ?,
                         area_updated_at = ?,
+                        is_visitor = COALESCE(?, is_visitor),
                         updated_at = ?
                         WHERE public_key = ?`).run(
                         rm.callsign,
@@ -671,6 +689,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.archetype || null,
                         mutedUntil(rm),
                         ...importedArea(rm),
+                        importedVisitor(rm),
                         rm.updatedAt || existing.updated_at || new Date().toISOString(),
                         rm.publicKey
                     );

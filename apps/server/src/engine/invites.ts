@@ -11,6 +11,7 @@ import {
     getMember,
     isNodeMember,
     isInvalidatedKey,
+    isVisitorKey,
     generateShortCode,
     verifyOfflineTicket,
     type Member,
@@ -136,11 +137,14 @@ export function redeemInvite(
         return { success: false, error: REPLACED_KEY };
     }
 
-    // Check if identity is ALREADY a member before "already used" check
+    // Check if identity is ALREADY a member before "already used" check. A visitor's row is not: it joins here like
+    // anyone new, and registerMemberInternal makes that row a member's.
     const existingMember = getMember(db, publicKey);
     if (existingMember) {
         const closed = closedAccountRefusal(existingMember);
         if (closed) return closed;
+    }
+    if (existingMember && !isVisitorKey(db, publicKey)) {
         // Not a failure and not a new join — someone re-entering. Its own event so it
         // neither inflates signups nor drags down the rejection rate.
         recordFunnelEvent('invite_reentry');
@@ -210,11 +214,13 @@ export function redeemOfflineTicket(
             return { success: false, error: REPLACED_KEY };
         }
 
-        // Check if identity is ALREADY a member before "already used" check
+        // Check if identity is ALREADY a member before "already used" check. A visitor's row is not, as in redeemInvite.
         const existingMember = getMember(db, joinerPublicKey);
         if (existingMember) {
             const closed = closedAccountRefusal(existingMember);
             if (closed) return closed;
+        }
+        if (existingMember && !isVisitorKey(db, joinerPublicKey)) {
             recordFunnelEvent('invite_reentry');
             return { success: true, member: existingMember, alreadyMember: true };
         }

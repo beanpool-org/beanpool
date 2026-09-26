@@ -518,9 +518,10 @@ export function exportSyncState(
             ? db.prepare(`SELECT * FROM ${table} WHERE ${watermark} >= ?`).all(since) as any[]
             : db.prepare(`SELECT * FROM ${table}`).all() as any[];
 
-    // The mute (G3) and a person's coarse area (G4) travel with the member, so a promoted standby keeps them;
-    // rowToMember leaves both out because the member directory is built from it too. This payload goes only to a
-    // standby pulling with the replication token or the admin password (routes/backup.ts): the database's own trust.
+    // The mute (G3), a person's coarse area (G4) and whether the row is a visitor's travel with the member, so a
+    // promoted standby keeps them; rowToMember leaves them out because the member directory is built from it too. This
+    // payload goes only to a standby pulling with the replication token or the admin password (routes/backup.ts): the
+    // database's own trust.
     const members = (delta
         ? db.prepare("SELECT * FROM members WHERE updated_at >= ?").all(since) as any[]
         : db.prepare("SELECT * FROM members").all() as any[]
@@ -530,6 +531,7 @@ export function exportSyncState(
         areaLat: row.area_lat ?? null,
         areaLng: row.area_lng ?? null,
         areaUpdatedAt: row.area_updated_at ?? null,
+        isVisitor: !!row.is_visitor,
     }));
 
     const postRows = sel('posts', 'updated_at');

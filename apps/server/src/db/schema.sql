@@ -83,6 +83,13 @@ CREATE TABLE IF NOT EXISTS members (
     area_lat REAL CHECK (area_lat IS NULL OR (area_lat >= -90 AND area_lat <= 90)),
     area_lng REAL CHECK (area_lng IS NULL OR (area_lng >= -180 AND area_lng <= 180)),
     area_updated_at TEXT,
+    -- 1: a visitor's row, not a member's (engine isVisitorKey). A key a member sent a message or Beans to that has no
+    -- account here, or a member of another community: registerVisitor is the only writer of 1, and joining for real (an
+    -- invite, an offline ticket, the open door) writes 0 on the same row. A visitor receives what is sent to it and reads
+    -- only what a non-member reads (readsAsMember). 0 on every row nothing marked, so a row is a member's unless marked.
+    -- A node that already has data marks its visitors once, as it gains the column (db.ts markExistingVisitors). In
+    -- members_touch_updated_at's list, so delta sync carries a promotion.
+    is_visitor INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -821,7 +828,8 @@ AFTER UPDATE OF
     paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
     lat, lng, location_auth_signer, auth_signer, location_updated_at,
     moderation_muted_until,
-    area_lat, area_lng, area_updated_at
+    area_lat, area_lng, area_updated_at,
+    is_visitor
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

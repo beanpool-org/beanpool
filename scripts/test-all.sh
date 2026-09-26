@@ -434,6 +434,7 @@ run_federation_suites() {
       test-moderation-notifications
       test-polls
       test-poll-voters-members-only
+      test-suspended-and-visitor-reads
       test-events
       test-enterprise-event-http
       test-event-chat

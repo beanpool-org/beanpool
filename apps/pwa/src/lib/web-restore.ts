@@ -178,7 +178,7 @@ export function releaseSignInCopy(eph: EphemeralKey, collectionId: string, proof
 export async function fetchSignInCopy(eph: EphemeralKey, collectionId: string): Promise<{ copy: SealedShare | null } | { answer: DoorAnswer }> {
     const answer = await door('POST', '/api/recovery/collect/fragments', { collectionId }, signer(eph));
     if (answer.status !== 200 || !Array.isArray(answer.body.fragments)) return { answer };
-    const f = (answer.body.fragments as any[]).find((x) => x?.holderType === 'sso');
+    const f = (answer.body.fragments as Array<Record<string, unknown> | null>).find((x) => x?.holderType === 'sso');
     if (!f || typeof f.payload !== 'string' || typeof f.payloadIv !== 'string' || typeof f.payloadTag !== 'string' || typeof f.kdfParams !== 'string') {
         return { copy: null };
     }

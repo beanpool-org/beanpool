@@ -155,6 +155,7 @@ function stubNode(info: unknown, members: Map<string, string> = new Map(), peerN
         // A member's polls, once someone has joined or restored (the node sends a list and a count, not an object).
         if (path === '/api/marketplace/transactions') return json(200, []);
         if (path.startsWith('/api/messages/conversations/')) return json(200, { conversations: [], totalUnread: 0 });
+        if (path === '/api/groups') return json(200, []);
         return json(200, {});
     }));
     return calls;
@@ -166,6 +167,7 @@ beforeEach(() => {
     resetCapturedAuthReturn();
     resetCommunityInfoOnce();
     clearRadiusSettings();
+    sessionStorage.clear();
     markers.length = 0;
     window.history.replaceState(null, '', '/app');
     vi.mocked(sync.connectToAnchor).mockClear();
@@ -176,6 +178,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     clearRadiusSettings();
+    sessionStorage.clear();
 });
 
 async function openLobby() {
@@ -224,6 +227,8 @@ describe('a visitor with no key on the global node', () => {
         // Right after the first card in the list, before the second.
         const order = Array.from(list.querySelectorAll('[data-testid="visitor-card"], [data-testid="visitor-list-note"], [data-testid="event-card"]'));
         expect(order[1]).toBe(notes[0]);
+        // No point shared: a card's name is its title, type, terms and category, and no distance.
+        expect(cards[0]).toHaveAccessibleName('Sourdough loaves. Offer. Free, a swap, or ask. Food & Produce.');
 
         // The poll: its answers and counts, no author row and nothing to vote with.
         expect(within(list).getAllByTestId('poll-option-readonly')).toHaveLength(2);
@@ -235,6 +240,29 @@ describe('a visitor with no key on the global node', () => {
         expect(document.body.textContent).not.toMatch(/\bhidden\b/);
     });
 
+    it('from sm up, where the list is a grid, the one line comes first, on a row of its own, so no card sits alone on the first row (4112421731)', async () => {
+        stubNode(GLOBAL);
+        await openLobby();
+        const list = await screen.findByTestId('visitor-list');
+        expect(list.className).toMatch(/\bsm:grid-cols-2\b/);
+        const note = within(list).getByTestId('visitor-list-note');
+        // Still one line, under the first card in the one-column list at 320 px (the order the test above holds).
+        expect(within(list).getAllByTestId('visitor-list-note')).toHaveLength(1);
+        // The whole width of the grid, and, from sm (the first width with two columns), placed before every card:
+        // CSS grid places a full-width item after a card on the card's row only by starting a new row, which leaves
+        // the rest of row 1 empty. jsdom has no layout; e2e/lobby-shots.mjs measures it at 640 and 1280 px.
+        const classes = note.className.split(/\s+/);
+        expect(classes).toContain('col-span-full');
+        expect(classes).toContain('sm:order-first');
+        expect(classes.filter(c => /(^|:)order-/.test(c))).toEqual(['sm:order-first']);
+        // The grid's items (each card sits in a `display: contents` wrapper): no card is ordered before it.
+        const items = Array.from(list.children).flatMap(w => Array.from(w.children));
+        expect(items).toContain(note);
+        for (const item of items.filter(i => i !== note)) {
+            expect(String(item.getAttribute('class') ?? '')).not.toMatch(/(^|\s|:)-?order-/);
+        }
+    });
+
     it('from a point the visitor shared: "about N km" in whole km, and "About N km away · area only" on the sheet', async () => {
         saveRadiusSettings({ lat: -28.55, lng: 153.55, radiusKm: 50, label: 'Home' });
         stubNode(GLOBAL);
@@ -242,6 +270,10 @@ describe('a visitor with no key on the global node', () => {
         const list = await screen.findByTestId('visitor-list');
         const distances = within(list).getAllByTestId('visitor-card-distance').map(d => d.textContent);
         expect(distances).toEqual(['about 1 km', 'about 11 km']);
+        // A screen reader hears what the card shows (4112421734): the visible title first (WCAG 2.5.3), then the type,
+        // the terms, the category and the distance, not the title alone.
+        expect(within(list).getAllByTestId('visitor-card')[1]).toHaveAccessibleName('Borrow a ladder. Need. Free, a swap, or ask. Tools. about 11 km.');
+        expect(within(list).getByRole('button', { name: /^Sourdough loaves\. Offer\. .* about 1 km\.$/ })).toBeInTheDocument();
 
         fireEvent.click(within(list).getAllByTestId('visitor-card')[1]);
         expect(await screen.findByTestId('visitor-detail-distance')).toHaveTextContent('About 11 km away · area only');
@@ -409,6 +441,125 @@ describe('a visitor with no key on the global node', () => {
         fireEvent.click(screen.getAllByTestId('header-join')[0]);
         const overlay = await screen.findByTestId('lobby-join-overlay');
         expect(await within(overlay).findByTestId('join-too-old')).toBeInTheDocument();
+    });
+});
+
+/*
+ * A listing shared by link, read in the lobby, is where the visitor lands once they have joined (4112421730). The
+ * address loses `?post=` as the page loads, and a join by sign-in leaves the page and comes back, so the lobby keeps
+ * the post's id in this tab (sessionStorage) and App opens it once, in the member's Market, when the identity is set.
+ */
+describe('a listing shared by link, read in the lobby, opens again once the visitor has joined', () => {
+    /** The page left (a sign-in's round trip, a reload) and loaded again in the same tab: this tab's storage stays. */
+    function leaveAndComeBack() {
+        cleanup();
+        resetCapturedAuthReturn();
+        resetCommunityInfoOnce();
+        window.history.replaceState(null, '', '/app');
+    }
+
+    async function restoreWith12Words(from: HTMLElement, member: BeanPoolIdentity) {
+        await waitFor(() => expect(from).not.toBeDisabled());
+        fireEvent.click(from);
+        const overlay = await screen.findByTestId('lobby-join-overlay');
+        fireEvent.click(await within(overlay).findByRole('button', { name: 'I have my 12 words' }));
+        const words = member.mnemonic!;
+        for (let i = 0; i < 12; i++) fireEvent.change(await within(overlay).findByLabelText(`Recovery word ${i + 1}`), { target: { value: words[i] } });
+        fireEvent.click(within(overlay).getByRole('button', { name: 'Recover Identity' }));
+        await waitFor(() => expect(screen.queryByTestId('guest-lobby')).toBeNull());
+        await screen.findByTestId('mobile-bottom-nav');
+    }
+
+    /** The member's Market with its list showing, and no listing open. */
+    async function memberListWithNothingOpen() {
+        await screen.findAllByText('Sourdough loaves');
+        // Give the Market's deep-link effect, and its one read by id, their turn.
+        await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+        expect(screen.queryByRole('button', { name: /Back to Market/ })).toBeNull();
+        expect(screen.queryByTestId('visitor-detail')).toBeNull();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/not found|went wrong|couldn't|could not|no longer/i);
+    }
+
+    it('a sign-in that leaves the page: the listing opens in the member\'s Market on the way back, and only once', async () => {
+        const member = await generateIdentity('Rowan');
+        stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]));
+        window.history.replaceState(null, '', '/app?post=p-need');
+        render(<App />);
+        expect(await screen.findByTestId('visitor-detail')).toHaveTextContent('Borrow a ladder');
+        // The address is clean, as before: a reload does not reopen it from there.
+        expect(window.location.search).toBe('');
+
+        // Signing in (here: getting the account back by sign-in) leaves the page; the sign-in's return finds the join
+        // it started and settles it, as WebJoin does after the provider's redirect.
+        leaveAndComeBack();
+        const t0 = Date.now();
+        await savePendingJoin({ identity: member, provider: 'google', nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: true, sentAt: t0 });
+        render(<App />);
+        expect(await screen.findByRole('button', { name: /Back to Market/ })).toBeInTheDocument();
+        expect(screen.queryByTestId('guest-lobby')).toBeNull();
+        expect(screen.getAllByText('Borrow a ladder').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Sourdough loaves')).toBeNull();
+        expect((await loadIdentity())?.publicKey).toBe(member.publicKey);
+
+        // Once: the next load in this tab is the member's Market as usual.
+        leaveAndComeBack();
+        render(<App />);
+        await memberListWithNothingOpen();
+    });
+
+    it("joining without leaving the page (12 words, from the sheet's own Join): the same listing, in the member's Market", async () => {
+        const member = await generateIdentity('Rowan');
+        stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]));
+        window.history.replaceState(null, '', '/app?post=p-need');
+        render(<App />);
+        const sheet = await screen.findByTestId('visitor-detail');
+        await restoreWith12Words(within(sheet).getByTestId('visitor-join'), member);
+
+        expect(await screen.findByRole('button', { name: /Back to Market/ })).toBeInTheDocument();
+        expect(screen.getAllByText('Borrow a ladder').length).toBeGreaterThan(0);
+    });
+
+    it('a listing that has gone: the member lands on the Market, with nothing opened and no error', async () => {
+        const member = await generateIdentity('Rowan');
+        stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]));
+        window.history.replaceState(null, '', '/app?post=p-gone');
+        await openLobby();
+        await screen.findByTestId('visitor-list');
+        await restoreWith12Words(screen.getAllByTestId('header-join')[0], member);
+
+        await memberListWithNothingOpen();
+    });
+
+    it('a listing kept longer ago than a join takes: nothing opens', async () => {
+        const member = await generateIdentity('Rowan');
+        stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]));
+        window.history.replaceState(null, '', '/app?post=p-need');
+        // The lobby opened the link two days ago in this tab (a clock two days behind, still running).
+        const realNow = Date.now.bind(Date);
+        const clock = vi.spyOn(Date, 'now').mockImplementation(() => realNow() - 2 * 86_400_000);
+        render(<App />);
+        const sheet = await screen.findByTestId('visitor-detail');
+        clock.mockRestore();
+        fireEvent.click(within(sheet).getByRole('button', { name: /Back to Market/ }));
+        await restoreWith12Words(screen.getAllByTestId('header-join')[0], member);
+
+        await memberListWithNothingOpen();
+    });
+
+    it("a member arriving on a shared link opens it as before, and the lobby's slot plays no part", async () => {
+        const member = await generateIdentity('Rowan');
+        stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]));
+        // A member's first visit in this tab: their key is here already, nothing was kept by a lobby.
+        await savePendingJoin({ identity: member, provider: 'google', nonce: null, startedAt: Date.now(), expiresAt: Date.now() + PENDING_JOIN_TTL_MS, restored: true, sentAt: Date.now() });
+        render(<App />);
+        await screen.findByTestId('mobile-bottom-nav');
+        leaveAndComeBack();
+        window.history.replaceState(null, '', '/app?post=p-offer');
+        render(<App />);
+        expect(await screen.findByRole('button', { name: /Back to Market/ })).toBeInTheDocument();
+        expect(screen.getAllByText('Sourdough loaves').length).toBeGreaterThan(0);
+        expect(sessionStorage.length).toBe(0);
     });
 });
 

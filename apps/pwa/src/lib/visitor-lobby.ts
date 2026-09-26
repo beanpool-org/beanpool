@@ -51,3 +51,50 @@ export function visitorPriceText(post: Pick<MarketplacePost, 'credits' | 'priceT
 export function visitorDistanceText(km: number): string {
     return `about ${Math.max(1, Math.round(km))} km`;
 }
+
+/**
+ * A listing the lobby opened from a shared link (`/?post=<id>`), kept in this tab until the visitor has joined, so they
+ * land on it as a member. App strips `?post=` from the address as the page loads, and a join by sign-in leaves the page
+ * and comes back, so neither the address nor App's state lasts that long; this tab's sessionStorage does. One key, one
+ * use, and only the post's id: nothing the visitor typed, chose or shared goes in it.
+ */
+export const LINKED_POST_STORAGE_KEY = 'beanpool_lobby_linked_post';
+
+/** How long a kept listing waits for its visitor: a sign-in's round trip and the steps after it, with room to read. */
+export const LINKED_POST_KEPT_MS = 60 * 60_000;
+
+/** A post id as the node makes them (a UUID) or a client names one: no spaces, no address, nothing long. */
+const POST_ID = /^[\w.:-]{1,200}$/;
+
+/** The lobby opened `postId` from a shared link: keep it for after the join. A storage that refuses keeps nothing. */
+export function keepLinkedPost(postId: string, now: number = Date.now()): void {
+    if (!POST_ID.test(postId)) return;
+    try {
+        sessionStorage.setItem(LINKED_POST_STORAGE_KEY, JSON.stringify({ id: postId, at: now }));
+    } catch { /* a private window: the member lands on the Market */ }
+}
+
+/**
+ * The listing kept by the lobby, taken out: its id once, then never again. Nothing when there is none, when it was
+ * kept longer ago than a join takes (or "later" than now), or when the slot holds anything but an id and a time.
+ */
+export function takeKeptLinkedPost(now: number = Date.now()): string | null {
+    let raw: string | null;
+    try {
+        raw = sessionStorage.getItem(LINKED_POST_STORAGE_KEY);
+        if (raw === null) return null;
+        sessionStorage.removeItem(LINKED_POST_STORAGE_KEY);
+    } catch {
+        return null;
+    }
+    try {
+        const kept = JSON.parse(raw) as unknown;
+        if (!kept || typeof kept !== 'object') return null;
+        const { id, at } = kept as { id?: unknown; at?: unknown };
+        if (typeof id !== 'string' || !POST_ID.test(id) || typeof at !== 'number' || !Number.isFinite(at)) return null;
+        if (at > now || now - at > LINKED_POST_KEPT_MS) return null;
+        return id;
+    } catch {
+        return null;
+    }
+}

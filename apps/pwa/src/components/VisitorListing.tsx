@@ -35,6 +35,18 @@ interface CardProps {
     onOpen: () => void;
 }
 
+/**
+ * A card's name for a screen reader: what the card shows, in words, as short sentences. The visible title comes first
+ * (WCAG 2.5.3, so "open Sourdough loaves" by voice finds it), then the type, the terms, the category (its words, not
+ * its emoji) and the distance when there is one. A name that was the title alone left out everything else on the card.
+ */
+export function visitorCardName(post: MarketplacePost, beans: boolean, distanceKm: number | null): string {
+    const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
+    const parts = [post.title.trim(), typeLabel(post), visitorPriceText(post, beans), cat ? cat.label : post.category];
+    if (distanceKm != null) parts.push(visitorDistanceText(distanceKm));
+    return parts.filter(Boolean).map((p) => (/[.!?]$/.test(p) ? p : `${p}.`)).join(' ');
+}
+
 /** One listing in the lobby's list: photo, title, terms, category and, from a shared point, a whole-km distance. */
 export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
@@ -45,7 +57,7 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
             type="button"
             data-testid="visitor-card"
             onClick={onOpen}
-            aria-label={`Open listing: ${post.title}`}
+            aria-label={visitorCardName(post, beans, distanceKm)}
             className="self-start w-full min-w-0 text-left bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 shadow-sm flex flex-row gap-3 cursor-pointer hover:shadow-md transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
         >
             <span className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-nature-100 dark:bg-nature-800 flex items-center justify-center">

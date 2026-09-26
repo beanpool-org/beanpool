@@ -17,7 +17,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import type { CommunityInfo } from '../lib/api';
 import { connectToAnchor, reconnectToAnchor } from '../lib/sync';
 import { browserCanHoldKey } from '../lib/web-join';
-import { beansOn } from '../lib/visitor-lobby';
+import { beansOn, keepLinkedPost } from '../lib/visitor-lobby';
 import { MarketplacePage } from './MarketplacePage';
 import { WelcomePage } from './WelcomePage';
 import { TOO_OLD } from '../components/WebJoin';
@@ -36,7 +36,7 @@ interface Props {
     info: CommunityInfo;
     /** Joined, or an account brought back: App draws the member's app. */
     onComplete: (identity: BeanPoolIdentity) => void;
-    /** `/?post=<id>`, a shared listing: opened in the lobby's Market. */
+    /** `/?post=<id>`, a shared listing: opened in the lobby's Market, and kept for after the join. */
     linkedPostId?: string | null;
     onLinkedPostTaken?: () => void;
 }
@@ -60,10 +60,13 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     // The doorbell socket: with no key it gets only `{ type }` doorbells, and each has the lists read again.
     useEffect(() => { connectToAnchor(); }, []);
 
+    // A shared listing: opened here, and kept in this tab so the visitor lands on it again once they have joined, even
+    // by a sign-in that leaves the page (App takes it when the identity is set).
     useEffect(() => {
         if (!linkedPostId) return;
         setTab('marketplace');
         setOpenPostId(linkedPostId);
+        keepLinkedPost(linkedPostId);
         onLinkedPostTaken?.();
     }, [linkedPostId, onLinkedPostTaken]);
 

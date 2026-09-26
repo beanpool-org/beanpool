@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 55,
-  "hash": "bf53d74573213e4a4dd474d6fca337a165690abe806af18774b40121f118910f",
+  "version": 56,
+  "hash": "6c7f7d9a3e84d5e1c0d13a6034255272346db02698499115ead098d502ab8970",
   "sections": [
     {
       "id": "about",
@@ -1709,6 +1709,10 @@
         {
           "type": "p",
           "text": "Before you join, the page shows the **Market** and the **Map** as a visitor sees them: the listings, their photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings."
+        },
+        {
+          "type": "p",
+          "text": "If you came from a link someone shared to a listing or an event, it opens first. Join from that page, and once you are in, it opens again, this time with who posted it."
         },
         {
           "type": "ul",
@@ -3657,7 +3661,7 @@
         },
         {
           "type": "p",
-          "text": "Anyone who taps that link opens the event — in the app if they have it, in the web app otherwise. Someone who is not in your community lands on its join page."
+          "text": "Anyone who taps that link opens the event — in the app if they have it, in the web app otherwise. Someone who is not in your community lands on its join page. In a web browser, the global community shows them the event first, as a visitor sees it, and opens it again once they have joined."
         },
         {
           "type": "h2",

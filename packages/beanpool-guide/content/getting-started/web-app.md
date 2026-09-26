@@ -15,6 +15,8 @@ The global community at global.beanpool.org is open to anyone, and you can join 
 
 Before you join, the page shows the **Market** and the **Map** as a visitor sees them: the listings, their photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings.
 
+If you came from a link someone shared to a listing or an event, it opens first. Join from that page, and once you are in, it opens again, this time with who posted it.
+
 - Tap **Join**, then **I'm new to BeanPool**.
 - Choose the name people will see. It needs at least 2 letters, and at most 20.
 - Sign in once, with one of the accounts the page shows: **Google**, **Apple**, **Facebook** or **GitHub**. The page takes you to that company's own sign-in and brings you back. With GitHub it shows a code instead: tap **Copy code**, then **Open GitHub**, enter the code there and come back.

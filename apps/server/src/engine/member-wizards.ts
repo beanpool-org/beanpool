@@ -38,6 +38,7 @@ import {
     countOpenTrades,
 } from '../state-engine.js';
 import { ledger } from './ledger.js';
+import { isMemberKeySpelling } from './member-key.js';
 import { logger } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
@@ -151,11 +152,25 @@ export function generateRekeyCode(): string {
  * - Issues a secure one-time re-enrolment code
  * - Revokes any active admin sessions for the old key
  */
+const MISSPELT_ROW_ERROR = 'This row’s key isn’t written the way this community keeps keys, so it isn’t the member whose key it is. Remove it in People instead.';
+
+/**
+ * The wizards below lower-case the key an operator names, so a member's key in capitals still finds that member. Not
+ * when that exact spelling has a row of its own: a row a door stored under another spelling before the one-spelling
+ * rule (engine/member-key.ts reportMisspeltMemberKeys), which is not the member whose key it is. Lower-cased, it would
+ * re-key or offboard that member instead. Such a row is removed (People → Remove), which takes its exact key.
+ */
+function assertNotMisspeltRow(key: string | null | undefined): void {
+    if (!key || isMemberKeySpelling(key)) return;
+    if (db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(key)) throw new Error(MISSPELT_ROW_ERROR);
+}
+
 export function issueRekeyCode(
     oldPublicKey: string,
     operatorPubkey: string,
     opts?: { ttlMs?: number }
 ): { code: string; oldPubkey: string; callsign: string; expiresAt: string } {
+    assertNotMisspeltRow(oldPublicKey);
     const cleanOld = oldPublicKey ? oldPublicKey.trim().toLowerCase() : '';
     const cleanOperator = operatorPubkey ? operatorPubkey.trim().toLowerCase() : 'owner:password';
     const member = getMember(cleanOld);
@@ -553,6 +568,7 @@ export function getRekeyStatus(publicKey: string): {
  * - Check for pending escrows
  */
 export function getOffboardPreview(publicKey: string): OffboardPreview {
+    assertNotMisspeltRow(publicKey);
     const cleanPub = publicKey.trim().toLowerCase();
     const member = getMember(cleanPub);
     if (!member) {
@@ -649,6 +665,7 @@ export function executeOffboard(
     options: OffboardOptions,
     operatorPubkey: string
 ): { success: boolean; memberPubkey: string; callsign: string; resolution: string; balanceSettled: number } {
+    assertNotMisspeltRow(publicKey);
     const cleanPub = publicKey.trim().toLowerCase();
     const cleanOperator = operatorPubkey ? operatorPubkey.trim().toLowerCase() : 'owner:password';
 

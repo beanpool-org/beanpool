@@ -149,6 +149,7 @@ import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './pa
 import { gatewayAdmit, gatewayAdmitMember, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
+import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
 
 
 // X-1: replay protection for signed requests.
@@ -229,6 +230,10 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
     const nonce = params.get('nonce');
     if (!pubKeyHex && !sigB64 && !ts && !nonce) return { kind: 'unsigned' };
     if (!pubKeyHex || !sigB64 || !ts || !nonce) return { kind: 'invalid' };
+    // One key, one spelling (engine/member-key.ts), as the signature middleware takes it: the socket is the key's in lower
+    // case, and a spelling the hex decoder would read as some other key (a prefix, a suffix, 63 or 65 characters) is refused.
+    const signerKey = provenKeySpelling(pubKeyHex);
+    if (!signerKey) return { kind: 'invalid' };
     try {
         const tsNum = Number(ts);
         const now = Date.now();
@@ -236,7 +241,7 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
 
         const signedMessage = `WS\n${pathname}\n${ts}\n${nonce}\n`;
         const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
-        const spki = Buffer.concat([spkiHeader, Buffer.from(pubKeyHex, 'hex')]);
+        const spki = Buffer.concat([spkiHeader, Buffer.from(signerKey, 'hex')]);
         const publicKeyObject = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
         const isValid = crypto.verify(
             undefined, Buffer.from(signedMessage), publicKeyObject, Buffer.from(sigB64, 'base64'),
@@ -253,10 +258,10 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
         // stranger's gets, as an open one does once that happens (state-engine deliverBroadcast). Of the
         // members, only one who reads as a member (readsAsMember, the test every member-only read
         // applies) gets the member feed (`feed`).
-        const standing = socketStanding(pubKeyHex);
+        const standing = socketStanding(signerKey);
         return standing.act
-            ? { kind: 'member', pubkey: pubKeyHex, visitor: standing.visitor, feed: standing.feed }
-            : { kind: 'non_member', pubkey: pubKeyHex.toLowerCase() };
+            ? { kind: 'member', pubkey: signerKey, visitor: standing.visitor, feed: standing.feed }
+            : { kind: 'non_member', pubkey: signerKey };
     } catch {
         return { kind: 'invalid' };
     }
@@ -1240,6 +1245,19 @@ export async function startHttpsServer(port: number): Promise<number> {
             return;
         }
 
+        // One key, one spelling (engine/member-key.ts). The signature is checked by decoding X-Public-Key's hex, which
+        // forgives case and stops at the first character that isn't hex, so one keypair signed as `ab12…`, `AB12…` and
+        // `ab12…zz`, and each was a different key to every lookup below and in every route: a second member row, a
+        // second vote. The signer is taken in the member table's spelling, lower case, for everything from here on (the
+        // actor, the replaced-key and closed-account refusals, the visitor gate, the spoof check); anything but 64
+        // hexadecimal characters is refused before any lookup, the nonce unspent.
+        const signerKey = provenKeySpelling(pubKeyHex);
+        if (!signerKey) {
+            ctx.status = 400;
+            ctx.body = { error: BAD_SIGNER_KEY_ERROR, code: BAD_KEY_CODE };
+            return;
+        }
+
         try {
             const ts = Number(timestampHeader);
             const now = Date.now();
@@ -1259,7 +1277,7 @@ export async function startHttpsServer(port: number): Promise<number> {
 
             // Convert hex pubkey to SPKI format for Node.js verify
             const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
-            const spki = Buffer.concat([spkiHeader, Buffer.from(pubKeyHex, 'hex')]);
+            const spki = Buffer.concat([spkiHeader, Buffer.from(signerKey, 'hex')]);
             const publicKeyObject = crypto.createPublicKey({
                 key: spki,
                 format: 'der',
@@ -1281,13 +1299,13 @@ export async function startHttpsServer(port: number): Promise<number> {
 
             // A key a re-key replaced signs nothing here, write or read (REPLACED_KEY_REFUSAL). Only once the signature
             // checks out, so a forged request learns nothing about which keys are replaced.
-            if (isInvalidatedKey(pubKeyHex)) {
+            if (isInvalidatedKey(signerKey)) {
                 ctx.status = 403;
                 ctx.body = { error: REPLACED_KEY_REFUSAL, code: 'key_invalidated' };
                 return;
             }
             // Nor does a key whose account here was closed, removed or deleted by its owner (CLOSED_ACCOUNT_REFUSAL).
-            if (isClosedAccountKey(pubKeyHex)) {
+            if (isClosedAccountKey(signerKey)) {
                 // The one exception: asking again to delete it (CLOSED_ACCOUNT_PURGE_AGAIN). Answered here, so no handler
                 // runs and no activity is stamped on the closed row.
                 if (ctx.method === 'POST' && ctx.path.replace(/\/+$/, '').toLowerCase() === '/api/member/purge') {
@@ -1303,19 +1321,19 @@ export async function startHttpsServer(port: number): Promise<number> {
             // three review rounds each found one more function that let such a row act as a member (a pledge, a keeper's
             // row, a node role). Answered as a visitor's refused write was (a key with no row's words where a route has
             // them), before the actor is bound and before any activity is stamped. Reads keep the read gate below.
-            if (MUTATING_METHODS.has(ctx.method) && visitorWriteRefused(ctx.method, ctx.path, (ctx as any).requestBody, pubKeyHex)) {
+            if (MUTATING_METHODS.has(ctx.method) && visitorWriteRefused(ctx.method, ctx.path, (ctx as any).requestBody, signerKey)) {
                 ctx.status = 403;
                 ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
                 return;
             }
 
-            // Bind cryptographically verified public key to state actor
-            ctx.state.actor = pubKeyHex;
+            // Bind cryptographically verified public key to state actor, in the member table's spelling
+            ctx.state.actor = signerKey;
 
             // SRV-20: stash the verified signing material so a route that creates a
             // transaction can persist it on the row (auth_signer/signature/payload),
             // making the transaction's authorship re-verifiable by any importing node.
-            ctx.state.authSig = { signer: pubKeyHex, signature: signatureBase64, payload: signedMessage };
+            ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage };
 
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
             // keypair — an attacker can mint one. For gated reads, require the
@@ -1328,7 +1346,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             // pruned account no longer reads as a member would on a node without the
             // visitors' view. Writes otherwise keep their own per-route authorization;
             // membership isn't required there — e.g. first-time registration.)
-            if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, pubKeyHex)) {
+            if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, signerKey)) {
                 ctx.status = 403;
                 ctx.body = { error: 'Read access requires a member identity' };
                 return;
@@ -1353,7 +1371,16 @@ export async function startHttpsServer(port: number): Promise<number> {
                 // would have been spoofable (#841 review).
                 const isOtherEntity = OTHER_ENTITY_IDENTITY_FIELD.test(k);
                 
-                if (isIdentityField && !isOtherEntity && typeof value === 'string' && value !== pubKeyHex) {
+                // Held to the signer's one spelling, so a route reading its own identity field never sees another
+                // spelling of the actor. The signer's own key in capitals is told so in a plain sentence (400 bad_key);
+                // anything else is the mismatch below.
+                if (isIdentityField && !isOtherEntity && typeof value === 'string' && value !== signerKey
+                    && provenKeySpelling(value) === signerKey) {
+                    ctx.status = 400;
+                    ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
+                    return;
+                }
+                if (isIdentityField && !isOtherEntity && typeof value === 'string' && value !== signerKey) {
                     // A2-13: don't name the field in the client-facing error — leaking
                     // which key is the identity field eases SRV-6 spoof-bypass crafting.
                     throw new Error('Identity mismatch: a request field does not match the signing key.');

@@ -13,7 +13,9 @@ const KEY_LIKE = /^[0-9a-f]{64}$/i;
  */
 export function adminActorName(signer: string | null | undefined): string {
     if (typeof signer !== 'string' || !KEY_LIKE.test(signer.trim())) return COMMUNITY_ADMIN;
-    const row = db.prepare('SELECT callsign FROM members WHERE public_key = ? COLLATE NOCASE').get(signer.trim()) as { callsign?: string | null } | undefined;
+    // The member's own row, in the one spelling keys are kept in (engine/member-key.ts). Not a case-blind match, which
+    // could answer with a row a door stored under that key in capitals before that rule, named by whoever made it.
+    const row = db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(signer.trim().toLowerCase()) as { callsign?: string | null } | undefined;
     const callsign = row?.callsign?.trim();
     if (!callsign || KEY_LIKE.test(callsign)) return COMMUNITY_ADMIN;
     return callsign;

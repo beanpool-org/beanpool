@@ -35,6 +35,7 @@ import {
     isLiveVisitor, getActingMember,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
+import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
 import {
@@ -960,6 +961,25 @@ function signedByKey(ctx: any, publicKey: string): boolean {
 /** The signature middleware's window (https-server.ts SIGNATURE_FRESHNESS_MS). */
 const REDEEM_SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
 
+/**
+ * The key a redeem joins, in the one spelling this community keeps keys in (engine/member-key.ts), or null when the
+ * redeem is refused (400 bad_key). The body names the key, and these two routes skip the signature middleware, so a
+ * key in capitals was a different key to every lookup: an unsigned redeem naming a member's key that way made a second
+ * member row for it, with a name the caller picked. A key already in that spelling is taken as named. One in capitals
+ * is taken, lower-cased, only when this request's own signature proves it (signedByKey), as the middleware takes a
+ * signer; never when someone else names it. Anything else (a prefix, a suffix, 63 or 65 characters) never.
+ */
+function redeemKey(ctx: any, publicKey: unknown): string | null {
+    if (isMemberKeySpelling(publicKey)) return publicKey;
+    const proven = provenKeySpelling(publicKey);
+    return proven && signedByKey(ctx, publicKey as string) ? proven : null;
+}
+
+function badRedeemKey(ctx: any): void {
+    ctx.status = 400;
+    ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
+}
+
 router.post('/api/invite/redeem', async (ctx) => {
     const { code, publicKey, callsign } = (ctx as any).requestBody || {};
     if (!code || !publicKey || !callsign) {
@@ -968,8 +988,12 @@ router.post('/api/invite/redeem', async (ctx) => {
         return;
     }
 
+    // One key, one spelling, before anything is looked up or written: the code stays unused.
+    const joiner = redeemKey(ctx, publicKey);
+    if (!joiner) return badRedeemKey(ctx);
+
     // A visitor's row joins only on a redeem its own key signed; a key with no row joins unsigned, as before.
-    const result = redeemInvite(code, publicKey, callsign.slice(0, 20), signedByKey(ctx, publicKey));
+    const result = redeemInvite(code, joiner, callsign.slice(0, 20), signedByKey(ctx, joiner));
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
@@ -978,7 +1002,7 @@ router.post('/api/invite/redeem', async (ctx) => {
     // Unsigned (the joiner is not a member yet), and for a publicKey that is already a member this answers before
     // the code is checked as used, so ANYONE holding a recent code could name any member's key here. The public
     // card only: the whole row carried that member's contact details whatever they chose. The apps read avatarUrl.
-    ctx.body = { success: true, member: redeemedCard(ctx, result, publicKey), alreadyMember: result.alreadyMember };
+    ctx.body = { success: true, member: redeemedCard(ctx, result, joiner), alreadyMember: result.alreadyMember };
 });
 
 router.post('/api/invite/redeem-offline', async (ctx) => {
@@ -988,14 +1012,17 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
         ctx.body = { error: 'ticketB64, publicKey, and callsign are required' };
         return;
     }
-    const result = redeemOfflineTicket(ticketB64, publicKey, callsign.slice(0, 20), signedByKey(ctx, publicKey));
+    // One key, one spelling, as /api/invite/redeem above: before the ticket is read, so it stays unused.
+    const joiner = redeemKey(ctx, publicKey);
+    if (!joiner) return badRedeemKey(ctx);
+    const result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), signedByKey(ctx, joiner));
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
         return;
     }
     // The public card only, as /api/invite/redeem above: unsigned, and answers for any existing member's key.
-    ctx.body = { success: true, member: redeemedCard(ctx, result, publicKey), alreadyMember: result.alreadyMember };
+    ctx.body = { success: true, member: redeemedCard(ctx, result, joiner), alreadyMember: result.alreadyMember };
 });
 
 // Read-only pre-flight: lets onboarding reject a dud invite at Step 1 (before
@@ -1344,6 +1371,14 @@ router.post('/api/ledger/transfer', async (ctx) => {
     if (isSyntheticAccount(String(to))) {
         ctx.status = 400;
         ctx.body = { error: 'Invalid recipient' };
+        return;
+    }
+    // One key, one spelling (engine/member-key.ts): a person is named by their key as this community keeps it. A key
+    // in capitals made a second row that held the Beans, which the member whose key it is never saw; an enterprise or
+    // a project keyed on its own id is still named by that id. Before anything moves.
+    if (!isNameableAccount(to)) {
+        ctx.status = 400;
+        ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
         return;
     }
     // G3: the note rides to the recipient with the Beans (their history and live feed), so it is a message. A

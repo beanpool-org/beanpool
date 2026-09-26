@@ -46,6 +46,7 @@ import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
 import { issueCsrfToken } from './admin-auth.js';
 import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
+import { isMemberKeySpelling } from './engine/member-key.js';
 
 // ===================== CONSTANTS & TTLs =====================
 export const CHALLENGE_TTL_MS = 60_000;          // 60 seconds challenge freshness
@@ -264,6 +265,13 @@ export function authorizeKeySigner(params: {
     totpCode?: string;
 }): KeySignerCheck {
     const { memberPubkey, signatureValid, totpCode } = params;
+
+    // One key, one spelling (engine/member-key.ts): the signature check decodes the key's hex, which forgives case, so a
+    // row a door stored under a member's key in capitals, before that rule, would open a session for that key's holder
+    // as a second person. Answered as a key with no row is. Both apps send the key in lower case.
+    if (!isMemberKeySpelling(memberPubkey)) {
+        return { ok: false, error: 'Member not found or inactive' };
+    }
 
     // Member existence and active status check. A visitor's row is answered as a key with no row is: a role it holds from
     // before the visitors' rule acts for nothing (engine/node-roles.ts NODE_ROLE_ACTS), so it opens no session (4111202677).

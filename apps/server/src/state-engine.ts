@@ -169,6 +169,7 @@ import {
     NOT_A_MEMBER_CODE,
     assertNodeMember,
 } from './engine/members.js';
+import { isMemberKeySpelling, badKeyError, reportMisspeltMemberKeys } from './engine/member-key.js';
 import {
     generateInvite,
     adminGenerateInvite,
@@ -664,6 +665,11 @@ export function initStateEngine(): void {
             console.error('');
         }
     } catch (e) { console.warn('[LedgerAudit] startup check failed:', e); }
+
+    // One key, one spelling (engine/member-key.ts). A person's row stored under a key written another way (in capitals,
+    // say) by a door before this version is logged, with what the operator should do. Nothing is merged or deleted: it
+    // is a person's data. On a standby too, which holds the same rows. Never throws.
+    reportMisspeltMemberKeys();
 
     // Daily ledger conservation audit (also once shortly after boot)
     setTimeout(() => {
@@ -1244,7 +1250,11 @@ export function assertMemberActive(publicKey: string): void {
         if (e?.message?.includes('Device key has been invalidated')) throw e;
         // If table does not exist during early boot or mock, ignore
     }
-    const member = db.prepare("SELECT status FROM members WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
+    // The row under exactly this key, else the member's row in the one spelling keys are kept in (engine/member-key.ts).
+    // Not a case-blind match, which could answer with a row a door stored under that key in capitals before that rule
+    // (pruned by an operator, say) and refuse the member whose key it is.
+    const statusOf = db.prepare("SELECT status FROM members WHERE public_key = ?");
+    const member = (statusOf.get(publicKey) ?? statusOf.get(cleanKey)) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
@@ -1815,6 +1825,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // A recipient with no row here gets a visitor's row, but only once the Beans have moved: in the transaction below,
     // so a send any rule refuses (the send gate, the sender's floor) leaves no row behind.
     const newRecipient = !isSyntheticAccount(to) && !getMember(to);
+    // One key, one spelling (engine/member-key.ts): a recipient with no row gets one only under a key written the way
+    // this community keeps keys, so Beans sent to a member's key in capitals make no second row that holds them.
+    // Thrown before anything moves; the send route refuses it first (400 bad_key).
+    if (newRecipient && !isMemberKeySpelling(to)) throw badKeyError();
     // A visitor's row (isLiveVisitor) makes no row for anyone else: it sends Beans only to a key that has a row here.
     // Thrown, as assertNodeMember's refusal, so an enclosing transaction rolls back; the send route answers it.
     if (newRecipient && isLiveVisitor(from)) {

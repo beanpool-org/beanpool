@@ -121,6 +121,7 @@ import { alreadyJoined, getMember, type SyncJoinRequest } from '@beanpool/engine
 import { generateInvite } from './invites.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
 import { getNodeRole } from './sync.js';
+import { isMemberKeySpelling } from './member-key.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -428,6 +429,10 @@ export function declineKnock(id: string, member: string, now = Date.now()): Answ
  * member's key: a re-key has moved their knocks to it (`moveKnocks`).
  */
 export function scrubKnocksOf(pubkey: string): void {
+    // Knocks are kept under the one spelling of a key (engine/member-key.ts). A row a door stored under another spelling
+    // before that rule (pruned by its exact key) has none, and lower-casing its key would scrub the knock of the member
+    // whose key it is.
+    if (!isMemberKeySpelling(pubkey) && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(pubkey)) return;
     db.prepare(`UPDATE join_requests SET callsign = 'Deleted Member', message = '', avatar = NULL, from_node = NULL, updated_at = ?
                 WHERE pubkey = ? AND (callsign != 'Deleted Member' OR message != '' OR avatar IS NOT NULL OR from_node IS NOT NULL)`)
         .run(iso(Date.now()), pubkey.toLowerCase());

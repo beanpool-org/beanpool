@@ -41,6 +41,7 @@ import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
+import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
@@ -383,6 +384,13 @@ const handleEnrol = async (ctx: any) => {
     if (!targetPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'memberPubkey is required' };
+        return;
+    }
+    // One key, one spelling (engine/member-key.ts): a role is for a member's key as this community keeps it, never a row
+    // a door stored under another spelling before that rule (reportMisspeltMemberKeys). Before any lookup or write.
+    if (!isMemberKeySpelling(targetPubkey)) {
+        ctx.status = 400;
+        ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
         return;
     }
 
@@ -1661,6 +1669,12 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
     if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
         ctx.status = 400;
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
+        return;
+    }
+    // One key, one spelling, as the enrol route above.
+    if (!isMemberKeySpelling(targetPubkey)) {
+        ctx.status = 400;
+        ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
         return;
     }
 

@@ -20,6 +20,7 @@ import { reachAdmitsPeer, parseReachPeers, isSyntheticAccount } from '@beanpool/
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
 import { getMember, registerVisitor, bumpPostsVersion, bumpMembersVersion } from './state-engine.js';
 import { logger } from './logger.js';
+import { isMemberKeySpelling } from './engine/member-key.js';
 
 /**
  * Prefix on a cached listing's local id. Namespaced by peer so two peers cannot collide on a UUID, and so a
@@ -166,6 +167,9 @@ export function cacheRemoteListings(
             // A synthetic account cannot author anything, and a `bridge_`/`escrow_` id arriving as an author
             // would have registerVisitor trying to create a member row for a ledger account.
             if (isSyntheticAccount(l.authorPublicKey)) { dropped++; continue; }
+            // One key, one spelling (engine/member-key.ts): a local member's key in capitals is no remote author (it
+            // passed the guard below, and got a visitor's row of its own).
+            if (!isMemberKeySpelling(l.authorPublicKey)) { dropped++; continue; }
 
             // THE GUARD. See the note above — this is an account-freeze vector, not a tidiness check.
             const existing = getMember(l.authorPublicKey);

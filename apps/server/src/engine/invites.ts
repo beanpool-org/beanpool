@@ -6,6 +6,7 @@ import { db } from '../db/db.js';
 import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
+import { isMemberKeySpelling, BAD_KEY_ERROR } from './member-key.js';
 import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
 import {
     getMember,
@@ -125,6 +126,10 @@ export function redeemInvite(
     callsign: string,
     joinerSigned = false
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+    // One key, one spelling (engine/member-key.ts), before any lookup or write: a member's key in capitals is no other
+    // key, and no second member. The route takes the key that way first (routes/community.ts redeemKey).
+    if (!isMemberKeySpelling(publicKey)) return { success: false, error: BAD_KEY_ERROR };
+
     // Funnel: the top of the join flow. Counted here rather than derived because a
     // rejected code leaves nothing behind to derive from.
     recordFunnelEvent('invite_attempt');
@@ -222,6 +227,9 @@ export function redeemOfflineTicket(
     callsign: string,
     joinerSigned = false
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+    // One key, one spelling, as in redeemInvite.
+    if (!isMemberKeySpelling(joinerPublicKey)) return { success: false, error: BAD_KEY_ERROR };
+
     // Funnel: the offline ticket is the other door into the same flow, so it counts as
     // an attempt too — otherwise a community handing out paper tickets would look like
     // nobody was trying to join at all.

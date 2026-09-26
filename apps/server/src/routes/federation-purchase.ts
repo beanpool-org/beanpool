@@ -49,10 +49,10 @@ function ourPublicUrl(): string | null {
     }
 }
 
-/** Reserved account prefixes. A cross-node purchase must never be aimed at one of these. */
 /** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
 const NOT_OUR_MEMBER_PURCHASE_ERROR = 'Only a member of this community can make a cross-community purchase';
 
+/** Reserved account prefixes. A cross-node purchase must never be aimed at one of these. */
 const SYNTHETIC_PREFIXES = ['escrow_', 'project_', 'bridge_', 'treasury_'];
 const isSyntheticKey = (k: string): boolean =>
     k === 'COMMONS_POOL' || k === 'SYSTEM' || SYNTHETIC_PREFIXES.some(p => k.startsWith(p));

@@ -24,7 +24,7 @@
  */
 
 import Router from '@koa/router';
-import { OWNER_LOCK_OPEN_CHECK_PATH } from '@beanpool/core';
+import { OWNER_LOCK_OPEN_CHECK_PATH, timestampOfSignedText } from '@beanpool/core';
 import { requireAdminRole } from '../admin-auth.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import { recordOwnerLockOpen } from '../engine/owner-lock-opens.js';
@@ -123,7 +123,7 @@ export function createOwnerUnlockRoutes(deps: RouteDeps): Router {
             return;
         }
         const authSig = (ctx.state as any).authSig as { signature: string; payload: string };
-        const checkedAt = Number(String(authSig.payload).split('\n')[2]);
+        const checkedAt = timestampOfSignedText(String(authSig.payload));
         if (!Number.isFinite(checkedAt) || checkedAt <= 0) {
             ctx.status = 400;
             ctx.body = { error: 'The signed request has no usable timestamp.' };

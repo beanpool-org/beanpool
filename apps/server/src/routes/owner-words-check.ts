@@ -17,7 +17,7 @@
  */
 
 import Router from '@koa/router';
-import { OWNER_WORDS_CHECK_PATH } from '@beanpool/core';
+import { OWNER_WORDS_CHECK_PATH, timestampOfSignedText } from '@beanpool/core';
 import { isNodeOwner } from '../engine/node-roles.js';
 import {
     OWNER_WORDS_ATTESTATION, getOwnerWordsCheckedAt, listOwnerWordsStatus, recordOwnerWordsCheck,
@@ -57,9 +57,9 @@ export function createOwnerWordsCheckRoutes(deps: RouteDeps): Router {
             return;
         }
         const authSig = (ctx.state as any).authSig as { signature: string; payload: string };
-        // The signed timestamp (METHOD\nPATH\nTIMESTAMP\nNONCE\nBODY): the signature covers it, and the middleware
+        // The signed timestamp, in either format (@beanpool/core timestampOfSignedText): the signature covers it, and the middleware
         // has already refused it if it was stale.
-        const checkedAt = Number(String(authSig.payload).split('\n')[2]);
+        const checkedAt = timestampOfSignedText(String(authSig.payload));
         if (!Number.isFinite(checkedAt) || checkedAt <= 0) {
             ctx.status = 400;
             ctx.body = { error: 'The signed request has no usable timestamp.' };

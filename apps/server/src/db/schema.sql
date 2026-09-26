@@ -1750,3 +1750,15 @@ CREATE INDEX IF NOT EXISTS idx_keeper_changes_due ON enterprise_keeper_changes(a
 CREATE UNIQUE INDEX IF NOT EXISTS idx_keeper_changes_pending_unique
 ON enterprise_keeper_changes(enterprise_pubkey, member_pubkey)
 WHERE status = 'pending';
+
+-- Request binding (engine/member-signature.ts): how many people's apps signed here each day (UTC), for Settings.
+-- `own`: per address of this community's; `unconfirmed`: per address a node with no configured names was reached at,
+-- which Settings offers the owner to confirm; `old_app`: signatures in the old format, bound to no community ("N
+-- members are on an old app", until the switch). Counts only: no key is stored. Rows older than 8 days are dropped.
+CREATE TABLE IF NOT EXISTS signature_audiences (
+    day      TEXT NOT NULL,
+    kind     TEXT NOT NULL CHECK (kind IN ('own', 'unconfirmed', 'old_app')),
+    address  TEXT NOT NULL,
+    people   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, kind, address)
+);

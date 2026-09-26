@@ -114,7 +114,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/admin/auth/pairing/:id/approve', async (ctx) => {
         if (!deps.rateLimit(ctx as any)) return;
-        const { memberPubkey, signature, totpCode } = bodyOf(ctx);
+        const { memberPubkey, signature, totpCode, signedFor } = bodyOf(ctx);
         if (typeof memberPubkey !== 'string' || typeof signature !== 'string' || !memberPubkey || !signature) {
             ctx.status = 400;
             ctx.body = { error: 'memberPubkey and signature are required' };
@@ -125,10 +125,11 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             memberPubkey,
             signature,
             totpCode: typeof totpCode === 'string' ? totpCode : undefined,
+            signedFor,
         });
         if (!res.ok) {
             ctx.status = res.status;
-            ctx.body = { error: res.error, reason: res.reason, ...(res.totpRequired ? { totpRequired: true } : {}) };
+            ctx.body = { error: res.error, reason: res.reason, ...(res.code ? { code: res.code } : {}), ...(res.totpRequired ? { totpRequired: true } : {}) };
             return;
         }
         ctx.body = { success: true, role: res.role };
@@ -136,9 +137,9 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/admin/auth/pairing/:id/decline', async (ctx) => {
         if (!deps.rateLimit(ctx as any)) return;
-        const { memberPubkey, signature } = bodyOf(ctx);
-        const res = declinePairing({ pairingId: ctx.params.id, memberPubkey: String(memberPubkey || ''), signature: String(signature || '') });
-        if (!res.ok) { ctx.status = res.status; ctx.body = { error: res.error }; return; }
+        const { memberPubkey, signature, signedFor } = bodyOf(ctx);
+        const res = declinePairing({ pairingId: ctx.params.id, memberPubkey: String(memberPubkey || ''), signature: String(signature || ''), signedFor });
+        if (!res.ok) { ctx.status = res.status; ctx.body = res.code ? { error: res.error, code: res.code } : { error: res.error }; return; }
         ctx.body = { success: true };
     });
 

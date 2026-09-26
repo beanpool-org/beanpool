@@ -47,6 +47,7 @@ import { issueCsrfToken } from './admin-auth.js';
 import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
 import { isMemberKeySpelling } from './engine/member-key.js';
+import { adminSigninText, verifyStatementSignature } from './engine/member-signature.js';
 
 // ===================== CONSTANTS & TTLs =====================
 export const CHALLENGE_TTL_MS = 60_000;          // 60 seconds challenge freshness
@@ -197,9 +198,14 @@ export function verifyAndSolveChallenge(params: {
     memberPubkey: string;
     signature: string;
     totpCode?: string;
+    /** The host the app signed for (request binding): with it, only the format-2 sign-in text is accepted. */
+    signedFor?: unknown;
 }): {
     ok: boolean;
     error?: string;
+    /** 421 wrong_community or 426 app_too_old (engine/member-signature.ts), when that is why it was refused. */
+    status?: number;
+    code?: string;
     totpRequired?: boolean;
     handshakeToken?: string;
     expiresAt?: number;
@@ -220,15 +226,31 @@ export function verifyAndSolveChallenge(params: {
         return { ok: false, error: 'Challenge already resolved' };
     }
 
+    // Request binding (decision 4a, 2026-09-27): the app builds `0xFF ‖ beanpool-admin-signin/2\n<host>\n<challengeId>`
+    // from the challenge id alone and says which host (`signedFor`); it never signs the node's text. Before this the app
+    // signed whatever `challenge` text the node sent, so a hostile community could make its Manage button sign a
+    // complete request for another. The old forms (the challenge text, or the bare id) are accepted only until the
+    // switch (engine/member-signature.ts), and a format-2 sign-in for another community's host never.
+    let statement: ReturnType<typeof verifyStatementSignature> | null = null;
     const signer = authorizeKeySigner({
         memberPubkey,
         totpCode,
-        // Signature over challenge.challenge, falling back to the bare challengeId.
-        signatureValid: () =>
-            verifyEd25519Signature(challenge.challenge, signature, memberPubkey) ||
-            verifyEd25519Signature(challenge.challengeId, signature, memberPubkey),
+        signatureValid: () => {
+            statement = verifyStatementSignature({
+                signature,
+                pubKeyHex: memberPubkey,
+                boundText: (host) => adminSigninText(host, challenge.challengeId),
+                signedFor: params.signedFor,
+                oldTexts: [challenge.challenge, challenge.challengeId],
+            });
+            return statement.ok;
+        },
     });
     if (!signer.ok) {
+        const refused = statement as ReturnType<typeof verifyStatementSignature> | null;
+        if (signer.badSignature && refused && !refused.ok && (refused.status === 421 || refused.status === 426)) {
+            return { ok: false, error: refused.error, status: refused.status, code: refused.code };
+        }
         return { ok: false, error: signer.error, ...(signer.totpRequired ? { totpRequired: true } : {}) };
     }
     const role = signer.role;

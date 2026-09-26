@@ -19,6 +19,7 @@ import {
     type InviteCode,
     type GenesisInviteType
 } from '@beanpool/engine';
+import { ticketBinding } from './member-signature.js';
 
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
@@ -242,7 +243,7 @@ export function redeemOfflineTicket(
     // this catch is for anything it lets through.
     let verified: ReturnType<typeof verifyOfflineTicket>;
     try {
-        verified = verifyOfflineTicket(db, ticketB64);
+        verified = verifyOfflineTicket(db, ticketB64, ticketBinding);
     } catch {
         recordFunnelEvent('invite_failed', 'malformed');
         return { success: false, error: 'Malformed or broken offline ticket payload' };

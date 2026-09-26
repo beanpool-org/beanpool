@@ -2398,3 +2398,50 @@ export async function executeOffboardApi(
     }
     return res.json();
 }
+
+// ======================== ADDRESSES MEMBERS' APPS USE (request binding) ========================
+// A member's app signs each request for the address it reaches the community at, and the node accepts only its own
+// addresses (apps/server engine/own-addresses.ts). Settings lists them, offers to confirm one the node doesn't know,
+// and says how many apps are too old to name a community (engine/member-signature.ts).
+
+export interface AppAddress {
+    address: string;
+    /** public-address: the registrar's (or CF_RECORD_NAME); env: BEANPOOL_ADDRESSES; owner: confirmed here; registrar: the registrar's name for this key. */
+    source: 'public-address' | 'env' | 'owner' | 'registrar';
+    today: number;
+    busiestDay: number;
+}
+
+export interface AppAddressesReport {
+    addresses: AppAddress[];
+    /** Addresses apps reached this node at while it knew none of its own: offered to confirm. */
+    unconfirmed: { address: string; today: number; busiestDay: number }[];
+    /** Apps that signed in the old format, bound to no community. */
+    oldApps: { today: number; busiestDay: number };
+    /** The day (UTC) old apps stop working here, or null when they already don't. */
+    unboundSignaturesUntil: string | null;
+    unboundSignaturesAccepted: boolean;
+}
+
+async function appAddressesCall(nodeUrl: string, path: string, init: RequestInit): Promise<AppAddressesReport> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, path), init);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}: ${res.statusText}`);
+    return body as AppAddressesReport;
+}
+
+export function getAppAddresses(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AppAddressesReport> {
+    return appAddressesCall(nodeUrl, '/api/local/admin/app-addresses', { headers: buildAdminHeaders(adminPassword, tfaToken) });
+}
+
+export function confirmAppAddress(nodeUrl: string, address: string, adminPassword?: string, tfaToken?: string): Promise<AppAddressesReport> {
+    return appAddressesCall(nodeUrl, '/api/local/admin/app-addresses/confirm', {
+        method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken), body: JSON.stringify({ address }),
+    });
+}
+
+export function removeAppAddress(nodeUrl: string, address: string, adminPassword?: string, tfaToken?: string): Promise<AppAddressesReport> {
+    return appAddressesCall(nodeUrl, '/api/local/admin/app-addresses/remove', {
+        method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken), body: JSON.stringify({ address }),
+    });
+}

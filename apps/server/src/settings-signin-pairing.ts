@@ -7,7 +7,9 @@
  *      BINDING SECRET that only this browser holds (an httpOnly, SameSite=Strict cookie scoped to the pairing
  *      routes). The QR carries the node URL, the id and the short code — never the secret.
  *   2. The owner scans it in the app, compares the short code, passes the phone's own unlock, and posts an
- *      approval signed with their member key over `beanpool-settings-signin:v1:approve:<id>:<code>`.
+ *      approval signed with their member key over `0xFF ‖ beanpool-settings-signin/2\n<host>\napprove\n<id>\n<code>`
+ *      (@beanpool/core settingsSigninText; <host> the address the phone reached this node at, sent as `signedFor`),
+ *      or, from an app before request binding and only until the switch, `beanpool-settings-signin:v1:approve:<id>:<code>`.
  *      The node runs the same signer checks as the app's one-time link (authorizeKeySigner: active member,
  *      owner, admin or moderator in node_roles, signature, the node's 2FA code when on) and mints the same 60-second
  *      handshake token — but keeps it here, bound to the pairing. It is never sent to the phone or the page.
@@ -28,8 +30,8 @@ import {
     authorizeKeySigner,
     mintHandshakeToken,
     consumeHandshakeToken,
-    verifyEd25519Signature,
 } from './admin-key-auth.js';
+import { settingsSigninText, verifyStatementSignature } from './engine/member-signature.js';
 import { logger } from './logger.js';
 
 export const PAIRING_TTL_MS = 2 * 60_000;
@@ -191,7 +193,7 @@ export function describePairing(pairingId: string, now = Date.now()):
 
 export type ApproveResult =
     | { ok: true; role: MemberNodeRole }
-    | { ok: false; status: number; error: string; totpRequired?: boolean; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'totp' | 'refused' };
+    | { ok: false; status: number; error: string; code?: string; totpRequired?: boolean; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'totp' | 'refused' | 'wrong-community' | 'app-too-old' };
 
 function refuse(p: Pairing): void {
     p.refusals++;
@@ -207,11 +209,29 @@ function who(pubkey: string): string {
     return `${m?.callsign ? `@${m.callsign} ` : ''}(key ${pubkey.slice(0, 12)}…)`;
 }
 
+/**
+ * The phone's signature over this pairing's approval or decline (request binding, engine/member-signature.ts): the
+ * format-2 text naming the host the phone reached this node at (`signedFor`), which must be this community's, or the old
+ * v1 text until the switch. A pairing shown by community A and approved there is never an approval at B: a hostile A
+ * could otherwise show a QR carrying B's pairing id and its own address, and sign in to B's Settings as the member.
+ */
+function pairingSignature(p: Pairing, action: 'approve' | 'decline', memberPubkey: string, signature: string, signedFor: unknown) {
+    return verifyStatementSignature({
+        signature,
+        pubKeyHex: memberPubkey,
+        boundText: (host) => settingsSigninText(host, action, p.id, p.shortCode),
+        signedFor,
+        oldTexts: [pairingMessage(action, p.id, p.shortCode)],
+    });
+}
+
 export function approvePairing(params: {
     pairingId: string;
     memberPubkey: string;
     signature: string;
     totpCode?: string;
+    /** The host the phone signed for (format 2); absent from an old app. */
+    signedFor?: unknown;
     now?: number;
 }): ApproveResult {
     const now = params.now ?? Date.now();
@@ -222,11 +242,13 @@ export function approvePairing(params: {
     if (p.status !== 'waiting') return { ok: false, status: 409, error: 'That code was already used. Get a new code on the computer.', reason: 'used' };
 
     const memberPubkey = String(params.memberPubkey || '').trim();
-    const message = pairingMessage('approve', p.id, p.shortCode);
     // The signature is checked FIRST here (authorizeKeySigner checks it after the role): only a real key holder
     // may cause a "holds no role here" notice on the waiting page.
-    if (!verifyEd25519Signature(message, params.signature, memberPubkey)) {
+    const signed = pairingSignature(p, 'approve', memberPubkey, params.signature, params.signedFor);
+    if (!signed.ok) {
         refuse(p);
+        if (signed.status === 421) return { ok: false, status: 421, error: signed.error, code: signed.code, reason: 'wrong-community' };
+        if (signed.status === 426) return { ok: false, status: 426, error: signed.error, code: signed.code, reason: 'app-too-old' };
         return { ok: false, status: 403, error: 'Invalid cryptographic signature', reason: 'bad-signature' };
     }
 
@@ -267,18 +289,23 @@ export function approvePairing(params: {
  * (isMemberKeySpelling): the signature check forgives case, so a row an old door stored under a member's key in capitals
  * would answer as a second member, as a key sign-in would (authorizeKeySigner).
  */
-export function declinePairing(params: { pairingId: string; memberPubkey: string; signature: string; now?: number }):
+export function declinePairing(params: { pairingId: string; memberPubkey: string; signature: string; signedFor?: unknown; now?: number }):
     | { ok: true }
-    | { ok: false; status: number; error: string } {
+    | { ok: false; status: number; error: string; code?: string } {
     const now = params.now ?? Date.now();
     const p = isPairingId(params.pairingId) ? pairings.get(params.pairingId) : undefined;
     if (!p) return { ok: false, status: 404, error: 'That code is not known here.' };
     if (expired(p, now) || p.status !== 'waiting') return { ok: false, status: 409, error: 'That code is no longer waiting.' };
     const memberPubkey = String(params.memberPubkey || '').trim();
     const member = isMemberKeySpelling(memberPubkey) ? getMember(db, memberPubkey) : undefined;
-    if (!member || member.status !== 'active' || !isNodeMember(db, memberPubkey) ||
-        !verifyEd25519Signature(pairingMessage('decline', p.id, p.shortCode), params.signature, memberPubkey)) {
+    if (!member || member.status !== 'active' || !isNodeMember(db, memberPubkey)) {
         return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
+    }
+    const signed = pairingSignature(p, 'decline', memberPubkey, params.signature, params.signedFor);
+    if (!signed.ok) {
+        return signed.status === 421 || signed.status === 426
+            ? { ok: false, status: signed.status, error: signed.error, code: signed.code }
+            : { ok: false, status: 403, error: 'Invalid cryptographic signature' };
     }
     p.status = 'declined';
     logger.info('AUTH', `Settings sign-in by phone declined by ${who(memberPubkey)} (pairing ${p.id.slice(0, 8)})`);

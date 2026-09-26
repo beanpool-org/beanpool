@@ -236,14 +236,18 @@ export interface ParsedInviteTicketText {
     intendedFor?: string;
 }
 
-/** A format-2 ticket payload read back, or null when `text` isn't one. */
+/**
+ * A format-2 ticket payload read back, or null when `text` isn't one. `intendedFor` is the last field and is whatever
+ * the inviter typed or pasted, line breaks included, so it is the rest of the text (as a request's BODY is).
+ */
 export function parseInviteTicketText(text: string): ParsedInviteTicketText | null {
     if (typeof text !== 'string' || !text.startsWith(`${INVITE_TICKET_TAG}\n`)) return null;
     const lines = text.split('\n');
-    if (lines.length !== 5) return null;
+    if (lines.length < 5) return null;
     const timestamp = Number(lines[3]);
     if (!lines[1] || !lines[2] || !/^\d+$/.test(lines[3]) || !Number.isSafeInteger(timestamp)) return null;
-    return { host: lines[1], inviter: lines[2], timestamp, ...(lines[4] ? { intendedFor: lines[4] } : {}) };
+    const intendedFor = lines.slice(4).join('\n');
+    return { host: lines[1], inviter: lines[2], timestamp, ...(intendedFor ? { intendedFor } : {}) };
 }
 
 /** A re-enrolment code's proof of possession of the new key (`/api/member/re-enroll`). */

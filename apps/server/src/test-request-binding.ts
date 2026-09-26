@@ -541,6 +541,11 @@ async function main(): Promise<void> {
             const jA = joiner('JoA'), jB = joiner('JoB');
             const atA = await redeem(A, ticketA, jA);
             assert(atA.status === 200 && atA.body?.success && (await A.send('member', { pk: jA.pk })) === 'active', `a ticket made for a.test joins A (${show(atA)})`);
+            const jMulti = joiner('JoMulti');
+            const multiLine = await core.buildInviteTicket('https://a.test', mia.pk, mia.sign, { intendedFor: 'Robin\n(from the market)' });
+            const atAMulti = await redeem(A, multiLine, jMulti);
+            assert(atAMulti.status === 200 && atAMulti.body?.success && (await A.send('member', { pk: jMulti.pk })) === 'active',
+                `so does one whose "who is it for" holds a line break (${show(atAMulti)})`);
             const checkB = await check(B, ticketA);
             assert(checkB.status === 200 && checkB.body?.valid === false && checkB.body?.reason === 'wrong_community', `B's pre-flight says it is for another community (${show(checkB)})`);
             const atB = await redeem(B, ticketA, jB);

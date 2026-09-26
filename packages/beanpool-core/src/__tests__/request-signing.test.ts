@@ -3,7 +3,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
 import {
-    BOUND_SIGNATURE_MARKER, REQUEST_TAG, SIGNED_FOR_HEADER,
+    BOUND_SIGNATURE_MARKER, INVITE_TICKET_TAG, REQUEST_TAG, SIGNED_FOR_HEADER,
     adminSigninText, audienceOf, bodyOfSignedText, buildBoundRequestHeaders, buildBoundWsParams, buildInviteTicket,
     bytesOfSignedText, ed25519Signer, inviteTicketText, parseInviteTicketText, parseSignedText, signAdminSignin,
     signSettingsSignin, settingsSigninText, signedPathOf, signedRequestBytes, signedRequestText, timestampOfSignedText,
@@ -148,6 +148,15 @@ describe('builders', () => {
         expect(parseInviteTicketText(inviteTicketText('a.example', PUB, 42))).toEqual({ host: 'a.example', inviter: PUB, timestamp: 42 });
         expect(parseInviteTicketText('{"i":"x","t":1}')).toBeNull();
         expect(ed25519.verify(b64(s), signedRequestBytes(p), ed25519.getPublicKey(SEED))).toBe(true);
+
+        // "Who is this invite for?" is typed or pasted by the inviter, so it can hold a line break. It is the last
+        // field, so the rest of the text is all of it; a ticket with one must still be readable, or it can never be used.
+        const pasted = 'Robin\n(from the market)\n';
+        const multi = await buildInviteTicket('https://a.example', PUB, ed25519Signer(SEED), { timestamp: 42, intendedFor: pasted });
+        const m = JSON.parse(Buffer.from(multi, 'base64').toString('utf8'));
+        expect(parseInviteTicketText(m.p)).toEqual({ host: 'a.example', inviter: PUB, timestamp: 42, intendedFor: pasted });
+        expect(ed25519.verify(b64(m.s), signedRequestBytes(m.p), ed25519.getPublicKey(SEED))).toBe(true);
+        expect(parseInviteTicketText(`${INVITE_TICKET_TAG}\na.example\n${PUB}\n42`)).toBeNull();
 
         const re = await signReEnroll('https://a.example', ' abc-123 ', ed25519Signer(SEED));
         expect(ed25519.verify(b64(re), signedRequestBytes(reEnrollText('a.example', 'ABC-123')), ed25519.getPublicKey(SEED))).toBe(true);

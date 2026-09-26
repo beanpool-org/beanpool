@@ -23,7 +23,7 @@ The simplest complete backup: stop the server, copy the whole data folder somewh
 
 A backup from Settings is **locked** only when the server has a printed recovery code. A locked backup opens with that code, or with any one owner's phone (see Restoring). Until you make a recovery code, the server keeps making the backups it always made: **not locked**, readable by anyone who has the file.
 
-A server with no recovery code says so every time. The download carries the words "Backups are not locked yet: make a recovery code to lock them." and the server's log repeats them. The fleet manager shows that server as "Partial: database, no keys", with "Make a recovery code on the node to lock its backups." In Settings, the **Who can unlock this community** card shows the same words (see below). The download button itself still says "✅ Backup downloaded", which is true, because the file opens.
+A server with no recovery code says so every time. The download carries the words "Backups are not locked yet: make a recovery code to lock them. Until then a backup file can be read by anyone who has it, and a server restored from it cannot open members' sign-in recovery copies." and the server's log repeats them. The fleet manager shows that server as "Partial: database, no keys", with "Make a recovery code on the node to lock its backups." In Settings, the **Who can unlock this community** card shows the same words (see below). The download button itself still says "✅ Backup downloaded", which is true, because the file opens.
 
 ## Who can unlock this community
 

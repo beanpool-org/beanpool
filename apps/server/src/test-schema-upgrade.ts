@@ -717,6 +717,99 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 14. Visitors' rows (members.is_visitor) ─────────────────────────────────────────────────────────────────────
+    // Every node from before it has no is_visitor column, and holds visitors' rows (a DM or a transfer to a key with no
+    // account, a federation visitor) that read as members. The fixture is a booted node with the column and its
+    // one-time marker taken away, seeded with a row of every kind a live node can hold. The upgrade adds the column,
+    // marks exactly the rows with no record of joining and no sign of use as a member, stamps them for delta sync, and
+    // never runs again.
+    console.log('\n--- 14. Legacy node without members.is_visitor ---');
+    {
+        const dir = tmp('legacy-visitors');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const freshMembers = columns(d, 'members');
+        assert(freshMembers.includes('is_visitor'), 'a fresh install has members.is_visitor');
+        // As the node runs (db.ts): rows may name an inviter this node has no row for ('genesis', 'open:google').
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TRIGGER members_touch_updated_at; ALTER TABLE members DROP COLUMN is_visitor;
+                DELETE FROM node_config WHERE key = 'migration_mark_visitors_v1';`);
+        assert(!columns(d, 'members').includes('is_visitor'), 'the fixture genuinely lacks the column');
+        const OLD = '2025-01-01T00:00:00.000Z';
+        const key = (n: number) => n.toString(16).padStart(2, '0').repeat(32);
+        const genesisKey = key(1);
+        const seed = (n: number, cols: Record<string, unknown> = {}) => {
+            const all: Record<string, unknown> = { public_key: key(n), callsign: `Row${n}`, joined_at: OLD, updated_at: OLD, ...cols };
+            const names = Object.keys(all);
+            d.prepare(`INSERT INTO members (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`).run(...names.map(k => all[k]));
+            return key(n);
+        };
+        // Visitors: no record of joining, and never used as a member here.
+        const visitors: Record<string, string> = {
+            'a DM or a transfer to a key with no account (Visitor-…)': seed(10, { callsign: 'Visitor-0a0a0a0a' }),
+            'a federation visitor, with its home community': seed(11, { callsign: 'RemoteRay', home_node_url: 'https://peer.example.test' }),
+            'a visitor whose row was later closed': seed(12, { status: 'pruned' }),
+            'a visitor written with empty strings for inviter and code': seed(13, { invited_by: '', invite_code: '' }),
+        };
+        // Members: each has a record of joining, or a sign of use as a member here.
+        const members: Record<string, string> = {
+            'the genesis member': seed(1, { invited_by: 'genesis', invite_code: 'genesis' }),
+            'a member who joined with an invite': seed(20, { invited_by: genesisKey, invite_code: 'INV-ABCD-EFGH' }),
+            'a member who joined with an offline ticket': seed(21, { invited_by: genesisKey, invite_code: '0123456789abcdef' }),
+            'a member who joined through the open door': seed(22, { invited_by: 'open:google' }),
+            'an enterprise (no key holds it)': seed(23, { is_treasury: 1 }),
+            'a visitor who redeemed an invite before this version and set a photo': seed(24, { avatar_url: 'data:image/png;base64,iVBORw0KGgo=' }),
+            'a row with a profile edit': seed(25, { profile_updated_at: OLD }),
+            'a row with a bio': seed(26, { bio: 'I grow tomatoes' }),
+            'a row with contact details': seed(27, { contact_value: 'row27@example.test' }),
+            'a row that made an invite': seed(28),
+            'a row that used an invite code': seed(29),
+            'a row with a node role': seed(30),
+            'a row with a member_joined line in the feed': seed(31),
+        };
+        d.prepare(`INSERT INTO invite_codes (code, created_by, created_at, used_by) VALUES ('INV-ROW28-MADE', ?, ?, NULL)`).run(key(28), OLD);
+        d.prepare(`INSERT INTO invite_codes (code, created_by, created_at, used_by) VALUES ('INV-ROW29-USED', ?, ?, ?)`).run(genesisKey, OLD, key(29));
+        d.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'moderator', 'genesis')`).run(key(30));
+        d.prepare(`INSERT INTO activity_feed (event_type, actor_pubkey) VALUES ('member_joined', ?)`).run(key(31));
+        d.prepare(`INSERT INTO open_joins (member_pubkey, provider, join_hash) VALUES (?, 'google', 'hash-row22')`).run(key(22));
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before is_visitor boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        assert(/Visitors' rows marked: 4\b/.test(result.output) && /kept as members, with no record of joining but used as a member here: 5\b/.test(result.output),
+            `the boot says how many it marked and how many ambiguous rows it kept as members (${(result.output.match(/Visitors' rows marked[^\n]*/) || [''])[0].slice(0, 160)})`);
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(columns(after, 'members')) === JSON.stringify(freshMembers), 'members: exactly the columns a fresh install has');
+        const flag = (pk: string) => (after.prepare('SELECT is_visitor, updated_at FROM members WHERE public_key = ?').get(pk) as any);
+        for (const [label, pk] of Object.entries(visitors)) {
+            const r = flag(pk);
+            assert(r.is_visitor === 1 && r.updated_at > OLD, `marked a visitor, and stamped for delta sync: ${label} (${r.is_visitor}, ${r.updated_at})`);
+        }
+        for (const [label, pk] of Object.entries(members)) {
+            const r = flag(pk);
+            assert(r.is_visitor === 0 && r.updated_at === OLD, `left a member, untouched: ${label} (${r.is_visitor})`);
+        }
+        const system = after.prepare("SELECT is_visitor FROM members WHERE public_key = 'SYSTEM'").get() as any;
+        assert(!system || system.is_visitor === 0, 'the SYSTEM account is left alone');
+        assert(!!after.prepare("SELECT 1 FROM node_config WHERE key = 'migration_mark_visitors_v1'").get(), 'the one-time marker is written');
+        // The trigger is back and lists the column, so a promotion reaches a standby by delta sync.
+        const fed = visitors['a federation visitor, with its home community'];
+        after.prepare("UPDATE members SET updated_at = ? WHERE public_key = ?").run(OLD, fed);
+        after.prepare("UPDATE members SET is_visitor = 0 WHERE public_key = ?").run(fed);
+        assert(flag(fed).updated_at > OLD, `members_touch_updated_at stamps a change of is_visitor (${flag(fed).updated_at})`);
+        // A row with no record of joining written after the upgrade is not marked by a later boot: the pass ran once.
+        const late = key(40);
+        after.prepare(`INSERT INTO members (public_key, callsign, joined_at, updated_at) VALUES (?, 'LateRow', ?, ?)`).run(late, OLD, OLD);
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        const again = new Database(path.join(dir, 'state.db'), { readonly: true });
+        assert((again.prepare('SELECT is_visitor FROM members WHERE public_key = ?').get(late) as any).is_visitor === 0,
+            'the pass runs once: a later boot marks nobody');
+        again.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

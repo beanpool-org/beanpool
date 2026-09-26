@@ -221,6 +221,7 @@ What the standby does, in order. Each step is written to data/takeover-journal.j
 Afterwards:
 
 - Sign in to Settings with **the community's** admin password, or an owner's key. The standby's own admin password no longer works.
+- **Tell your members that a sign-in they disconnected may be connected again.** When a member disconnected their last sign-in account, the old main server deleted its copy, and that deletion never reached the standby. So on this server the sign-in shows as connected and brings their account back, until they disconnect it again (on the phone app: **Settings**, **Account Protection**, **Disconnect**).
 - **If you used the recovery code, make a new one.** The one you typed is spent: until you replace it, Who can unlock this community says "Your recovery code was used. Make a new one". Anyone holding that paper can open the community's keys. An owner's phone spends nothing: their key is still theirs, and the new main server locks to them again.
 - If the result says the tunnel did not come back, the keys had no tunnel token. With PUBLIC_ADDRESS_NAME set, the server asks for the address again within a few minutes: it has the same identity, so the name is still its own. Otherwise claim the address again under Public Address. With the recovery code, the standby looks in the older copies it held for a token before giving up; a phone opens only the newest copy.
 - Other standbys trust the new main server already, because it has the same identity. Make a replication token on it and paste it into each of them.

@@ -289,7 +289,8 @@ takes over. What such a copy holds opens only with the key and the `sub` togethe
   backups. The operator can still open those. The members' guide says so.
 - **A copy deleted after the seal still reaches no standby** (no tombstone for
   `recovery_shares`), so it stays there, wrapped, and after a take-over it would open again. Its
-  own PR, with `invalidated_keys`.
+  own PR, with `invalidated_keys`. Until then the members' guide (`settings/recovery.md`) and the
+  operator manual's take-over steps say so.
 - **The operator.** Only a secret the server never sees would lock the operator out: a passkey
   with the PRF extension (design option C). It cannot cover the old Android phones this app is
   for, so it could only ever sit on top, as an opt-in. Marty, 2026-09-26 (D-3 = a): not now;

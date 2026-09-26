@@ -7351,13 +7351,16 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
  * THROWS if it cannot spare them, leaving every table as it found them: a committed half-clear would strand
  * the replica without the rows this argument exists to protect, so the caller must fail the resync instead.
  */
-export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): void {
+export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts: { invalidatedKeys?: boolean } = {}): void {
     const tables = [
         'members', 'posts', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
         'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
         'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'moderation_notices', 'tombstones',
+        // Only when the incoming copy carries the main server's replaced keys (`opts.invalidatedKeys`): from a main
+        // server that predates them, the keys this node holds are the only ones it has (engine/key-move.ts).
+        ...(opts.invalidatedKeys ? ['invalidated_keys'] : []),
     ];
     // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
     // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.

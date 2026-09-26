@@ -376,6 +376,20 @@ export interface SyncModerationNotice {
 }
 
 /**
+ * A key the main server no longer accepts (apps/server engine/member-wizards.ts): 'rekey_pending' from the moment an
+ * operator starts a re-key, 'rekeyed' with the key that replaced it once the re-key completes. Replicated so a server that
+ * takes over refuses a lost or stolen phone's key at every door and in the middleware at once, and so a standby follows a
+ * re-key (apps/server engine/key-move.ts). Watermarked on `invalidatedAt`, which both writes stamp; the main server never
+ * deletes a row.
+ */
+export interface SyncInvalidatedKey {
+    publicKey: string;
+    reason: string;
+    invalidatedAt: string;
+    rekeyedTo: string | null;
+}
+
+/**
  * One community in the global node's mirror of the public directory registry (G5, apps/server engine/directory-cache.ts),
  * as its hourly run last wrote it: public data, checked field by field. Replicated so a server that takes over knows
  * which communities the old one had already seen (`firstSeenAt`), and tells no watcher about them again. Never deleted:
@@ -435,6 +449,11 @@ export interface SyncPayload {
     joinRequests?: SyncJoinRequest[];
     /** Watermarked on `updated_at`, which a new notice, a seen mark and a re-key all stamp. */
     moderationNotices?: SyncModerationNotice[];
+    /**
+     * Watermarked on `invalidated_at`, which a re-key's start and its completion both stamp. Absent from a main server
+     * that predates it: a standby then keeps the rows it has.
+     */
+    invalidatedKeys?: SyncInvalidatedKey[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     /**
      * `post_id|order_num` for every photo row the exporter left OUT because it could not read the object the
@@ -989,6 +1008,20 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
+    // The keys a re-key replaced, or is replacing (apps/server engine/member-wizards.ts). A key is lower case wherever
+    // this server writes one.
+    let invalidatedKeys: SyncInvalidatedKey[] = [];
+    try {
+        invalidatedKeys = sel('invalidated_keys', 'invalidated_at').map((r: any) => ({
+            publicKey: r.public_key,
+            reason: r.reason,
+            invalidatedAt: r.invalidated_at,
+            rekeyedTo: r.rekeyed_to ?? null,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
@@ -1031,6 +1064,7 @@ export function exportSyncState(
         directoryCache,
         joinRequests,
         moderationNotices,
+        invalidatedKeys,
         tombstones,
     };
 }

@@ -9,6 +9,7 @@ import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs } from '@beanpoo
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
 import { routeLivePostChange } from './live-posts';
+import { createVisitorDoorbells } from './visitor-doorbells';
 import {
     requestSync,
     registerSyncActivityListener,
@@ -52,6 +53,13 @@ let isRetry = false;
 let reconnectSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
 /** The member this socket signed in as, so a pushed change about their own listing takes the full refresh. */
 let memberPubkey: string | null = null;
+/**
+ * True while the socket was opened with no identity at all: a visitor's (the global lobby, G9b). It gets only bare
+ * doorbells, each one a read of the whole guest list, so they go through `visitorDoorbells` instead of straight into
+ * the coordinator. A member's socket never does.
+ */
+let visitorSocket = false;
+const visitorDoorbells = createVisitorDoorbells({ read: () => requestSync() });
 let isConnecting = false;
 /** Bumped by reconnectToAnchor: a connect still reading the identity from before it opens nothing. */
 let connectGeneration = 0;
@@ -277,9 +285,16 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             // A public offer or need the node sent whole is not a doorbell: the views that hold
             // listings write it into their lists (lib/live-posts), and nothing is fetched. One that
             // involves this member, or a view is tied to, rings the doorbell as before.
+            //
+            // A visitor's doorbell waits its turn (lib/visitor-doorbells): a thousand lobbies must not all read the
+            // guest list in the same moment, nor each once per change.
             if (data.type !== 'state_snapshot') {
                 const change = livePostChange(data);
                 if (change && routeLivePostChange(change, memberPubkey)) return;
+                if (visitorSocket) {
+                    visitorDoorbells.ring();
+                    return;
+                }
                 requestSync().catch(err => {
                     console.warn('[WS Sync] Broadcast sync error:', err);
                 });
@@ -326,6 +341,7 @@ export function connectToAnchor(url?: string): void {
         .then(async (ident) => {
             if (generation !== connectGeneration) return;
             memberPubkey = ident?.publicKey ?? null;
+            visitorSocket = !ident;
             const params: string[] = [];
             if (ident && ident.callsign) {
                 params.push(`callsign=${encodeURIComponent(ident.callsign)}`);
@@ -342,6 +358,8 @@ export function connectToAnchor(url?: string): void {
         })
         .catch(() => {
             if (generation !== connectGeneration) return;
+            // The identity could not be read, so nobody knows this is a visitor: the doorbells ring as a member's did.
+            visitorSocket = false;
             establishConnection(baseWsUrl, baseWsUrl);
         })
         .finally(() => {
@@ -374,6 +392,8 @@ export function reconnectToAnchor(): void {
         clearTimeout(reconnectSyncTimeoutId);
         reconnectSyncTimeoutId = null;
     }
+    // The member's socket opens with a sync of its own: nothing the lobby held back is read on its behalf later.
+    visitorDoorbells.reset();
     connectGeneration++;
     isConnecting = false;
     reconnectAttempt = 0;
@@ -405,7 +425,9 @@ if (typeof document !== 'undefined') {
         const isHidden = document.hidden || document.visibilityState === 'hidden';
         if (isHidden) {
             stopHeartbeat();
+            visitorDoorbells.hidden();
         } else {
+            visitorDoorbells.visible();
             const isDead = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
             if (isDead) {
                 if (ws) {
@@ -509,6 +531,8 @@ export function resetSyncForTest(): void {
     reconnectAttempt = 0;
     isRetry = false;
     memberPubkey = null;
+    visitorSocket = false;
+    visitorDoorbells.reset();
     isConnecting = false;
     currentUrl = null;
     listeners = [];

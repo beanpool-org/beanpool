@@ -1348,8 +1348,8 @@ export function getActingMember(publicKey: string): Member | undefined {
 }
 
 /**
- * The read test, for what only members may read: isNodeMember, and not suspended or disabled, and not a visitor's row
- * (the engine's readsAsMember). Pass the verified signer.
+ * The read test, for what only members may read: isNodeMember (which a visitor's row fails), and not suspended or
+ * disabled (the engine's readsAsMember). Pass the verified signer.
  */
 export function readsAsMember(pubkey: string | null | undefined): boolean {
     return readsAsMemberEngine(db, pubkey);

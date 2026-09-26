@@ -359,10 +359,10 @@ export const NOT_A_MEMBER_CODE = 'not_a_member';
 
 /**
  * For a write that reaches another member (their message, a trade with them) and answers with them: the signer must
- * still be a member of this node, the engine's isNodeMember (a member row, not pruned, for a key no re-key has
- * invalidated), the same test as every member-only read. A pruned account keeps its row, its group roles and its open
- * trades, and the old key of a member being re-keyed (a lost or stolen phone) keeps its row too, and both can still
- * sign. Refused 403 before anything is written or anyone is returned.
+ * still be a member of this node, the engine's isNodeMember (a member row that isn't a visitor's, not pruned, for a key
+ * no re-key has invalidated). A pruned account keeps its row, its group roles and its open trades, and the old key of a
+ * member being re-keyed (a lost or stolen phone) keeps its row too, and both can still sign; a visitor's row never
+ * joined. Refused 403 before anything is written or anyone is returned.
  *
  * Deliberately not state-engine's assertMemberActive, which also refuses 'suspended' and 'disabled': a suspended
  * member keeps what suspension already allows them (closing their own trades, running their own event's chat).

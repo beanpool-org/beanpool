@@ -43,9 +43,10 @@ function refuseMembersOnly(ctx: Context): false {
 /**
  * For a route where the caller ACTS and the answer hands back other members (the trade with its other party, the
  * message and who reacted to it, the group they act in), on a node that shows guests the listings and not the people:
- * only a member of this node goes on (isNodeMember, the act test). Anyone else is answered 403 `members_only` and the
- * route stops (false). A suspended or disabled member and a visitor's row go on, as they always have: what they may do
- * is suspension's rule and each route's, not this one's, and the people in the answer are the ones they are acting with.
+ * only a member of this node goes on (isNodeMember, the act test). Anyone else, a visitor's row included, is answered
+ * 403 `members_only` and the route stops (false). A suspended or disabled member goes on, as they always have: what they
+ * may do is suspension's rule and each route's, not this one's, and the people in the answer are the ones they are
+ * acting with.
  *
  * A route's own test of its caller does not stand in for this one: a pruned account keeps its member row, its group
  * roles, its friends and its conversations, and can still sign, and a POST is seen by neither the read gate nor the

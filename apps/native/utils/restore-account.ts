@@ -8,7 +8,8 @@
  * So every restore passes {@link clearToRestore} before it writes anything, and the member sees "Replace this phone's
  * account?" (welcome.tsx), with that account's 12 words one tap away when the phone has them. Cancel keeps everything:
  * the key, the onboarding record, and the community the phone is set to. Replace takes all of it, and the rest of what
- * that account kept in app storage, before the restored account is written ({@link saveRestoredAccount}).
+ * that account kept in app storage, its saved communities and its push alerts, before the restored account is written
+ * ({@link saveRestoredAccount}).
  *
  * The other paths that write the phone's identity never put a different key over it:
  * - an invite join reuses the phone's key and makes one only when there is none (welcome.tsx `handleCreate`);
@@ -25,6 +26,7 @@ import {
     importIdentity, loadIdentity, removeStoredIdentity, wipeIdentityScopedStorage, type BeanPoolIdentity,
 } from './identity';
 import { clearPendingOnboarding } from './onboarding-state';
+import { communitiesOnThisPhone, forgetCommunities, releaseAccountFromPhone } from './account-leaves-phone';
 
 /**
  * Asked before a restore writes another account over the one this phone holds: the "Replace this phone's account?"
@@ -102,16 +104,22 @@ export async function clearToRestore(incoming: BeanPoolIdentity, confirmReplace?
  * and neither reads the phone's old address, key or sync cursors after the gate: the 12-word restore asks the node the
  * member typed for the account's name, and a sign-in restore has already fetched and opened its copy.
  *
- * Replacing another account, what that account kept in app storage goes first (identity.ts `wipeIdentityScopedStorage`:
- * its community's address, its guest markers, the communities it asked to join, its sync cursors), as the screen said,
- * and so the restored account inherits none of it (#1179 review 4109902595). Only this phone's own storage can fail
- * from here. If it does, the old key goes too, with whatever the restore had written, and {@link ReplaceNotSaved} is
- * thrown: the member said that account goes, nothing reports success, and trying again restores onto an empty phone.
+ * Replacing another account, that account goes first, as the screen said, and the restored account inherits none of
+ * it (#1179 review 4109902595). Its push alerts stop: the phone's token is unregistered on its communities, signed by
+ * its key while the phone still holds it (account-leaves-phone.ts `releaseAccountFromPhone`). That is the one node call
+ * after the gate, best effort with a short timeout, and it never fails the restore. Then its saved communities and
+ * their cached copies go, and what it kept in app storage (identity.ts `wipeIdentityScopedStorage`: its community's
+ * address, its guest markers, the communities it asked to join, its sync cursors). Only this phone's own storage can
+ * fail from here. If it does, the old key goes too, with whatever the restore had written, and {@link ReplaceNotSaved}
+ * is thrown: the member said that account goes, nothing reports success, and trying again restores onto an empty phone.
  * Onto an empty phone, or over the same account, nothing is removed, and a failed write throws as it is.
  */
 export async function saveRestoredAccount({ identity, replacesAnother }: ClearedRestore, anchorUrl: string): Promise<void> {
     try {
-        if (replacesAnother) await wipeIdentityScopedStorage(AsyncStorage);
+        if (replacesAnother) {
+            await releaseAccountFromPhone(await leavingAccount(identity));
+            await wipeIdentityScopedStorage(AsyncStorage);
+        }
         await AsyncStorage.setItem('beanpool_anchor_url', anchorUrl);
         await importIdentity(identity);
     } catch (e) {
@@ -123,18 +131,29 @@ export async function saveRestoredAccount({ identity, replacesAnother }: Cleared
     await clearPendingOnboarding();
 }
 
+/** The account a replace takes off this phone: the key it holds now, unless that is the restored one. */
+async function leavingAccount(restored: BeanPoolIdentity): Promise<BeanPoolIdentity | null> {
+    const current = await loadIdentity().catch(() => null);
+    return current && current.publicKey !== restored.publicKey ? current : null;
+}
+
 /**
- * The phone after a replace it could not save: neither account, nor any of the old one's app storage, nor the new
- * community's address. Returns the {@link ReplaceNotSaved} to throw. It is one even when the key could not be removed
- * (the old key is still here, and a retry asks about it again): the join wizard is gone by then, so an app still
- * holding the old account would route it, with none of its app storage, into the app (_layout.tsx, PR #1183 review
- * 4110094956).
+ * The phone after a replace it could not save: neither account, nor any of the old one's app storage or saved
+ * communities, nor the new community's address. Returns the {@link ReplaceNotSaved} to throw. It is one even when the
+ * key could not be removed (the old key is still here, and a retry asks about it again): the join wizard is gone by
+ * then, so an app still holding the old account would route it, with none of its app storage, into the app
+ * (_layout.tsx, PR #1183 review 4110094956).
  */
 async function removeUnsavedReplace(failure: unknown): Promise<ReplaceNotSaved> {
     try {
         await removeStoredIdentity();
     } catch (e) {
         console.error('[Restore] The replaced account\'s key could not be removed after a failed save', e);
+    }
+    try {
+        await forgetCommunities(await communitiesOnThisPhone());
+    } catch (e) {
+        console.error('[Restore] The saved communities could not be cleared after a failed save', e);
     }
     try {
         await wipeIdentityScopedStorage(AsyncStorage);

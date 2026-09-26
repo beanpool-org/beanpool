@@ -31,14 +31,17 @@ vi.mock('expo-crypto', async () => {
     const { randomBytes } = await import('node:crypto');
     return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
 });
+// A replace takes the old account's cached community copies (community-cache.ts): recorded, never the database.
+vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
 
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { restoreFromWords, ReplaceNotSaved } from '../restore-account';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
-import { KNOCKS_STORE_KEY } from '../storage-keys';
-import { mnemonicToKeypair } from '../crypto';
+import { KNOCKS_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { decodeBase64, encodeUtf8, hexToBytes, mnemonicToKeypair, verifyData } from '../crypto';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
+import { removeCommunityCaches } from '../community-cache';
 
 // Test phrase only (a BIP-39 vector), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
@@ -46,16 +49,18 @@ const NODE = 'https://test.beanpool.org';
 const MULLUM = 'https://mullum.beanpool.org';
 const ANCHOR = 'beanpool_anchor_url';
 const INVITE_RECORD = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: MULLUM, callsign: 'Kim', redeemed: true };
-/** What stays through any restore: a list of community addresses, and a setting about the phone, not the member. */
-const PHONE_KEPT = { beanpool_saved_nodes: JSON.stringify([{ url: MULLUM, name: 'Mullum' }]), beanpool_light_palette: 'sand' };
+/** What stays through any restore: a setting about the phone, not the member. */
+const PHONE_KEPT = { beanpool_light_palette: 'sand' };
 
 /**
  * The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors, its
  * profile (photo, bio, contact) with a photo parked for the next sync, the invite codes it made, an unfinished post,
- * and the reports it has yet to send.
+ * the reports it has yet to send, and the communities it saved (the switcher's list, which Sign Out removed and
+ * Replace kept until #1183's review 5324593567).
  */
 function accountStorage(publicKey: string): Record<string, string> {
     return {
+        beanpool_saved_nodes: JSON.stringify([{ url: MULLUM, name: 'Mullum' }]),
         beanpool_guest_nodes: JSON.stringify(['https://byron.beanpool.org']),
         beanpool_canonical_profile: JSON.stringify({ avatar: 'bundled://koala', bio: 'Grows tomatoes', contactValue: '0400 000 000' }),
         pending_profile_avatar: 'bundled://koala',
@@ -86,6 +91,7 @@ beforeEach(async () => {
     mem.async.clear();
     mem.secure.clear();
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('No node may be contacted from a test'); }));
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
         if (typeof args[0] === 'string' && args[0].startsWith('Failed to migrate legacy identity')) return;
         quietError(...args);
@@ -95,6 +101,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
 });
 
@@ -267,5 +274,120 @@ describe('a 12-word restore with nothing to replace', () => {
         expect(restored).toMatchObject({ publicKey: restoredPub, callsign: '', mnemonic: WORDS });
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, callsign: '' });
         expect(mem.async.get(ANCHOR)).toBe(NODE);
+    });
+});
+
+// ── Replace takes the old account's push alerts and communities too (#1183 review 5324593567) ──────────────────────
+
+const BYRON = 'https://byron.beanpool.org';
+const PHONE_TOKEN = 'ExponentPushToken[kims-phone]';
+
+interface Sent { url: string; method?: string; headers: Record<string, string>; body: string; keyOnPhone?: string }
+
+/** Every community answers 'ok', or is 'down' (a network error). Records what each was sent and whose key was on the phone. */
+function nodes(answer: (url: string) => 'ok' | 'down' = () => 'ok'): Sent[] {
+    const sent: Sent[] = [];
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        sent.push({
+            url, method: init?.method, headers: init?.headers as Record<string, string>, body: String(init?.body),
+            keyOnPhone: (await loadIdentity())?.publicKey,
+        });
+        if (answer(url) === 'down') throw new TypeError('Network request failed');
+        return new Response('{"success":true}', { status: 200 });
+    });
+    return sent;
+}
+
+/** A DELETE /api/push-tokens for the phone's token, signed by this key (the signature checked, not just the name). */
+async function unregisters(req: Sent, publicKey: string): Promise<boolean> {
+    const h = req.headers;
+    const body = JSON.parse(req.body);
+    const canonical = `DELETE\n/api/push-tokens\n${h['X-Timestamp']}\n${h['X-Nonce']}\n${req.body}`;
+    return req.method === 'DELETE' && h['X-Public-Key'] === publicKey && body.publicKey === publicKey && body.token === PHONE_TOKEN
+        && await verifyData(decodeBase64(h['X-Signature']), encodeUtf8(canonical), hexToBytes(publicKey));
+}
+
+describe('a 12-word Replace takes the old account\'s push alerts and communities', () => {
+    it('Kim\'s push token is unregistered on each of Kim\'s communities, signed by Kim\'s key before the restored key is written', async () => {
+        await phoneWithInviteJoin();
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        const sent = nodes();
+
+        await restoreFromWords(WORDS, NODE, { confirmReplace: async () => true, nameOnNode: async () => 'Marty' });
+
+        // Mullum (set and saved: asked once) and Byron (visited as a guest). Never the restored account's key.
+        expect(sent.map((s) => s.url).sort()).toEqual([`${BYRON}/api/push-tokens`, `${MULLUM}/api/push-tokens`]);
+        for (const req of sent) {
+            expect(await unregisters(req, phone.publicKey)).toBe(true);
+            expect(req.keyOnPhone).toBe(phone.publicKey);
+        }
+        expect(mem.secure.has(PUSH_TOKEN_STORE_KEY)).toBe(false);
+        expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub });
+    });
+
+    it('Kim\'s saved communities and their cached copies go', async () => {
+        await phoneWithInviteJoin();
+        nodes();
+
+        await restoreFromWords(WORDS, NODE, { confirmReplace: async () => true, nameOnNode: async () => 'Marty' });
+
+        expect(mem.async.has(SAVED_NODES_STORE_KEY)).toBe(false);
+        expect(removeCommunityCaches).toHaveBeenCalled();
+        expect([...vi.mocked(removeCommunityCaches).mock.calls[0][0]].sort()).toEqual([BYRON, MULLUM]);
+    });
+
+    it('a community that can\'t be reached neither holds up nor fails the replace', async () => {
+        await phoneWithInviteJoin();
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        const sent = nodes(() => 'down');
+
+        const restored = await restoreFromWords(WORDS, NODE, { confirmReplace: async () => true, nameOnNode: async () => 'Marty' });
+
+        expect(sent).toHaveLength(2);
+        expect(restored).toMatchObject({ publicKey: restoredPub, callsign: 'Marty' });
+        expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub });
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+    });
+
+    it('Cancel: no community is asked, and the token, the saved communities and their copies stay', async () => {
+        await phoneWithInviteJoin();
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        nodes();
+
+        await expect(restoreFromWords(WORDS, NODE, { confirmReplace: async () => false, nameOnNode: async () => 'Marty' }))
+            .rejects.toMatchObject({ reason: 'cancelled' });
+
+        expect(fetch).not.toHaveBeenCalled();
+        expect(mem.secure.get(PUSH_TOKEN_STORE_KEY)).toBe(PHONE_TOKEN);
+        expect(removeCommunityCaches).not.toHaveBeenCalled();
+        await expectPhoneKept();
+    });
+
+    it('the same account: nothing is unregistered, and its saved communities and cached copies stay', async () => {
+        const keys = await mnemonicToKeypair(WORDS);
+        await importIdentity({ publicKey: keys.publicKeyHex, privateKey: keys.privateKeyHex, callsign: 'Marty', createdAt: '2026-01-01T00:00:00.000Z' });
+        for (const [k, v] of Object.entries({ [ANCHOR]: MULLUM, ...accountStorage(keys.publicKeyHex) })) mem.async.set(k, v);
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        nodes();
+
+        await restoreFromWords(WORDS, NODE, { nameOnNode: async () => 'Marty' });
+
+        expect(fetch).not.toHaveBeenCalled();
+        expect(mem.secure.get(PUSH_TOKEN_STORE_KEY)).toBe(PHONE_TOKEN);
+        expect(mem.async.get(SAVED_NODES_STORE_KEY)).toBe(accountStorage(keys.publicKeyHex).beanpool_saved_nodes);
+        expect(removeCommunityCaches).not.toHaveBeenCalled();
+    });
+
+    it('onto an empty phone: nothing is unregistered or removed', async () => {
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: MULLUM }]));
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        nodes();
+
+        await restoreFromWords(WORDS, NODE, { nameOnNode: async () => 'Marty' });
+
+        expect(fetch).not.toHaveBeenCalled();
+        expect(mem.async.get(SAVED_NODES_STORE_KEY)).toBe(JSON.stringify([{ url: MULLUM }]));
+        expect(removeCommunityCaches).not.toHaveBeenCalled();
     });
 });

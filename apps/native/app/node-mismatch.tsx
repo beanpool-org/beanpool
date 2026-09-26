@@ -9,7 +9,8 @@ import { useNodeStatus } from './NodeStatusContext';
 import { normalizeNodeUrl, looksLikeNodeAddress } from '../utils/node-url';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SavedNodePicker } from '../components/SavedNodePicker';
-import { wipeIdentity, getMnemonic, hasMnemonic } from '../utils/identity';
+import { getMnemonic, hasMnemonic } from '../utils/identity';
+import { deleteAccountFromThisPhone } from '../utils/account-leaves-phone';
 import { requestSync } from '../services/pillar-sync';
 import { NoWordsNotice } from '../components/NoWordsNotice';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
@@ -113,7 +114,8 @@ export default function NodeMismatchScreen() {
                     text: 'Delete',
                     style: 'destructive',
                     onPress: async () => {
-                        await wipeIdentity();
+                        // Its push alerts stop first, signed by its key while the phone still holds it.
+                        await deleteAccountFromThisPhone(identity);
                         setIdentity(null);
                     },
                 },

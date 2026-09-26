@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SAVED_NODES_STORE_KEY } from './storage-keys';
 
 export interface SavedNode {
     url: string;
@@ -10,14 +11,14 @@ export interface SavedNode {
 
 export async function getSavedNodes(): Promise<SavedNode[]> {
     try {
-        const data = await AsyncStorage.getItem('beanpool_saved_nodes');
+        const data = await AsyncStorage.getItem(SAVED_NODES_STORE_KEY);
         const nodes: SavedNode[] = data ? JSON.parse(data) : [];
         
         // Auto-migrate standard legacy active node if it exists
         const currentActiveUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (currentActiveUrl && !nodes.find(n => n.url === currentActiveUrl)) {
             nodes.push({ url: currentActiveUrl, lastConnected: new Date().toISOString() });
-            await AsyncStorage.setItem('beanpool_saved_nodes', JSON.stringify(nodes));
+            await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
         }
         return nodes;
     } catch (e) {
@@ -37,13 +38,13 @@ export async function addSavedNode(url: string, alias?: string, currencyType?: '
         if (currencyType) existing.currencyType = currencyType;
         if (currencyValue) existing.currencyValue = currencyValue;
     }
-    await AsyncStorage.setItem('beanpool_saved_nodes', JSON.stringify(nodes));
+    await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
 }
 
 export async function removeSavedNode(url: string) {
     let nodes = await getSavedNodes();
     nodes = nodes.filter(n => n.url !== url);
-    await AsyncStorage.setItem('beanpool_saved_nodes', JSON.stringify(nodes));
+    await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
 }
 
 /**

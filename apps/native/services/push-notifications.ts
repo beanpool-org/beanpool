@@ -6,8 +6,7 @@ import { router } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import type { NotificationResponse } from 'expo-notifications';
 import { signedRequest } from '../utils/db';
-import { loadIdentity } from '../utils/identity';
-import { buildSignedHeaders } from '../utils/crypto';
+import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 let Notifications: typeof import('expo-notifications') | null = null;
@@ -70,7 +69,7 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
         const token = tokenData.data;
 
         // Store locally
-        await SecureStore.setItemAsync('bp_push_token', token);
+        await SecureStore.setItemAsync(PUSH_TOKEN_STORE_KEY, token);
 
         // Register with the BeanPool server
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -134,36 +133,8 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
     }
 }
 
-/**
- * Removes the push token from the server (e.g., on logout).
- */
-export async function unregisterPushToken(publicKey: string): Promise<void> {
-    if (isExpoGo || !Notifications) return;
-
-    try {
-        const token = await SecureStore.getItemAsync('bp_push_token');
-        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        const identity = await loadIdentity();
-
-        if (anchorUrl && token && identity) {
-            // DELETE /api/push-tokens is a protected (deny-by-default) mutating route — it
-            // must be Ed25519-signed or the server 401s and the token is never removed
-            // server-side (so the device keeps receiving pushes after logout).
-            const bodyString = JSON.stringify({ publicKey, token });
-            const headers = await buildSignedHeaders('DELETE', '/api/push-tokens', bodyString, identity.privateKey, identity.publicKey);
-            await fetch(`${anchorUrl}/api/push-tokens`, {
-                method: 'DELETE',
-                headers,
-                body: bodyString,
-            });
-        }
-
-        await SecureStore.deleteItemAsync('bp_push_token');
-        console.log('[Push] Token unregistered');
-    } catch (error) {
-        console.warn('[Push] Error unregistering token:', error);
-    }
-}
+// Unregistering is the leaving account's (utils/account-leaves-phone.ts `unregisterPushToken`): on each of its
+// communities, signed by its own key, before Sign Out, a replace or a delete takes the key off the phone.
 
 /**
  * Sets up notification response listener for deep linking.

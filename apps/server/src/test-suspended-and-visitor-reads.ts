@@ -13,11 +13,11 @@
  *
  *  1. Member-only reads, for each reader: a member suspended through a report, one disabled by an admin, a visitor made
  *     by a DM (POST /api/messages/conversation), one made by a transfer (transfer() from the genesis account, which is
- *     how every send reaches the row, with Beans), one made by a send the node refused (POST /api/ledger/transfer), a
- *     federation visitor, and the old key of a member being re-keyed each get no Community contact (the member list and
- *     the profile page), no voters (the board), no activity feed and no distances. A real member made every way there is
- *     (the genesis member, an invite, an offline ticket, the open door) gets all four, as do the suspended and the
- *     disabled member once their suspension is lifted.
+ *     how every send reaches the row, with Beans), the recipient of a send the node refused (POST /api/ledger/transfer),
+ *     which gets no row, a federation visitor, and the old key of a member being re-keyed each get no Community contact
+ *     (the member list and the profile page), no voters (the board), no activity feed and no distances. A real member
+ *     made every way there is (the genesis member, an invite, an offline ticket, the open door) gets all four, as do the
+ *     suspended and the disabled member once their suspension is lifted.
  *  2. The gate: a visitor reads its own conversation list, its DM and its Beans (balance, transactions) and nothing
  *     else gated (the directory, a profile, its standing, someone else's Beans or chats, the whole ledger, groups). A
  *     suspended member still reads their own messages, standing and balance, and still sends a message.
@@ -249,13 +249,15 @@ async function main() {
     assert(!!texTx, 'a transfer to a key with no account here lands, with its 5 Beans');
     const tex2 = keypair('RefusedTex2');
     const refusedSend = await post('/api/ledger/transfer', { to: tex2.pubKeyHex, amount: 1 }, olive);
-    assert(refusedSend.status === 400, `a send from a member with no trade yet is refused (${refusedSend.status}), after the node has made the recipient's row`);
+    // A refused send makes no row (test-visitors-cant-act section 4): the recipient reads below as the key with no row it is.
+    assert(refusedSend.status === 400 && !row(tex2.pubKeyHex),
+        `a send from a member with no trade yet is refused (${refusedSend.status}), and the recipient gets no row`);
     const rita = keypair('RemoteRita');
     registerVisitor(rita.pubKeyHex, rita.callsign, 'https://peer.example.test');
     const vo = keypair('DmVo');
     const voConv = await post('/api/messages/conversation', { type: 'dm', participants: [olive.pubKeyHex, vo.pubKeyHex], createdBy: olive.pubKeyHex }, olive);
     assert(voConv.status === 200, `Olive opens a DM to another key with no account here (${voConv.status} ${voConv.text.slice(0, 80)})`);
-    for (const [label, id] of [['the DM', dee], ['the transfer', tex], ['the refused send', tex2], ['the federation handshake', rita], ['the second DM', vo]] as const) {
+    for (const [label, id] of [['the DM', dee], ['the transfer', tex], ['the federation handshake', rita], ['the second DM', vo]] as const) {
         assert(!!row(id.pubKeyHex) && visitorFlag(id.pubKeyHex) === 1, `${label} made a visitor's row (is_visitor ${visitorFlag(id.pubKeyHex)})`);
     }
     for (const [label, id] of [['the genesis member', gen], ['the invited member', ivy], ['the ticket member', tia], ['the open-door member', oona], ['a seeded member', olive]] as const) {
@@ -301,7 +303,7 @@ async function main() {
         ['a member disabled by an admin', dis],
         ['a DM-made visitor', dee],
         ['a transfer-made visitor', tex],
-        ['a visitor made by a refused send', tex2],
+        ['the recipient of a refused send (no row)', tex2],
         ['a federation visitor', rita],
         ["a re-key-invalidated key", rex],
     ];

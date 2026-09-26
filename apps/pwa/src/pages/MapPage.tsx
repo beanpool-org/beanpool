@@ -1747,12 +1747,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             // the way to its detail sheet. No price, no name, no badge.
             <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
                 <div className="bg-white dark:bg-nature-900 m-4 rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800">
+                    {/* A 44 px target, as the event card's ✕ (48 px) is: the small circle sits where it was, inside it. */}
                     <button
+                        type="button"
                         onClick={() => setPreviewPost(null)}
                         aria-label="Close preview"
-                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-400 cursor-pointer"
+                        className="absolute top-1 right-1 min-w-[44px] min-h-[44px] p-0 rounded-full bg-transparent flex items-center justify-center border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     >
-                        ✕
+                        <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-400">✕</span>
                     </button>
                     <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                         {previewPost.photos && previewPost.photos.length > 0

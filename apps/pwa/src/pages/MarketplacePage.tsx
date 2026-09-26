@@ -2601,9 +2601,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 if (visitor) {
                     // One column on a phone (320px at 1.3x text), more from sm up. The Join card first, and the one line
-                    // about what joining shows under the first card, not on every card.
+                    // about what joining shows under the first card, not on every card. From sm up it spans the grid and
+                    // is ordered first: a full-width line after the first card would start row 2 and leave that card
+                    // alone on row 1, so there it sits on a row of its own above the cards.
                     const note = (
-                        <p data-testid="visitor-list-note" className="col-span-full m-0 px-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
+                        <p data-testid="visitor-list-note" className="col-span-full sm:order-first m-0 px-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
                             {VISITOR_LIST_NOTE}
                         </p>
                     );

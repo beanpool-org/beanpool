@@ -43,7 +43,7 @@ Reminders come as alerts on your phone, with your Marketplace alerts, so they st
 
 Open the event and tap **Share**. Your phone's usual share sheet opens with the event's name, when it is, where it is, and a link. On a computer, the link is copied for you to paste.
 
-Anyone who taps that link opens the event — in the app if they have it, in the web app otherwise. Someone who is not in your community lands on its join page.
+Anyone who taps that link opens the event — in the app if they have it, in the web app otherwise. Someone who is not in your community lands on its join page. In a web browser, the global community shows them the event first, as a visitor sees it, and opens it again once they have joined.
 
 ## Putting it in your calendar
 

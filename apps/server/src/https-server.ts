@@ -1317,7 +1317,8 @@ export async function startHttpsServer(port: number): Promise<number> {
                 return;
             }
             // Nor does a visitor's row write anything the rule doesn't give it (visitor-allowlist.ts VISITOR_WRITES): its own
-            // direct conversations, its phone's pushes, Beans it holds and the join doors. One place, as for a closed account:
+            // direct conversations, its phone's pushes, Beans it holds, taking its own listing down and the join doors. One
+            // place, as for a closed account:
             // three review rounds each found one more function that let such a row act as a member (a pledge, a keeper's
             // row, a node role). Answered as a visitor's refused write was (a key with no row's words where a route has
             // them), before the actor is bound and before any activity is stamped. Reads keep the read gate below.

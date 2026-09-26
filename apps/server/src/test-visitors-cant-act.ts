@@ -56,6 +56,13 @@
  *     an allowlisted write whose body names what isn't the visitor's own; what she keeps still works through it; members
  *     and suspended members reach the route. Every other section measures the per-function checks behind the gate, as
  *     each review round did, with the gate off (setVisitorGateForTests).
+ * 5c. The gate's follow-ups (the director, 2026-09-26), gate on: no member announcement (4111438869), no push about an event
+ *     it is Going to from before this rule, a change, a cancellation or a reminder, reaches a visitor's phone, while a
+ *     member's does, and a key with no row's gets none; it takes down its own listing from before this rule (4111438923)
+ *     and nothing else about it changes, but not a listing of Alice's (naming Alice as the author or not), an
+ *     enterprise's it keeps from before, nor its own event or poll; it sets only which of its pushes reach its phone
+ *     (4111438819), and a body with holiday mode or any other key is the gate's refusal and changes nothing, while a
+ *     member's reaches the route.
  *  6. After its own signed redeem of an invite the visitor is a member and does all of it.
  *  7. The global profile: three visitors' rows a week old are refused a report as a key with no row is, and hide
  *     nothing (three members of a week hide it); a place watch is refused as a key with no row is. A visitor changes its
@@ -82,7 +89,10 @@ import {
     postGroupThreadMessage, postEventThreadMessage,
     adminAssignTreasuryOperator, requestToJoinEnterprise, approveKeeperRequest, proposeKeeperRemoval, stepDownAsKeeper,
     applyDueKeeperChanges, postEnterpriseThreadMessage, treasuryKeepers, keeperOf, canOperate, grantNodeRole, revokeNodeRole,
+    dispatchPushNotification, isOnHoliday, getMemberPreferences,
 } from './state-engine.js';
+import { runEventReminderSweep, reminderPushTitle } from './engine/event-reminders.js';
+import { EVENT_UPDATED_PUSH_TITLE, EVENT_CANCELLED_PUSH_TITLE } from './engine/posts.js';
 import { createPairing, declinePairing, approvePairing, describePairing, pairingMessage } from './settings-signin-pairing.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { createCrowdfundProject } from './db/db.js';
@@ -185,11 +195,13 @@ function socket(id: Id): Promise<Sock> {
 }
 const settle = (ms = 150) => new Promise(r => setTimeout(r, ms));
 
-/** Every push the node sent is answered here in place of Expo and never sent on. */
+/** Every push the node sent is answered here in place of Expo and never sent on, and kept here (section 5c). */
+const pushed: { to: string; title: string; body: string }[] = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init?: any) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input?.url;
     if (typeof url === 'string' && url.startsWith('https://exp.host/')) {
+        try { for (const m of JSON.parse(String(init?.body ?? '[]'))) pushed.push({ to: m.to, title: m.title, body: m.body }); } catch { /* */ }
         return new Response('{"data":[]}', { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     return realFetch(input, init);
@@ -981,6 +993,8 @@ async function main(): Promise<void> {
             'POST /api/push-tokens', 'DELETE /api/push-tokens', 'POST /api/members/preferences',
             // Beans it holds (the send gate then decides).
             'POST /api/ledger/transfer',
+            // Taking down its own listing, from before this rule (4111438923).
+            'POST /api/marketplace/posts/remove',
             // The join doors, signed by the joiner (its invite or ticket redeem is one the middleware never sees).
             'POST /api/join', 'POST /api/join/sso-nonce', 'POST /api/join/github/start', 'POST /api/join/github/poll', 'POST /api/join/knock',
             // What anyone may do, signed or not.
@@ -994,9 +1008,11 @@ async function main(): Promise<void> {
 
         // Every other write the middleware sees, signed by a visitor's row, gets the gate's answer and changes nothing: Wes, who keeps
         // the mill from before this rule; Zed, admin from before it; Vera, with a seat, an RSVP, keeper's rows and her own lines
-        // elsewhere. An allowlisted write naming what isn't the visitor's own (the body names another's DM) is refused the same.
+        // elsewhere. An allowlisted write naming what isn't the visitor's own (the body names another's DM, Alice's listing, or a
+        // preference that isn't a push's) is refused the same.
         const OWN_ONLY = new Set(['POST /api/messages/conversation', 'POST /api/messages/send', 'POST /api/messages/edit', 'POST /api/messages/delete',
-            'POST /api/messages/react', 'POST /api/messages/mark-read', 'POST /api/messages/mute']);
+            'POST /api/messages/react', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/members/preferences',
+            'POST /api/marketplace/posts/remove']);
         for (const v of [wes, zed, vera]) {
             const stampBefore = (db.prepare('SELECT last_active_at FROM members WHERE public_key = ?').get(v.pk) as any)?.last_active_at;
             const notRefused: string[] = [];
@@ -1039,7 +1055,7 @@ async function main(): Promise<void> {
         const send = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: bob.pk, amount: 1, memo: 'Through the gate' });
         assert(send.status === 200 && Math.abs(balanceOf(bob.pk) - (bobBefore + 1)) < 1e-6, `she sends Beans she holds (${show(send)})`);
         const token = await call('POST', vera, '/api/push-tokens', { publicKey: vera.pk, token: 'ExponentPushToken[vera-gate]', platform: 'android' });
-        const prefs = await call('POST', vera, '/api/members/preferences', { publicKey: vera.pk, preferences: { chat: false } });
+        const prefs = await call('POST', vera, '/api/members/preferences', { publicKey: vera.pk, preferences: { notify_chat: false } });
         const untoken = await call('DELETE', vera, '/api/push-tokens', { publicKey: vera.pk, token: 'ExponentPushToken[vera-gate]' });
         assert(token.status === 200 && prefs.status === 200 && untoken.status === 200,
             `she registers her phone's push token, sets which pushes she wants, and takes the token away (${token.status} ${prefs.status} ${untoken.status})`);
@@ -1068,6 +1084,151 @@ async function main(): Promise<void> {
         const sidPosts = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Sid chutney', description: 'Jars', credits: 2, priceType: 'fixed', authorPublicKey: sid.pk });
         assert(aliceSays.status === 200 && JSON.stringify(sidPosts.body) !== GATE_ANSWER,
             `a member writes in the DM, and a suspended member is answered by the route, not the gate (${show(aliceSays)}; ${show(sidPosts)})`);
+        gate?.setVisitorGateForTests(false);
+    }
+
+    // ── 5c. The gate's follow-ups ───────────────────────────────────────────────────────────────
+    console.log("\n── 5c. The gate's follow-ups: no member's push reaches a visitor's phone, it sets only which of its pushes do, and it takes its own listing down");
+    {
+        gate?.setVisitorGateForTests(true);
+        const GATE_ANSWER = JSON.stringify({ error: NOT_A_MEMBER, code: 'not_a_member' });
+        type Measured = { r: Res; changed: string[] };
+        /** What `make` was answered, and the tables it changed. */
+        const measured = async (make: () => Promise<Res>): Promise<Measured> => {
+            resetLimits();
+            const before = snapshot();
+            const r = await make();
+            await settle(20);
+            return { r, changed: changedTables(before, snapshot()) };
+        };
+        const refusedByGate = (m: Measured) => m.r.status === 403 && JSON.stringify(m.r.body) === GATE_ANSWER && m.changed.length === 0;
+        const told = (m: Measured) => `${show(m.r)}${m.changed.length ? `; changed: ${m.changed.join(', ')}` : ''}`;
+        const admin = async (method: string, path: string, body?: unknown): Promise<Res> => {
+            resetLimits();
+            const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', 'x-admin-password': process.env.ADMIN_PASSWORD! },
+                body: body !== undefined ? JSON.stringify(body) : undefined });
+            let json: any; try { json = await res.json(); } catch { /* empty */ }
+            return { status: res.status, body: json };
+        };
+
+        // 4111438869: the push token the gate lets a visitor set gets what is sent to it, and no member's push. Bob (a member),
+        // Vera and Nobody (a key with no row) each register a phone over HTTP, as the apps do.
+        const TOKEN = { bob: 'ExponentPushToken[bob-5c]', vera: 'ExponentPushToken[vera-5c]', nobody: 'ExponentPushToken[nobody-5c]' };
+        for (const [phone, token] of [[bob, TOKEN.bob], [vera, TOKEN.vera], [nobody, TOKEN.nobody]] as const) {
+            const r = await call('POST', phone, '/api/push-tokens', { publicKey: phone.pk, token, platform: 'android' });
+            assert(r.status === 200 && r.body?.success === true, `${phone.name} registers a phone's push token (${show(r)})`);
+        }
+        assert(isVisitorRow(vera.pk) && !hasRow(nobody.pk), "Vera's row is a visitor's, and Nobody has no row");
+        /** Which of the three phones got a push with this title since `pushed` was last emptied. */
+        const reached = (title: string) => {
+            const got = (token: string) => pushed.some(p => p.to === token && p.title === title);
+            return { bob: got(TOKEN.bob), vera: got(TOKEN.vera), nobody: got(TOKEN.nobody) };
+        };
+        const who = (r: { bob: boolean; vera: boolean; nobody?: boolean }) =>
+            `member ${r.bob ? 'pushed' : 'not pushed'}, visitor ${r.vera ? 'pushed' : 'not pushed'}${r.nobody === undefined ? '' : `, no row ${r.nobody ? 'pushed' : 'not pushed'}`}`;
+
+        // An admin's announcement: the /ws copy never reaches a visitor's socket (visitorMayReceive), nor now the push.
+        pushed.length = 0;
+        const announced = await admin('POST', '/api/local/admin/announcements', { title: 'Members meeting 5c', body: 'Hall, Tuesday 7pm', severity: 'info' });
+        await settle(50);
+        const announcement = reached('Members meeting 5c');
+        assert(announced.status === 200 && announcement.bob && !announcement.vera && !announcement.nobody,
+            `an admin's announcement is pushed to a member's phone, and not to a visitor's nor a key with no row's (${who(announcement)}; ${show(announced)})`);
+
+        // An event Bob and Vera are Going to (hers from before this rule): Alice moves it, then cancels it, over HTTP.
+        const bee = createPost('event', 'community', 'Probe bee 5c', 'Bring a hat', 0, 'fixed', alice.pk, -28.55, 153.5, [], false, undefined, false,
+            { eventStartAt: inHours(30), eventPlaceName: 'The hall' } as any)!;
+        rsvpEvent(bee.id, bob.pk, 'going');
+        asBeforeThisRule(vera, () => { rsvpEvent(bee.id, vera.pk, 'going'); });
+        pushed.length = 0;
+        const moved = await call('POST', alice, '/api/marketplace/posts/update', { id: bee.id, authorPublicKey: alice.pk, eventStartAt: inHours(54) });
+        await settle(50);
+        const change = reached(EVENT_UPDATED_PUSH_TITLE);
+        assert(moved.status === 200 && change.bob && !change.vera,
+            `Alice moves an event Vera is Going to from before this rule: "${EVENT_UPDATED_PUSH_TITLE}" is pushed to Bob and not to Vera (${who(change)}; ${show(moved)})`);
+        pushed.length = 0;
+        const cancelled = await call('POST', alice, '/api/marketplace/posts/remove', { id: bee.id, authorPublicKey: alice.pk });
+        await settle(50);
+        const cancel = reached(EVENT_CANCELLED_PUSH_TITLE);
+        assert(cancelled.status === 200 && cancelled.body?.success === true && cancel.bob && !cancel.vera,
+            `and cancels it: "${EVENT_CANCELLED_PUSH_TITLE}" is pushed to Bob and not to Vera (${who(cancel)}; ${show(cancelled)})`);
+
+        // Found while testing, the same class: a reminder. An event that starts in 50 minutes, which Bob and Vera (from before this
+        // rule) are Going to with a reminder an hour before, chosen two hours ago; the node's own sweep sends it.
+        const picnic = createPost('event', 'community', 'Probe picnic 5c', 'Bring a rug', 0, 'fixed', alice.pk, -28.55, 153.5, [], false, undefined, false,
+            { eventStartAt: new Date(Date.now() + 50 * 60_000).toISOString(), eventPlaceName: 'The park' } as any)!;
+        rsvpEvent(picnic.id, bob.pk, 'going');
+        asBeforeThisRule(vera, () => { rsvpEvent(picnic.id, vera.pk, 'going'); });
+        pushed.length = 0;
+        db.prepare("UPDATE event_rsvps SET reminder_offsets = '[60]', updated_at = ? WHERE post_id = ?").run(ago(2 * 3_600_000), picnic.id);
+        runEventReminderSweep(dispatchPushNotification);
+        await settle(50);
+        const reminder = reached(reminderPushTitle('Probe picnic 5c'));
+        assert(reminder.bob && !reminder.vera, `the event's reminder is pushed to Bob and not to Vera (${who(reminder)})`);
+
+        // 4111438923: she takes down her own listing, from before this rule, and nothing else.
+        const aliceQuinces = offer(alice, 'Alice quinces 5c');
+        const seedPackets = createPost('offer', 'produce', 'Seed packets 5c', 'Seeds', 1, 'fixed', enterpriseKey)!;
+        let herEvent = '';
+        let herPoll = '';
+        asBeforeThisRule(vera, () => {
+            herEvent = createPost('event', 'community', 'Vera open garden 5c', 'Come and see', 0, 'fixed', vera.pk, -28.55, 153.5, [], false, undefined, false,
+                { eventStartAt: inHours(40), eventPlaceName: 'Her yard' } as any)!.id;
+            herPoll = createPost('poll', 'community', 'Vera asks: honey or wax?', '', 0, 'fixed', vera.pk, undefined, undefined, [], false,
+                undefined, false, { pollOptions: [{ id: 'h', text: 'Honey' }, { id: 'w', text: 'Wax' }] } as any)!.id;
+        });
+        rsvpEvent(herEvent, bob.pk, 'going');
+        const notHerListing: [string, unknown][] = [
+            ["Alice's listing, naming Alice as its author", { id: aliceQuinces.id, authorPublicKey: alice.pk }],
+            ["Alice's listing, naming herself as its author", { id: aliceQuinces.id, authorPublicKey: vera.pk }],
+            ["the listing of the seed bank, which she keeps from before this rule", { id: seedPackets.id, authorPublicKey: enterpriseKey }],
+            ['her own event from before this rule (it would be cancelled, and Bob told)', { id: herEvent, authorPublicKey: vera.pk }],
+            ['her own poll from before this rule', { id: herPoll, authorPublicKey: vera.pk }],
+            ["a post that isn't there", { id: 'no-such-post-5c', authorPublicKey: vera.pk }],
+        ];
+        assert(keeperRole(enterpriseKey, vera.pk) === 'keeper', 'she still holds her keeper\'s row on the seed bank from before this rule');
+        for (const [what, body] of notHerListing) {
+            pushed.length = 0;
+            const m = await measured(() => call('POST', vera, '/api/marketplace/posts/remove', body));
+            assert(refusedByGate(m) && pushed.length === 0, `she can't take down ${what}: the gate's refusal, and nothing changes (${told(m)})`);
+        }
+        const postRow = () => db.prepare('SELECT * FROM posts WHERE id = ?').get(veraOffer) as Record<string, unknown>;
+        const before = postRow();
+        const takenDown = await measured(() => call('POST', vera, '/api/marketplace/posts/remove', { id: veraOffer, authorPublicKey: vera.pk }));
+        const after = postRow();
+        const differs = Object.keys(before).filter(k => JSON.stringify(before[k]) !== JSON.stringify(after[k])).sort();
+        assert(before.active === 1 && before.type === 'offer' && takenDown.r.status === 200 && takenDown.r.body?.success === true
+            && after.active === 0 && after.status === 'cancelled',
+            `she takes down her own offer from before this rule (${told(takenDown)})`);
+        assert(differs.join() === 'active,status,updated_at' && takenDown.changed.join() === 'posts',
+            `and nothing else about it changes (the post's ${differs.join(', ')}; tables ${takenDown.changed.join(', ')})`);
+        assert(isVisitorRow(vera.pk), 'and her row is still a visitor\'s');
+
+        // 4111438819: which of its pushes reach its phone, and nothing more. The push settings the apps send are hers to set.
+        const pushSettings = { notify_chat: true, notify_marketplace: false, notify_escrow: true, notify_recovery: true, eventReminderOffsets: [60] };
+        const set = await measured(() => call('POST', vera, '/api/members/preferences', { publicKey: vera.pk, preferences: pushSettings }));
+        const hers = getMemberPreferences(vera.pk);
+        assert(set.r.status === 200 && set.r.body?.success === true && hers.notify_marketplace === 'false' && hers.notify_chat === 'true'
+            && JSON.stringify(hers.eventReminderOffsets) === '[60]' && set.changed.join() === 'member_preferences',
+            `she sets which of her pushes reach her phone: chat, marketplace, escrow, recovery and her event reminders (${told(set)})`);
+        const fiftyMadeUp = Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`made_up_${i}`, true]));
+        const notPushSettings: [string, unknown][] = [
+            ['holiday mode', { holiday_mode: true }],
+            ['holiday mode beside a push setting', { notify_marketplace: true, holiday_mode: true }],
+            ['fifty made-up keys', fiftyMadeUp],
+            ["her reminders' stored key, past their check", { event_reminder_offsets: '[1]' }],
+            ['a list', ['notify_chat']],
+            ['text', 'notify_chat'],
+        ];
+        for (const [what, preferences] of notPushSettings) {
+            const m = await measured(() => call('POST', vera, '/api/members/preferences', { publicKey: vera.pk, preferences }));
+            assert(refusedByGate(m), `her preferences with ${what}: the gate's refusal, and nothing changes (${told(m)})`);
+        }
+        const rowsOf = (pk: string) => (db.prepare('SELECT COUNT(*) AS n FROM member_preferences WHERE public_key = ?').get(pk) as { n: number }).n;
+        assert(!isOnHoliday(vera.pk) && getMemberPreferences(vera.pk).notify_marketplace === 'false',
+            `she is not on holiday, and her push settings are as she set them (${rowsOf(vera.pk)} rows)`);
+        const miaSets = await measured(() => call('POST', mia, '/api/members/preferences', { publicKey: mia.pk, preferences: { notify_chat: true, chat: true } }));
+        assert(miaSets.r.status === 200 && miaSets.r.body?.success === true, `a member's preferences reach the route as before (${told(miaSets)})`);
         gate?.setVisitorGateForTests(false);
     }
 

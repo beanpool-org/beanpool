@@ -459,3 +459,43 @@ describe('MarketplacePage: a listing pushed over the live feed', () => {
         expect(applied).toBe(true);
     });
 });
+
+// A new account on the global node is a stranger at an open door (G11-e, design G11 §6): nothing a member writes in a
+// post becomes a link on the web. A later "make links clickable" change meets this test and has to think about them.
+describe('MarketplacePage: links in a post stay plain text (G11-e)', () => {
+    const TITLE = 'Free bikes at www.phish.example';
+    const DESCRIPTION = 'Claim yours: https://phish.example/win or <a href="https://phish.example/x">here</a>';
+    const linkPost = {
+        id: 'post-link', title: TITLE, description: DESCRIPTION, type: 'offer', category: 'services',
+        credits: 5, status: 'active', active: true, authorPublicKey: 'member-eve', authorCallsign: 'Eve',
+        createdAt: '2026-09-15T00:00:00Z',
+    };
+    const phishLinks = (root: ParentNode) =>
+        Array.from(root.querySelectorAll('a')).filter(a => /phish/.test(a.getAttribute('href') ?? '') || /phish/.test(a.textContent ?? ''));
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([linkPost] as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    });
+
+    it('in every board view, a URL, a www. address and an <a> tag are text, never a link', async () => {
+        for (const mode of ['grid', 'list', 'compact']) {
+            try { localStorage.setItem('marketplace_view_mode', mode); } catch { /* */ }
+            const { container, unmount } = render(<MarketplacePage identity={identity} />);
+            await screen.findAllByText(TITLE);
+            expect(phishLinks(container)).toHaveLength(0);
+            unmount();
+        }
+    });
+
+    it('in the opened post, the description is shown as written, with no link in it', async () => {
+        const { container } = render(<MarketplacePage identity={identity} openPostId="post-link" />);
+        await waitFor(() => expect(container.textContent).toContain(DESCRIPTION));
+        expect(phishLinks(container)).toHaveLength(0);
+        expect(phishLinks(document.body)).toHaveLength(0);
+    });
+});

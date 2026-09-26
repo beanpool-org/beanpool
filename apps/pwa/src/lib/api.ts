@@ -159,6 +159,9 @@ export async function request<T>(method: string, path: string, body?: any): Prom
         // The status travels with the error: a node older than a route answers 404, and a screen that can
         // hide a feature quietly needs to tell that apart from the node being down or refusing.
         (error as Error & { status?: number }).status = res.status;
+        // So does the node's own code (a new account's limit, a moderation pause): a form shows those in place,
+        // in the node's words (lib/node-refusal.ts).
+        if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
         throw error;
     }
     return res.json();
@@ -310,6 +313,36 @@ export async function getCommunityInfo(): Promise<CommunityInfo> {
 
 export async function getMembers(): Promise<Member[]> {
     return request('GET', '/api/community/members');
+}
+
+/** One of a new account's daily limits, over a rolling 24 hours. `resetsAt`: when the oldest use leaves the window. */
+export interface NewAccountLimit {
+    limit: number;
+    used: number;
+    /** Absent from a node older than this field (#1133 sent only limit/used/resetsAt): work it out from those. */
+    remaining?: number;
+    resetsAt: string | null;
+}
+
+/** The signed member's own standing here (GET /api/community/me): the new-account limits and any moderation pause. */
+export interface CommunityStanding {
+    publicKey: string;
+    probation: {
+        onProbation: boolean;
+        exemptBecause: 'off' | 'role' | null;
+        ageEndsAt: string | null;
+        keptPosts: number;
+        keptPostsNeeded: number;
+        limits: { posts: NewAccountLimit; photos: NewAccountLimit; new_dm_recipients: NewAccountLimit };
+        /** The rule as data: the limits end once the first `hours` are over AND `keptPosts` posts have stayed up. */
+        endsWhen?: { hours: number; keptPosts: number };
+    };
+    mute: { muted: boolean; until: string | null };
+}
+
+/** The signer's own standing: members only, and only ever their own (the node reads the signature, not a parameter). */
+export async function getCommunityMe(): Promise<CommunityStanding> {
+    return request('GET', '/api/community/me');
 }
 
 export async function registerMember(publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {

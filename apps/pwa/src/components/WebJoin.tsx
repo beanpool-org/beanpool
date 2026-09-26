@@ -159,6 +159,8 @@ const WENT_WRONG_KEPT = "Something went wrong on this page before we could finis
 /** A nonce lives ten minutes on the node; one older than this is fetched again before it is sent to a provider. */
 const NONCE_FRESH_MS = 5 * 60 * 1000;
 const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
+/** After the node's sign-up refusal: the limit is counted per network, so a class or a meetup joining together meets it. */
+const SHARED_NETWORK = "Everyone joining from the same network counts together: at a campus, an office or a meetup it may be other people joining, not you.";
 
 /** A key restored just now, as a pending join of its own. */
 function restoredPending(r: BeanPoolIdentity): PendingJoin {
@@ -381,7 +383,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             case 'rate_limited': {
                 // Kept for an hour, so trying again later uses this key rather than making a second one.
                 const next = await keep({ ...p, nonce: null, expiresAt: Date.now() + PENDING_JOIN_RATE_LIMITED_TTL_MS });
-                return toProviders(next, { tone: 'error', text: outcome.message });
+                return toProviders(next, { tone: 'error', text: `${outcome.message} ${SHARED_NETWORK}` });
             }
             case 'unavailable':
                 setPending(p);

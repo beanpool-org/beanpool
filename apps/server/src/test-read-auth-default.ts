@@ -87,6 +87,7 @@ async function main() {
         ['a conversation list', `/api/messages/conversations/${alice.pubKeyHex}`],
         ["a member's transactions", `/api/ledger/transactions?publicKey=${alice.pubKeyHex}`],
         ['a balance', `/api/ledger/balance/${alice.pubKeyHex}`],
+        ['a standing (probation and mute)', '/api/community/me'],
     ];
 
     console.log('── 1. a stranger (unsigned) is refused ──');

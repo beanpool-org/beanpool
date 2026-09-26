@@ -674,6 +674,49 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 13. Requests to join (G6) ────────────────────────────────────────────────────────────────────────────────────
+    // Every node from before G6 has no join_requests table. The fixture is a booted node with it dropped; it must boot
+    // onto exactly a fresh install's table (columns and indexes), empty, with its rules in force.
+    console.log('\n--- 13. Legacy node without join_requests (G6) ---');
+    {
+        const dir = tmp('legacy-g6');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const fresh = { cols: columns(d, 'join_requests'), idx: indexes(d, 'join_requests') };
+        assert(fresh.cols.length > 0 && fresh.idx.includes('idx_join_requests_one_open'), `a fresh install has the table and its one-open-knock index (${fresh.idx.join(', ')})`);
+        d.exec('DROP TABLE join_requests;');
+        const gone = (d.prepare(`SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'join_requests'`).get() as any).n;
+        assert(gone === 0, 'the fixture genuinely lacks it');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the pre-G6 node boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(columns(after, 'join_requests')) === JSON.stringify(fresh.cols) && JSON.stringify(indexes(after, 'join_requests')) === JSON.stringify(fresh.idx),
+            `join_requests: exactly the columns and indexes a fresh install has (${columns(after, 'join_requests').join(', ')})`);
+        assert((after.prepare('SELECT COUNT(*) AS n FROM join_requests').get() as any).n === 0, 'and empty');
+        const pk = 'cd'.repeat(32);
+        const ins = (id: string, status: string, decidedAt: string | null, code: string | null) => {
+            try {
+                after.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, status, decided_at, invite_code) VALUES (?, ?, 'Knocker', 'hi', ?, ?, ?)`)
+                    .run(id, pk, status, decidedAt, code);
+                return true;
+            } catch { return false; }
+        };
+        assert(ins('k1', 'pending', null, null), 'a pending knock is stored');
+        const second = ins('k2', 'pending', null, null);
+        const oddStatus = ins('k3', 'maybe', '2026-09-26T00:00:00.000Z', null);
+        const approvedNoInvite = ins('k4', 'approved', '2026-09-26T00:00:00.000Z', null);
+        const pendingDecided = ins('k5', 'pending', '2026-09-26T00:00:00.000Z', null);
+        assert(!second && !oddStatus && !approvedNoInvite && !pendingDecided,
+            `the rules hold: one open knock per key, a known status, an approval always names its invite, a pending knock has no decision (${second}, ${oddStatus}, ${approvedNoInvite}, ${pendingDecided})`);
+        assert(ins('k6', 'declined', '2026-09-26T00:00:00.000Z', null), 'a declined knock beside the open one is fine');
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

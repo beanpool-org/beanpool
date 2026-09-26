@@ -942,6 +942,72 @@ describe('NodeIdentityPanel Component', () => {
             expect(phoneInput).toBeInTheDocument();
         });
     });
+    describe('requests to join (G6)', () => {
+        function mockKnockNode(config: Record<string, unknown>, open: number) {
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/node/config')) {
+                    return Promise.resolve({ ok: true, json: () => Promise.resolve({ publishLocation: true, directoryPushIntervalHours: 12, serviceRadius: null, ...config }) });
+                }
+                if (url.includes('/api/local/admin/knocks')) {
+                    return Promise.resolve({ ok: true, json: () => Promise.resolve({ acceptKnocks: config.acceptKnocks, takingKnocks: config.acceptKnocks, open }) });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+            }));
+        }
+
+        const nodeConfigBody = () => {
+            const call = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/node/config'));
+            return call ? JSON.parse(call[1].body) : undefined;
+        };
+
+        it('shows the switch and how many are waiting, and saves the operator\'s choice', async () => {
+            mockKnockNode({ acceptKnocks: true }, 2);
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+            });
+            const toggle = await waitFor(() => {
+                const el = document.getElementById('accept-knocks') as HTMLInputElement;
+                expect(el).toBeInTheDocument();
+                return el;
+            });
+            expect(toggle.checked).toBe(true);
+            await waitFor(() => expect(document.getElementById('open-knocks')).toHaveTextContent('2 requests waiting for an answer.'));
+            const countCall = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/knocks'));
+            expect(countCall[1].headers).toBeDefined();
+
+            await act(async () => {
+                fireEvent.click(toggle);
+            });
+            expect(toggle.checked).toBe(false);
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()?.acceptKnocks).toBe(false);
+        });
+
+        it('says when nobody is waiting', async () => {
+            mockKnockNode({ acceptKnocks: false }, 0);
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(document.getElementById('open-knocks')).toHaveTextContent('No requests waiting.'));
+            expect((document.getElementById('accept-knocks') as HTMLInputElement).checked).toBe(false);
+        });
+
+        it('hides the switch for a node that has no such setting, and never sends it there', async () => {
+            mockKnockNode({}, 0);
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+            });
+            expect(document.getElementById('accept-knocks')).toBeNull();
+            expect((global.fetch as any).mock.calls.some((c: any[]) => c[0].includes('/api/local/admin/knocks'))).toBe(false);
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()).toBeDefined();
+            expect('acceptKnocks' in nodeConfigBody()).toBe(false);
+        });
+    });
 });
 
 

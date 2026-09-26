@@ -48,6 +48,7 @@ import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedT
 import { logger } from '../logger.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
+import { takeRecoverySealFullPull } from './recovery-seal-key.js';
 import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';
 
 // Said once per value, not on every 60 s pull.
@@ -253,8 +254,9 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         // The import path enforces: valid signature → signer maps to a trusted
         // `mirror` connector (the primary) → conservation guard (runs on a backup
         // unconditionally, A2-8). A forged/tampered payload is rejected there. It
-        // applies partial (delta) or full payloads identically, LWW per row.
-        const result = await importRemoteState(payload);
+        // applies partial (delta) or full payloads identically, LWW per row; only
+        // the recovery seal's clean-up needs to know which this was.
+        const result = await importRemoteState(payload, { full: !isDelta });
         // The main server's node profile and switch overrides, signed with the payload the import just verified:
         // kept as this database's record, so a take-over or a hand promotion from here meets the main server's
         // profile, not this standby's (config/node-profile.ts). A primary too old to send it leaves the record alone.
@@ -343,8 +345,8 @@ export async function requestResync(): Promise<{ ok: boolean; error?: string }> 
 
 /**
  * Decide the next pull mode: a periodic (or drift-triggered) FULL reconcile when due
- * and not size-disabled, otherwise an incremental DELTA. A backup with no cursor yet
- * always resolves to a full seed inside pullOnce.
+ * and not size-disabled, or the one the recovery seal asks for, otherwise an incremental
+ * DELTA. A backup with no cursor yet always resolves to a full seed inside pullOnce.
  */
 // Cadence is operator-tunable (fleet manager → local-config) and read LIVE here, so a
 // change takes effect on the next tick without restarting the node. Config wins; else
@@ -369,6 +371,12 @@ function nextMode(): PullMode {
     // the reliable deltas make optional at scale. So at GB size / reconcile-off: tiny
     // deltas every tick, no periodic full, and a full only if drift is truly detected.
     if (pendingReconcile) return 'full';
+    // The recovery seal asks once for a whole copy, even for a large database: the rows the main server holds tell which
+    // copies here it deleted before the seal (services/recovery-seal-key.ts). A whole one, never a 304 "unchanged".
+    if (takeRecoverySealFullPull()) {
+        lastImportedGeneratedAt = null;
+        return 'full';
+    }
     const reconcileMs = getReconcileMs();
     if (reconcileMs > 0 && !reconcileDisabledForSize && Date.now() - lastFullReconcileAt >= reconcileMs) return 'full';
     return 'delta';

@@ -19,10 +19,25 @@
 // serves the current one. That makes the two dangerous states unreachable rather than merely
 // unlikely: a member can never be left holding fewer fragments than the threshold, and a
 // stale fragment can never be combined with fresh ones.
+//
+// ## Every row is wrapped with the node's key, here and nowhere else
+//
+// The insert wraps each copy with the key kept outside the database (services/recovery-seal-key.ts) and every
+// read unwraps it, so everything above this file sees the client's bytes exactly as they were sent, every check
+// below runs on those bytes, and the database, a copy of it, a snapshot and a standby hold only wrapped rows.
 
 
 import { db } from '../db/db.js';
 import { isSingleBlobSso } from '@beanpool/core';
+import {
+    NODE_WRAP_ALG,
+    RecoverySealKeyMissing,
+    RecoverySealUnopenable,
+    isNodeWrapped,
+    openRecoveryFields,
+    sealRecoveryFields,
+    shareRowAad,
+} from '../services/recovery-seal-key.js';
 
 /** Who holds a fragment. Mirrors the CHECK constraint on `recovery_shares.holder_type`. */
 export type KeeperType = 'hub' | 'member' | 'sso';
@@ -199,6 +214,13 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         if (s.holderType === 'sso' && !s.ssoLookupHash) {
             throw new RecoveryShareError('A sign-in fragment needs an sso_lookup_hash to be findable.');
         }
+        // The node's own wrap is told from a client's copy by this scheme name alone, so no client copy may carry it:
+        // the boot migration would take such a row for one already wrapped, and every read would refuse it.
+        if (isNodeWrapped(s.kdfParams)) {
+            throw new RecoveryShareError(
+                `Fragment for ${holderKey} names the node's own wrap ('${NODE_WRAP_ALG}') as its scheme.`,
+            );
+        }
         if (s.holderType === 'sso' && isSingleBlobSso(s.kdfParams)) {
             let parsedKdf: Record<string, unknown> | null = null;
             try {
@@ -252,6 +274,14 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
     `);
     const dropOlder = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?');
 
+    // Wrapped with the node's key once every check above has passed on the client's own bytes, and before the
+    // transaction opens: a server without its key refuses here (RecoverySealKeyMissing), and nothing is stored,
+    // wrapped or not.
+    const sealed = shares.map(s => sealRecoveryFields(
+        { encryptedShare: s.encryptedShare, shareIv: s.shareIv, shareTag: s.shareTag, kdfParams: s.kdfParams ?? null },
+        shareRowAad(ownerPubkey, s.holderType),
+    ));
+
     // The generation is read INSIDE the transaction, so the read-modify-write is atomic.
     //
     // Today's driver is synchronous and the server is one process, so nothing can interleave
@@ -271,38 +301,55 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         const nextGeneration = (row?.gen ?? 0) + 1;
 
         dropOlder.run(ownerPubkey, nextGeneration);
-        for (const s of shares) {
+        shares.forEach((s, i) => {
             insert.run(
                 ownerPubkey, s.holderType, s.holderRef, s.shareIndex,
-                s.encryptedShare, s.shareIv, s.shareTag,
+                sealed[i].encryptedShare, sealed[i].shareIv, sealed[i].shareTag,
                 s.ephemeralPubkey ?? null, s.ssoLookupHash ?? null,
-                s.ssoLookupSalt ?? null, s.kdfParams ?? null, nextGeneration,
+                s.ssoLookupSalt ?? null, sealed[i].kdfParams, nextGeneration,
             );
-        }
+        });
         return nextGeneration;
     });
 
     return write();
 }
 
+/**
+ * A stored row as the client deposited it: unwrapped with the node's key. Throws RecoverySealKeyMissing on a server
+ * without its key and RecoverySealUnopenable for a row that key does not open. A row stored before the wrap reads as
+ * it is until the boot migration wraps it.
+ */
 function rowToShare(r: Record<string, unknown>): StoredKeeperShare {
+    const copy = openRecoveryFields(
+        {
+            encryptedShare: r.encrypted_share as string,
+            shareIv: r.share_iv as string,
+            shareTag: r.share_tag as string,
+            kdfParams: (r.kdf_params as string | null) ?? null,
+        },
+        shareRowAad(r.owner_pubkey as string, r.holder_type as string),
+    );
     return {
         id: r.id as number,
         ownerPubkey: r.owner_pubkey as string,
         holderType: r.holder_type as KeeperType,
         holderRef: r.holder_ref as string,
         shareIndex: r.share_index as number,
-        encryptedShare: r.encrypted_share as string,
-        shareIv: r.share_iv as string,
-        shareTag: r.share_tag as string,
+        encryptedShare: copy.encryptedShare,
+        shareIv: copy.shareIv,
+        shareTag: copy.shareTag,
         ephemeralPubkey: (r.ephemeral_pubkey as string | null) ?? null,
         ssoLookupHash: (r.sso_lookup_hash as string | null) ?? null,
         ssoLookupSalt: (r.sso_lookup_salt as string | null) ?? null,
-        kdfParams: (r.kdf_params as string | null) ?? null,
+        kdfParams: copy.kdfParams ?? null,
         generation: r.generation as number,
         createdAt: r.created_at as string,
     };
 }
+
+/** The same reader, for the release path's own queries (engine/recovery-release.ts). */
+export const openShareRow = rowToShare;
 
 /** Every fragment of the current generation. Server-internal — this is the whole secret. */
 export function getCurrentShares(ownerPubkey: string): StoredKeeperShare[] {
@@ -312,6 +359,37 @@ export function getCurrentShares(ownerPubkey: string): StoredKeeperShare[] {
         'SELECT * FROM recovery_shares WHERE owner_pubkey = ? AND generation = ? ORDER BY id'
     ).all(ownerPubkey, generation) as Record<string, unknown>[];
     return rows.map(rowToShare);
+}
+
+/**
+ * The current generation as a NEW one is built from it (a deposit's carry-forward): every row this server's key opens.
+ *
+ * A row locked with a key this server does not have (a server restored from a plain backup, or promoted from a
+ * standby before the take-over carries the key) cannot go into a new generation, and refusing the deposit over it
+ * would leave the member unable ever to connect a sign-in again. So it is left out, which the new generation then
+ * drops, and the log says how many. A server with no key at all still refuses (RecoverySealKeyMissing).
+ */
+export function getCurrentSharesToCarry(ownerPubkey: string): StoredKeeperShare[] {
+    const generation = getCurrentGeneration(ownerPubkey);
+    if (generation === 0) return [];
+    const rows = db.prepare(
+        'SELECT * FROM recovery_shares WHERE owner_pubkey = ? AND generation = ? ORDER BY id'
+    ).all(ownerPubkey, generation) as Record<string, unknown>[];
+    const carried: StoredKeeperShare[] = [];
+    let left = 0;
+    for (const r of rows) {
+        try {
+            carried.push(rowToShare(r));
+        } catch (e) {
+            if (!(e instanceof RecoverySealUnopenable)) throw e;
+            left++;
+        }
+    }
+    if (left) {
+        console.warn(`[RecoverySeal] ${left} recovery cop${left === 1 ? 'y' : 'ies'} locked with another key could not be `
+            + 'carried into a member\'s new generation and will be dropped with the old one.');
+    }
+    return carried;
 }
 
 /** How many fragments the member currently has out. */
@@ -420,4 +498,65 @@ export function canRemoveKeeper(ownerPubkey: string): boolean {
 export function deleteAllShares(ownerPubkey: string): number {
     const r = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(ownerPubkey);
     return r.changes;
+}
+
+/**
+ * A member moved to a new key (the re-key wizard, engine/member-wizards.ts): the rows they own belong to the new key,
+ * and the rows where they are the keeper name it. The owner is part of what a wrapped row is bound to, so each wrapped
+ * row they own is opened under the old key and wrapped again under the new one; a keeper ref is not, so those rows are
+ * only renamed.
+ *
+ * A wrapped row must never change owner without being wrapped again: bound to the old owner and filed under the new
+ * one, it would not open with any key, even once the key that locked it is back. So:
+ * - With no key file, it throws {@link RecoverySealKeyMissing} and the caller's transaction (the whole re-key) rolls
+ *   back. The re-enrolment code stays pending, and the re-key can be run again once the key is back.
+ * - A row this server's key does not open (another key locked it) stays where it is, under the old key it is bound
+ *   to, and the log says how many. The re-key must not wait on it, and left there it still opens if the key that
+ *   locked it comes back. The member's 12 words still work, and connecting the sign-in again makes a new copy.
+ *
+ * Every row it moves is stamped, so a standby is sent the move. Runs inside the caller's transaction.
+ */
+export function moveRecoverySharesToNewKey(oldPubkey: string, newPubkey: string): void {
+    const rows = db.prepare(`
+        SELECT * FROM recovery_shares
+        WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)
+    `).all(oldPubkey, oldPubkey) as Record<string, unknown>[];
+    const move = db.prepare(`
+        UPDATE recovery_shares
+        SET owner_pubkey = ?, holder_ref = ?, encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE id = ?
+    `);
+    let leftBehind = 0;
+    for (const r of rows) {
+        const holderType = r.holder_type as string;
+        const owner = r.owner_pubkey === oldPubkey ? newPubkey : r.owner_pubkey as string;
+        const ref = holderType === 'member' && r.holder_ref === oldPubkey ? newPubkey : r.holder_ref as string;
+        let fields = {
+            encryptedShare: r.encrypted_share as string,
+            shareIv: r.share_iv as string,
+            shareTag: r.share_tag as string,
+            kdfParams: (r.kdf_params as string | null) ?? null,
+        };
+        if (owner !== r.owner_pubkey && isNodeWrapped(fields.kdfParams)) {
+            try {
+                fields = sealRecoveryFields(
+                    openRecoveryFields(fields, shareRowAad(r.owner_pubkey as string, holderType)),
+                    shareRowAad(owner, holderType),
+                );
+            } catch (e) {
+                if (e instanceof RecoverySealKeyMissing) throw e;
+                if (!(e instanceof RecoverySealUnopenable)) throw e;
+                leftBehind++;
+                continue;
+            }
+        }
+        move.run(owner, ref, fields.encryptedShare, fields.shareIv, fields.shareTag, fields.kdfParams, r.id);
+    }
+    if (leftBehind) {
+        const one = leftBehind === 1;
+        console.warn(`[RecoverySeal] ${leftBehind} recovery cop${one ? 'y' : 'ies'} locked with another key `
+            + `${one ? 'stays' : 'stay'} under a re-keyed member's old key, where ${one ? 'it is' : 'they are'} bound: `
+            + `moved, ${one ? 'it' : 'they'} could never open again.`);
+    }
 }

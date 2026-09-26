@@ -476,7 +476,7 @@ async function main(): Promise<void> {
             && !db.prepare('SELECT 1 FROM invalidated_keys WHERE public_key = ?').get(bob.pk),
             `re-keying or offboarding the stray row is refused, and never reaches Bob (${rekeyErr.slice(0, 40)} / ${previewErr.slice(0, 40)} / ${offboardErr.slice(0, 40)})`);
     }
-    let noraRekey = '';
+    let noraRekey: string;
     try { noraRekey = issueRekeyCode(nora.pk.toUpperCase(), founder.pk).oldPubkey; } catch (e: any) { noraRekey = `threw ${e.message}`; }
     assert(noraRekey === nora.pk, `a member's key named in capitals with no stray row still finds that member to re-key, as before (${noraRekey.slice(0, 20)})`);
 

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 49,
-  "hash": "b28bd7b0c6f57a568208a0d66e704250cd1f4530e6860b8ad813061dbb074cd4",
+  "version": 50,
+  "hash": "69e23a9486f5976ad5cdfb5881a26ad9d33739108a46c17fe9ad6a186c5c6c51",
   "sections": [
     {
       "id": "setup",
@@ -2171,7 +2171,7 @@
           "type": "ul",
           "items": [
             "**this community's web address**: the name you claimed above, or the server's CF_RECORD_NAME;",
-            "**set on the server**: extra names in the server's .env, as BEANPOOL_ADDRESSES=one.example.org,two.example.org (a domain of your own, or a proxy's name);",
+            "**set on the server**: extra names in the server's .env, as BEANPOOL_ADDRESSES=one.example.org,two.example.org (a domain of your own, or a proxy's name). Write a name with letters outside a–z in its punycode form, which starts with xn-- (bücher.example is xn--bcher-kva.example). An entry that isn't an address is left out, and the server's log names it when the server starts: check the list here after changing the .env;",
             "**confirmed in Settings**: addresses an owner or admin confirmed here. Only these can be removed here."
           ]
         },

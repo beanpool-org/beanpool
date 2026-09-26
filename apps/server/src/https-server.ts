@@ -152,6 +152,7 @@ import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allo
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
 import { requestNonces, verifyMemberSignature } from './engine/member-signature.js';
+import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER } from '@beanpool/core';
 
 
@@ -859,6 +860,7 @@ export function getUpgradeHandler(): UpgradeHandler | null { return _upgradeHand
  * and reporting the result has no such gap.
  */
 export async function startHttpsServer(port: number): Promise<number> {
+    checkEnvAddresses();
     const app = new Koa();
     app.proxy = true;
     _koaApp = app;

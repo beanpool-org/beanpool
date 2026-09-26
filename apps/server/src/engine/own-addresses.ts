@@ -25,8 +25,10 @@
  * the owner to confirm with one tap (decision 3a, 2026-09-27).
  */
 
+import { domainToASCII } from 'node:url';
 import { audienceOf } from '@beanpool/core';
 import { getNodeConfig, resolvePublicNodeUrl } from '../state-engine.js';
+import { logger } from '../logger.js';
 
 export type AddressSource = 'public-address' | 'env' | 'owner' | 'registrar' | 'loopback';
 
@@ -47,13 +49,38 @@ export function normalizeAddress(input: unknown): string | null {
     return host && host.length <= 253 ? host : null;
 }
 
+const warnedEnvEntries = new Set<string>();
+
+/**
+ * An entry of BEANPOOL_ADDRESSES that is not an address is left out, and members' apps that reach this community by it
+ * are refused (421 wrong_community): at once on a node with another name, otherwise after the switch. Named in the log
+ * once, so the operator can see why (4113047023).
+ */
+function warnDroppedEnvEntry(entry: string): void {
+    if (warnedEnvEntries.has(entry)) return;
+    warnedEnvEntries.add(entry);
+    const ascii = domainToASCII(entry);
+    const punycode = ascii && ascii !== entry.toLowerCase() && normalizeAddress(ascii) ? ` (here, ${ascii})` : '';
+    logger.warn('AUTH', `BEANPOOL_ADDRESSES: ${JSON.stringify(entry)} is not an address, so it is left out, and members' apps `
+        + `that reach this community by it are refused. A name with letters outside a-z must be written in its punycode `
+        + `form, xn--…${punycode}; a port is digits only.`);
+}
+
 function envAddresses(): string[] {
     const out: string[] = [];
     for (const part of String(process.env.BEANPOOL_ADDRESSES || '').split(',')) {
-        const host = normalizeAddress(part.trim());
+        const entry = part.trim();
+        if (!entry) continue;
+        const host = normalizeAddress(entry);
         if (host) out.push(host);
+        else warnDroppedEnvEntry(entry);
     }
     return out;
+}
+
+/** At start: name each BEANPOOL_ADDRESSES entry that is not an address, before any member's app is refused over it. */
+export function checkEnvAddresses(): void {
+    envAddresses();
 }
 
 /** The owner-confirmed addresses as stored in node_config (3). */

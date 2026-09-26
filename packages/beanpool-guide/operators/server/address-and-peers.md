@@ -24,7 +24,7 @@ Also under **Public Address**. A member's app signs every request for the addres
 The list shows each address with where it comes from and how many apps used it today and on the busiest day this week:
 
 - **this community's web address**: the name you claimed above, or the server's CF_RECORD_NAME;
-- **set on the server**: extra names in the server's .env, as BEANPOOL_ADDRESSES=one.example.org,two.example.org (a domain of your own, or a proxy's name);
+- **set on the server**: extra names in the server's .env, as BEANPOOL_ADDRESSES=one.example.org,two.example.org (a domain of your own, or a proxy's name). Write a name with letters outside a–z in its punycode form, which starts with xn-- (bücher.example is xn--bcher-kva.example). An entry that isn't an address is left out, and the server's log names it when the server starts: check the list here after changing the .env;
 - **confirmed in Settings**: addresses an owner or admin confirmed here. Only these can be removed here.
 
 If your server has no address set up (your own domain behind a proxy, with none of the above), it accepts any address for now and lists the ones apps used. Tap **Yes, … is its address** beside yours. After the date shown on the list, a server with no address refuses addresses it doesn't know. Until it has one, it also accepts its home-network address (such as 192.168.1.20). Once it has an address, it accepts only its listed ones, so if members' apps also reach it on your home network, confirm that address too.

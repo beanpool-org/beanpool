@@ -23,7 +23,8 @@
  *  4. /ws: a token signed for A gets no member feed at B (doorbells only by default; 401 at C, strict); a token whose
  *     signature is written in hex → 401 at C.
  *  5. Two names: B accepts b.test and b2.test and refuses c.test; a spoofed Host or X-Forwarded-Host changes nothing;
- *     /api/community/info says requestSigning 2 and lists both names.
+ *     /api/community/info says requestSigning 2 and lists both names. B's log names, once each, the BEANPOOL_ADDRESSES
+ *     entries it left out (a non-ASCII name, a bad port).
  *  6. The directory: on the global node, a signed /api/global/home read for global.test shows the member's watches;
  *     signed for b.test → 421.
  *  7. The switch: before the date the old format is accepted; after it (the clock injected) 426 app_too_old and an
@@ -339,7 +340,7 @@ async function main(): Promise<void> {
         console.log('Request binding: a member\'s signature counts only at the community it was signed for\n');
         const [A, B, C, G, U] = await Promise.all([
             startNode('a', { CF_RECORD_NAME: 'a.test' }),
-            startNode('b', { CF_RECORD_NAME: 'b.test', BEANPOOL_ADDRESSES: 'b2.test, https://B2.test:8443/ ' }),
+            startNode('b', { CF_RECORD_NAME: 'b.test', BEANPOOL_ADDRESSES: 'b2.test, https://B2.test:8443/ , bücher.test, name.example:844x' }),
             startNode('c', { CF_RECORD_NAME: 'c.test', ENFORCE_WS_AUTH: 'true', ACCEPT_UNBOUND_SIGNATURES_UNTIL: 'never' }),
             startNode('g', { CF_RECORD_NAME: 'global.test', NODE_PROFILE: 'global' }),
             startNode('u', {}),
@@ -461,6 +462,10 @@ async function main(): Promise<void> {
             const info = await call(B, 'GET', '/api/community/info');
             assert(info.status === 200 && info.body?.requestSigning === 2 && JSON.stringify(info.body?.addresses) === JSON.stringify(['b.test', 'b2.test']),
                 `/api/community/info says requestSigning 2 and lists b.test and b2.test (${JSON.stringify({ r: info.body?.requestSigning, a: info.body?.addresses })})`);
+            const dropped = B.output().split('\n').filter((line) => line.includes('BEANPOOL_ADDRESSES'));
+            const named = (entry: string) => dropped.filter((line) => line.includes(JSON.stringify(entry))).length;
+            assert(named('bücher.test') === 1 && named('name.example:844x') === 1 && dropped.some((line) => line.includes('bücher.test') && line.includes('xn--bcher-kva.test')),
+                `B's log names each BEANPOOL_ADDRESSES entry it left out, once, and gives bücher.test's xn-- form (${JSON.stringify(dropped.map((line) => line.slice(0, 240)))})`);
         });
 
         // ── 6. The directory call to the global node ──

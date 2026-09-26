@@ -3725,6 +3725,10 @@ export interface SuccessionProposalInfo {
  * `autoPromoted`: the lead got the role automatically (the community removed the previous lead, or they stepped
  * down). The other keepers may then run succession at once — answer G — so isEligible is true without the wait,
  * and the lead's own activity does not cancel a proposal.
+ *
+ * A visitor's lead's row (from before the visitors' rule) is eligible at once too, and its activity cancels nothing
+ * (leadReturnedSince, recordActivity): it acts for the enterprise in nothing, so its keepers could otherwise add no
+ * keeper and choose no lead until a Decision or an admin acted (4111202724).
  */
 export function getLeadInactivity(enterprisePubkey: string): {
     leadPubkey: string | null;
@@ -3735,7 +3739,7 @@ export function getLeadInactivity(enterprisePubkey: string): {
     autoPromoted: boolean;
 } {
     const leadRow = db.prepare(`
-        SELECT o.member_pubkey, o.auto_promoted_at, m.callsign, m.last_active_at, m.joined_at
+        SELECT o.member_pubkey, o.auto_promoted_at, m.callsign, m.last_active_at, m.joined_at, m.is_visitor
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
         WHERE o.treasury_pubkey = ? AND o.role = 'lead'
@@ -3757,7 +3761,7 @@ export function getLeadInactivity(enterprisePubkey: string): {
     const msInactive = Math.max(0, Date.now() - lastActiveTime);
     const daysInactive = msInactive / (24 * 60 * 60 * 1000);
     const autoPromoted = !!leadRow.auto_promoted_at;
-    const isEligible = autoPromoted || daysInactive >= 30;
+    const isEligible = autoPromoted || !!leadRow.is_visitor || daysInactive >= 30;
 
     return {
         leadPubkey: leadRow.member_pubkey,
@@ -3777,9 +3781,12 @@ function leadIsAutoPromoted(enterprisePubkey: string, leadPubkey: string): boole
     return !!r?.auto_promoted_at;
 }
 
-/** Has the lead a proposal targets done anything on the node since it opened? (Never, for an auto-promoted lead.) */
+/**
+ * Has the lead a proposal targets done anything on the node since it opened? (Never, for an auto-promoted lead, nor for
+ * a visitor's row, which acts for no enterprise: getLeadInactivity.)
+ */
 function leadReturnedSince(prop: any): boolean {
-    if (leadIsAutoPromoted(prop.enterprise_pubkey, prop.lead_pubkey)) return false;
+    if (leadIsAutoPromoted(prop.enterprise_pubkey, prop.lead_pubkey) || isVisitorKey(prop.lead_pubkey)) return false;
     const leadRow = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(prop.lead_pubkey) as any;
     return !!leadRow?.last_active_at && new Date(leadRow.last_active_at).getTime() > new Date(prop.created_at).getTime();
 }
@@ -3814,9 +3821,10 @@ export function expireSuccessionProposals(enterprisePubkey?: string, asOfTime?: 
 
 /**
  * Automatically cancel any active succession proposals if the lead keeper records node activity.
- * An auto-promoted lead's activity cancels nothing (answer G).
+ * An auto-promoted lead's activity cancels nothing (answer G), nor a visitor's row's (getLeadInactivity).
  */
 export function cancelActiveSuccessionIfLeadActive(leadPubkey: string): void {
+    if (isVisitorKey(leadPubkey)) return;
     const activeProps = db.prepare(
         "SELECT * FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
     ).all(leadPubkey) as any[];
@@ -3947,7 +3955,8 @@ export function proposeLeadSuccession(
         throw new Error('Lead keeper has recorded node activity within the last 30 days');
     }
 
-    if (proposerPubkey === leadPubkey) {
+    // A visitor's lead's row is no lead to itself (getLeadInactivity): it is answered below as any key that keeps nothing.
+    if (proposerPubkey === leadPubkey && !isVisitorKey(leadPubkey)) {
         throw new Error('Lead keeper cannot propose succession against themselves');
     }
     if (candidatePubkey === leadPubkey) {
@@ -4032,7 +4041,7 @@ export function voteLeadSuccession(
         throw new Error('Lead keeper has returned to activity; succession proposal was cancelled');
     }
 
-    if (voterPubkey === prop.lead_pubkey) {
+    if (voterPubkey === prop.lead_pubkey && !isVisitorKey(prop.lead_pubkey)) {
         throw new Error('Lead keeper cannot vote on succession');
     }
     if (!isActiveKeeperOf(prop.enterprise_pubkey, voterPubkey)) {

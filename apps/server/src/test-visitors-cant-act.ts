@@ -36,6 +36,9 @@
  *     Then for a visitor's row holding admin from before this rule: every write the middleware sees, signed by it; and
  *     every write on the admin surface the middleware never sees (/api/local/ and the rest), signed by it, and under a
  *     Settings session it opened before this rule (answered as one whose holder's role was taken away).
+ * 2b. Succession (4111202724): a visitor's lead's row acts for nothing, so its keepers may replace it at once, and its own
+ *     activity (a reply in its DM) cancels no proposal; the vote carries and the new lead answers a request to keep the
+ *     enterprise. The same for a group it convenes. A member's lead active this month is not replaced (control).
  *  3. What a visitor keeps: it replies in its DM (the app may ask for the DM again first), marks it read and mutes it,
  *     edits and deletes its own lines there and reacts there (the director, 2026-09-26); it sends Beans it holds to a
  *     member, under the send gate as anyone is, and a visitor that never traded is told in plain words that it receives
@@ -730,6 +733,75 @@ async function main(): Promise<void> {
             assert(differSession.length === 0,
                 `every admin write, under a session he opened before this rule, is answered as under one whose role was taken away, and changes nothing more${differSession.length ? `; ${differSession.length} were not:\n    ${differSession.join('\n    ')}` : ''}`);
         }
+    }
+
+    // ── 2b. Succession (4111202724) ─────────────────────────────────────────────────────────────
+    console.log("\n── 2b. Succession: a visitor's lead's row may be replaced at once, and its own activity is no lead returning");
+    {
+        // The apiary Vera leads from before this rule (section 2 swept it with her as its lead): Cody keeps it, and now Dan.
+        const dan = makeMember('DanVA');
+        adminAssignTreasuryOperator(apiary, dan.pk, 'admin');
+        const veraReplies = () => call('POST', vera, '/api/messages/send',
+            { conversationId: veraDm.id, authorPubkey: vera.pk, ciphertext: 'c3RpbGwgaGVyZQ==', nonce: `bj${crypto.randomBytes(4).toString('hex')}` });
+        const quiet = () => db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(ago(40 * DAY), vera.pk);
+        // The reviewer's case: she has been quiet 40 days, so Cody's proposal opens; then she replies in her own DM.
+        quiet();
+        const propose = await call('POST', cody, `/api/enterprise/${apiary}/succession/propose`, { candidatePubkey: dan.pk });
+        const proposal = propose.body?.proposal;
+        assert(propose.status === 200 && proposal?.status === 'active', `setup: Cody proposes Dan to lead the apiary (${show(propose)})`);
+        const proposalStatus = () => (db.prepare('SELECT status FROM enterprise_succession_proposals WHERE id = ?').get(proposal?.id) as any)?.status;
+        const reply = await veraReplies();
+        assert(reply.status === 200 && proposalStatus() === 'active',
+            `Vera's reply in her own DM cancels nothing: the proposal is still open (reply ${reply.status}; proposal ${proposalStatus()})`);
+        const danVotes = await call('POST', dan, `/api/enterprise/${apiary}/succession/${proposal?.id}/vote`, { choice: 'yes' });
+        assert(ok(danVotes) && keeperRole(apiary, dan.pk) === 'lead' && keeperRole(apiary, vera.pk) === 'keeper',
+            `Dan's vote carries it: he leads the apiary, and Vera's row is a keeper's (${show(danVotes)})`);
+        const noa = makeMember('NoaVA');
+        const noaAsks = requestToJoinEnterprise(apiary, noa.pk, 0).id;
+        const danApproves = await call('POST', dan, `/api/enterprise/${apiary}/keepers/requests/${noaAsks}/approve`, {});
+        assert(ok(danApproves), `and, as lead, answers a request to keep it, which nobody could while her row led it (${show(danApproves)})`);
+        // And at once: the wax works, which she leads from before this rule too, though she replied a moment ago.
+        let wax = '';
+        asBeforeThisRule(vera, () => { wax = keyOf(createTreasury('Wax works VA', AVATAR, 0, { leadKeeperPubkey: vera.pk, purpose: 'Candles' } as any)); });
+        adminAssignTreasuryOperator(wax, cody.pk, 'admin');
+        adminAssignTreasuryOperator(wax, dan.pk, 'admin');
+        await veraReplies();
+        const waxPropose = await call('POST', cody, `/api/enterprise/${wax}/succession/propose`, { candidatePubkey: dan.pk });
+        assert(waxPropose.status === 200 && waxPropose.body?.proposal?.status === 'active',
+            `a proposal to replace her as lead of the wax works opens at once, though she replied a moment ago: her lead's row acts for nothing (${show(waxPropose)})`);
+        // Control: a member's lead active within 30 days is not replaced this way.
+        const press = keyOf(createTreasury('Press VA', AVATAR, 0, { leadKeeperPubkey: alice.pk, purpose: 'Cider' } as any));
+        adminAssignTreasuryOperator(press, kai.pk, 'admin');
+        adminAssignTreasuryOperator(press, tom.pk, 'admin');
+        db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(new Date().toISOString(), alice.pk);
+        const pressPropose = await call('POST', kai, `/api/enterprise/${press}/succession/propose`, { candidatePubkey: tom.pk });
+        assert(pressPropose.status === 400 && /recorded node activity within the last 30 days/.test(pressPropose.body?.error ?? ''),
+            `a member's lead active this month is not replaced (control: ${show(pressPropose)})`);
+
+        // The same for groups Vera convenes from before this rule, with Cody and Dan their members.
+        const groupHers = (name: string): string => {
+            let id = '';
+            asBeforeThisRule(vera, () => { id = createGroup({ name, createdBy: vera.pk, joinPolicy: 'open' } as any).id; });
+            joinGroup(id, cody.pk);
+            joinGroup(id, dan.pk);
+            return id;
+        };
+        const hive = groupHers('Bee club VA');
+        quiet();
+        const groupPropose = await call('POST', cody, `/api/groups/${hive}/succession/propose`, { candidatePubkey: dan.pk });
+        const groupProposal = groupPropose.body?.proposal;
+        assert(groupPropose.status === 200 && groupProposal?.status === 'active', `setup: Cody proposes Dan to convene the bee club (${show(groupPropose)})`);
+        const groupProposalStatus = () => (db.prepare('SELECT status FROM group_convenor_proposals WHERE id = ?').get(groupProposal?.id) as any)?.status;
+        await veraReplies();
+        assert(groupProposalStatus() === 'active', `her reply in her DM cancels no vote to replace her as convenor (${groupProposalStatus()})`);
+        const danVotesGroup = await call('POST', dan, `/api/groups/${hive}/succession/${groupProposal?.id}/vote`, { choice: 'yes' });
+        const danLeads = (db.prepare('SELECT lead_pubkey FROM groups WHERE id = ?').get(hive) as any)?.lead_pubkey === dan.pk;
+        assert(ok(danVotesGroup) && groupProposalStatus() === 'passed' && danLeads, `Dan's vote carries it, and he leads the bee club (${show(danVotesGroup)})`);
+        const guild = groupHers('Candle guild VA');
+        await veraReplies();
+        const guildPropose = await call('POST', cody, `/api/groups/${guild}/succession/propose`, { candidatePubkey: dan.pk });
+        assert(guildPropose.status === 200 && guildPropose.body?.proposal?.status === 'active',
+            `and a vote to replace her as convenor of the candle guild opens at once, though she replied a moment ago (${show(guildPropose)})`);
     }
 
     // ── 3. What a visitor keeps ─────────────────────────────────────────────────────────────────

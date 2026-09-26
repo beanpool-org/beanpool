@@ -321,7 +321,7 @@ export async function child(mode: string): Promise<void> {
         // The main server: every member deposits, then re-deposits (a re-deposit drops the older generation); then three
         // disconnect their only sign-in (deleteAllShares) and three are purged (purgeMemberSelf), both a DELETE of their
         // rows. Its standby: each of the main server's pulls, written with sync.ts's own statements. The deletions never
-        // reach it: a deletion of a copy has no tombstone.
+        // reach it: a deletion of a copy had no tombstone then.
         const { db, initSchema } = await import('./db/db.js');
         initSchema();
         db.pragma('secure_delete = 0');

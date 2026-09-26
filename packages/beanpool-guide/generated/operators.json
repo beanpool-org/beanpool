@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 46,
-  "hash": "d30485e87b2502335147ba297d6d88245d928d9c261756287b87646df8927587",
+  "version": 47,
+  "hash": "1b7eab2eef0620b8c9744a877b81188690de3af411edafea57449a31c71bdafb",
   "sections": [
     {
       "id": "setup",
@@ -1822,7 +1822,7 @@
           "items": [
             "On your server, **Replication Access** (under Backups & Restore) makes a replication token. It is shown once. There is one token per server: making a new one stops every standby using the old one until you paste the new one in.",
             "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server** (or as BACKUP_REPLICATION_TOKEN in its .env). A standby only takes a token. It never takes your admin password, so its disk and its backups never hold it.",
-            "The token copies the whole database, and can download a backup and the locked take-over keys. It never gets your server's keys unlocked: a backup that is not locked holds no keys, and nothing on the server hands them out in the clear any more. The copy of the database on the standby is not locked, though: that is what a standby is. Guard the standby's disk like a backup. Members' sign-in recovery copies in it stay locked with the main server's recovery-seal.key, which reaches a standby only inside the locked take-over keys.",
+            "The token copies the whole database, and can download a backup and the locked take-over keys. It never gets your server's keys unlocked: a backup that is not locked holds no keys, and nothing on the server hands them out in the clear any more. The copy of the database on the standby is not locked, though: that is what a standby is. Guard the standby's disk like a backup. Members' sign-in recovery copies in it stay locked with the main server's recovery-seal.key, which reaches a standby only inside the locked take-over keys. When a member disconnects a sign-in or deletes their account, the standby deletes its copy too, at its next copy.",
             "**Token-only** refuses the admin password for copying. A new server starts with it on. A server set up before this change has it off, so an older standby keeps working; Replication Access says so, and tells you when a standby last copied with the admin password. Tick **Require token** once every standby has the token.",
             "An older standby that still holds your admin password swaps it for a token by itself when it starts, if your server has no token yet: it uses the password once, keeps the token and deletes the password. If it cannot, it keeps the password, warns in its log at every start, and shows a red notice under **Live Backup Server** saying why and whether it is still copying.",
             "That standby is **not copying** if your server has two-factor sign-in on, has token-only on, or no longer takes that password. It still copies with the password only if your server already has a token and token-only is off.",
@@ -1909,7 +1909,6 @@
           "type": "ul",
           "items": [
             "Sign in to Settings with **the community's** admin password, or an owner's key. The standby's own admin password no longer works.",
-            "**Tell your members that a sign-in they disconnected may be connected again.** When a member disconnected their last sign-in account, the old main server deleted its copy, and that deletion never reached the standby. So on this server the sign-in shows as connected and brings their account back, until they disconnect it again (on the phone app: **Settings**, **Account Protection**, **Disconnect**).",
             "**If you used the recovery code, make a new one.** The one you typed is spent: until you replace it, Who can unlock this community says \"Your recovery code was used. Make a new one\". Anyone holding that paper can open the community's keys. An owner's phone spends nothing: their key is still theirs, and the new main server locks to them again.",
             "If the result says the tunnel did not come back, the keys had no tunnel token. With PUBLIC_ADDRESS_NAME set, the server asks for the address again within a few minutes: it has the same identity, so the name is still its own. Otherwise claim the address again under Public Address. With the recovery code, the standby looks in the older copies it held for a token before giving up; a phone opens only the newest copy.",
             "Other standbys trust the new main server already, because it has the same identity. Make a replication token on it and paste it into each of them.",

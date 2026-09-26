@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 51,
-  "hash": "e9925cda37370f7465d705c79e4dff33c71012972d207c6efa2a83e254540bb1",
+  "version": 52,
+  "hash": "f21971351634040337f742c7dc03cf66beb5b8112b2369ebac7219e6cea7dade",
   "sections": [
     {
       "id": "about",
@@ -4935,7 +4935,7 @@
         },
         {
           "type": "p",
-          "text": "If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account. Disconnecting deletes the copy. It does not delete the copies already in the server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back. The people who run the server can open those too. Nor does it delete the copy on a standby server, the second server some communities keep ready to take over: if that server ever does, a sign-in you disconnected is connected there again and brings your account back, until you disconnect it again."
+          "text": "If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account. Disconnecting deletes the copy. A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Disconnecting does not delete the copies already in the server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back. The people who run the server can open those too."
         },
         {
           "type": "h2",

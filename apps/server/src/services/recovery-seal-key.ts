@@ -73,7 +73,8 @@
  * shows which ones that server no longer holds, whether or not that server has sealed, and asks its puller for one once
  * it has ({@link dropCopiesMainServerDeleted}). A standby left holding no copy that way (its main server deleted every
  * one before the seal, so no wrapped copy comes) runs the VACUUM then too, without recording it.
- * Deletions after the seal still do not reach a standby; those copies are wrapped, and are left to a tombstone.
+ * A deletion made by this code reaches a standby as a tombstone (engine/recovery-shares.ts deleteAllShares), which removes
+ * the copies at its next pull; the rule above is for the ones deleted by code from before it, which wrote none.
  *
  * A rollback past the seal (the command below) puts every copy back in the client's form, and each server that copied
  * them must clear its files again once they are wrapped again. So the main server names each clear it records after
@@ -616,8 +617,9 @@ export const CLEARED_KEY = 'recovery_seal_cleared';
  * import that brings wrapped copies and none in the client's form (the main server has sealed again), or once no copy
  * it holds is in the client's form, at boot or after any import (its wrapped copies have replaced the ones sent in that
  * form, and a whole copy has removed the ones it no longer holds). Its copies deleted on the main server after the seal
- * stay wrapped here (no deletion reaches a standby), so "a wrapped copy is here" no longer shows that server has sealed
- * again. Removed with the clear it waits for.
+ * can stay wrapped here (a deletion reaches it only at the pull that brings its tombstone, and one made by code from
+ * before tombstones never), so "a wrapped copy is here" no longer shows that server has sealed again. Removed with the
+ * clear it waits for.
  */
 export const REOPENED_KEY = 'recovery_seal_reopened';
 
@@ -767,11 +769,12 @@ export function takeRecoverySealFullPull(): boolean {
 }
 
 /**
- * On a standby, after an import: remove the copies its main server deleted before the seal. No deletion of a copy
- * reaches a standby (a copy has no tombstone). A re-deposit's older generation does go, because the import drops it; a
- * member disconnecting their only sign-in, removing their keepers or deleting their account does not. Each copy deleted
- * that way before the seal is still a row here, as the app sealed it, and opens with the `sub` alone: what the seal is
- * for. Once a take-over made this server a main one, its wrap would lock them in again, with its own key.
+ * On a standby, after an import: remove the copies its main server deleted before the seal. No deletion made before the
+ * seal reached a standby (the code then wrote no tombstone for a copy; this code does, engine/recovery-shares.ts
+ * deleteAllShares). A re-deposit's older generation did go, because the import drops it; a member disconnecting their
+ * only sign-in, removing their keepers or deleting their account did not. Each copy deleted that way before the seal is
+ * still a row here, as the app sealed it, and opens with the `sub` alone: what the seal is for. Once a take-over made
+ * this server a main one, its wrap would lock them in again, with its own key.
  *
  * Whether or not the main server has sealed: nothing in the proof below asks it. Before the seal it may delete more,
  * and the next whole copy removes those too. So a main server that deleted every copy before the seal leaves its
@@ -804,7 +807,7 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
             wholeCopyAsked = true;
             wholeCopyWanted = true;
             console.warn(`⚠️ Recovery seal: this standby holds ${copies(old.length)} in the form stored before the seal beside its main `
-                + 'server\'s wrapped ones: copies deleted there before the seal (a deletion of a copy does not reach a standby). It asks '
+                + 'server\'s wrapped ones: copies deleted there before the seal (a deletion made then did not reach a standby). It asks '
                 + 'the main server for one whole copy, to tell them by what that server still holds, and removes them.');
         }
         return;

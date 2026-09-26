@@ -32,9 +32,9 @@ async function main(): Promise<void> {
     } = await epochFixtures(SCRIPT);
 
     // ── 26–28: a copy a member removed while the rollback lasted (the deciding pass on 4eadf334) ──────
-    // No deletion of a copy reaches a standby, so that member's copy stays here in the client's form after its main server
-    // seals again, and only a whole copy removes it. A standby asks for one once a process, and may have spent that ask
-    // already. It still clears at the import that brings the wrapped copies (the rest of what the rollback sent would
+    // A deletion the older code makes reaches no standby (it writes no tombstone), so that member's copy stays here in the
+    // client's form after its main server seals again, and only a whole copy removes it. A standby asks for one once a
+    // process, and may have spent that ask already. It still clears at the import that brings the wrapped copies (the rest of what the rollback sent would
     // otherwise stay in its files until a restart), and asks for one more whole copy, which removes that member's.
     const T8 = '2026-06-08T00:00:00.000Z', T9 = '2026-06-09T00:00:00.000Z', T10 = '2026-06-10T00:00:00.000Z';
 

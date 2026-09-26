@@ -1164,6 +1164,26 @@ describe('the global lobby on the map (G9b)', () => {
         fireEvent.click(within(card).getByRole('button', { name: 'View Details' }));
         expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-bread');
     });
+
+    it("a visitor's pin card: the ✕ is a 44 px touch target with a focus ring, its circle small inside it (4112421737)", async () => {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(GLOBAL_INFO as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={null} isMember={false} visitor onNavigate={vi.fn()} />); });
+        await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true));
+        act(() => { mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!.listeners['click']?.(); });
+        const card = await view!.findByTestId('map-preview-card');
+
+        const close = within(card).getByRole('button', { name: 'Close preview' });
+        const classes = close.className.split(/\s+/);
+        expect(classes).toEqual(expect.arrayContaining(['min-w-[44px]', 'min-h-[44px]', 'focus-visible:ring-2']));
+        // Nothing that would hold the hit area under 44 px.
+        expect(classes.filter(c => /^(w|h|max-w|max-h)-/.test(c))).toEqual([]);
+        // The ✕ itself is still the small circle, drawn inside the larger target.
+        expect(within(close).getByText('✕').className).toMatch(/\bw-7\b.*\bh-7\b|\bh-7\b.*\bw-7\b/);
+
+        fireEvent.click(close);
+        await waitFor(() => expect(view!.queryByTestId('map-preview-card')).toBeNull());
+    });
 });
 
 describe("MapPage: the node's refusal in the post form (G11-e, design G11 §6)", () => {

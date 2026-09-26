@@ -18,7 +18,7 @@ import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
-import { visitorsSeeListings } from './lib/visitor-lobby';
+import { visitorsSeeListings, takeKeptLinkedPost } from './lib/visitor-lobby';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -292,6 +292,15 @@ export function App() {
     const [linkedPost, setLinkedPost] = useState<string | null>(null);
     useEffect(() => { setLinkedPost(takePostParam()); }, []);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
+    // On the global lobby a visitor reads the shared listing first; the lobby keeps it in this tab (a join by sign-in
+    // leaves the page), and it opens here once, when they have joined. Before the address's own, so that one wins.
+    useEffect(() => {
+        if (!identity) return;
+        const kept = takeKeptLinkedPost();
+        if (!kept) return;
+        setActiveTab('marketplace');
+        setOpenMarketPostId(kept);
+    }, [identity]);
     useEffect(() => {
         if (!identity || !linkedPost) return;
         setActiveTab('marketplace');

@@ -60,6 +60,7 @@ vi.mock('./api', async (importOriginal) => {
 });
 
 import * as api from './api';
+import { loadIdentity } from './identity';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
 import { LedgerPage } from '../pages/LedgerPage';
 import { MarketplacePage } from '../pages/MarketplacePage';
@@ -492,6 +493,114 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
                 await vi.advanceTimersByTimeAsync(300);
             });
 
+            expect(postsSpy.mock.calls.length).toBe(initialCalls + 1);
+        });
+    });
+
+    // The global lobby (G9b): a socket with no key, whose bare doorbells each mean the whole guest list read again. They
+    // wait their turn (lib/visitor-doorbells), so the list is read once per window, not once per change.
+    describe('A visitor in the lobby', () => {
+        async function openVisitorSocket(): Promise<any> {
+            vi.mocked(loadIdentity).mockResolvedValueOnce(null);
+            return setupWsConnection();
+        }
+
+        function setHidden(hidden: boolean): void {
+            Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
+            Object.defineProperty(document, 'visibilityState', { value: hidden ? 'hidden' : 'visible', configurable: true });
+            document.dispatchEvent(new Event('visibilitychange'));
+        }
+
+        async function fiftyDoorbellsInTwoSeconds(ws: any): Promise<void> {
+            for (let i = 0; i < 50; i++) {
+                ws.onmessage({ data: JSON.stringify({ type: ['new_post', 'post_updated', 'post_removed', 'state_synced'][i % 4] }) });
+                await vi.advanceTimersByTimeAsync(40);
+            }
+        }
+
+        const visitorMarket = () => (
+            <MarketplacePage identity={null} isMember={false} visitor={{ joinCard: null, onJoin: () => {}, beans: false }}
+                marketClickCount={0} openPostId={null} onPostOpened={() => {}} onNavigate={() => {}} />
+        );
+
+        it('the Market: fifty doorbells in two seconds are one list read, 5–15 s after the first', async () => {
+            const ws = await openVisitorSocket();
+            const postsSpy = vi.spyOn(api, 'getMarketplacePosts');
+            await act(async () => {
+                render(visitorMarket());
+                await vi.advanceTimersByTimeAsync(2500);
+            });
+            const initialCalls = postsSpy.mock.calls.length;
+            expect(initialCalls).toBe(1);
+
+            await act(async () => {
+                await fiftyDoorbellsInTwoSeconds(ws);
+                await vi.advanceTimersByTimeAsync(5_000 - 2_000 - 1);
+            });
+            expect(postsSpy.mock.calls.length).toBe(initialCalls);
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(10_000 + 500);
+            });
+            expect(postsSpy.mock.calls.length).toBe(initialCalls + 1);
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(60_000);
+            });
+            expect(postsSpy.mock.calls.length).toBe(initialCalls + 1);
+        });
+
+        it('the Market in a background tab reads nothing on doorbells, and exactly once on coming back', async () => {
+            const ws = await openVisitorSocket();
+            const postsSpy = vi.spyOn(api, 'getMarketplacePosts');
+            await act(async () => {
+                render(visitorMarket());
+                await vi.advanceTimersByTimeAsync(2500);
+            });
+            const initialCalls = postsSpy.mock.calls.length;
+
+            await act(async () => {
+                setHidden(true);
+                for (let i = 0; i < 10; i++) {
+                    ws.onmessage({ data: JSON.stringify({ type: 'new_post' }) });
+                    await vi.advanceTimersByTimeAsync(3_000);
+                }
+                await vi.advanceTimersByTimeAsync(60_000);
+            });
+            expect(postsSpy.mock.calls.length).toBe(initialCalls);
+
+            // The page reads on coming back, and the doorbells' own read (within 1.5 s) is taken into that one.
+            await act(async () => {
+                setHidden(false);
+                await vi.advanceTimersByTimeAsync(20_000);
+            });
+            expect(postsSpy.mock.calls.length).toBe(initialCalls + 1);
+        });
+
+        it('the Map: fifty doorbells in two seconds are one read of the pins, 5–15 s after the first', async () => {
+            const ws = await openVisitorSocket();
+            const postsSpy = vi.spyOn(api, 'getMarketplacePosts');
+            await act(async () => {
+                render(<MapPage identity={null} isMember={false} visitor />);
+                await vi.advanceTimersByTimeAsync(2500);
+            });
+            const initialCalls = postsSpy.mock.calls.length;
+            expect(initialCalls).toBe(1);
+
+            await act(async () => {
+                await fiftyDoorbellsInTwoSeconds(ws);
+                await vi.advanceTimersByTimeAsync(5_000 - 2_000 - 1);
+            });
+            expect(postsSpy.mock.calls.length).toBe(initialCalls);
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(10_000 + 500);
+            });
+            expect(postsSpy.mock.calls.length).toBe(initialCalls + 1);
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(60_000);
+            });
             expect(postsSpy.mock.calls.length).toBe(initialCalls + 1);
         });
     });

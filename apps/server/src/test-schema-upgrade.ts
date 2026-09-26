@@ -47,10 +47,14 @@ const indexes = (db: Database.Database, table: string): string[] =>
     (db.prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=? AND name NOT LIKE 'sqlite_%'`)
         .all(table) as any[]).map(r => r.name).sort();
 
-/** Boot the REAL initSchema() against a data dir, in a child process (the db module is a singleton). */
-function bootInto(dir: string): { ok: boolean; output: string } {
+/**
+ * Boot the REAL initSchema() against a data dir, in a child process (the db module is a singleton). `env` adds to the
+ * environment (NODE_ROLE=backup boots it as a standby); `source`, when given, is the boot script instead, and must
+ * print BOOT_OK.
+ */
+function bootInto(dir: string, env: Record<string, string> = {}, source?: string): { ok: boolean; output: string } {
     const script = path.join(dir, 'boot.mjs');
-    fs.writeFileSync(script, `
+    fs.writeFileSync(script, source ?? `
         import { initSchema } from ${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))};
         initSchema();
         console.log('BOOT_OK');
@@ -58,7 +62,7 @@ function bootInto(dir: string): { ok: boolean; output: string } {
     try {
         const out = execFileSync('pnpm', ['exec', 'tsx', script], {
             cwd: path.join(__dirname, '..'),
-            env: { ...process.env, BEANPOOL_DATA_DIR: dir },
+            env: { ...process.env, BEANPOOL_DATA_DIR: dir, ...env },
             encoding: 'utf-8',
             stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -715,6 +719,212 @@ END`;
         after.close();
         assert(bootInto(dir).ok, 'booting it again is a no-op');
         fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // ── 14. Visitors' rows (members.is_visitor) ─────────────────────────────────────────────────────────────────────
+    // Every node from before it has no is_visitor column, and holds visitors' rows (a DM or a transfer to a key with no
+    // account, a federation visitor) that read as members. The fixture is a booted node with the column and its
+    // one-time marker taken away, seeded with a row of every kind a live node can hold. The upgrade adds the column,
+    // marks exactly the rows with no record of joining and no sign of use as a member, stamps them for delta sync, and
+    // never runs again.
+    console.log('\n--- 14. Legacy node without members.is_visitor ---');
+    {
+        const dir = tmp('legacy-visitors');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const freshMembers = columns(d, 'members');
+        assert(freshMembers.includes('is_visitor'), 'a fresh install has members.is_visitor');
+        // As the node runs (db.ts): rows may name an inviter this node has no row for ('genesis', 'open:google').
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TRIGGER members_touch_updated_at; ALTER TABLE members DROP COLUMN is_visitor;
+                DELETE FROM node_config WHERE key = 'migration_mark_visitors_v1';`);
+        assert(!columns(d, 'members').includes('is_visitor'), 'the fixture genuinely lacks the column');
+        const OLD = '2025-01-01T00:00:00.000Z';
+        const key = (n: number) => n.toString(16).padStart(2, '0').repeat(32);
+        const genesisKey = key(1);
+        const seed = (n: number, cols: Record<string, unknown> = {}) => {
+            const all: Record<string, unknown> = { public_key: key(n), callsign: `Row${n}`, joined_at: OLD, updated_at: OLD, ...cols };
+            const names = Object.keys(all);
+            d.prepare(`INSERT INTO members (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`).run(...names.map(k => all[k]));
+            return key(n);
+        };
+        // Visitors: no record of joining, and never used as a member here.
+        const visitors: Record<string, string> = {
+            'a DM or a transfer to a key with no account (Visitor-…)': seed(10, { callsign: 'Visitor-0a0a0a0a' }),
+            'a federation visitor, with its home community': seed(11, { callsign: 'RemoteRay', home_node_url: 'https://peer.example.test' }),
+            'a visitor whose row was later closed': seed(12, { status: 'pruned' }),
+            'a visitor written with empty strings for inviter and code': seed(13, { invited_by: '', invite_code: '' }),
+        };
+        // Members: each has a record of joining, or a sign of use as a member here.
+        const members: Record<string, string> = {
+            'the genesis member': seed(1, { invited_by: 'genesis', invite_code: 'genesis' }),
+            'a member who joined with an invite': seed(20, { invited_by: genesisKey, invite_code: 'INV-ABCD-EFGH' }),
+            'a member who joined with an offline ticket': seed(21, { invited_by: genesisKey, invite_code: '0123456789abcdef' }),
+            'a member who joined through the open door': seed(22, { invited_by: 'open:google' }),
+            'an enterprise (no key holds it)': seed(23, { is_treasury: 1 }),
+            'a visitor who redeemed an invite before this version and set a photo': seed(24, { avatar_url: 'data:image/png;base64,iVBORw0KGgo=' }),
+            'a row with a profile edit': seed(25, { profile_updated_at: OLD }),
+            'a row with a bio': seed(26, { bio: 'I grow tomatoes' }),
+            'a row with contact details': seed(27, { contact_value: 'row27@example.test' }),
+            'a row that made an invite': seed(28),
+            'a row that used an invite code': seed(29),
+            'a row with a node role': seed(30),
+            'a row with a member_joined line in the feed': seed(31),
+        };
+        d.prepare(`INSERT INTO invite_codes (code, created_by, created_at, used_by) VALUES ('INV-ROW28-MADE', ?, ?, NULL)`).run(key(28), OLD);
+        d.prepare(`INSERT INTO invite_codes (code, created_by, created_at, used_by) VALUES ('INV-ROW29-USED', ?, ?, ?)`).run(genesisKey, OLD, key(29));
+        d.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'moderator', 'genesis')`).run(key(30));
+        d.prepare(`INSERT INTO activity_feed (event_type, actor_pubkey) VALUES ('member_joined', ?)`).run(key(31));
+        d.prepare(`INSERT INTO open_joins (member_pubkey, provider, join_hash) VALUES (?, 'google', 'hash-row22')`).run(key(22));
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before is_visitor boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        assert(/Visitors' rows marked: 4\b/.test(result.output) && /kept as members, with no record of joining but used as a member here: 5\b/.test(result.output),
+            `the boot says how many it marked and how many ambiguous rows it kept as members (${(result.output.match(/Visitors' rows marked[^\n]*/) || [''])[0].slice(0, 160)})`);
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(columns(after, 'members')) === JSON.stringify(freshMembers), 'members: exactly the columns a fresh install has');
+        const flag = (pk: string) => (after.prepare('SELECT is_visitor, updated_at FROM members WHERE public_key = ?').get(pk) as any);
+        for (const [label, pk] of Object.entries(visitors)) {
+            const r = flag(pk);
+            assert(r.is_visitor === 1 && r.updated_at > OLD, `marked a visitor, and stamped for delta sync: ${label} (${r.is_visitor}, ${r.updated_at})`);
+        }
+        for (const [label, pk] of Object.entries(members)) {
+            const r = flag(pk);
+            assert(r.is_visitor === 0 && r.updated_at === OLD, `left a member, untouched: ${label} (${r.is_visitor})`);
+        }
+        const system = after.prepare("SELECT is_visitor FROM members WHERE public_key = 'SYSTEM'").get() as any;
+        assert(!system || system.is_visitor === 0, 'the SYSTEM account is left alone');
+        assert(!!after.prepare("SELECT 1 FROM node_config WHERE key = 'migration_mark_visitors_v1'").get(), 'the one-time marker is written');
+        // The trigger is back and lists the column, so a promotion reaches a standby by delta sync.
+        const fed = visitors['a federation visitor, with its home community'];
+        after.prepare("UPDATE members SET updated_at = ? WHERE public_key = ?").run(OLD, fed);
+        after.prepare("UPDATE members SET is_visitor = 0 WHERE public_key = ?").run(fed);
+        assert(flag(fed).updated_at > OLD, `members_touch_updated_at stamps a change of is_visitor (${flag(fed).updated_at})`);
+        // A row with no record of joining written after the upgrade is not marked by a later boot: the pass ran once.
+        const late = key(40);
+        after.prepare(`INSERT INTO members (public_key, callsign, joined_at, updated_at) VALUES (?, 'LateRow', ?, ?)`).run(late, OLD, OLD);
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        const again = new Database(path.join(dir, 'state.db'), { readonly: true });
+        assert((again.prepare('SELECT is_visitor FROM members WHERE public_key = ?').get(late) as any).is_visitor === 0,
+            'the pass runs once: a later boot marks nobody');
+        again.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // ── 15. A standby leaves the marking to its main server ─────────────────────────────────────────────────────────
+    // A standby's copy lacks some of what the rule reads (profile_updated_at isn't imported; invite_codes and the activity
+    // feed don't replicate; node_roles only arrive with a take-over), so a standby boot marks nobody and writes no marker.
+    // Its main server's marks reach it by delta sync, with the main's word that they are made, and the import then writes
+    // the marker (test-suspended-and-visitor-reads §6). Promoted without that word (its main server predates the column),
+    // it runs the pass at its first boot as the main server, on what it holds; with it, the main server's marks stand.
+    console.log('\n--- 15. A standby leaves the marking to its main server ---');
+    {
+        const OLD = '2025-01-01T00:00:00.000Z';
+        const MARKER = "SELECT value FROM node_config WHERE key = 'migration_mark_visitors_v1'";
+        const key = (n: number) => n.toString(16).padStart(2, '0').repeat(32);
+        const seed = (d: Database.Database, n: number, cols: Record<string, unknown> = {}) => {
+            const all: Record<string, unknown> = { public_key: key(n), callsign: `Row${n}`, joined_at: OLD, updated_at: OLD, ...cols };
+            const names = Object.keys(all);
+            d.prepare(`INSERT INTO members (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`).run(...names.map(k => all[k]));
+            return key(n);
+        };
+        // What a take-over's "role" step writes (services/takeover.ts): the role in local-config.json, over NODE_ROLE.
+        const promote = (dir: string) => {
+            const file = path.join(dir, 'local-config.json');
+            const config = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
+            fs.writeFileSync(file, JSON.stringify({ ...config, nodeRole: 'primary' }, null, 2));
+        };
+        const STANDBY = { NODE_ROLE: 'backup' };
+
+        // A standby from before the column, copying a main server from before it too.
+        const dir = tmp('standby-visitors');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        let d = new Database(path.join(dir, 'state.db'));
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TRIGGER members_touch_updated_at; ALTER TABLE members DROP COLUMN is_visitor;
+                DELETE FROM node_config WHERE key = 'migration_mark_visitors_v1';`);
+        const visitor = seed(d, 10, { callsign: 'Visitor-0a0a0a0a' });
+        const member = seed(d, 20, { invited_by: key(1), invite_code: 'INV-ABCD-EFGH' });
+        d.close();
+        const standbyBoot = bootInto(dir, STANDBY);
+        assert(standbyBoot.ok, 'the standby from before is_visitor boots');
+        if (!standbyBoot.ok) console.error(standbyBoot.output.split('\n').slice(-20).join('\n'));
+        d = new Database(path.join(dir, 'state.db'), { readonly: true });
+        const flag = (db: Database.Database, pk: string) => db.prepare('SELECT is_visitor, updated_at FROM members WHERE public_key = ?').get(pk) as { is_visitor: number; updated_at: string };
+        assert(columns(d, 'members').includes('is_visitor'), 'the standby has the column');
+        assert(flag(d, visitor).is_visitor === 0 && flag(d, visitor).updated_at === OLD, `a standby boot marks nobody, and stamps nothing (is_visitor ${flag(d, visitor).is_visitor})`);
+        assert(!d.prepare(MARKER).get(), 'a standby boot writes no marker, so the pass is left for a promotion');
+        assert(!/Visitors' rows marked/.test(standbyBoot.output), 'a standby boot logs no marks');
+        d.close();
+        assert(bootInto(dir, STANDBY).ok, 'the standby boots again');
+        d = new Database(path.join(dir, 'state.db'), { readonly: true });
+        assert(flag(d, visitor).is_visitor === 0 && !d.prepare(MARKER).get(), 'a second standby boot marks nobody and writes no marker either');
+        d.close();
+        // Promoted: NODE_ROLE=backup stays in its .env; the take-over's local-config.json says primary.
+        promote(dir);
+        const promotedBoot = bootInto(dir, STANDBY);
+        assert(promotedBoot.ok, 'the promoted standby boots as the main server');
+        d = new Database(path.join(dir, 'state.db'), { readonly: true });
+        assert(flag(d, visitor).is_visitor === 1 && flag(d, visitor).updated_at > OLD, `a promoted standby whose main server never marked runs the pass: the visitor is marked (is_visitor ${flag(d, visitor).is_visitor})`);
+        assert(flag(d, member).is_visitor === 0 && flag(d, member).updated_at === OLD, '…and the member left alone');
+        assert(!!d.prepare(MARKER).get() && /Visitors' rows marked: 1\b/.test(promotedBoot.output),
+            `…the marker is written and the boot says what it marked (${(promotedBoot.output.match(/Visitors' rows marked[^\n]*/) || [''])[0].slice(0, 120)})`);
+        d.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+
+        // A standby holding its main server's marks: the main server marked Vi (the mark copied), and kept Al as a member on
+        // evidence the standby doesn't hold (a profile edit, an invite made, a code used or a feed line), so Al's copy
+        // shows no record of joining and no sign of use. The import wrote the marker with the marks.
+        const dir2 = tmp('standby-marks-copied');
+        const freshStandby = bootInto(dir2, STANDBY);
+        assert(freshStandby.ok, 'a fresh standby boots');
+        d = new Database(path.join(dir2, 'state.db'));
+        assert(!d.prepare(MARKER).get(), 'a fresh standby writes no marker');
+        d.pragma('foreign_keys = OFF');
+        const vi = seed(d, 11, { callsign: 'Visitor-0b0b0b0b', is_visitor: 1 });
+        const al = seed(d, 12, { callsign: 'AlKeptByMain' });
+        d.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_mark_visitors_v1', 'copied')").run();
+        d.close();
+        promote(dir2);
+        const promoted2 = bootInto(dir2, STANDBY);
+        assert(promoted2.ok, 'the promoted standby boots as the main server');
+        d = new Database(path.join(dir2, 'state.db'), { readonly: true });
+        assert(flag(d, al).is_visitor === 0 && flag(d, al).updated_at === OLD,
+            `a promoted standby holding its main server's marks doesn't mark again: the member it kept stays one (is_visitor ${flag(d, al).is_visitor})`);
+        assert(flag(d, vi).is_visitor === 1, "…and the main server's visitor stays one");
+        assert(!/Visitors' rows marked/.test(promoted2.output), '…and it logs no marks');
+        d.close();
+        fs.rmSync(dir2, { recursive: true, force: true });
+
+        // A take-over interrupted before its "role" step finishes at the next boot (services/takeover.ts
+        // resumeTakeoverAtBoot), after the database's boot ran as a standby's: the pass runs then, not at a later restart.
+        const dir3 = tmp('standby-promoted-in-process');
+        assert(bootInto(dir3, STANDBY).ok, 'a fresh standby boots');
+        d = new Database(path.join(dir3, 'state.db'));
+        d.pragma('foreign_keys = OFF');
+        const late = seed(d, 13, { callsign: 'Visitor-0c0c0c0c' });
+        d.close();
+        const inProcess = bootInto(dir3, STANDBY, `
+            import { initSchema } from ${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))};
+            import { updateLocalConfig } from ${JSON.stringify(path.join(__dirname, 'config', 'local-config.ts'))};
+            initSchema();
+            // The take-over's "role" step, finished at this boot after initSchema has read the role as a standby's.
+            updateLocalConfig({ nodeRole: 'primary' });
+            const { resumeTakeoverAtBoot } = await import(${JSON.stringify(path.join(__dirname, 'services', 'takeover.ts'))});
+            resumeTakeoverAtBoot();
+            console.log('BOOT_OK');
+            process.exit(0);
+        `);
+        assert(inProcess.ok, 'the standby boots, and the take-over promotes it in-process');
+        if (!inProcess.ok) console.error(inProcess.output.split('\n').slice(-20).join('\n'));
+        d = new Database(path.join(dir3, 'state.db'), { readonly: true });
+        assert(/a standby marks none itself/.test(inProcess.output) && flag(d, late).is_visitor === 1 && !!d.prepare(MARKER).get(),
+            `a standby promoted in-process by a take-over finishing at boot runs the pass then (is_visitor ${flag(d, late).is_visitor})`);
+        d.close();
+        fs.rmSync(dir3, { recursive: true, force: true });
     }
 
     freshDb.close();

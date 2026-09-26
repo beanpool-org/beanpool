@@ -31,7 +31,7 @@ import {
     purgeMemberSelf,
     getMembersVersion,
     lastActiveForViewer,
-    contactVisibleTo, contactViewer, isNodeMember, isLiveMemberKey, publicMemberCard,
+    contactVisibleTo, contactViewer, isNodeMember, readsAsMember, passesReadGate, isVisitorKey, publicMemberCard,
 } from '../state-engine.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
@@ -63,7 +63,7 @@ import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { avatarKeysRequired } from '../engine/avatar-keys.js';
-import { membersOnlyHere } from './viewer.js';
+import { membersOnlyHere, memberReadsOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
@@ -720,8 +720,10 @@ router.get('/api/community/me', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    // The gated-read test, whatever ENFORCE_READ_AUTH says: the old key of a member being re-keyed reads nothing here.
-    if (!isLiveMemberKey(actor)) {
+    // The gated-read gate's own test, whatever ENFORCE_READ_AUTH says (passesReadGate): the old key of a member being
+    // re-keyed reads nothing here, nor does a visitor, which has no standing here to read. A suspended member reads their
+    // own, as their messages and trades.
+    if (!passesReadGate(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'Read access requires a member identity' };
         return;
@@ -781,8 +783,10 @@ function peoplePoint(ctx: any): Point | null | undefined {
         ctx.body = { error: 'Distances to people need a signed request' };
         return undefined;
     }
-    // A pruned or self-deleted account keeps its row and can still sign, but it is no longer in the community.
-    if (!isNodeMember(actor)) {
+    // Only a reader who reads as a member (readsAsMember): a pruned or self-deleted account keeps its row and can still
+    // sign, but it is no longer in the community; a suspended member, while that lasts, and a visitor see what a
+    // non-member sees.
+    if (!readsAsMember(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'Read access requires a member identity' };
         return undefined;
@@ -805,10 +809,13 @@ router.get('/api/community/health', async (ctx) => {
     ctx.body = publicHealth;
 });
 
-// Lightweight membership probe — returns whether a public key is a registered member or recovering
+// Lightweight membership probe — returns whether a public key is a registered member or recovering.
+// A visitor's row (isVisitorKey: a key someone sent a message or Beans to, or a member of another community) is no
+// member: the apps read `isMember: false` as "join here", and joining with an invite or through the open door makes
+// that same row a member's (engine/members.ts registerMemberInternal).
 router.get('/api/community/membership/:publicKey', async (ctx) => {
     const member = getMember(ctx.params.publicKey);
-    if (member) {
+    if (member && !isVisitorKey(member.publicKey)) {
         // On a node that shows visitors the listings and not the people (G9a), a key is not turned into a name for
         // anyone but its holder: the web app adopting its own name and the phone's probe both sign as that key.
         const named = !getProfileSwitches().guestListingsOnly || ctx.state.actor === ctx.params.publicKey;
@@ -933,7 +940,10 @@ function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMembe
 /**
  * Whether this request carries a fresh signature by `publicKey` itself, in the replay-proof scheme the signature
  * middleware checks. The two redeem routes skip that middleware (the joiner may hold no member key yet), and both apps
- * sign them anyway. Only ever decides what an answer holds, never refuses one, so the nonce is not spent here.
+ * sign them anyway. It decides what an answer holds, and whether a visitor's row may join (engine/invites.ts
+ * unsignedVisitorRefusal). The nonce is not spent here: the signature covers the body, so a replay within the window can
+ * only repeat what the key's holder asked for (this code, this key, this name), and once that has joined the row is a
+ * member's and a replay is answered "already a member".
  */
 function signedByKey(ctx: any, publicKey: string): boolean {
     const signer = ctx.get('X-Public-Key');
@@ -955,7 +965,8 @@ router.post('/api/invite/redeem', async (ctx) => {
         return;
     }
 
-    const result = redeemInvite(code, publicKey, callsign.slice(0, 20));
+    // A visitor's row joins only on a redeem its own key signed; a key with no row joins unsigned, as before.
+    const result = redeemInvite(code, publicKey, callsign.slice(0, 20), signedByKey(ctx, publicKey));
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
@@ -974,7 +985,7 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
         ctx.body = { error: 'ticketB64, publicKey, and callsign are required' };
         return;
     }
-    const result = redeemOfflineTicket(ticketB64, publicKey, callsign.slice(0, 20));
+    const result = redeemOfflineTicket(ticketB64, publicKey, callsign.slice(0, 20), signedByKey(ctx, publicKey));
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
@@ -1207,8 +1218,9 @@ router.post('/api/trust/profile', async (ctx) => {
     }
     // A member's name, standing and trades, and the members who brought them in, each by name and face: on a node
     // that shows guests the listings and not the people, for members of this node only. A signature alone is anyone's
-    // (4108354076: any key, from the exact recovery lookup, walked up the invite tree from here).
-    if (!membersOnlyHere(ctx)) return;
+    // (4108354076: any key, from the exact recovery lookup, walked up the invite tree from here). A read, so a
+    // suspended member and a visitor are refused too (memberReadsOnlyHere).
+    if (!memberReadsOnlyHere(ctx)) return;
     if (!targetPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'targetPubkey is required' };
@@ -1363,7 +1375,7 @@ router.get('/api/ledger/export', async (ctx) => {
 
 router.post('/api/push-tokens', async (ctx) => {
     const { publicKey, token, platform } = (ctx as any).requestBody || {};
-    if (!publicKey || !token) {
+    if (!publicKey || !token || typeof token !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey or token' };
         return;

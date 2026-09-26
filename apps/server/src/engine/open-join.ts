@@ -35,7 +35,7 @@
 
 import crypto from 'node:crypto';
 import { db, afterTransactionCommit } from '../db/db.js';
-import { getMember, type Member, type SyncOpenJoin } from '@beanpool/engine';
+import { alreadyJoined, type Member, type SyncOpenJoin } from '@beanpool/engine';
 import { registerMemberInternal } from './members.js';
 import type { SsoProvider } from '../sso.js';
 
@@ -192,7 +192,8 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
     // writer of a door member from ever storing another, so one keypair can never be two members.
     const publicKey = input.publicKey.toLowerCase();
     return db.transaction((): OpenJoinOutcome => {
-        if (getMember(db, publicKey)) return { ok: false, reason: 'already_member' };
+        // A visitor's row joins like anyone new, and registerMemberInternal makes it a member's (alreadyJoined).
+        if (alreadyJoined(db, publicKey)) return { ok: false, reason: 'already_member' };
         if (openJoinKeyInvalidated(publicKey)) return { ok: false, reason: 'key_invalidated' };
         const taken = openJoinTaken(joinHash);
         if (taken === 'removed') return { ok: false, reason: 'removed' };

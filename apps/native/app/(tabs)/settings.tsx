@@ -7,7 +7,8 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { processProfileImage } from '../../utils/image-processing';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
-import { updateCallsign, wipeIdentity, getMnemonic, hasMnemonic } from '../../utils/identity';
+import { updateCallsign, getMnemonic, hasMnemonic } from '../../utils/identity';
+import { signOutOfThisPhone } from '../../utils/account-leaves-phone';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
@@ -1330,30 +1331,9 @@ export default function SettingsScreen() {
                     onPress: async () => {
                         setAdvancedLoading(true);
                         try {
-                            const { clearDB } = await import('../../utils/db');
-                            await clearDB();
-                            
-                            // Purge sync engine cursors and the saved node matrix to force a clean slate
-                            const allKeys = await AsyncStorage.getAllKeys();
-                            const pillarKeys = allKeys.filter(k => k.startsWith('pillar_sync_') || k.startsWith('pillar:'));
-                            await AsyncStorage.multiRemove([
-                                'beanpool_anchor_url',
-                                'beanpool_saved_nodes',
-                                ...pillarKeys
-                            ]);
-
-                            // Physically delete dormant DB files for all saved nodes to reclaim disk space
-                            for (const node of savedNodes) {
-                                try {
-                                    const filename = getDatabaseFilenameForNode(node.url);
-                                    const paths = getDatabaseFilePaths(filename);
-                                    for (const p of paths) {
-                                        await FileSystem.deleteAsync(p, { idempotent: true });
-                                    }
-                                } catch (e) {}
-                            }
-                            
-                            await wipeIdentity();
+                            // Its push alerts stop (signed by its key, so before the wipe), its saved communities and
+                            // their cached copies go, then the key and the rest of its app storage.
+                            await signOutOfThisPhone(identity);
                             setIdentity(null);
                         } catch (e: any) {
                             Alert.alert("Sign Out Failed", e.message || "Failed to sign out.");
@@ -1397,29 +1377,9 @@ export default function SettingsScreen() {
                             // 1. Send signed purge request to community node
                             await purgeAccountOnNode(identity);
 
-                            // 2. Wipe local database and keys
-                            const { clearDB } = await import('../../utils/db');
-                            await clearDB();
-                            
-                            const allKeys = await AsyncStorage.getAllKeys();
-                            const pillarKeys = allKeys.filter(k => k.startsWith('pillar_sync_') || k.startsWith('pillar:'));
-                            await AsyncStorage.multiRemove([
-                                'beanpool_anchor_url',
-                                'beanpool_saved_nodes',
-                                ...pillarKeys
-                            ]);
-
-                            for (const node of savedNodes) {
-                                try {
-                                    const filename = getDatabaseFilenameForNode(node.url);
-                                    const paths = getDatabaseFilePaths(filename);
-                                    for (const p of paths) {
-                                        await FileSystem.deleteAsync(p, { idempotent: true });
-                                    }
-                                } catch (e) {}
-                            }
-                            
-                            await wipeIdentity();
+                            // 2. Wipe this phone as Sign Out does. This community dropped the key's push tokens with
+                            // the account; the other communities it registered with are asked there.
+                            await signOutOfThisPhone(identity);
                             setIdentity(null);
                             Alert.alert("Account Purged", "Your account and profile have been permanently purged from the community node.");
                         } catch (e: any) {

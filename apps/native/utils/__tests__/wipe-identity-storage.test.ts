@@ -39,6 +39,8 @@ describe('wipeIdentityScopedStorage', () => {
             // Reports this key queued while offline. A node files a report as whoever signs it, so the next account's
             // retry would file them in its own name.
             beanpool_pending_abuse_reports: JSON.stringify([{ reporterPubkey: 'ab'.repeat(32), targetPubkey: 'cd'.repeat(32), reason: 'spam', timestamp: 1 }]),
+            // Where the phone sent its push token for this key (push-registrations.ts). The next account starts its own.
+            beanpool_push_registered_at: JSON.stringify(['https://test.beanpool.org']),
             // A cache about every member, not this one: stays.
             [`bp_tier_${'cd'.repeat(32)}`]: '2',
             some_ui_pref: 'dark',

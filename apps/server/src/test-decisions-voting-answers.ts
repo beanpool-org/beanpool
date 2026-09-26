@@ -249,11 +249,11 @@ async function run() {
 
     // ── I. Secret ballots ─────────────────────────────────────────────────
     console.log('\n--- I. Secret ballots ---');
-    // A member's socket (a /ws socket signed by a member is tagged with _memberPubkey at upgrade) gets the full
-    // event; a stranger's socket gets decision_vote_cast only as a bare doorbell (PUBLIC_WS_EVENTS), since the
-    // decisions list and detail are public reads.
+    // A member's socket (a /ws socket signed by a member is tagged with _memberPubkey at upgrade, and _memberFeed for
+    // one who reads as a member) gets the full event; a stranger's socket gets decision_vote_cast only as a bare
+    // doorbell (PUBLIC_WS_EVENTS), since the decisions list and detail are public reads.
     const seen: any[] = [];
-    const fakeSocket = { _memberPubkey: proposerA, send: (m: string) => seen.push(JSON.parse(m)), readyState: 1 };
+    const fakeSocket = { _memberPubkey: proposerA, _memberFeed: true, send: (m: string) => seen.push(JSON.parse(m)), readyState: 1 };
     const strangerSeen: any[] = [];
     const strangerSocket = { send: (m: string) => strangerSeen.push(JSON.parse(m)), readyState: 1 };
     addWsClient(fakeSocket);

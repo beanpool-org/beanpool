@@ -54,7 +54,7 @@ import {
     parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError,
     type CodeStanza, type OwnerStanza, type SealedEnvelopeHeader, type SealedEnvelopeKey,
 } from '@beanpool/core';
-import { db } from '../db/db.js';
+import { db, markExistingVisitors } from '../db/db.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { logger } from '../logger.js';
 import {
@@ -880,7 +880,13 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
         }
 
         const configured = getLocalConfig().nodeRole;
-        if ((configured === 'primary' || configured === 'backup') && getNodeRole() !== configured) setNodeRole(configured);
+        if ((configured === 'primary' || configured === 'backup') && getNodeRole() !== configured) {
+            setNodeRole(configured);
+            // Promoted here, in this process (a take-over finished at boot after an interruption), after the database's
+            // boot left the visitors' rows to a main server as a standby's does: the pass runs now, not at the next
+            // restart. It does nothing if the main server's marks were copied (db.ts markExistingVisitors).
+            if (configured === 'primary') markExistingVisitors();
+        }
 
         auditRan = runPendingPromotionAudit(j);
     } catch (e: any) {

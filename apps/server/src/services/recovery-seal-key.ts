@@ -1125,6 +1125,8 @@ function forgetClearMadeAsStandby(): void {
         db.prepare('DELETE FROM node_config WHERE key = ?').run(CLEARED_KEY);
         db.prepare('DELETE FROM node_config WHERE key = ?').run(MAIN_EPOCH_KEY);
     })();
+    // As forgetClear does: a standby pass that already tried the clear at this boot must not stop the main pass's clear (#1188 4111161914).
+    clearTriedThisProcess = false;
     console.log('🔐 Recovery seal: this server recorded its clear of state.db while it was a standby, which does not show that no rollback past '
         + 'the seal came since. As a main server it clears once more, under a seal epoch of its own.');
 }

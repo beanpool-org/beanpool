@@ -15,7 +15,7 @@
  *   7. the reverse migration (the rollback command, run as a command) restores the rows byte for byte;
  *   8. a standby (NODE_ROLE=backup) makes no key file, a main server makes one (0600), and an unreadable key
  *      file never stops a boot;
- *   9. moving a member to a new key (the re-key wizard) keeps their copy openable.
+ *   9. moving a member to a new key (the re-key wizard) keeps their copy openable, and stamps what it moves.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-seal.ts
  *
@@ -563,6 +563,14 @@ async function main(): Promise<void> {
         const sealed9 = await sealSeedToSso(new Uint8Array(m9.seed), 'google', GOOGLE_SUB) as Sealed;
         const { res } = await deposit(m9, sealed9);
         check(res.status === 200, `setup: the member deposits a copy (got ${res.status})`);
+        // A copy another member holds for m9 (a member keeper), so the rename is seen too. Both rows stamped long ago.
+        const other9 = newId();
+        addMember(other9, 'SealRekeyOther');
+        const keeperRowId = Number(db.prepare(`INSERT INTO recovery_shares
+            (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)
+            VALUES (?, 'member', ?, 1, 'a', 'b', 'c', 1)`).run(other9.pk, m9.pk).lastInsertRowid);
+        const ownRowId = (db.prepare('SELECT id FROM recovery_shares WHERE owner_pubkey = ?').get(m9.pk) as any)?.id;
+        db.prepare('UPDATE recovery_shares SET updated_at = ? WHERE id IN (?, ?)').run(STALE, ownRowId, keeperRowId);
         const moved = newId();
         const { code } = issueRekeyCode(m9.pk, 'owner:password');
         completeRekey(m9.pk, moved.pk, code, 'owner:password');
@@ -571,6 +579,12 @@ async function main(): Promise<void> {
             'after the move, the copy is filed under the new key and still opens with the server\'s key');
         const seed = shares[0] ? await openShareFromSso(shares[0] as Sealed, 'google', GOOGLE_SUB) : null;
         check(!!seed && Buffer.from(seed).equals(m9.seed), '...to the seed it was made from');
+        const own = db.prepare('SELECT owner_pubkey, updated_at FROM recovery_shares WHERE id = ?').get(ownRowId) as any;
+        check(own?.owner_pubkey === moved.pk && own.updated_at > STALE,
+            `the moved copy is stamped, so a standby is sent the move (updated_at ${own?.updated_at})`);
+        const keeper = db.prepare('SELECT holder_ref, updated_at FROM recovery_shares WHERE id = ?').get(keeperRowId) as any;
+        check(keeper?.holder_ref === moved.pk && keeper.updated_at > STALE,
+            `...and so is a copy the member keeps for someone else, renamed to the new key (updated_at ${keeper?.updated_at})`);
     });
 
     console.log(`\n${passed}/${run} checks passed.`);

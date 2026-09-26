@@ -505,8 +505,8 @@ export function deleteAllShares(ownerPubkey: string): number {
  * and the rows where they are the keeper name it. The owner is part of what a wrapped row is bound to, so each wrapped
  * row they own is opened under the old key and wrapped again under the new one; a keeper ref is not, so those rows are
  * only renamed. A row this server cannot open (no key, or another key's) moves as it is: it did not open here before
- * the move either, and the move must not wait on it. Runs inside the caller's transaction; stamps nothing, as the two
- * UPDATEs it replaces did not.
+ * the move either, and the move must not wait on it. Every row it moves is stamped, so a standby is sent the move.
+ * Runs inside the caller's transaction.
  */
 export function moveRecoverySharesToNewKey(oldPubkey: string, newPubkey: string): void {
     const rows = db.prepare(`
@@ -515,7 +515,8 @@ export function moveRecoverySharesToNewKey(oldPubkey: string, newPubkey: string)
     `).all(oldPubkey, oldPubkey) as Record<string, unknown>[];
     const move = db.prepare(`
         UPDATE recovery_shares
-        SET owner_pubkey = ?, holder_ref = ?, encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?
+        SET owner_pubkey = ?, holder_ref = ?, encrypted_share = ?, share_iv = ?, share_tag = ?, kdf_params = ?,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
         WHERE id = ?
     `);
     let stranded = 0;

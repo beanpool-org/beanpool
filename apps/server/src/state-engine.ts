@@ -1172,8 +1172,12 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         }
     }
     const msg = JSON.stringify(event);
+    // Every socket's key is the one spelling (https-server.ts verifyWsConnect, engine/member-key.ts), and so is every
+    // key a join writes, so the socket-standing matches below are exact: a case-blind one would take an event about a
+    // row an old door stored under another spelling of a member's key (member-key.ts reportMisspeltMemberKeys) for
+    // news about that member.
     const joinedPubkey = event?.type === 'member_joined' && typeof event.member?.publicKey === 'string'
-        ? event.member.publicKey.toLowerCase() : null;
+        ? event.member.publicKey : null;
     let doorbell: string | null = null;
     // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
     // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
@@ -1189,8 +1193,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
         // member_joined alone never makes one (a replaced key, whatever announced it, stays a stranger's socket).
-        if (joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey
-            || (typeof ws._memberPubkey === 'string' && ws._memberPubkey.toLowerCase() === joinedPubkey))) {
+        if (joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey)) {
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
                 ws._memberPubkey = event.member.publicKey;
@@ -1219,14 +1222,15 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // socket for good: a prune says so outright, a re-key started for a lost or stolen phone announces profile_updated
     // for the old key (issueRekeyCode), and one completed announces member_rekeyed. A suspension and its end announce
     // profile_updated too (adminSetUserStatus, a community vote, a report's action), so a suspended member's socket stops
-    // getting the member feed while it lasts and gets it again after, keeping what is sent to it throughout.
+    // getting the member feed while it lasts and gets it again after, keeping what is sent to it throughout. Exactly that
+    // key: removing a stray row under a member's key in capitals (as reportMisspeltMemberKeys tells an operator to) is
+    // no news about the member, whose open app would otherwise stop getting its messages and Beans (4111765291).
     const changedKey = event?.type === 'member_rekeyed' ? event.oldPublicKey
         : event?.type === 'user_pruned' || event?.type === 'profile_updated' ? event.publicKey : null;
     if (typeof changedKey === 'string') {
-        const key = changedKey.toLowerCase();
         let standing: SocketStanding | undefined;
         for (const ws of wsClients) {
-            if (typeof ws._memberPubkey !== 'string' || ws._memberPubkey.toLowerCase() !== key) continue;
+            if (ws._memberPubkey !== changedKey) continue;
             standing ??= event.type === 'user_pruned' ? { act: false, visitor: false, feed: false } : socketStanding(ws._memberPubkey);
             if (!standing.act) ws._memberPubkey = null;
             ws._visitor = standing.visitor;
@@ -1383,8 +1387,8 @@ export function passesReadGate(pubkey: string | null | undefined): boolean {
 }
 
 /**
- * May bring someone in (an invite, an offline ticket, an answer to a knock): isNodeMember (the engine's
- * mayBringSomeoneIn). Pass the verified signer.
+ * May bring someone in (an invite, an offline ticket, an answer to a knock): isNodeMember, for a key in the one spelling
+ * (the engine's mayBringSomeoneIn). Pass the verified signer, or the maker a code names.
  */
 export function mayBringSomeoneIn(pubkey: string | null | undefined): boolean {
     return mayBringSomeoneInEngine(db, pubkey);

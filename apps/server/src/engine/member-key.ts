@@ -12,12 +12,15 @@
 //  - a key someone NAMES (a body field, a peer's message) is refused unless it is already in that spelling
 //    (isMemberKeySpelling): it is never silently lower-cased into someone else's;
 //  - a key a request's own signature PROVES (the signature middleware's signer, a redeem signed by the key it names)
-//    is taken in that spelling (provenKeySpelling), and anything but 64 hexadecimal characters is refused.
+//    is taken in that spelling (provenKeySpelling), and anything but 64 hexadecimal characters is refused;
+//  - a key named INSIDE what is signed, whose signature is then checked against it (an offline ticket's inviter), or a
+//    key a stored row names as someone who acts (an invite code's maker), must already be in that spelling: a row
+//    under another spelling acts for nobody.
 
 import { isSyntheticAccount } from '@beanpool/core';
+import { isMemberKeySpelling } from '@beanpool/engine';
 import { db } from '../db/db.js';
 
-const MEMBER_KEY = /^[0-9a-f]{64}$/;
 const MEMBER_KEY_ANY_CASE = /^[0-9a-fA-F]{64}$/;
 
 export const BAD_KEY_CODE = 'bad_key';
@@ -26,10 +29,11 @@ export const BAD_KEY_ERROR = 'That key isn’t written the way this community ke
 /** The signer's key is not 64 hexadecimal characters (routes/open-join.ts and routes/knocks.ts give the same answer). */
 export const BAD_SIGNER_KEY_ERROR = 'The key that signed this request is not a member key: it must be 64 hexadecimal characters.';
 
-/** Whether `key` is a member key in the one spelling this community keeps: 64 characters, 0-9 and a-f in lower case. */
-export function isMemberKeySpelling(key: unknown): key is string {
-    return typeof key === 'string' && MEMBER_KEY.test(key);
-}
+/**
+ * Whether `key` is a member key in the one spelling this community keeps: 64 characters, 0-9 and a-f in lower case.
+ * Kept in the engine, whose offline-ticket check and invite test hold a key named inside a ticket or a code to it too.
+ */
+export { isMemberKeySpelling };
 
 /**
  * The key a request's own signature proves, in the one spelling: `signer` lower-cased when it is 64 hexadecimal

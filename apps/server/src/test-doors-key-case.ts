@@ -26,8 +26,11 @@
  *     The one spelling still works.
  *  5. Rows made before this rule: a boot check lists each person's row stored under another spelling, and changes
  *     nothing. Such a row signs in to Settings with no role it holds, names no admin, is re-keyed and offboarded by
- *     nobody (which would have acted on the member whose key it is), and once an operator removes it the member whose
- *     key it is still acts and keeps what they wrote when they knocked.
+ *     nobody (which would have acted on the member whose key it is). The key's holder can't act as it by a road that
+ *     names a key inside what is signed either: an offline ticket naming it as the inviter (in capitals, or with …zz
+ *     after the key) is refused and stays unrecorded, and a code it made before this rule admits nobody. Once an
+ *     operator removes it the member whose key it is still acts, keeps what they wrote when they knocked, and their
+ *     open app still gets their messages.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-doors-key-case.ts
  */
@@ -180,8 +183,9 @@ const hasRow = (pk: string) => !!db.prepare('SELECT 1 FROM members WHERE public_
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body ?? null).slice(0, 120)}`;
 const isBadKey = (r: Res) => r.status === 400 && r.body?.code === 'bad_key' && typeof r.body?.error === 'string' && r.body.error.length > 20;
 
-function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pk, t: Date.now(), n: crypto.randomBytes(4).toString('hex') });
+/** An offline ticket signed by `inviter`'s key, naming `as` as its inviter (its own key by default). */
+function offlineTicket(inviter: Id, as = inviter.pk): string {
+    const payload = JSON.stringify({ i: as, t: Date.now(), n: crypto.randomBytes(4).toString('hex') });
     return Buffer.from(JSON.stringify({ p: payload, s: crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64') })).toString('base64');
 }
 const ticketCode = (ticket: string) => {
@@ -480,6 +484,49 @@ async function main(): Promise<void> {
     try { noraRekey = issueRekeyCode(nora.pk.toUpperCase(), founder.pk).oldPubkey; } catch (e: any) { noraRekey = `threw ${e.message}`; }
     assert(noraRekey === nora.pk, `a member's key named in capitals with no stray row still finds that member to re-key, as before (${noraRekey.slice(0, 20)})`);
 
+    // Bob's key signs a stray row's part by the roads that name a key inside what is signed: an offline ticket's inviter,
+    // and a code the stray row made. The stray rows are still active here, as until an operator removes them; Bob's own
+    // row is too.
+    const tia = keypair('Tia');   // a new key, holding the tickets
+    const inviteCheck = (c: string) => call('GET', null, `/api/invite/check?code=${encodeURIComponent(c)}`);
+    // A refused redeem is counted in the join funnel (engine/funnel.ts: a refusal leaves nothing else to count it from),
+    // so that table is left out of "nothing written" here and the count checked instead.
+    const refusals = (variant: string) => Number((db.prepare("SELECT COALESCE(SUM(count), 0) AS n FROM onboarding_funnel WHERE event = 'invite_failed' AND variant = ?").get(variant) as any).n);
+    for (const [how, stray] of [['in capitals', bobCaps], ['with …zz after it', `${bob.pk}zz`]] as const) {
+        const t = offlineTicket(bob, stray);
+        const before = snapshot(['onboarding_funnel']);
+        const counted = refusals('invalid');
+        const check = await inviteCheck(`BP-${t}`);
+        const r = await call('POST', null, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
+        const changed = changedTables(before, snapshot(['onboarding_funnel']));
+        assert(r.status === 400 && check.status === 200 && check.body?.valid === false && changed.length === 0 && refusals('invalid') === counted + 1
+            && !db.prepare('SELECT 1 FROM invite_codes WHERE code = ?').get(ticketCode(t)) && !hasRow(tia.pk),
+            `an offline ticket Bob's key signs naming his key ${how} (a stray row) as its inviter: the preflight calls it invalid and the redeem is refused, the ticket unrecorded, nothing written but the funnel's count of a refusal (${show(check)}; ${show(r)}; changed: ${changed.join(', ') || 'nothing'})`);
+    }
+    {
+        const t = offlineTicket(bob);
+        const check = await inviteCheck(`BP-${t}`);
+        const r = await call('POST', null, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
+        assert(check.body?.valid === true && r.status === 200 && (db.prepare('SELECT invited_by FROM members WHERE public_key = ?').get(tia.pk) as any)?.invited_by === bob.pk,
+            `a ticket Bob signs naming his own key in the one spelling still admits, invited by Bob (${show(check)}; ${show(r)})`);
+    }
+    {
+        // A code the stray row made before this rule (Bob's /api/invite/generate signed in capitals made it then).
+        const strayCode = 'INV-STRY-BOB1';
+        db.prepare('INSERT INTO invite_codes (code, created_by, created_at) VALUES (?, ?, ?)').run(strayCode, bobCaps, new Date().toISOString());
+        const uma = keypair('Uma');
+        const before = snapshot(['onboarding_funnel']);
+        const counted = refusals('inviter_gone');
+        const check = await inviteCheck(strayCode);
+        const r = await call('POST', null, '/api/invite/redeem', { code: strayCode, publicKey: uma.pk, callsign: 'Uma' });
+        const changed = changedTables(before, snapshot(['onboarding_funnel']));
+        assert(r.status === 400 && check.body?.valid === false && check.body?.reason === 'unknown_inviter' && changed.length === 0 && refusals('inviter_gone') === counted + 1
+            && !hasRow(uma.pk) && (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(strayCode) as any)?.used_by == null,
+            `a code the stray row made before this rule admits nobody: the preflight says its maker can't bring anyone in, the redeem is refused, the code unused, nothing written but the funnel's count of a refusal (${show(check)}; ${show(r)}; changed: ${changed.join(', ') || 'nothing'})`);
+    }
+    // Bob's app is open while the operator tidies up.
+    const bobOpen = await socket(bob);
+
     // An operator removes the stray rows, by their exact keys.
     for (const k of [bobCaps, PIA]) {
         const pr = await admin('POST', `/api/local/admin/users/${encodeURIComponent(k)}/prune`, {});
@@ -498,6 +545,13 @@ async function main(): Promise<void> {
         `what Pia wrote when she knocked is kept: removing the stray row scrubbed no one else's knock (${JSON.stringify(piaKnockRow)})`);
     const piaSend = await call('POST', bob, '/api/ledger/transfer', { to: pia.pk, amount: 1, memo: 'welcome' });
     assert(piaSend.status === 200, `and Bob still sends Beans to Pia (${show(piaSend)})`);
+    const seenBefore = bobOpen.events.length;
+    const afterPrune = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ciphertext: 'YWZ0ZXI=', nonce: 'bm9uY2U=' });
+    await settle();
+    const newLines = bobOpen.events.slice(seenBefore).filter(e => e.type === 'new_message' && e.conversationId === dm.body?.conversation?.id);
+    assert(afterPrune.status === 200 && newLines.length === 1,
+        `Bob's app, open while the stray row was removed, still gets the next line Alice sends him: removing it didn't cut his socket off (${show(afterPrune)}; ${bobOpen.events.slice(seenBefore).map(e => e.type).join(',') || 'nothing'})`);
+    bobOpen.ws.close();
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

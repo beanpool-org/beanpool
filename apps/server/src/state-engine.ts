@@ -11,6 +11,7 @@ import {
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
+import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
@@ -539,6 +540,11 @@ export function initStateEngine(): void {
     // Members' faces behind a member-only key in every avatar URL, where visitors see the listings and not the people
     // (G9a-2, engine/avatar-keys.ts). Decided here, once, so the URLs emitted and the URLs served agree.
     installAvatarKeysAtBoot();
+    // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
+    // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
+    // serves, and before the take-over envelope is sealed, so the first envelope after the upgrade already has the file.
+    // Never throws.
+    installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
     // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
     setMoneyGuardHook(() => assertBeansOn());
     seedPulseCurated();

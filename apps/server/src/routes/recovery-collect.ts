@@ -64,7 +64,8 @@ import {
     type SsoProvider,
 } from '../sso.js';
 import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
-import { signInFailure } from './keepers.js';
+import { isSingleBlobSsoStored } from '../services/recovery-seal-key.js';
+import { recoverySealFailure, signInFailure } from './keepers.js';
 import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import type { RouteDeps } from './types.js';
 
@@ -106,6 +107,8 @@ function notifySeedReleased(collection: Collection, provider: SsoProvider): void
 function fail(ctx: any, e: unknown): void {
     // A sign-in first: a provider that could not be asked is 503, try again, not a refused sign-in (signInFailure).
     if (e instanceof SsoVerificationError) return signInFailure(ctx, e);
+    // A server that cannot open the copy (its recovery-seal key is missing, or the copy is another key's): 503, the sentence.
+    if (recoverySealFailure(ctx, e)) return;
     if (e instanceof RecoveryReleaseError) {
         ctx.status = 400;
         ctx.body = { error: (e as Error).message };
@@ -204,7 +207,8 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             SELECT kdf_params FROM recovery_shares
             WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso'
         `).all(pubkey, collection.generation) as { kdf_params: string | null }[];
-        const isSingleBlob = ssoRows.length > 0 && ssoRows.every(r => isSingleBlobSso(r.kdf_params));
+        // Stored rows are wrapped; the client's scheme is readable beside the wrap without the key.
+        const isSingleBlob = ssoRows.length > 0 && ssoRows.every(r => isSingleBlobSsoStored(r.kdf_params));
         const defaultThreshold = isSingleBlob ? 1 : 2;
         const threshold = progress?.threshold ?? defaultThreshold;
         ctx.status = 200;
@@ -234,7 +238,10 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/collect/fragments', async (ctx) => {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
-        const releases = listReleases(collection.id);
+        let releases;
+        try {
+            releases = listReleases(collection.id);
+        } catch (e) { return fail(ctx, e); }
         const progress = collectionProgress(collection.id);
         const isSingleBlob = releases.some(r => r.holderType === 'sso' && isSingleBlobSso(r.kdfParams));
         const defaultThreshold = isSingleBlob ? 1 : 2;

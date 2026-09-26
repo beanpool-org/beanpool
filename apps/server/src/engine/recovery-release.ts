@@ -43,11 +43,17 @@
 // points at, and the reason the check is here rather than left to the caller.
 
 import crypto from 'node:crypto';
-import { TWO_LAYER_THRESHOLD, isSingleBlobSso } from '@beanpool/core';
+import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 
 import { db } from '../db/db.js';
-import { getCurrentGeneration, type KeeperType } from './recovery-shares.js';
+import { getCurrentGeneration, openShareRow, type KeeperType } from './recovery-shares.js';
 import { ssoLookupHash, type SsoProvider } from '../sso.js';
+import {
+    isSingleBlobSsoStored,
+    openRecoveryFields,
+    releaseRowAad,
+    sealRecoveryFields,
+} from '../services/recovery-seal-key.js';
 
 /** How long a collection stays open. Long enough to text a friend and wait for the hub's 24h. */
 export const COLLECTION_TTL_MS = 72 * 60 * 60 * 1000;
@@ -275,7 +281,12 @@ function requireLive(id: string): Collection {
     return state.collection;
 }
 
-export function listReleases(collectionId: string): ReleasedFragment[] {
+/**
+ * The releases as stored: each copy wrapped with the node's key (services/recovery-seal-key.ts), so a released copy
+ * is no more readable in the database than one still held. For counting and classifying, which needs no key; never
+ * handed to anyone.
+ */
+function storedReleases(collectionId: string): ReleasedFragment[] {
     const rows = db.prepare(`
         SELECT * FROM recovery_releases WHERE collection_id = ? ORDER BY id
     `).all(collectionId) as Record<string, unknown>[];
@@ -291,6 +302,20 @@ export function listReleases(collectionId: string): ReleasedFragment[] {
         releasedBy: (r.released_by as string | null) ?? null,
         releasedAt: r.released_at as string,
     }));
+}
+
+/**
+ * The releases as the recovering device reads them: exactly the bytes the client deposited, unwrapped here. Throws
+ * RecoverySealKeyMissing on a server without its key.
+ */
+export function listReleases(collectionId: string): ReleasedFragment[] {
+    return storedReleases(collectionId).map(r => {
+        const copy = openRecoveryFields(
+            { encryptedShare: r.payload, shareIv: r.payloadIv, shareTag: r.payloadTag, kdfParams: r.kdfParams },
+            releaseRowAad(collectionId, r.shareId, r.holderType),
+        );
+        return { ...r, payload: copy.encryptedShare, payloadIv: copy.shareIv, payloadTag: copy.shareTag, kdfParams: copy.kdfParams };
+    });
 }
 
 /**
@@ -391,6 +416,13 @@ function recordRelease(args: {
     // a client retrying a request that already succeeded, must not read as two of three pieces.
     // The first release wins — re-releasing with a different payload would let a keeper who
     // approved once replace the piece afterwards.
+    //
+    // Recorded wrapped, bound to this release rather than to the share row: the next re-split deletes that row, and
+    // the release stays as history (services/recovery-seal-key.ts).
+    const sealed = sealRecoveryFields(
+        { encryptedShare: args.payload, shareIv: args.payloadIv, shareTag: args.payloadTag, kdfParams: args.kdfParams ?? null },
+        releaseRowAad(args.collectionId, args.shareId, args.holderType),
+    );
     db.prepare(`
         INSERT OR IGNORE INTO recovery_releases
             (collection_id, share_id, holder_type, share_index,
@@ -398,8 +430,8 @@ function recordRelease(args: {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         args.collectionId, args.shareId, args.holderType, args.shareIndex,
-        args.payload, args.payloadIv, args.payloadTag,
-        args.ephemeralPubkey, args.kdfParams ?? null, args.releasedBy, nowIso(),
+        sealed.encryptedShare, sealed.shareIv, sealed.shareTag,
+        args.ephemeralPubkey, sealed.kdfParams, args.releasedBy, nowIso(),
     );
 
     const released = listReleases(args.collectionId).find(r => r.shareId === args.shareId);
@@ -482,16 +514,18 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
         );
     }
 
+    // Through the storage layer's reader: the client's bytes, unwrapped with the node's key.
+    const copy = openShareRow(share);
     return recordRelease({
         collectionId,
-        shareId: share.id as number,
+        shareId: copy.id,
         holderType: 'sso',
-        shareIndex: share.share_index as number,
-        payload: share.encrypted_share as string,
-        payloadIv: share.share_iv as string,
-        payloadTag: share.share_tag as string,
+        shareIndex: copy.shareIndex,
+        payload: copy.encryptedShare,
+        payloadIv: copy.shareIv,
+        payloadTag: copy.shareTag,
         ephemeralPubkey: null,
-        kdfParams: (share.kdf_params as string | null) ?? null,
+        kdfParams: copy.kdfParams ?? null,
         releasedBy: null,
     });
 }
@@ -499,11 +533,13 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
 /**
  * K2 — the hub's own fragment, under D7.
  *
- * Returns the fragment exactly as the client deposited it. There is no node-side wrapping key —
- * an env-held `recovery.hubShareKey` was specified through Revision 3.6 and withdrawn on
- * 2026-08-08, because a lost or rotated variable would have made every member's K2 permanently
- * undecryptable, for a gain of one piece against a DB-snapshot attacker who is still under the
- * threshold either way. See ONBOARDING.md § Hub keeper (K2).
+ * Returns the fragment exactly as the client deposited it. An env-held `recovery.hubShareKey` was
+ * specified through Revision 3.6 and withdrawn on 2026-08-08, because a lost or rotated variable
+ * would have made every member's K2 permanently undecryptable, for a gain of one piece against a
+ * DB-snapshot attacker who is still under the threshold either way. See ONBOARDING.md § Hub keeper
+ * (K2). Every stored row, this one included, is now wrapped at rest with the node's recovery-seal
+ * key (services/recovery-seal-key.ts), a file in the data folder rather than a variable, and
+ * unwrapped here; what the device receives is unchanged.
  *
  * So this IS the node handing over a piece it can read. That is safe only because it is one piece
  * of three, and the D7 delay plus the owner notification are what actually defend it — not the
@@ -528,16 +564,17 @@ export function releaseHubFragment(collectionId: string): ReleasedFragment {
         );
     }
 
+    const copy = openShareRow(share);
     return recordRelease({
         collectionId,
-        shareId: share.id as number,
+        shareId: copy.id,
         holderType: 'hub',
-        shareIndex: share.share_index as number,
-        payload: share.encrypted_share as string,
-        payloadIv: share.share_iv as string,
-        payloadTag: share.share_tag as string,
+        shareIndex: copy.shareIndex,
+        payload: copy.encryptedShare,
+        payloadIv: copy.shareIv,
+        payloadTag: copy.shareTag,
         ephemeralPubkey: null,
-        kdfParams: (share.kdf_params as string | null) ?? null,
+        kdfParams: copy.kdfParams ?? null,
         releasedBy: null,
     });
 }
@@ -562,7 +599,8 @@ export function collectionProgress(collectionId: string): {
     const state = collectionState(collectionId);
     if (!state) return null;
 
-    const releases = listReleases(collectionId);
+    // As stored: progress counts and classifies, so it answers on a server without its key too.
+    const releases = storedReleases(collectionId);
     const hasHub = db.prepare(`
         SELECT 1 AS present FROM recovery_shares
         WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'hub'
@@ -591,10 +629,10 @@ export function collectionProgress(collectionId: string): {
     const releasedSso = releases.filter(r => r.holderType === 'sso');
     let needed: number;
     if (releasedSso.length > 0) {
-        const isReleasedSingleBlob = releasedSso.some(r => isSingleBlobSso(r.kdfParams));
+        const isReleasedSingleBlob = releasedSso.some(r => isSingleBlobSsoStored(r.kdfParams));
         needed = isReleasedSingleBlob ? 1 : TWO_LAYER_THRESHOLD;
     } else {
-        const allSingleBlob = hasSso && ssoRows.every(r => isSingleBlobSso(r.kdf_params));
+        const allSingleBlob = hasSso && ssoRows.every(r => isSingleBlobSsoStored(r.kdf_params));
         needed = allSingleBlob ? 1 : (hasSso ? TWO_LAYER_THRESHOLD : TWO_LAYER_THRESHOLD + 1);
     }
 

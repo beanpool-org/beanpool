@@ -12,11 +12,12 @@ import {
 import { isSingleBlobSso } from '@beanpool/core';
 import {
     putShareGeneration,
-    getCurrentShares,
+    getCurrentSharesToCarry,
     RecoveryShareError,
     type KeeperShareInput,
     type StoredKeeperShare,
 } from './recovery-shares.js';
+import { RecoverySealKeyMissing, requireRecoverySealKey } from '../services/recovery-seal-key.js';
 
 /**
  * Depositing a keeper generation that includes a sign-in (K3) fragment — Google or Apple.
@@ -102,6 +103,9 @@ export async function depositSsoKeeperGeneration(
     deposit: SsoKeeperDeposit,
 ): Promise<SsoKeeperResult> {
     const { provider, ownerPubkey, shares, idToken, sessionId, nonce } = deposit;
+    // A server that cannot lock the copy (services/recovery-seal-key.ts) refuses before the sign-in is checked, so the
+    // member's nonce is not spent on a deposit that could never be stored.
+    requireRecoverySealKey();
     checkSsoKeeperShares(provider, ownerPubkey, shares);
 
     // Order matters: verify BEFORE touching storage. A failed sign-in must leave the existing
@@ -178,7 +182,7 @@ export function checkSsoKeeperShares(
     // The hub-fragment rules as well, against what is stored for this owner now: a split that breaks
     // them was never going to be stored either. storeVerifiedSsoKeeperGeneration applies them again,
     // to the generation it actually carries forward.
-    planCarryForward(getCurrentShares(ownerPubkey), provider, shares, ssoShares[0]);
+    planCarryForward(getCurrentSharesToCarry(ownerPubkey), provider, shares, ssoShares[0]);
     return ssoShares[0];
 }
 
@@ -266,8 +270,9 @@ export async function storeVerifiedSsoKeeperGeneration(
     const lookupHash = await ssoLookupHash(identity.provider, identity.sub, salt);
 
     // Planned again, not reused from the check above: this is what is stored now, after the await,
-    // and it is the generation the new one is built from.
-    const current = getCurrentShares(ownerPubkey);
+    // and it is the generation the new one is built from. A copy the node's key does not open is not
+    // carried (getCurrentSharesToCarry): refusing over it would lock the member out of connecting again.
+    const current = getCurrentSharesToCarry(ownerPubkey);
     const { hubShare, existingOtherSso, legacyOtherSso } = planCarryForward(current, identity.provider, shares, ssoShare);
 
     let nextIndex = 1;
@@ -323,7 +328,8 @@ export async function storeVerifiedSsoKeeperGeneration(
             shareCount: finalShares.length,
         };
     } catch (e) {
-        if (e instanceof RecoveryShareError) throw e;
+        // A missing seal key is the server's condition, not the deposit's: it keeps its own error (a 503 on the route).
+        if (e instanceof RecoveryShareError || e instanceof RecoverySealKeyMissing) throw e;
         throw new KeeperDepositError(`Could not store the recovery fragments: ${(e as Error).message}`);
     }
 }

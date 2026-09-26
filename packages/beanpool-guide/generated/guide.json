@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 45,
-  "hash": "10fbc49ce322e7679fa59c8fde73044a3ca9c0a6e4087b67462e9efd9e0d1b0a",
+  "version": 47,
+  "hash": "fffca6599d1919612843df4823884fe2cbe2ac1ceb8e02f63e21b2b3322863c5",
   "sections": [
     {
       "id": "about",
@@ -1763,8 +1763,8 @@
           "items": [
             "After you join, a card called **Your account is new** shows how many of each are left and when more come back. Tap **✕** to put it away. It stays in **Settings** until the limits are over.",
             "If you reach a limit, **New Post** or the chat says which one and when it lets up, and **New Post** shows the same card.",
-            "If the moderators have paused your posting, **New Post** and the chat say so.",
-            "The web app shows these alerts only while it is open. If your posting is paused, **New Post** and the chat tell you the next time you try. If the moderators hide or remove one of your posts while the web app is closed, it doesn't tell you later, so check your posts now and then, or use the phone app, which does."
+            "If the moderators have paused your posting, **New Post** and the chat say so, and a card called **Posting paused** says until when. It stays until the pause ends.",
+            "If the moderators hide or remove one of your posts, or pause your posting, while the web app is closed, the web app shows the alert the next time you open it, for up to 60 days. Each alert shows once: tap **Acknowledge**. If several are waiting, **Close all** puts them all away. If your account is on your phone too, the web app can show an alert you already saw there."
           ]
         },
         {
@@ -4550,7 +4550,7 @@
         },
         {
           "type": "p",
-          "text": "These alerts come under **Marketplace Activity** in your notification settings. See \"Notifications\"."
+          "text": "These alerts come under **Marketplace Activity** in your notification settings. See \"Notifications\". The web app has no notifications: it shows each alert while it is open, or the next time you open it."
         },
         {
           "type": "p",

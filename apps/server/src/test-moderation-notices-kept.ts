@@ -14,12 +14,12 @@
  *   4. a pause: the third removal in 30 days leaves the author "Posting paused" (and /api/community/me says so); the
  *      lift leaves "You can post again"; nobody else has either
  *   5. the read: the signer's own only, whatever the query or the path names; unseen=1 the unseen only; unsigned 401,
- *      a key that is no member 403; private, no-store
+ *      a key that is no member 403, a visitor's row 403; a suspended member reads their own; private, no-store
  *   6. the mark: a member marks their own only (another member's ids mark nothing, and those stay unseen), once; a bad
  *      body 400; a key that is no member 403, unsigned 401; the full read then has seenAt, and unseen=1 leaves it out
  *   7. the bounds: a member's newest 50 (each new one past that drops the oldest, with a tombstone); nothing older than 60
- *      days is read, and the hourly hygiene job deletes it (tombstoned); nothing kept for an enterprise's key or a closed
- *      account, nor past the size limits; a prune and a self-deletion take a member's notices (and a closed account
+ *      days is read, and the hourly hygiene job deletes it (tombstoned); nothing kept for an enterprise's key, a visitor's
+ *      row or a closed account, nor past the size limits; a prune and a self-deletion take a member's notices (and a closed account
  *      reads nothing); a re-key moves them to the new key
  *   8. replication: the export carries each notice with when it was seen; a standby importing it holds them (insert, and
  *      a seen mark over an older copy), keeps a newer copy of its own, keeps deleted a notice it has a tombstone for,
@@ -307,6 +307,14 @@ async function main(): Promise<void> {
     assert(unsigned.status === 401, `unsigned: 401 (${unsigned.status})`);
     const stranger = await call('GET', nobody, '/api/notices');
     assert(stranger.status === 403 && !Array.isArray(stranger.body?.notices), `a key that is no member here: 403 (${stranger.status})`);
+    const vis = member('Visitor-5a5a', 0);
+    attempt(() => db.prepare('UPDATE members SET is_visitor = 1 WHERE public_key = ?').run(vis.pk));
+    const visitorRead = await call('GET', vis, '/api/notices');
+    assert(visitorRead.status === 403 && !Array.isArray(visitorRead.body?.notices), `a visitor's row: 403 (${visitorRead.status})`);
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(R[0].pk);
+    const suspendedRead = await readNotices(R[0]);
+    assert(suspendedRead.status === 200 && suspendedRead.notices.length === r1Ids.size, `a suspended member still reads their own, as /api/community/me (${suspendedRead.status})`);
+    db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(R[0].pk);
 
     // ── 6. the mark ──────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. marking seen: one\'s own only ──');
@@ -374,6 +382,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(shop.pk);
     assert(keepFor(shop, 'For an enterprise', Date.now()) === null && rowsOf(shop).length === 0, "nothing is kept for an enterprise's key");
     assert(keepFor(nobody.pk, 'For nobody', Date.now()) === null && rowsOf(nobody.pk).length === 0, 'nor for a key that is no member here');
+    assert(keepFor(vis, 'For a visitor', Date.now()) === null && rowsOf(vis).length === 0, "nor for a visitor's row");
     assert(keepFor(bea, 'x'.repeat(401), Date.now()) === null && keepFor(bea, 'Long data', Date.now(), { kind: 'x'.repeat(300) }) === null
         && attempt(() => kept.keepNotice(bea.pk, 'T'.repeat(81), 'Long title', {}, Date.now())) === null && rowsOf(bea).length === 50,
         'nor anything past the size limits (title 80, body 400, data 300)');

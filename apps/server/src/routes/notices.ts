@@ -12,8 +12,9 @@
  * `requireSignature` middleware. The read is a gated read (not on the public allowlist), so an unsigned caller gets 401
  * and a signed key that is no member here 403 from the middleware; a closed account and a replaced key get its 403 on
  * both routes. The checks here answer the same way where the middleware lets a request through (a node with
- * ENFORCE_READ_AUTH=false, and a write, which the middleware does not hold to membership). An id that is not the
- * signer's marks nothing.
+ * ENFORCE_READ_AUTH=false, and a write, which the middleware does not hold to membership), with the gate's own test
+ * (passesReadGate), as /api/community/me does: a suspended member reads and marks their own, a visitor's row has none.
+ * An id that is not the signer's marks nothing.
  *
  * ## The main server only, for the mark
  *
@@ -21,7 +22,7 @@
  * the main server's, which would not have the mark. The community's address reaches the main server.
  */
 import Router from '@koa/router';
-import { isNodeMember, getNodeRole } from '../state-engine.js';
+import { passesReadGate, getNodeRole } from '../state-engine.js';
 import { listKeptNotices, markKeptNoticesSeen, MARK_SEEN_MAX_IDS } from '../engine/kept-notices.js';
 import type { RouteDeps } from './types.js';
 
@@ -33,7 +34,7 @@ function member(ctx: any): string | undefined {
         ctx.body = { error: 'A signed request is required' };
         return undefined;
     }
-    if (!isNodeMember(actor)) {
+    if (!passesReadGate(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'Read access requires a member identity' };
         return undefined;

@@ -6,7 +6,7 @@
  * (routes/notices.ts).
  *
  * - For one member only: they read their own (the signer, never a parameter) and mark their own seen. Kept only for a
- *   member who can read it here: not an enterprise's key, not a closed account.
+ *   member who can read it here: not an enterprise's key, not a closed account, not a visitor's row.
  * - Exactly what the live notice carried: its title, body and data (the kind, the post). `tell()` never names who
  *   acted or who reported, so nothing here does either.
  * - Bounded: a member's newest KEPT_NOTICES.perMember, and nothing older than KEPT_NOTICES.maxAgeDays. A new notice
@@ -65,9 +65,10 @@ const toNotice = (r: NoticeRow): KeptNotice => ({
     id: r.id, title: r.title, body: r.body, severity: 'info', data: parseData(r.data), createdAt: r.created_at, seenAt: r.seen_at,
 });
 
-/** A member who can read their notices here: a member row, not an enterprise's key, not a closed account. */
+/** A member who can read their notices here: a member row, not an enterprise's key, not a closed account, not a visitor's row. */
 function canHold(pubkey: string): boolean {
-    return !!db.prepare("SELECT 1 FROM members WHERE public_key = ? AND COALESCE(is_treasury, 0) = 0 AND status != 'pruned'").get(pubkey);
+    return !!db.prepare(`SELECT 1 FROM members WHERE public_key = ? AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
+                           AND status != 'pruned'`).get(pubkey);
 }
 
 /** Deletes these notices, each with its tombstone, so a standby deletes them too. */

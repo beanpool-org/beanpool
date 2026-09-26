@@ -27,6 +27,7 @@ export interface AuditSyncPayload {
     placeWatches?: any[];
     joinRequests?: any[];
     directoryCache?: any[];
+    moderationNotices?: any[];
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -198,6 +199,9 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // Requests to join (G6). A knock the replica lost is a stranger nobody answers after a take-over; an answer it
         // lost is a decline forgotten, or an approved applicant told about an invite the new server doesn't have.
         ['join_requests', payload.joinRequests?.length ?? 0],
+        // Moderation notices kept for their member. A notice the replica lost is a web member never told, after a
+        // take-over, that their post was hidden or removed or their posting paused.
+        ['moderation_notices', payload.moderationNotices?.length ?? 0],
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

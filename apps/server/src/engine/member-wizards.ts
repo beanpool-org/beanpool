@@ -44,6 +44,7 @@ import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { movePlaceWatches } from './place-watches.js';
 import { moveRecoverySharesToNewKey } from './recovery-shares.js';
 import { moveKnocks } from './knocks.js';
+import { moveKeptNotices } from './kept-notices.js';
 
 // ===================== TYPES =====================
 
@@ -394,6 +395,9 @@ export function completeRekey(
         // as a second member; deleting the account would miss what they wrote. Stamped, so the move replicates
         // (engine/knocks.ts).
         moveKnocks(cleanOld, cleanNew, nowIso);
+        // (p3) The moderation notices kept for them (engine/kept-notices.ts): what they have not seen yet is theirs on the
+        // new key. Stamped, so the move replicates.
+        moveKeptNotices(cleanOld, cleanNew);
 
         // (q) treasury_operators (Keeperships)
         db.prepare('UPDATE treasury_operators SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);

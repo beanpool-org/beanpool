@@ -357,6 +357,25 @@ export interface SyncJoinRequest {
 }
 
 /**
+ * A moderation notice kept for the member it is for (apps/server engine/kept-notices.ts): what the live notice said (a
+ * post hidden, back, removed or cleared; a report's outcome; a pause and its lift), and when that member saw it, so the
+ * web app shows it the next time it opens. Never who acted or who reported. Replicated so a server that takes over
+ * still shows a member what they have not seen. `data` is the notice's JSON (its kind, the post). Watermarked on
+ * `updatedAt`, which a new notice, a seen mark and a re-key stamp; a deletion (the bounds: a member's newest 50, none
+ * older than 60 days; a prune; a self-deletion) travels as a `moderation_notices` tombstone keyed by `id`.
+ */
+export interface SyncModerationNotice {
+    id: string;
+    recipient: string;
+    title: string;
+    body: string;
+    data: string;
+    createdAt: string;
+    seenAt: string | null;
+    updatedAt: string;
+}
+
+/**
  * One community in the global node's mirror of the public directory registry (G5, apps/server engine/directory-cache.ts),
  * as its hourly run last wrote it: public data, checked field by field. Replicated so a server that takes over knows
  * which communities the old one had already seen (`firstSeenAt`), and tells no watcher about them again. Never deleted:
@@ -414,6 +433,8 @@ export interface SyncPayload {
     directoryCache?: SyncDirectoryCommunity[];
     /** Watermarked on `updated_at`, which a knock, a reopened knock, an answer, a scrub and the tidy-up all stamp. Empty on the global node. */
     joinRequests?: SyncJoinRequest[];
+    /** Watermarked on `updated_at`, which a new notice, a seen mark and a re-key all stamp. */
+    moderationNotices?: SyncModerationNotice[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     /**
      * `post_id|order_num` for every photo row the exporter left OUT because it could not read the object the
@@ -935,6 +956,23 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
+    // Moderation notices kept for their member (apps/server engine/kept-notices.ts), and when they saw each one.
+    let moderationNotices: SyncModerationNotice[] = [];
+    try {
+        moderationNotices = sel('moderation_notices', 'updated_at').map((r: any) => ({
+            id: r.id,
+            recipient: r.recipient,
+            title: r.title,
+            body: r.body,
+            data: r.data,
+            createdAt: r.created_at,
+            seenAt: r.seen_at ?? null,
+            updatedAt: r.updated_at,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
@@ -976,6 +1014,7 @@ export function exportSyncState(
         placeWatches,
         directoryCache,
         joinRequests,
+        moderationNotices,
         tombstones,
     };
 }

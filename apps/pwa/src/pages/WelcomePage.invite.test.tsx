@@ -276,10 +276,14 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
     /**
      * The node as it is (engine/invites.ts): single-use codes, a key that is a member answered as one before the code is
      * looked at, and a membership probe that reads the same members. `loseAnswer`: it takes the redeem and the answer is
-     * lost. `dropNext`: the next redeem never reaches it. `down`: the probe gets no answer.
+     * lost. `dropNext`: the next redeem never reaches it. `down`: the probe gets no answer. `onProbe`: runs as the probe
+     * is answered.
      */
     function inviteNode(opts: { onTaken?: () => Promise<void> } = {}) {
-        const state = { members: new Map<string, string>(), usedBy: null as string | null, loseAnswer: false, dropNext: false, down: false };
+        const state = {
+            members: new Map<string, string>(), usedBy: null as string | null, loseAnswer: false, dropNext: false, down: false,
+            onProbe: null as (() => void) | null,
+        };
         const node = stubNode(LOCAL, {
             '/api/invite/check': () => json(200, state.usedBy ? { valid: false, reason: 'used' } : { valid: true }),
             '/api/invite/redeem': async (body) => {
@@ -297,6 +301,7 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
             },
             '/api/community/membership/': (_body, call) => {
                 if (state.down) throw new TypeError('Failed to fetch');
+                state.onProbe?.();
                 const key = decodeURIComponent(call.path.split('/').pop()!);
                 return json(200, { isMember: state.members.has(key), callsign: state.members.get(key) ?? null });
             },
@@ -390,6 +395,30 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
         expect((await loadIdentity())?.publicKey).toBe(key);
         expect(peekInviteSent()).toBeUndefined();
         expect(node.redeems()).toHaveLength(1);
+    });
+
+    it("a member at the reload, but this browser can't save it (a full disk): \"Finish joining\" says so, the key stays, and Retry saves it", async () => {
+        const node = inviteNode();
+        node.state.loseAnswer = true;
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await sendAndLoseTheAnswer();
+        const key = node.redeems()[0].body.publicKey;
+
+        // The write after the probe (the save) fails as a full disk's does, once.
+        node.state.onProbe = () => {
+            node.state.onProbe = null;
+            idb.failNextCommit();
+        };
+        reopen();
+        expect(await screen.findByRole('heading', { name: 'Finish joining' })).toBeInTheDocument();
+        expect(screen.getByTestId('invite-sent-unreachable')).toHaveTextContent("The community has you as Rowan, but this browser couldn't save the account.");
+        expect(await loadIdentity()).toBeNull();
+        expect(peekInviteSent()?.identity.publicKey).toBe(key);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await screen.findByText(/Choose your look/);
+        expect((await loadIdentity())?.publicKey).toBe(key);
+        expect(peekInviteSent()).toBeUndefined();
     });
 
     it("another tab saved an account while the invite was at the node: that account stays, and the held screen offers the sent key's 12 words", async () => {

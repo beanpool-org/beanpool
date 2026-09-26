@@ -58,7 +58,7 @@ On the global community, the sign-in you joined with brings your account back to
 - Type your name here. Tap your account when it shows.
 - Choose the sign-in you joined with: **Google**, **Apple**, **Facebook** or **GitHub**. As when joining, the page takes you to that company's own sign-in and brings you back, and GitHub shows a code instead.
 - The page opens your account's locked copy in the browser, and checks that it really is the account you tapped. If it isn't, it says **That isn't** (the name) and saves nothing.
-- You're in, with your 12 words when the copy kept them: an account that joined in a browser always has them.
+- You're in, with your 12 words when the copy kept them: an account that joined in a browser always has them. If the copy didn't keep them, this browser doesn't have them, and Settings says so (see "Keep your 12 words" below).
 
 Your account's devices are told that it is being brought back, in case it isn't you.
 
@@ -95,3 +95,5 @@ The web app may offer **Install BeanPool** so it opens from your home screen lik
 ## Keep your 12 words
 
 Browsers sometimes clear saved data, for example Safari after a week without a visit. Until you have looked at your 12 words, the web app's Settings shows a warning with **View & Save Recovery Phrase**. Do it, and write them down.
+
+A browser that got your account back with a sign-in whose copy didn't keep your 12 words doesn't have them, so it shows no such warning. There, **View Recovery Phrase** says **Not saved in this browser**, and opens a page that says what brings your account back instead: your 12 words, if you have them written down, or the sign-in Settings shows as connected. With neither, only the phone app can, if your account is on your phone too. **Remove from This Device Only** says the same before you sign out.

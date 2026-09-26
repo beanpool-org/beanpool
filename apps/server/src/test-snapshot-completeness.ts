@@ -50,6 +50,8 @@
  *      it and when, so a restored community still has every request, and a decline still blocks for its 30 days.
  *  17. And the moderation notices kept for the web app (engine/kept-notices.ts): one unseen and one seen, so a restored
  *      node still shows a web member what they have not seen, and not what they have.
+ *  18. And the keys a re-key replaced (`invalidated_keys`, engine/member-wizards.ts), with the key that replaced each, so a
+ *      restored node still refuses a lost phone's key at every door.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -300,6 +302,13 @@ async function main(): Promise<void> {
     db.prepare(`INSERT INTO moderation_notices (id, recipient, title, body, data, created_at, seen_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
         .run('notice-seen-at-t', mutedMember, '🛡️ Your post was removed', 'Your post was removed by the community\'s moderators.', '{"kind":"post_removed"}', toldAtT, sawAtT, sawAtT);
 
+    // A key a completed re-key replaced, and one whose re-key has only started, as engine/member-wizards.ts writes them.
+    const replacedAtT = new Date(Date.now() - 480_000).toISOString();
+    const replacedKey = 'ab'.repeat(32);
+    const replacedBy = 'cd'.repeat(32);
+    db.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to) VALUES (?, 'rekeyed', ?, ?), (?, 'rekey_pending', ?, NULL)`)
+        .run(replacedKey, replacedAtT, replacedBy, '12'.repeat(32), replacedAtT);
+
     /** What every referenced object held at T. The whole suite is about reproducing this map. */
     const atT = new Map<string, Buffer>([
         [keptKey, keptPhoto],
@@ -406,6 +415,10 @@ async function main(): Promise<void> {
                 'and a moderation notice kept for a member and not yet seen, so a restored node still shows it in the web app');
             assert(seenNotice?.recipient === mutedMember && seenNotice?.seen_at === sawAtT && seenNotice?.updated_at === sawAtT,
                 'and one they have seen, with when, so a restored node never shows it again');
+            const replacedRows = archived.prepare('SELECT public_key, reason, invalidated_at, rekeyed_to FROM invalidated_keys ORDER BY public_key').all() as any[];
+            assert(replacedRows.length === 2 && replacedRows.some((r) => r.public_key === replacedKey && r.reason === 'rekeyed' && r.rekeyed_to === replacedBy && r.invalidated_at === replacedAtT)
+                && replacedRows.some((r) => r.reason === 'rekey_pending' && r.rekeyed_to === null),
+                'and the keys a re-key replaced, with the key that replaced each, so a restored node still refuses a lost phone\'s key');
         } finally {
             archived.close();
         }

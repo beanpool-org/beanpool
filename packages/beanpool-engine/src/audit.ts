@@ -28,6 +28,7 @@ export interface AuditSyncPayload {
     joinRequests?: any[];
     directoryCache?: any[];
     moderationNotices?: any[];
+    invalidatedKeys?: any[];
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -202,6 +203,9 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // Moderation notices kept for their member. A notice the replica lost is a web member never told, after a
         // take-over, that their post was hidden or removed or their posting paused.
         ['moderation_notices', payload.moderationNotices?.length ?? 0],
+        // The keys the main server replaced. A key the replica lost is a lost phone's key let back in after a take-over.
+        // Only when the copy carries them: a main server that predates them sends none, and its standby keeps its own.
+        ...(Array.isArray(payload.invalidatedKeys) ? [['invalidated_keys', payload.invalidatedKeys.length] as [string, number]] : []),
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

@@ -155,6 +155,22 @@ describe('OwnerWordsCheck (Settings)', () => {
         expect((screen.getByLabelText(/Your 12 words, in order/i) as HTMLTextAreaElement).value).toBe('');
     });
 
+    it('"Can\'t find them?" sends an owner to View Recovery Phrase only when this browser has the words', async () => {
+        nodeSays({ owner: true, wordsCheckedAt: null });
+        const { unmount } = renderAt320(<OwnerWordsCheck identity={PWA_ID} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Check now' }));
+        expect(screen.getByText("Can't find them? If this browser still has them, View Recovery Phrase (below) shows them.")).toBeInTheDocument();
+        unmount();
+
+        // Restored from a sign-in copy without them (web-restore.ts): View Recovery Phrase has nothing to show.
+        renderAt320(<OwnerWordsCheck identity={PWA_ID} hasWords={false} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Check now' }));
+        expect(screen.getByText("Can't find them? They aren't saved in this browser, so View Recovery Phrase can't show them.")).toBeInTheDocument();
+        expect(screen.queryByText(/View Recovery Phrase \(below\) shows them/)).toBeNull();
+        // The check itself is the same: typed from paper, it still works.
+        expect(screen.getByLabelText(/Your 12 words, in order/i)).toBeInTheDocument();
+    });
+
     it('the box turns off autocomplete, autocorrect, capitals and spellcheck', async () => {
         nodeSays({ owner: true, wordsCheckedAt: null });
         const box = await openAndType(PWA_ID, '');

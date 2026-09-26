@@ -89,6 +89,25 @@
   --shadow-card: 0 4px 12px rgba(0,0,0,0.3);
 }
 
+/*
+ * The node's alerts (SystemAlerts): each severity's heading and border (ink), and its button (fill, with white words).
+ * WCAG AA on the dialog's --bg-primary: ink 5.9:1 or more in light, 5.8:1 or more in dark; white on each fill 5.0:1 or
+ * more (measured by e2e/moderation-notices-check.mjs). The old blue, amber and red 500s were 2.1 to 3.8:1.
+ */
+:root {
+  --alert-info-ink: #1d4ed8;      /* blue-700 */
+  --alert-warning-ink: #92400e;   /* amber-800 */
+  --alert-critical-ink: #b91c1c;  /* red-700 */
+  --alert-info-fill: #1d4ed8;     /* blue-700 */
+  --alert-warning-fill: #b45309;  /* amber-700 */
+  --alert-critical-fill: #b91c1c; /* red-700 */
+}
+:root.dark-theme {
+  --alert-info-ink: #60a5fa;      /* blue-400 */
+  --alert-warning-ink: #fbbf24;   /* amber-400 */
+  --alert-critical-ink: #f87171;  /* red-400 */
+}
+
 html, body, #root {
   height: 100%;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;

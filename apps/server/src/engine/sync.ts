@@ -16,6 +16,10 @@ import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
 import { mergeReplicatedNotices } from './kept-notices.js';
 import {
+    mergeReplicatedInvalidatedKeys, followReplicatedRekeys, dropMovedRecoveryCopies, noteReplacedKeysFromMainServer,
+    type ReplicatedRekey,
+} from './key-move.js';
+import {
     exportSyncState as exportSyncStateEngine,
     type SyncPayload,
     type Transaction
@@ -401,6 +405,26 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
     }
 }
 
+/**
+ * The tables whose tombstone row key holds a member's key, and which of its `|` parts do: the rows a re-key moves to the
+ * new key (engine/key-move.ts moveMemberKeyRows). Every other table's tombstone is keyed by an id or a post, which a
+ * re-key leaves as it is. `members` is left out: its tombstone is an enterprise's treasury row, the row a re-key needs,
+ * so no main server deletes it and then re-keys it.
+ */
+const MEMBER_KEY_PARTS: Record<string, number[]> = {
+    friends: [0, 1],
+    event_rsvps: [1],
+    conversation_participants: [1],
+    group_members: [1],
+};
+
+function tombstoneNamesKey(ts: { tableName: string; rowKey: string }, key: string): boolean {
+    const parts = MEMBER_KEY_PARTS[ts.tableName];
+    if (!parts) return false;
+    const fields = ts.rowKey.split('|');
+    return parts.some((i) => fields[i] === key);
+}
+
 function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null {
     switch (tableName) {
         case 'friends': {
@@ -589,7 +613,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'invalidatedKeys', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -620,6 +644,42 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
     try {
         db.transaction(() => {
+            const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
+                for (const ts of tombstones) {
+                    const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
+                    if (localTs && localTs > ts.deletedAt) {
+                        conflictsSkipped++;
+                        continue;
+                    }
+                    const deleted = applyTombstoneLocally(ts.tableName, ts.rowKey);
+                    db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at)
+                                VALUES (?, ?, ?)`).run(ts.tableName, ts.rowKey, ts.deletedAt);
+                    if (deleted) tombstonesApplied++;
+                    if (deleted && ts.tableName === 'group_members') groupChanges++;
+                }
+            };
+            const tombstones = remote.tombstones ?? [];
+            const appliedBeforeRekey = new Set<(typeof tombstones)[number]>();
+
+            // The keys the main server replaced (engine/key-move.ts), first: a re-key there is followed here before the copy's
+            // rows go in, so the member's row under the new key updates the moved row instead of meeting the old key's row
+            // on the callsign index, and every row that named the old key names the new one, as there. A main server older
+            // than this sends none, and this standby keeps the keys it has.
+            // Before each re-key it follows, this copy's tombstones that name the old key, in the main server's order: it
+            // deleted those rows, then re-keyed. After the move they would match no row, be recorded as applied all the same,
+            // and the rows would be back under the new key (a member un-RSVPed, unfriended, or out of a group's chat, and a
+            // server that takes over sending them its lines). Each one is from before that re-key: after it, no row there
+            // names the old key. A delete between two re-keys names the key between them, and goes before the second.
+            let followedRekeys: ReplicatedRekey[] = [];
+            if (Array.isArray(remote.invalidatedKeys)) {
+                followedRekeys = followReplicatedRekeys(mergeReplicatedInvalidatedKeys(remote.invalidatedKeys).rekeys, (rekey) => {
+                    const naming = tombstones.filter((ts) => !appliedBeforeRekey.has(ts) && tombstoneNamesKey(ts, rekey.oldKey));
+                    applyTombstones(naming);
+                    for (const ts of naming) appliedBeforeRekey.add(ts);
+                });
+                noteReplacedKeysFromMainServer();
+            }
+
             for (const rm of remote.members ?? []) {
                 const existing = db.prepare("SELECT updated_at, is_visitor FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null } | undefined;
                 if (!existing) {
@@ -1240,6 +1300,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     if (res.changes > 0) recoverySharesImported++;
                 }
             }
+            // A followed re-key's recovery copies: the ones the main server moved to the new key go from the old one.
+            if (followedRekeys.length > 0) dropMovedRecoveryCopies(followedRekeys);
 
             if (remote.pollVotes) {
                 const importVote = db.prepare(`INSERT INTO poll_votes
@@ -1404,21 +1466,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             // older than this sends none and changes nothing here.
             if (remote.moderationNotices) mergeReplicatedNotices(remote.moderationNotices);
 
-            const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
-                for (const ts of tombstones) {
-                    const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
-                    if (localTs && localTs > ts.deletedAt) {
-                        conflictsSkipped++;
-                        continue;
-                    }
-                    const deleted = applyTombstoneLocally(ts.tableName, ts.rowKey);
-                    db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at)
-                                VALUES (?, ?, ?)`).run(ts.tableName, ts.rowKey, ts.deletedAt);
-                    if (deleted) tombstonesApplied++;
-                    if (deleted && ts.tableName === 'group_members') groupChanges++;
-                }
-            };
-
             // Requests to join (G6, engine/knocks.ts): every knock and every answer, so a server that takes over still
             // has them. After the members, because an approved row's invite is made again here only by a member this
             // database has. The main server's tidy-up clears rows (stamped, so they come in here) and deletes them
@@ -1429,11 +1476,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             // was down). Still here, the old row would keep the new one out of the one-open index, and then be deleted
             // itself: neither. The other tables a function merges above lose nothing this way: place_watches replaces
             // a watch on the same cell itself, and directory_cache and open_joins have no tombstones.
-            const knockTombstones = (remote.tombstones ?? []).filter((ts) => ts.tableName === 'join_requests');
+            const knockTombstones = tombstones.filter((ts) => ts.tableName === 'join_requests');
             applyTombstones(knockTombstones);
             if (remote.joinRequests) mergeReplicatedKnocks(remote.joinRequests);
 
-            applyTombstones((remote.tombstones ?? []).filter((ts) => ts.tableName !== 'join_requests'));
+            applyTombstones(tombstones.filter((ts) => ts.tableName !== 'join_requests' && !appliedBeforeRekey.has(ts)));
         })();
     } finally {
         currentImportOrigin = null;

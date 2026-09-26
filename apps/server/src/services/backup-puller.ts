@@ -47,6 +47,7 @@
 import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedTables, getStateHash, getSyncCursor, setSyncCursor, type ImportResult, type SyncPayload, type ReplicaConsistency } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { noteWholeCopyOfVisitorMarks, visitorMarksWantWholeCopy } from '../db/db.js';
+import { noteWholeCopyOfReplacedKeys, replacedKeysWantWholeCopy } from '../engine/key-move.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
@@ -242,7 +243,9 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
                     + 'of its own, so this payload does not carry those rows. Keeping this replica\'s copies of them — '
                     + 'they may be the only readable ones left.');
             }
-            clearReplicatedTables(keepPhotos);
+            // The replaced keys too, when this copy carries the main server's (it sends every one it has: it never
+            // deletes a row). One from a main server older than that sends none, and this standby keeps its own.
+            clearReplicatedTables(keepPhotos, { invalidatedKeys: Array.isArray(payload.invalidatedKeys) });
             lastGeneratedAtMs = 0;
             // Forget all cursors so a failed import can't leave the next pull 304-ing
             // ("unchanged") or delta-ing against a cleared replica — it re-seeds fully.
@@ -264,6 +267,8 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         if (payload.nodeProfile) noteMainServerProfile(payload.nodeProfile);
         // A whole copy from a main server whose visitors are marked: every row here has its mark now (db.ts).
         if (!isDelta && payload.visitorsMarked === true) noteWholeCopyOfVisitorMarks();
+        // A whole copy that carries the main server's replaced keys: every one is here now (engine/key-move.ts).
+        if (!isDelta && Array.isArray(payload.invalidatedKeys)) noteWholeCopyOfReplacedKeys();
 
         if (payload.generatedAt) {
             const genMs = Date.parse(payload.generatedAt);
@@ -366,6 +371,7 @@ function getReconcileMs(): number {
 }
 
 let visitorMarksAsked = false;
+let replacedKeysAsked = false;
 
 function nextMode(): PullMode {
     if (!lastImportedCursor) return 'full'; // seed
@@ -389,6 +395,14 @@ function nextMode(): PullMode {
         visitorMarksAsked = true;
         lastImportedGeneratedAt = null; // a whole one, never a 304 "unchanged"
         logger.info('P2P', "[Backup] Visitors' rows: taking one whole copy of the main server, so the rows copied before this version get its marks");
+        return 'full';
+    }
+    // Once a process, the same for the keys the main server replaced: a delta brings the ones replaced since this standby's
+    // cursor, and the ones from before either server had this version come only in a whole copy (engine/key-move.ts).
+    if (!replacedKeysAsked && replacedKeysWantWholeCopy()) {
+        replacedKeysAsked = true;
+        lastImportedGeneratedAt = null; // a whole one, never a 304 "unchanged"
+        logger.info('P2P', '[Backup] Replaced keys: taking one whole copy of the main server, so the keys it replaced before this version are refused here too');
         return 'full';
     }
     const reconcileMs = getReconcileMs();

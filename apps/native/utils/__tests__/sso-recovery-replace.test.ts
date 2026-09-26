@@ -68,7 +68,7 @@ const PHONE_KEPT = { beanpool_saved_nodes: JSON.stringify([{ url: MULLUM, name: 
 
 /**
  * The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors, its
- * profile (photo, bio, contact) with a photo parked for the next sync, and the invite codes it made.
+ * profile (photo, bio, contact) with a photo parked for the next sync, the invite codes it made, and an unfinished post.
  */
 function accountStorage(publicKey: string): Record<string, string> {
     return {
@@ -77,6 +77,7 @@ function accountStorage(publicKey: string): Record<string, string> {
         pending_profile_avatar: 'bundled://koala',
         pending_profile_sync: 'true',
         [`bp_offline_invites_${publicKey}`]: JSON.stringify([{ code: 'INV-ABC', intendedFor: 'Robin' }]),
+        beanpool_offer_draft: JSON.stringify({ anchorUrl: MULLUM, postTitle: 'Tomatoes', postPhotos: ['bundled://koala'], postLat: -28.55, postLng: 153.5 }),
         [KNOCKS_STORE_KEY]: JSON.stringify({
             pubkey: publicKey,
             knocks: [{ url: 'https://near.example', name: 'Near Home', key: 'k1', sentAt: '2026-09-20T00:00:00.000Z' }],

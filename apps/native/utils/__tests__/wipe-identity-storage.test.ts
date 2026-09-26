@@ -34,6 +34,8 @@ describe('wipeIdentityScopedStorage', () => {
             pending_profile_sync: 'true',
             // The invite codes this key made, with who each was for (the node keeps them).
             [`bp_offline_invites_${'ab'.repeat(32)}`]: JSON.stringify([{ code: 'INV-ABC', intendedFor: 'Robin' }]),
+            // An unfinished post, kept per community: the next account there would be offered it to finish as its own.
+            beanpool_offer_draft: JSON.stringify({ anchorUrl: 'https://test.beanpool.org', postTitle: 'Tomatoes', postPhotos: ['bundled://koala'], postLat: -28.55, postLng: 153.5 }),
             // A cache about every member, not this one: stays.
             [`bp_tier_${'cd'.repeat(32)}`]: '2',
             some_ui_pref: 'dark',

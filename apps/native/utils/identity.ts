@@ -247,6 +247,9 @@ interface WipeableStorage {
  * the account, and the next account's profile publish (db.ts `pushProfileToServer`) and its knocks
  * (find-community.tsx) fall back on them: left behind, they would go out under the new key. The invite
  * codes this key made (people.tsx) name who the member invited; the node keeps them, so the list comes back.
+ * So does an unfinished post (map.tsx `OFFER_DRAFT_KEY`: its words, photos and map pin). It is kept per
+ * community, not per account, so the next account there would be offered it to finish and post as its own
+ * (PR #1183 review 4110094960).
  *
  * `beanpool_saved_nodes` stays on purpose: it is a list of community addresses, not anything about
  * who the member is.
@@ -259,6 +262,7 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promi
     await storage.removeItem(CANONICAL_PROFILE_STORE_KEY);
     await storage.removeItem('pending_profile_avatar');
     await storage.removeItem('pending_profile_sync');
+    await storage.removeItem('beanpool_offer_draft');
 
     const allKeys = await storage.getAllKeys();
     const accountKeys = allKeys.filter((k: string) =>

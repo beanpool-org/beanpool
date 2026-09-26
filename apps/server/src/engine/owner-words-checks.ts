@@ -8,6 +8,7 @@
  */
 
 import { db } from '../db/db.js';
+import { NODE_ROLE_ACTS } from './node-roles.js';
 
 /** The one statement an owner's app may make. Anything else in the body is refused, so nothing else is stored. */
 export const OWNER_WORDS_ATTESTATION = 'owner-12-words-checked';
@@ -61,7 +62,7 @@ export function listOwnerWordsStatus(): OwnerWordsStatus[] {
          JOIN members m ON nr.member_pubkey = m.public_key
          LEFT JOIN owner_words_checks owc ON owc.member_pubkey = nr.member_pubkey
          LEFT JOIN owner_lock_opens olo ON olo.member_pubkey = nr.member_pubkey
-         WHERE nr.role = 'owner' AND m.status = 'active'
+         WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS}
          ORDER BY nr.granted_at ASC, nr.rowid ASC`,
     ).all() as { pubkey: string; callsign: string; checked_at: number | null; lock_envelope: string | null; lock_opened: number | null; lock_at: number | null }[];
     return rows.map((r) => ({

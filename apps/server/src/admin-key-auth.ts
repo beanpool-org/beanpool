@@ -29,7 +29,7 @@
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
-import { getMember } from '@beanpool/engine';
+import { getMember, isVisitorKey } from '@beanpool/engine';
 import {
     isNodeOwner,
     nodeRoleOf,
@@ -38,6 +38,7 @@ import {
     setNodeRoleBreakGlassHash,
     getNodeRoleBreakGlassHash,
     grantNodeRole,
+    NODE_ROLE_ACTS,
     type MemberNodeRole,
 } from './engine/node-roles.js';
 import { getLocalConfig, isBreakGlassMode, updateLocalConfig } from './config/local-config.js';
@@ -264,9 +265,10 @@ export function authorizeKeySigner(params: {
 }): KeySignerCheck {
     const { memberPubkey, signatureValid, totpCode } = params;
 
-    // Member existence and active status check
+    // Member existence and active status check. A visitor's row is answered as a key with no row is: a role it holds from
+    // before the visitors' rule acts for nothing (engine/node-roles.ts NODE_ROLE_ACTS), so it opens no session (4111202677).
     const member = getMember(db, memberPubkey);
-    if (!member || member.status !== 'active') {
+    if (!member || member.status !== 'active' || isVisitorKey(db, memberPubkey)) {
         return { ok: false, error: 'Member not found or inactive' };
     }
 
@@ -547,7 +549,7 @@ export function verifyBreakGlassCode(code: string, ownerPubkey?: string): { memb
             `SELECT nr.member_pubkey, nr.role, nr.break_glass_hash
              FROM node_roles nr
              JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.member_pubkey = ? AND nr.role = 'owner' AND nr.break_glass_hash IS NOT NULL AND m.status = 'active'`
+             WHERE nr.member_pubkey = ? AND nr.role = 'owner' AND nr.break_glass_hash IS NOT NULL AND ${NODE_ROLE_ACTS}`
         ).get(ownerPubkey) as { member_pubkey: string; role: string; break_glass_hash: string } | undefined;
         if (!row?.break_glass_hash) return null;
         const storedBuf = Buffer.from(row.break_glass_hash);
@@ -561,7 +563,7 @@ export function verifyBreakGlassCode(code: string, ownerPubkey?: string): { memb
         `SELECT nr.member_pubkey, nr.role, nr.break_glass_hash
          FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.role = 'owner' AND nr.break_glass_hash IS NOT NULL AND m.status = 'active'`
+         WHERE nr.role = 'owner' AND nr.break_glass_hash IS NOT NULL AND ${NODE_ROLE_ACTS}`
     ).all() as { member_pubkey: string; role: string; break_glass_hash: string }[];
 
     for (const r of rows) {
@@ -593,8 +595,9 @@ export function enrolAdminOwnerKey(params: {
 } {
     const { targetPubkey, actorPubkey, isBreakGlass = false, role = 'owner' } = params;
 
+    // A visitor's row is answered as a key with no row is (grantNodeRole gives it no role either).
     const member = getMember(db, targetPubkey);
-    if (!member || member.status !== 'active') {
+    if (!member || member.status !== 'active' || isVisitorKey(db, targetPubkey)) {
         throw new Error('Target member not found or inactive');
     }
 

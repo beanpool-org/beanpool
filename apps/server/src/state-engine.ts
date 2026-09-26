@@ -42,6 +42,7 @@ import {
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
+    heldNodeRoleOf,
     isNodeOwner,
     isNodeAdmin,
     getFirstNodeAdminPubkey,
@@ -52,11 +53,13 @@ import {
     bumpNodeRoleSessionEpoch,
     setNodeRoleBreakGlassHash,
     getNodeRoleBreakGlassHash,
+    NODE_ROLE_ACTS,
     type MemberNodeRole,
     type NodeRoleRecord,
 } from './engine/node-roles.js';
 export {
     nodeRoleOf,
+    heldNodeRoleOf,
     isNodeOwner,
     isNodeAdmin,
     getFirstNodeAdminPubkey,
@@ -6468,10 +6471,11 @@ const moderationNoticeCb = {
 
 export function isSoleOwner(publicKey: string): boolean {
     if (!isNodeOwner(publicKey)) return false;
+    // Other owners whose role acts (NODE_ROLE_ACTS): a visitor's row's owner role can't keep the node.
     const ownerCount = (db.prepare(
         `SELECT COUNT(*) as c FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+         WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS} AND nr.member_pubkey != ?`
     ).get(publicKey) as any)?.c || 0;
     return ownerCount === 0;
 }
@@ -6629,7 +6633,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         const ownerCount = (db.prepare(
             `SELECT COUNT(*) as c FROM node_roles nr
              JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+             WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS} AND nr.member_pubkey != ?`
         ).get(publicKey) as any)?.c || 0;
         if (ownerCount === 0) {
             throw new Error('Cannot purge the sole node owner; appoint another owner first');
@@ -6789,7 +6793,7 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
     const inBranch = new Set(branch);
     const activeOwners = (db.prepare(
         `SELECT nr.member_pubkey FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.role = 'owner' AND m.status = 'active'`
+         WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS}`
     ).all() as { member_pubkey: string }[]).map(r => r.member_pubkey);
     if (activeOwners.some(pk => inBranch.has(pk)) && !activeOwners.some(pk => !inBranch.has(pk))) {
         throw new Error("This branch holds the node's only owner, so nobody in it was pruned. Appoint another owner outside the branch first");

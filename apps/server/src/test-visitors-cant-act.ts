@@ -25,10 +25,17 @@
  *     backing: each refused as a key with no row is, and nothing changes. The lead passes over it, a vote doesn't count
  *     it, an approval it made as lead doesn't land, the enterprise's page tells it nothing a key with no row isn't
  *     told, and an event the enterprise hosts reads to it without the note or who is going.
+ * 1c. Node roles (4111202677): an owner makes no visitor's row moderator or admin, nor enrols its key, as for a key with
+ *     no row. One that holds admin from before this rule signs in to Settings neither by the app's link nor by phone,
+ *     a Settings session it opened then takes down no post, and signed as itself it pauses no enterprise, approves no
+ *     request to keep one and removes no keeper; an owner still takes such a role away.
  *  2. The sweep: every registered write the middleware sees, signed by the visitor and by a key with no row with the
  *     same body, is answered the same, but for what the visitor may do (a line in its DM, marking it read, muting it,
  *     changing its lines there, Beans). Then every enterprise write again on a crowdfund, an enterprise with a goal,
  *     which takes another path through some of them (a pledge goes to the crowdfund), and on the enterprise it leads.
+ *     Then for a visitor's row holding admin from before this rule: every write the middleware sees, signed by it; and
+ *     every write on the admin surface the middleware never sees (/api/local/ and the rest), signed by it, and under a
+ *     Settings session it opened before this rule (answered as one whose holder's role was taken away).
  *  3. What a visitor keeps: it replies in its DM (the app may ask for the DM again first), marks it read and mutes it,
  *     edits and deletes its own lines there and reacts there (the director, 2026-09-26); it sends Beans it holds to a
  *     member, under the send gate as anyone is, and a visitor that never traded is told in plain words that it receives
@@ -64,14 +71,17 @@ import {
     seedGenesisMember, createConversation, sendMessage, registerVisitor, getBalance, createTreasury,
     postGroupThreadMessage, postEventThreadMessage,
     adminAssignTreasuryOperator, requestToJoinEnterprise, approveKeeperRequest, proposeKeeperRemoval, stepDownAsKeeper,
-    applyDueKeeperChanges, postEnterpriseThreadMessage, treasuryKeepers, keeperOf, canOperate,
+    applyDueKeeperChanges, postEnterpriseThreadMessage, treasuryKeepers, keeperOf, canOperate, grantNodeRole, revokeNodeRole,
 } from './state-engine.js';
-import { createPairing, declinePairing, describePairing, pairingMessage } from './settings-signin-pairing.js';
+import { createPairing, declinePairing, approvePairing, describePairing, pairingMessage } from './settings-signin-pairing.js';
+import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { createCrowdfundProject } from './db/db.js';
 import { createDecision } from './decisions-engine.js';
-import { startHttpsServer, getKoaApp } from './https-server.js';
+import { startHttpsServer, getKoaApp, resetAdminRateLimit } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
+import { resetAdminAuthTarpit } from './admin-auth.js';
+import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 
 let run = 0, passed = 0;
@@ -106,6 +116,20 @@ function makeMember(name: string, beans = 100, joinedDaysAgo = 30): Id {
     return id;
 }
 
+/**
+ * The limits a sweep of refusals would otherwise run into, so two keys making the same request are answered on its merits:
+ * the admin surface's limiter and its tarpit for refused sign-ins, the auth endpoints' 15 a minute (every window closed),
+ * and the join doors' knocks from one network a day (KNOCK_RULES.perAddressPerDay: the address each knock was made from is
+ * forgotten, as the node forgets it after a day; the knocks stay).
+ */
+function resetLimits(): void {
+    resetGatewayRateLimit();
+    resetAdminRateLimit();
+    resetAdminAuthTarpit();
+    pruneAuthAttempts(Date.now() + 120_000);
+    db.prepare('UPDATE join_requests SET ip_hash = NULL').run();
+}
+
 async function call(method: string, id: Id | null, path: string, body?: unknown): Promise<Res> {
     resetGatewayRateLimit();
     const bodyString = body === undefined ? '' : JSON.stringify(body);
@@ -121,6 +145,15 @@ async function call(method: string, id: Id | null, path: string, body?: unknown)
     }
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? bodyString : undefined });
+    let json: any; try { json = await res.json(); } catch { /* empty */ }
+    return { status: res.status, body: json };
+}
+
+/** A request under a Settings session (x-admin-session, as an app's browser sends it after the exchange). */
+async function callWithSession(session: string, method: string, path: string, body?: unknown): Promise<Res> {
+    resetLimits();
+    const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', 'x-admin-session': session },
+        body: body !== undefined ? JSON.stringify(body) : undefined });
     let json: any; try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json };
 }
@@ -366,6 +399,15 @@ async function main(): Promise<void> {
     assert(isVisitorRow(vera.pk) && (db.prepare('SELECT status, callsign FROM members WHERE public_key = ?').get(vera.pk) as any)?.status === 'active',
         "Vera's row is still an active visitor's, under her own name");
 
+    // Zed (section 1c): a visitor's row an owner made admin before this rule, swept again in section 2.
+    let zed!: Id;
+    /** A Settings session Zed opened while he could still open one (asBeforeThisRule), as verify-challenge and exchange open it. */
+    const zedSessionBeforeThisRule = (): string => {
+        let id = '';
+        asBeforeThisRule(zed, () => { id = consumeHandshakeToken(mintHandshakeToken(zed.pk, 'admin').handshakeToken).sessionId ?? ''; });
+        return id;
+    };
+
     // ── 1b. Keeping an enterprise ───────────────────────────────────────────────────────────────
     console.log("\n── 1b. Keeping an enterprise: a visitor's keeper's or lead's row acts for none, and an admin appoints no visitor");
     {
@@ -472,6 +514,83 @@ async function main(): Promise<void> {
             `a member who keeps the orchard hosts its event: its note and who is going (control: ${show(kaiReads)})`);
         assert(veraReads.status === 200 && veraReads.body?.[0]?.id === orchardEvent.id && !JSON.stringify(veraReads.body).includes('5580') && !veraReads.body?.[0]?.eventRsvps,
             `Vera, who keeps it too, reads the event without its note or who is going (${show(veraReads)})`);
+
+        // ── 1c. Node roles (4111202677) ──
+        console.log("\n── 1c. Node roles: an owner gives a visitor's row none, and one it holds from before this rule acts for nothing");
+        const roleOf = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as { role: string } | undefined)?.role;
+        const rolesNow = () => JSON.stringify(db.prepare('SELECT * FROM node_roles ORDER BY member_pubkey').all());
+        for (const role of ['moderator', 'admin'] as const) {
+            const n = await admin('POST', '/api/local/admin/node-roles', { pubkey: nobody.pk, role });
+            const before = rolesNow();
+            const v = await admin('POST', '/api/local/admin/node-roles', { pubkey: wes.pk, role });
+            assert(v.status === 404 && v.body?.error === 'Member not found' && same(v, n) && rolesNow() === before,
+                `the owner can't make Wes, a visitor's row, ${role}: "Member not found", as for a key with no row (visitor ${show(v)}; no row ${show(n)})`);
+        }
+        for (const role of ['admin', 'owner'] as const) {
+            const n = await admin('POST', '/api/local/admin/auth/enrol', { memberPubkey: nobody.pk, role });
+            const before = rolesNow();
+            const v = await admin('POST', '/api/local/admin/auth/enrol', { memberPubkey: wes.pk, role });
+            assert(v.status >= 400 && same(v, n) && rolesNow() === before && !roleOf(wes.pk),
+                `nor enrol his key as an ${role}'s, as for a key with no row (visitor ${show(v)}; no row ${show(n)})`);
+        }
+
+        // Zed: a visitor's row made admin before this rule, which opened Settings sessions then. Ada is a member admin (control).
+        zed = keypair('ZedVA');
+        createConversation('dm', [mia.pk, zed.pk], mia.pk);
+        asBeforeThisRule(zed, () => grantNodeRole(zed.pk, 'admin', 'owner:password'));
+        const ada = makeMember('AdaVA');
+        grantNodeRole(ada.pk, 'admin', 'owner:password');
+        const zedSession = zedSessionBeforeThisRule();
+        assert(isVisitorRow(zed.pk) && roleOf(zed.pk) === 'admin' && !!zedSession,
+            "setup: Zed, a visitor's row, holds admin from before this rule, and a Settings session opened then");
+        // He signs in to Settings as the app does (challenge, verify-challenge): refused as a key with no row is.
+        const signIn = async (who: Id): Promise<Res> => {
+            const c = await call('POST', null, '/api/local/admin/auth/challenge', {});
+            return call('POST', null, '/api/local/admin/auth/verify-challenge', { challengeId: c.body?.challengeId, memberPubkey: who.pk,
+                signature: crypto.sign(null, Buffer.from(String(c.body?.challenge)), who.priv).toString('base64') });
+        };
+        const zedIn = await signIn(zed);
+        const nobodyIn = await signIn(nobody);
+        const adaIn = await signIn(ada);
+        assert(zedIn.status === 403 && same(zedIn, nobodyIn) && !zedIn.body?.handshakeToken,
+            `Zed signs in to Settings: refused as a key with no row is, and no handshake (visitor ${show(zedIn)}; no row ${show(nobodyIn)})`);
+        assert(adaIn.status === 200 && !!adaIn.body?.handshakeToken, `a member admin signs in (control: ${show(adaIn)})`);
+        // And by phone, on a browser's sign-in code (settings-signin-pairing.ts): refused as a key with no row is; it still waits.
+        const pairing = createPairing({ clientKey: 'visitors-cant-act-roles' });
+        if (!pairing.ok) throw new Error(`no pairing: ${pairing.error}`);
+        const approve = (id: Id) => approvePairing({ pairingId: pairing.pairingId, memberPubkey: id.pk,
+            signature: crypto.sign(null, Buffer.from(pairingMessage('approve', pairing.pairingId, pairing.shortCode)), id.priv).toString('base64') });
+        const pn = approve(nobody);
+        const pz = approve(zed);
+        assert(!pz.ok && !pn.ok && pz.status === pn.status && pz.error === pn.error && describePairing(pairing.pairingId).ok,
+            `nor by phone: refused as a key with no row is, and the sign-in still waits (visitor ${JSON.stringify(pz)}; no row ${JSON.stringify(pn)})`);
+        // The session he opened before this rule acts for nothing: it takes down no member's post (4111202677's last row).
+        const bobPost = offer(bob, 'Bob pears').id;
+        const zedTakesDown = await callWithSession(zedSession, 'POST', `/api/local/admin/posts/${bobPost}/delete`, {});
+        const bobPostStatus = () => (db.prepare('SELECT status FROM posts WHERE id = ?').get(bobPost) as any)?.status;
+        assert(zedTakesDown.status === 401 && zedTakesDown.body?.sessionExpired === true && bobPostStatus() === 'active',
+            `his session from before this rule takes down no member's post: it is no longer a session (${show(zedTakesDown)})`);
+        const adaSession = consumeHandshakeToken(adaIn.body?.handshakeToken).sessionId ?? '';
+        const adaTakesDown = await callWithSession(adaSession, 'POST', `/api/local/admin/posts/${offer(bob, 'Bob quinces').id}/delete`, {});
+        assert(adaTakesDown.status === 200, `a member admin's session takes one down (control: ${show(adaTakesDown)})`);
+        // Signed as himself, he acts for no enterprise as admin: the forge, which Kai leads and Kit keeps, and Rex asks to keep.
+        const kit = makeMember('KitVA');
+        const rex = makeMember('RexVA');
+        const forge = keyOf(createTreasury('Forge VA', AVATAR, 0, { leadKeeperPubkey: kai.pk, purpose: 'Iron' } as any));
+        adminAssignTreasuryOperator(forge, kit.pk, 'admin');
+        const rexAsks = requestToJoinEnterprise(forge, rex.pk, 0).id;
+        await refusedAsNoRow("Zed, admin from before this rule, pauses the forge, which he doesn't keep", zed, 'POST', `/api/enterprise/${forge}/pause`, {});
+        await refusedAsNoRow("approves Rex's request to keep it", zed, 'POST', `/api/enterprise/${forge}/keepers/requests/${rexAsks}/approve`, {});
+        await refusedAsNoRow('or removes Kit, a member who keeps it', zed, 'POST', `/api/enterprise/${forge}/keepers/${kit.pk}/remove`, {});
+        assert(!keeperRole(forge, rex.pk) && keeperRole(forge, kit.pk) === 'keeper', 'Rex keeps no forge, and Kit still keeps it');
+        const adaPauses = await call('POST', ada, `/api/enterprise/${forge}/pause`, {});
+        assert(ok(adaPauses), `a member admin pauses it (control: ${show(adaPauses)})`);
+        // An owner still takes a visitor's row's role away, owner included.
+        const yan = keypair('YanVA');
+        createConversation('dm', [mia.pk, yan.pk], mia.pk);
+        asBeforeThisRule(yan, () => grantNodeRole(yan.pk, 'owner', 'owner:password'));
+        const takeYan = await admin('DELETE', `/api/local/admin/node-roles/${yan.pk}/owner`);
+        assert(ok(takeYan) && !roleOf(yan.pk), `an owner takes away the owner's role a visitor's row holds from before this rule (${show(takeYan)})`);
     }
 
     // ── 2. The sweep ────────────────────────────────────────────────────────────────────────────
@@ -541,6 +660,76 @@ async function main(): Promise<void> {
             `every enterprise write, on the enterprise she leads (${onCrowdfund.length}), is answered to the visitor as to a key with no row${differOnHers.length ? `; ${differOnHers.length} were not:\n    ${differOnHers.join('\n    ')}` : ''}`);
         assert(isVisitorRow(vera.pk) && !db.prepare("SELECT 1 FROM members WHERE public_key = ? AND status = 'pruned'").get(vera.pk),
             'and the visitor is still a live visitor');
+
+        // And a visitor's row holding a node role from before this rule (4111202677): Zed, admin. Every write the middleware sees,
+        // signed by him and by a key with no row (a fresh one each time, so a knock or a push token of its own is compared with a
+        // first one) with the same body, is answered the same, and changes nothing a key with no row's doesn't.
+        /** The tables `make` changes. */
+        const changes = async (make: () => Promise<Res>): Promise<{ r: Res; changed: string[] }> => {
+            const before = snapshot();
+            const r = await make();
+            await settle(5);
+            return { r, changed: changedTables(before, snapshot()) };
+        };
+        /** Answered the same, and the visitor changed no table the key with no row didn't. */
+        const asNoRow = (route: string, v: { r: Res; changed: string[] }, n: { r: Res; changed: string[] }, who: string, other: string): string | null => {
+            const extra = v.changed.filter(t => !n.changed.includes(t));
+            return same(v.r, n.r) && extra.length === 0 ? null
+                : `${route}\n      ${who} ${show(v.r)}\n      ${other} ${show(n.r)}${extra.length ? `\n      changed: ${extra.join(', ')}` : ''}`;
+        };
+        const differZed: string[] = [];
+        for (const route of swept) {
+            const [method, path] = route.split(' ');
+            if (MAY.has(route)) continue;
+            const stranger = keypair('StrangerVA');
+            resetLimits();
+            const n = await changes(() => call(method, stranger, materialise(path), bodyFor(stranger)));
+            resetLimits();
+            const v = await changes(() => call(method, zed, materialise(path), bodyFor(zed)));
+            const d = asNoRow(route, v, n, 'admin visitor', 'no row       ');
+            if (d) differZed.push(d);
+        }
+        assert(differZed.length === 0,
+            `every one is answered to a visitor's row holding admin as to a key with no row, and changes nothing more${differZed.length ? `; ${differZed.length} were not:\n    ${differZed.join('\n    ')}` : ''}`);
+        // The admin surface the middleware never sees (/api/local/ and the rest of `outside`): his signature is answered as a key with
+        // no row's, and a Settings session he opened before this rule as one whose holder's role was taken away (Ex, a member who
+        // was admin). Nothing changes either way.
+        const adminWrites = writes.filter(r => outside(r.split(' ')[1]) && !r.split(' ')[1].startsWith('/api/pair/') && !r.split(' ')[1].startsWith('/api/invite/'));
+        const ex = makeMember('ExVA');
+        grantNodeRole(ex.pk, 'admin', 'owner:password');
+        const exSessions = adminWrites.map(() => consumeHandshakeToken(mintHandshakeToken(ex.pk, 'admin').handshakeToken).sessionId ?? '');
+        revokeNodeRole(ex.pk, 'admin', 'owner:password');
+        const zedSessions = adminWrites.map(() => zedSessionBeforeThisRule());
+        const differSigned: string[] = [];
+        for (const route of adminWrites) {
+            const [method, path] = route.split(' ');
+            const stranger = keypair('StrangerVA');
+            resetLimits();
+            const n = await changes(() => call(method, stranger, materialise(path), bodyFor(stranger)));
+            resetLimits();
+            const v = await changes(() => call(method, zed, materialise(path), bodyFor(zed)));
+            const d = asNoRow(route, v, n, 'admin visitor', 'no row       ');
+            if (d) differSigned.push(d);
+        }
+        assert(adminWrites.length > 100 && differSigned.length === 0,
+            `every admin write (${adminWrites.length}), signed by him, is answered as a key with no row's, and changes nothing more${differSigned.length ? `; ${differSigned.length} were not:\n    ${differSigned.join('\n    ')}` : ''}`);
+        // Never swept with a session that still works: every admin route would run as admin, the public address's and the fleet's
+        // included, which reach outside this test.
+        const live = await callWithSession(zedSessionBeforeThisRule(), 'GET', '/api/local/admin/auth/session');
+        const sessionActs = live.body?.authenticated !== false;
+        assert(!sessionActs, `a session he opened before this rule is no longer one (${show(live)})`);
+        if (!sessionActs) {
+            const differSession: string[] = [];
+            for (const [i, route] of adminWrites.entries()) {
+                const [method, path] = route.split(' ');
+                const n = await changes(() => callWithSession(exSessions[i], method, materialise(path), bodyFor(zed)));
+                const v = await changes(() => callWithSession(zedSessions[i], method, materialise(path), bodyFor(zed)));
+                const d = asNoRow(route, v, n, 'admin visitor', 'role taken   ');
+                if (d) differSession.push(d);
+            }
+            assert(differSession.length === 0,
+                `every admin write, under a session he opened before this rule, is answered as under one whose role was taken away, and changes nothing more${differSession.length ? `; ${differSession.length} were not:\n    ${differSession.join('\n    ')}` : ''}`);
+        }
     }
 
     // ── 3. What a visitor keeps ─────────────────────────────────────────────────────────────────

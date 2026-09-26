@@ -345,6 +345,33 @@ export async function getCommunityMe(): Promise<CommunityStanding> {
     return request('GET', '/api/community/me');
 }
 
+/**
+ * A moderation notice the node kept for the signed member (GET /api/notices): what its live alert said (a post hidden,
+ * back, removed or cleared; a report's outcome; a pause and its lift), so the web app, which has no push, shows it the
+ * next time it opens. Never names who acted or who reported.
+ */
+export interface KeptNotice {
+    id: string;
+    title: string;
+    body: string;
+    severity: string;
+    /** The notice's own data: its kind, the post. */
+    data: Record<string, unknown>;
+    createdAt: string;
+    seenAt: string | null;
+}
+
+/** The signer's own notices they have not marked seen, oldest first. A node older than the route answers 404. */
+export async function getUnseenNotices(): Promise<KeptNotice[]> {
+    const res = await request<{ notices?: KeptNotice[] }>('GET', '/api/notices?unseen=1');
+    return Array.isArray(res?.notices) ? res.notices : [];
+}
+
+/** Marks the signer's own notices seen; the node ignores an id that is not theirs. */
+export async function markNoticesSeen(ids: string[]): Promise<{ success: boolean; marked: number }> {
+    return request('POST', '/api/notices/seen', { ids });
+}
+
 export async function registerMember(publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {
     return request('POST', '/api/community/register', { publicKey, callsign });
 }

@@ -129,6 +129,7 @@ function startHeartbeat(socket: WebSocket): void {
 
 let listeners: SyncCallback[] = [];
 let announcementListeners: ((a: any) => void)[] = [];
+let socketOpenListeners: (() => void)[] = [];
 let currentState: SyncState = loadCachedState();
 
 function updateLastSyncTime(time: number): void {
@@ -206,6 +207,8 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
 
         currentState = { ...currentState, connected: true };
         notify();
+        // What was kept while the socket was down (the moderation notices the web app reads, SystemAlerts).
+        socketOpenListeners.forEach(cb => { try { cb(); } catch { /* a listener's failure is its own */ } });
 
         // The catch-up sync for whatever was missed while the socket was down. After a drop it waits a random
         // 0–3 s on top of the retry's own spread: a node or edge restart drops every tab at once, and their syncs
@@ -430,6 +433,17 @@ export function onSystemAnnouncement(cb: (a: any) => void): () => void {
 }
 
 /**
+ * Subscribe to the socket opening: a first connect, a retry after a drop, or the tab coming back. A live event sent
+ * while the socket was down never arrives, so this is when to read what was kept for this member.
+ */
+export function onSocketOpen(cb: () => void): () => void {
+    socketOpenListeners.push(cb);
+    return () => {
+        socketOpenListeners = socketOpenListeners.filter(l => l !== cb);
+    };
+}
+
+/**
  * Reset sync module state for isolated unit testing.
  */
 export function resetSyncForTest(): void {
@@ -459,6 +473,7 @@ export function resetSyncForTest(): void {
     currentUrl = null;
     listeners = [];
     announcementListeners = [];
+    socketOpenListeners = [];
     currentState = { connected: false, lastSyncTime: null, merkleRoot: null, accountCount: 0 };
 }
 

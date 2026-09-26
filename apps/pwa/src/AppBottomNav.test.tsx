@@ -40,6 +40,7 @@ vi.mock('./lib/sync', () => ({
     connectToAnchor: vi.fn(() => () => {}),
     onSystemAnnouncement: vi.fn(() => () => {}),
     onSyncActivity: vi.fn(() => () => {}),
+    onSocketOpen: vi.fn(() => () => {}),
 }));
 
 vi.mock('./lib/avatar', () => ({
@@ -70,6 +71,8 @@ vi.mock('./lib/api', () => ({
     getMyActiveRecoveryCollections: vi.fn(async () => []),
     getTreasuryDetail: vi.fn(async () => null),
     getTreasuries: vi.fn(async () => []),
+    getUnseenNotices: vi.fn(async () => []),
+    markNoticesSeen: vi.fn(async () => ({ success: true, marked: 0 })),
 }));
 
 vi.mock('./components/SyncStatus', () => ({

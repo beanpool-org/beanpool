@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
-import { connectToAnchor, onSystemAnnouncement, onSyncActivity } from './lib/sync';
+import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
 import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth, type MarketplaceTransaction } from './lib/api';
 import { withJitter } from './lib/jitter';
@@ -34,6 +34,8 @@ import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { NewAccountCard } from './components/NewAccountCard';
+import { ModerationPauseCard } from './components/ModerationPauseCard';
+import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
 
@@ -160,7 +162,11 @@ export function App() {
         };
     }, [isBottomNavVisible]);
     const [theme, themePreference, setThemePreference] = useTheme();
-    const [sysAnnouncement, setSysAnnouncement] = useState<{ title: string, body: string, severity: string } | null>(null);
+    // Read again when a pause or its lift is shown (SystemAlerts): "Posting paused" follows it at once.
+    const [standingKey, setStandingKey] = useState(0);
+    const onAlertShown = useCallback((a: ShownAlert) => {
+        if (a.kind === 'moderation_muted' || a.kind === 'moderation_unmuted') setStandingKey(k => k + 1);
+    }, []);
     const [totalUnread, setTotalUnread] = useState(0);
     const [pendingDealsCount, setPendingDealsCount] = useState(0);
     const [myTransactions, setMyTransactions] = useState<MarketplaceTransaction[]>([]);
@@ -300,10 +306,8 @@ export function App() {
     useEffect(() => {
         if (!identity) return;
 
+        // The node's alerts, live and kept for this member, are SystemAlerts' (below).
         connectToAnchor();
-        const unsub = onSystemAnnouncement((a) => {
-            setSysAnnouncement({ title: a.title, body: a.body, severity: a.severity });
-        });
         // Ensure existing users are registered with the node
         import('./lib/api').then(({ registerMember }) =>
             registerMember(identity.publicKey, identity.callsign).catch(() => {})
@@ -322,8 +326,6 @@ export function App() {
             })
             // Unknown after a failed check: treat as a member so the pages waiting on it still load.
             .catch(() => setIsGuest(prev => prev ?? false));
-
-        return unsub;
     }, [identity]);
 
     // The identity in flight, read at await-resolution time rather than captured. The previous
@@ -774,7 +776,8 @@ export function App() {
                                         identity={identity}
                                         onCheckNow={() => { setSettingsInitialMode('menu'); setOwnerWordsOpen(true); setShowSettings(true); }}
                                     />
-                                    {/* A member only: a guest has no standing here to read. */}
+                                    {/* A member only: a guest has no standing here to read. A pause is never put away. */}
+                                    {isGuest === false && <ModerationPauseCard refreshKey={standingKey} />}
                                     {isGuest === false && !newAccountCardClosed && (
                                         <NewAccountCard onClose={closeNewAccountCard} />
                                     )}
@@ -1014,47 +1017,8 @@ export function App() {
                 </nav>
             </div>
 
-            {/* System Announcement Modal */}
-            {sysAnnouncement && (
-                <div style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.8)', zIndex: 9999,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: '1rem', backdropFilter: 'blur(4px)',
-                    WebkitBackdropFilter: 'blur(4px)'
-                }}>
-                    <div style={{
-                        background: 'var(--bg-primary)',
-                        border: `2px solid ${sysAnnouncement.severity === 'critical' ? '#ef4444' : sysAnnouncement.severity === 'warning' ? '#f59e0b' : '#3b82f6'}`,
-                        borderRadius: '12px', padding: '1.5rem',
-                        maxWidth: '400px', width: '100%',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                        textAlign: 'center'
-                    }}>
-                        <h2 style={{
-                            margin: '0 0 1rem', fontSize: '1.5rem',
-                            color: sysAnnouncement.severity === 'critical' ? '#ef4444' : sysAnnouncement.severity === 'warning' ? '#f59e0b' : '#3b82f6'
-                        }}>
-                            {sysAnnouncement.severity === 'critical' ? '🚨 ' : sysAnnouncement.severity === 'warning' ? '⚠️ ' : 'ℹ️ '}
-                            {sysAnnouncement.title}
-                        </h2>
-                        <p style={{ margin: '0 0 1.5rem', lineHeight: 1.5, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
-                            {sysAnnouncement.body}
-                        </p>
-                        <button
-                            onClick={() => setSysAnnouncement(null)}
-                            style={{
-                                width: '100%', padding: '0.8rem',
-                                background: sysAnnouncement.severity === 'critical' ? '#ef4444' : sysAnnouncement.severity === 'warning' ? '#f59e0b' : '#3b82f6',
-                                color: '#fff', border: 'none', borderRadius: '8px',
-                                fontSize: '1.1rem', fontWeight: 600, cursor: 'pointer'
-                            }}
-                        >
-                            Acknowledge
-                        </button>
-                    </div>
-                </div>
-            )}
+            {/* The node's alerts: live, and the moderation notices kept while the web app was closed. */}
+            <SystemAlerts memberPubkey={identity?.publicKey} isGuest={isGuest} onShown={onAlertShown} />
 
             {/* PWA Install Banner */}
             <InstallPrompt />

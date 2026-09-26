@@ -177,7 +177,8 @@ export default function SuggestChangeScreen() {
                                 onPress={handleSend}
                                 disabled={sending || over}
                                 accessibilityRole="button"
-                                accessibilityLabel="Send suggestion"
+                                accessibilityLabel={sending ? "Sending suggestion..." : "Send suggestion"}
+                                accessibilityState={{ disabled: sending || over, busy: sending }}
                             >
                                 {sending ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.submitBtnText}>SEND</Text>}
                             </Pressable>

@@ -19,11 +19,12 @@ vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: 
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
-    buildSignedHeaders: vi.fn(async (method: string, path: string) => ({ 'X-Signed': `${method} ${path}` })),
+    buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
 import { fetchMemberPreferences, fetchMyEvents, isRouteMissing, setEventReminder } from '../db';
 import { buildSignedHeaders } from '../crypto';
+import { signedPathOf } from '@beanpool/core';
 
 const fetchMock = vi.fn();
 
@@ -56,7 +57,7 @@ describe('fetchMyEvents — "Your events" (the shared contract)', () => {
         expect(init.method).toBe('GET');
         // Whose list it is comes from the signature, never from a parameter.
         expect(url).not.toContain('publicKey');
-        expect(buildSignedHeaders).toHaveBeenCalledWith('GET', '/api/events/mine', '', 'me-priv', 'me-pub');
+        expect(buildSignedHeaders).toHaveBeenCalledWith('GET', 'https://test.beanpool.org/api/events/mine', '', 'me-priv', 'me-pub');
     });
 
     it('puts the soonest first even when the node did not', async () => {
@@ -90,7 +91,7 @@ describe('setEventReminder — one event’s own choice', () => {
         expect(url).toBe('https://test.beanpool.org/api/events/ev%2F1/reminder');
         expect(init.method).toBe('PUT');
         expect(init.body).toBe('{"offsets":[1440,120]}');
-        expect(buildSignedHeaders).toHaveBeenCalledWith('PUT', '/api/events/ev%2F1/reminder', '{"offsets":[1440,120]}', 'me-priv', 'me-pub');
+        expect(buildSignedHeaders).toHaveBeenCalledWith('PUT', 'https://test.beanpool.org/api/events/ev%2F1/reminder', '{"offsets":[1440,120]}', 'me-priv', 'me-pub');
     });
 
     it('sends null to hand the event back to the member’s default', async () => {
@@ -122,6 +123,8 @@ describe('fetchMemberPreferences — where the member’s default lives', () => 
         fetchMock.mockResolvedValueOnce(reply(200, { holiday_mode: 'false', eventReminderOffsets: '[1440]' }));
         await expect(fetchMemberPreferences('me-pub')).resolves.toMatchObject({ eventReminderOffsets: '[1440]' });
         expect(fetchMock.mock.calls[0][0]).toBe('https://test.beanpool.org/api/members/preferences?publicKey=me-pub');
-        expect(buildSignedHeaders).toHaveBeenCalledWith('GET', '/api/members/preferences', '', 'me-priv', 'me-pub');
+        // Given the URL fetched; the path signed is its path without the query (@beanpool/core signedPathOf).
+        expect(buildSignedHeaders).toHaveBeenCalledWith('GET', 'https://test.beanpool.org/api/members/preferences?publicKey=me-pub', '', 'me-priv', 'me-pub');
+        expect(signedPathOf('https://test.beanpool.org/api/members/preferences?publicKey=me-pub')).toBe('/api/members/preferences');
     });
 });

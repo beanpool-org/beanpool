@@ -7,8 +7,8 @@ vi.mock('expo-local-authentication', () => ({
 }));
 
 vi.mock('../crypto', () => ({
-    buildSignedHeaders: vi.fn(async (method: string, path: string) => ({
-        'Content-Type': 'application/json', 'X-Public-Key': 'pk', 'X-Signature': `sig:${method}:${path}`, 'X-Timestamp': '1', 'X-Nonce': 'n',
+    buildSignedHeaders: vi.fn(async (method: string, url: string) => ({
+        'Content-Type': 'application/json', 'X-Public-Key': 'pk', 'X-Signature': `sig:${method}:${url}`, 'X-Timestamp': '1', 'X-Nonce': 'n',
     })),
     signData: vi.fn(),
     encodeUtf8: (s: string) => new TextEncoder().encode(s),
@@ -229,7 +229,7 @@ describe('the silent open check', () => {
         ]);
         expect(await runLockOpenCheck('https://anna.example.org/', ownerFromPwa, store, 1_000_000)).toBe('reported');
         expect(calls[0].url).toBe('https://anna.example.org/api/node/takeover-envelope/header');
-        expect((calls[0].init?.headers as Record<string, string>)['X-Signature']).toBe('sig:GET:/api/node/takeover-envelope/header');
+        expect((calls[0].init?.headers as Record<string, string>)['X-Signature']).toBe('sig:GET:https://anna.example.org/api/node/takeover-envelope/header');
         expect(calls[1].url).toBe('https://anna.example.org/api/node/owner/lock-open-check');
         expect(calls[1].init?.method).toBe('POST');
         expect(JSON.parse(String(calls[1].init?.body))).toEqual({ envelopeId: s.header.envelopeId, opened: true });

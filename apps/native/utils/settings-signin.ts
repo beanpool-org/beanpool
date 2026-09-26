@@ -7,18 +7,20 @@
  *   2. The node is asked about the pairing (GET …/pairing/<id>): its short code must match the one in the QR, and
  *      it says which browser asked ("Firefox on Windows") so the owner can notice a computer that isn't theirs.
  *   3. The owner confirms, then the phone's unlock — the same gate as Manage (requireDeviceUnlock, fails closed).
- *   4. The approval: the member key signs `beanpool-settings-signin:v1:approve:<id>:<code>` (the same Ed25519
- *      scheme as the Manage link's challenge). The node checks the live role and its 2FA code, and signs in only
- *      the browser that showed the code — it holds a secret this phone never sees. Nothing comes back to the
- *      phone but "done".
+ *   4. The approval: the member key signs `0xFF ‖ beanpool-settings-signin/2\n<host>\napprove\n<id>\n<code>`, bound
+ *      to the host the phone sends it to and sent with `signedFor: <host>` (request binding, member-statements.ts),
+ *      so a node that relays another community's pairing gets a signature that community refuses. A node older than
+ *      request binding gets the old `beanpool-settings-signin:v1:approve:<id>:<code>`. The node checks the live role
+ *      and its 2FA code, and signs in only the browser that showed the code — it holds a secret this phone never
+ *      sees. Nothing comes back to the phone but "done".
  *
  * Server: apps/server/src/settings-signin-pairing.ts. Page: apps/manager/src/components/auth/PhoneSignIn.tsx.
  */
 
 import { parseSettingsSigninQr, isSameNode, nodeOrigin, type SettingsSigninQr } from '@beanpool/core';
-import { signData, encodeUtf8, hexToBytes, encodeBase64 } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { requireDeviceUnlock } from './node-admin';
+import { oldPairingText, signPairing } from './member-statements';
 
 export type ScanResult =
     | { kind: 'ok'; qr: SettingsSigninQr }
@@ -95,16 +97,19 @@ export async function lookupPairing(qr: SettingsSigninQr): Promise<PairingLookup
     }
 }
 
-/** The exact text the member key signs. Must match pairingMessage() in the server's settings-signin-pairing.ts. */
+/** The old text, for a node older than request binding. Must match its pairingMessage() in settings-signin-pairing.ts. */
 export function signinMessage(action: 'approve' | 'decline', qr: SettingsSigninQr): string {
-    return `beanpool-settings-signin:v1:${action}:${qr.pairingId}:${qr.shortCode}`;
+    return oldPairingText(action, qr.pairingId, qr.shortCode);
 }
 
-/** The approval (or decline) request: POST …/pairing/<id>/<action>, JSON { memberPubkey, signature[, totpCode] }. */
+/**
+ * The approval (or decline) request: POST …/pairing/<id>/<action>, JSON { memberPubkey, signature[, signedFor][, totpCode] }.
+ * Signed for the host it is POSTed to (`qr.nodeUrl`, which readSigninScan has checked is this app's node).
+ */
 export async function buildSigninRequest(
     action: 'approve' | 'decline', qr: SettingsSigninQr, identity: BeanPoolIdentity, totpCode?: string,
 ): Promise<{ url: string; init: RequestInit }> {
-    const sig = await signData(encodeUtf8(signinMessage(action, qr)), hexToBytes(identity.privateKey));
+    const signed = await signPairing(qr.nodeUrl, action, qr.pairingId, qr.shortCode, identity.privateKey);
     return {
         url: `${qr.nodeUrl}${pairingPath(qr.pairingId)}/${action}`,
         init: {
@@ -112,7 +117,8 @@ export async function buildSigninRequest(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 memberPubkey: identity.publicKey,
-                signature: encodeBase64(sig),
+                signature: signed.signature,
+                ...(signed.signedFor ? { signedFor: signed.signedFor } : {}),
                 ...(action === 'approve' && totpCode ? { totpCode: totpCode.trim() } : {}),
             }),
         },

@@ -33,13 +33,14 @@ export async function signedPost(
     url: string, path: string, body: unknown, identity: BeanPoolIdentity,
 ): Promise<Response> {
     const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders(
-        'POST', path, bodyString, identity.privateKey, identity.publicKey,
-    );
     // Covered by "does not double the slash when the stored node URL ends in one" in
     // keeper-enrolment.test.ts — through the real call path rather than against a helper, which
     // is what makes it a regression test for this line rather than for a regex.
-    return fetch(`${url.replace(/\/+$/, '')}${path}`, {
+    const target = `${url.replace(/\/+$/, '')}${path}`;
+    const headers = await buildSignedHeaders(
+        'POST', target, bodyString, identity.privateKey, identity.publicKey,
+    );
+    return fetch(target, {
         method: 'POST', headers, body: bodyString,
     });
 }
@@ -51,10 +52,11 @@ export async function signedPost(
 export async function signedGet(
     url: string, path: string, identity: BeanPoolIdentity,
 ): Promise<Response> {
+    const target = `${url.replace(/\/+$/, '')}${path}`;
     const headers = await buildSignedHeaders(
-        'GET', path, '', identity.privateKey, identity.publicKey,
+        'GET', target, '', identity.privateKey, identity.publicKey,
     );
-    return fetch(`${url.replace(/\/+$/, '')}${path}`, {
+    return fetch(target, {
         method: 'GET', headers,
     });
 }
@@ -73,10 +75,11 @@ export async function signedGet(
 export async function signedDelete(
     url: string, path: string, identity: BeanPoolIdentity,
 ): Promise<Response> {
+    const target = `${url.replace(/\/+$/, '')}${path}`;
     const headers = await buildSignedHeaders(
-        'DELETE', path, '', identity.privateKey, identity.publicKey,
+        'DELETE', target, '', identity.privateKey, identity.publicKey,
     );
-    return fetch(`${url.replace(/\/+$/, '')}${path}`, {
+    return fetch(target, {
         method: 'DELETE', headers,
     });
 }

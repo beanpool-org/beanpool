@@ -1724,12 +1724,13 @@ export async function createPost(post: any) {
         ? `/api/treasury/${encodeURIComponent(enterpriseHost)}/event`
         : '/api/marketplace/posts';
     const bodyString = JSON.stringify(enterpriseHost ? bodyWithoutAuthor : body);
-    const headers = await buildSignedHeaders('POST', path, bodyString, identity.privateKey, identity.publicKey);
+    const postUrl = `${anchorUrl}${path}`;
+    const headers = await buildSignedHeaders('POST', postUrl, bodyString, identity.privateKey, identity.publicKey);
 
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(`${anchorUrl}${path}`, {
+        const res = await fetch(postUrl, {
             method: 'POST',
             headers,
             body: bodyString,
@@ -1752,8 +1753,8 @@ export async function createPost(post: any) {
                 // Same signal as in `_signedRequest`: the node has told us it holds no photo.
                 const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
                 if (healed) {
-                    const retryHeaders = await buildSignedHeaders('POST', path, bodyString, identity.privateKey, identity.publicKey);
-                    const retryRes = await fetch(`${anchorUrl}${path}`, {
+                    const retryHeaders = await buildSignedHeaders('POST', postUrl, bodyString, identity.privateKey, identity.publicKey);
+                    const retryRes = await fetch(postUrl, {
                         method: 'POST',
                         headers: retryHeaders,
                         body: bodyString,
@@ -1808,8 +1809,9 @@ export async function votePoll(postId: string, optionId: string) {
         voterPublicKey: identity.publicKey
     };
     const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/vote`, bodyString, identity.privateKey, identity.publicKey);
-    const res = await fetch(`${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/vote`, {
+    const voteUrl = `${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/vote`;
+    const headers = await buildSignedHeaders('POST', voteUrl, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(voteUrl, {
         method: 'POST',
         headers,
         body: bodyString
@@ -1893,7 +1895,7 @@ export async function rsvpEvent(postId: string, status: EventRsvpStatus | null) 
     const sig = await signData(encodeUtf8(rsvpSignedMessage(postId, status)), hexToBytes(identity.privateKey));
     const path = `/api/marketplace/posts/${encodeURIComponent(postId)}/rsvp`;
     const bodyString = JSON.stringify({ status, signature: encodeBase64(sig) });
-    const headers = await buildSignedHeaders('POST', path, bodyString, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}${path}`, bodyString, identity.privateKey, identity.publicKey);
     const res = await fetch(`${anchorUrl}${path}`, { method: 'POST', headers, body: bodyString });
     if (!res.ok) {
         const txt = await res.text();
@@ -1985,7 +1987,7 @@ export async function setEventReminder(postId: string, offsets: number[] | null)
 
     const path = `/api/events/${encodeURIComponent(postId)}/reminder`;
     const bodyString = JSON.stringify({ offsets });
-    const headers = await buildSignedHeaders('PUT', path, bodyString, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('PUT', `${anchorUrl}${path}`, bodyString, identity.privateKey, identity.publicKey);
     const res = await fetch(`${anchorUrl}${path}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', ...headers },
@@ -2044,8 +2046,9 @@ export async function closePoll(postId: string) {
         authorPublicKey: identity.publicKey
     };
     const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/close`, bodyString, identity.privateKey, identity.publicKey);
-    const res = await fetch(`${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/close`, {
+    const closeUrl = `${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/close`;
+    const headers = await buildSignedHeaders('POST', closeUrl, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(closeUrl, {
         method: 'POST',
         headers,
         body: bodyString
@@ -2125,7 +2128,7 @@ export async function deleteCrowdfundProjectApi(projectId: string) {
         creatorPubkey: identity.publicKey,
     };
     const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/crowdfund/projects/delete', bodyString, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/crowdfund/projects/delete`, bodyString, identity.privateKey, identity.publicKey);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -2610,7 +2613,7 @@ export async function deletePost(id: string) {
     if (!identity) throw new Error('Not logged in. Identity required.');
 
     const payload = JSON.stringify({ id, authorPublicKey: identity.publicKey });
-    const headers = await buildSignedHeaders('POST', '/api/marketplace/posts/remove', payload, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/marketplace/posts/remove`, payload, identity.privateKey, identity.publicKey);
 
     try {
         const res = await fetch(`${anchorUrl}/api/marketplace/posts/remove`, {
@@ -3756,7 +3759,7 @@ async function _deliverPendingMessage(
     const { DeviceEventEmitter } = require('react-native');
     try {
         const bodyString = JSON.stringify(body);
-        const headers = await buildSignedHeaders('POST', '/api/messages/send', bodyString, identity.privateKey, identity.publicKey);
+        const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/send`, bodyString, identity.privateKey, identity.publicKey);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         const res = await fetch(`${anchorUrl}/api/messages/send`, {
@@ -3844,7 +3847,7 @@ export async function editMessage(conversationId: string, messageId: string, new
 
     const body = { messageId, authorPubkey: identity.publicKey, ciphertext, nonce };
     const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/messages/edit', bodyString, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/edit`, bodyString, identity.privateKey, identity.publicKey);
 
     const res = await fetch(`${anchorUrl}/api/messages/edit`, { method: 'POST', headers, body: bodyString });
     if (!res.ok) {
@@ -3889,7 +3892,7 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
         metadata
     };
     const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/messages/send', bodyString, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/send`, bodyString, identity.privateKey, identity.publicKey);
     const res = await fetch(`${anchorUrl}/api/messages/send`, { method: 'POST', headers, body: bodyString });
     if (!res.ok) {
         let errMsg = 'Failed to send image.';
@@ -3989,7 +3992,7 @@ export async function createConversationApi(type: 'dm', participants: string[], 
     if (postId) body.postId = postId;
 
     const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/messages/conversation', bodyString, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/conversation`, bodyString, identity.privateKey, identity.publicKey);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -4144,7 +4147,7 @@ export async function redeemInvite(
             : { code: codePayload, publicKey: identity.publicKey, callsign };
         const bodyString = JSON.stringify(body);
         const endpoint = isOfflineTicket ? '/api/invite/redeem-offline' : '/api/invite/redeem';
-        const headers = await buildSignedHeaders('POST', endpoint, bodyString, identity.privateKey, identity.publicKey);
+        const headers = await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey);
 
         const stop = new AbortController();
         const timer = options.timeoutMs ? setTimeout(() => stop.abort(), options.timeoutMs) : undefined;
@@ -4320,7 +4323,7 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
     if (contactValue) payloadObj.contact = { value: contactValue, visibility: contactVisibility };
     if (publicArchetype) payloadObj.archetype = publicArchetype;
     const bodyString = JSON.stringify(payloadObj);
-    const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
     try {
         const res = await fetch(`${anchorUrl}/api/profile/update`, {
             method: 'POST',
@@ -4377,7 +4380,7 @@ async function _signedRequest(endpoint: string, payload: any) {
     if (!identity) throw new Error('No identity found. You must be logged in.');
 
     const bodyString = JSON.stringify(payload);
-    const headers = await buildSignedHeaders('POST', endpoint, bodyString, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -4419,7 +4422,7 @@ async function _signedRequest(endpoint: string, payload: any) {
             // still hold a (now broken) node URL.
             const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
             if (healed) {
-                const retryHeaders = await buildSignedHeaders('POST', endpoint, bodyString, identity.privateKey, identity.publicKey);
+                const retryHeaders = await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey);
                 const retryRes = await fetch(`${anchorUrl}${endpoint}`, {
                     method: 'POST',
                     headers: retryHeaders,
@@ -4460,8 +4463,8 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
     const identity = await loadIdentity();
     if (identity?.privateKey && identity?.publicKey) {
         try {
-            const signPath = path.split('?')[0];
-            const signedHeaders = await buildSignedHeaders('GET', signPath, '', identity.privateKey, identity.publicKey);
+            // The URL fetched below: its host is what is signed for, its path (no query) what the node checks.
+            const signedHeaders = await buildSignedHeaders('GET', `${anchorUrl}${path}`, '', identity.privateKey, identity.publicKey);
             headers = { ...headers, ...signedHeaders };
         } catch (e) {
             console.warn('[signedGet] Could not sign GET request:', e);
@@ -5353,8 +5356,7 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
     if (!identity) throw new Error('No identity found. You must be logged in.');
 
     const bodyString = payload !== undefined ? JSON.stringify(payload) : '';
-    const signPath = endpoint.split('?')[0];
-    const headers = await buildSignedHeaders(method, signPath, bodyString, identity.privateKey, identity.publicKey);
+    const headers = await buildSignedHeaders(method, `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey);
 
     const res = await fetch(`${anchorUrl}${endpoint}`, {
         method,

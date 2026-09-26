@@ -466,7 +466,7 @@ export default function PublicProfileScreen() {
                     archetype: publicArchetype,
                 };
                 const bodyString = JSON.stringify(payloadObj);
-                const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
+                const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
                 await fetch(`${url}/api/profile/update`, {
                     method: 'POST',
                     headers,

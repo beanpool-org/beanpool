@@ -260,9 +260,10 @@ export async function runLockOpenCheck(nodeUrl: string, identity: Keys, store: K
     const base = nodeUrl.replace(/\/+$/, '');
     const pin = await readLockPin(store, identity.publicKey);
     try {
-        const headers = await buildSignedHeaders('GET', TAKEOVER_HEADER_PATH, '', identity.privateKey, identity.publicKey);
+        const headerUrl = `${base}${TAKEOVER_HEADER_PATH}`;
+        const headers = await buildSignedHeaders('GET', headerUrl, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
-        const res = await fetch(`${base}${TAKEOVER_HEADER_PATH}`, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
+        const res = await fetch(headerUrl, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
         if (res.status === 403) {
             if (pin?.owner) await writeLockPin(store, identity.publicKey, { ...pin, owner: false });
             return 'not-owner';
@@ -280,8 +281,9 @@ export async function runLockOpenCheck(nodeUrl: string, identity: Keys, store: K
         }
         const opened = canOpenAsOwner(header, identity.privateKey);
         const report = JSON.stringify({ envelopeId: header.envelopeId, opened });
-        const postHeaders = await buildSignedHeaders('POST', OWNER_LOCK_OPEN_CHECK_PATH, report, identity.privateKey, identity.publicKey);
-        const sent = await fetch(`${base}${OWNER_LOCK_OPEN_CHECK_PATH}`, { method: 'POST', headers: { Accept: 'application/json', ...postHeaders }, body: report });
+        const reportUrl = `${base}${OWNER_LOCK_OPEN_CHECK_PATH}`;
+        const postHeaders = await buildSignedHeaders('POST', reportUrl, report, identity.privateKey, identity.publicKey);
+        const sent = await fetch(reportUrl, { method: 'POST', headers: { Accept: 'application/json', ...postHeaders }, body: report });
         // Only a delivered report counts: otherwise the next run tries again.
         await writeLockPin(store, identity.publicKey, sent.ok ? { ...learnt, lastEnvelopeId: header.envelopeId } : learnt);
         return sent.ok ? 'reported' : 'offline';

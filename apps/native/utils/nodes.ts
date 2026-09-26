@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { audienceOf } from '@beanpool/core';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
+import {
+    hydrateRequestSigning, knownRequestSigning, rememberRequestSigning, requestSigningOf,
+} from './request-signing-version';
 
 export interface SavedNode {
     url: string;
@@ -7,6 +11,11 @@ export interface SavedNode {
     lastConnected?: string;
     currencyType?: 'text' | 'image';
     currencyValue?: string;
+    /**
+     * What the node's /api/community/info said about request signing (request-signing-version.ts): 2 or more for
+     * a server that reads format 2, 1 when it answered without saying. Absent: not asked yet (format 2 is used).
+     */
+    requestSigning?: number;
 }
 
 export async function getSavedNodes(): Promise<SavedNode[]> {
@@ -31,7 +40,11 @@ export async function addSavedNode(url: string, alias?: string, currencyType?: '
     const nodes = await getSavedNodes();
     const existing = nodes.find(n => n.url === url);
     if (!existing) {
-        nodes.push({ url, alias, lastConnected: new Date().toISOString(), currencyType, currencyValue });
+        const requestSigning = knownRequestSigning(url);
+        nodes.push({
+            url, alias, lastConnected: new Date().toISOString(), currencyType, currencyValue,
+            ...(requestSigning !== undefined ? { requestSigning } : {}),
+        });
     } else {
         existing.lastConnected = new Date().toISOString();
         if (alias) existing.alias = alias;
@@ -39,6 +52,36 @@ export async function addSavedNode(url: string, alias?: string, currencyType?: '
         if (currencyValue) existing.currencyValue = currencyValue;
     }
     await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
+}
+
+/**
+ * Record what `url`'s `GET /api/community/info` answered about request signing: for this run at once, and on every
+ * saved node with the same host for the next. `infoBody` is the parsed answer; anything that isn't an info answer
+ * records nothing. Never throws.
+ */
+export async function recordRequestSigning(url: string, infoBody: unknown): Promise<void> {
+    const version = requestSigningOf(infoBody);
+    if (version === null) return;
+    const host = rememberRequestSigning(url, version);
+    if (!host) return;
+    try {
+        const nodes = await getSavedNodes();
+        let changed = false;
+        for (const n of nodes) {
+            if (audienceOf(n.url) === host && n.requestSigning !== version) {
+                n.requestSigning = version;
+                changed = true;
+            }
+        }
+        if (changed) await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
+    } catch {
+        // Kept in memory for this run; asked again on the next.
+    }
+}
+
+/** Load each saved node's recorded request-signing answer into memory (app start, utils/node-request-signing.ts). */
+export function loadSavedRequestSigning(): Promise<void> {
+    return hydrateRequestSigning(getSavedNodes);
 }
 
 export async function removeSavedNode(url: string) {

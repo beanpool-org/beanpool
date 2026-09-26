@@ -2,7 +2,11 @@ import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { getPublicKey, sign, verify, etc, hashes } from '@noble/ed25519';
 import * as Crypto from 'expo-crypto';
 import { WORDLIST } from '../../pwa/src/lib/bip39-wordlist';
-import { toEd25519Seed } from '@beanpool/core';
+import {
+    toEd25519Seed, audienceOf, buildBoundRequestHeaders, buildBoundWsParams, unboundRequestText, signedPathOf, utf8Bytes, toBase64,
+    type Signer,
+} from '@beanpool/core';
+import { requestSigningFormatFor } from './request-signing-version';
 
 if (typeof global.crypto !== 'object') {
     (global as any).crypto = {};
@@ -194,50 +198,89 @@ export async function signData(message: Uint8Array, privateKey: Uint8Array): Pro
 }
 
 /**
+ * The member key as @beanpool/core's `Signer`. Handed only to core's builders and to the old-form fallbacks for a
+ * server older than request binding (here and in member-statements.ts): the app never signs bytes a node chose.
+ * utils/__tests__/request-binding-source-rule.test.ts holds every caller to that.
+ */
+export function memberSigner(privateKeyHex: string): Signer {
+    const key = hexToBytes(privateKeyHex);
+    return (bytes) => signData(bytes, key);
+}
+
+/**
  * X-1: build replay-proof signed-request headers (single source of truth for
- * HTTP request signing — X-2). Signs `METHOD\nPATH\nTIMESTAMP\nNONCE\nBODY` so a
- * captured signature can't be replayed or reused against a different endpoint.
+ * HTTP request signing — X-2). `url` is the FULL URL the fetch will use: the host
+ * signed for and the path signed are both read from it (@beanpool/core
+ * `audienceOf` / `signedPathOf`), so they can't drift from what is fetched.
  *
- * `path` MUST be the request pathname (no origin, no query string) and identical
- * to what the fetch URL uses, so it matches the server's `ctx.path`.
+ * Format 2 (request binding): `0xFF ‖ beanpool-request/2\nHOST\nMETHOD\nPATH\nTS\nNONCE\nBODY`
+ * plus `X-Signed-For: HOST`, so the signature counts only at the community it was
+ * sent to. The old `METHOD\nPATH\nTS\nNONCE\nBODY` only for a node whose info said
+ * it predates that (request-signing-version.ts).
  */
 export async function buildSignedHeaders(
     method: string,
-    path: string,
+    url: string,
     bodyString: string,
     privateKeyHex: string,
     publicKeyHex: string,
 ): Promise<Record<string, string>> {
-    const timestamp = String(Date.now());
-    const nonce = bytesToHex(Crypto.getRandomBytes(16));
-    const canonical = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyString}`;
-    const signatureBytes = await signData(encodeUtf8(canonical), hexToBytes(privateKeyHex));
-    return {
-        'Content-Type': 'application/json',
-        'X-Public-Key': publicKeyHex,
-        'X-Signature': encodeBase64(signatureBytes),
-        'X-Timestamp': timestamp,
-        'X-Nonce': nonce,
-    };
+    if (!audienceOf(url)) throw new Error(`Cannot sign a request for ${JSON.stringify(url)}: pass the full URL fetched`);
+    const sign = memberSigner(privateKeyHex);
+    const signed = await requestSigningFormatFor(url) === 2
+        ? await buildBoundRequestHeaders({ method, url, body: bodyString, publicKeyHex, sign, nonce: freshNonce() })
+        : await unboundRequestHeaders(method, url, bodyString, publicKeyHex, sign);
+    return { 'Content-Type': 'application/json', ...signed };
 }
 
 /**
  * WebSocket connect auth (SRV-4). Produces signed query params for the `/ws`
  * handshake, mirroring the HTTP replay-proof scheme (method=`WS`, path,
- * timestamp, nonce, empty body). The node gives the full live feed only to a
+ * timestamp, nonce, empty body). `wsUrl` is the full `ws(s)://…/ws` URL the socket
+ * opens (before its query). The node gives the full live feed only to a
  * member-signed socket; an unsigned one gets public doorbells only. Returns a
- * `&`-joinable query fragment.
+ * `&`-joinable query fragment: in format 2 it adds `for=HOST&v=2`.
  */
 export async function buildSignedWsParams(
-    path: string,
+    wsUrl: string,
     privateKeyHex: string,
     publicKeyHex: string,
 ): Promise<string> {
+    if (!audienceOf(wsUrl)) throw new Error(`Cannot sign a socket for ${JSON.stringify(wsUrl)}: pass the full URL opened`);
+    const sign = memberSigner(privateKeyHex);
+    return await requestSigningFormatFor(wsUrl) === 2
+        ? buildBoundWsParams({ wsUrl, publicKeyHex, sign, nonce: freshNonce() })
+        : unboundWsParams(wsUrl, publicKeyHex, sign);
+}
+
+function freshNonce(): string {
+    return bytesToHex(Crypto.getRandomBytes(16));
+}
+
+// ── The old format, for a server older than request binding ──────────────────────────────────────────────
+// Only for a node whose /api/community/info answered without `requestSigning` (request-signing-version.ts).
+// Byte for byte what builds before it sent, through core's `unboundRequestText`. Every server refuses it after
+// the switch, so a node that only pretends to be old gains nothing lasting.
+
+async function unboundRequestHeaders(
+    method: string, url: string, bodyString: string, publicKeyHex: string, sign: Signer,
+): Promise<Record<string, string>> {
     const timestamp = String(Date.now());
-    const nonce = bytesToHex(Crypto.getRandomBytes(16));
-    const canonical = `WS\n${path}\n${timestamp}\n${nonce}\n`;
-    const signatureBytes = await signData(encodeUtf8(canonical), hexToBytes(privateKeyHex));
-    const sig = encodeBase64(signatureBytes);
+    const nonce = freshNonce();
+    const text = unboundRequestText({ method: method.toUpperCase(), path: signedPathOf(url), timestamp, nonce, body: bodyString });
+    return {
+        'X-Public-Key': publicKeyHex,
+        'X-Signature': toBase64(await sign(utf8Bytes(text))),
+        'X-Timestamp': timestamp,
+        'X-Nonce': nonce,
+    };
+}
+
+async function unboundWsParams(wsUrl: string, publicKeyHex: string, sign: Signer): Promise<string> {
+    const timestamp = String(Date.now());
+    const nonce = freshNonce();
+    const text = unboundRequestText({ method: 'WS', path: signedPathOf(wsUrl), timestamp, nonce, body: '' });
+    const sig = toBase64(await sign(utf8Bytes(text)));
     return `pubkey=${encodeURIComponent(publicKeyHex)}&ts=${timestamp}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
 }
 

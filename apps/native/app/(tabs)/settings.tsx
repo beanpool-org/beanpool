@@ -20,7 +20,7 @@ import { getCanonicalProfile } from '../../utils/canonical-profile';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../../utils/avatar-value';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
-import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
+import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -783,6 +783,7 @@ export default function SettingsScreen() {
                     const res = await fetch(`${cleanUrl}/api/community/info?_t=${Date.now()}`);
                      if (res.ok) {
                         const data = await res.json();
+                        await recordRequestSigning(cleanUrl, data);
                         let remoteTxCount = data.transactionCount || 0;
                         
                         if (identity?.publicKey) {
@@ -1043,7 +1044,7 @@ export default function SettingsScreen() {
                     }) : archetypeRaw;
                 }
                 const bodyString = JSON.stringify(payloadObj);
-                const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
+                const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
 
                 let res: Response | null = null;
                 try {

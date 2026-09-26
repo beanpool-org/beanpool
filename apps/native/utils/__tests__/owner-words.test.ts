@@ -26,6 +26,7 @@ import {
 } from '../owner-words';
 import { OWNER_WORDS_TEXT_ON, OWNER_WORDS_TOUCH_TARGETS, ownerWordsStyleSpec } from '../owner-words-style';
 import { lightColors, darkColors } from '../../constants/colors';
+import { boundSignatureValid } from './server-signature-check';
 
 const WORDS = 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' ');
 const SEED = sha256(sha256(utf8ToBytes(WORDS.join(' '))));
@@ -113,10 +114,10 @@ describe('the words never leave the phone and are never stored', () => {
             const calls = mockFetch({ status: 200, body: { wordsCheckedAt: 1 } });
             await sendOwnerWordsAttestation(NODE, who);
             const h = calls[0].init!.headers as Record<string, string>;
-            const msg = `POST\n/api/node/owner/words-check\n${h['X-Timestamp']}\n${h['X-Nonce']}\n${calls[0].init!.body}`;
-            const sig = Uint8Array.from(Buffer.from(h['X-Signature'], 'base64'));
             expect(h['X-Public-Key']).toBe(PUB);
-            expect(ed25519.verify(sig, utf8ToBytes(msg), hexToBytes(PUB))).toBe(true);
+            // Signed for the community it went to, as that node checks it (request binding).
+            expect(h['X-Signed-For']).toBe('test.beanpool.org');
+            expect(boundSignatureValid({ url: calls[0].url, method: 'POST', headers: h, body: String(calls[0].init!.body) }, PUB)).toBe(true);
             expect(calls[0].url).toBe('https://test.beanpool.org/api/node/owner/words-check');
         }
     });

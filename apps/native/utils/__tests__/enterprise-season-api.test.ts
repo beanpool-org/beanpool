@@ -19,13 +19,14 @@ vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: 
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
-    buildSignedHeaders: vi.fn(async (method: string, path: string) => ({ 'X-Signed': `${method} ${path}` })),
+    buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
 import {
     pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp, getEnterpriseLedger,
 } from '../db';
 import { buildSignedHeaders } from '../crypto';
+import { signedPathOf } from '@beanpool/core';
 
 const fetchMock = vi.fn();
 
@@ -58,9 +59,9 @@ describe('enterprise season calls (native API client)', () => {
             expect(url).toBe(`https://test.beanpool.org${path}`);
             expect(init.method).toBe('POST');
             expect(init.body).toBe('{}');
-            // Signed over the exact path and body it sends — no actor rides the body.
-            expect(buildSignedHeaders).toHaveBeenCalledWith('POST', path, '{}', 'me-priv', 'me-pub');
-            expect(init.headers).toEqual({ 'X-Signed': `POST ${path}` });
+            // Signed over the exact URL and body it sends — no actor rides the body.
+            expect(buildSignedHeaders).toHaveBeenCalledWith('POST', `https://test.beanpool.org${path}`, '{}', 'me-priv', 'me-pub');
+            expect(init.headers).toEqual({ 'X-Signed': `POST https://test.beanpool.org${path}` });
         });
     }
 
@@ -79,7 +80,9 @@ describe('getEnterpriseLedger', () => {
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toBe('https://test.beanpool.org/api/enterprise/ent1/ledger?since=2026-08-18T00%3A00%3A00.000Z');
         expect(init.method).toBe('GET');
-        expect(buildSignedHeaders).toHaveBeenCalledWith('GET', '/api/enterprise/ent1/ledger', '', 'me-priv', 'me-pub');
+        // Given the URL fetched; the path signed is its path without the query (@beanpool/core signedPathOf).
+        expect(buildSignedHeaders).toHaveBeenCalledWith('GET', url, '', 'me-priv', 'me-pub');
+        expect(signedPathOf(url)).toBe('/api/enterprise/ent1/ledger');
     });
 
     it('has no query string for all time', async () => {

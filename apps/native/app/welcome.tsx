@@ -842,7 +842,7 @@ export default function WelcomeScreen() {
                             callsign: pendingIdentity.callsign,
                         };
                         const bodyString = JSON.stringify(payloadObj);
-                        const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
+                        const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
                         const res = await fetch(`${url}/api/profile/update`, {
                             method: 'POST',
                             headers,
@@ -1466,7 +1466,7 @@ export default function WelcomeScreen() {
                         callsign: pendingIdentity.callsign,
                     };
                     const bodyString = JSON.stringify(payloadObj);
-                    const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
+                    const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
                     const res = await fetch(`${url}/api/profile/update`, {
                         method: 'POST',
                         headers,

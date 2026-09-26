@@ -6,23 +6,30 @@ vi.mock('expo-local-authentication', () => ({
     authenticateAsync: vi.fn(),
 }));
 
-vi.mock('../crypto', () => ({
-    buildSignedHeaders: vi.fn(),
-    signData: vi.fn(async () => new Uint8Array([1, 2, 3])),
-    encodeUtf8: (s: string) => new TextEncoder().encode(s),
-    hexToBytes: () => new Uint8Array(32),
-    encodeBase64: () => 'AQID',
-}));
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: (n: number) => new Uint8Array(randomBytes(n)) };
+});
+// The app's own signer, watched: the member key signs through @noble/ed25519's sign (utils/crypto.ts signData).
+vi.mock('@noble/ed25519', async (orig) => {
+    const real = await orig<typeof import('@noble/ed25519')>();
+    return { ...real, sign: vi.fn(real.sign) };
+});
 
 import * as LocalAuthentication from 'expo-local-authentication';
-import { buildSettingsSigninQr } from '@beanpool/core';
-import { signData } from '../crypto';
+import { sign as memberKeySign } from '@noble/ed25519';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { buildSettingsSigninQr, settingsSigninText, signedRequestBytes, utf8Bytes } from '@beanpool/core';
 import {
     readSigninScan, scanProblemMessage, lookupPairing, buildSigninRequest, signinMessage,
     approveComputerSignin, declineComputerSignin, formatShortCode,
 } from '../settings-signin';
+import { rememberRequestSigning, resetRequestSigningForTests } from '../request-signing-version';
 
-const identity = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'me', createdAt: '' };
+const SEED = new Uint8Array(32).fill(9);
+const identity = { publicKey: Buffer.from(ed25519.getPublicKey(SEED)).toString('hex'), privateKey: Buffer.from(SEED).toString('hex'), callsign: 'me', createdAt: '' };
+const signedBy = (sigB64: string, bytes: Uint8Array) =>
+    ed25519.verify(Buffer.from(sigB64, 'base64'), bytes, Buffer.from(identity.publicKey, 'hex'));
 const ID = '0123456789abcdef'.repeat(4);
 const APP_NODE = 'https://mullum.beanpool.org/';
 const qrText = (node = 'https://mullum.beanpool.org', pairingId = ID, shortCode = 'K7F3QX') => buildSettingsSigninQr({ nodeUrl: node, pairingId, shortCode });
@@ -119,24 +126,37 @@ describe('asking the node about the pairing', () => {
 describe('the approval request', () => {
     const qr = { nodeUrl: 'https://mullum.beanpool.org', pairingId: ID, shortCode: 'K7F3QX' };
 
-    it('signs exactly beanpool-settings-signin:v1:approve:<id>:<code> with the member key', async () => {
+    beforeEach(() => resetRequestSigningForTests());
+
+    it('signs 0xFF ‖ beanpool-settings-signin/2 for the host it is sent to, and says which host (signedFor)', async () => {
         const { url, init } = await buildSigninRequest('approve', qr, identity);
         expect(url).toBe(`https://mullum.beanpool.org/api/local/admin/auth/pairing/${ID}/approve`);
         expect(init.method).toBe('POST');
         expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
-        expect(JSON.parse(init.body as string)).toEqual({ memberPubkey: identity.publicKey, signature: 'AQID' });
-        const signed = new TextDecoder().decode(vi.mocked(signData).mock.calls[0][0] as Uint8Array);
-        expect(signed).toBe(`beanpool-settings-signin:v1:approve:${ID}:K7F3QX`);
-        expect(signed).toBe(signinMessage('approve', qr));
+        const body = JSON.parse(init.body as string);
+        expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org' });
+        expect(signedBy(body.signature, signedRequestBytes(settingsSigninText('mullum.beanpool.org', 'approve', ID, 'K7F3QX')))).toBe(true);
+        // Not the old unbound text, which any community could relay.
+        expect(signedBy(body.signature, utf8Bytes(signinMessage('approve', qr)))).toBe(false);
+    });
+
+    it('signs exactly beanpool-settings-signin:v1:approve:<id>:<code> with the member key for a node older than request binding', async () => {
+        rememberRequestSigning('https://mullum.beanpool.org', 1);
+        const { init } = await buildSigninRequest('approve', qr, identity);
+        const body = JSON.parse(init.body as string);
+        expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String) });
+        expect(signinMessage('approve', qr)).toBe(`beanpool-settings-signin:v1:approve:${ID}:K7F3QX`);
+        expect(signedBy(body.signature, utf8Bytes(`beanpool-settings-signin:v1:approve:${ID}:K7F3QX`))).toBe(true);
     });
 
     it('carries the 2FA code on an approval only, trimmed', async () => {
         const a = await buildSigninRequest('approve', qr, identity, ' 123456 ');
         expect(JSON.parse(a.init.body as string).totpCode).toBe('123456');
         const d = await buildSigninRequest('decline', qr, identity, '123456');
-        expect(JSON.parse(d.init.body as string)).toEqual({ memberPubkey: identity.publicKey, signature: 'AQID' });
+        const declined = JSON.parse(d.init.body as string);
+        expect(declined).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org' });
         expect(d.url.endsWith('/decline')).toBe(true);
-        expect(new TextDecoder().decode(vi.mocked(signData).mock.calls[1][0] as Uint8Array)).toBe(`beanpool-settings-signin:v1:decline:${ID}:K7F3QX`);
+        expect(signedBy(declined.signature, signedRequestBytes(settingsSigninText('mullum.beanpool.org', 'decline', ID, 'K7F3QX')))).toBe(true);
     });
 
     it('never sends a private key', async () => {
@@ -154,7 +174,7 @@ describe('the "Sign in" press', () => {
         const calls = mockFetch([{ status: 200, body: { success: true } }]);
         expect(await approveComputerSignin(opts)).toEqual({ kind: 'unlock-failed' });
         expect(calls).toHaveLength(0);
-        expect(signData).not.toHaveBeenCalled();
+        expect(memberKeySign).not.toHaveBeenCalled();
     });
 
     it('fails closed on a phone with no screen lock', async () => {

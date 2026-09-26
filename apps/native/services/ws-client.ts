@@ -123,7 +123,8 @@ class WebSocketSyncClient {
             // ENFORCE_WS_AUTH=true). Sent by every build since v1.1.56.
             if (identity && identity.privateKey && identity.publicKey) {
                 try {
-                    params.push(await buildSignedWsParams('/ws', identity.privateKey, identity.publicKey));
+                    // Signed over the URL the socket opens: its host (request binding) and its path.
+                    params.push(await buildSignedWsParams(wsUrl, identity.privateKey, identity.publicKey));
                 } catch (err) {
                     console.warn('[WS Sync] Failed to sign WS connect', err);
                 }

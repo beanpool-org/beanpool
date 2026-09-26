@@ -51,7 +51,7 @@ import { removeCommunityCaches } from '../community-cache';
 import { clearDB, closeDB } from '../db';
 import { resetSyncFingerprints } from '../../services/pillar-sync';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
-import { decodeBase64, encodeUtf8, hexToBytes, verifyData } from '../crypto';
+import { boundSignatureValid } from './server-signature-check';
 import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
@@ -99,15 +99,16 @@ function nodes(answer: (url: string) => Answer = () => 'ok'): Sent[] {
     return sent;
 }
 
-/** A DELETE /api/push-tokens for this token, signed by this key (checked against the key, not just named). */
+/**
+ * A DELETE /api/push-tokens for this token, signed by this key (checked against the key, not just named) for the
+ * community it was sent to, as that node checks it (request binding).
+ */
 async function unregisters(req: Sent, account: BeanPoolIdentity, token = PHONE_TOKEN): Promise<boolean> {
-    const h = req.headers;
-    const canonical = `DELETE\n/api/push-tokens\n${h['X-Timestamp']}\n${h['X-Nonce']}\n${req.body}`;
     const body = JSON.parse(req.body);
     return req.method === 'DELETE'
-        && h['X-Public-Key'] === account.publicKey
+        && new URL(req.url).pathname === '/api/push-tokens'
         && body.publicKey === account.publicKey && body.token === token
-        && await verifyData(decodeBase64(h['X-Signature']), encodeUtf8(canonical), hexToBytes(account.publicKey));
+        && boundSignatureValid({ url: req.url, method: 'DELETE', headers: req.headers, body: req.body }, account.publicKey);
 }
 
 const pushTokensAt = (...communities: string[]) => communities.map((c) => `${c}/api/push-tokens`).sort();

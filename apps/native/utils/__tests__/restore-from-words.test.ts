@@ -39,7 +39,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { restoreFromWords, ReplaceNotSaved } from '../restore-account';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
-import { decodeBase64, encodeUtf8, hexToBytes, mnemonicToKeypair, verifyData } from '../crypto';
+import { mnemonicToKeypair } from '../crypto';
+import { boundSignatureValid } from './server-signature-check';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
 import { removeCommunityCaches } from '../community-cache';
 
@@ -305,11 +306,10 @@ function nodes(answer: (url: string) => 'ok' | 'down' = () => 'ok'): Sent[] {
 
 /** A DELETE /api/push-tokens for the phone's token, signed by this key (the signature checked, not just the name). */
 async function unregisters(req: Sent, publicKey: string): Promise<boolean> {
-    const h = req.headers;
     const body = JSON.parse(req.body);
-    const canonical = `DELETE\n/api/push-tokens\n${h['X-Timestamp']}\n${h['X-Nonce']}\n${req.body}`;
-    return req.method === 'DELETE' && h['X-Public-Key'] === publicKey && body.publicKey === publicKey && body.token === PHONE_TOKEN
-        && await verifyData(decodeBase64(h['X-Signature']), encodeUtf8(canonical), hexToBytes(publicKey));
+    return req.method === 'DELETE' && new URL(req.url).pathname === '/api/push-tokens'
+        && body.publicKey === publicKey && body.token === PHONE_TOKEN
+        && boundSignatureValid({ url: req.url, method: 'DELETE', headers: req.headers, body: req.body }, publicKey);
 }
 
 describe('a 12-word Replace takes the old account\'s push alerts and communities', () => {

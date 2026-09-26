@@ -9,16 +9,18 @@
  *   2. The phone's own unlock (fingerprint, face or device PIN) before any link is requested. A phone with
  *      no lock set gets an explanation, not a link — this path FAILS CLOSED, unlike the app-lock helper in
  *      LocalAuth.ts, which opens on a lockless phone on purpose so nobody is locked out of their own account.
- *   3. The node's challenge is signed with the member key; the node answers with a 60-second, single-use
- *      token (and still asks for its own 2FA code if the owner turned 2FA on).
+ *   3. The member key signs a sign-in text the phone builds from the node's challenge id (request binding: bound
+ *      to this node's host, member-statements.ts); the node answers with a 60-second, single-use token (and
+ *      still asks for its own 2FA code if the owner turned 2FA on).
  *   4. The token travels in the URL FRAGMENT (`/settings#handoff=…`): fragments are never sent to a server,
  *      so it cannot land in a proxy or access log or a Referer header. The page posts it to the node once
  *      and wipes it from the address bar.
  */
 
 import * as LocalAuthentication from 'expo-local-authentication';
-import { buildSignedHeaders, signData, encodeUtf8, hexToBytes, encodeBase64 } from './crypto';
+import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
+import { signAdminChallenge, UnsignableChallengeError, type SignedStatement } from './member-statements';
 
 import { canManageNode, manageLabel, manageSubtitle, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem } from './node-role';
 
@@ -46,10 +48,10 @@ const NO_ROLE: MyNodeRole = { role: null, communityName: null };
 /** As fetchMyNodeRole, but null when the node gave no answer at all (offline, a 5xx), as opposed to "no role". */
 async function askNodeRole(nodeUrl: string, identity: BeanPoolIdentity): Promise<MyNodeRole | null> {
     try {
-        const path = '/api/node-admin/me';
-        const headers = await buildSignedHeaders('GET', path, '', identity.privateKey, identity.publicKey);
+        const url = `${base(nodeUrl)}/api/node-admin/me`;
+        const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
-        const res = await fetch(`${base(nodeUrl)}${path}`, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
         if (!res.ok) return res.status < 500 ? NO_ROLE : null;
         const body = await res.json() as { role?: unknown; communityName?: unknown };
         return {
@@ -101,10 +103,10 @@ export function forgetNodeRole(nodeUrl: string, publicKey: string): void {
 /** Pending admin work on this node (for the header badge). Null when unavailable or not an admin. */
 export async function fetchAdminQueue(nodeUrl: string, identity: BeanPoolIdentity): Promise<{ total: number; items: AdminQueueItem[] } | null> {
     try {
-        const path = '/api/node-admin/queue';
-        const headers = await buildSignedHeaders('GET', path, '', identity.privateKey, identity.publicKey);
+        const url = `${base(nodeUrl)}/api/node-admin/queue`;
+        const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
-        const res = await fetch(`${base(nodeUrl)}${path}`, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
         if (!res.ok) return null;
         const body = await res.json() as { total?: unknown; items?: unknown };
         if (typeof body.total !== 'number' || !Array.isArray(body.items)) return null;
@@ -149,26 +151,37 @@ export type LinkResult =
     | { kind: 'refused'; message: string }
     | { kind: 'error'; message: string };
 
-/** Sign the node's challenge with the member key and get the 60-second, single-use sign-in token. */
+/**
+ * Sign in to the node's Settings with the member key and get the 60-second, single-use sign-in token. The phone
+ * signs a text it builds from the challenge id alone, never the node's text (member-statements.ts): a node that
+ * sends anything else gets nothing signed.
+ */
 export async function requestSettingsLink(nodeUrl: string, identity: BeanPoolIdentity, totpCode?: string): Promise<LinkResult> {
     try {
         const chalRes = await fetch(`${base(nodeUrl)}/api/local/admin/auth/challenge`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
         });
         const chal = await chalRes.json().catch(() => ({})) as { challengeId?: string; challenge?: string; error?: string };
-        if (!chalRes.ok || !chal.challengeId || !chal.challenge) {
+        if (!chalRes.ok || !chal.challengeId) {
             return chalRes.status === 403
                 ? { kind: 'refused', message: chal.error || 'The node refused the request.' }
                 : { kind: 'error', message: chal.error || `The node did not answer (${chalRes.status}).` };
         }
-        const sig = await signData(encodeUtf8(chal.challenge), hexToBytes(identity.privateKey));
+        let signed: SignedStatement;
+        try {
+            signed = await signAdminChallenge(nodeUrl, chal, identity.privateKey);
+        } catch (e) {
+            if (e instanceof UnsignableChallengeError) return { kind: 'error', message: e.message };
+            throw e;
+        }
         const res = await fetch(`${base(nodeUrl)}/api/local/admin/auth/verify-challenge`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 challengeId: chal.challengeId,
                 memberPubkey: identity.publicKey,
-                signature: encodeBase64(sig),
+                signature: signed.signature,
+                ...(signed.signedFor ? { signedFor: signed.signedFor } : {}),
                 ...(totpCode ? { totpCode: totpCode.trim() } : {}),
             }),
         });

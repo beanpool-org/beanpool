@@ -23,6 +23,7 @@
  * If this file ever grows a request to a host that is NOT a localhost forward, revisit it — that is the change
  * that would make the global flag genuinely wrong.
  */
+/* global process, URL, fetch, console -- a Node script; the repo's lint config declares no Node globals for scripts/ */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 import crypto from 'node:crypto';

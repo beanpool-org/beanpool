@@ -5352,12 +5352,14 @@ export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } 
     return importRemoteStateEngine(getSyncCb(), remote)
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
-            // and at a whole copy removes the copies that server deleted before it; sent copies in the client's form after
-            // it cleared (a rollback), it clears again (services/recovery-seal-key.ts). Never throws.
+            // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new
+            // seal epoch from its main server, or copies sent in the client's form after it cleared), it clears again
+            // (services/recovery-seal-key.ts). Never throws.
             clearCopiesDroppedBeforeSeal({
                 standby: getNodeRole() === 'backup',
                 wholeCopy: opts.full && Array.isArray(remote.recoveryShares) ? remote.recoveryShares : null,
                 imported: Array.isArray(remote.recoveryShares) ? remote.recoveryShares : null,
+                mainEpoch: remote.sealEpoch,
             });
             return result;
         })

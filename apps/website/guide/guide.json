@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 52,
-  "hash": "f21971351634040337f742c7dc03cf66beb5b8112b2369ebac7219e6cea7dade",
+  "version": 53,
+  "hash": "167bb20ea99272866fdb812d0a9fbd5fbcab7d129be10e5097f42153d4ca4aab",
   "sections": [
     {
       "id": "about",
@@ -1135,7 +1135,7 @@
           "type": "ul",
           "items": [
             "Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.",
-            "Or tap **Account Protection**, then **Show My 12 Recovery Words**. Tap **Hide** when you are done."
+            "Or tap **Account Protection**, then **Show My 12 Recovery Words**, and pass your phone's lock screen check. Tap **Hide** when you are done."
           ]
         },
         {
@@ -4955,7 +4955,7 @@
         },
         {
           "type": "p",
-          "text": "Make sure you have the 12 words for the account you are replacing. If this phone has them, that screen shows them when you tap **Show** (the account's name) **12 words**. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back."
+          "text": "Make sure you have the 12 words for the account you are replacing. If this phone has them, that screen shows them when you tap **Show** (the account's name) **12 words** and pass your phone's lock screen check. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back."
         },
         {
           "type": "h2",

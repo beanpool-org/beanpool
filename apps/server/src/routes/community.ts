@@ -62,6 +62,8 @@ import { logger } from '../logger.js';
 import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
+import { avatarKeysRequired } from '../engine/avatar-keys.js';
+import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
@@ -805,7 +807,10 @@ router.get('/api/community/health', async (ctx) => {
 router.get('/api/community/membership/:publicKey', async (ctx) => {
     const member = getMember(ctx.params.publicKey);
     if (member) {
-        ctx.body = { isMember: true, callsign: member.callsign };
+        // On a node that shows visitors the listings and not the people (G9a), a key is not turned into a name for
+        // anyone but its holder: the web app adopting its own name and the phone's probe both sign as that key.
+        const named = !getProfileSwitches().guestListingsOnly || ctx.state.actor === ctx.params.publicKey;
+        ctx.body = { isMember: true, callsign: named ? member.callsign : null };
     } else {
         ctx.body = {
             isMember: false,
@@ -911,6 +916,35 @@ router.post('/api/invite/generate', async (ctx) => {
     ctx.body = { success: true, invite };
 });
 
+/**
+ * The member card a redeem answers with. A new join's is its own. An existing member's, on a node that shows guests the
+ * listings and not the people, goes only to a request signed by that member's key: the phone re-entering signs its
+ * redeem with it and reads its own photo from the card (native utils/db.ts redeemInvite). Anyone else holding a code or
+ * a ticket learns only that the key is a member, as the public membership probe says, and not its name or face.
+ */
+function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMemberCard>[0]; alreadyMember?: boolean }, publicKey: string) {
+    if (!result.member) return undefined;
+    if (result.alreadyMember && getProfileSwitches().guestListingsOnly && !signedByKey(ctx, publicKey)) return undefined;
+    return publicMemberCard(result.member);
+}
+
+/**
+ * Whether this request carries a fresh signature by `publicKey` itself, in the replay-proof scheme the signature
+ * middleware checks. The two redeem routes skip that middleware (the joiner may hold no member key yet), and both apps
+ * sign them anyway. Only ever decides what an answer holds, never refuses one, so the nonce is not spent here.
+ */
+function signedByKey(ctx: any, publicKey: string): boolean {
+    const signer = ctx.get('X-Public-Key');
+    const signature = ctx.get('X-Signature');
+    const timestamp = ctx.get('X-Timestamp');
+    const nonce = ctx.get('X-Nonce');
+    if (!signer || !signature || !timestamp || !nonce || typeof publicKey !== 'string' || signer.toLowerCase() !== publicKey.toLowerCase()) return false;
+    if (!(Math.abs(Date.now() - Number(timestamp)) <= REDEEM_SIGNATURE_FRESHNESS_MS)) return false;
+    return verifyEd25519Signature(`${ctx.method}\n${ctx.path}\n${timestamp}\n${nonce}\n${ctx.rawBody ?? ''}`, signature, signer);
+}
+/** The signature middleware's window (https-server.ts SIGNATURE_FRESHNESS_MS). */
+const REDEEM_SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
+
 router.post('/api/invite/redeem', async (ctx) => {
     const { code, publicKey, callsign } = (ctx as any).requestBody || {};
     if (!code || !publicKey || !callsign) {
@@ -928,7 +962,7 @@ router.post('/api/invite/redeem', async (ctx) => {
     // Unsigned (the joiner is not a member yet), and for a publicKey that is already a member this answers before
     // the code is checked as used, so ANYONE holding a recent code could name any member's key here. The public
     // card only: the whole row carried that member's contact details whatever they chose. The apps read avatarUrl.
-    ctx.body = { success: true, member: result.member ? publicMemberCard(result.member) : undefined, alreadyMember: result.alreadyMember };
+    ctx.body = { success: true, member: redeemedCard(ctx, result, publicKey), alreadyMember: result.alreadyMember };
 });
 
 router.post('/api/invite/redeem-offline', async (ctx) => {
@@ -945,7 +979,7 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
         return;
     }
     // The public card only, as /api/invite/redeem above: unsigned, and answers for any existing member's key.
-    ctx.body = { success: true, member: result.member ? publicMemberCard(result.member) : undefined, alreadyMember: result.alreadyMember };
+    ctx.body = { success: true, member: redeemedCard(ctx, result, publicKey), alreadyMember: result.alreadyMember };
 });
 
 // Read-only pre-flight: lets onboarding reject a dud invite at Step 1 (before
@@ -1169,6 +1203,10 @@ router.post('/api/trust/profile', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // A member's name, standing and trades, and the members who brought them in, each by name and face: on a node
+    // that shows guests the listings and not the people, for members of this node only. A signature alone is anyone's
+    // (4108354076: any key, from the exact recovery lookup, walked up the invite tree from here).
+    if (!membersOnlyHere(ctx)) return;
     if (!targetPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'targetPubkey is required' };
@@ -1480,6 +1518,9 @@ router.post('/api/reports', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // A Pulse item's report answers with its owner's key, and submitReport asks only for a member row, which a pruned
+    // account keeps.
+    if (!membersOnlyHere(ctx)) return;
     if (targetPulseItemId !== undefined && targetPulseItemId !== null) {
         // A Pulse item report names the item; the reported member is always its owner, whatever
         // targetPubkey the client sent.
@@ -1542,6 +1583,9 @@ router.post('/api/friends/add', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // The answer is the friend's name and face. addFriend asks only that the owner has a member row, which a pruned
+    // account keeps.
+    if (!membersOnlyHere(ctx)) return;
     if (!friendPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
@@ -1590,6 +1634,13 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
     // predicates cannot drift apart — see the note there for why that matters on a public
     // endpoint. It already returns public-safe fields only.
     ctx.status = 200;
+    // On a node that shows visitors the listings and not the people (G9a-2), whoever asks is a stranger until they
+    // are recovered: the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by.
+    // The key stays, as the recovery flow may need it; alone it opens nothing there (engine/avatar-keys.ts).
+    if (getProfileSwitches().guestListingsOnly) {
+        ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
+        return;
+    }
     ctx.body = findRecoveryCandidates(callsign);
 });
 
@@ -1616,7 +1667,9 @@ router.get('/api/members', async (ctx) => {
     const etag = `W/"members-${getMembersVersion()}${querySig}"`;
 
     ctx.set('ETag', etag);
-    ctx.set('Cache-Control', point ? 'private, max-age=0, must-revalidate' : 'public, max-age=0, must-revalidate');
+    // With faces behind a member-only key (G9a-2, engine/avatar-keys.ts) the body holds those keys, so no shared cache
+    // may keep it either.
+    ctx.set('Cache-Control', point || avatarKeysRequired() ? 'private, max-age=0, must-revalidate' : 'public, max-age=0, must-revalidate');
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch) {

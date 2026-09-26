@@ -288,6 +288,7 @@ run_federation_suites() {
       test-web-door
       test-global-moderation
       test-distance-search
+      test-guest-view
       test-distance-search-perf
       test-global-directory
       test-knock
@@ -384,6 +385,7 @@ run_federation_suites() {
       test-apple-return
       test-recovery-backup-durability
       test-public-address
+      test-node-config-public
       test-registrar-contract
       test-invite-trampoline
       test-request-body

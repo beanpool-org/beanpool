@@ -39,6 +39,81 @@ function openDb(): Promise<IDBDatabase> {
     });
 }
 
+/** What the two slots hold, read inside the transaction that may write them. */
+interface StoredSlots {
+    identity: BeanPoolIdentity | undefined;
+    pending: PendingJoin | undefined;
+}
+
+/** What to write back: a slot left out is left as it is. */
+interface SlotWrites<T> {
+    identity?: BeanPoolIdentity;
+    pending?: PendingJoin | 'delete';
+    result: T;
+}
+
+/**
+ * Read both slots and decide what to write, in one readwrite transaction: `decide` sees what is stored at that moment,
+ * never a tab's copy, and nothing else can write between its reading and its writing. Every write to either slot but
+ * wipeIdentity's goes through here.
+ */
+async function withStoredSlots<T>(decide: (stored: StoredSlots) => SlotWrites<T>): Promise<T> {
+    const db = await openDb();
+    let result: T | undefined;
+    await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        // Both asked at once: requests answer in order, so the second answer comes with the first already in.
+        const identityReq = store.get(KEY_ID);
+        const pendingReq = store.get(PENDING_JOIN_ID);
+        pendingReq.onsuccess = () => {
+            const decision = decide({
+                identity: (identityReq.result ?? undefined) as BeanPoolIdentity | undefined,
+                pending: (pendingReq.result ?? undefined) as PendingJoin | undefined,
+            });
+            if (decision.identity) store.put(decision.identity, KEY_ID);
+            if (decision.pending === 'delete') store.delete(PENDING_JOIN_ID);
+            else if (decision.pending) store.put(decision.pending, PENDING_JOIN_ID);
+            result = decision.result;
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    });
+    return result as T;
+}
+
+/*
+ * ---------- One browser, one identity (#1154 follow-up, review 4106962020) ----------
+ *
+ * Nothing here writes a different key over the identity this browser holds. Two tabs can each be part way through a
+ * join, a restore or an invite, and whichever saves first is this browser's account: another key arriving after it is
+ * refused (IdentityHeldError) with nothing changed, and the page that tried says so, with the account already here to
+ * open. A key a join sent that way stays in the pending slot, marked sent (completePendingJoin), so it is never lost
+ * without the member being told. The same key may be written again (a name change, a join finishing twice), and keeps
+ * the 12 words stored with it when the new copy brings none. The one way to put another account here is the member's
+ * own: sign out (wipeIdentity), then restore it.
+ */
+
+/** This browser holds another account, and a write that would have replaced it was refused. Nothing changed. */
+export class IdentityHeldError extends Error {
+    /** The identity this browser holds, as stored. */
+    readonly held: BeanPoolIdentity;
+    constructor(held: BeanPoolIdentity) {
+        super('This browser holds a different BeanPool account, so it was not replaced.');
+        this.name = 'IdentityHeldError';
+        this.held = held;
+    }
+}
+
+/** What may go in the identity slot in place of `stored`: `incoming`, unless `stored` is another key's. */
+function identityToWrite(stored: BeanPoolIdentity | undefined, incoming: BeanPoolIdentity): { write: BeanPoolIdentity } | { held: BeanPoolIdentity } {
+    if (!stored?.publicKey) return { write: incoming };
+    if (stored.publicKey !== incoming.publicKey) return { held: stored };
+    const keepWords = !incoming.mnemonic?.length && !!stored.mnemonic?.length;
+    return { write: keepWords ? { ...incoming, mnemonic: stored.mnemonic } : incoming };
+}
+
 /**
  * Load the existing identity from IndexedDB, or return null.
  */
@@ -99,6 +174,7 @@ export function seedViewedKey(publicKey: string): string {
 /**
  * Generate a new Ed25519 identity from a 12-word mnemonic.
  * Returns the identity AND the mnemonic (for one-time display).
+ * Refused, with nothing saved, when this browser holds another account (IdentityHeldError).
  */
 export async function createIdentity(callsign: string): Promise<BeanPoolIdentity> {
     const identity = await generateIdentity(callsign);
@@ -114,6 +190,7 @@ export async function generateIdentity(callsign: string): Promise<BeanPoolIdenti
 /**
  * Recover identity from a 12-word mnemonic phrase.
  * Derives the same keypair deterministically.
+ * Refused, with nothing saved, when this browser holds another account (IdentityHeldError).
  */
 export async function createIdentityFromMnemonic(words: string[], callsign: string): Promise<BeanPoolIdentity> {
     const identity = await identityFromMnemonic(words, callsign);
@@ -227,8 +304,9 @@ export class PendingJoinHeldError extends Error {
  * Both are releaseSentPendingJoin. Every other write reads the STORED record in its own transaction (never a tab's
  * copy of it) and keeps a sent mark it finds there: savePendingJoin writes the same key back with the stored mark,
  * clearUnsentPendingJoin and loadPendingJoin's clock never delete a sent record, and completePendingJoin removes the
- * pending join only when it holds the key that joined. The one exception is wipeIdentity, the member's own "delete
- * everything on this device".
+ * pending join only when it holds the key that joined, and only as that key becomes this browser's identity (never
+ * when another account is here). The one exception is wipeIdentity, the member's own "delete everything on this
+ * device".
  */
 
 /** The node's membership probe, signed by the pending key, answered `isMember: false` (web-join.ts probeMembership). */
@@ -278,30 +356,14 @@ export type SentJoinRelease =
     /** The member chose to let this record go (the one with this key and this sentAt), told what that means. */
     | { kind: 'abandoned'; publicKey: string; sentAt: number | undefined };
 
-/**
- * Read the stored pending join and decide what to write, in one readwrite transaction: `decide` sees what is stored
- * at that moment, never a tab's copy, and nothing else can write between its reading and its writing.
- */
+/** withStoredSlots for the pending join alone. */
 async function withStoredPendingJoin<T>(
     decide: (current: PendingJoin | undefined) => { write?: PendingJoin | 'delete'; result: T },
 ): Promise<T> {
-    const db = await openDb();
-    let result: T | undefined;
-    await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.get(PENDING_JOIN_ID);
-        req.onsuccess = () => {
-            const decision = decide(req.result as PendingJoin | undefined);
-            if (decision.write === 'delete') store.delete(PENDING_JOIN_ID);
-            else if (decision.write) store.put(decision.write, PENDING_JOIN_ID);
-            result = decision.result;
-        };
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    return withStoredSlots(({ pending }) => {
+        const decision = decide(pending);
+        return { pending: decision.write, result: decision.result };
     });
-    return result as T;
 }
 
 /** `pending` without any sent mark: what a write may put in the slot when the store holds none for its key. */
@@ -421,27 +483,24 @@ export async function releaseSentPendingJoin(release: SentJoinRelease): Promise<
 /**
  * The node said yes: `identity` becomes this browser's identity and the pending join holding its key goes, in one
  * transaction, so there is never a moment with both or neither. A pending join holding another key stays.
+ *
+ * Unless this browser already holds another account (another tab saved one while this join was out): then nothing is
+ * written, the pending join stays exactly as stored, sent mark and all, and IdentityHeldError says which account is
+ * here. That key is a member now, so it must not be dropped without the member being told (WebJoin's 'taken' screen).
  */
 export async function completePendingJoin(identity: BeanPoolIdentity): Promise<void> {
-    const db = await openDb();
-    await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        store.put(identity, KEY_ID);
-        const req = store.get(PENDING_JOIN_ID);
-        req.onsuccess = () => {
-            const current = req.result as PendingJoin | undefined;
-            if (current && (!current.identity?.privateKey || current.identity.publicKey === identity.publicKey)) store.delete(PENDING_JOIN_ID);
-        };
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    const out = await withStoredSlots<{ held: BeanPoolIdentity } | null>(({ identity: stored, pending }) => {
+        const next = identityToWrite(stored, identity);
+        if ('held' in next) return { result: next };
+        const drop = !!pending && (!pending.identity?.privateKey || pending.identity.publicKey === identity.publicKey);
+        return { identity: next.write, pending: drop ? 'delete' : undefined, result: null };
     });
+    if (out) throw new IdentityHeldError(out.held);
 }
 
 /**
- * Import a pre-existing identity (from another device) and store it in IndexedDB.
- * Overwrites any existing identity.
+ * Import a pre-existing identity (from another device) and store it in IndexedDB. Refused, with nothing changed, when
+ * this browser holds another account (IdentityHeldError).
  */
 export async function importIdentity(identity: BeanPoolIdentity): Promise<void> {
     await saveIdentity(identity);
@@ -467,25 +526,22 @@ export async function wipeIdentity(): Promise<void> {
 }
 
 /**
- * Update the callsign on the existing identity in IndexedDB.
- * Returns the updated identity.
+ * Update the callsign on the existing identity in IndexedDB, read and written in one transaction (so it never writes
+ * back an identity another tab has just signed out). Returns the updated identity, or null when there is none.
  */
 export async function updateCallsign(newCallsign: string): Promise<BeanPoolIdentity | null> {
-    const identity = await loadIdentity();
-    if (!identity) return null;
-    identity.callsign = newCallsign;
-    await saveIdentity(identity);
-    return identity;
+    return withStoredSlots<BeanPoolIdentity | null>(({ identity }) => {
+        if (!identity) return { result: null };
+        const next = { ...identity, callsign: newCallsign };
+        return { identity: next, result: next };
+    });
 }
 
+/** Save `identity` as this browser's, unless it holds another account (IdentityHeldError, nothing changed). */
 async function saveIdentity(identity: BeanPoolIdentity): Promise<void> {
-    const db = await openDb();
-    await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        store.put(identity, KEY_ID);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    const held = await withStoredSlots<BeanPoolIdentity | null>(({ identity: stored }) => {
+        const next = identityToWrite(stored, identity);
+        return 'held' in next ? { result: next.held } : { identity: next.write, result: null };
     });
+    if (held) throw new IdentityHeldError(held);
 }

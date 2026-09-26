@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 import { execFileSync } from 'node:child_process';
 import {
     getNodeConfig, updateNodeConfig, getDirectoryInfo, exportLedgerAudit,
-    getNodeRole, getMemberStats,
+    getNodeRole, getMemberStats, type NodeConfig,
 } from '../state-engine.js';
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig,
@@ -232,6 +232,26 @@ router.get('/', async (ctx) => {
 
 // ===================== NODE CONFIG =====================
 
+// Public read (PUBLIC_READ_EXACT), so it names each field it returns and never passes the stored config through:
+// that also holds the public-address agent's state (publicAddress: the Cloudflare tunnel token, the registrar
+// contact), which no reader of this route uses. Who reads what:
+//   - serviceRadius: the web app's map and marketplace, the phone's map (unsigned), the manager, static/settings.js
+//   - the directory switches, push interval and last push: the manager's Node Identity screen and static/settings.js
+//   - acceptKnocks (withKnockSetting, below): the manager's Node Identity screen
+// The operator's public address is read from the admin route /api/local/admin/public-address/status.
+function publicNodeConfig(config: NodeConfig) {
+    const r = config.serviceRadius;
+    return {
+        serviceRadius: r && typeof r === 'object' ? { lat: r.lat, lng: r.lng, radiusKm: r.radiusKm } : r,
+        publishLocation: config.publishLocation,
+        publishMembers: config.publishMembers,
+        publishContacts: config.publishContacts,
+        publishHealth: config.publishHealth,
+        directoryPushIntervalHours: config.directoryPushIntervalHours,
+        lastDirectoryPush: config.lastDirectoryPush,
+    };
+}
+
 // `acceptKnocks`: whether this community takes "ask to join" requests (G6, D4: on unless the operator turns it off). It is
 // the `knocks` profile switch as configured, so it travels with the profile record (config/node-profile.ts), and it
 // is said here beside the directory settings because Settings shows them together. Public, like the switch itself in
@@ -242,11 +262,10 @@ function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: bool
 
 router.get('/api/node/config', async (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    ctx.body = withKnockSetting(getNodeConfig());
+    ctx.body = withKnockSetting(publicNodeConfig(getNodeConfig()));
 });
 
 router.post('/api/local/admin/node/config', async (ctx) => {
-    console.log("updateNodeConfig hit!", (ctx as any).requestBody);
     if (!(await checkAdminAuth(ctx as any))) {
         console.log("Auth failed for updateNodeConfig");
         return;

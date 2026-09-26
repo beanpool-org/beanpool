@@ -113,7 +113,8 @@ import { createFederationCommissionRoutes } from './routes/federation-commission
 import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
-import { profileFeatureGate } from './routes/profile-feature-gate.js';
+import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
+import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
@@ -257,7 +258,7 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
 //     request cannot carry signature headers. Message attachments are E2E
 //     ciphertext (NAT-1), so serving them unauthenticated leaks no plaintext.
 //     (A token-in-URL scheme for these is tracked as follow-up.)
-const PUBLIC_READ_EXACT = new Set<string>([
+export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/version',
     '/api/community/info',
     '/api/community/health',
@@ -293,7 +294,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
 // accidentally expose a sensitive neighbour — e.g. the DM-content reads
 // (/api/messages/conversations/:pk, /api/messages/:conversationId) must stay
 // GATED; only the E2E-ciphertext attachment binary is public.
-const PUBLIC_READ_PATTERNS: RegExp[] = [
+export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member?
     /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
     /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
@@ -307,9 +308,70 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
 ];
 
+// Public reads that name members, on a node that shows visitors the listings and not the people (`guestListingsOnly`,
+// on the global profile by default and overridable anywhere, G9a): off the allowlist there, so the ordinary gate
+// answers them for members only, whatever else is switched on. Each names people: a decision carries its author's key
+// and can name a member in its params (a suspension), the pool balance belongs to a ledger a visitor has no part in,
+// and the Pulse feed carries each member's key, name, face and their own pages elsewhere. The lobby has nothing of
+// them to be transparent about. Everywhere else they stay public.
+export const MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/commons/decisions',
+    '/api/commons/balance',
+    '/api/pulse/feed',
+]);
+// And every public read of the Beans constructs, the enterprises and treasuries (one construct), crowdfunds and Commons
+// projects, wherever those are switched on with the visitors' view (a global node with Beans back on, a local node
+// with the view overridden on). Members only rather than stripped for a visitor, as a post is: each is people and
+// money through and through. An enterprise names its keepers and their backing pledges (key, name, face), who paused
+// it, who is winding it up and who placed it, and its flow carries members' memos; a crowdfund names its creator, a
+// project its proposer; each carries balances from a ledger a visitor has no part in, and an enterprise its own face
+// and exact place. A visitor's copy would be a second guestPost over some fifty fields, every new one a leak until
+// someone decides; off the allowlist, a new field or a new public read under these prefixes is members-only already.
+// The apps read a refused one as "none", as they do on a node with them off. (The phone reads the treasuries list and
+// its crowdfund sync unsigned, native db.ts getTreasuries and pillar-sync, so on such a node a member's phone lists
+// none of them until those two reads are signed.)
+export const MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
+    /^\/api\/commons\/decisions\/[^/]+$/,
+    /^\/api\/(treasury|treasuries|enterprise|enterprises)(\/|$)/,
+    /^\/api\/map\/enterprises$/,
+    /^\/api\/crowdfund(\/|$)/,
+    /^\/api\/commons\/projects(\/|$)/,
+];
+
+function isAllowlisted(path: string): boolean {
+    return PUBLIC_READ_EXACT.has(path) || PUBLIC_READ_PATTERNS.some(re => re.test(path));
+}
+
+// The router answers a path with one trailing slash as the path itself (@koa/router's default, strict: false), so this
+// test does too. Otherwise `/api/pulse/feed/` would miss it, be held only to the gate's usual live-member test, and
+// reach the feed as a pruned account. Only a public read: the gated reads under the same prefixes (an enterprise's
+// ledger, its thread) keep the gate's usual test.
+function namesMembers(path: string): boolean {
+    const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+    return isAllowlisted(routed)
+        && (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed)));
+}
+
+/**
+ * Who may make a gated read, once signed. A member of this node always (isNodeMember). A pruned account keeps its row and
+ * can still sign: it passes on a node without the visitors' view (isLiveMemberKey, #1156's separate call), except the
+ * reads gated only because of that view (namesMembers). On a node with the view (`guestListingsOnly`) it reads as a
+ * visitor would, everywhere: nothing a gated read holds is for a visitor (G9a round 3). The switch is read only for a key
+ * that is live but no member, so a member's read pays nothing for it.
+ */
+function mayMakeGatedRead(pubKeyHex: string, path: string): boolean {
+    if (isNodeMember(pubKeyHex)) return true;
+    return !namesMembers(path) && isLiveMemberKey(pubKeyHex) && !getProfileSwitches().guestListingsOnly;
+}
+
 function isPublicRead(path: string): boolean {
-    if (PUBLIC_READ_EXACT.has(path)) return true;
-    return PUBLIC_READ_PATTERNS.some(re => re.test(path));
+    if (!isAllowlisted(path)) return false;
+    // The switches are read only for these few paths, so no other request pays for them.
+    if (!namesMembers(path)) return true;
+    const switches = getProfileSwitches();
+    // A Beans read that is switched off names nobody: it answers 404 feature_off to everyone (profileFeatureGate), a
+    // visitor as a member, as it did before this switch existed.
+    return !switches.guestListingsOnly || featureOffFor(path, switches) !== null;
 }
 
 // A2-22: clamp client-supplied pagination. An unclamped `?limit=` (e.g. limit=-1,
@@ -694,6 +756,13 @@ function isSignatureBypassed(p: string): boolean {
         p === '/api/invite/redeem-offline';
 }
 
+// The administrative rate limiter's buckets (its middleware is in startHttpsServer): each client's requests in the last minute.
+const adminRateLimits = new Map<string, number[]>();
+/** Tests only: forget every administrative bucket. */
+export function resetAdminRateLimit(): void {
+    adminRateLimits.clear();
+}
+
 // Module-level reference so the HTTP server can reuse the same Koa app for
 // plain-HTTP tunnel ingress (avoids TLS handshake overhead from cloudflared).
 let _koaApp: Koa | null = null;
@@ -915,7 +984,6 @@ export async function startHttpsServer(port: number): Promise<number> {
     });
 
     // Administrative In-Memory Rate Limiter Middleware
-    const adminRateLimits = new Map<string, number[]>();
     app.use(async (ctx, next) => {
         const lowerPath = ctx.path.toLowerCase();
         if (lowerPath.startsWith('/api/local/') || lowerPath.startsWith('/api/admin/')) {
@@ -1045,8 +1113,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         const isMutatingApi = MUTATING_METHODS.has(ctx.method) && isApiPath;
         // SRV-2/SRV-4: gated reads require the same signature as writes when
         // ENFORCE_READ_AUTH is on. Deny-by-default — every GET /api/* is gated
-        // unless it is on the public allowlist.
-        const isGatedRead = ENFORCE_READ_AUTH && ctx.method === 'GET' && isApiPath && !isPublicRead(ctx.path);
+        // unless it is on the public allowlist. A HEAD too: the router answers it with the GET handler, so an ungated
+        // HEAD ran any gated read for anyone and its Content-Length told them what the GET would not (4108354205).
+        const isGatedRead = ENFORCE_READ_AUTH && (ctx.method === 'GET' || ctx.method === 'HEAD') && isApiPath && !isPublicRead(ctx.path);
         if (isSignatureBypassed(ctx.path)) {
             return await next();
         }
@@ -1139,8 +1208,10 @@ export async function startHttpsServer(port: number): Promise<number> {
             // of a member being re-keyed (a lost or stolen phone), which this node
             // has invalidated (isLiveMemberKey). (Writes keep their own per-route
             // authorization; membership isn't required there — e.g. first-time
-            // registration.)
-            if (isGatedRead && !isLiveMemberKey(pubKeyHex)) {
+            // registration.) Where this node shows visitors the listings and not the
+            // people (G9a), every gated read takes the member test itself
+            // (mayMakeGatedRead): a pruned account reads as a visitor would.
+            if (isGatedRead && !mayMakeGatedRead(pubKeyHex, ctx.path)) {
                 ctx.status = 403;
                 ctx.body = { error: 'Read access requires a member identity' };
                 return;

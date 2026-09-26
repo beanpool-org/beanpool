@@ -17,12 +17,15 @@
  * The watch routes act for the signer (`ctx.state.actor`) and nobody else: no route takes a member's key from the
  * body, and the signature middleware's spoof check refuses a body key that names anyone but the signer. The two reads
  * are on the public list (https-server.ts): a guest deciding whether to join can see what is near, and a signed read
- * adds the caller's own watches to the card.
+ * adds the caller's own watches to the card. With the visitors' view on (`guestListingsOnly`, G9a), a guest's count of
+ * the posts near a point is worked out from each post's 0.1° area, as the listing is; the communities are the public
+ * directory's, each at the place it publishes there.
  */
 import crypto from 'node:crypto';
 import Router from '@koa/router';
 import { getPosts, isNodeMember } from '../state-engine.js';
 import { parsePoint, type Point } from './distance-query.js';
+import { seesGuestView } from './viewer.js';
 import { isPoint, readMemberArea } from '../engine/member-area.js';
 import { listCommunities, listedCommunityCount, readMirrorStatus } from '../engine/directory-cache.js';
 import {
@@ -141,10 +144,15 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         let nearbyPosts: { radiusKm: number; count: number; more: boolean } | null = null;
         if (point) {
             // The listing's own read, with the reader's own visibility (hidden, group and paused posts as the Market
-            // shows them), cut at one past the cap: a count, never a second copy of the listing's rules.
+            // shows them), cut at one past the cap: a count, never a second copy of the listing's rules. A visitor on a
+            // node that shows them the listings and not the people (G9a) gets the listing's visitors' read: for nobody
+            // in particular, and measured from each post's area (`coarse`). The count then changes only where the
+            // circle crosses an area's centre, so bisecting it from any number of points finds the area, never the
+            // post (the deciding review of #1159 found the post to the metre from the exact count).
+            const guest = seesGuestView(ctx);
             const posts = getPosts({
-                types: ['offer', 'need', 'poll', 'event'], viewerPubkey: actor, limit: NEARBY_POSTS_CAP + 1,
-                near: { ...point, radiusKm: NEARBY_POSTS_RADIUS_KM },
+                types: ['offer', 'need', 'poll', 'event'], viewerPubkey: guest ? undefined : actor, limit: NEARBY_POSTS_CAP + 1,
+                near: { ...point, radiusKm: NEARBY_POSTS_RADIUS_KM }, coarse: guest || undefined,
             });
             nearbyPosts = { radiusKm: NEARBY_POSTS_RADIUS_KM, count: Math.min(posts.length, NEARBY_POSTS_CAP), more: posts.length > NEARBY_POSTS_CAP };
         }

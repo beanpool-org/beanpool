@@ -24,6 +24,7 @@ import { chatRateLimit } from '../chat-rate-limit.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { assertMayMessage } from '../engine/probation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
+import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
@@ -263,6 +264,10 @@ router.post('/api/messages/edit', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // The answer is the message with its reactions, each naming who reacted (as are delete's and react's). The chat
+    // tests read participants and group rows, which a pruned account keeps: on a node that shows guests the listings
+    // and not the people, for members of this node only.
+    if (!membersOnlyHere(ctx)) return;
     if (!messageId || !ciphertext || !nonce) {
         ctx.status = 400;
         ctx.body = { error: 'messageId, ciphertext, and nonce are required' };
@@ -298,6 +303,7 @@ router.post('/api/messages/delete', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    if (!membersOnlyHere(ctx)) return; // the message and who reacted to it, as edit's answer
     if (!messageId || typeof messageId !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'messageId is required' };
@@ -494,6 +500,7 @@ router.post('/api/messages/react', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    if (!membersOnlyHere(ctx)) return; // who reacted, by key, as edit's answer
     if (!messageId || !emoji || typeof emoji !== 'string' || !emoji.trim() || emoji.length > 32) {
         ctx.status = 400;
         ctx.body = { error: 'messageId, authorPubkey, and a valid emoji (<=32 chars) are required' };

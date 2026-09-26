@@ -18,6 +18,9 @@
  *   3. the reads circlesMayRead allows search circles, and every other read takes exactly one pass
  *   4. the default page's circle searched idx_posts_lat_lng
  *   5. the first pages are the pages a brute-force haversine over every post gives, on both paths
+ *   6. a visitor's read on the global node (G9a: `coarse`, every place read as its 0.1° area inside the query) is no
+ *      slower than the member's read of the same shape beyond a timer's noise, takes the same path (circles, or one
+ *      pass), and its pages are the brute-force pages by distance from each post's area
  *
  * Every bound compares two times measured in the same run, medians of interleaved reads, and is generous, so a slow or
  * busy machine can't fail it. The timings are printed as the table for the PR.
@@ -165,6 +168,8 @@ const VIEWER = () => members[0];
 const asRead = (extra: PostFilter): PostFilter => ({ limit: 50, offset: 0, excludeEvents: true, viewerPubkey: VIEWER(), ...extra });
 const before = (f: PostFilter) => getPostsRankedBy(db, asRead(f), rowsNear743b5d57);
 const now = (f: PostFilter) => getPostsEngine(db, asRead(f));
+// As the route reads for a visitor on the global node (G9a): nobody in particular, every place read as its area.
+const guest = (f: PostFilter) => getPostsEngine(db, { ...asRead(f), viewerPubkey: undefined, coarse: true });
 
 // A town few posts gather around (towns late in the list are chosen least).
 const SPARSE = towns[250];
@@ -203,33 +208,37 @@ const SHAPES: Shape[] = [
 ];
 
 /** The reads a page makes: circles (a box on idx_posts_lat_lng joined to the listing) and one pass. */
-function trace(f: PostFilter): { circles: number; passes: number } {
+function trace(f: PostFilter, read: (f: PostFilter) => unknown = now): { circles: number; passes: number } {
     const prepare = db.prepare.bind(db);
     const out = { circles: 0, passes: 0 };
     (db as any).prepare = (sql: string) => {
         const st = prepare(sql);
-        const kind = /CROSS JOIN posts p/.test(sql) ? 'circles' : /haversine_km/.test(sql) && !/WHERE p\.id IN/.test(sql) ? 'passes' : undefined;
+        const kind = /CROSS JOIN posts p/.test(sql) ? 'circles' : /haversine_km|area_km/.test(sql) && !/WHERE p\.id IN/.test(sql) ? 'passes' : undefined;
         if (kind) {
             const all = st.all.bind(st);
             (st as any).all = (...params: unknown[]) => { out[kind]++; return all(...params); };
         }
         return st;
     };
-    try { now(f); } finally { delete (db as any).prepare; }
+    try { read(f); } finally { delete (db as any).prepare; }
     return out;
 }
 
-/** Medians of the two reads, interleaved (each goes first half the time), after a few to warm up. */
-function race(f: PostFilter, reps: number): { before: number; now: number } {
-    for (let i = 0; i < 2; i++) { before(f); now(f); }
+/** Medians of two reads (743b5d57's and this one, unless others are given), interleaved (each goes first half the time), after a few to warm up. */
+function race(f: PostFilter, reps: number, first: (f: PostFilter) => unknown = before, second: (f: PostFilter) => unknown = now): { before: number; now: number } {
+    for (let i = 0; i < 2; i++) { first(f); second(f); }
     const a: number[] = [], b: number[] = [];
     const time = (read: () => unknown, into: number[]) => { const t = performance.now(); read(); into.push(performance.now() - t); };
     for (let i = 0; i < reps; i++) {
-        if (i % 2) { time(() => before(f), a); time(() => now(f), b); } else { time(() => now(f), b); time(() => before(f), a); }
+        if (i % 2) { time(() => first(f), a); time(() => second(f), b); } else { time(() => second(f), b); time(() => first(f), a); }
     }
     const median = (xs: number[]) => xs.sort((x, y) => x - y)[Math.floor(xs.length / 2)];
     return { before: median(a), now: median(b) };
 }
+const readsOf = ({ circles, passes }: { circles: number; passes: number }) =>
+    `${circles ? `${circles} circle${circles > 1 ? 's' : ''}` : ''}${circles && passes ? ' + ' : ''}${passes ? `${passes} pass` : ''}` || 'no point';
+/** The same kind of read: circles or not, and a pass after them or not. How many circles differs with the areas. */
+const samePath = (a: { circles: number; passes: number }, b: { circles: number; passes: number }) => (a.circles > 0) === (b.circles > 0) && a.passes === b.passes;
 
 /**
  * Within a timer's noise of 743b5d57, generously: twice as slow, or 5 ms, whichever is more. The regressions this suite exists
@@ -238,17 +247,22 @@ function race(f: PostFilter, reps: number): { before: number; now: number } {
  */
 const noSlower = (t: number, base: number) => t <= Math.max(2 * base, base + 5);
 
-interface Row { size: string; shape: Shape; before: number; now: number; reads: string; same: boolean }
+interface Row {
+    size: string; shape: Shape; before: number; now: number; reads: string; same: boolean;
+    /** The member's read and the visitor's, raced against each other (G9a). */
+    member: number; guest: number; guestReads: string; guestSamePath: boolean;
+}
 function measure(size: string): Row[] {
     return SHAPES.map(shape => {
         const f = shape.filter;
         const slow = /no filter|feed|type=offer|type=need/.test(shape.name) && !/today/.test(shape.name);
         const t = race(f, slow ? 9 : 15);
-        const { circles, passes } = trace(f);
-        const reads = `${circles ? `${circles} circle${circles > 1 ? 's' : ''}` : ''}${circles && passes ? ' + ' : ''}${passes ? `${passes} pass` : ''}` || 'no point';
+        const path = trace(f);
         const a = before(f), b = now(f);
         const same = JSON.stringify(a.map(p => [p.id, p.distanceKm])) === JSON.stringify(b.map(p => [p.id, p.distanceKm]));
-        return { size, shape, ...t, reads, same };
+        const g = race(f, slow ? 9 : 15, now, guest);
+        const guestPath = trace(f, guest);
+        return { size, shape, ...t, reads: readsOf(path), same, member: g.before, guest: g.now, guestReads: readsOf(guestPath), guestSamePath: samePath(path, guestPath) };
     });
 }
 
@@ -280,6 +294,13 @@ async function main(): Promise<void> {
         const cells = sizes.map(size => { const r = rows.find(x => x.size === size && x.shape === shape)!; return `${r.before.toFixed(1)} → ${r.now.toFixed(1)}`; });
         console.log(`| ${shape.name} | ${cells.join(' | ')} | ${rows.find(x => x.shape === shape && x.size === '100k / 200k')!.reads} |`);
     }
+    console.log(`\nMedians in ms, a member's read → a visitor's on the global node (G9a, every place read as its area), per posts / transactions.\n`);
+    console.log(`| read | ${sizes.join(' | ')} | visitor's reads |`);
+    console.log(`|---|${sizes.map(() => '---').join('|')}|---|`);
+    for (const shape of SHAPES) {
+        const cells = sizes.map(size => { const r = rows.find(x => x.size === size && x.shape === shape)!; return `${r.member.toFixed(1)} → ${r.guest.toFixed(1)}`; });
+        console.log(`| ${shape.name} | ${cells.join(' | ')} | ${rows.find(x => x.shape === shape && x.size === '100k / 200k')!.guestReads} |`);
+    }
     console.log('');
 
     // ── 1. no read slower than 743b5d57's ────────────────────────────────────────────────────────
@@ -293,6 +314,13 @@ async function main(): Promise<void> {
     const wrongPath = rows.filter(r => r.shape.filter.near && (r.shape.circles ? !/circle/.test(r.reads) : r.reads !== '1 pass'));
     assert(wrongPath.length === 0,
         `no filter, the apps' feed and type offer or need search circles; every other read takes exactly one pass (${wrongPath.map(r => `${r.size}, ${r.shape.name}: ${r.reads}`).join('; ') || 'all as said'})`);
+
+    // ── 6a. a visitor's read, against the member's ───────────────────────────────────────────────
+    for (const r of rows) {
+        assert(noSlower(r.guest, r.member), `${r.size}, ${r.shape.name}: a visitor's read ${r.guest.toFixed(1)} ms, no slower than the member's ${r.member.toFixed(1)} ms`);
+    }
+    const otherPath = rows.filter(r => !r.guestSamePath).map(r => `${r.size}, ${r.shape.name}: ${r.reads} → ${r.guestReads}`);
+    assert(otherPath.length === 0, `a visitor's read takes the member's path: circles where the member's does, one pass where it does (${otherPath.join('; ') || 'all the same'})`);
 
     // ── 4. the index ─────────────────────────────────────────────────────────────────────────────
     const prepare = db.prepare.bind(db);
@@ -315,10 +343,14 @@ async function main(): Promise<void> {
     // Every seeded post is live and by an active member, every event is still to come, and the reader is in the club, so
     // the listing shows every post its filter matches (the default page leaves events out); the reference is measured
     // here from the rows alone.
-    const all = db.prepare(`SELECT id, type, category, lat, lng, updated_at, created_at FROM posts WHERE id LIKE 'perf-%'`).all() as Array<{ id: string; type: string; category: string; lat: number | null; lng: number | null; updated_at: string; created_at: string }>;
+    const all = db.prepare(`SELECT id, type, category, lat, lng, updated_at, created_at, audience_scope FROM posts WHERE id LIKE 'perf-%'`).all() as Array<{ id: string; type: string; category: string; lat: number | null; lng: number | null; updated_at: string; created_at: string; audience_scope: string }>;
     const by = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-    const referenceFor = (keep: (p: typeof all[number]) => boolean) => all.filter(keep)
-        .map(p => ({ id: p.id, u: p.updated_at, c: p.created_at, d: p.lat === null || p.lng === null ? null : haversine(HUB.lat, HUB.lng, p.lat, p.lng) }))
+    // The areas for a visitor's read (G9a): 0.1° to the nearest step, halves up, as the node rounds them.
+    const areaOf = (deg: number) => Math.round(deg * 10) / 10 + 0;
+    // A visitor is read for nobody in particular, so the club's posts are not theirs to see.
+    const referenceFor = (keep: (p: typeof all[number]) => boolean, byArea = false) => all.filter(p => keep(p) && (!byArea || p.audience_scope === 'public'))
+        .map(p => ({ id: p.id, u: p.updated_at, c: p.created_at, d: p.lat === null || p.lng === null ? null
+            : byArea ? haversine(HUB.lat, HUB.lng, areaOf(p.lat), areaOf(p.lng)) : haversine(HUB.lat, HUB.lng, p.lat, p.lng) }))
         .sort((a, b) => (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0) || (a.d ?? 0) - (b.d ?? 0) || by(b.u, a.u) || by(b.c, a.c) || by(a.id, b.id));
     const brute: Array<[string, PostFilter, (p: typeof all[number]) => boolean]> = [
         ['no filter (circles)', {}, p => p.type !== 'event'],
@@ -341,10 +373,25 @@ async function main(): Promise<void> {
         results.push(`${name}: ${ref.length} posts${wrong.length ? `, wrong at ${wrong.join(', ')}` : ''}`);
     }
     assert(allSame, `on both paths, the pages at offsets 0, 50, 1,000 and near the end are the brute-force pages (${results.join('; ')})`);
+    // ── 6b. a visitor's pages, by area ───────────────────────────────────────────────────────────
+    const guestResults: string[] = [];
+    let guestSame = true;
+    for (const [name, f, keep] of brute) {
+        const ref = referenceFor(keep, true);
+        const wrong: number[] = [];
+        for (const offset of [0, 50, 1000, ref.length - 20]) {
+            if (offset < 0) continue;
+            const got = guest({ ...f, ...nearest(HUB), offset }).map(p => p.id);
+            if (JSON.stringify(got) !== JSON.stringify(ref.slice(offset, offset + 50).map(r => r.id))) wrong.push(offset);
+        }
+        if (wrong.length) guestSame = false;
+        guestResults.push(`${name}: ${ref.length} posts${wrong.length ? `, wrong at ${wrong.join(', ')}` : ''}`);
+    }
+    assert(guestSame, `a visitor's pages at offsets 0, 50, 1,000 and near the end are the brute-force pages by distance from each post's area, on both paths (${guestResults.join('; ')})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ No nearest-first read is slower than 743b5d57\'s, and the default page reads the posts near the reader, not every post on the node.');
+    console.log('⭐️ No nearest-first read is slower than 743b5d57\'s, the default page reads the posts near the reader, not every post on the node, and a visitor\'s read by area costs what a member\'s does.');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

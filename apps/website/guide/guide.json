@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 36,
-  "hash": "9110b069c761ca605cdc47667cc3975bf2835da7f761d3e734a4e277fabda3db",
+  "version": 40,
+  "hash": "5565ac6b6218f1cdb5eb0b770aab4f24366edcfeec3a7b88e079ee67989a7d04",
   "sections": [
     {
       "id": "about",
@@ -792,7 +792,7 @@
     {
       "slug": "joining",
       "title": "Joining BeanPool",
-      "summary": "Two ways in: a community, with an invite from a member, or the global community, with one sign-in. And how to invite someone else.",
+      "summary": "Two ways in: a community, with an invite from a member, or the global community when it is open, with one sign-in. And how to invite someone else.",
       "section": "getting-started",
       "related": [
         "your-12-words",
@@ -810,7 +810,7 @@
           "type": "ul",
           "items": [
             "**With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.",
-            "**Without an invite**, you can join the **global community**: people from everywhere, where you can post, message people and find a community near you. There are no Beans there. Beans, credit and the Commons live in local communities."
+            "**Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans there. Beans, credit and the Commons live in local communities."
           ]
         },
         {
@@ -857,7 +857,7 @@
         {
           "type": "ul",
           "items": [
-            "On the first screen, tap **Explore BeanPool worldwide**.",
+            "On the first screen, tap **Explore BeanPool worldwide**. It is at the bottom of the screen: on a small phone, scroll down. The app shows it only when the global community is open.",
             "Sign in once with Google, Apple (on an iPhone), Facebook or GitHub. This keeps out fake accounts: one sign-in account makes one BeanPool account. BeanPool never sees your password and never posts anything for you.",
             "Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others."
           ]
@@ -905,6 +905,7 @@
         {
           "type": "ul",
           "items": [
+            "**No Explore BeanPool worldwide button:** the global community isn't open yet, or the app couldn't reach it. Check your connection and open the app again. You can still join a community with an invite.",
             "**Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.",
             "**The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Use a different sign-in** and **← Back to Home** still work.",
             "**This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.",
@@ -1033,7 +1034,7 @@
         },
         {
           "type": "p",
-          "text": "The web app has no sign-in recovery yet, even on the global community, where you join with a sign-in. There, your 12 words bring your account back, or linking from the phone app if your account is on your phone too. Browsers can also clear saved data, so write the words down before you rely on the web app."
+          "text": "On the global community you join in a browser with a sign-in, and that sign-in is kept as a second way back: Settings shows **Sign-in recovery: connected**. Getting your account back with it in a browser comes in a later update. Until then your 12 words bring it back, or linking from the phone app if your account is on your phone too. On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app."
         }
       ]
     },
@@ -1478,7 +1479,7 @@
         },
         {
           "type": "p",
-          "text": "The global community needs no invite, but for now it is joined from the app's first screen, before you have an account: tap **Explore BeanPool worldwide** there. See \"Joining BeanPool\". Joining it from an account you already have is not possible yet."
+          "text": "The global community needs no invite, but for now it is joined from the app's first screen, before you have an account: when the global community is open, tap **Explore BeanPool worldwide** there. See \"Joining BeanPool\". Joining it from an account you already have is not possible yet."
         },
         {
           "type": "h2",
@@ -1560,7 +1561,15 @@
         },
         {
           "type": "p",
-          "text": "The sign-in stops one person making many accounts. The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once. After that, your 12 words are your account."
+          "text": "The sign-in stops one person making many accounts. The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once."
+        },
+        {
+          "type": "p",
+          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account together with your community's server can open it, as with a sign-in account linked on the phone app. Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
+        },
+        {
+          "type": "p",
+          "text": "If you would rather the community did not keep that copy, the web app can't remove it yet. The phone app can, if your account is on your phone too: with the global community open, go to **Settings**, tap **Account Protection**, then **Disconnect** next to the sign-in. Either way, keep your 12 words safe: they are the way back that is yours alone."
         },
         {
           "type": "p",
@@ -1573,6 +1582,18 @@
         {
           "type": "p",
           "text": "If you close the page halfway, open it again within 10 minutes and it carries on with the same name."
+        },
+        {
+          "type": "p",
+          "text": "**One account per browser.** If you join in two tabs at once, the second one says **This browser already has an account** and offers **Open** with that account's name. Nothing replaces it. If the second tab's join had gone through too, that account is kept on this browser as well, and **Show** (its name) **12 words** shows its words: write them down if you want to keep it. To use it instead, sign out in Settings (**Remove from This Device Only**), then restore it with those words."
+        },
+        {
+          "type": "p",
+          "text": "**A join that went out comes first.** If this browser sent a join that may have gone through, the page asks the community about it before anything else, even an invite or restoring another account. If you are in, you carry on. If it may still go through, the page asks you to wait a few minutes, then **Check again**. This holds even when the community has stopped taking new members."
+        },
+        {
+          "type": "p",
+          "text": "If something goes wrong on the page after your join went out, it says so and offers **Reload page**. Your join is kept on this browser, and the reload checks whether you are in."
         },
         {
           "type": "h2",
@@ -1596,7 +1617,7 @@
         {
           "type": "ul",
           "items": [
-            "Getting your account back with Google, Facebook, GitHub or Apple. The sign-in you join the global community with does not bring the account back yet. On the web, your 12 words bring it back, or linking from the phone app if your account is on your phone too.",
+            "Getting your account back with Google, Facebook, GitHub or Apple, in the browser. The sign-in you join the global community with is kept as a way back (see above), but getting your account back with it in a browser comes in a later update. Until then, on the web, your 12 words bring it back, or linking from the phone app if your account is on your phone too.",
             "The Pulse's **Learn** lane.",
             "The phone's app lock.",
             "Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Sign in on a computer**)."

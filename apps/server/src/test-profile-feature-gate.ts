@@ -38,6 +38,7 @@ async function main() {
         distanceSortDefault: true,
         directoryMirror: true,
         publishToDirectory: false,
+        guestListingsOnly: true,
     };
 
     assert(featureOffFor('/api/marketplace/posts/request', mockSwitchesOff) === 'escrow',

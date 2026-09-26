@@ -18,6 +18,14 @@
  *   9. moving a member to a new key (the re-key wizard) keeps their copy openable, and stamps what it moves;
  *  10. without the key file, a re-key is refused and changes nothing, and the same code works once the key is back;
  *  11. a copy locked with another key stays under the old key it is bound to, and the re-key does not wait on it.
+ *  12. copies a main server dropped BEFORE the seal (re-deposits, removals, a purge, the way the code before it deleted:
+ *      secure_delete off) are gone from state.db and its WAL after the upgrade's boot: one VACUUM, once, retried at the
+ *      next boot when the disk has no room, and posts' search still finds the right post after it;
+ *  13. the same on a standby, which never wraps: its one VACUUM waits until the main server's wrapped copies have
+ *      replaced its own, runs after the import that does it (here, a force-resync past copies the main deleted), and
+ *      leaves none of the copies it replaced or dropped in its files;
+ *  14. a data folder without hard links (link() fails with EPERM, ENOTSUP, EMLINK, ENOSYS or EXDEV) still gets its key,
+ *      made in place, never over a file already there, and a failed write leaves nothing behind.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-seal.ts
  *
@@ -83,6 +91,18 @@ const OLD_ENROLMENTS = [
 ] as const;
 
 interface Sealed { encryptedShare: string; shareIv: string; shareTag: string; kdfParams: string }
+
+/** A copy shaped as the apps seal one (seed box, salt, words box), with random bytes: what 12 and 13 look for. */
+function fakeCopy(): Sealed {
+    const b64 = (n: number) => crypto.randomBytes(n).toString('base64');
+    return {
+        encryptedShare: b64(48), shareIv: b64(24), shareTag: b64(16),
+        kdfParams: JSON.stringify({ alg: 'scrypt-xc20p-single-v1', salt: b64(32), N: 16384, r: 8, p: 1, words: { ct: b64(120), iv: b64(24), tag: b64(16) } }),
+    };
+}
+
+const CLEARED_KEY = 'recovery_seal_cleared';
+const FTS_PROBE_WORD = 'sealprobe40';
 
 // ── identities ─────────────────────────────────────────────────────────────────────────────────────
 interface Id { pk: string; priv: crypto.KeyObject; seed: Buffer }
@@ -181,6 +201,10 @@ async function child(mode: string): Promise<void> {
             out.words = opened.words;
         } catch (e) { out.serverReader = thrown(e); }
     } else if (mode === 'boot') {
+        if (process.env.SEAL_FREE_BYTES) {
+            const seal: any = await import('./services/recovery-seal-key.js');
+            seal._setFreeBytesForTests?.(Number(process.env.SEAL_FREE_BYTES));
+        }
         try {
             const { initStateEngine } = await import('./state-engine.js');
             initStateEngine();
@@ -191,6 +215,124 @@ async function child(mode: string): Promise<void> {
         if (out.keyExists) {
             out.keyBytes = fs.statSync(keyPath).size;
             out.keyMode = (fs.statSync(keyPath).mode & 0o777).toString(8);
+        }
+        const { db } = await import('./db/db.js');
+        out.secureDelete = db.pragma('secure_delete', { simple: true });
+        out.cleared = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CLEARED_KEY) as any)?.value ?? null;
+        if (process.env.SEAL_FTS_PROBE) {
+            try { db.exec("INSERT INTO posts_fts(posts_fts, rank) VALUES ('integrity-check', 1)"); out.ftsIntegrity = 'ok'; }
+            catch (e) { out.ftsIntegrity = thrown(e); }
+            out.ftsHit = db.prepare('SELECT p.id FROM posts p WHERE p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)')
+                .pluck().all(FTS_PROBE_WORD);
+        }
+    } else if (mode === 'pre-seal-node') {
+        // A database as the code before the seal left it: the schema, then copies deposited, re-deposited, removed and
+        // purged the way that code did it, on a connection with secure_delete off (its default; db.ts turns it on now).
+        const { db, initSchema } = await import('./db/db.js');
+        initSchema();
+        db.pragma('secure_delete = 0');
+        const standby = process.env.SEAL_FIXTURE === 'standby';
+        const N = 30;
+        const owners = Array.from({ length: N }, () => crypto.randomBytes(32).toString('hex'));
+        const gen1 = owners.map(() => fakeCopy());
+        const gen2 = owners.map(() => fakeCopy());
+        const T = '2026-06-01T00:00:00.000Z';
+        const dropOlder = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?');
+        // A main server stored a deposit with a plain INSERT (putShareGeneration); a standby with sync.ts's own statement.
+        const put = db.prepare(`INSERT${standby ? ' OR REPLACE' : ''} INTO recovery_shares
+            (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, ephemeral_pubkey,
+             sso_lookup_hash, sso_lookup_salt, kdf_params, generation, created_at, updated_at)
+            VALUES (?, 'sso', 'google', 1, ?, ?, ?, NULL, ?, 'lookup-salt', ?, ?, ?, ?)`);
+        const deposit = (i: number, c: Sealed, generation: number) => {
+            dropOlder.run(owners[i], generation);
+            put.run(owners[i], c.encryptedShare, c.shareIv, c.shareTag, `lookup-${i}`, c.kdfParams, generation, T, T);
+        };
+        db.transaction(() => owners.forEach((_, i) => deposit(i, gen1[i], 1)))();
+        db.pragma('wal_checkpoint(TRUNCATE)');
+        db.transaction(() => owners.forEach((_, i) => deposit(i, gen2[i], 2)))();
+        db.pragma('wal_checkpoint(TRUNCATE)');
+        if (!standby) {
+            // Posts with gaps in their rowids, to show the search still finds the right post after the VACUUM.
+            const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey)
+                VALUES (?, 'offer', 'general', ?, ?, ?)`);
+            for (let i = 0; i < 60; i++) post.run(`fixture-post-${i}`, `fixture post ${i}`, `sealprobe${i}`, owners[0]);
+            db.prepare("DELETE FROM posts WHERE CAST(substr(id, 14) AS INTEGER) % 3 = 0").run();
+            // Owners 25-29 had a copy released before they were purged.
+            const col = db.prepare(`INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, created_at, expires_at)
+                VALUES (?, ?, 2, 'eph', 'complete', ?, ?)`);
+            const rel = db.prepare(`INSERT INTO recovery_releases (collection_id, share_id, holder_type, share_index, payload, payload_iv, payload_tag, kdf_params, released_at)
+                VALUES (?, 0, 'sso', 1, ?, ?, ?, ?, ?)`);
+            for (let i = 25; i < N; i++) {
+                col.run(`fixture-collection-${i}`, owners[i], T, T);
+                rel.run(`fixture-collection-${i}`, gen2[i].encryptedShare, gen2[i].shareIv, gen2[i].shareTag, gen2[i].kdfParams, T);
+            }
+            db.pragma('wal_checkpoint(TRUNCATE)');
+            // Owners 20-24 removed their copy (DELETE /api/recovery/shares); 25-29 were purged (state-engine's purge).
+            // Left in the WAL, as the last writes before the upgrade.
+            for (let i = 20; i < 25; i++) db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(owners[i]);
+            for (let i = 25; i < N; i++) {
+                db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(owners[i]);
+                db.prepare('DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)').run(owners[i]);
+                db.prepare('DELETE FROM recovery_collections WHERE owner_pubkey = ?').run(owners[i]);
+            }
+            out.dropped = [...gen1, ...gen2.slice(20)];
+            out.live = gen2.slice(0, 20);
+        } else {
+            // A force-resync before the seal: every row cleared (clearReplicatedTables) and the snapshot imported again.
+            db.prepare('DELETE FROM recovery_shares').run();
+            db.transaction(() => owners.forEach((_, i) => deposit(i, gen2[i], 2)))();
+            out.dropped = gen1;
+            out.live = gen2;
+            // The main server has since deleted the last two members' copies; a deletion of a copy does not reach a
+            // standby, so these stay here, unwrapped, until a force-resync.
+            out.orphans = owners.slice(N - 2);
+            out.owners = owners;
+        }
+    } else if (mode === 'standby-import') {
+        // A standby (NODE_ROLE=backup) meeting its main server's wrapped copies through the real import path: a signed
+        // payload from a trusted mirror. The main server has deleted the orphans, so its payload does not carry them.
+        const { initStateEngine, exportSyncState, signSyncPayload, importRemoteState, clearReplicatedTables } = await import('./state-engine.js');
+        initStateEngine();
+        const { db } = await import('./db/db.js');
+        const clearedNow = () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CLEARED_KEY) as any)?.value ?? null;
+        const stored = () => db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as string[];
+        out.secureDelete = db.pragma('secure_delete', { simple: true });
+        out.keyExists = fs.existsSync(path.join(dataDir, KEY_FILE));
+        out.clearedAtBoot = clearedNow();
+        const { startP2P } = await import('./p2p.js');
+        const { addConnector } = await import('./connector-manager.js');
+        const node = await startP2P(0, 0);
+        try {
+            const nodeId = node.peerId.toString();
+            addConnector(`/ip4/127.0.0.1/tcp/1/p2p/${nodeId}`, 'mirror', 'main-server');
+            const owners: string[] = JSON.parse(process.env.SEAL_OWNERS!);
+            const orphans = new Set<string>(JSON.parse(process.env.SEAL_ORPHANS!));
+            const now = new Date().toISOString();
+            const wrapped = owners.filter(o => !orphans.has(o)).map((o) => {
+                const i = owners.indexOf(o);
+                return {
+                    ownerPubkey: o, holderType: 'sso', holderRef: 'google', shareIndex: 1,
+                    encryptedShare: crypto.randomBytes(200).toString('base64'), shareIv: crypto.randomBytes(24).toString('base64'),
+                    shareTag: crypto.randomBytes(16).toString('base64'), ephemeralPubkey: null,
+                    ssoLookupHash: `lookup-${i}`, ssoLookupSalt: 'lookup-salt',
+                    kdfParams: JSON.stringify({ alg: 'node-wrap-xc20p-v1', inner: 'scrypt-xc20p-single-v1' }),
+                    generation: 2, createdAt: now, updatedAt: now,
+                };
+            });
+            const importWrapped = async () => {
+                const payload: any = await exportSyncState(nodeId);
+                payload.recoveryShares = wrapped;
+                delete payload.signature;
+                delete payload.publicKey;
+                await importRemoteState(await signSyncPayload(payload));
+            };
+            await importWrapped();
+            out.afterImport = { cleared: clearedNow(), unwrapped: stored().filter(k => !k?.includes('node-wrap-xc20p-v1')).length };
+            clearReplicatedTables();
+            await importWrapped();
+            out.afterResync = { cleared: clearedNow(), unwrapped: stored().filter(k => !k?.includes('node-wrap-xc20p-v1')).length, rows: stored().length };
+        } finally {
+            await node.stop();
         }
     } else {
         out.error = `unknown child mode ${mode}`;
@@ -332,6 +474,12 @@ async function main(): Promise<void> {
     function foundInDbFiles(needles: { label: string; bytes: Buffer }[]): string[] {
         const files = dbFiles();
         return needles.filter(n => files.includes(n.bytes)).map(n => n.label);
+    }
+    /** How many of these copies another data directory's state.db, -wal and -shm still hold any piece of. */
+    function copiesFoundIn(dir: string, copies: Sealed[]): number {
+        const files = Buffer.concat(['state.db', 'state.db-wal', 'state.db-shm']
+            .map(f => path.join(dir, f)).filter(p => fs.existsSync(p)).map(p => fs.readFileSync(p)));
+        return copies.filter(c => needlesOf(c).some(n => files.includes(n.bytes))).length;
     }
 
     // ── 1. after a deposit, the database file holds none of the client's box ───────────────────
@@ -517,6 +665,8 @@ async function main(): Promise<void> {
         const copy = tempDir('rollback');
         fs.copyFileSync(dbPath, path.join(copy, 'state.db'));
         if (fs.existsSync(keyPath)) fs.copyFileSync(keyPath, path.join(copy, KEY_FILE));
+        check(!!db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY),
+            'setup: this server recorded clearing its database at boot');
         const r = await runChild([SEAL_CLI, '--unwrap-recovery-rows'], copy, {});
         check(r.code === 0, `the rollback command exits 0 (got ${r.code}: ${r.stderr.slice(-400)})`);
         check(!/[A-Za-z0-9+/]{40,}={0,2}/.test(r.stdout.replace(/[0-9a-f]{64}/g, '')), 'its output holds counts, not keys or copies');
@@ -540,6 +690,8 @@ async function main(): Promise<void> {
             const still = (back.prepare("SELECT COUNT(*) AS n FROM recovery_shares WHERE kdf_params LIKE '%node-wrap-xc20p-v1%'").get() as any).n
                 + (back.prepare("SELECT COUNT(*) AS n FROM recovery_releases WHERE kdf_params LIKE '%node-wrap-xc20p-v1%'").get() as any).n;
             check(still === 0, `no wrapped row is left for the older server to trip on (${still})`);
+            check(!back.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY),
+                'the record of the clearing is gone: the older server deletes without zeroing, so coming back clears again');
         } finally { back.close(); }
     });
 
@@ -654,6 +806,131 @@ async function main(): Promise<void> {
                 'with the key that locked it back, the copy left there still opens, to the seed it was made from');
         } finally {
             fs.writeFileSync(keyPath, saved, { mode: 0o600 });
+        }
+    });
+
+    // ── 12. copies a main server dropped before the seal ────────────────────────────────────────
+    const sealLines = (r: ChildResult) => (r.stdout + r.stderr).split('\n').filter(l => l.includes('Recovery seal')).join(' | ');
+    await section('12. copies a main server dropped before the seal are gone from state.db and its WAL after the upgrade', async () => {
+        const dir = tempDir('dropped-main');
+        const fx = resultOf(await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'pre-seal-node', SEAL_FIXTURE: 'main' }));
+        const dropped: Sealed[] = fx.dropped;
+        const live: Sealed[] = fx.live;
+        const before = copiesFoundIn(dir, dropped);
+        check(before > 0, `control: before the upgrade, ${before} of the ${dropped.length} copies re-deposits, removals and a purge dropped are still in state.db or its WAL`);
+
+        // The upgrade's first boot, on a disk without room for the VACUUM: the wrap runs, the clearing waits.
+        const tight = await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'boot', NODE_ROLE: 'primary', SEAL_FREE_BYTES: String(1024 * 1024) });
+        const t = resultOf(tight);
+        check(t.booted === true && t.keyExists === true, `a disk without room never stops the boot (booted ${t.booted}, key ${t.keyExists})`);
+        check(t.cleared === null && /needs about \d+ MB free in .*, which has 1 MB\. The server runs; the next boot tries again/.test(tight.stderr),
+            `...it says why it did not clear, and records nothing, so the next boot tries again (${sealLines(tight)})`);
+        check(copiesFoundIn(dir, dropped) > 0, '...and the dropped copies are still there: it does not claim what it did not do');
+
+        const first = await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'boot', NODE_ROLE: 'primary', SEAL_FTS_PROBE: '1' });
+        const f = resultOf(first);
+        check(f.booted === true && f.secureDelete === 1, `the next boot runs, with secure_delete on for the connection (secure_delete ${f.secureDelete})`);
+        check(typeof f.cleared === 'string' && /cleared state\.db of sign-in recovery copies deleted before the seal \(one VACUUM, [\d.]+ s/.test(first.stdout),
+            `...it runs the VACUUM, says so, and records it (${sealLines(first)})`);
+        const after = copiesFoundIn(dir, dropped);
+        check(after === 0, `none of the ${dropped.length} dropped copies is left in state.db, -wal or -shm (found ${after}; ${before} before)`);
+        const liveLeft = copiesFoundIn(dir, live);
+        check(liveLeft === 0, `nor any of the ${live.length} copies the wrap rewrote (found ${liveLeft})`);
+        check(f.ftsIntegrity === 'ok' && JSON.stringify(f.ftsHit) === JSON.stringify(['fixture-post-40']),
+            `posts' search index still matches its posts after the VACUUM (integrity ${f.ftsIntegrity}, '${FTS_PROBE_WORD}' finds ${JSON.stringify(f.ftsHit)})`);
+
+        const second = await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'boot', NODE_ROLE: 'primary' });
+        const s = resultOf(second);
+        check(s.booted === true && s.cleared === f.cleared && !/one VACUUM/.test(second.stdout), `a later boot does not run it again (${sealLines(second)})`);
+    });
+
+    // ── 13. the same on a standby, which never wraps ────────────────────────────────────────────
+    await section('13. a standby clears the copies it dropped before the seal once its main server\'s wrapped copies replace its own', async () => {
+        const dir = tempDir('dropped-standby');
+        const fx = resultOf(await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'pre-seal-node', SEAL_FIXTURE: 'standby' }));
+        const before = copiesFoundIn(dir, fx.dropped);
+        check(before > 0, `control: before the upgrade, ${before} of the ${fx.dropped.length} copies the standby's imports and a force-resync dropped are still in its state.db`);
+        const r = await runChild([SCRIPT], dir, {
+            RECOVERY_SEAL_CHILD: 'standby-import', NODE_ROLE: 'backup',
+            SEAL_OWNERS: JSON.stringify(fx.owners), SEAL_ORPHANS: JSON.stringify(fx.orphans),
+        });
+        const s = resultOf(r);
+        check(s.keyExists === false && s.secureDelete === 1 && s.clearedAtBoot === null,
+            `at boot the standby makes no key, zeroes what it deletes, and waits: it still holds its copies in the old form (${JSON.stringify({ key: s.keyExists, secureDelete: s.secureDelete, cleared: s.clearedAtBoot })})`);
+        check(s.afterImport?.cleared === null && s.afterImport?.unwrapped === 2,
+            `after its main server's wrapped copies arrive, the 2 copies the main server deleted are still here unwrapped, so it still waits (${JSON.stringify(s.afterImport)})`);
+        check(/still holds 2 sign-in recovery copies in the form stored before the seal.*A force-resync removes them/.test(r.stderr),
+            `...and says so, and what removes them (${sealLines(r)})`);
+        check(typeof s.afterResync?.cleared === 'string' && s.afterResync.unwrapped === 0 && s.afterResync.rows === 28,
+            `after a force-resync it holds only wrapped copies, and has run its one VACUUM (${JSON.stringify(s.afterResync)})`);
+        const dropped = copiesFoundIn(dir, fx.dropped);
+        check(dropped === 0, `none of the ${fx.dropped.length} copies it dropped before the seal is left in its state.db, -wal or -shm (found ${dropped}; ${before} before)`);
+        const replaced = copiesFoundIn(dir, fx.live);
+        check(replaced === 0, `nor any of the ${fx.live.length} it held until the wrapped copies and the force-resync replaced them (found ${replaced})`);
+    });
+
+    // ── 14. a data folder without hard links ─────────────────────────────────────────────────────
+    await section('14. a data folder without hard links still gets its key, made in place and never over another file', async () => {
+        const seal = await import('./services/recovery-seal-key.js');
+        const fsw = fs as any;
+        const realLink = fs.linkSync, realFsync = fs.fsyncSync;
+        const savedDir = process.env.BEANPOOL_DATA_DIR;
+        const errno = (code: string) => Object.assign(new Error(`${code}: operation not permitted, link`), { code });
+        const others = (dir: string) => fs.readdirSync(dir).filter(f => f !== KEY_FILE);
+        try {
+            for (const code of ['EPERM', 'ENOTSUP', 'EMLINK', 'ENOSYS', 'EXDEV']) {
+                const dir = tempDir(`nolink-${code.toLowerCase()}`);
+                process.env.BEANPOOL_DATA_DIR = dir;
+                fsw.linkSync = () => { throw errno(code); };
+                const kp = path.join(dir, KEY_FILE);
+                let made: { created: boolean } | string;
+                try { made = seal.ensureRecoverySealKey(); } catch (e) { made = thrown(e); }
+                const st = fs.existsSync(kp) ? fs.statSync(kp) : null;
+                check(typeof made === 'object' && made.created && st?.size === 32 && (st.mode & 0o777) === 0o600 && others(dir).length === 0,
+                    `${code}: the key is made in place, 32 bytes, 0600, with no temporary file left (${JSON.stringify(made)}, ${st?.size} bytes, left ${JSON.stringify(others(dir))})`);
+                const bytes = st ? fs.readFileSync(kp) : Buffer.alloc(0);
+                const again = seal.ensureRecoverySealKey();
+                check(!again.created && fs.readFileSync(kp).equals(bytes), `${code}: a second boot keeps it, byte for byte`);
+            }
+            // A key that appears between the look and the create is never written over.
+            const raceDir = tempDir('nolink-race');
+            process.env.BEANPOOL_DATA_DIR = raceDir;
+            const theirs = crypto.randomBytes(32);
+            fsw.linkSync = () => { fs.writeFileSync(path.join(raceDir, KEY_FILE), theirs, { mode: 0o600 }); throw errno('EPERM'); };
+            const raced = seal.ensureRecoverySealKey();
+            check(!raced.created && fs.readFileSync(path.join(raceDir, KEY_FILE)).equals(theirs) && others(raceDir).length === 0,
+                'a key file that appears in the meantime is kept as it is, and nothing is left beside it');
+            // Any other failure of link is not a filesystem without links: it is thrown, and nothing is left.
+            const accDir = tempDir('nolink-eacces');
+            process.env.BEANPOOL_DATA_DIR = accDir;
+            fsw.linkSync = () => { throw errno('EACCES'); };
+            let accErr = '';
+            try { seal.ensureRecoverySealKey(); } catch (e) { accErr = thrown(e); }
+            check(accErr.includes('EACCES') && fs.readdirSync(accDir).length === 0, `EACCES is thrown, not worked around, and leaves nothing (${accErr})`);
+            // A write that fails leaves no temporary file behind (it did, before: the parked "a .tmp left on a failed fsync").
+            fsw.linkSync = realLink;
+            const ioDir = tempDir('fsync-fails');
+            process.env.BEANPOOL_DATA_DIR = ioDir;
+            fsw.fsyncSync = () => { throw Object.assign(new Error('EIO: i/o error, fsync'), { code: 'EIO' }); };
+            let ioErr = '';
+            try { seal.ensureRecoverySealKey(); } catch (e) { ioErr = thrown(e); }
+            check(ioErr.includes('EIO') && fs.readdirSync(ioDir).length === 0, `a failed fsync is thrown and leaves no file at all (${ioErr}; left ${JSON.stringify(fs.readdirSync(ioDir))})`);
+            // Without links, a key whose own write fails is removed, so the next boot makes a whole one.
+            const halfDir = tempDir('nolink-fsync-fails');
+            process.env.BEANPOOL_DATA_DIR = halfDir;
+            fsw.linkSync = () => { throw errno('EPERM'); };
+            let syncs = 0;
+            fsw.fsyncSync = (fd: number) => { if (++syncs === 2) throw Object.assign(new Error('EIO: i/o error, fsync'), { code: 'EIO' }); return realFsync(fd); };
+            let halfErr = '';
+            try { seal.ensureRecoverySealKey(); } catch (e) { halfErr = thrown(e); }
+            check(halfErr.includes('EIO') && fs.readdirSync(halfDir).length === 0, `without links, a key whose write fails is removed rather than left half made (${halfErr}; left ${JSON.stringify(fs.readdirSync(halfDir))})`);
+            fsw.fsyncSync = realFsync;
+            const retry = seal.ensureRecoverySealKey();
+            check(retry.created && fs.statSync(path.join(halfDir, KEY_FILE)).size === 32, '...and the next try makes it');
+        } finally {
+            fsw.linkSync = realLink;
+            fsw.fsyncSync = realFsync;
+            process.env.BEANPOOL_DATA_DIR = savedDir;
         }
     });
 

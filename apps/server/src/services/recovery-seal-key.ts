@@ -47,6 +47,12 @@
  * wraps, so a standby that already holds the unwrapped copy is sent the wrapped one, and it runs with secure_delete on
  * and truncates the WAL after, so the unwrapped bytes do not linger in the database files.
  *
+ * Copies DELETED before the seal are not rows any more, so the wrap cannot reach them: the server deleted without zeroing
+ * until now, and each one is still in state.db's free pages as the app sealed it. So each server, the main and every
+ * standby, runs one VACUUM once it holds no copy in the old form, and records it ({@link clearCopiesDroppedBeforeSeal}).
+ * From this change on, db.ts zeroes whatever the server deletes or replaces (secure_delete). Backups and snapshots made
+ * before the upgrade are copies of the live rows then, unwrapped ones included; no code here reaches them.
+ *
  * Rolling the server back past this change needs the rows unwrapped first, by the NEW code, with the server stopped:
  *
  *     node dist/services/recovery-seal-key.js --unwrap-recovery-rows          # in the image (/app/apps/server)
@@ -152,31 +158,81 @@ export function requireRecoverySealKey(): void {
 }
 
 /**
+ * What `link()` says on a data folder that has no hard links: FAT/exFAT, many SMB/CIFS and some FUSE mounts (Linux gives
+ * EPERM, macOS ENOTSUP). The same list sealed-backup.ts falls back on, with ENOTSUP.
+ */
+const NO_HARD_LINKS = new Set(['EPERM', 'ENOTSUP', 'EMLINK', 'ENOSYS', 'EXDEV']);
+
+/** Flush a directory's entries, where the filesystem lets a directory be opened and synced; elsewhere, nothing. */
+function fsyncDir(dir: string): void {
+    let fd: number | null = null;
+    try {
+        fd = fs.openSync(dir, 'r');
+        fs.fsyncSync(fd);
+    } catch { /* not every filesystem (or platform) syncs a directory */ } finally {
+        if (fd !== null) try { fs.closeSync(fd); } catch { /* closed */ }
+    }
+}
+
+/**
  * Make the key file if there is none. Written to a temporary file and linked into place, so a crash leaves no half a key
- * and an existing file (a key, or something that is not one) is never overwritten.
+ * and an existing file (a key, or something that is not one) is never overwritten. On a data folder without hard links,
+ * the key is created in place instead, exclusively (`wx`), so that still never overwrites a file: a crash in the moment
+ * between the create and the one 32-byte write would leave an empty file, which the boot then names.
  */
 export function ensureRecoverySealKey(): { created: boolean } {
     const target = recoverySealKeyPath();
     if (fs.existsSync(target)) return { created: false };
-    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const dir = path.dirname(target);
+    fs.mkdirSync(dir, { recursive: true });
+    const key = crypto.randomBytes(KEY_BYTES);
     const tmp = `${target}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    const fd = fs.openSync(tmp, 'wx', 0o600);
     try {
-        fs.writeSync(fd, crypto.randomBytes(KEY_BYTES));
-        fs.fsyncSync(fd);
-    } finally {
-        fs.closeSync(fd);
-    }
-    try {
+        const fd = fs.openSync(tmp, 'wx', 0o600);
+        try {
+            fs.writeSync(fd, key);
+            fs.fsyncSync(fd);
+        } finally {
+            fs.closeSync(fd);
+        }
         fs.chmodSync(tmp, 0o600);
-        fs.linkSync(tmp, target);
+        try {
+            fs.linkSync(tmp, target);
+        } catch (e) {
+            const code = (e as NodeJS.ErrnoException).code ?? '';
+            if (code === 'EEXIST') return { created: false };
+            if (!NO_HARD_LINKS.has(code)) throw e;
+            return { created: createKeyInPlace(target, key) };
+        }
+        fsyncDir(dir);
         return { created: true };
-    } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'EEXIST') return { created: false };
-        throw e;
     } finally {
         fs.rmSync(tmp, { force: true });
     }
+}
+
+/** The fallback without hard links: create the key file exclusively and write it. False if a file is already there. */
+function createKeyInPlace(target: string, key: Buffer): boolean {
+    let fd: number;
+    try {
+        fd = fs.openSync(target, 'wx', 0o600);
+    } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+        throw e;
+    }
+    try {
+        fs.writeSync(fd, key);
+        fs.fsyncSync(fd);
+    } catch (e) {
+        // This process made the file a moment ago and nothing has used it: a key that did not go down whole is removed,
+        // so the next boot makes one rather than finding a file that is not a key.
+        try { fs.closeSync(fd); } catch { /* closed */ }
+        fs.rmSync(target, { force: true });
+        throw e;
+    }
+    fs.closeSync(fd);
+    fsyncDir(path.dirname(target));
+    return true;
 }
 
 function parseKdf(kdfParams: string | null | undefined): Record<string, unknown> | null {
@@ -315,10 +371,158 @@ export function wrapRecoveryRows(): { shares: number; releases: number } {
 /**
  * The reverse, for a rollback past this change: every wrapped row back to the client's bytes. Refuses (and changes
  * nothing) if any wrapped row does not open with this key, because an older server would then serve it as garbage.
+ * It also forgets that the database was cleared ({@link clearCopiesDroppedBeforeSeal}): the older server deletes
+ * without zeroing, so coming back to this code clears it again.
  */
 export function unwrapRecoveryRows(): { shares: number; releases: number } {
     requireKey();
-    return rewriteRows(kdf => isNodeWrapped(kdf), openRecoveryFields);
+    const done = rewriteRows(kdf => isNodeWrapped(kdf), openRecoveryFields);
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(CLEARED_KEY);
+    return done;
+}
+
+// ── copies deleted before the seal ────────────────────────────────────────────────────────────────
+
+/**
+ * node_config: when this database was cleared of copies deleted before the seal. Written only after the VACUUM and its
+ * checkpoint finished, so one that failed or was cut off runs again. node_config is not replicated: each server
+ * clears its own file.
+ */
+export const CLEARED_KEY = 'recovery_seal_cleared';
+
+/** Head room left on a disk after the VACUUM, on top of what it writes. */
+const VACUUM_MARGIN_BYTES = 64 * 1024 * 1024;
+
+let clearedSettled = false;
+let clearTriedThisProcess = false;
+let standbyWaitLogged = false;
+let freeBytesForTests: number | null = null;
+
+/** Tests: pretend every disk has this many bytes free (null: measure). */
+export function _setFreeBytesForTests(bytes: number | null): void {
+    freeBytesForTests = bytes;
+}
+
+/** Where SQLite puts VACUUM's temporary copy: the first writable directory of these (unixTempFileDir in os_unix.c). */
+function sqliteTempDir(): string {
+    for (const d of [process.env.SQLITE_TMPDIR, process.env.TMPDIR, '/var/tmp', '/usr/tmp', '/tmp']) {
+        if (!d) continue;
+        try {
+            if (!fs.statSync(d).isDirectory()) continue;
+            fs.accessSync(d, fs.constants.W_OK | fs.constants.X_OK);
+            return d;
+        } catch { /* the next one */ }
+    }
+    return '.';
+}
+
+function freeBytes(dir: string): number | null {
+    if (freeBytesForTests !== null) return freeBytesForTests;
+    try {
+        const s = fs.statfsSync(dir);
+        return Number(s.bavail) * (s.bsize || 4096);
+    } catch {
+        return null;
+    }
+}
+
+const mb = (n: number) => `${Math.ceil(n / 1048576)} MB`;
+
+function dbFile(): string {
+    return path.join(dataDir(), 'state.db');
+}
+
+function fileBytes(p: string): number {
+    try { return fs.statSync(p).size; } catch { return 0; }
+}
+
+/**
+ * Whether the disks have room for the VACUUM. It writes a copy of every page in use to SQLite's temporary directory, and
+ * then the whole database again into the WAL beside state.db, before the checkpoint folds it back. The data folder is
+ * asked for both, since on most hosts the temporary directory is the same disk under another name (a container's
+ * layer); the room is checked, never assumed, because nodes share small disks.
+ */
+function roomForVacuum(): { ok: true } | { ok: false; why: string } {
+    const pageSize = Number(db.pragma('page_size', { simple: true }));
+    const inUse = (Number(db.pragma('page_count', { simple: true })) - Number(db.pragma('freelist_count', { simple: true }))) * pageSize;
+    const checks = [
+        { dir: dataDir(), need: 2 * inUse + VACUUM_MARGIN_BYTES },
+        { dir: sqliteTempDir(), need: inUse + VACUUM_MARGIN_BYTES },
+    ];
+    for (const { dir, need } of checks) {
+        const free = freeBytes(dir);
+        if (free === null) return { ok: false, why: `the free space in ${dir} could not be measured` };
+        if (free < need) return { ok: false, why: `it needs about ${mb(need)} free in ${dir}, which has ${mb(free)}` };
+    }
+    return { ok: true };
+}
+
+/** A stored copy still in the form it had before the seal, on the main server or on a standby. */
+function holdsUnwrappedCopy(): boolean {
+    for (const kdf of db.prepare('SELECT kdf_params FROM recovery_shares').pluck().iterate() as IterableIterator<string | null>) {
+        if (!isNodeWrapped(kdf)) return true;
+    }
+    return false;
+}
+
+/**
+ * Clear state.db of the copies deleted before the seal, once. Until this change the server deleted without zeroing
+ * (secure_delete was off), so every copy a re-deposit dropped, a member removed or a purge took is still in the file's
+ * free pages as the app sealed it: a whole seed box, its salt and the words box, which opens with the `sub` alone to the
+ * member's current seed. The wrap cannot reach them; one VACUUM rewrites the file from the live rows only, and the
+ * checkpoint after it empties the WAL. From here on db.ts zeroes whatever is deleted (secure_delete), so once is enough.
+ *
+ * It runs when this server holds no copy in the old form: on a main server, at boot right after the wrap; on a standby,
+ * which never wraps, at boot and after each import, once its main server's wrapped copies have replaced the ones it had.
+ * Never throws and never stops a boot. A VACUUM that fails, or that the disks have no room for, is logged and tried again
+ * at the next boot; one that finished is recorded ({@link CLEARED_KEY}) and never runs again.
+ */
+export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean }): void {
+    if (clearedSettled || clearTriedThisProcess) return;
+    try {
+        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY)) { clearedSettled = true; return; }
+        if (holdsUnwrappedCopy()) {
+            const kdfs = opts.standby && !standbyWaitLogged
+                ? db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[] : [];
+            const n = kdfs.filter(k => !isNodeWrapped(k)).length;
+            // Wrapped copies beside them: the main server has sealed, so these are not simply waiting for its next import.
+            if (n > 0 && n < kdfs.length) {
+                standbyWaitLogged = true;
+                console.warn(`⚠️ Recovery seal: this standby still holds ${n} sign-in recovery cop${n === 1 ? 'y' : 'ies'} in the form stored before `
+                    + 'the seal that its main server has not replaced: copies deleted there (a deletion of a copy does not reach a standby), '
+                    + 'or ones it has not wrapped yet. A force-resync removes them; then this server clears state.db of copies deleted before the seal, once.');
+            }
+            return;
+        }
+        clearTriedThisProcess = true;
+        const room = roomForVacuum();
+        if (!room.ok) {
+            console.warn(`⚠️ Recovery seal: sign-in recovery copies deleted before the seal may still be readable in state.db's free space. `
+                + `Clearing them takes one VACUUM, and ${room.why}. The server runs; the next boot tries again.`);
+            return;
+        }
+        const before = fileBytes(dbFile());
+        const t0 = performance.now();
+        try {
+            db.exec('VACUUM');
+            const [cp] = db.pragma('wal_checkpoint(TRUNCATE)') as { busy: number; log: number; checkpointed: number }[];
+            if (!cp || cp.busy !== 0) throw new Error('the checkpoint after it could not finish (another connection was reading)');
+        } catch (e) {
+            // A VACUUM that stopped part way leaves its frames in the WAL: give the disk its space back.
+            try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* the next checkpoint does */ }
+            throw e;
+        }
+        const seconds = (performance.now() - t0) / 1000;
+        const after = fileBytes(dbFile());
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+            .run(CLEARED_KEY, JSON.stringify({ at: new Date().toISOString(), seconds: Number(seconds.toFixed(2)), bytesBefore: before, bytesAfter: after }));
+        clearedSettled = true;
+        console.log(`🔐 Recovery seal: cleared state.db of sign-in recovery copies deleted before the seal (one VACUUM, ${seconds.toFixed(1)} s, `
+            + `${mb(before)} → ${mb(after)}). This runs once.`);
+    } catch (e) {
+        console.warn(`⚠️ Recovery seal: the one VACUUM that clears sign-in recovery copies deleted before the seal from state.db failed: `
+            + `${(e as Error)?.message || e}. The server runs; the next boot tries again.`);
+    }
 }
 
 /** How many stored rows are wrapped, and how many of those this server's key does not open. Needs the key. */
@@ -350,6 +554,7 @@ export function installRecoverySealAtBoot(opts: { standby: boolean }): void {
         if (opts.standby) {
             console.log(`🔐 Recovery seal: a standby holds no key of its own, and a take-over does not bring data/${RECOVERY_SEAL_KEY_FILE} yet: `
                 + 'once promoted, this server makes its own and cannot open the sign-in recovery copies it inherited (members\' 12 words still work).');
+            clearCopiesDroppedBeforeSeal(opts);
             return;
         }
         if (ensureRecoverySealKey().created) console.log(`🔐 Recovery seal: made data/${RECOVERY_SEAL_KEY_FILE}.`);
@@ -363,6 +568,7 @@ export function installRecoverySealAtBoot(opts: { standby: boolean }): void {
             console.warn(`⚠️ Recovery seal: ${unopenable} of them were locked with another recovery-seal key and cannot be opened `
                 + 'here. Those members\' 12 words still work; connecting their sign-in again makes a new copy.');
         }
+        clearCopiesDroppedBeforeSeal(opts);
     } catch (e) {
         installedAs = null;
         console.warn(`⚠️ Recovery seal: ${(e as Error)?.message || e} The server runs; the next boot tries again.`);

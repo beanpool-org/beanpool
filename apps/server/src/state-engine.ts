@@ -11,7 +11,7 @@ import {
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
-import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
+import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
@@ -5260,7 +5260,14 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
 
 export function importRemoteState(remote: SyncPayload): Promise<ImportResult> {
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote).finally(forgetLedgerHistory);
+    return importRemoteStateEngine(getSyncCb(), remote)
+        .then((result) => {
+            // A standby clears its database of recovery copies deleted before the seal once the main server's wrapped
+            // copies have replaced the ones it held (services/recovery-seal-key.ts). Once, and never throws.
+            clearCopiesDroppedBeforeSeal({ standby: getNodeRole() === 'backup' });
+            return result;
+        })
+        .finally(forgetLedgerHistory);
 }
 // ===================== RATINGS =====================
 

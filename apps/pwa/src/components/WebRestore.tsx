@@ -453,6 +453,16 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         }
     }
 
+    /**
+     * "Try again" for the sign-ins: the can't-reach notice goes as it is tried, and comes back only if it fails again. Not
+     * cleared in fetchNonce itself: there it would wipe why backToSignIns came back here (review 4109590845).
+     */
+    function retryNonce() {
+        if (!session) return;
+        setNotice(null);
+        void fetchNonce(session);
+    }
+
     async function backToName() {
         await clearPendingRestore().catch(() => {});
         opened.current = null; // an account left on the save-failed screen is let go, not kept in memory
@@ -570,7 +580,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                     {!nonceHeld && fetchingNonce ? (
                         <p role="status" style={lede}>Getting the sign-ins ready…</p>
                     ) : !nonceHeld ? (
-                        <button type="button" style={secondaryButton} disabled={busy} onClick={() => session && void fetchNonce(session)}>Try again</button>
+                        <button type="button" style={secondaryButton} disabled={busy} onClick={retryNonce}>Try again</button>
                     ) : ordered.length === 0 ? (
                         <p role="alert" style={lede}>This community has no sign-in a browser can use yet.</p>
                     ) : (

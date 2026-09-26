@@ -298,6 +298,23 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         await screen.findByTestId('restore-screen-name');
     });
 
+    it("the sign-ins couldn't be got ready, and Try again gets them: the can't-reach notice goes with the trouble (review 4109590845)", async () => {
+        let down = true;
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/collect/sso-nonce': () => {
+                if (down) throw new TypeError('Failed to fetch');
+                return json(200, { nonce: 'rn-2', expiresInSeconds: 600, githubFlow: 'node', clientIds: { google: 'web-client' } });
+            },
+        });
+        renderRestore();
+        await pickAlice();
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent("Can't reach the community right now.");
+        down = false;
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await screen.findByTestId('restore-provider-google');
+        expect(screen.queryByTestId('join-notice')).toBeNull();
+    });
+
     it('GitHub: the code, the wait, released with the node\'s session', async () => {
         const node = recoveryNode(() => copyOf(account, 'github', 'gh-sub-1'));
         const { onRestored } = renderRestore();
@@ -361,6 +378,8 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-2') });
         expect(await screen.findByTestId('join-notice')).toHaveTextContent("That Google account isn't a way back into Alice.");
         await screen.findByTestId('restore-provider-google');
+        // Still said once the fresh nonce is in: why it came back here is not wiped by getting the sign-ins ready.
+        expect(screen.getByTestId('join-notice')).toHaveTextContent("That Google account isn't a way back into Alice.");
         expect(node.recovery().some((c) => c.path === '/api/recovery/collect/sso-nonce')).toBe(true);
         expect(onRestored).not.toHaveBeenCalled();
     });

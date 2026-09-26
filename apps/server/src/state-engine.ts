@@ -184,6 +184,7 @@ import {
     readsAsMember as readsAsMemberEngine,
     passesReadGate as passesReadGateEngine,
     isVisitorKey as isVisitorKeyEngine,
+    mayBringSomeoneIn as mayBringSomeoneInEngine,
     alreadyJoined as alreadyJoinedEngine,
     isInvalidatedKey as isInvalidatedKeyEngine,
     publicMemberCard,
@@ -1231,12 +1232,13 @@ export function getAllMembers(): Member[] {
 
 export { generateInvite, adminGenerateInvite };
 
-export function redeemInvite(code: string, publicKey: string, callsign: string): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
-    return redeemInviteEngine(broadcast, code, publicKey, callsign);
+/** `joinerSigned`: the request carries a fresh signature by `publicKey` itself, the only way a visitor's row joins. */
+export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+    return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned);
 }
 
-export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
-    return redeemOfflineTicketEngine(broadcast, ticketB64, joinerPublicKey, callsign);
+export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+    return redeemOfflineTicketEngine(broadcast, ticketB64, joinerPublicKey, callsign, joinerSigned);
 }
 
 export function checkInvite(codeOrTicket: string): InviteCheckResult {
@@ -1291,6 +1293,14 @@ export function readsAsMember(pubkey: string | null | undefined): boolean {
 /** Passes the gated-read gate: isNodeMember, and not a visitor's row (the engine's passesReadGate). Pass the verified signer. */
 export function passesReadGate(pubkey: string | null | undefined): boolean {
     return passesReadGateEngine(db, pubkey);
+}
+
+/**
+ * May bring someone in (an invite, an offline ticket, an answer to a knock): isNodeMember, and not a visitor's row (the
+ * engine's mayBringSomeoneIn). Pass the verified signer.
+ */
+export function mayBringSomeoneIn(pubkey: string | null | undefined): boolean {
+    return mayBringSomeoneInEngine(db, pubkey);
 }
 
 /** A visitor's row, not a member's (the engine's isVisitorKey; members.is_visitor). */

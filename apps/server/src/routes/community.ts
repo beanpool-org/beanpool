@@ -940,7 +940,10 @@ function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMembe
 /**
  * Whether this request carries a fresh signature by `publicKey` itself, in the replay-proof scheme the signature
  * middleware checks. The two redeem routes skip that middleware (the joiner may hold no member key yet), and both apps
- * sign them anyway. Only ever decides what an answer holds, never refuses one, so the nonce is not spent here.
+ * sign them anyway. It decides what an answer holds, and whether a visitor's row may join (engine/invites.ts
+ * unsignedVisitorRefusal). The nonce is not spent here: the signature covers the body, so a replay within the window can
+ * only repeat what the key's holder asked for (this code, this key, this name), and once that has joined the row is a
+ * member's and a replay is answered "already a member".
  */
 function signedByKey(ctx: any, publicKey: string): boolean {
     const signer = ctx.get('X-Public-Key');
@@ -962,7 +965,8 @@ router.post('/api/invite/redeem', async (ctx) => {
         return;
     }
 
-    const result = redeemInvite(code, publicKey, callsign.slice(0, 20));
+    // A visitor's row joins only on a redeem its own key signed; a key with no row joins unsigned, as before.
+    const result = redeemInvite(code, publicKey, callsign.slice(0, 20), signedByKey(ctx, publicKey));
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
@@ -981,7 +985,7 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
         ctx.body = { error: 'ticketB64, publicKey, and callsign are required' };
         return;
     }
-    const result = redeemOfflineTicket(ticketB64, publicKey, callsign.slice(0, 20));
+    const result = redeemOfflineTicket(ticketB64, publicKey, callsign.slice(0, 20), signedByKey(ctx, publicKey));
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };

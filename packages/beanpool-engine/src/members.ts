@@ -199,9 +199,10 @@ export function verifyOfflineTicket(db: Db, ticketB64: string):
         const payloadObj = JSON.parse(payloadJson);
         const { i: inviterPubkey, t: timestamp, f: intendedFor } = payloadObj;
 
-        // A member of this node, not just a row: a pruned account keeps its row, and so does the old key of a member
-        // being re-keyed, and a ticket either signs would bring its holder in as someone new (engine/invites.ts).
-        if (!isNodeMember(db, inviterPubkey)) {
+        // A member of this node who may bring someone in (mayBringSomeoneIn), not just a row: a pruned account keeps its
+        // row, and so does the old key of a member being re-keyed, and a ticket either signs would bring its holder in as
+        // someone new (engine/invites.ts); a visitor's row never joined, and its ticket would admit anyone, itself too.
+        if (!mayBringSomeoneIn(db, inviterPubkey)) {
             return { ok: false, reason: 'unknown_inviter', error: 'Inviter is not a formally recognized member of this decentralized mesh' };
         }
 
@@ -261,8 +262,9 @@ export function checkInvite(db: Db, codeOrTicket: string): InviteCheckResult {
     // standard online codes generated more than 30 days ago expire
     const ageMs = Date.now() - new Date(row.created_at).getTime();
     if (ageMs > 30 * 24 * 60 * 60 * 1000) return { valid: false, reason: 'expired' };
-    // Its maker has since been pruned or re-keyed: redeemInvite refuses it (apps/server engine/invites.ts), so say so now.
-    if (!isNodeMember(db, row.created_by)) return { valid: false, reason: 'unknown_inviter' };
+    // Its maker has since been pruned or re-keyed, or is a visitor's row (a code made before visitors couldn't make
+    // them): redeemInvite refuses it (apps/server engine/invites.ts), so say so now.
+    if (!mayBringSomeoneIn(db, row.created_by)) return { valid: false, reason: 'unknown_inviter' };
 
     const inviter = getMember(db, row.created_by);
     return { valid: true, inviterCallsign: inviter?.callsign || null };
@@ -409,6 +411,21 @@ export function passesReadGate(db: Db, pubkey: string | null | undefined): boole
     const row = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
         { status: string | null; is_visitor: number | null } | undefined;
     // isNodeMember's test, and not a visitor's row, in one lookup.
+    return !!row && !row.is_visitor && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
+}
+
+/**
+ * THE INVITE TEST: whether `pubkey` may bring someone into this node: make an invite (apps/server engine/invites.ts
+ * canInvite), sign an offline ticket that admits someone (verifyOfflineTicket), or answer a request to join (the knock
+ * routes). The act test (isNodeMember), and not a visitor's row: a visitor never joined, and an invite, a ticket or a
+ * knock's invite of its own would admit anyone, itself included, which undoes everything a visitor's row is held back
+ * from. Suspended and disabled members pass, as they did (#1177): what suspension stops is each route's own rule
+ * (answering a knock asks assertMemberActive too). One lookup. Pass the verified signer.
+ */
+export function mayBringSomeoneIn(db: Db, pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    const row = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
+        { status: string | null; is_visitor: number | null } | undefined;
     return !!row && !row.is_visitor && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
 }
 

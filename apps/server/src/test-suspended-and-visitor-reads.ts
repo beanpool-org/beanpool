@@ -26,13 +26,22 @@
  *     member's and a visitor's still get their own messages. A socket signed before its key joined is made a member
  *     socket when member_joined goes out for it, but never for a replaced key. A lifted suspension, and a visitor who
  *     joins, bring the member feed back to the socket already open.
- *  4. A visitor joins: the membership probe says it is no member until then; an invite, an offline ticket and the open
- *     door each make its row a member's (not "already a member"), use the code, keep its DMs and Beans, and it reads as
- *     a member. It may knock. registerVisitor never makes a member's row a visitor's.
+ *  4. A visitor joins: the membership probe says it is no member until then; an invite, an offline ticket (each redeem
+ *     signed by the visitor's own key, as both apps sign it) and the open door each make its row a member's (not
+ *     "already a member"), use the code, keep its DMs and Beans, and it reads as a member. It may knock.
+ *     registerVisitor never makes a member's row a visitor's.
  *  5. Invites refuse a key a re-key replaced: an invite code and an offline ticket, and neither is used.
  *  6. Replication: the export carries the mark (never the member directory); a standby takes it on a row it never had
  *     and on an older copy, takes a visitor's join (who invited them, the code), and keeps its own mark when a main
  *     server from before the column sends none.
+ *  7. Only a visitor's own key makes its row a member's: an unsigned redeem, or one signed by another key, naming a
+ *     visitor (by a DM, or federation), code or ticket, is refused and writes nothing (no rename, no inviter or code,
+ *     no joined_at, no feed line, the code and the ticket unused); the visitor's own signed redeem of the same code and
+ *     ticket then joins, keeping its DM and Beans; a key with no row still joins unsigned. A visitor's row brings
+ *     nobody in: it can't make an invite (the answer a key with no row gets), a code it made before this version and a
+ *     ticket it signs admit nobody, itself included, and it can neither approve nor decline a knock (403 not_member,
+ *     as a key with no row). A member, and a suspended or a disabled one, still makes an invite; a member answers
+ *     knocks; a suspended member still can't (#1177).
  *
  * Runs twice: here with every ENFORCE_* variable REMOVED (the fresh-download default: read auth on, the member-only
  * /ws feed), then in a child process with ENFORCE_READ_AUTH=false, where the gate doesn't run and each route's own
@@ -185,15 +194,15 @@ async function main() {
     const rex = seedMember('RekeyRex');       // a member whose phone is lost: an operator issues a re-key code
     const reporter = seedMember('ReporterRae');
 
-    // Real members, every way in.
-    const joinWithInvite = async (id: Id) => {
+    // Real members, every way in. Unsigned, as a key with no row may redeem; `signer` signs the redeem, as both apps do.
+    const joinWithInvite = async (id: Id, signer?: Id) => {
         const invite = se.generateInvite(gen.pubKeyHex)!;
-        const res = await post('/api/invite/redeem', { code: invite.code, publicKey: id.pubKeyHex, callsign: id.callsign });
+        const res = await post('/api/invite/redeem', { code: invite.code, publicKey: id.pubKeyHex, callsign: id.callsign }, signer);
         return { res, code: invite.code };
     };
-    const joinWithTicket = async (id: Id) => {
+    const joinWithTicket = async (id: Id, signer?: Id) => {
         const ticketB64 = offlineTicket(gen);
-        return post('/api/invite/redeem-offline', { ticketB64, publicKey: id.pubKeyHex, callsign: id.callsign });
+        return post('/api/invite/redeem-offline', { ticketB64, publicKey: id.pubKeyHex, callsign: id.callsign }, signer);
     };
     const joinOpenDoor = (id: Id, sub: string) => registerOpenJoin(se.broadcast, {
         publicKey: id.pubKeyHex, callsign: id.callsign, provider: 'google',
@@ -464,7 +473,8 @@ async function main() {
         const probe = await get(`/api/community/membership/${dee.pubKeyHex}`);
         assert(probe.status === 200 && probe.body?.isMember === false, `the membership probe says the DM-made visitor is no member (${probe.text.slice(0, 80)})`);
         assert(knockerRefusal(vo.pubKeyHex) === null, `a visitor may ask to join (knockerRefusal ${knockerRefusal(vo.pubKeyHex)})`);
-        const deeJoin = await joinWithInvite(dee);
+        // Each visitor signs its own redeem, as both apps do: only its own key makes its row a member's (§7).
+        const deeJoin = await joinWithInvite(dee, dee);
         assert(deeJoin.res.status === 200 && !deeJoin.res.body?.alreadyMember, `the DM-made visitor joins with an invite, not as "already a member" (${deeJoin.res.text.slice(0, 120)})`);
         const deeRow = row(dee.pubKeyHex);
         const used = db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(deeJoin.code) as any;
@@ -476,7 +486,7 @@ async function main() {
         const convs = await get(`/api/messages/conversations/${dee.pubKeyHex}`, dee);
         assert(convs.status === 200 && (convs.body?.conversations ?? []).some((c: any) => c.id === deeConvId), 'it keeps its DM with Olive');
 
-        const texJoin = await joinWithTicket(tex);
+        const texJoin = await joinWithTicket(tex, tex);
         assert(texJoin.status === 200 && !texJoin.body?.alreadyMember, `the transfer-made visitor joins with an offline ticket (${texJoin.text.slice(0, 120)})`);
         assert(visitorFlag(tex.pubKeyHex) === 0 && row(tex.pubKeyHex).invited_by === gen.pubKeyHex, 'its row is a member\'s now');
         assert(Number(se.getBalance(tex.pubKeyHex)?.balance) === 5, `it keeps its 5 Beans (${se.getBalance(tex.pubKeyHex)?.balance})`);
@@ -559,6 +569,140 @@ async function main() {
         se.setNodeRole('primary');
         assert(visitorFlag(yan.pubKeyHex) === 1, `a copy from a main server that predates the column leaves the mark as it is (is_visitor ${visitorFlag(yan.pubKeyHex)})`);
         await p2p.stop();
+    }
+
+    // ── 7. Only a visitor's own key joins with its row; a visitor's row brings nobody in ───────────────────────────
+    console.log('\n── 7. only a visitor itself joins with its row, and a visitor brings nobody in ──');
+    {
+        const feedLines = (pk: string) => (db.prepare("SELECT COUNT(*) AS n FROM activity_feed WHERE event_type = 'member_joined' AND actor_pubkey = ?").get(pk) as { n: number }).n;
+        const codeUser = (code: string) => (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(code) as { used_by: string | null } | undefined)?.used_by ?? null;
+        const codesUsedBy = (pk: string) => (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE used_by = ?').get(pk) as { n: number }).n;
+        const snapshot = (pk: string) => {
+            const r = row(pk);
+            return JSON.stringify([r.callsign, r.invited_by, r.invite_code, r.joined_at, r.is_visitor, r.updated_at]);
+        };
+
+        // Val: a visitor made by a member's DM, with Beans. Vera: a federation visitor.
+        const val = keypair('VisitorVal');
+        const valConv = await post('/api/messages/conversation', { type: 'dm', participants: [olive.pubKeyHex, val.pubKeyHex], createdBy: olive.pubKeyHex }, olive);
+        se.transfer('genesis', val.pubKeyHex, 3, 'beans for Val', 'direct', true);
+        const vera = keypair('VisitorVera');
+        registerVisitor(vera.pubKeyHex, vera.callsign, 'https://peer.example.test');
+        assert(valConv.status === 200 && visitorFlag(val.pubKeyHex) === 1 && visitorFlag(vera.pubKeyHex) === 1,
+            `two visitors: Val (a DM and 3 Beans) and Vera (federation) (${valConv.status}, ${visitorFlag(val.pubKeyHex)}, ${visitorFlag(vera.pubKeyHex)})`);
+        const code = se.generateInvite(gen.pubKeyHex)!.code;
+        const ticketB64 = offlineTicket(gen);
+        const before = new Map([[val.pubKeyHex, snapshot(val.pubKeyHex)], [vera.pubKeyHex, snapshot(vera.pubKeyHex)]]);
+        // The name the deciding pass measured: the genesis member's, so an unsigned redeem can't dress a visitor as her.
+        const attempts: [string, string, Record<string, string>, Id | undefined, Id][] = [
+            ["an unsigned invite redeem naming a DM-made visitor's key", '/api/invite/redeem', { code, publicKey: val.pubKeyHex, callsign: gen.callsign }, undefined, val],
+            ["an invite redeem signed by another key (a member's) naming it", '/api/invite/redeem', { code, publicKey: val.pubKeyHex, callsign: gen.callsign }, olive, val],
+            ['an unsigned offline-ticket redeem naming it', '/api/invite/redeem-offline', { ticketB64, publicKey: val.pubKeyHex, callsign: gen.callsign }, undefined, val],
+            ["an offline-ticket redeem signed by another key (a member's) naming it", '/api/invite/redeem-offline', { ticketB64, publicKey: val.pubKeyHex, callsign: gen.callsign }, olive, val],
+            ["an unsigned invite redeem naming a federation visitor's key", '/api/invite/redeem', { code, publicKey: vera.pubKeyHex, callsign: gen.callsign }, undefined, vera],
+            ['an unsigned offline-ticket redeem naming it', '/api/invite/redeem-offline', { ticketB64, publicKey: vera.pubKeyHex, callsign: gen.callsign }, undefined, vera],
+        ];
+        for (const [label, p, body, signer, target] of attempts) {
+            const r = await post(p, body, signer);
+            assert(r.status === 400 && r.body?.success !== true && !r.body?.member,
+                `${label} is refused (${r.status} ${r.text.slice(0, 140)})`);
+            assert(snapshot(target.pubKeyHex) === before.get(target.pubKeyHex) && feedLines(target.pubKeyHex) === 0 && codesUsedBy(target.pubKeyHex) === 0,
+                `…and writes nothing: no rename, no inviter or code, no joined_at, no feed line, no code used, still a visitor (${row(target.pubKeyHex).callsign}, is_visitor ${visitorFlag(target.pubKeyHex)})`);
+        }
+        assert(codeUser(code) === null, 'the invite code is still unused after all of them');
+
+        // The visitor's own signed redeem, of the same code and the same ticket (so neither was used above).
+        const valJoin = await post('/api/invite/redeem', { code, publicKey: val.pubKeyHex, callsign: val.callsign }, val);
+        const valRow = row(val.pubKeyHex);
+        assert(valJoin.status === 200 && valJoin.body?.success === true && !valJoin.body?.alreadyMember && visitorFlag(val.pubKeyHex) === 0
+            && valRow.invited_by === gen.pubKeyHex && valRow.invite_code === code && codeUser(code) === val.pubKeyHex && feedLines(val.pubKeyHex) === 1,
+            `Val's own signed redeem of the same code makes her row a member's and uses the code (${valJoin.status} ${valJoin.text.slice(0, 100)})`);
+        assert(Number(se.getBalance(val.pubKeyHex)?.balance) === 3, `…she keeps her 3 Beans (${se.getBalance(val.pubKeyHex)?.balance})`);
+        const valConvs = await get(`/api/messages/conversations/${val.pubKeyHex}`, val);
+        assert(valConvs.status === 200 && (valConvs.body?.conversations ?? []).some((c: any) => c.id === valConv.body?.conversation?.id),
+            `…and her DM with Olive (${valConvs.status})`);
+        await expectReader('Val, joined with her own signed redeem', val);
+        const veraJoin = await post('/api/invite/redeem-offline', { ticketB64, publicKey: vera.pubKeyHex, callsign: vera.callsign }, vera);
+        assert(veraJoin.status === 200 && !veraJoin.body?.alreadyMember && visitorFlag(vera.pubKeyHex) === 0 && row(vera.pubKeyHex).invited_by === gen.pubKeyHex,
+            `Vera's own signed redeem of the same ticket makes her row a member's (${veraJoin.status} ${veraJoin.text.slice(0, 100)})`);
+
+        // A key with no row still joins unsigned, code and ticket, as before.
+        const nell = keypair('NewNell');
+        const nellJoin = await post('/api/invite/redeem', { code: se.generateInvite(gen.pubKeyHex)!.code, publicKey: nell.pubKeyHex, callsign: nell.callsign });
+        assert(nellJoin.status === 200 && !nellJoin.body?.alreadyMember && visitorFlag(nell.pubKeyHex) === 0,
+            `a key with no row still joins with an unsigned invite redeem (${nellJoin.status} ${nellJoin.text.slice(0, 100)})`);
+        const nora = keypair('NewNora');
+        const noraJoin = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(gen), publicKey: nora.pubKeyHex, callsign: nora.callsign });
+        assert(noraJoin.status === 200 && !noraJoin.body?.alreadyMember && visitorFlag(nora.pubKeyHex) === 0,
+            `…and with an unsigned offline-ticket redeem (${noraJoin.status} ${noraJoin.text.slice(0, 100)})`);
+
+        // A visitor's row brings nobody in: no invite, no offline ticket, no answer to a knock. A key with no row gets the
+        // same answers.
+        const wes = keypair('VisitorWes');
+        se.transfer('genesis', wes.pubKeyHex, 1, 'hello', 'direct', true);
+        const nobody = keypair('NobodyNat');
+        assert(visitorFlag(wes.pubKeyHex) === 1 && !row(nobody.pubKeyHex), 'Wes is a visitor (a transfer); Nat has no row');
+        const wesMakes = await post('/api/invite/generate', { publicKey: wes.pubKeyHex }, wes);
+        const natMakes = await post('/api/invite/generate', { publicKey: nobody.pubKeyHex }, nobody);
+        assert(wesMakes.status === 403 && wesMakes.status === natMakes.status && wesMakes.text === natMakes.text,
+            `a visitor can't make an invite: the answer a key with no row gets (${wesMakes.status} ${wesMakes.text.slice(0, 80)} / ${natMakes.status} ${natMakes.text.slice(0, 80)})`);
+        assert(se.generateInvite(wes.pubKeyHex) === null && !db.prepare('SELECT 1 FROM invite_codes WHERE created_by = ?').get(wes.pubKeyHex), '…and no code is written');
+
+        // Members still do, a suspended and a disabled one included, as #1177 left them.
+        const sam = seedMember('SuspendedSam');
+        const samReport = se.submitReport(reporter.pubKeyHex, sam.pubKeyHex, 'Spamming the market chats');
+        assert(!!samReport?.id && se.actionReport(samReport!.id, false, true) === true && row(sam.pubKeyHex).status === 'suspended', 'Sam is suspended through a report');
+        const dora = seedMember('DisabledDora');
+        se.adminSetUserStatus(dora.pubKeyHex, 'disabled');
+        for (const [label, id] of [['a member', olive], ['a suspended member', sam], ['a disabled member', dora]] as const) {
+            const made = await post('/api/invite/generate', { publicKey: id.pubKeyHex }, id);
+            assert(made.status === 200 && !!made.body?.invite?.code, `${label} still makes an invite (${made.status} ${made.text.slice(0, 80)})`);
+        }
+
+        // A code a visitor made before this version (on main, `generateInvite` asked only for the act test), and an
+        // offline ticket a visitor signs: neither brings in someone new, nor the visitor itself.
+        const wesCode = 'INV-WESV-ISIT';
+        db.prepare('INSERT INTO invite_codes (code, created_by, created_at) VALUES (?, ?, ?)').run(wesCode, wes.pubKeyHex, new Date().toISOString());
+        const pip = keypair('NewPip');
+        const checked = await get(`/api/invite/check?code=${wesCode}`);
+        assert(checked.status === 200 && checked.body?.valid === false, `the pre-flight check calls a visitor's code no good (${checked.text.slice(0, 100)})`);
+        const viaWesCode = await post('/api/invite/redeem', { code: wesCode, publicKey: pip.pubKeyHex, callsign: pip.callsign });
+        assert(viaWesCode.status === 400 && !row(pip.pubKeyHex) && codeUser(wesCode) === null,
+            `a code a visitor made brings nobody in, and stays unused (${viaWesCode.status} ${viaWesCode.text.slice(0, 100)})`);
+        const selfRedeem = await post('/api/invite/redeem', { code: wesCode, publicKey: wes.pubKeyHex, callsign: 'WesTheMember' }, wes);
+        assert(selfRedeem.status === 400 && visitorFlag(wes.pubKeyHex) === 1 && codeUser(wesCode) === null,
+            `…nor the visitor itself, with its own signed redeem (${selfRedeem.status} ${selfRedeem.text.slice(0, 100)})`);
+        const viaWesTicket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(wes), publicKey: pip.pubKeyHex, callsign: pip.callsign });
+        assert(viaWesTicket.status === 400 && !row(pip.pubKeyHex),
+            `an offline ticket a visitor signs brings nobody in (${viaWesTicket.status} ${viaWesTicket.text.slice(0, 100)})`);
+        const selfTicket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(wes), publicKey: wes.pubKeyHex, callsign: 'WesTheMember' }, wes);
+        assert(selfTicket.status === 400 && visitorFlag(wes.pubKeyHex) === 1 && codesUsedBy(wes.pubKeyHex) === 0,
+            `…nor the visitor itself (${selfTicket.status} ${selfTicket.text.slice(0, 100)})`);
+
+        // Knocks: a visitor neither approves nor declines one; a member does both; a suspended member still doesn't.
+        const knockBody = (id: Id) => ({ callsign: id.callsign, message: `Hello from ${id.callsign}, I live nearby.`, fromNode: 'https://global.beanpool.org/' });
+        const kay = keypair('KnockingKay');
+        const knockId = (id: Id) => (db.prepare('SELECT id FROM join_requests WHERE pubkey = ?').get(id.pubKeyHex) as { id: string } | undefined)?.id ?? '';
+        const kayKnock = await post('/api/join/knock', knockBody(kay), kay);
+        const kayId = knockId(kay);
+        assert(kayKnock.status === 201 && !!kayId, `Kay asks to join (${kayKnock.status} ${kayKnock.text.slice(0, 100)})`);
+        for (const verb of ['approve', 'decline']) {
+            const byWes = await post(`/api/join/knocks/${kayId}/${verb}`, {}, wes);
+            const byNat = await post(`/api/join/knocks/${kayId}/${verb}`, {}, nobody);
+            assert(byWes.status === 403 && byWes.body?.code === 'not_member' && byWes.status === byNat.status && byWes.body?.code === byNat.body?.code,
+                `a visitor can't ${verb} a knock: 403 not_member, as a key with no row (${byWes.status} ${byWes.body?.code} / ${byNat.status} ${byNat.body?.code})`);
+        }
+        const kayRow = db.prepare('SELECT status, invite_code FROM join_requests WHERE id = ?').get(kayId) as { status: string; invite_code: string | null } | undefined;
+        assert(kayRow?.status === 'pending' && !kayRow?.invite_code, `…and Kay's knock is still waiting, with no invite (${kayRow?.status})`);
+        const samAnswers = await post(`/api/join/knocks/${kayId}/approve`, {}, sam);
+        assert(samAnswers.status === 403 && samAnswers.body?.code === 'not_active',
+            `a suspended member still can't answer a knock, as #1177 left them (${samAnswers.status} ${samAnswers.body?.code})`);
+        const oliveApproves = await post(`/api/join/knocks/${kayId}/approve`, {}, olive);
+        assert(oliveApproves.status === 200 && !!oliveApproves.body?.invite, `a member approves Kay's knock (${oliveApproves.status} ${oliveApproves.text.slice(0, 100)})`);
+        const kim = keypair('KnockingKim');
+        const kimKnock = await post('/api/join/knock', knockBody(kim), kim);
+        const oliveDeclines = await post(`/api/join/knocks/${knockId(kim)}/decline`, {}, olive);
+        assert(kimKnock.status === 201 && oliveDeclines.status === 200, `a member declines Kim's knock (${kimKnock.status}, ${oliveDeclines.status} ${oliveDeclines.text.slice(0, 100)})`);
     }
 
     for (const s of Object.values(sockets)) s.ws.close();

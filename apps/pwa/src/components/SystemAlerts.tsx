@@ -12,8 +12,14 @@
  * marks nothing, so a tab closed or discarded before the member looks leaves it for the next open. Two tabs may both
  * show it; none may use it up unseen. A read or a mark that fails shows nothing and breaks nothing: an unmarked notice
  * is read again at the next open, never lost.
+ *
+ * Put away on purpose, never by accident: for a second after each alert appears its buttons ignore a press, as browsers
+ * delay their own permission buttons, and so they do for a second after a letter is typed. A member typing when an
+ * alert comes, whose Tab lands on Acknowledge, would otherwise put it away unread with the next Space (#1186's review,
+ * measured). While an alert shows it is modal: Tab stays inside it, and when the last one is put away focus goes back
+ * to where the member was.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { onSystemAnnouncement, onSocketOpen } from '../lib/sync';
 import { getUnseenNotices, markNoticesSeen, type KeptNotice } from '../lib/api';
 
@@ -30,6 +36,8 @@ export interface ShownAlert {
 
 /** A second read this soon after one that answered is the same read: the app opening, then its socket connecting. */
 export const REREAD_GAP_MS = 5_000;
+/** How long after an alert appears, or after a letter is typed while it shows, its buttons ignore a press. */
+export const PRESS_GUARD_MS = 1_000;
 /** The most ids one mark sends (the node takes up to 100). */
 const MARK_BATCH = 100;
 
@@ -70,8 +78,18 @@ function markSeen(ids: string[]): void {
     }
 }
 
-const COLOURS: Record<string, string> = { critical: '#ef4444', warning: '#f59e0b' };
+/** Each severity's heading and border, and its button: index.css, a pair per theme that passes WCAG AA on the dialog. */
+const SEVERITIES = new Set(['info', 'warning', 'critical']);
+const ink = (severity: string) => `var(--alert-${SEVERITIES.has(severity) ? severity : 'info'}-ink)`;
+const fill = (severity: string) => `var(--alert-${SEVERITIES.has(severity) ? severity : 'info'}-fill)`;
 const ICONS: Record<string, string> = { critical: '🚨 ', warning: '⚠️ ' };
+
+/** A key that types a character (not Space, Enter or Tab, which work the buttons): the member is typing, not pressing. */
+function typesACharacter(e: KeyboardEvent): boolean {
+    if (e.ctrlKey || e.metaKey || e.altKey) return false;
+    // 'Unidentified' and 'Process': a phone's on-screen keyboard, and a character being composed.
+    return (e.key.length === 1 && e.key !== ' ') || e.key === 'Unidentified' || e.key === 'Process';
+}
 /** A title's own icon: the node's moderation notices start with one ("🛡️ Your post was removed"). */
 const LEADING_EMOJI = /^\s*(\p{Extended_Pictographic}[\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F\u200D]*)\s*/u;
 
@@ -95,9 +113,11 @@ export interface SystemAlertsProps {
     onShown?: (alert: ShownAlert) => void;
     /** For tests: the gap between two reads of the kept notices. */
     rereadGapMs?: number;
+    /** For tests: how long the buttons ignore a press after an alert appears or a letter is typed. */
+    pressGuardMs?: number;
 }
 
-export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = REREAD_GAP_MS }: SystemAlertsProps) {
+export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = REREAD_GAP_MS, pressGuardMs = PRESS_GUARD_MS }: SystemAlertsProps) {
     const [queue, setQueue] = useState<ShownAlert[]>([]);
     /** Every kept copy queued or shown for this member in this tab: never queued twice. */
     const known = useRef(new Set<string>());
@@ -106,6 +126,9 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
     const onShownRef = useRef(onShown);
     onShownRef.current = onShown;
     const dialogRef = useRef<HTMLDivElement>(null);
+    /** When the alert showing now appeared, and when a character was last typed while one showed (performance.now()). */
+    const shownAt = useRef(-Infinity);
+    const typedAt = useRef(-Infinity);
 
     const enqueue = useCallback((alerts: (ShownAlert | null)[]) => {
         const fresh: ShownAlert[] = [];
@@ -167,6 +190,49 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
     };
 
     const head = queue[0];
+    const showing = !!head;
+
+    // While an alert shows it is modal (WCAG 2.1.2, 2.4.3): Tab and Shift+Tab go round its buttons and never out to the
+    // page behind it, and focus that lands outside it all the same comes back to it. A typed character is noted (see
+    // `pressable`). When the last alert is put away, focus goes back to where the member was when the first came, if
+    // that is still on the page and nothing else has taken focus since. Declared before the effect that focuses the
+    // dialog, so it sees the member's own focus first.
+    useEffect(() => {
+        if (!showing) return;
+        const before = document.activeElement;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (typesACharacter(e)) typedAt.current = performance.now();
+            const dialog = dialogRef.current;
+            if (e.key !== 'Tab' || !dialog) return;
+            const stops = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled)'));
+            const at = stops.indexOf(document.activeElement as HTMLElement);
+            const last = stops.length - 1;
+            // From one of its buttons to the next: the browser's own Tab. Anywhere else, round to the other end.
+            if (at !== -1 && (e.shiftKey ? at > 0 : at < last)) return;
+            e.preventDefault();
+            (stops.length === 0 ? dialog : e.shiftKey ? stops[last] : stops[0]).focus();
+        };
+        const onFocusIn = (e: FocusEvent) => {
+            const dialog = dialogRef.current;
+            if (dialog && e.target instanceof Node && !dialog.contains(e.target)) dialog.focus();
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        document.addEventListener('focusin', onFocusIn, true);
+        return () => {
+            document.removeEventListener('keydown', onKeyDown, true);
+            document.removeEventListener('focusin', onFocusIn, true);
+            const now = document.activeElement;
+            if (before instanceof HTMLElement && before !== document.body && before.isConnected && (!now || now === document.body)) {
+                before.focus();
+            }
+        };
+    }, [showing]);
+
+    // Each alert's second starts as it is drawn: a layout effect, so no press can come in between.
+    useLayoutEffect(() => {
+        if (head) shownAt.current = performance.now();
+    }, [head?.key]);
+
     useEffect(() => {
         if (!head) return;
         onShownRef.current?.(head);
@@ -179,14 +245,20 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
 
     if (!head) return null;
 
-    const colour = COLOURS[head.severity] ?? '#3b82f6';
     const { icon, words } = titleParts(head.title, head.severity);
     const waiting = queue.length;
+    /** A press counts once this alert has shown for the guard's length, and nothing has been typed for as long. */
+    const pressable = () => {
+        const now = performance.now();
+        return now - shownAt.current >= pressGuardMs && now - typedAt.current >= pressGuardMs;
+    };
     const acknowledge = () => {
+        if (!pressable()) return;
         putAway([head]);
         setQueue(q => (q[0]?.key === head.key ? q.slice(1) : q));
     };
     const closeAll = () => {
+        if (!pressable()) return;
         const closed = queue.slice(1);
         // Closed unread, the app still hears of each: a pause behind another notice still puts "Posting paused" up.
         for (const a of closed) onShownRef.current?.(a);
@@ -215,7 +287,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                 aria-describedby="system-alert-body"
                 style={{
                     background: 'var(--bg-primary)',
-                    border: `2px solid ${colour}`,
+                    border: `2px solid ${ink(head.severity)}`,
                     borderRadius: '12px',
                     maxWidth: '400px', width: '100%', maxHeight: '100%', boxSizing: 'border-box',
                     // The words scroll and the buttons stay: a long notice at 320px with large text still shows Acknowledge.
@@ -227,7 +299,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                 }}
             >
                 <div data-testid="system-alert-text" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '1.5rem 1.25rem 0' }}>
-                    <h2 id="system-alert-title" style={{ margin: '0 0 1rem', fontSize: 'min(1.5rem, 7vw)', lineHeight: 1.25, color: colour, overflowWrap: 'anywhere' }}>
+                    <h2 id="system-alert-title" style={{ margin: '0 0 1rem', fontSize: 'min(1.5rem, 7vw)', lineHeight: 1.25, color: ink(head.severity), overflowWrap: 'anywhere' }}>
                         <span aria-hidden="true">{icon}</span>
                         {words}
                     </h2>
@@ -246,7 +318,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                         onClick={acknowledge}
                         style={{
                             width: '100%', padding: '0.8rem',
-                            background: colour,
+                            background: fill(head.severity),
                             color: '#fff', border: 'none', borderRadius: '8px',
                             fontSize: '1.1rem', fontWeight: 600, cursor: 'pointer'
                         }}
@@ -260,7 +332,8 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                             style={{
                                 width: '100%', padding: '0.6rem', marginTop: '0.5rem',
                                 background: 'transparent', color: 'var(--text-secondary)',
-                                border: '1px solid var(--border-secondary)', borderRadius: '8px',
+                                // A border that shows (3:1 or more on the dialog, WCAG 1.4.11): --border-secondary was 1.06:1.
+                                border: '1px solid var(--text-muted)', borderRadius: '8px',
                                 fontSize: '0.95rem', cursor: 'pointer'
                             }}
                         >

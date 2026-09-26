@@ -10,6 +10,7 @@ import { render, screen, waitFor, fireEvent, within, act } from '@testing-librar
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { App } from './App';
+import { PRESS_GUARD_MS } from './components/SystemAlerts';
 import * as api from './lib/api';
 import type { KeptNotice, CommunityStanding } from './lib/api';
 
@@ -76,6 +77,8 @@ const PAUSED = standing({ muted: true, until: '9999-12-31T23:59:59.999Z' });
 const alertDialog = () => screen.queryByRole('alertdialog');
 /** The node's live alert reaching this tab's socket. */
 const announce = (a: any) => act(() => { hooks.announce!(a); });
+/** An alert's buttons ignore a press for its first second (SystemAlerts PRESS_GUARD_MS): the member reads, then taps. */
+const readIt = () => new Promise(r => setTimeout(r, PRESS_GUARD_MS + 50));
 
 describe('The web app shows moderation notices kept while it was closed', () => {
     beforeEach(() => {
@@ -101,6 +104,7 @@ describe('The web app shows moderation notices kept while it was closed', () => 
         await new Promise(r => setTimeout(r, 20));
         expect(api.markNoticesSeen).not.toHaveBeenCalled();
 
+        await readIt();
         fireEvent.click(within(first).getByRole('button', { name: 'Acknowledge' }));
         await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([REMOVED.id]));
         const second = await screen.findByRole('alertdialog');
@@ -108,6 +112,7 @@ describe('The web app shows moderation notices kept while it was closed', () => 
         expect(second).toHaveTextContent(HIDDEN.body);
         expect(api.markNoticesSeen).not.toHaveBeenCalledWith([HIDDEN.id]);
 
+        await readIt();
         fireEvent.click(within(second).getByRole('button', { name: 'Acknowledge' }));
         await waitFor(() => expect(alertDialog()).toBeNull());
         await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([HIDDEN.id]));
@@ -127,6 +132,7 @@ describe('The web app shows moderation notices kept while it was closed', () => 
         render(<App />);
         const again = await screen.findByRole('alertdialog');
         expect(again).toHaveTextContent(REMOVED.body);
+        await readIt();
         fireEvent.click(within(again).getByRole('button', { name: 'Acknowledge' }));
         await waitFor(() => expect(alertDialog()).toBeNull());
         await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([REMOVED.id]));
@@ -144,6 +150,7 @@ describe('The web app shows moderation notices kept while it was closed', () => 
         await announce({ type: 'system_announcement', title: REMOVED.title, body: REMOVED.body, severity: 'info', kind: 'post_removed', noticeId: REMOVED.id });
         expect(within(shown).queryByText(/1 of/)).toBeNull();
         expect(api.markNoticesSeen).not.toHaveBeenCalled();
+        await readIt();
         fireEvent.click(within(shown).getByRole('button', { name: 'Acknowledge' }));
         await waitFor(() => expect(alertDialog()).toBeNull());
         await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([REMOVED.id]));
@@ -207,7 +214,9 @@ describe('A paused member sees it plainly', () => {
         vi.mocked(api.getCommunityMe).mockResolvedValue(PAUSED);
         await announce({ type: 'system_announcement', title: '🛡️ Posting paused', body: 'You can’t post.', severity: 'info', kind: 'moderation_muted', noticeId: 'n-muted' });
         expect(await screen.findByTestId('moderation-pause-card')).toBeInTheDocument();
-        fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Acknowledge' }));
+        const pause = await screen.findByRole('alertdialog');
+        await readIt();
+        fireEvent.click(within(pause).getByRole('button', { name: 'Acknowledge' }));
 
         vi.mocked(api.getCommunityMe).mockResolvedValue(NOT_PAUSED);
         await announce({ type: 'system_announcement', title: '🛡️ You can post again', body: 'A moderator lifted the pause.', severity: 'info', kind: 'moderation_unmuted', noticeId: 'n-unmuted' });
@@ -225,6 +234,7 @@ describe('A paused member sees it plainly', () => {
         await announce({ type: 'system_announcement', title: '🛡️ You can post again', body: 'A moderator lifted the pause.', severity: 'info', kind: 'moderation_unmuted', noticeId: 'n-unmuted-behind' });
         const dialog = await screen.findByRole('alertdialog');
         expect(dialog).toHaveTextContent(REMOVED.title);
+        await readIt();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Close all 2' }));
         await waitFor(() => expect(screen.queryByTestId('moderation-pause-card')).toBeNull());
     });

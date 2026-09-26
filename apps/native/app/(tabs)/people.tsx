@@ -186,7 +186,8 @@ export default function PeopleScreen() {
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
-        if (!identity || !anchorUrl || !profileKnown || !takesKnocks || isGuest) return;
+        // The tab stays mounted across a switch of community: a count read on the last one must not ride along.
+        if (!identity || !anchorUrl || !profileKnown || !takesKnocks || isGuest) { setKnockCount(0); return; }
         let alive = true;
         fetchJoinRequests(anchorUrl, identity).then(r => { if (alive) setKnockCount(r.ok ? r.total : 0); });
         return () => { alive = false; };

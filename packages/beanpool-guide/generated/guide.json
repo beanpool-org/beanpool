@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 48,
-  "hash": "71afc9ca34a082e9acc0fdee32141e4fc0587ffa4afff21ee65e5f65ec48c360",
+  "version": 50,
+  "hash": "e057b6ec7e990b6f0a289d4ed91610d89a14702f89149c56fd26f232303a3d69",
   "sections": [
     {
       "id": "about",
@@ -1720,7 +1720,7 @@
         },
         {
           "type": "p",
-          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account together with your community's server can open it, as with a sign-in account linked on the phone app. Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
+          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account together with your community's server can open it, as with a sign-in account linked on the phone app. The people who run the server can open it too: see \"Getting your account back\". Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
         },
         {
           "type": "p",
@@ -4920,6 +4920,18 @@
         {
           "type": "p",
           "text": "To remove it, tap **Disconnect**."
+        },
+        {
+          "type": "h2",
+          "text": "Who can open the copy"
+        },
+        {
+          "type": "p",
+          "text": "A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it."
+        },
+        {
+          "type": "p",
+          "text": "If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account. Disconnecting deletes the copy. It does not delete the copies already in the server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back. The people who run the server can open those too. Nor does it delete the copy on a standby server, the second server some communities keep ready to take over: if that server ever does, a sign-in you disconnected is connected there again and brings your account back, until you disconnect it again."
         },
         {
           "type": "h2",

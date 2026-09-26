@@ -723,7 +723,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
-                                <SignInRecoveryLine enrolled={signInRecovery} />
+                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasMnemonic(identity)} />
                             </div>
                         </div>
 

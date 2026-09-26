@@ -9,7 +9,7 @@ import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
 import {
-    getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding, resumePlan,
+    getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding, resumePlan, keyMadeForThisJoin,
     type OnboardingFlow,
 } from '../utils/onboarding-state';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile } from '../utils/node-profile';
@@ -179,6 +179,14 @@ export default function WelcomeScreen() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pendingIdentity, setPendingIdentity] = useState<BeanPoolIdentity | null>(null);
+    /** The key this join made, when it made one (onboarding-state.ts `newKey`): whose words Safety Backup shows. */
+    const [pendingNewKey, setPendingNewKey] = useState<string | null>(null);
+    /**
+     * Whether Safety Backup's words are the member's own new ones: a key this join made (the invite wizard, or the global
+     * door). Otherwise the key was already on this phone, an established account joining another community, and its
+     * words are read only once the phone's lock has passed (handleShowPendingWords), as Settings reads them.
+     */
+    const pendingWordsAreNew = !!pendingIdentity && pendingNewKey === pendingIdentity.publicKey;
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [inviteCode, setInviteCode] = useState('');
     const [pendingInviteCode, setPendingInviteCode] = useState('');
@@ -276,12 +284,20 @@ export default function WelcomeScreen() {
     const outgoingIdentityRef = useRef(outgoingIdentity);
     outgoingIdentityRef.current = outgoingIdentity;
     const outgoingLockBusyRef = useRef(false);
+    const pendingIdentityRef = useRef(pendingIdentity);
+    pendingIdentityRef.current = pendingIdentity;
+    const pendingLockBusyRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
+        if (!pendingWordsAreNew) {
+            // The phone's own account (or none): nothing is read until Show passes its lock (handleShowPendingWords).
+            setPendingWords(null);
+            return;
+        }
         getMnemonic(pendingIdentity).then(w => { if (!cancelled) setPendingWords(w); });
         return () => { cancelled = true; };
-    }, [pendingIdentity]);
+    }, [pendingIdentity, pendingWordsAreNew]);
 
     useEffect(() => {
         setOutgoingWords(null);
@@ -574,6 +590,7 @@ export default function WelcomeScreen() {
                 setGlobalPhase('checking');
             } else if (plan.identity) {
                 setPendingIdentity(plan.identity);
+                setPendingNewKey(plan.newKey ? plan.identity.publicKey : null);
             }
             setMode(plan.mode);
         })();
@@ -635,6 +652,9 @@ export default function WelcomeScreen() {
             const parsedCode = normaliseInviteCode(rawInvite);
             const { checkInvite, redeemInvite } = await import('../utils/db');
             const storedIdentity = await loadIdentity();
+            // Whether the phone's key is one this join made (an earlier pass through this wizard, or the global door): read
+            // before adoptJoinKey below takes the door's mark off the record.
+            const joinRecord = storedIdentity ? await getPendingOnboarding() : null;
 
             const check = await checkInvite(parsedCode, nodeUrl);
             if (check && !check.valid) {
@@ -680,7 +700,11 @@ export default function WelcomeScreen() {
             const identity = storedIdentity
                 ? { ...storedIdentity, callsign: callsign.trim() }
                 : await createIdentity(callsign.trim());
+            // A key made here is the member's own new account; the phone's own key is an established account, whose words
+            // Safety Backup shows only once the phone's lock has passed.
+            const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey);
             setPendingIdentity(identity);
+            setPendingNewKey(keyIsNew ? identity.publicKey : null);
             setPendingInviteCode(parsedCode);
 
             // The phone's key is about to go to this community: if the global door made it, the door must never
@@ -708,6 +732,7 @@ export default function WelcomeScreen() {
                 anchorUrl: nodeUrl,
                 callsign: callsign.trim(),
                 redeemed: true,
+                ...(keyIsNew ? { newKey: identity.publicKey } : {}),
             });
 
             // Go to avatar selection (Step 2)
@@ -1131,7 +1156,7 @@ export default function WelcomeScreen() {
     async function afterDoorAnswer(answer: DoorAnswer, key: JoinKey, identity: BeanPoolIdentity, via: 'signIn' | 'join') {
         if (answer.kind === 'joined') {
             // Under the name the node kept: from the answer, or, for `already_member`, asked of the node.
-            await finishGlobalJoin(await joinedUnderNodeName(GLOBAL_NODE_URL, answer, identity), answer.enrolment);
+            await finishGlobalJoin(await joinedUnderNodeName(GLOBAL_NODE_URL, answer, identity), answer.enrolment, key);
             return;
         }
         const next = nextStepFor(answer);
@@ -1155,7 +1180,10 @@ export default function WelcomeScreen() {
     }
 
     /** In. From here it is an invite join's steps: photo, Safety Backup, How it Works, then the Market. */
-    async function finishGlobalJoin(joined: BeanPoolIdentity, joinEnrolment: KeeperEnrolmentResult | null) {
+    async function finishGlobalJoin(joined: BeanPoolIdentity, joinEnrolment: KeeperEnrolmentResult | null, key: JoinKey) {
+        // Whose words Safety Backup shows: a key the door made is the member's own new one; the phone's own account's wait
+        // for its lock. Read before the record below replaces the door's.
+        const keyIsNew = key.createdHere || keyMadeForThisJoin(await getPendingOnboarding(), joined.publicKey);
         // On the phone first, under the name the node kept: the wizard's record below means nothing without it.
         const identity = await keepJoinedIdentity(joined);
         await AsyncStorage.setItem('beanpool_anchor_url', GLOBAL_NODE_URL);
@@ -1169,6 +1197,7 @@ export default function WelcomeScreen() {
             callsign: identity.callsign,
             redeemed: true,
             joinEnrolment,
+            ...(keyIsNew ? { newKey: identity.publicKey } : {}),
         });
         setJoinFlow('global');
         setCallsign(identity.callsign);
@@ -1179,6 +1208,7 @@ export default function WelcomeScreen() {
         // The sign-in the member joined with already protects them: Safety Backup says so, with no second sign-in.
         setEnrolment(joinEnrolment);
         setPendingIdentity(identity);
+        setPendingNewKey(keyIsNew ? identity.publicKey : null);
         setGlobalKey(null);
         setDoorSignIn(null);
         setMode('profileSetup');
@@ -1210,6 +1240,24 @@ export default function WelcomeScreen() {
         hapticTick();
         setOutgoingSeedCopied(true);
         setTimeout(() => setOutgoingSeedCopied(false), 2000);
+    }
+
+    // --- Safety Backup's words for a key the phone already had (an established account joining another community): the
+    // phone's lock first, the check Settings asks. A key this join made shows its words with no check: they are the
+    // member's own new ones (PR #1205 review 4112404374). ---
+    async function handleShowPendingWords() {
+        if (pendingLockBusyRef.current) return;
+        pendingLockBusyRef.current = true;
+        hapticTick();
+        const account = pendingIdentity;
+        try {
+            const words = await readWordsBehindLock(account, 'Confirm your security to view your recovery phrase.');
+            // A check that did not pass shows nothing. Nor does one that answers after the step has moved on.
+            if (!words || pendingIdentityRef.current !== account) return;
+            setPendingWords(words);
+        } finally {
+            pendingLockBusyRef.current = false;
+        }
     }
 
 
@@ -1247,7 +1295,8 @@ export default function WelcomeScreen() {
 
     // --- Copy seed phrase to clipboard ---
     async function handleCopySeed() {
-        const words = await getMnemonic(pendingIdentity);
+        // What the step shows: the member's new words, or the phone's own account's once its lock has passed.
+        const words = pendingWords;
         if (!words) return;
         await Clipboard.setStringAsync(words.join(' '));
         hapticTick();
@@ -1509,15 +1558,19 @@ export default function WelcomeScreen() {
                           A phone restored with a sign-in, joining another community, has no words: the
                           panel says so in one line, and there is no grid, copy or tickbox for words that
                           don't exist (the grid would otherwise wait on them forever).
+
+                          A phone joining another community with the account it already holds: those words are
+                          an established account's, so they are drawn only once Show has passed the phone's lock
+                          (handleShowPendingWords), whether or not a sign-in covers it.
                         */}
-                        {!hasMnemonic(pendingIdentity) ? null : !protection.showWords && !revealWords ? (
+                        {!hasMnemonic(pendingIdentity) ? null : !(pendingWordsAreNew ? protection.showWords || revealWords : !!pendingWords) ? (
                             <Pressable
                                 style={[styles.secondaryBtn, { marginBottom: 4 }]}
-                                onPress={() => setRevealWords(true)}
+                                onPress={pendingWordsAreNew ? () => setRevealWords(true) : handleShowPendingWords}
                                 accessibilityRole="button"
                                 accessibilityHint="Shows the twelve words that can restore your account"
                             >
-                                <Text style={styles.secondaryBtnText}>Rather write down 12 words?</Text>
+                                <Text style={styles.secondaryBtnText}>{protection.showWords ? '🔑 Show my 12 words' : 'Rather write down 12 words?'}</Text>
                             </Pressable>
                         ) : (
                         <>

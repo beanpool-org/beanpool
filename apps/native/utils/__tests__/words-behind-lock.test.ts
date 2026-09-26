@@ -230,8 +230,9 @@ describe('every other screen that draws an account\'s words', () => {
     it('no screen reads the words any other way', () => {
         // Walk app/: every getMnemonic( left is one of these, and each is not a way to see someone else's words.
         const allowed: Record<string, number> = {
-            // The member's OWN new words, on onboarding's Safety Backup step (and its Copy), before the account exists.
-            'welcome.tsx:getMnemonic(pendingIdentity)': 2,
+            // Safety Backup, only for a key this join made (the member's own new words). A key the phone already had is
+            // read through readWordsBehindLock instead (join-words-behind-lock.test.ts; review 4112404374).
+            'welcome.tsx:getMnemonic(pendingIdentity)': 1,
             // Sends the account (key and words) to a desktop the member pairs with; draws nothing. See the PR.
             'pair-device.tsx:getMnemonic(identity)': 1,
         };

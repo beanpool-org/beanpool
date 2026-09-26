@@ -40,6 +40,7 @@ import {
     NEXT_REQUEST_TIMEOUT_MS,
 } from '../invite-next';
 import type { BeanPoolIdentity } from '../identity';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NODE = 'https://node.example';
 const MADE: BeanPoolIdentity = { publicKey: 'ef'.repeat(32), privateKey: '09'.repeat(32), callsign: 'Kim', createdAt: '' };
@@ -114,6 +115,7 @@ async function next(phone: { key: BeanPoolIdentity | null }, answer: 'answered' 
     if (check && !check.valid) {
         const spent = check.reason === 'used' ? await afterSpentInvite(NODE, storedIdentity, joinRecord) : 'spent';
         if (spent === 'enterApp' && storedIdentity) {
+            await AsyncStorage.setItem('beanpool_anchor_url', NODE);
             await clearPendingOnboarding();
             return { went: 'app', identity: storedIdentity };
         }
@@ -239,6 +241,24 @@ describe('an established account, already in that community, in the same branch:
         node.members.add(HAD.publicKey);
         node.usedBy = HAD.publicKey;
         expect(await next({ key: HAD })).toEqual({ went: 'app', identity: HAD });
+    });
+
+    /**
+     * The app's node is the stored anchor: its database file, its sync, and the recheck before the app opens all read it.
+     * _layout.tsx's "Wipe & Join Fresh" removes it before sending the member here with the invite, and the phone may hold
+     * another community's. Into the app on this community is into the app with this community as the anchor (PR #1218,
+     * 4112785851).
+     */
+    it('the anchor is the community that said the key is in, before the app opens: none on the phone, or another one', async () => {
+        node.members.add(HAD.publicKey);
+        node.usedBy = HAD.publicKey;
+        expect(storage.get('beanpool_anchor_url')).toBeUndefined();
+        expect((await next({ key: HAD })).went).toBe('app');
+        expect(storage.get('beanpool_anchor_url')).toBe(NODE);
+
+        storage.set('beanpool_anchor_url', 'https://another.example');
+        expect((await next({ key: HAD })).went).toBe('app');
+        expect(storage.get('beanpool_anchor_url')).toBe(NODE);
     });
 
     it('a record that names another key, or a door\'s mark the invite join has taken away, does not make it new', async () => {
@@ -465,6 +485,15 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
         expect(spent.match(/setIdentity\(/g)).toHaveLength(1);
         // And nowhere else on the screen goes into the app with the phone's key as it stood at Next.
         expect(welcome().match(/setIdentity\(storedIdentity\)/g)).toHaveLength(1);
+    });
+
+    it('into the app with the anchor on the community that said the key is in, before its recheck', () => {
+        const enterApp = slice(handleCreate(), "if (spent === 'enterApp' && storedIdentity) {", 'return;');
+        inOrder(enterApp, [
+            "await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);",
+            'await recheckNodeStatus()',
+            'setIdentity(storedIdentity);',
+        ]);
     });
 
     it("the redeem's only carry-on after a refusal is the node's say-so: no bare 'already been used'", () => {

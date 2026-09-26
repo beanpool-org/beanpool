@@ -708,7 +708,10 @@ export default function WelcomeScreen() {
                     const spent = check.reason === 'used' ? await afterSpentInvite(nodeUrl, storedIdentity, joinRecord) : 'spent';
                     if (spent === 'enterApp' && storedIdentity) {
                         // A key the phone already had, an established account already in this community: into the app, as
-                        // before. Its words stay behind Settings' lock.
+                        // before. Its words stay behind Settings' lock. Into the app on this community: the anchor is the app's
+                        // node (its database, its sync, the recheck below), and the phone may have none ("Wipe & Join Fresh"
+                        // removes it) or another community's.
+                        await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
                         await clearPendingOnboarding();
                         await recheckNodeStatus().catch(() => {});
                         setIdentity(storedIdentity);

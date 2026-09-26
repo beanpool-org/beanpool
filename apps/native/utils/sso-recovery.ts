@@ -21,7 +21,6 @@
  * they make the restored key; a copy without them restores the key alone, as it always did.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import {
     openShareFromSso,
@@ -33,8 +32,8 @@ import {
 } from '@beanpool/core';
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
-import { importIdentity, type BeanPoolIdentity } from './identity';
-import { clearToRestore, type ConfirmReplace } from './restore-account';
+import type { BeanPoolIdentity } from './identity';
+import { clearToRestore, saveRestoredAccount, type ConfirmReplace } from './restore-account';
 import {
     signInWithGoogle, signInWithApple, signInWithFacebook, signInWithGithubViaNode, SsoSignInError,
     type SsoProvider, type GithubDevicePrompt,
@@ -390,21 +389,16 @@ export async function recoverAccountWithSso(options: {
     };
 
     // 9. Never over another account without the member's yes: until then nothing on the phone changes.
-    const toSave = await clearToRestore(restoredIdentity, options.confirmReplace);
+    const cleared = await clearToRestore(restoredIdentity, options.confirmReplace);
 
-    // 10. Save Anchor URL and Identity
-    await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
-    await importIdentity(toSave);
-
-    // Clear any pending onboarding state
-    try {
-        const { clearPendingOnboarding } = await import('./onboarding-state');
-        await clearPendingOnboarding();
-    } catch {}
+    // 10. Save the anchor URL and the identity, and end any half-finished join wizard. Replacing another account, its
+    // app storage goes first (restore-account.ts `saveRestoredAccount`). Nothing after the gate reads the old anchor:
+    // every node call above went to `finalAnchorUrl`.
+    await saveRestoredAccount(cleared, finalAnchorUrl);
 
     options.onProgress?.({ step: 'done', message: 'Account restored successfully!' });
     return {
-        identity: toSave,
+        identity: cleared.identity,
         provider: options.provider,
     };
 }

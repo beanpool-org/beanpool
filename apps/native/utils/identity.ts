@@ -257,12 +257,17 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promi
     }
 }
 
-export async function wipeIdentity(): Promise<void> {
+/** Take the key off this phone, and nothing else. {@link wipeIdentity} is the whole wipe. */
+export async function removeStoredIdentity(): Promise<void> {
     if (isWeb) {
         localStorage.removeItem(KEY_ID);
     } else {
         await SecureStore.deleteItemAsync(KEY_ID);
     }
+}
+
+export async function wipeIdentity(): Promise<void> {
+    await removeStoredIdentity();
 
     // A wiped device has no half-finished join wizard to resume.
     try {

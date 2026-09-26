@@ -44,10 +44,22 @@ describe('wipeIdentityScopedStorage', () => {
             // A cache about every member, not this one: stays.
             [`bp_tier_${'cd'.repeat(32)}`]: '2',
             some_ui_pref: 'dark',
+            // The account's block list and its own offline reports stay, under its own key (blocklist.ts): restored,
+            // it has its blocks back, and no other account reads them or sends those reports (Marty, 2026-09-27).
+            [`beanpool_blocked_users:${'ab'.repeat(32)}`]: JSON.stringify(['cd'.repeat(32)]),
+            [`beanpool_pending_abuse_reports:${'ab'.repeat(32)}`]: JSON.stringify([{ reporterPubkey: 'ab'.repeat(32), targetPubkey: 'cd'.repeat(32), reason: 'spam', timestamp: 1 }]),
+            beanpool_blocked_users_moved: '1',
         });
 
         await wipeIdentityScopedStorage(storage);
 
-        expect([...storage.data.keys()].sort()).toEqual(['beanpool_saved_nodes', `bp_tier_${'cd'.repeat(32)}`, 'some_ui_pref']);
+        expect([...storage.data.keys()].sort()).toEqual([
+            `beanpool_blocked_users:${'ab'.repeat(32)}`,
+            'beanpool_blocked_users_moved',
+            `beanpool_pending_abuse_reports:${'ab'.repeat(32)}`,
+            'beanpool_saved_nodes',
+            `bp_tier_${'cd'.repeat(32)}`,
+            'some_ui_pref',
+        ]);
     });
 });

@@ -39,7 +39,7 @@ import Router from '@koa/router';
 
 import { db } from '../db/db.js';
 import { isSingleBlobSso } from '@beanpool/core';
-import { getMember, dispatchPushNotification } from '../state-engine.js';
+import { getMember, getActingMember, dispatchPushNotification } from '../state-engine.js';
 import {
     openCollection,
     collectionState,
@@ -362,7 +362,8 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     /** R1's cheap stop — reachable by the OWNER, who is the one without the attacker's session id. */
     router.post('/api/recovery/collect/cancel', async (ctx) => {
         const owner = ctx.state?.actor as string | undefined;
-        if (!owner || !getMember(owner)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
+        // A visitor's row has no account here being recovered, as a key with no row has none (getActingMember).
+        if (!owner || !getActingMember(owner)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
         const id = (ctx as any).requestBody?.collectionId;
         if (typeof id !== 'string' || !id) { ctx.status = 400; ctx.body = { error: 'Which session?' }; return; }
         try {
@@ -374,7 +375,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     /** Live recoveries against the caller's own account — what makes cancelling possible at all. */
     router.post('/api/recovery/collect/mine', async (ctx) => {
         const owner = ctx.state?.actor as string | undefined;
-        if (!owner || !getMember(owner)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
+        if (!owner || !getActingMember(owner)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
         ctx.status = 200;
         ctx.body = {
             collections: openCollectionsFor(owner).map(c => ({

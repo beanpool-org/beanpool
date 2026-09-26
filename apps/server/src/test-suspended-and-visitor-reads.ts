@@ -13,11 +13,11 @@
  *
  *  1. Member-only reads, for each reader: a member suspended through a report, one disabled by an admin, a visitor made
  *     by a DM (POST /api/messages/conversation), one made by a transfer (transfer() from the genesis account, which is
- *     how every send reaches the row, with Beans), one made by a send the node refused (POST /api/ledger/transfer), a
- *     federation visitor, and the old key of a member being re-keyed each get no Community contact (the member list and
- *     the profile page), no voters (the board), no activity feed and no distances. A real member made every way there is
- *     (the genesis member, an invite, an offline ticket, the open door) gets all four, as do the suspended and the
- *     disabled member once their suspension is lifted.
+ *     how every send reaches the row, with Beans), the recipient of a send the node refused (POST /api/ledger/transfer),
+ *     which gets no row, a federation visitor, and the old key of a member being re-keyed each get no Community contact
+ *     (the member list and the profile page), no voters (the board), no activity feed and no distances. A real member
+ *     made every way there is (the genesis member, an invite, an offline ticket, the open door) gets all four, as do the
+ *     suspended and the disabled member once their suspension is lifted.
  *  2. The gate: a visitor reads its own conversation list, its DM and its Beans (balance, transactions) and nothing
  *     else gated (the directory, a profile, its standing, someone else's Beans or chats, the whole ledger, groups). A
  *     suspended member still reads their own messages, standing and balance, and still sends a message.
@@ -164,6 +164,11 @@ async function main() {
     const { registerOpenJoin, openJoinHash, openJoinAddressHash } = await import('./engine/open-join.js');
     const { knockerRefusal, openKnockCount, tidyKnocks } = await import('./engine/knocks.js');
     const { registerVisitor } = await import('./engine/members.js');
+    // The signature middleware refuses a visitor's write that isn't its own (visitor-allowlist.ts) before any route. The
+    // writes below measure each route's own check behind it, with it off, then ask the gate's answer with it on. Loaded so
+    // the suite runs to the end, and says what fails, on a tree without it.
+    const { setVisitorGateForTests } = await import('./visitor-allowlist.js')
+        .catch(() => ({ setVisitorGateForTests: (_on: boolean) => { /* no gate on this tree */ } }));
 
     await initTls();
     se.initStateEngine();
@@ -249,13 +254,15 @@ async function main() {
     assert(!!texTx, 'a transfer to a key with no account here lands, with its 5 Beans');
     const tex2 = keypair('RefusedTex2');
     const refusedSend = await post('/api/ledger/transfer', { to: tex2.pubKeyHex, amount: 1 }, olive);
-    assert(refusedSend.status === 400, `a send from a member with no trade yet is refused (${refusedSend.status}), after the node has made the recipient's row`);
+    // A refused send makes no row (test-visitors-cant-act section 4): the recipient reads below as the key with no row it is.
+    assert(refusedSend.status === 400 && !row(tex2.pubKeyHex),
+        `a send from a member with no trade yet is refused (${refusedSend.status}), and the recipient gets no row`);
     const rita = keypair('RemoteRita');
     registerVisitor(rita.pubKeyHex, rita.callsign, 'https://peer.example.test');
     const vo = keypair('DmVo');
     const voConv = await post('/api/messages/conversation', { type: 'dm', participants: [olive.pubKeyHex, vo.pubKeyHex], createdBy: olive.pubKeyHex }, olive);
     assert(voConv.status === 200, `Olive opens a DM to another key with no account here (${voConv.status} ${voConv.text.slice(0, 80)})`);
-    for (const [label, id] of [['the DM', dee], ['the transfer', tex], ['the refused send', tex2], ['the federation handshake', rita], ['the second DM', vo]] as const) {
+    for (const [label, id] of [['the DM', dee], ['the transfer', tex], ['the federation handshake', rita], ['the second DM', vo]] as const) {
         assert(!!row(id.pubKeyHex) && visitorFlag(id.pubKeyHex) === 1, `${label} made a visitor's row (is_visitor ${visitorFlag(id.pubKeyHex)})`);
     }
     for (const [label, id] of [['the genesis member', gen], ['the invited member', ivy], ['the ticket member', tia], ['the open-door member', oona], ['a seeded member', olive]] as const) {
@@ -301,7 +308,7 @@ async function main() {
         ['a member disabled by an admin', dis],
         ['a DM-made visitor', dee],
         ['a transfer-made visitor', tex],
-        ['a visitor made by a refused send', tex2],
+        ['the recipient of a refused send (no row)', tex2],
         ['a federation visitor', rita],
         ["a re-key-invalidated key", rex],
     ];
@@ -681,10 +688,15 @@ async function main() {
         se.transfer('genesis', wes.pubKeyHex, 1, 'hello', 'direct', true);
         const nobody = keypair('NobodyNat');
         assert(visitorFlag(wes.pubKeyHex) === 1 && !row(nobody.pubKeyHex), 'Wes is a visitor (a transfer); Nat has no row');
+        setVisitorGateForTests(false);
         const wesMakes = await post('/api/invite/generate', { publicKey: wes.pubKeyHex }, wes);
         const natMakes = await post('/api/invite/generate', { publicKey: nobody.pubKeyHex }, nobody);
         assert(wesMakes.status === 403 && wesMakes.status === natMakes.status && wesMakes.text === natMakes.text,
             `a visitor can't make an invite: the answer a key with no row gets (${wesMakes.status} ${wesMakes.text.slice(0, 80)} / ${natMakes.status} ${natMakes.text.slice(0, 80)})`);
+        setVisitorGateForTests(true);
+        const wesMakesGated = await post('/api/invite/generate', { publicKey: wes.pubKeyHex }, wes);
+        assert(wesMakesGated.status === 403 && wesMakesGated.body?.code === 'not_a_member',
+            `…and through the signature middleware's gate, 403 not_a_member before the route (${wesMakesGated.status} ${wesMakesGated.text.slice(0, 80)})`);
         assert(se.generateInvite(wes.pubKeyHex) === null && !db.prepare('SELECT 1 FROM invite_codes WHERE created_by = ?').get(wes.pubKeyHex), '…and no code is written');
 
         // Members still do, a suspended and a disabled one included, as #1177 left them.
@@ -726,10 +738,15 @@ async function main() {
         const kayId = knockId(kay);
         assert(kayKnock.status === 201 && !!kayId, `Kay asks to join (${kayKnock.status} ${kayKnock.text.slice(0, 100)})`);
         for (const verb of ['approve', 'decline']) {
+            setVisitorGateForTests(false);
             const byWes = await post(`/api/join/knocks/${kayId}/${verb}`, {}, wes);
             const byNat = await post(`/api/join/knocks/${kayId}/${verb}`, {}, nobody);
             assert(byWes.status === 403 && byWes.body?.code === 'not_member' && byWes.status === byNat.status && byWes.body?.code === byNat.body?.code,
                 `a visitor can't ${verb} a knock: 403 not_member, as a key with no row (${byWes.status} ${byWes.body?.code} / ${byNat.status} ${byNat.body?.code})`);
+            setVisitorGateForTests(true);
+            const byWesGated = await post(`/api/join/knocks/${kayId}/${verb}`, {}, wes);
+            assert(byWesGated.status === 403 && byWesGated.body?.code === 'not_a_member',
+                `…and through the gate, 403 not_a_member before the route (${byWesGated.status} ${byWesGated.body?.code})`);
         }
         const kayRow = db.prepare('SELECT status, invite_code FROM join_requests WHERE id = ?').get(kayId) as { status: string; invite_code: string | null } | undefined;
         assert(kayRow?.status === 'pending' && !kayRow?.invite_code, `…and Kay's knock is still waiting, with no invite (${kayRow?.status})`);

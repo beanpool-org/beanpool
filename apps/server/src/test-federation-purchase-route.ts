@@ -51,12 +51,12 @@ const nodeTotal = (): number => {
     return r4(s + getCommonsBalanceExact());
 };
 
-function makeMember(callsign: string, balance: number, homeNodeUrl?: string): string {
+function makeMember(callsign: string, balance: number, homeNodeUrl?: string, isVisitor = false): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`)
-        .run(pk, callsign, homeNodeUrl ?? null);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url, is_visitor)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?)`)
+        .run(pk, callsign, homeNodeUrl ?? null, isVisitor ? 1 : 0);
     // Epoch at NOW, not 0 — epoch 0 is 1970 and the first read would charge ~56 years of demurrage (#138).
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(pk, balance, ledger.getCurrentEpoch());
@@ -129,6 +129,8 @@ async function main() {
     const localSeller = makeMember('Local Seller', 0);
     const visitingSeller = makeMember('Visiting Seller', 0, PEER_URL);
     const visitorBuyer = makeMember('Visiting Buyer', 100, 'https://elsewhere.beanpool.org');
+    // A visitor's row made HERE (a member's DM or send makes one): no home node, and Beans it holds on this ledger.
+    const localVisitor = makeMember('Local Visitor', 30, undefined, true);
     const baseline = nodeTotal();
     const buyerBefore = bal(buyer);
     const good = { nodeUrl: PEER_URL, sellerPublicKey: stranger(), amount: 25 };
@@ -169,6 +171,11 @@ async function main() {
 
     const ghost = await buy(stranger(), good);
     assert(ghost.status === 403, `a signer who is not a member of this community is refused (${ghost.status})`);
+
+    const localVisiting = await buy(localVisitor, good);
+    assert(localVisiting.status === ghost.status && localVisiting.body?.error === ghost.body?.error && bal(localVisitor) === 30,
+        `a visitor's row made here, holding Beans, is refused as a key with no row is (${localVisiting.status}: `
+        + `${localVisiting.body?.error}) — a visitor trades with nobody, and a purchase abroad would escrow its Beans`);
 
     const visiting = await buy(visitorBuyer, good);
     assert(visiting.status === 503 && visiting.body?.code === SETTLEMENT_REFUSED_CODE,

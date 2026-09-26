@@ -439,6 +439,7 @@ run_federation_suites() {
       test-polls
       test-poll-voters-members-only
       test-suspended-and-visitor-reads
+      test-visitors-cant-act
       test-events
       test-enterprise-event-http
       test-event-chat

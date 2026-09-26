@@ -12,6 +12,7 @@ import {
     getConversation,
     isInvalidatedKey,
     isNodeMember,
+    isLiveVisitor,
     SystemMessageType,
     type Conversation,
     type Message,
@@ -25,7 +26,7 @@ import {
 } from './group-thread.js';
 import { writeMessageTombstone } from './message-tombstone.js';
 import { unmutedRecipients } from './chat-mutes.js';
-import { NOT_A_MEMBER_ERROR } from './members.js';
+import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './members.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow') => void;
@@ -64,6 +65,65 @@ function assertMemberActive(publicKey: string): void {
     if (isInvalidatedKey(db, publicKey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403);
 }
 
+/** A visitor's line anywhere but a direct conversation it is in: refused in the words a key with no row is refused in. */
+const VISITOR_SEND_REFUSAL = 'Member not found';
+
+/**
+ * Whether `publicKey` is a visitor's row (isLiveVisitor) and `messageId` a line of a direct conversation it is in. There
+ * a visitor edits and deletes its own lines and reacts, as anyone in a DM does (the director, 2026-09-26: messaging is
+ * what Marty's answer gives a visitor, and one that can't take its own words back is worse off). Anywhere else a
+ * visitor's row changes no line, and is answered as a key with no row is.
+ */
+export function isVisitorsDirectLine(messageId: unknown, publicKey: string | undefined): boolean {
+    if (typeof messageId !== 'string' || !messageId || !publicKey || !isLiveVisitor(db, publicKey)) return false;
+    return !!db.prepare(`
+        SELECT 1 FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id AND c.type = 'dm'
+        JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.public_key = ?
+        WHERE m.id = ?
+    `).get(publicKey, messageId);
+}
+
+/**
+ * Whether `conversationId` is a direct conversation `publicKey`, a visitor's row (isLiveVisitor), is in: where it marks read
+ * and mutes (visitor-allowlist.ts VISITOR_WRITES).
+ */
+export function isVisitorsDirectConversation(conversationId: unknown, publicKey: string | undefined): boolean {
+    if (typeof conversationId !== 'string' || !conversationId || !publicKey || !isLiveVisitor(db, publicKey)) return false;
+    return !!db.prepare(`
+        SELECT 1 FROM conversations c
+        JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.public_key = ?
+        WHERE c.id = ? AND c.type = 'dm'
+    `).get(publicKey, conversationId);
+}
+
+/**
+ * Whether a visitor's row may send to `conversationId`: a direct conversation it is in, or an id that names no
+ * conversation, which sendMessage follows to the one it became (chat consolidation) and refuses a visitor anywhere but a
+ * direct conversation it is in.
+ */
+export function visitorMaySendTo(conversationId: unknown, publicKey: string | undefined): boolean {
+    if (isVisitorsDirectConversation(conversationId, publicKey)) return true;
+    return typeof conversationId === 'string' && !!conversationId && !!publicKey && isLiveVisitor(db, publicKey)
+        && !db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(conversationId);
+}
+
+/**
+ * Whether a visitor's row asks for a direct conversation it is already in (an app asks before it writes): two distinct
+ * participants, itself one of them, who have one. assertMayOpenConversation refuses it any other.
+ */
+export function isVisitorsDirectConversationWith(publicKey: string | undefined, participants: unknown): boolean {
+    if (!publicKey || !Array.isArray(participants) || !isLiveVisitor(db, publicKey)) return false;
+    const unique = [...new Set(participants)];
+    if (unique.length !== 2 || !unique.every(p => typeof p === 'string') || !unique.includes(publicKey)) return false;
+    return !!findDirectConversationRow(unique[0] as string, unique[1] as string);
+}
+
+/** An edit or a deletion by a visitor's row, of a line outside its direct conversations: the words a key with no row gets. */
+function refuseVisitorOutsideItsDirectConversations(messageId: string, publicKey: string): void {
+    if (isLiveVisitor(db, publicKey) && !isVisitorsDirectLine(messageId, publicKey)) throw new MessagingError(VISITOR_SEND_REFUSAL);
+}
+
 /**
  * The old chat group ("👥 Group" in the web app's Talk screen) was removed on 2026-09-19 (groups decision 2):
  * a group chat is now the chat every Commons group owns (engine/group-thread.ts). The create route answers
@@ -71,6 +131,27 @@ function assertMemberActive(publicKey: string): void {
  */
 export const CHAT_GROUP_REMOVED_ERROR =
     'Group chats made from Talk were removed. Create a group in Commons instead — every group has its own chat.';
+
+/** One DM per pair, never keyed to a post (chat consolidation): the pair's conversation row, if they have one. */
+function findDirectConversationRow(a: string, b: string): any {
+    return db.prepare(`
+        SELECT c.* FROM conversations c
+        JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
+        JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
+        WHERE c.type = 'dm' AND c.post_id IS NULL
+    `).get(a, b);
+}
+
+/**
+ * Who may open a conversation over the route: a visitor's row (isLiveVisitor) opens none. It may ask again for a
+ * direct conversation it is already in (an app asks before it writes), and is refused a new one in the words a key with
+ * no row is refused in, so it makes no row for anyone. Federation's relay opens one for a member of another community
+ * by calling createConversation itself.
+ */
+export function assertMayOpenConversation(createdBy: string, participants: string[]): void {
+    if (!isLiveVisitor(db, createdBy)) return;
+    if (!findDirectConversationRow(participants[0], participants[1])) throw new MessagingError(VISITOR_SEND_REFUSAL);
+}
 
 export function createConversation(
     cb: MessagingCallbacks,
@@ -88,13 +169,7 @@ export function createConversation(
         }
     }
 
-    // One DM per pair, never keyed to a post (chat consolidation).
-    const existing = db.prepare(`
-        SELECT c.* FROM conversations c
-        JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
-        JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
-        WHERE c.type = 'dm' AND c.post_id IS NULL
-    `).get(participants[0], participants[1]) as any;
+    const existing = findDirectConversationRow(participants[0], participants[1]);
     if (existing) {
         const parts = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(existing.id) as any[];
         return {
@@ -134,10 +209,15 @@ export function sendMessage(
     clientId?: string
 ): Message | null {
     assertMemberActive(authorPubkey);
+    // A visitor's row (isLiveVisitor) writes only in a direct conversation it is already in (checked again below, once
+    // an old conversation id has been followed to the one it became). A member of another community relayed by a peer
+    // is one, writing to a member here.
+    const visitor = isLiveVisitor(db, authorPubkey);
     // A group's chat has one rule book (engine/group-thread.ts): membership re-checked against the group, not
     // the participants mirror; observers read only; 2000 characters; plaintext-v1. Every app already in the
     // stores sends a group chat line through this route, so it is accepted here under exactly those rules.
     const directConv = db.prepare("SELECT type FROM conversations WHERE id=?").get(conversationId) as any;
+    if (visitor && directConv && directConv.type !== 'dm') throw new MessagingError(VISITOR_SEND_REFUSAL);
     if (directConv?.type === GROUP_THREAD_TYPE) {
         try {
             const m = postGroupThreadMessageFromSendRoute(cb, conversationId, authorPubkey, ciphertext, nonce, type, !!attachment?.data, clientId, metadata);
@@ -191,12 +271,15 @@ export function sendMessage(
         } catch (e) {}
     }
 
+    const targetConv = db.prepare("SELECT type FROM conversations WHERE id=?").get(effectiveConvId) as any;
+    if (visitor && (targetConv?.type !== 'dm' || !participants.some(p => p.public_key === authorPubkey))) {
+        throw new MessagingError(VISITOR_SEND_REFUSAL);
+    }
     if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) return null;
 
     // An event chat is written through POST /api/marketplace/posts/:id/chat/message, which re-checks the
     // RSVP, applies the 2000-character cap and refuses once the event has ended or been cancelled. The
     // participants mirror alone is not authority to post (docs/events-on-the-map.md §2.2).
-    const targetConv = db.prepare("SELECT type FROM conversations WHERE id=?").get(effectiveConvId) as any;
     if (targetConv?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_SEND_ERROR, 403);
     if (targetConv?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_SEND_ERROR, 403);
 
@@ -290,11 +373,15 @@ export function toggleMessageReaction(
         try { assertCanWriteInGroupChat(row.conversation_id, authorPubkey); }
         catch (e: any) { throw toGroupChatMessagingError(e); }
     } else {
-        if (!participants.some((p: any) => p.public_key === authorPubkey)) {
+        // A visitor's row reacts in a direct conversation it is in (isVisitorsDirectLine). A participant row it holds in any
+        // other chat is from before visitors were refused one, and there it is answered as a key with no row is.
+        const visitorsDirectLine = isVisitorsDirectLine(messageId, authorPubkey);
+        if (!participants.some((p: any) => p.public_key === authorPubkey)
+            || (!visitorsDirectLine && isLiveVisitor(db, authorPubkey))) {
             return null;
         }
         // A participant row outlasts a prune and a pending re-key; a reaction still reaches the other person.
-        if (!isNodeMember(db, authorPubkey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403);
+        if (!visitorsDirectLine && !isNodeMember(db, authorPubkey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403, NOT_A_MEMBER_CODE);
         // An event chat carries text the host can remove and nothing else, and it is read-only once the event
         // ends — a reaction would be a write this route cannot rule on.
         if (convType?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_REACT_ERROR, 403);
@@ -383,6 +470,7 @@ export function editMessage(
     nonce: string
 ): Message {
     assertMemberActive(authorPubkey);
+    refuseVisitorOutsideItsDirectConversations(messageId, authorPubkey);
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
     if (!row) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR);
     // Enterprise discussion-thread messages are not editable. This route has no size bound
@@ -484,6 +572,7 @@ export function deleteOwnMessage(
     authorPubkey: string
 ): Message {
     assertMemberActive(authorPubkey);
+    refuseVisitorOutsideItsDirectConversations(messageId, authorPubkey);
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
     if (!row) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
     // Fails closed, as the edit does: a message whose conversation row is missing cannot be shown to be

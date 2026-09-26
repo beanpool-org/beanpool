@@ -47,6 +47,7 @@ import {
     getCommonsBalanceExact,
     getBalance,
     getMember,
+    getActingMember,
     setUserStatusRow,
     adminPruneUser,
     COMMUNITY_DECISION_ACTOR,
@@ -301,8 +302,8 @@ export function quorumRatioForEffect(effect: DecisionEffect, _touches?: Decision
  * The turnout base (§3.4, answer K): members who could vote and were ACTIVE in the 30 days before
  * `asOfTime` — any signed activity, not only trades.
  *
- * "Could vote" is the same test checkVoterEligibility applies: active, unfrozen, not an enterprise, and —
- * when `joinedBefore` is given (a Decision's opensAt) — joined before the Decision opened.
+ * "Could vote" is the same test checkVoterEligibility applies: active, unfrozen, not an enterprise, not a visitor's row,
+ * and — when `joinedBefore` is given (a Decision's opensAt) — joined before the Decision opened.
  *
  * Activity signal: `members.last_active_at`, stamped from the verified signer of every signed write
  * (https-server requireSignature → recordActivity). It is NOT carried by delta backup (the members touch
@@ -324,6 +325,7 @@ export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: strin
         WHERE m.status = 'active'
           AND COALESCE(m.is_treasury, 0) = 0
           AND COALESCE(m.credit_frozen, 0) = 0
+          AND m.is_visitor = 0
           AND m.public_key NOT IN ('SYSTEM', 'COMMONS_POOL')
           AND m.public_key NOT LIKE 'escrow_%'
           AND (@joinedBefore IS NULL OR (m.joined_at IS NOT NULL AND julianday(m.joined_at) < julianday(@joinedBefore)))
@@ -395,7 +397,8 @@ export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; er
  * limit. The Decisions list serves it (canPropose) so the apps gate the Propose button on the node's rule.
  */
 export function checkProposalStanding(authorPubkey: string): { ok: boolean; error?: string } {
-    const member = getMember(authorPubkey);
+    // A visitor's row proposes nothing, as a key with no row proposes nothing (getActingMember).
+    const member = getActingMember(authorPubkey);
     if (!member) return { ok: false, error: 'Member not found' };
     if (member.status !== 'active') return { ok: false, error: 'Member is not active' };
     const frozenRow = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(authorPubkey) as any;
@@ -420,7 +423,8 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
  * and leaves it alone on update, and a full-file restore carries the row as-is (test-decisions-voting-answers).
  */
 export function checkVoterEligibility(voterPubkey: string, decision?: { opensAt: string } | null): { ok: boolean; error?: string } {
-    const member = getMember(voterPubkey);
+    // A visitor's row votes on nothing, as a key with no row votes on nothing (getActingMember).
+    const member = getActingMember(voterPubkey);
     if (!member) return { ok: false, error: 'Member not found' };
     if (member.status !== 'active') return { ok: false, error: 'Voter account is not active' };
     const row = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen, joined_at FROM members WHERE public_key = ?").get(voterPubkey) as any;

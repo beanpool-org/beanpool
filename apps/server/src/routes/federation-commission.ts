@@ -26,7 +26,7 @@ import crypto from 'node:crypto';
 // The purchase route still does it dynamically. Left alone here rather than swept up: it is a different file
 // with no coverage in this PR, and a one-line drive-by in the path that debits members is not free.
 import { peerIdFromString } from '@libp2p/peer-id';
-import { getMember, getNodeConfig, canOperateTreasury } from '../state-engine.js';
+import { getMember, getActingMember, getNodeConfig, canOperateTreasury } from '../state-engine.js';
 import {
     getConnectorByPublicUrl, peerIdFromAddress, ENABLE_PEER_CONNECTORS,
 } from '../connector-manager.js';
@@ -49,6 +49,9 @@ function ourPublicUrl(): string | null {
         return null;
     }
 }
+
+/** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
+const NOT_OUR_MEMBER_COMMISSION_ERROR = 'Only a member of this community can commission across a boundary';
 
 const statusFor = (outcome: string): number =>
     outcome === 'settled' ? 200 : outcome === 'pending' ? 202 : 409;
@@ -114,7 +117,7 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         const keeperMember = getMember(keeper);
         if (!keeperMember) {
             ctx.status = 403;
-            ctx.body = { error: 'Only a member of this community can commission across a boundary' };
+            ctx.body = { error: NOT_OUR_MEMBER_COMMISSION_ERROR };
             return;
         }
         // A visitor's beans live elsewhere, but that is not why this refuses — the payer here is the
@@ -123,6 +126,13 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         if (isVisitor(keeper)) {
             ctx.status = 403;
             ctx.body = { error: "You're visiting this community, so you can't act for one of its enterprises." };
+            return;
+        }
+        // A visitor's row made here (by a member's DM or send: no home node, so isVisitor above passes it) is answered as a
+        // key with no row is (getActingMember). canOperateTreasury would refuse it below too, in words that say more.
+        if (!getActingMember(keeper)) {
+            ctx.status = 403;
+            ctx.body = { error: NOT_OUR_MEMBER_COMMISSION_ERROR };
             return;
         }
 

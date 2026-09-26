@@ -43,6 +43,7 @@ import {
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
+    heldNodeRoleOf,
     isNodeOwner,
     isNodeAdmin,
     getFirstNodeAdminPubkey,
@@ -53,11 +54,13 @@ import {
     bumpNodeRoleSessionEpoch,
     setNodeRoleBreakGlassHash,
     getNodeRoleBreakGlassHash,
+    NODE_ROLE_ACTS,
     type MemberNodeRole,
     type NodeRoleRecord,
 } from './engine/node-roles.js';
 export {
     nodeRoleOf,
+    heldNodeRoleOf,
     isNodeOwner,
     isNodeAdmin,
     getFirstNodeAdminPubkey,
@@ -157,11 +160,13 @@ import {
     seedGenesisMember,
     registerMember as registerMemberEngine,
     registerVisitor,
+    writeVisitorRow,
     updateProfile as updateProfileEngine,
     isCallsignAvailable,
     findRecoveryCandidates,
     setMemberActivityHook,
     NOT_A_MEMBER_ERROR,
+    NOT_A_MEMBER_CODE,
     assertNodeMember,
 } from './engine/members.js';
 import {
@@ -186,6 +191,7 @@ import {
     readsAsMember as readsAsMemberEngine,
     passesReadGate as passesReadGateEngine,
     isVisitorKey as isVisitorKeyEngine,
+    isLiveVisitor as isLiveVisitorEngine,
     mayBringSomeoneIn as mayBringSomeoneInEngine,
     alreadyJoined as alreadyJoinedEngine,
     isInvalidatedKey as isInvalidatedKeyEngine,
@@ -1049,9 +1055,13 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 // get only PUBLIC_WS_EVENTS, as a bare doorbell, unless the operator chose the open
 // feed (ENFORCE_WS_AUTH=false), where they get every event without recipients.
 //
-// Two things a socket's verified key decides, as for an HTTP read:
-//   - `_memberPubkey`, a key that passes the act test (isNodeMember): what is sent TO it as a party (`recipients`),
-//     its own messages, trades and Beans. A suspended or disabled member's and a visitor's socket keep this.
+// Three things a socket's verified key decides, as for an HTTP read:
+//   - `_memberPubkey`, a key that passes the act test (isNodeMember), or a visitor's (isLiveVisitor): what is sent TO
+//     it as a party (`recipients`), its own messages, trades and Beans. A suspended or disabled member's socket keeps
+//     this.
+//   - `_visitor`, a visitor's key: of what is sent to it as a party, only what isLiveVisitor lets it read over HTTP,
+//     its direct conversations and its Beans (visitorMayReceive). A group's chat, an event's chat or note, a trade: none
+//     of them, even where a row from before this rule still names it.
 //   - `_memberFeed`, a key that reads as a member (readsAsMember): the member feed, everything else a member socket
 //     gets (community events, poll voters, the doorbells of other people's private events). A suspended or disabled
 //     member's socket, while that lasts, and a visitor's get only what a stranger's gets here.
@@ -1074,13 +1084,39 @@ export function broadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     deliverBroadcast(event, recipients, opts);
 }
 
-/** What a /ws socket's verified key gets: what is sent to it as a party (`act`), and the member feed (`feed`). */
-export interface SocketStanding { act: boolean; feed: boolean }
+/**
+ * What a /ws socket's verified key gets: what is sent to it as a party (`act`), only its own direct conversations and
+ * Beans of that (`visitor`), and the member feed (`feed`).
+ */
+export interface SocketStanding { act: boolean; visitor: boolean; feed: boolean }
 
-/** A socket key's standing: act is isNodeMember, feed is readsAsMember (which needs act). Pass the verified key. */
+/**
+ * A socket key's standing: act is isNodeMember or isLiveVisitor, visitor is isLiveVisitor, feed is readsAsMember (which
+ * needs isNodeMember). Pass the verified key.
+ */
 export function socketStanding(pubkey: string): SocketStanding {
-    const act = isNodeMember(pubkey);
-    return { act, feed: act && readsAsMember(pubkey) };
+    const member = isNodeMember(pubkey);
+    const visitor = !member && isLiveVisitor(pubkey);
+    return { act: member || visitor, visitor, feed: member && readsAsMember(pubkey) };
+}
+
+/** Event types carrying a direct conversation's id (`conversationId`, or `conversation.id`), and a transfer's. */
+const VISITOR_CHAT_EVENTS: ReadonlySet<string> = new Set(['new_message', 'message_edited', 'message_reaction', 'conversation_created']);
+
+/**
+ * Whether an event sent to a visitor's socket as a party is one it may have: a line, an edit, a reaction or the
+ * opening of a direct conversation (a DM) it is in, or a transfer of its Beans. Anything else addressed to it is not
+ * delivered: a group's chat, an event's chat, a post's update, a trade. Its HTTP reads are held to the same
+ * (https-server.ts visitorsOwnRead).
+ */
+function visitorMayReceive(event: any): boolean {
+    const type = event?.type;
+    if (type === 'transaction') return true;
+    if (!VISITOR_CHAT_EVENTS.has(type)) return false;
+    const conversationId = typeof event.conversationId === 'string' ? event.conversationId : event.conversation?.id;
+    if (typeof conversationId !== 'string') return false;
+    const conv = db.prepare('SELECT type FROM conversations WHERE id = ?').get(conversationId) as { type: string } | undefined;
+    return conv?.type === 'dm';
 }
 
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): void {
@@ -1141,6 +1177,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     let withoutVoters: string | null = null;
     // The joined key's standing, asked once, and only if some socket holds that key.
     let joined: SocketStanding | undefined;
+    // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
+    let forVisitor: boolean | undefined;
     for (const ws of wsClients) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
@@ -1150,6 +1188,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
                 ws._memberPubkey = event.member.publicKey;
+                ws._visitor = joined.visitor;
                 ws._memberFeed = joined.feed;
                 ws._pendingMemberPubkey = null;
             }
@@ -1159,6 +1198,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             if (!opts?.othersGetDoorbell) continue;
             if (!ws._memberFeed && !ws._openFeed && !PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
+        } else if (recipients && ws._visitor) {
+            if (!(forVisitor ??= visitorMayReceive(event))) continue;
         } else if (!recipients && !ws._memberFeed && !ws._openFeed) {
             if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
@@ -1180,8 +1221,9 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         let standing: SocketStanding | undefined;
         for (const ws of wsClients) {
             if (typeof ws._memberPubkey !== 'string' || ws._memberPubkey.toLowerCase() !== key) continue;
-            standing ??= event.type === 'user_pruned' ? { act: false, feed: false } : socketStanding(ws._memberPubkey);
+            standing ??= event.type === 'user_pruned' ? { act: false, visitor: false, feed: false } : socketStanding(ws._memberPubkey);
             if (!standing.act) ws._memberPubkey = null;
+            ws._visitor = standing.visitor;
             ws._memberFeed = standing.feed;
         }
     }
@@ -1290,29 +1332,49 @@ export function contactViewer(viewerPubkey: string | null | undefined): ContactV
 }
 
 /**
- * The act test: a member of this node, a row that exists and isn't pruned, for a key not invalidated by a re-key
- * (the engine's isNodeMember). Suspended and disabled members and visitors' rows pass. Pass the verified signer.
+ * The act test: a member of this node, a row that exists, isn't a visitor's and isn't pruned, for a key not invalidated
+ * by a re-key (the engine's isNodeMember). Suspended and disabled members pass; a visitor's row doesn't (isLiveVisitor
+ * says what it may still do). Pass the verified signer.
  */
 export function isNodeMember(pubkey: string | null | undefined): boolean {
     return isNodeMemberEngine(db, pubkey);
 }
 
 /**
- * The read test, for what only members may read: isNodeMember, and not suspended or disabled, and not a visitor's row
- * (the engine's readsAsMember). Pass the verified signer.
+ * A visitor's row that still receives what is sent to it (the engine's isLiveVisitor): it replies in its own direct
+ * conversations, sends Beans it holds and reads its own messages and Beans, and nothing else a key with no row can't
+ * do. Pass the verified signer.
+ */
+export function isLiveVisitor(pubkey: string | null | undefined): boolean {
+    return isLiveVisitorEngine(db, pubkey);
+}
+
+/**
+ * The member row `publicKey` acts with here: its row, unless that row is a visitor's (isVisitorKey), which acts as a key
+ * with no row does. For a write whose "is there a member" test refuses a key with no row, so that a visitor is refused
+ * it in the same words. Pass the verified signer.
+ */
+export function getActingMember(publicKey: string): Member | undefined {
+    const member = getMember(publicKey);
+    return member && !isVisitorKey(publicKey) ? member : undefined;
+}
+
+/**
+ * The read test, for what only members may read: isNodeMember (which a visitor's row fails), and not suspended or
+ * disabled (the engine's readsAsMember). Pass the verified signer.
  */
 export function readsAsMember(pubkey: string | null | undefined): boolean {
     return readsAsMemberEngine(db, pubkey);
 }
 
-/** Passes the gated-read gate: isNodeMember, and not a visitor's row (the engine's passesReadGate). Pass the verified signer. */
+/** Passes the gated-read gate: isNodeMember (the engine's passesReadGate). Pass the verified signer. */
 export function passesReadGate(pubkey: string | null | undefined): boolean {
     return passesReadGateEngine(db, pubkey);
 }
 
 /**
- * May bring someone in (an invite, an offline ticket, an answer to a knock): isNodeMember, and not a visitor's row (the
- * engine's mayBringSomeoneIn). Pass the verified signer.
+ * May bring someone in (an invite, an offline ticket, an answer to a knock): isNodeMember (the engine's
+ * mayBringSomeoneIn). Pass the verified signer.
  */
 export function mayBringSomeoneIn(pubkey: string | null | undefined): boolean {
     return mayBringSomeoneInEngine(db, pubkey);
@@ -1750,7 +1812,14 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     if (to.startsWith('bridge_')) ensureBridgeAccount(peerFromBridgeAccountId(to)!);
 
     if (!isSyntheticAccount(from) && !getMember(from)) registerVisitor(from);
-    if (!isSyntheticAccount(to) && !getMember(to)) registerVisitor(to);
+    // A recipient with no row here gets a visitor's row, but only once the Beans have moved: in the transaction below,
+    // so a send any rule refuses (the send gate, the sender's floor) leaves no row behind.
+    const newRecipient = !isSyntheticAccount(to) && !getMember(to);
+    // A visitor's row (isLiveVisitor) makes no row for anyone else: it sends Beans only to a key that has a row here.
+    // Thrown, as assertNodeMember's refusal, so an enclosing transaction rolls back; the send route answers it.
+    if (newRecipient && isLiveVisitor(from)) {
+        throw Object.assign(new Error(NOT_A_MEMBER_ERROR), { status: 403, statusCode: 403, code: NOT_A_MEMBER_CODE });
+    }
 
     // Send gate (Trust Model v2): direct peer-to-peer sends ("gift a friend") require the sender
     // to have EARNED trust — i.e. completed at least one real (marketplace) trade. Stops a fresh /
@@ -1820,6 +1889,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     const txn = conservingTransaction<Transaction | null>(() => {
         const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
         if (!success) return null;
+        // The rows only: ledger.transfer has just made the in-memory account it credited, and persistAccount below
+        // writes its balance over the row's 0.
+        if (newRecipient) writeVisitorRow(to);
 
         if (!isSyntheticAccount(from) && from !== 'genesis') {
             recordActivity(from);
@@ -2444,8 +2516,9 @@ export function canVouch(publicKey: string): boolean {
  */
 export function canOperate(publicKey: string): boolean {
     if (isAdminPubkey(publicKey)) return true;
-    const row = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(publicKey) as any;
-    return !!row?.can_operate;
+    // A visitor's row stewards nothing, whatever switch it holds from before visitors were refused one.
+    const row = db.prepare("SELECT can_operate, is_visitor FROM members WHERE public_key = ?").get(publicKey) as any;
+    return !!row?.can_operate && !row.is_visitor;
 }
 
 /**
@@ -2471,10 +2544,11 @@ export function canOperate(publicKey: string): boolean {
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
     if (!canOperate(publicKey)) return false;
+    // A visitor's row keeps no enterprise, whatever keeper row it holds from before visitors were refused one.
     const row = db.prepare(`
         SELECT 1 FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active'
+        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0
     `).get(publicKey, treasuryPubkey);
     return !!row;
 }
@@ -2514,12 +2588,13 @@ function keeperRequestRecipients(enterprisePubkey: string, applicantPubkey: stri
  * keepers included: a suspended keeper keeps their row (adminSetOperator, the suspend_member Decision), a
  * removed one does not. Counting only active keepers would let a community's suspension of the lead turn
  * the remaining keeper into a "sole keeper" who could approve keepers and wind the enterprise up alone
- * (PR #838 B1).
+ * (PR #838 B1). A visitor's row is no actor here, whatever keeper row it holds from before visitors were refused one; it
+ * still counts as a binding, as a suspended keeper does.
  */
 export function isLeadOrSoleKeeperOrAdmin(enterprisePubkey: string, actorPubkey: string): boolean {
     if (isAdminPubkey(actorPubkey)) return true;
-    const mem = db.prepare("SELECT status, can_operate FROM members WHERE public_key = ?").get(actorPubkey) as any;
-    if (!mem || mem.status !== 'active' || mem.can_operate !== 1) return false;
+    const mem = db.prepare("SELECT status, can_operate, is_visitor FROM members WHERE public_key = ?").get(actorPubkey) as any;
+    if (!mem || mem.is_visitor || mem.status !== 'active' || mem.can_operate !== 1) return false;
     const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, actorPubkey) as any;
     if (!op) return false;
     const opCount = (db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(enterprisePubkey) as any)?.c ?? 0;
@@ -2541,7 +2616,7 @@ export function keeperOf(publicKey: string): string[] {
     return (db.prepare(`
         SELECT o.treasury_pubkey FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.member_pubkey = ? AND m.status = 'active'
+        WHERE o.member_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0
     `).all(publicKey) as any[]).map(r => r.treasury_pubkey);
 }
 
@@ -2550,7 +2625,7 @@ export function keeperOf(publicKey: string): string[] {
  * (docs/community-governance.md), so a community can see who is accountable for what.
  * Suspended keepers (operator switch off, or account not active) are listed with `suspended: true` rather
  * than hidden: they still count toward "sole keeper" (isLeadOrSoleKeeperOrAdmin), so hiding them would
- * show one keeper while the server says there are two. They cannot act.
+ * show one keeper while the server says there are two. They cannot act; nor can a visitor's row, listed the same way.
  */
 export function treasuryKeepers(treasuryPubkey: string): Array<{
     publicKey: string;
@@ -2564,7 +2639,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
 }> {
     return (db.prepare(`
         SELECT m.public_key, m.callsign, m.avatar_url, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
-               m.can_operate, m.status
+               m.can_operate, m.status, m.is_visitor
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
         WHERE o.treasury_pubkey = ?
@@ -2577,7 +2652,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
         role: r.role || 'keeper',
         backing: Number(r.backing || 0),
         lastActiveAt: lastActiveForViewer(r.last_active_at || r.joined_at, r.public_key),
-        suspended: r.can_operate !== 1 || r.status !== 'active',
+        suspended: r.can_operate !== 1 || r.status !== 'active' || !!r.is_visitor,
     }));
 }
 
@@ -2595,7 +2670,8 @@ export function getEnterpriseFloor(enterprisePubkey: string): engine.EnterpriseF
 }
 
 export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin', backing = 0): { ok: true } {
-    const member = getMember(memberPubkey);
+    // A visitor's row keeps nothing, as a key with no row keeps nothing (getActingMember).
+    const member = getActingMember(memberPubkey);
     if (!member) throw new Error('Member not found');
     if (member.isTreasury) throw new Error('A treasury cannot keep another treasury');
     const t = db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
@@ -2720,10 +2796,11 @@ export function promoteOrPauseAfterLeadLeft(enterprisePubkey: string, by: string
     db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'lead_changed'
                 WHERE enterprise_pubkey = ? AND status = 'active'`).run(enterprisePubkey);
 
+    // Never a visitor's row: it acts for no enterprise (isActiveKeeperOf).
     const next = db.prepare(`
         SELECT o.member_pubkey FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND COALESCE(m.can_operate, 0) = 1
+        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND COALESCE(m.can_operate, 0) = 1 AND m.is_visitor = 0
         ORDER BY o.granted_at ASC, o.rowid ASC
         LIMIT 1
     `).get(enterprisePubkey) as any;
@@ -2918,7 +2995,8 @@ export function releaseEnterpriseBacking(
 
         const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, keeperPubkey);
         const hasActivePledge = currentKeeperPledge > 0;
-        if (!bound && !hasActivePledge && !isAdminPubkey(keeperPubkey)) {
+        // A visitor's row is neither, whatever it holds from before visitors were refused a keeper's row.
+        if (((!bound && !hasActivePledge) || isVisitorKey(keeperPubkey)) && !isAdminPubkey(keeperPubkey)) {
             throw new Error('You are not an authorized keeper or pledge holder of this enterprise');
         }
 
@@ -3019,8 +3097,9 @@ export function requestToJoinEnterprise(
         throw new Error('This enterprise has been closed');
     }
 
-    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
-    if (!km || km.status !== 'active') {
+    // A visitor's row is refused as a key with no row is.
+    const km = db.prepare("SELECT status, credit_frozen, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!km || km.is_visitor || km.status !== 'active') {
         throw new Error('Your account is not active, so you cannot join as a keeper');
     }
     if (km.credit_frozen === 1) {
@@ -3123,11 +3202,12 @@ export const KEEPER_CHANGE_OBJECTION_MS = 3 * 24 * 60 * 60 * 1000;
 /** How long a succession proposal stays open (answer M). */
 export const SUCCESSION_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
+/** Never a visitor's row, whatever keeper row it holds from before visitors were refused one. */
 function isActiveKeeperOf(enterprisePubkey: string, memberPubkey: string): boolean {
     return !!db.prepare(`
         SELECT 1 FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active' AND m.is_visitor = 0
     `).get(enterprisePubkey, memberPubkey);
 }
 
@@ -3158,8 +3238,9 @@ function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: st
     if (ent.status === 'completed') throw new KeeperChangeRefused('Completed enterprise accepts no requests');
     if (ent.status === 'disabled' || ent.status === 'pruned') throw new KeeperChangeRefused('This enterprise has been closed');
 
-    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
-    if (!km || km.status !== 'active') {
+    // A visitor's row, as when it asks (requestToJoinEnterprise): a request it made before visitors were refused one lands on nobody.
+    const km = db.prepare("SELECT status, credit_frozen, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!km || km.is_visitor || km.status !== 'active') {
         throw new KeeperChangeRefused('Applicant account is not active, so they cannot be approved as a keeper');
     }
     if (km.credit_frozen === 1) {
@@ -3572,7 +3653,9 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
 
     const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .get(enterprisePubkey, memberPubkey) as any;
-    if (!op) throw new Error('You are not a keeper of this enterprise');
+    // A visitor's row keeps nothing to step down from, as a key with no row keeps nothing: its row stays until it joins, the
+    // lead removes it, or an admin or the community does.
+    if (!op || isVisitorKey(memberPubkey)) throw new Error('You are not a keeper of this enterprise');
     if (keeperBindingCount(enterprisePubkey) <= 1) {
         throw new Error('You are the only keeper. Add another keeper first, or wind the enterprise up.');
     }
@@ -3651,6 +3734,10 @@ export interface SuccessionProposalInfo {
  * `autoPromoted`: the lead got the role automatically (the community removed the previous lead, or they stepped
  * down). The other keepers may then run succession at once — answer G — so isEligible is true without the wait,
  * and the lead's own activity does not cancel a proposal.
+ *
+ * A visitor's lead's row (from before the visitors' rule) is eligible at once too, and its activity cancels nothing
+ * (leadReturnedSince, recordActivity): it acts for the enterprise in nothing, so its keepers could otherwise add no
+ * keeper and choose no lead until a Decision or an admin acted (4111202724).
  */
 export function getLeadInactivity(enterprisePubkey: string): {
     leadPubkey: string | null;
@@ -3661,7 +3748,7 @@ export function getLeadInactivity(enterprisePubkey: string): {
     autoPromoted: boolean;
 } {
     const leadRow = db.prepare(`
-        SELECT o.member_pubkey, o.auto_promoted_at, m.callsign, m.last_active_at, m.joined_at
+        SELECT o.member_pubkey, o.auto_promoted_at, m.callsign, m.last_active_at, m.joined_at, m.is_visitor
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
         WHERE o.treasury_pubkey = ? AND o.role = 'lead'
@@ -3683,7 +3770,7 @@ export function getLeadInactivity(enterprisePubkey: string): {
     const msInactive = Math.max(0, Date.now() - lastActiveTime);
     const daysInactive = msInactive / (24 * 60 * 60 * 1000);
     const autoPromoted = !!leadRow.auto_promoted_at;
-    const isEligible = autoPromoted || daysInactive >= 30;
+    const isEligible = autoPromoted || !!leadRow.is_visitor || daysInactive >= 30;
 
     return {
         leadPubkey: leadRow.member_pubkey,
@@ -3703,9 +3790,12 @@ function leadIsAutoPromoted(enterprisePubkey: string, leadPubkey: string): boole
     return !!r?.auto_promoted_at;
 }
 
-/** Has the lead a proposal targets done anything on the node since it opened? (Never, for an auto-promoted lead.) */
+/**
+ * Has the lead a proposal targets done anything on the node since it opened? (Never, for an auto-promoted lead, nor for
+ * a visitor's row, which acts for no enterprise: getLeadInactivity.)
+ */
 function leadReturnedSince(prop: any): boolean {
-    if (leadIsAutoPromoted(prop.enterprise_pubkey, prop.lead_pubkey)) return false;
+    if (leadIsAutoPromoted(prop.enterprise_pubkey, prop.lead_pubkey) || isVisitorKey(prop.lead_pubkey)) return false;
     const leadRow = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(prop.lead_pubkey) as any;
     return !!leadRow?.last_active_at && new Date(leadRow.last_active_at).getTime() > new Date(prop.created_at).getTime();
 }
@@ -3740,9 +3830,10 @@ export function expireSuccessionProposals(enterprisePubkey?: string, asOfTime?: 
 
 /**
  * Automatically cancel any active succession proposals if the lead keeper records node activity.
- * An auto-promoted lead's activity cancels nothing (answer G).
+ * An auto-promoted lead's activity cancels nothing (answer G), nor a visitor's row's (getLeadInactivity).
  */
 export function cancelActiveSuccessionIfLeadActive(leadPubkey: string): void {
+    if (isVisitorKey(leadPubkey)) return;
     const activeProps = db.prepare(
         "SELECT * FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
     ).all(leadPubkey) as any[];
@@ -3752,11 +3843,12 @@ export function cancelActiveSuccessionIfLeadActive(leadPubkey: string): void {
     }
 }
 
+/** Who votes on a succession: the keepers who may act (isActiveKeeperOf), the lead aside. */
 function otherActiveKeepers(enterprisePubkey: string, leadPubkey: string): string[] {
     return (db.prepare(`
         SELECT o.member_pubkey FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active' AND m.is_visitor = 0
     `).all(enterprisePubkey, leadPubkey) as any[]).map(r => r.member_pubkey);
 }
 
@@ -3872,7 +3964,8 @@ export function proposeLeadSuccession(
         throw new Error('Lead keeper has recorded node activity within the last 30 days');
     }
 
-    if (proposerPubkey === leadPubkey) {
+    // A visitor's lead's row is no lead to itself (getLeadInactivity): it is answered below as any key that keeps nothing.
+    if (proposerPubkey === leadPubkey && !isVisitorKey(leadPubkey)) {
         throw new Error('Lead keeper cannot propose succession against themselves');
     }
     if (candidatePubkey === leadPubkey) {
@@ -3957,7 +4050,7 @@ export function voteLeadSuccession(
         throw new Error('Lead keeper has returned to activity; succession proposal was cancelled');
     }
 
-    if (voterPubkey === prop.lead_pubkey) {
+    if (voterPubkey === prop.lead_pubkey && !isVisitorKey(prop.lead_pubkey)) {
         throw new Error('Lead keeper cannot vote on succession');
     }
     if (!isActiveKeeperOf(prop.enterprise_pubkey, voterPubkey)) {
@@ -4031,7 +4124,8 @@ export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; fai
  */
 export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
     if (voucherPubkey === targetPubkey) throw new Error('You cannot vouch for yourself');
-    if (!getMember(voucherPubkey)) throw new Error('Voucher not found');
+    // A visitor's row is no voucher, as a key with no row is none (getActingMember).
+    if (!getActingMember(voucherPubkey)) throw new Error('Voucher not found');
     // can_vouch outlasts a prune, and a pending re-key leaves it on the old key: neither hands out a credit floor.
     assertNodeMember(voucherPubkey);
     if (!getMember(targetPubkey)) throw new Error('Member not found');
@@ -6206,7 +6300,9 @@ export function adminSetVoucher(publicKey: string, granted: boolean): { ok: true
  * Toggling can_operate mints no beans and changes no floors. Idempotent.
  */
 export function adminSetOperator(publicKey: string, granted: boolean): { ok: true } {
-    if (!getMember(publicKey)) throw new Error('Member not found');
+    // Switched on only for a member: a visitor's row keeps nothing, as a key with no row keeps nothing (getActingMember).
+    // Switching it off is always allowed.
+    if (!(granted ? getActingMember(publicKey) : getMember(publicKey))) throw new Error('Member not found');
     db.prepare("UPDATE members SET can_operate=? WHERE public_key=?").run(granted ? 1 : 0, publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
@@ -6395,10 +6491,11 @@ const moderationNoticeCb = {
 
 export function isSoleOwner(publicKey: string): boolean {
     if (!isNodeOwner(publicKey)) return false;
+    // Other owners whose role acts (NODE_ROLE_ACTS): a visitor's row's owner role can't keep the node.
     const ownerCount = (db.prepare(
         `SELECT COUNT(*) as c FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+         WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS} AND nr.member_pubkey != ?`
     ).get(publicKey) as any)?.c || 0;
     return ownerCount === 0;
 }
@@ -6544,7 +6641,9 @@ export function adminPruneUser(publicKey: string, actor: string) {
  * 6. Writes tombstones for delta-sync replication.
  */
 export function purgeMemberSelf(publicKey: string): { ok: boolean; message: string } {
-    const member = getMember(publicKey);
+    // A visitor's row has no account here to delete, as a key with no row has none (getActingMember): a member who
+    // wrote to it or paid it keeps that conversation and those Beans.
+    const member = getActingMember(publicKey);
     if (!member) {
         throw new Error('Member not found');
     }
@@ -6556,7 +6655,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         const ownerCount = (db.prepare(
             `SELECT COUNT(*) as c FROM node_roles nr
              JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+             WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS} AND nr.member_pubkey != ?`
         ).get(publicKey) as any)?.c || 0;
         if (ownerCount === 0) {
             throw new Error('Cannot purge the sole node owner; appoint another owner first');
@@ -6717,7 +6816,7 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
     const inBranch = new Set(branch);
     const activeOwners = (db.prepare(
         `SELECT nr.member_pubkey FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.role = 'owner' AND m.status = 'active'`
+         WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS}`
     ).all() as { member_pubkey: string }[]).map(r => r.member_pubkey);
     if (activeOwners.some(pk => inBranch.has(pk)) && !activeOwners.some(pk => !inBranch.has(pk))) {
         throw new Error("This branch holds the node's only owner, so nobody in it was pruned. Appoint another owner outside the branch first");
@@ -7450,7 +7549,7 @@ export function assertNotOnHoliday(publicKey: string): void {
  * set when blocked so the client can name the count.
  */
 export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true; openTrades: number } {
-    if (!getMember(publicKey)) throw new Error('Member not found');
+    if (!getActingMember(publicKey)) throw new Error('Member not found');
     const open = countOpenTrades(publicKey);
     if (enabled && open > 0) {
         const err: any = new Error(`You have ${open} active trade${open === 1 ? '' : 's'} in progress. Complete or cancel ${open === 1 ? 'it' : 'them'} before switching on holiday mode.`);

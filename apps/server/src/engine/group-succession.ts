@@ -27,7 +27,7 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
-import { getGroupLead } from '@beanpool/engine';
+import { getGroupLead, isVisitorKey } from '@beanpool/engine';
 import { postGroupSystemLine, callsignOf, GroupSystemType, loadGroupForThread } from './group-thread.js';
 import type { MessagingCallbacks } from './messaging.js';
 
@@ -77,11 +77,11 @@ export interface GroupSuccessionProposalInfo {
     canVote: boolean;
 }
 
-/** The group's other active convenors, account active — the electorate whenever there is one. */
+/** The group's other active convenors, account active and a member's (not a visitor's row) — the electorate whenever there is one. */
 function otherActiveConvenors(groupId: string, leadPubkey: string): string[] {
     return (db.prepare(`
         SELECT gm.member_pubkey FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
-        WHERE gm.group_id = ? AND gm.status = 'active' AND gm.role = 'convenor' AND m.status = 'active'
+        WHERE gm.group_id = ? AND gm.status = 'active' AND gm.role = 'convenor' AND m.status = 'active' AND m.is_visitor = 0
           AND gm.member_pubkey != ?
     `).all(groupId, leadPubkey) as any[]).map(r => r.member_pubkey);
 }
@@ -99,12 +99,14 @@ export function getConvenorSilence(groupId: string, nowMs = Date.now()): Conveno
             isSilent: false, isEligible: false, electorate: 'members',
         };
     }
-    const m = db.prepare('SELECT callsign, last_active_at, joined_at FROM members WHERE public_key = ?').get(lead) as any;
+    const m = db.prepare('SELECT callsign, last_active_at, joined_at, is_visitor FROM members WHERE public_key = ?').get(lead) as any;
     const lastActiveAt: string | null = m?.last_active_at || m?.joined_at || null;
     const lastMs = lastActiveAt ? Date.parse(lastActiveAt) : 0;
     const msInactive = Math.max(0, nowMs - (Number.isFinite(lastMs) ? lastMs : 0));
     const electorate = electorateKind(groupId, lead);
-    const isSilent = msInactive >= GROUP_CONVENOR_SILENCE_MS;
+    // A visitor's row convening from before the visitors' rule acts for the group in nothing, so it is silent from the
+    // start, and its own activity (a reply in its DM) is no convenor coming back (convenorReturnedSince; 4111202724).
+    const isSilent = !!m?.is_visitor || msInactive >= GROUP_CONVENOR_SILENCE_MS;
     return {
         convenorPubkey: lead,
         convenorCallsign: m?.callsign ?? null,
@@ -119,8 +121,8 @@ export function getConvenorSilence(groupId: string, nowMs = Date.now()): Conveno
 
 /**
  * Who may propose, stand and vote: the lead's fellow active convenors, or — when the lead is the group's only
- * convenor — its active members with role 'member'. Accounts must be active either way. Observers never vote,
- * and the lead has no vote on their own replacement.
+ * convenor — its active members with role 'member'. Accounts must be active, and a member's (a visitor's row
+ * votes on nothing), either way. Observers never vote, and the lead has no vote on their own replacement.
  */
 export function successionElectorate(groupId: string, leadPubkey?: string | null): string[] {
     const lead = leadPubkey === undefined ? getGroupLead(db, groupId) : leadPubkey;
@@ -130,13 +132,14 @@ export function successionElectorate(groupId: string, leadPubkey?: string | null
     }
     return (db.prepare(`
         SELECT gm.member_pubkey FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
-        WHERE gm.group_id = ? AND gm.status = 'active' AND gm.role = 'member' AND m.status = 'active'
+        WHERE gm.group_id = ? AND gm.status = 'active' AND gm.role = 'member' AND m.status = 'active' AND m.is_visitor = 0
           AND (? IS NULL OR gm.member_pubkey != ?)
     `).all(groupId, lead, lead) as any[]).map(r => r.member_pubkey);
 }
 
-/** Has the convenor a proposal targets done anything on the node since it opened? */
+/** Has the convenor a proposal targets done anything on the node since it opened? Never, for a visitor's row (getConvenorSilence). */
 function convenorReturnedSince(prop: any): boolean {
+    if (isVisitorKey(db, prop.convenor_pubkey)) return false;
     const r = db.prepare('SELECT last_active_at FROM members WHERE public_key = ?').get(prop.convenor_pubkey) as any;
     return !!r?.last_active_at && Date.parse(r.last_active_at) > Date.parse(prop.created_at);
 }

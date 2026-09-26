@@ -70,10 +70,14 @@ function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
 const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
 
+/**
+ * The actor of a post, an RSVP or a poll vote has a member's row here. A visitor's row (members.is_visitor) is refused in
+ * the same words as a key with no row: it posts, RSVPs and votes on nothing.
+ */
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
-    const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!member) throw new Error('Member not found');
+    const member = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(publicKey) as any;
+    if (!member || member.is_visitor) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
     if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');

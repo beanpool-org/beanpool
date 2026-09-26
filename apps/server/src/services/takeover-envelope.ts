@@ -22,7 +22,8 @@
  *
  * ## What never happens
  *
- * - An owner's key is taken from a request. Recipients come from node_roles (owners whose member row is active).
+ * - An owner's key is taken from a request. Recipients come from node_roles (owners whose role acts: an active
+ *   member's row, not a visitor's; engine/node-roles.ts NODE_ROLE_ACTS).
  * - The recovery code is stored or logged. Only its public record (codeId, codePub, salt, scrypt cost) is kept;
  *   the code itself exists in memory for the one response that shows it.
  * - A plaintext field leaves through the envelope route. It serves the sealed bytes and nothing else.
@@ -46,6 +47,7 @@ import { readProfileRecord, type ProfileRecord } from '../config/node-profile.js
 import { readOpenJoinRecord, OPEN_JOINS_IN_BUNDLE, type OpenJoinRecord } from '../engine/open-join.js';
 import { logger } from '../logger.js';
 import { setTakeoverChangeHandler } from './takeover-signal.js';
+import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
 
 export const TAKEOVER_ENVELOPE_FILE = 'takeover-envelope.json';
@@ -201,7 +203,7 @@ function currentOwners(): { owners: OwnerRecipient[]; skipped: SkippedOwner[] } 
     const rows = db.prepare(
         `SELECT nr.member_pubkey AS pubkey, m.callsign AS callsign
          FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.role = 'owner' AND m.status = 'active'
+         WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS}
          ORDER BY nr.member_pubkey`,
     ).all() as { pubkey: string; callsign: string | null }[];
     const owners: OwnerRecipient[] = [];

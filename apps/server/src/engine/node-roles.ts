@@ -1,5 +1,5 @@
 import { db } from '../db/db.js';
-import { getMember } from '@beanpool/engine';
+import { getMember, isVisitorKey } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
@@ -16,10 +16,31 @@ export interface NodeRoleRecord {
 }
 
 /**
+ * The rows whose node role acts: an active member's, not a visitor's (members.is_visitor). A visitor's row never joined,
+ * so it acts as a key with no row does (the director's rule, 2026-09-26): grantNodeRole gives it no role, and a role it
+ * holds from before that rule (heldNodeRoleOf) opens no Settings session and passes no role test here (4111202677).
+ */
+export const NODE_ROLE_ACTS = "m.status = 'active' AND m.is_visitor = 0";
+
+/**
  * Returns the primary node role of a member, or null if they hold none.
- * A member holds at most one role. Pruned members hold no node role.
+ * A member holds at most one role. Pruned members, and visitors' rows (NODE_ROLE_ACTS), hold no node role.
  */
 export function nodeRoleOf(pubkey: string): NodeRole | null {
+    if (!pubkey) return null;
+    const row = db.prepare(
+        `SELECT nr.role FROM node_roles nr
+         JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.member_pubkey = ? AND ${NODE_ROLE_ACTS}`
+    ).get(pubkey) as { role: NodeRole } | undefined;
+    return row?.role || null;
+}
+
+/**
+ * The role an active row holds, whether or not it acts (nodeRoleOf): a visitor's row's role from before this rule acts
+ * for nothing, and an owner may still take it away (revokeNodeRole, the node-roles DELETE route).
+ */
+export function heldNodeRoleOf(pubkey: string): NodeRole | null {
     if (!pubkey) return null;
     const row = db.prepare(
         `SELECT nr.role FROM node_roles nr
@@ -30,20 +51,20 @@ export function nodeRoleOf(pubkey: string): NodeRole | null {
 }
 
 /**
- * Returns whether the given pubkey is an explicit node owner.
+ * Returns whether the given pubkey is an explicit node owner (NODE_ROLE_ACTS).
  */
 export function isNodeOwner(pubkey: string): boolean {
     if (!pubkey) return false;
     const row = db.prepare(
         `SELECT 1 FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.member_pubkey = ? AND nr.role = 'owner' AND m.status = 'active'`
+         WHERE nr.member_pubkey = ? AND nr.role = 'owner' AND ${NODE_ROLE_ACTS}`
     ).get(pubkey);
     return !!row;
 }
 
 /**
- * Returns whether the given pubkey has node administrative authority.
+ * Returns whether the given pubkey has node administrative authority (NODE_ROLE_ACTS).
  * By default (`includeOwner = true`), owners have full admin authority.
  */
 export function isNodeAdmin(pubkey: string, includeOwner: boolean = true): boolean {
@@ -52,14 +73,14 @@ export function isNodeAdmin(pubkey: string, includeOwner: boolean = true): boole
         const row = db.prepare(
             `SELECT 1 FROM node_roles nr
              JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.member_pubkey = ? AND (nr.role = 'admin' OR nr.role = 'owner') AND m.status = 'active'`
+             WHERE nr.member_pubkey = ? AND (nr.role = 'admin' OR nr.role = 'owner') AND ${NODE_ROLE_ACTS}`
         ).get(pubkey);
         return !!row;
     }
     const row = db.prepare(
         `SELECT 1 FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.member_pubkey = ? AND nr.role = 'admin' AND m.status = 'active'`
+         WHERE nr.member_pubkey = ? AND nr.role = 'admin' AND ${NODE_ROLE_ACTS}`
     ).get(pubkey);
     return !!row;
 }
@@ -72,14 +93,15 @@ export function getFirstNodeAdminPubkey(): string {
     const row = db.prepare(
         `SELECT nr.member_pubkey FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE m.status = 'active'
+         WHERE ${NODE_ROLE_ACTS}
          ORDER BY (nr.role = 'owner') DESC, nr.rowid ASC LIMIT 1`
     ).get() as { member_pubkey: string } | undefined;
     return row ? row.member_pubkey : '';
 }
 
 /**
- * Lists all active node role assignments with member callsign.
+ * Lists all active node role assignments with member callsign. A visitor's row's role from before this rule is listed
+ * too, though it acts for nothing (NODE_ROLE_ACTS), so an owner sees it and can take it away.
  */
 export function listNodeRoles(): NodeRoleRecord[] {
     const rows = db.prepare(
@@ -101,7 +123,9 @@ export function listNodeRoles(): NodeRoleRecord[] {
  * `grantNodeRole` asks. An owner role parked in `suspended_node_roles` counts: a community that
  * suspended its owner still HAS one. The role is held aside, it comes back the moment the
  * suspension lifts, and the member is still there. Genuinely ownerless means a node that never had
- * an owner, or whose owners were all removed outright (#1006).
+ * an owner, or whose owners were all removed outright (#1006). A visitor's row's owner role from before the visitors'
+ * rule counts here the same way: it acts for nothing (NODE_ROLE_ACTS), but it would act again if that row joined, so
+ * an admin's session doesn't make itself owner over it; the password still may.
  *
  * THE INVARIANT THIS RELIES ON: a parked row exists only while the member it names is still here and
  * still able to come back. Every path that takes them away for good deletes it — `adminPruneUser`,
@@ -137,7 +161,8 @@ export function nodeHasOwner(): boolean {
  * Each member holds at most ONE node role.
  *
  * Enforces:
- * - Target member must exist in members table and be active
+ * - Target member must exist in members table and be active, and not be a visitor's row: that is answered "Member not
+ *   found", as a key with no row is (NODE_ROLE_ACTS)
  * - SYSTEM placeholder account can NEVER hold a node role
  * - A treasury (is_treasury=1) can NEVER hold a node role
  * - Only an owner may grant 'owner' (unless bootstrapping a node that has no owner at all — see nodeHasOwner)
@@ -164,7 +189,7 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
     }
 
     const member = getMember(db, targetPubkey);
-    if (!member) {
+    if (!member || isVisitorKey(db, targetPubkey)) {
         throw new Error('Member not found');
     }
 
@@ -188,7 +213,7 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         const ownerCount = (db.prepare(
             `SELECT COUNT(*) as c FROM node_roles nr
              JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.role = 'owner' AND m.status = 'active'`
+             WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS}`
         ).get() as any)?.c || 0;
 
         const isOwner =
@@ -275,16 +300,17 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
             if (!isOwner) {
                 throw new Error('Only an owner may revoke the owner role');
             }
-            if (!isNodeOwner(targetPubkey)) {
+            if (heldNodeRoleOf(targetPubkey) !== 'owner') {
                 return;
             }
 
+            // Only an owner whose role acts is one the node can't lose: a visitor's row's owner role acts for nothing.
             const ownerCount = (db.prepare(
                 `SELECT COUNT(*) as c FROM node_roles nr
                  JOIN members m ON nr.member_pubkey = m.public_key
-                 WHERE nr.role = 'owner' AND m.status = 'active'`
+                 WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS}`
             ).get() as any)?.c || 0;
-            if (ownerCount <= 1) {
+            if (isNodeOwner(targetPubkey) && ownerCount <= 1) {
                 throw new Error('Cannot remove the last owner');
             }
         } else if (role === 'admin') {

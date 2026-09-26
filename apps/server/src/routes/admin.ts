@@ -16,7 +16,7 @@ import {
     type EscrowRefundShortfall,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
-    getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, type MemberNodeRole,
+    getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, heldNodeRoleOf, type MemberNodeRole,
     canVouch, getMemberTrustProfile,
     getMemberStats,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
@@ -1689,7 +1689,8 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     }
 
     try {
-        const currentRole = nodeRoleOf(pubkey);
+        // The role the row holds, acting or not: an owner takes away a visitor's row's role too (heldNodeRoleOf).
+        const currentRole = heldNodeRoleOf(pubkey);
         if (currentRole !== role) {
             ctx.status = 404;
             ctx.body = { error: `Member ${pubkey} does not hold role '${role}'` };

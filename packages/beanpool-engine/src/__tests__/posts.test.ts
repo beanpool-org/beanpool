@@ -50,7 +50,8 @@ const POSTS_FIXTURE_DDL = `
         status TEXT DEFAULT 'active',
         earned_credit REAL DEFAULT 0,
         paused INTEGER DEFAULT 0,
-        joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        is_visitor INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE groups (
         id TEXT PRIMARY KEY,

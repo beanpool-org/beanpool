@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 44,
-  "hash": "2a0e8e48e65810f2775533b979995dd3f0b6cd286c472476a1548c8f1973f700",
+  "version": 45,
+  "hash": "5dac9321806dfe7dc80ded9023e3d8d8a3799c503f0bc8f67940b43796ff3895",
   "sections": [
     {
       "id": "setup",
@@ -999,7 +999,7 @@
             "The trust score shown on a member's page is not calculated yet. Do not act on it.",
             "Suspended members can still make invites from their app.",
             "While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.",
-            "Someone a member messages or sends beans to who has not joined is a visitor. They get those messages and beans, and see only what someone who has not joined sees. They can't invite anyone or answer a request to join. If they join with an invite from their own app, they become a member and keep both."
+            "Someone a member messages or sends beans to who has not joined is a visitor. They get those messages and beans, and see only what someone who has not joined sees. In those conversations they can reply, edit or delete what they wrote, and react. They keep the beans, and can pass them on once they join. They can't do anything else: they can't post, trade, join a group, go to an event, report, vote, invite anyone or answer a request to join. If they join with an invite from their own app, they become a member and keep their messages and beans."
           ]
         }
       ]

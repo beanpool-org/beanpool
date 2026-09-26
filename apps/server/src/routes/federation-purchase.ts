@@ -22,7 +22,7 @@
 
 import Router from '@koa/router';
 import crypto from 'node:crypto';
-import { getMember, getNodeConfig } from '../state-engine.js';
+import { getMember, getActingMember, getNodeConfig } from '../state-engine.js';
 import {
     getConnectorByAddress, getConnectorByPublicUrl, peerIdFromAddress, ENABLE_PEER_CONNECTORS,
 } from '../connector-manager.js';
@@ -48,6 +48,9 @@ function ourPublicUrl(): string | null {
         return null;   // never let a config read stop a purchase — the peer can derive it
     }
 }
+
+/** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
+const NOT_OUR_MEMBER_PURCHASE_ERROR = 'Only a member of this community can make a cross-community purchase';
 
 /** Reserved account prefixes. A cross-node purchase must never be aimed at one of these. */
 const SYNTHETIC_PREFIXES = ['escrow_', 'project_', 'bridge_', 'treasury_'];
@@ -110,7 +113,7 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
         const buyer = getMember(buyerPublicKey);
         if (!buyer) {
             ctx.status = 403;
-            ctx.body = { error: 'Only a member of this community can make a cross-community purchase' };
+            ctx.body = { error: NOT_OUR_MEMBER_PURCHASE_ERROR };
             return;
         }
         if (isVisitor(buyerPublicKey)) {
@@ -120,6 +123,14 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
                     + 'a purchase has to be made from there. Nothing has been deducted.',
                 code: SETTLEMENT_REFUSED_CODE,
             };
+            return;
+        }
+        // A visitor's row made here (by a member's DM or send: no home node, so isVisitor above passes it) trades with nobody,
+        // as a key with no row trades with nobody (getActingMember). Nothing below asks again: beginOutboundSettlement
+        // escrows the buyer's Beans as its first act, and an escrow is not a direct send, so the send gate doesn't see it.
+        if (!getActingMember(buyerPublicKey)) {
+            ctx.status = 403;
+            ctx.body = { error: NOT_OUR_MEMBER_PURCHASE_ERROR };
             return;
         }
 

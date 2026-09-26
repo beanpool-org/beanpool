@@ -17,7 +17,7 @@
  */
 
 import Router from '@koa/router';
-import { getMember, nodeRoleOf } from '../state-engine.js';
+import { getMember, isVisitorKey, nodeRoleOf } from '../state-engine.js';
 import { getAdminQueue } from '../engine/admin-queue.js';
 import { getLocalConfig } from '../config/local-config.js';
 import type { RouteDeps } from './types.js';
@@ -33,8 +33,9 @@ export function createNodeAdminRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: 'Sign this request with your member key' };
             return null;
         }
+        // A visitor's row is answered as a key with no row is: a role it holds from before the visitors' rule acts for nothing.
         const member = getMember(actor);
-        if (!member || member.status !== 'active') {
+        if (!member || member.status !== 'active' || isVisitorKey(actor)) {
             ctx.status = 403;
             ctx.body = { error: 'Not an active member of this community' };
             return null;

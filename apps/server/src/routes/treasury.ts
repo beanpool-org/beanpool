@@ -25,7 +25,7 @@ import {
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
     getKeeperChanges, proposeKeeperRemoval, objectToKeeperChange, stepDownAsKeeper,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
-    isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly,
+    isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly, getActingMember, isVisitorKey,
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
@@ -461,7 +461,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
             return;
         }
-        if (statusOf(actor) !== 'active') {
+        // A visitor's row pledges nothing, as a key with no row pledges nothing (getActingMember): pledgeToProject moves the
+        // Beans itself and asks nobody who the pledger is.
+        const memberStatus = getActingMember(actor) ? statusOf(actor) : undefined;
+        if (memberStatus !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'Only active community members can pledge.' };
             return;
@@ -498,7 +501,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const memberStatus = statusOf(actor);
+        // A visitor's row starts nothing, as a key with no row starts nothing (getActingMember).
+        const memberStatus = getActingMember(actor) ? statusOf(actor) : undefined;
         if (memberStatus !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'Only active community members can create an enterprise' };
@@ -1189,7 +1193,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
 
         const isOp = canOperateTreasury(actor, treasury);
-        const hasActivePledge = !!db.prepare(
+        // A visitor's row holds no pledge it can act on, whatever it pledged before visitors were refused a keeper's row.
+        const hasActivePledge = !isVisitorKey(actor) && !!db.prepare(
             "SELECT 1 FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL"
         ).get(treasury, actor);
 
@@ -1568,7 +1573,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
-        const actorStatus = statusOf(actor);
+        // A visitor's row posts in no thread, as a key with no row posts in none (getActingMember).
+        const actorStatus = getActingMember(actor) ? statusOf(actor) : undefined;
         if (!actorStatus || blocked(actorStatus)) {
             ctx.status = 403;
             ctx.body = { error: 'Your account is not active, so you cannot post in this thread.' };

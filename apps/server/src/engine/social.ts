@@ -9,14 +9,16 @@ import crypto from 'node:crypto';
 import {
     getMember,
     isNodeMember,
+    isVisitorKey,
     getFriends,
     type Rating,
     type FriendEntry
 } from '@beanpool/engine';
 
+/** The actor has a member's row here. A visitor's row is refused in the same words as a key with no row. */
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
-    if (!getMember(db, publicKey)) throw new Error('Member not found');
+    if (!getMember(db, publicKey) || isVisitorKey(db, publicKey)) throw new Error('Member not found');
 }
 
 /**
@@ -62,10 +64,10 @@ export function addRating(
 }
 
 /**
- * Add a connection between two members.
+ * Add a connection between two members. A visitor's row adds nobody, as a key with no row adds nobody.
  */
 export function addFriend(ownerPubkey: string, friendPubkey: string): FriendEntry | null {
-    if (!getMember(db, ownerPubkey) || !getMember(db, friendPubkey) || ownerPubkey === friendPubkey) return null;
+    if (!getMember(db, ownerPubkey) || isVisitorKey(db, ownerPubkey) || !getMember(db, friendPubkey) || ownerPubkey === friendPubkey) return null;
     
     const exists = db.prepare("SELECT * FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(ownerPubkey, friendPubkey);
     if (!exists) {

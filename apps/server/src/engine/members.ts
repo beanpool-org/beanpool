@@ -4,7 +4,7 @@
 
 import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
 import { ledger } from './ledger.js';
-import { getMember, getProfile, isNodeMember, publicMemberCard, type Member, type MemberProfile } from '@beanpool/engine';
+import { getMember, getProfile, isNodeMember, isVisitorKey, publicMemberCard, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
@@ -16,6 +16,9 @@ import { isSelfAvatarUrl } from '@beanpool/core';
  */
 export function recordActivity(publicKey: string): void {
     db.prepare("UPDATE members SET last_active_at=? WHERE public_key=?").run(new Date().toISOString(), publicKey);
+    // A visitor's row is no lead or convenor coming back: it acts for no enterprise and no group (the director's rule,
+    // 2026-09-26), so what it may still do (a reply in its own DM) cancels no vote to replace it (4111202724).
+    if (isVisitorKey(db, publicKey)) return;
     try {
         const activeProps = db.prepare(
             "SELECT id, enterprise_pubkey FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
@@ -253,7 +256,8 @@ export function registerMemberInternal(
             .run(invitedBy, inviteCode, callsign, new Date().toISOString(), publicKey);
         return announceJoin(broadcast, publicKey, callsign, invitedBy, 'Visitor joined');
     }
-    if (existing) {
+    // A visitor's row with no door is refused below, as a key with no row is: re-registering renames no visitor.
+    if (existing && !existing.is_visitor) {
         // Re-registration for a known key. Only touch the callsign if it actually
         // changed, and uniquify it (excluding self) so a re-register never collides.
         if (callsign.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
@@ -311,6 +315,15 @@ export function registerMember(broadcast: (event: any) => void, publicKey: strin
  * marked a visitor's (members.is_visitor).
  */
 export function registerVisitor(publicKey: string, callsign?: string, homeNodeUrl?: string): void {
+    if (writeVisitorRow(publicKey, callsign, homeNodeUrl)) ledger.initializeGenesisAccount(publicKey);
+}
+
+/**
+ * registerVisitor's rows, without its in-memory ledger account: for state-engine transfer(), which makes a new
+ * recipient's row inside its own transaction, only once the Beans have moved, and whose ledger.transfer has already
+ * made the account it credits (initializeGenesisAccount would zero it). True when it wrote a new row.
+ */
+export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUrl?: string): boolean {
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     if (existing) {
         let changed = false;
@@ -329,7 +342,7 @@ export function registerVisitor(publicKey: string, callsign?: string, homeNodeUr
         // arriving by any other route was invisible in the member directory for as long as the
         // ETag held — which, with no other write, is forever.
         if (changed) bumpMembersVersion();
-        return;
+        return false;
     }
     const generatedCallsign = callsign || `Visitor-${publicKey.substring(0, 8)}`;
     // A visitor's row (is_visitor = 1, the engine's isVisitorKey): it receives what is sent to it and reads only what a
@@ -339,9 +352,9 @@ export function registerVisitor(publicKey: string, callsign?: string, homeNodeUr
                     VALUES (?, ?, ?, ?, ?, ?, 1)`).run(publicKey, generatedCallsign, new Date().toISOString(), null, null, homeNodeUrl || null);
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
     })();
-    ledger.initializeGenesisAccount(publicKey);
     bumpMembersVersion();
     console.log(`🌐 Visitor registered: ${generatedCallsign} (federation${homeNodeUrl ? ` from ${homeNodeUrl}` : ''})`);
+    return true;
 }
 
 export const NOT_A_MEMBER_ERROR = 'Only members of this community can do this.';
@@ -349,10 +362,10 @@ export const NOT_A_MEMBER_CODE = 'not_a_member';
 
 /**
  * For a write that reaches another member (their message, a trade with them) and answers with them: the signer must
- * still be a member of this node, the engine's isNodeMember (a member row, not pruned, for a key no re-key has
- * invalidated), the same test as every member-only read. A pruned account keeps its row, its group roles and its open
- * trades, and the old key of a member being re-keyed (a lost or stolen phone) keeps its row too, and both can still
- * sign. Refused 403 before anything is written or anyone is returned.
+ * still be a member of this node, the engine's isNodeMember (a member row that isn't a visitor's, not pruned, for a key
+ * no re-key has invalidated). A pruned account keeps its row, its group roles and its open trades, and the old key of a
+ * member being re-keyed (a lost or stolen phone) keeps its row too, and both can still sign; a visitor's row never
+ * joined. Refused 403 before anything is written or anyone is returned.
  *
  * Deliberately not state-engine's assertMemberActive, which also refuses 'suspended' and 'disabled': a suspended
  * member keeps what suspension already allows them (closing their own trades, running their own event's chat).
@@ -376,7 +389,9 @@ export function updateProfile(
         archetype?: string | null;
     }
 ): MemberProfile | null {
-    if (!getMember(db, publicKey)) return null;
+    // A visitor's row has no profile to change here, as a key with no row has none: it gets a name, a photo and a bio
+    // when it joins.
+    if (!getMember(db, publicKey) || isVisitorKey(db, publicKey)) return null;
     recordActivity(publicKey);
 
     // The photo rule, bare base64 included (G9a-3): /api/avatar/<pk> sniffs, but the group, group-members and profile

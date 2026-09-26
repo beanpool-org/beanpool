@@ -354,7 +354,8 @@ async function main(): Promise<void> {
         /** What a device with only the Google sign-in gets, through every collect route, with no bytes of a copy in it. */
         const answer = (r: any) => ({
             opened: r.opened, released: r.released.status, releasedBody: r.released.body, fragments: r.fragments.status,
-            fragmentsBody: r.fragments.body, seed: r.seedHex !== null, error: r.error,
+            fragmentsError: r.fragments.body?.error ?? null, fragmentCount: Array.isArray(r.fragments.body?.fragments) ? r.fragments.body.fragments.length : null,
+            seed: r.seedHex !== null, error: r.error,
         });
         const none = answer(await standby.send('recovery-recover', { callsign: 'Zed' }));
         require_(none.opened !== 200 && !none.seed, `Zed, who never had a copy, gets none (${JSON.stringify(none)})`);

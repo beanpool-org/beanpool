@@ -6,6 +6,7 @@ import {
     type OwnerWordsCheckResult,
 } from '@beanpool/core';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
+import { KNOCKS_STORE_KEY } from './storage-keys';
 import { Platform } from 'react-native';
 
 const isWeb = Platform.OS === 'web';
@@ -238,13 +239,16 @@ interface WipeableStorage {
 /**
  * AsyncStorage state that belongs to the identity being wiped. Guest markers record which nodes
  * THIS key joined as a guest; left behind, a fresh identity inherits them and a real 'stranger'
- * result on those nodes is treated as guest mode. `beanpool_saved_nodes` stays on purpose: it is
- * a list of community addresses, not anything about who the member is.
+ * result on those nodes is treated as guest mode. The communities this key asked to join (utils/knock.ts)
+ * tie the key to places near where the member lives, so they go too (#1179 review 4109868126).
+ * `beanpool_saved_nodes` stays on purpose: it is a list of community addresses, not anything about
+ * who the member is.
  */
 export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promise<void> {
     await storage.removeItem('beanpool_anchor_url');
     await storage.removeItem('beanpool:identity');
     await storage.removeItem('beanpool_guest_nodes');
+    await storage.removeItem(KNOCKS_STORE_KEY);
 
     const allKeys = await storage.getAllKeys();
     const syncKeys = allKeys.filter((k: string) => k.startsWith('pillar_sync_') || k.startsWith('pillar:'));

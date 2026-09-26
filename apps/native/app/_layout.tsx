@@ -658,6 +658,8 @@ function RootLayoutNav() {
                 <Stack.Screen name="suggest-change" options={sheetOptions} />
                 <Stack.Screen name="owner-words-check" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="find-community" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="start-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/[slug]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/section/[id]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="public-profile" options={sheetOptions} />

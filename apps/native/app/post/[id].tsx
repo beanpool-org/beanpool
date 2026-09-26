@@ -32,6 +32,8 @@ import { colors, palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EventDetail } from '../../components/EventDetail';
 import { isHiddenAuthor } from '../../utils/posts-view';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE } from '../../utils/market-global';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
@@ -372,6 +374,12 @@ export default function PostDetailModal() {
     const [editPriceType, setEditPriceType] = useState<string>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
+
+    // On a community with Beans off (the worldwide one) a post has no price and nothing to accept through escrow:
+    // its terms are in the description, and the member messages the poster (utils/market-global.ts).
+    const nodeProfile = useNodeProfile();
+    const showsBeans = marketShowsBeans(nodeProfile?.features);
+    const escrowOn = nodeProfile?.features.escrow !== false;
 
     // Transactions / Reporting state
     const [accepting, setAccepting] = useState(false);
@@ -719,7 +727,7 @@ export default function PostDetailModal() {
                 category: editCategory,
                 title: editTitle.trim(),
                 description: editDescription.trim(),
-                credits: Number(editCredits) || 0,
+                credits: showsBeans ? Number(editCredits) || 0 : 0,
                 price_type: editPriceType,
                 repeatable: editRepeatable,
                 photos: editPhotos.length > 0 ? JSON.stringify(editPhotos) : null,
@@ -941,8 +949,15 @@ export default function PostDetailModal() {
                     </View>
                 )}
 
-                {/* Price Card */}
-                {!isPulsePost && (
+                {/* Price Card: where there are no Beans, what the poster would like in return is in the description. */}
+                {!isPulsePost && !showsBeans && (
+                    <View style={styles.priceCard} accessible accessibilityLabel={`${NO_BEANS_TERMS.value}. ${NO_BEANS_TERMS.note}`}>
+                        <Text style={styles.priceLabel}>{NO_BEANS_TERMS.label}</Text>
+                        <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{NO_BEANS_TERMS.value}</Text>
+                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6, paddingHorizontal: 16 }}>{NO_BEANS_TERMS.note}</Text>
+                    </View>
+                )}
+                {!isPulsePost && showsBeans && (
                     <View style={styles.priceCard}>
                         <Text style={styles.priceLabel}>{priceLabel}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
@@ -1187,7 +1202,10 @@ export default function PostDetailModal() {
                             {/* Description */}
                             <TextInput accessibilityLabel="Description" style={[styles.editInput, { minHeight: 80 }]} value={editDescription} onChangeText={setEditDescription} placeholder="Description" placeholderTextColor={colors.text.muted} multiline textAlignVertical="top" />
 
-                            {/* Credits + Price Type */}
+                            {/* Credits + Price Type; where there are no Beans, a note instead */}
+                            {!showsBeans ? (
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 10 }}>{NO_BEANS_EDIT_NOTE}</Text>
+                            ) : (
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
                                 <TextInput accessibilityLabel="Credits" style={[styles.editInput, { flex: 1, marginBottom: 0 }]} value={editCredits} onChangeText={setEditCredits} placeholder="Credits (B)" placeholderTextColor={colors.text.muted} keyboardType="numeric" />
                                 <Pressable accessibilityRole="button" onPress={() => {
@@ -1199,6 +1217,7 @@ export default function PostDetailModal() {
                                     }</Text>
                                 </Pressable>
                             </View>
+                            )}
 
                             {/* Repeatable Toggle */}
                             <Pressable
@@ -1305,7 +1324,7 @@ export default function PostDetailModal() {
                             Daily Pulse — a daily thought for the post-extraction economy
                         </Text>
                     </View>
-                ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && (
+                ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (
                     <View style={styles.otherPostActions}>
                         {myRequest ? (
                             <View style={styles.confirmBox}>

@@ -2,7 +2,7 @@
 slug: communities
 title: More than one community
 summary: Belong to several communities with one account, and switch between them.
-related: joining, leaving-or-deleting, your-12-words, faq, the-top-bar
+related: joining, finding-a-community, leaving-or-deleting, your-12-words, faq, the-top-bar
 ---
 
 ## One account, several communities
@@ -11,10 +11,12 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 
 ## Joining another community
 
-- A community needs an invite from one of its members.
+- A community lets you in with an invite from one of its members. No invite? From the global community you can ask a community near you to let you in: see "Finding a community near you".
 - Tap the invite icon (a person with a plus) at the top right of the screen to open **Invites**.
 - Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.
 - Tap **Join Community**.
+
+Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**.
 
 The global community needs no invite, but for now it is joined from the app's first screen, before you have an account: when the global community is open, tap **Explore BeanPool worldwide** there. See "Joining BeanPool". Joining it from an account you already have is not possible yet.
 

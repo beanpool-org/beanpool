@@ -473,6 +473,17 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
         expect(s).not.toContain("includes('already a member')");
     });
 
+    it("the global door's equivalent: a key the node has already (`already_member`) goes through the wizard, never into the app", () => {
+        const s = welcome();
+        const door = slice(s, 'async function handleGlobalSignIn(', 'async function handleShowOutgoingSeed(');
+        // Every `joined` answer, `already_member` included, finishes through finishGlobalJoin, which goes to the photo step.
+        expect(slice(door, 'async function afterDoorAnswer(', 'const next = nextStepFor(answer);'))
+            .toContain('await finishGlobalJoin(await joinedUnderNodeName(GLOBAL_NODE_URL, answer, identity), answer.enrolment, key);');
+        expect(slice(door, 'async function finishGlobalJoin(', '\n    }\n').trimEnd().endsWith("setMode('profileSetup');")).toBe(true);
+        // The door takes a key off (setIdentity(null)) but never enters the app with one.
+        expect(door.match(/setIdentity\((?!null\))/g)).toBeNull();
+    });
+
     it("a name the phone's own key holds there is its own; the name check and its suggestions are bounded", () => {
         const s = handleCreate();
         inOrder(s, [

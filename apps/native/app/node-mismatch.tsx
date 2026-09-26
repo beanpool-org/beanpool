@@ -29,6 +29,10 @@ export default function NodeMismatchScreen() {
     const { nodeUrl, recheck } = useNodeStatus();
     const [input, setInput] = useState(nodeUrl || '');
     const [loading, setLoading] = useState(false);
+    // The delete asks each community to stop the push alerts first, which can take a few seconds (UNREGISTER_TIMEOUT_MS):
+    // nothing else on the screen may start meanwhile.
+    const [deleting, setDeleting] = useState(false);
+    const busy = loading || deleting;
     const [error, setError] = useState<string | null>(null);
 
     // nodeUrl can resolve after first render; prefill once it's known.
@@ -114,9 +118,16 @@ export default function NodeMismatchScreen() {
                     text: 'Delete',
                     style: 'destructive',
                     onPress: async () => {
-                        // Its push alerts stop first, signed by its key while the phone still holds it.
-                        await deleteAccountFromThisPhone(identity);
-                        setIdentity(null);
+                        setDeleting(true);
+                        try {
+                            // Its push alerts stop first, signed by its key while the phone still holds it.
+                            await deleteAccountFromThisPhone(identity);
+                            setIdentity(null);
+                        } catch (e: any) {
+                            Alert.alert('Delete Failed', e?.message || 'The account could not be deleted from this phone.');
+                        } finally {
+                            setDeleting(false);
+                        }
                     },
                 },
             ]
@@ -146,7 +157,7 @@ export default function NodeMismatchScreen() {
                         <SavedNodePicker
                             nodes={otherNodes}
                             onPick={switchToNode}
-                            disabled={loading}
+                            disabled={busy}
                             label="Switch to one of your communities"
                             actionLabel="Switch to"
                             hint="Or enter a different address below."
@@ -168,12 +179,12 @@ export default function NodeMismatchScreen() {
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
-                        <Pressable style={styles.primaryBtn} onPress={handleReconnect} disabled={loading} accessibilityRole="button">
+                        <Pressable style={styles.primaryBtn} onPress={handleReconnect} disabled={busy} accessibilityRole="button">
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Reconnect</Text>}
                         </Pressable>
 
                         {!showWipe ? (
-                            <Pressable style={styles.secondaryBtn} onPress={handleStartWipe} disabled={loading} accessibilityRole="button">
+                            <Pressable style={styles.secondaryBtn} onPress={handleStartWipe} disabled={busy} accessibilityRole="button">
                                 <Text style={styles.secondaryBtnText}>Delete this account from this phone</Text>
                             </Pressable>
                         ) : (
@@ -200,10 +211,12 @@ export default function NodeMismatchScreen() {
                                         </Text>
                                     </>
                                 )}
-                                <Pressable style={styles.secondaryBtn} onPress={handleConfirmWipe} disabled={loading} accessibilityRole="button">
-                                    <Text style={styles.secondaryBtnText}>{words ? "I've saved them — delete the account" : 'Delete the account anyway'}</Text>
+                                <Pressable style={styles.secondaryBtn} onPress={handleConfirmWipe} disabled={busy} accessibilityRole="button">
+                                    {deleting
+                                        ? <ActivityIndicator color={colors.text.secondary} />
+                                        : <Text style={styles.secondaryBtnText}>{words ? "I've saved them — delete the account" : 'Delete the account anyway'}</Text>}
                                 </Pressable>
-                                <Pressable style={styles.secondaryBtn} onPress={() => { setShowWipe(false); setWords(null); }} accessibilityRole="button">
+                                <Pressable style={styles.secondaryBtn} onPress={() => { setShowWipe(false); setWords(null); }} disabled={busy} accessibilityRole="button">
                                     <Text style={styles.cancelWipeText}>Cancel</Text>
                                 </Pressable>
                             </View>

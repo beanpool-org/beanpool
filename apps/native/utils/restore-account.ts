@@ -105,9 +105,9 @@ export async function clearToRestore(incoming: BeanPoolIdentity, confirmReplace?
  * member typed for the account's name, and a sign-in restore has already fetched and opened its copy.
  *
  * Replacing another account, that account goes first, as the screen said, and the restored account inherits none of
- * it (#1179 review 4109902595). Its push alerts stop: the phone's token is unregistered on its communities, signed by
- * its key while the phone still holds it (account-leaves-phone.ts `releaseAccountFromPhone`). That is the one node call
- * after the gate, best effort with a short timeout, and it never fails the restore. Then its saved communities and
+ * it (#1179 review 4109902595). Its push alerts stop: the phone's token is unregistered on each community the phone
+ * sent it to, signed by its key while the phone still holds it (account-leaves-phone.ts `releaseAccountFromPhone`).
+ * That is the one node call after the gate, best effort with a short timeout, and it never fails the restore. Then its saved communities and
  * their cached copies go, and what it kept in app storage (identity.ts `wipeIdentityScopedStorage`: its community's
  * address, its guest markers, the communities it asked to join, its sync cursors). Only this phone's own storage can
  * fail from here. If it does, the old key goes too, with whatever the restore had written, and {@link ReplaceNotSaved}

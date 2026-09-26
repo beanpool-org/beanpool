@@ -130,3 +130,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `BulletinSection` component in `apps/manager/src/components/modules/BulletinSection.tsx` was untested.
 **Learning:** `BulletinSection` uses `resolveNodeApiUrl` to route requests via `/proxy/...` and `useSectionSubTab` to sync state with `onSubTabChange`. Mocking `globalThis.fetch` with endpoint-specific pathname matches and wrapping state updates in controlled state wrappers allowed complete coverage of broadcast forms, severity selectors, tab switching, and RSS feed curation modals.
 **Action:** Identify remaining untested module components in `apps/manager/src/components/modules/`.
+
+## 2026-09-16 - [manager tests] activity pause unit tests
+**Gap:** `ActivityPauseProvider`, `useActivityPause`, and `usePausablePoll` in `apps/manager/src/lib/activity-pause.tsx` lacked dedicated unit test coverage.
+**Learning:** Testing `activity-pause` required using Vitest fake timers (`vi.useFakeTimers()`) to verify idle threshold transitions (`idleAfterMs`), user event triggers (`keydown`, `pointermove`), visibility changes (`visibilitychange`), and `usePausablePoll` polling state lifecycle (immediate polling on resume, interval resets on `restartKey` change).
+**Action:** Check remaining utility files in `apps/manager/src/lib/` (e.g. `mode.ts`) for unit test coverage gaps.

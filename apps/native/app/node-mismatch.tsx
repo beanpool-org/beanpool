@@ -9,7 +9,8 @@ import { useNodeStatus } from './NodeStatusContext';
 import { normalizeNodeUrl, looksLikeNodeAddress } from '../utils/node-url';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SavedNodePicker } from '../components/SavedNodePicker';
-import { getMnemonic, hasMnemonic } from '../utils/identity';
+import { hasMnemonic } from '../utils/identity';
+import { readWordsBehindLock } from '../utils/words-behind-lock';
 import { deleteAccountFromThisPhone } from '../utils/account-leaves-phone';
 import { requestSync } from '../services/pillar-sync';
 import { NoWordsNotice } from '../components/NoWordsNotice';
@@ -94,7 +95,9 @@ export default function NodeMismatchScreen() {
 
     async function handleStartWipe() {
         if (hasMnemonic(identity)) {
-            const w = await getMnemonic(identity);
+            // The phone's lock first, as Settings asks it before the words: a check that does not pass opens nothing.
+            const w = await readWordsBehindLock(identity, 'Confirm your security to view your recovery phrase.');
+            if (!w) return;
             setWords(w);
         } else {
             setWords(null);

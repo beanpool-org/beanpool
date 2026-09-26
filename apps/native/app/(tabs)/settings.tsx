@@ -7,7 +7,7 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { processProfileImage } from '../../utils/image-processing';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
-import { updateCallsign, getMnemonic, hasMnemonic } from '../../utils/identity';
+import { updateCallsign, hasMnemonic } from '../../utils/identity';
 import { signOutOfThisPhone } from '../../utils/account-leaves-phone';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
@@ -30,6 +30,7 @@ import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference';
 import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../utils/LocalAuth';
+import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
@@ -345,14 +346,17 @@ export default function SettingsScreen() {
             setMnemonicWords(null);
             return;
         }
+        if (!hasMnemonic(identity)) {
+            Alert.alert("No recovery words found", "Your account key was generated without local passphrase words.");
+            return;
+        }
         setRevealLoading(true);
         try {
-            const words = await getMnemonic(identity);
+            // The phone's lock first, as View Recovery Phrase asks it: a check that does not pass shows nothing.
+            const words = await readWordsBehindLock(identity, 'Confirm your security to view your recovery phrase.');
             if (words && Array.isArray(words)) {
                 setMnemonicWords(words.join(' '));
                 setRevealWords(true);
-            } else {
-                Alert.alert("No recovery words found", "Your account key was generated without local passphrase words.");
             }
         } catch (e) {
             Alert.alert("Error reading recovery words", (e as Error).message);
@@ -869,8 +873,9 @@ export default function SettingsScreen() {
         }
     };
 
+    // Copy Words is drawn only once the words are shown: it copies what the phone's lock let through.
     const handleCopySeed = async () => {
-        const words = await getMnemonic(identity);
+        const words = seedWords;
         if (!words) return;
         await Clipboard.setStringAsync(words.join(' '));
         hapticTick();
@@ -2497,14 +2502,11 @@ export default function SettingsScreen() {
                                     <Pressable
                                         style={[styles.primaryBtn, seedConfirm !== 'CONFIRM' && { opacity: 0.5 }]}
                                         onPress={async () => {
-                                            const success = await authenticateUser('Confirm your security to view your recovery phrase.');
-                                            if (success) {
-                                                const words = await getMnemonic(identity);
-                                                if (!words) return;
-                                                setSeedWords(words);
-                                                setSeedVisible(true);
-                                                await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
-                                            }
+                                            const words = await readWordsBehindLock(identity, 'Confirm your security to view your recovery phrase.');
+                                            if (!words) return;
+                                            setSeedWords(words);
+                                            setSeedVisible(true);
+                                            await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
                                         }}
                                         disabled={seedConfirm !== 'CONFIRM'}
                                         accessibilityRole="button"

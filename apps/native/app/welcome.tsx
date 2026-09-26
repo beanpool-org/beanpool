@@ -4,6 +4,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
 import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
+import { readWordsBehindLock } from '../utils/words-behind-lock';
 import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
@@ -269,7 +270,12 @@ export default function WelcomeScreen() {
     // encrypted vault behind a biometric prompt, and a render function cannot await. Doing
     // this now means Phase C changes one function instead of every screen that shows words.
     const [pendingWords, setPendingWords] = useState<string[] | null>(null);
+    // The account this phone already holds is not the member's new one: its words are read only when Show has passed
+    // the phone's lock (handleShowOutgoingSeed), never as the screen opens, and are put away when that account goes.
     const [outgoingWords, setOutgoingWords] = useState<string[] | null>(null);
+    const outgoingIdentityRef = useRef(outgoingIdentity);
+    outgoingIdentityRef.current = outgoingIdentity;
+    const outgoingLockBusyRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -278,9 +284,7 @@ export default function WelcomeScreen() {
     }, [pendingIdentity]);
 
     useEffect(() => {
-        let cancelled = false;
-        getMnemonic(outgoingIdentity).then(w => { if (!cancelled) setOutgoingWords(w); });
-        return () => { cancelled = true; };
+        setOutgoingWords(null);
     }, [outgoingIdentity]);
 
     // Count step 3 being drawn — once per join, not once per render.
@@ -1180,9 +1184,27 @@ export default function WelcomeScreen() {
         setMode('profileSetup');
     }
 
-    // --- Copy the OUTGOING account's seed to the clipboard (confirm-replace) ---
+    // --- Show the OUTGOING account's seed (confirm-replace): the phone's lock first, the check Settings asks ---
+    async function handleShowOutgoingSeed() {
+        if (outgoingLockBusyRef.current) return;
+        outgoingLockBusyRef.current = true;
+        hapticTick();
+        const account = outgoingIdentity;
+        try {
+            const outCallsign = account?.callsign?.trim() || 'your current account';
+            const words = await readWordsBehindLock(account, `Confirm your security to view ${outCallsign}'s recovery phrase.`);
+            // A check that did not pass shows nothing. Nor does one that answers after the screen has moved on.
+            if (!words || outgoingIdentityRef.current !== account) return;
+            setOutgoingWords(words);
+            setShowOutgoingSeed(true);
+        } finally {
+            outgoingLockBusyRef.current = false;
+        }
+    }
+
+    // --- Copy the OUTGOING account's seed to the clipboard (confirm-replace): drawn only once Show has passed ---
     async function handleCopyOutgoingSeed() {
-        const words = await getMnemonic(outgoingIdentity);
+        const words = outgoingWords;
         if (!words) return;
         await Clipboard.setStringAsync(words.join(' '));
         hapticTick();
@@ -2243,7 +2265,7 @@ export default function WelcomeScreen() {
                                     {!showOutgoingSeed ? (
                                         <Pressable
                                             style={styles.secondaryBtn}
-                                            onPress={() => { hapticTick(); setShowOutgoingSeed(true); }}
+                                            onPress={handleShowOutgoingSeed}
                                             accessibilityRole="button"
                                         >
                                             <Text style={styles.secondaryBtnText}>🔑 Show {outCallsign}'s 12 words</Text>

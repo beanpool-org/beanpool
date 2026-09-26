@@ -502,8 +502,9 @@ export function takeRecoverySealFullPull(): boolean {
  * engine's export without a cursor: no WHERE and no LIMIT). The import that wrote it here was one transaction that
  * either wrote every row or failed, with no row skipped: each under that same key (INSERT OR REPLACE). This runs only
  * after that import succeeded. So a row here that the copy does not hold is one the main server did not hold, and no copy
- * it still holds is ever removed, whatever the clocks, the order of the pulls, or the form its own copies are in. And a
- * standby stores no copy of its own (it has no key to wrap one), so nothing else adds a row between the import and this.
+ * it still holds is ever removed, whatever the clocks, the order of the pulls, or the form its own copies are in. And
+ * nothing else adds a row in the old form between the import and this: this code stores every copy wrapped, or not at
+ * all without the key.
  *
  * A delta is no such proof: it carries only the rows changed since the last pull, found by the main server's clock. So
  * after a delta, or at boot, this asks the puller once for a whole copy ({@link takeRecoverySealFullPull}).

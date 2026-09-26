@@ -14,6 +14,7 @@ import { getMember, getBalance, createConversation, sendMessage, registerVisitor
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from './config/node-profile.js';
 import { getNodeRole } from './state-engine.js';
+import { isMemberKeySpelling, BAD_KEY_ERROR } from './engine/member-key.js';
 import {
     handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus, runOutboundSettlement,
     PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS, type OutboundOutcome,
@@ -267,6 +268,10 @@ export function registerFederationHandler(node: Libp2p): void {
 
                 if (!senderPublicKey || !recipientPublicKey || !ciphertext || !nonce) {
                     response = { error: 'Missing required payload fields' };
+                } else if (!isMemberKeySpelling(senderPublicKey) || !isMemberKeySpelling(recipientPublicKey)) {
+                    // One key, one spelling (engine/member-key.ts), before any lookup: a local member's key in capitals
+                    // is no remote sender (it passed the impersonation guard below, and got a visitor's row of its own).
+                    response = { error: BAD_KEY_ERROR };
                 } else {
                     // Verify recipient exists locally (O(1) indexed lookup)
                     const recipient = getMember(recipientPublicKey);

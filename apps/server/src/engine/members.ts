@@ -9,7 +9,8 @@ import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js'
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
-import { isSelfAvatarUrl } from '@beanpool/core';
+import { isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
+import { isMemberKeySpelling, badKeyError } from './member-key.js';
 
 /**
  * Record activity timestamp for a member.
@@ -240,6 +241,12 @@ export function registerMemberInternal(
     invitedBy: string | null,
     inviteCode: string | null
 ): Member | null {
+    // One key, one spelling (engine/member-key.ts): every door that reaches here (an invite, an offline ticket, the open
+    // door, re-registering) has already taken the key that way; this is the last line, before any lookup or write.
+    if (!isMemberKeySpelling(publicKey)) {
+        console.warn(`[Security] Rejected registration for a key not written as this community keeps keys (${JSON.stringify(String(publicKey).slice(0, 16))}…)`);
+        return null;
+    }
     if (!callsign || callsign.trim().length < 2) {
         console.warn(`[Security] Rejected registration with invalid callsign "${callsign}" for ${publicKey}`);
         return null;
@@ -325,6 +332,12 @@ export function registerVisitor(publicKey: string, callsign?: string, homeNodeUr
  */
 export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUrl?: string): boolean {
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
+    // One key, one spelling (engine/member-key.ts): a new row only for a key in it, so a send, a message or a peer
+    // naming a member's key in capitals makes no second row for it. Thrown before anything is written (the send route
+    // and the conversation route refuse it first, 400 bad_key). An existing row under exactly this id is left to the
+    // lines below: an enterprise or a project is keyed on its id. A reserved id is no one's key and no request names
+    // one (the send and conversation routes refuse it): the admin inbox's own `system` sender gets its row, as before.
+    if (!existing && !isMemberKeySpelling(publicKey) && !isSyntheticAccount(publicKey)) throw badKeyError();
     if (existing) {
         let changed = false;
         if (callsign && existing.callsign.startsWith('Visitor-')) {

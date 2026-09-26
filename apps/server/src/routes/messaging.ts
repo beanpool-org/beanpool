@@ -26,6 +26,7 @@ import { assertMayMessage } from '../engine/probation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
+import { isNameableAccount, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
  *  thread is readable by any member (it is public), but only its keepers get it in "Your groups", so only they may
@@ -112,6 +113,14 @@ router.post('/api/messages/conversation', async (ctx) => {
     if (!participants.every((p: unknown) => typeof p === 'string' && p.length > 0 && p.length <= MAX_PARTICIPANT_KEY_LENGTH)) {
         ctx.status = 400;
         ctx.body = { error: 'All participants must be valid public keys' };
+        return;
+    }
+    // One key, one spelling (engine/member-key.ts): a person is named by their key as this community keeps it. A key
+    // in capitals was a second person here (a visitor's row made for it, or a second member row), whose messages the
+    // member whose key it is never saw. Before anything is looked up for them or written.
+    if (!participants.every((p: string) => isNameableAccount(p))) {
+        ctx.status = 400;
+        ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
         return;
     }
     // conversation_participants is keyed on (conversation_id, public_key), so a repeated

@@ -444,6 +444,7 @@ run_federation_suites() {
       test-poll-voters-members-only
       test-suspended-and-visitor-reads
       test-visitors-cant-act
+      test-doors-key-case
       test-events
       test-enterprise-event-http
       test-event-chat

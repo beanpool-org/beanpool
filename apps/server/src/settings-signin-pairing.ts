@@ -22,7 +22,7 @@
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
-import { getMember, isNodeMember } from '@beanpool/engine';
+import { getMember, isMemberKeySpelling, isNodeMember } from '@beanpool/engine';
 import type { MemberNodeRole } from './engine/node-roles.js';
 import {
     authorizeKeySigner,
@@ -263,7 +263,9 @@ export function approvePairing(params: {
 
 /**
  * "No" on the phone: any active member's signature over the decline message ends the pairing. A visitor's row isn't a
- * member's (isNodeMember, the act test) and is refused as a key with no row is.
+ * member's (isNodeMember, the act test) and is refused as a key with no row is. So is a key in another spelling
+ * (isMemberKeySpelling): the signature check forgives case, so a row an old door stored under a member's key in capitals
+ * would answer as a second member, as a key sign-in would (authorizeKeySigner).
  */
 export function declinePairing(params: { pairingId: string; memberPubkey: string; signature: string; now?: number }):
     | { ok: true }
@@ -273,7 +275,7 @@ export function declinePairing(params: { pairingId: string; memberPubkey: string
     if (!p) return { ok: false, status: 404, error: 'That code is not known here.' };
     if (expired(p, now) || p.status !== 'waiting') return { ok: false, status: 409, error: 'That code is no longer waiting.' };
     const memberPubkey = String(params.memberPubkey || '').trim();
-    const member = getMember(db, memberPubkey);
+    const member = isMemberKeySpelling(memberPubkey) ? getMember(db, memberPubkey) : undefined;
     if (!member || member.status !== 'active' || !isNodeMember(db, memberPubkey) ||
         !verifyEd25519Signature(pairingMessage('decline', p.id, p.shortCode), params.signature, memberPubkey)) {
         return { ok: false, status: 403, error: 'Invalid cryptographic signature' };

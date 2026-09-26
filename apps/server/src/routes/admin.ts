@@ -41,6 +41,7 @@ import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
+import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
@@ -248,8 +249,11 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         }
         targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
     } else {
-        // Allow mobile app with signed headers (X-Public-Key, X-Signature)
-        const pubKeyHex = ctx.get('X-Public-Key');
+        // Allow mobile app with signed headers (X-Public-Key, X-Signature). This path skips the signature middleware, so
+        // the signer is taken here as the middleware takes it: in the one spelling (engine/member-key.ts
+        // provenKeySpelling). The signature check forgives case, so as sent, a key in capitals was the row an old door
+        // stored under that spelling, and "sign me out everywhere" ended that row's sessions instead of the member's.
+        const pubKeyHex = provenKeySpelling(ctx.get('X-Public-Key'));
         const signatureBase64 = ctx.get('X-Signature');
         if (pubKeyHex && signatureBase64 && nodeRoleOf(pubKeyHex)) {
             const timestampHeader = ctx.get('X-Timestamp');
@@ -383,6 +387,13 @@ const handleEnrol = async (ctx: any) => {
     if (!targetPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'memberPubkey is required' };
+        return;
+    }
+    // One key, one spelling (engine/member-key.ts): a role is for a member's key as this community keeps it, never a row
+    // a door stored under another spelling before that rule (reportMisspeltMemberKeys). Before any lookup or write.
+    if (!isMemberKeySpelling(targetPubkey)) {
+        ctx.status = 400;
+        ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
         return;
     }
 
@@ -1663,7 +1674,10 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
-
+    // No spelling rule here, unlike the enrol route above: grantNodeRole grants only to a member row under exactly this
+    // key, no door makes a row under any other spelling now (engine/member-key.ts), and a role on one a door made before
+    // opens no session (authorizeKeySigner) and signs nothing (the signature middleware). test-node-roles drives this
+    // route with made-up keys.
     try {
         grantNodeRole(targetPubkey, role, effectiveActor);
         ctx.body = { success: true, message: `Granted ${role} role to ${targetPubkey}` };

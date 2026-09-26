@@ -33,6 +33,7 @@
 
 import { db } from './db/db.js';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
+import { isMemberKeySpelling } from './engine/member-key.js';
 import {
     transfer, registerVisitor, getMember, moveToCommons, payFromCommons,
     conservingTransaction, getNodeRole,
@@ -714,6 +715,11 @@ export function handlePurchaseRequest(input: {
     }
     if (!input.sellerPublicKey || !input.buyerPublicKey) {
         return { accepted: false, reason: 'invalid_parties', message: 'Both parties must be identified.' };
+    }
+    // One key, one spelling (engine/member-key.ts): a local member's key in capitals is no remote buyer (it passed the
+    // buyer_is_local guard below, and got a visitor's row of its own), and a seller is one of ours only by their key.
+    if (!isMemberKeySpelling(input.sellerPublicKey) || !isMemberKeySpelling(input.buyerPublicKey)) {
+        return { accepted: false, reason: 'invalid_parties', message: 'Both parties must be identified by their keys, written as 64 characters, 0-9 and a-f in lower case.' };
     }
 
     const existing = getSettlement(input.key);

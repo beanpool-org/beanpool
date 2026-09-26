@@ -180,6 +180,20 @@ export function generateShortCode(): string {
     return `INV-${part1}-${part2}`;
 }
 
+/**
+ * Whether `key` is a member key in the one spelling this community keeps: 64 characters, 0-9 and a-f in lower case,
+ * with nothing before or after. The rule and why are the server's (apps/server engine/member-key.ts, which re-exports
+ * this). In short: a signature is checked by decoding the key's hex, which forgives case and stops at the first
+ * character that isn't hex, so `AB12…` and `ab12…zz` verify as `ab12…`, while every lookup on members.public_key is
+ * exact. A row a door stored under another spelling before that rule is a different row, and a key named inside
+ * something signed (an offline ticket's inviter) must be in this spelling, or the key's holder acts as that row.
+ */
+export function isMemberKeySpelling(key: unknown): key is string {
+    return typeof key === 'string' && /^[0-9a-f]{64}$/.test(key);
+}
+
+const INVITER_KEY_SPELLING = 'This ticket names its inviter by a key written another way than this community keeps keys, so it can’t be used. Ask a member for a fresh one.';
+
 export function verifyOfflineTicket(db: Db, ticketB64: string):
     | { ok: true; inviterPubkey: string; timestamp: number; intendedFor?: string; codeHash: string }
     | { ok: false; reason: 'unknown_inviter' | 'expired' | 'invalid' | 'malformed'; error: string } {
@@ -198,6 +212,14 @@ export function verifyOfflineTicket(db: Db, ticketB64: string):
 
         const payloadObj = JSON.parse(payloadJson);
         const { i: inviterPubkey, t: timestamp, f: intendedFor } = payloadObj;
+
+        // The inviter in the one spelling (isMemberKeySpelling), before any lookup. The signature below decodes the
+        // inviter's hex, so a ticket Bob's key signs naming `BOB…` or `bob…zz` verified; and a row an old door stored
+        // under that spelling is a member of its own, which let the key's holder admit people as it, even once Bob
+        // was removed (4111764568). Refused here, so checkInvite's preflight and redeemOfflineTicket agree and nothing is written.
+        if (!isMemberKeySpelling(inviterPubkey)) {
+            return { ok: false, reason: 'unknown_inviter', error: INVITER_KEY_SPELLING };
+        }
 
         // A member of this node who may bring someone in (mayBringSomeoneIn), not just a row: a pruned account keeps its
         // row, and so does the old key of a member being re-keyed, and a ticket either signs would bring its holder in as
@@ -438,10 +460,14 @@ export function passesReadGate(db: Db, pubkey: string | null | undefined): boole
  * routes). The act test (isNodeMember), which a visitor's row fails: a visitor never joined, and an invite, a ticket or a
  * knock's invite of its own would admit anyone, itself included. Suspended and disabled members pass, as they did
  * (#1177): what suspension stops is each route's own rule (answering a knock asks assertMemberActive too). Pass the
- * verified signer.
+ * verified signer, or the maker a code or a ticket names.
+ *
+ * Only a key in the one spelling (isMemberKeySpelling). A row an old door stored under another spelling of a member's
+ * key is nobody who signs now: a code it made before that rule, or a ticket naming it (verifyOfflineTicket), would let
+ * that key's holder keep admitting people through it, even once the member whose key it is was removed.
  */
 export function mayBringSomeoneIn(db: Db, pubkey: string | null | undefined): boolean {
-    return isNodeMember(db, pubkey);
+    return isMemberKeySpelling(pubkey) && isNodeMember(db, pubkey);
 }
 
 /** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade.ts). */

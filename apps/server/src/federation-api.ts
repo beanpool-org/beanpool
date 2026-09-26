@@ -13,6 +13,7 @@ import type Router from '@koa/router';
 import { getPeerOrigins, getConnectorsByLevel } from './connector-manager.js';
 import { getMembers, getPosts, getBalance, createConversation, sendMessage, registerVisitor, getCommunityInfo, getActivePostCount } from './state-engine.js';
 import { getLocalConfig } from './config/local-config.js';
+import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from './engine/member-key.js';
 
 /**
  * Dynamic CORS middleware for federation.
@@ -116,6 +117,12 @@ export function mountFederationRoutes(router: Router): void {
         if (!senderPublicKey || !recipientPublicKey || !ciphertext || !nonce) {
             ctx.status = 400;
             ctx.body = { error: 'Missing required fields: senderPublicKey, recipientPublicKey, ciphertext, nonce' };
+            return;
+        }
+        // One key, one spelling (engine/member-key.ts), before any lookup or write, as the libp2p relay.
+        if (!isMemberKeySpelling(senderPublicKey) || !isMemberKeySpelling(recipientPublicKey)) {
+            ctx.status = 400;
+            ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
             return;
         }
 

@@ -170,6 +170,7 @@ import {
     NOT_A_MEMBER_CODE,
     assertNodeMember,
 } from './engine/members.js';
+import { isMemberKeySpelling, badKeyError, reportMisspeltMemberKeys } from './engine/member-key.js';
 import {
     generateInvite,
     adminGenerateInvite,
@@ -668,6 +669,11 @@ export function initStateEngine(): void {
             console.error('');
         }
     } catch (e) { console.warn('[LedgerAudit] startup check failed:', e); }
+
+    // One key, one spelling (engine/member-key.ts). A person's row stored under a key written another way (in capitals,
+    // say) by a door before this version is logged, with what the operator should do. Nothing is merged or deleted: it
+    // is a person's data. On a standby too, which holds the same rows. Never throws.
+    reportMisspeltMemberKeys();
 
     // Daily ledger conservation audit (also once shortly after boot)
     setTimeout(() => {
@@ -1170,8 +1176,12 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         }
     }
     const msg = JSON.stringify(event);
+    // Every socket's key is the one spelling (https-server.ts verifyWsConnect, engine/member-key.ts), and so is every
+    // key a join writes, so the socket-standing matches below are exact: a case-blind one would take an event about a
+    // row an old door stored under another spelling of a member's key (member-key.ts reportMisspeltMemberKeys) for
+    // news about that member.
     const joinedPubkey = event?.type === 'member_joined' && typeof event.member?.publicKey === 'string'
-        ? event.member.publicKey.toLowerCase() : null;
+        ? event.member.publicKey : null;
     let doorbell: string | null = null;
     // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
     // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
@@ -1187,8 +1197,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
         // member_joined alone never makes one (a replaced key, whatever announced it, stays a stranger's socket).
-        if (joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey
-            || (typeof ws._memberPubkey === 'string' && ws._memberPubkey.toLowerCase() === joinedPubkey))) {
+        if (joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey)) {
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
                 ws._memberPubkey = event.member.publicKey;
@@ -1217,14 +1226,15 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // socket for good: a prune says so outright, a re-key started for a lost or stolen phone announces profile_updated
     // for the old key (issueRekeyCode), and one completed announces member_rekeyed. A suspension and its end announce
     // profile_updated too (adminSetUserStatus, a community vote, a report's action), so a suspended member's socket stops
-    // getting the member feed while it lasts and gets it again after, keeping what is sent to it throughout.
+    // getting the member feed while it lasts and gets it again after, keeping what is sent to it throughout. Exactly that
+    // key: removing a stray row under a member's key in capitals (as reportMisspeltMemberKeys tells an operator to) is
+    // no news about the member, whose open app would otherwise stop getting its messages and Beans (4111765291).
     const changedKey = event?.type === 'member_rekeyed' ? event.oldPublicKey
         : event?.type === 'user_pruned' || event?.type === 'profile_updated' ? event.publicKey : null;
     if (typeof changedKey === 'string') {
-        const key = changedKey.toLowerCase();
         let standing: SocketStanding | undefined;
         for (const ws of wsClients) {
-            if (typeof ws._memberPubkey !== 'string' || ws._memberPubkey.toLowerCase() !== key) continue;
+            if (ws._memberPubkey !== changedKey) continue;
             standing ??= event.type === 'user_pruned' ? { act: false, visitor: false, feed: false } : socketStanding(ws._memberPubkey);
             if (!standing.act) ws._memberPubkey = null;
             ws._visitor = standing.visitor;
@@ -1248,7 +1258,11 @@ export function assertMemberActive(publicKey: string): void {
         if (e?.message?.includes('Device key has been invalidated')) throw e;
         // If table does not exist during early boot or mock, ignore
     }
-    const member = db.prepare("SELECT status FROM members WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
+    // The row under exactly this key, else the member's row in the one spelling keys are kept in (engine/member-key.ts).
+    // Not a case-blind match, which could answer with a row a door stored under that key in capitals before that rule
+    // (pruned by an operator, say) and refuse the member whose key it is.
+    const statusOf = db.prepare("SELECT status FROM members WHERE public_key = ?");
+    const member = (statusOf.get(publicKey) ?? statusOf.get(cleanKey)) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
@@ -1377,8 +1391,8 @@ export function passesReadGate(pubkey: string | null | undefined): boolean {
 }
 
 /**
- * May bring someone in (an invite, an offline ticket, an answer to a knock): isNodeMember (the engine's
- * mayBringSomeoneIn). Pass the verified signer.
+ * May bring someone in (an invite, an offline ticket, an answer to a knock): isNodeMember, for a key in the one spelling
+ * (the engine's mayBringSomeoneIn). Pass the verified signer, or the maker a code names.
  */
 export function mayBringSomeoneIn(pubkey: string | null | undefined): boolean {
     return mayBringSomeoneInEngine(db, pubkey);
@@ -1819,6 +1833,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // A recipient with no row here gets a visitor's row, but only once the Beans have moved: in the transaction below,
     // so a send any rule refuses (the send gate, the sender's floor) leaves no row behind.
     const newRecipient = !isSyntheticAccount(to) && !getMember(to);
+    // One key, one spelling (engine/member-key.ts): a recipient with no row gets one only under a key written the way
+    // this community keeps keys, so Beans sent to a member's key in capitals make no second row that holds them.
+    // Thrown before anything moves; the send route refuses it first (400 bad_key).
+    if (newRecipient && !isMemberKeySpelling(to)) throw badKeyError();
     // A visitor's row (isLiveVisitor) makes no row for anyone else: it sends Beans only to a key that has a row here.
     // Thrown, as assertNodeMember's refusal, so an enclosing transaction rolls back; the send route answers it.
     if (newRecipient && isLiveVisitor(from)) {

@@ -205,6 +205,22 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // (z) enterprise_pledges
     move('enterprise_pledges', 'keeper');
     move('enterprise_pledges', 'enterprise');
+
+    // (z2) enterprise governance (docs/the-commons.md §2.3, §2.6): lead succession, keeper requests and keeper changes.
+    // Left on the old key, a lead back on a new one could not close the vote to replace them (recordActivity finds it by
+    // lead_pubkey), the vote would run on as if they never came back, and a member who had voted could vote again.
+    move('enterprise_succession_proposals', 'enterprise_pubkey');
+    move('enterprise_succession_proposals', 'lead_pubkey');
+    move('enterprise_succession_proposals', 'candidate_pubkey');
+    move('enterprise_succession_proposals', 'proposer_pubkey');
+    move('enterprise_succession_votes', 'voter_pubkey');
+    move('enterprise_keeper_requests', 'enterprise_pubkey');
+    move('enterprise_keeper_requests', 'member_pubkey');
+    move('enterprise_keeper_requests', 'decided_by');
+    move('enterprise_keeper_changes', 'enterprise_pubkey');
+    move('enterprise_keeper_changes', 'member_pubkey');
+    move('enterprise_keeper_changes', 'proposed_by');
+    move('enterprise_keeper_changes', 'resolved_by');
 }
 
 // ── on a standby ─────────────────────────────────────────────────────────────────────────────────────────────────

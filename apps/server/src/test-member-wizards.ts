@@ -69,6 +69,7 @@ import {
 } from './engine/member-wizards.js';
 import { runLedgerAudit } from './engine/audit.js';
 import { ledger } from './engine/ledger.js';
+import { recordActivity } from './engine/members.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';
 
@@ -287,6 +288,27 @@ async function main() {
                 VALUES ('bob-to-alice', 'request', 'produce', 'Spare jars?', 'For the honey', 0, ?, 'direct', ?, ?)`)
         .run(bobKey, oldAliceKey, oldAliceKey);
 
+    // 20. Enterprise governance (docs/the-commons.md §2.3, §2.6). Alice leads the treasury coop, with a vote open to
+    // replace her; she stands to replace Bob as lead of his enterprise, and has voted for it; she asked to keep Bob's
+    // enterprise, answered Bob's request to keep the coop, and withdrew a keeper change she proposed. And one of each
+    // names her key as the enterprise's own.
+    const insertSuccession = db.prepare(`INSERT INTO enterprise_succession_proposals (id, enterprise_pubkey, lead_pubkey, candidate_pubkey, proposer_pubkey, status, deadline_at)
+                                         VALUES (?, ?, ?, ?, ?, 'active', datetime('now', '+14 days'))`);
+    insertSuccession.run('succ-of-alice', treasuryPub, oldAliceKey, bobKey, bobKey);
+    insertSuccession.run('succ-by-alice', bobKey, bobKey, oldAliceKey, oldAliceKey);
+    insertSuccession.run('succ-at-alice', oldAliceKey, bobKey, operatorPubkey, operatorPubkey);
+    db.prepare("INSERT INTO enterprise_succession_votes (proposal_id, voter_pubkey, choice) VALUES ('succ-by-alice', ?, 'yes')").run(oldAliceKey);
+    const insertKeeperRequest = db.prepare(`INSERT INTO enterprise_keeper_requests (id, enterprise_pubkey, member_pubkey, status, decided_at, decided_by)
+                                            VALUES (?, ?, ?, ?, ?, ?)`);
+    insertKeeperRequest.run('keep-alice', bobKey, oldAliceKey, 'pending', null, null);
+    insertKeeperRequest.run('keep-bob', treasuryPub, bobKey, 'approved', new Date().toISOString(), oldAliceKey);
+    insertKeeperRequest.run('keep-bob-at-alice', oldAliceKey, bobKey, 'pending', null, null);
+    const insertKeeperChange = db.prepare(`INSERT INTO enterprise_keeper_changes (id, enterprise_pubkey, kind, member_pubkey, request_id, proposed_by, status, applies_at, resolved_at, resolved_by)
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '+3 days'), ?, ?)`);
+    insertKeeperChange.run('change-add-alice', bobKey, 'add', oldAliceKey, 'keep-alice', bobKey, 'pending', null, null);
+    insertKeeperChange.run('change-rm-bob', treasuryPub, 'remove', bobKey, null, oldAliceKey, 'withdrawn', new Date().toISOString(), oldAliceKey);
+    insertKeeperChange.run('change-at-alice', oldAliceKey, 'add', bobKey, 'keep-bob-at-alice', bobKey, 'pending', null, null);
+
     // Step A: Issue re-key code (tested with uppercase key to verify case normalization)
     const rekeyIssue = issueRekeyCode(oldAliceKey.toUpperCase(), operatorPubkey);
     assert(Boolean(rekeyIssue.code), `Re-enrolment code generated: ${rekeyIssue.code}`);
@@ -457,6 +479,33 @@ async function main() {
     const forOldAlice = db.prepare('SELECT 1 FROM posts WHERE target_pubkey = ? OR assigned_to = ?').get(oldAliceKey, oldAliceKey);
     assert(forAlice?.target_pubkey === newAliceKey && forAlice?.assigned_to === newAliceKey && !forOldAlice,
         'posts: the post addressed to her and the task given her name newAliceKey');
+
+    // Enterprise governance: every row that named her names the new key. Left on the old one, the vote to replace her as
+    // lead would run on as if she never came back, and her vote for Bob's successor would let her vote again.
+    const enterpriseKeyColumns: [string, string][] = [
+        ['enterprise_succession_proposals', 'enterprise_pubkey'], ['enterprise_succession_proposals', 'lead_pubkey'],
+        ['enterprise_succession_proposals', 'candidate_pubkey'], ['enterprise_succession_proposals', 'proposer_pubkey'],
+        ['enterprise_succession_votes', 'voter_pubkey'],
+        ['enterprise_keeper_requests', 'enterprise_pubkey'], ['enterprise_keeper_requests', 'member_pubkey'], ['enterprise_keeper_requests', 'decided_by'],
+        ['enterprise_keeper_changes', 'enterprise_pubkey'], ['enterprise_keeper_changes', 'member_pubkey'],
+        ['enterprise_keeper_changes', 'proposed_by'], ['enterprise_keeper_changes', 'resolved_by'],
+    ];
+    const enterpriseRows = (key: string) => enterpriseKeyColumns.map(([t, c]) => (db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE ${c} = ?`).get(key) as { n: number }).n);
+    assert(enterpriseRows(oldAliceKey).every((n) => n === 0), `enterprise governance: no row names the old key (${enterpriseRows(oldAliceKey).join(',')})`);
+    assert(enterpriseRows(newAliceKey).every((n) => n === 1),
+        `enterprise governance: each row that named her names newAliceKey (${enterpriseRows(newAliceKey).join(',')})`);
+    const votedTwice = (() => {
+        try {
+            db.prepare("INSERT INTO enterprise_succession_votes (proposal_id, voter_pubkey, choice) VALUES ('succ-by-alice', ?, 'yes')").run(newAliceKey);
+            return true;
+        } catch {
+            return false;
+        }
+    })();
+    assert(!votedTwice, 'enterprise governance: her vote is under the new key, so it cannot vote a second time');
+    recordActivity(newAliceKey);
+    const succOfAlice = db.prepare("SELECT status FROM enterprise_succession_proposals WHERE id = 'succ-of-alice'").get() as any;
+    assert(succOfAlice?.status === 'cancelled', `enterprise governance: acting on her new key closes the vote to replace her as lead (${succOfAlice?.status})`);
 
     // Case-insensitive assertMemberActive check
     throws(() => assertMemberActive(oldAliceKey.toUpperCase()), new RegExp(newAliceKey), 'assertMemberActive on uppercase old key reports rekeyed_to new key');

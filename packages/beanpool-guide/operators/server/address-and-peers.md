@@ -1,7 +1,7 @@
 ---
 slug: address-and-peers
 title: Address, identity and peers
-summary: Your community's web address, what it tells the BeanPool directory, the gateway switches, and links to other communities.
+summary: Your community's web address, the addresses members' apps use, what it tells the BeanPool directory, the gateway switches, and links to other communities.
 related: what-the-server-sees, rate-limits, updates-and-health, backups-and-replicas
 ---
 
@@ -16,6 +16,22 @@ related: what-the-server-sees, rate-limits, updates-and-health, backups-and-repl
 ![Public Address configuration in Settings](images/appliance-network.webp)
 
 You can also use your own domain name and certificate. BeanPool does not need to be involved.
+
+## Addresses members' apps use
+
+Also under **Public Address**. A member's app signs every request for the address it reaches your community at, and your server accepts only its own addresses. So the owner of another community can't copy a member's request and use it here, for example to send that member's Beans or delete their account.
+
+The list shows each address with where it comes from and how many apps used it today and on the busiest day this week:
+
+- **this community's web address**: the name you claimed above, or the server's CF_RECORD_NAME;
+- **set on the server**: extra names in the server's .env, as BEANPOOL_ADDRESSES=one.example.org,two.example.org (a domain of your own, or a proxy's name);
+- **confirmed in Settings**: addresses an owner or admin confirmed here. Only these can be removed here.
+
+If your server has no address set up (your own domain behind a proxy, with none of the above), it accepts any address for now and lists the ones apps used. Tap **Yes, … is its address** beside yours. After the date shown on the list, a server with no address refuses addresses it doesn't know. Until it has one, it also accepts its home-network address (such as 192.168.1.20). Once it has an address, it accepts only its listed ones, so if members' apps also reach it on your home network, confirm that address too.
+
+A confirmed address travels with the take-over keys, so a standby that takes over accepts it too.
+
+**Old apps.** The list also says how many apps too old to name a community reached your server today. Until the date shown, they keep working. After it, your server refuses them, and their members see a message asking them to update BeanPool from the app store. If the number stays high as the date comes near, remind your members to update.
 
 ## Node identity and the directory
 

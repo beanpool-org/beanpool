@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 48,
-  "hash": "4dce1d6b97400d1a849f1152e85d0c23a21288b7fc4dd3742d1c27e8f5fb008a",
+  "version": 49,
+  "hash": "b28bd7b0c6f57a568208a0d66e704250cd1f4530e6860b8ad813061dbb074cd4",
   "sections": [
     {
       "id": "setup",
@@ -2121,7 +2121,7 @@
     {
       "slug": "address-and-peers",
       "title": "Address, identity and peers",
-      "summary": "Your community's web address, what it tells the BeanPool directory, the gateway switches, and links to other communities.",
+      "summary": "Your community's web address, the addresses members' apps use, what it tells the BeanPool directory, the gateway switches, and links to other communities.",
       "section": "server",
       "related": [
         "what-the-server-sees",
@@ -2154,6 +2154,38 @@
         {
           "type": "p",
           "text": "You can also use your own domain name and certificate. BeanPool does not need to be involved."
+        },
+        {
+          "type": "h2",
+          "text": "Addresses members' apps use"
+        },
+        {
+          "type": "p",
+          "text": "Also under **Public Address**. A member's app signs every request for the address it reaches your community at, and your server accepts only its own addresses. So the owner of another community can't copy a member's request and use it here, for example to send that member's Beans or delete their account."
+        },
+        {
+          "type": "p",
+          "text": "The list shows each address with where it comes from and how many apps used it today and on the busiest day this week:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**this community's web address**: the name you claimed above, or the server's CF_RECORD_NAME;",
+            "**set on the server**: extra names in the server's .env, as BEANPOOL_ADDRESSES=one.example.org,two.example.org (a domain of your own, or a proxy's name);",
+            "**confirmed in Settings**: addresses an owner or admin confirmed here. Only these can be removed here."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If your server has no address set up (your own domain behind a proxy, with none of the above), it accepts any address for now and lists the ones apps used. Tap **Yes, … is its address** beside yours. After the date shown on the list, a server with no address refuses addresses it doesn't know. Until it has one, it also accepts its home-network address (such as 192.168.1.20). Once it has an address, it accepts only its listed ones, so if members' apps also reach it on your home network, confirm that address too."
+        },
+        {
+          "type": "p",
+          "text": "A confirmed address travels with the take-over keys, so a standby that takes over accepts it too."
+        },
+        {
+          "type": "p",
+          "text": "**Old apps.** The list also says how many apps too old to name a community reached your server today. Until the date shown, they keep working. After it, your server refuses them, and their members see a message asking them to update BeanPool from the app store. If the number stays high as the date comes near, remind your members to update."
         },
         {
           "type": "h2",

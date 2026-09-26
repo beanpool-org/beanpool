@@ -630,6 +630,30 @@ describe('PWA WebSocket Pong Watchdog', () => {
         expect(read).toHaveBeenCalledTimes(1);
     });
 
+    it('a visitor tab back in front with its socket gone reads once, in the new socket\'s opening sync, and not again for the doorbells it held', async () => {
+        const read = vi.fn();
+        onSyncActivity(read);
+        const socket = await openSocket();
+        read.mockClear();
+
+        setHidden(true);
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post' }) });
+        socket.onmessage({ data: JSON.stringify({ type: 'state_synced' }) });
+        await vi.advanceTimersByTimeAsync(30_000);
+        vi.spyOn(Math, 'random').mockReturnValue(0.999);
+        socket.close(); // dropped while hidden; its retry is a few seconds off
+        expect(read).not.toHaveBeenCalled();
+
+        setHidden(false);
+        expect(await waitForNewSocket(socket, 1_000)).toBeLessThanOrEqual(100);
+        wsInstance.readyState = 1;
+        wsInstance.onopen();
+        await vi.advanceTimersByTimeAsync(150);
+        expect(read).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(read).toHaveBeenCalledTimes(1);
+    });
+
     it('a visitor: a doorbell while the list is being read has it read once more after, paced again, never alongside', async () => {
         const pending: Array<() => void> = [];
         const read = vi.fn(() => new Promise<void>((resolve) => { pending.push(resolve); }));

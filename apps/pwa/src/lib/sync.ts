@@ -427,7 +427,6 @@ if (typeof document !== 'undefined') {
             stopHeartbeat();
             visitorDoorbells.hidden();
         } else {
-            visitorDoorbells.visible();
             const isDead = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
             if (isDead) {
                 if (ws) {
@@ -449,8 +448,11 @@ if (typeof document !== 'undefined') {
                 // backoff from the first window again.
                 reconnectAttempt = 0;
                 isRetry = false;
+                // That sync reads after every doorbell a visitor's tab held while hidden: they need no read of their own.
+                visitorDoorbells.reset();
                 connectToAnchor(currentUrl ?? undefined);
             } else if (ws) {
+                visitorDoorbells.visible();
                 startHeartbeat(ws);
             }
         }

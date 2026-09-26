@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 56,
-  "hash": "6c7f7d9a3e84d5e1c0d13a6034255272346db02698499115ead098d502ab8970",
+  "version": 57,
+  "hash": "dde725d46eab31ba04515e4ceb1c1dc6e60c3de31d3f52cddad5c5c6da28afb0",
   "sections": [
     {
       "id": "about",
@@ -4491,7 +4491,9 @@
           "items": [
             "They are not told.",
             "They can still see your posts.",
-            "The block is kept on this phone. If you reinstall the app or use another device, block them again."
+            "The block is kept on this phone, for your account only. Another account on this phone does not get your blocks.",
+            "If you sign out, or replace this phone's account with another one, your blocks stay on the phone. Come back with the same account and they are still there.",
+            "If you reinstall the app or use another device, block them again."
           ]
         },
         {
@@ -4813,7 +4815,7 @@
         },
         {
           "type": "p",
-          "text": "Your account and every community you saved are removed from this phone. A few settings stay, such as your block list. **Without your 12 words you cannot get back in.** Check you have them first."
+          "text": "Your account and every community you saved are removed from this phone. Your block list stays on the phone, kept for your account: come back with the same account and your blocks are still there. Another account on this phone does not get them. **Without your 12 words you cannot get back in.** Check you have them first."
         },
         {
           "type": "p",

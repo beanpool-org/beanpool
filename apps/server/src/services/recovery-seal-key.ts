@@ -77,7 +77,10 @@
  *
  * A standby that has recorded its clear and is then sent a copy in the client's form (its main server rolled back past
  * the seal, or it now copies one that has not sealed) forgets the record, as the rollback command does on a main
- * server, and clears again once an import brings the wrapped copies back ({@link REOPENED_KEY}).
+ * server, and clears again once an import brings the wrapped copies back ({@link REOPENED_KEY}). When the standby ran
+ * the older code too while the rollback lasted, this code saw none of those copies arrive: so at its boot it forgets the
+ * record too when it holds a copy in the client's form that was not here, as it is now, when the clear was recorded.
+ * Nothing on a standby needs a command for a rollback.
  *
  * Rolling the server back past this change needs the rows unwrapped first, by the NEW code, with the server stopped:
  *
@@ -581,7 +584,8 @@ export function unwrapRecoveryRows(): { shares: number; releases: number } {
 /**
  * node_config: when this database was cleared of copies deleted before the seal. Written only after the VACUUM and its
  * checkpoint finished, so one that failed or was cut off runs again. node_config is not replicated: each server
- * clears its own file.
+ * clears its own file. `clientForm`: a print of each copy in the client's form still here then
+ * ({@link clientFormPrints}), what a standby's boot compares with ({@link forgetClearIfClientFormArrivedWhileDown}).
  */
 export const CLEARED_KEY = 'recovery_seal_cleared';
 
@@ -773,6 +777,46 @@ function forgetClearIfSentClientForm(imported: { kdfParams?: string | null }[]):
     const clientForm = imported.filter(r => !isNodeWrapped(r?.kdfParams ?? null)).length;
     if (clientForm === 0) return;
     if (!db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY)) return;
+    forgetClear(clientForm);
+    console.warn(`⚠️ Recovery seal: this standby had cleared state.db of sign-in recovery copies deleted before the seal, and was then sent `
+        + `${copies(clientForm)} in the client's form (its main server rolled back past the seal, or has not sealed). So it forgets that `
+        + 'clear, and clears again once its main server\'s wrapped copies come back.');
+}
+
+/**
+ * On a standby, at boot: {@link forgetClearIfSentClientForm} for the copies that came while it ran other code. In a
+ * rollback of every server at once the standby runs the older code too while it lasts, and imports the copies the
+ * rollback command unwrapped and the re-deposits in the client's form with no thought of a recorded clear. Its main
+ * server wraps them all again at its own boot, before it serves anything, so no import this code makes afterwards shows
+ * one in the client's form: this boot is the only place it can tell.
+ *
+ * A copy in the client's form here that was not here, as it is now, when the clear was recorded came after it: nothing
+ * else writes one on a standby. The record keeps a print of each copy in the client's form that was here then (the ones
+ * its main server deleted before the seal, rows here until a whole copy removes them), so those never make it forget, at
+ * this boot or any other. The print covers where the copy sits, its bytes and its stamp, and the stamp is the main
+ * server's: the rollback command stamps every copy it unwraps and the older code stamps each re-deposit, so neither is
+ * the copy that was here. Prints are compared, never clocks: the stamps are the main server's clock and the record's
+ * `at` is this server's, and no skew between the two changes what matches. A record made before it kept prints (the
+ * first code with the seal) is taken to have held none: every copy in the client's form here then forgets it, once,
+ * at the cost of one more VACUUM, and the clear recorded after that keeps them.
+ */
+function forgetClearIfClientFormArrivedWhileDown(): void {
+    const record = db.prepare('SELECT value FROM node_config WHERE key = ?').pluck().get(CLEARED_KEY) as string | undefined;
+    if (record === undefined) return;
+    let kept: unknown;
+    try { kept = (JSON.parse(record) as { clientForm?: unknown })?.clientForm; } catch { kept = null; }
+    const then = new Set(Array.isArray(kept) ? kept.filter((p): p is string => typeof p === 'string') : []);
+    const arrived = clientFormPrints().filter(p => !then.has(p)).length;
+    if (arrived === 0) return;
+    forgetClear(arrived);
+    console.warn(`⚠️ Recovery seal: this standby had cleared state.db of sign-in recovery copies deleted before the seal, and at this boot `
+        + `holds ${copies(arrived)} in the client's form that ${arrived === 1 ? 'was' : 'were'} not here when it cleared (its main server `
+        + 'rolled back past the seal while this standby ran older code). So it forgets that clear, and clears again once its main '
+        + 'server\'s wrapped copies come back.');
+}
+
+/** Forget the recorded clear, and wait for an import that brings the main server's wrapped copies ({@link REOPENED_KEY}). */
+function forgetClear(clientForm: number): void {
     db.transaction(() => {
         db.prepare('DELETE FROM node_config WHERE key = ?').run(CLEARED_KEY);
         db.prepare(UPSERT_CONFIG).run(REOPENED_KEY, JSON.stringify({ at: new Date().toISOString(), copies: clientForm }));
@@ -780,9 +824,19 @@ function forgetClearIfSentClientForm(imported: { kdfParams?: string | null }[]):
     clearedSettled = false;
     clearTriedThisProcess = false;
     standbyWaitLogged = false;
-    console.warn(`⚠️ Recovery seal: this standby had cleared state.db of sign-in recovery copies deleted before the seal, and was then sent `
-        + `${copies(clientForm)} in the client's form (its main server rolled back past the seal, or has not sealed). So it forgets that `
-        + 'clear, and clears again once its main server\'s wrapped copies come back.');
+}
+
+/**
+ * A print of each copy in the client's form here: a hash of where it sits (the key the table is unique on), its stamp
+ * and its bytes, 16 hex characters. It shows only whether that same copy is still here; a copy cannot be read from it.
+ */
+function clientFormPrints(): string[] {
+    const rows = db.prepare(`SELECT owner_pubkey, generation, holder_type, holder_ref, updated_at, encrypted_share, share_iv, share_tag, kdf_params
+        FROM recovery_shares`).all() as (Omit<ShareRow, 'id'> & { generation: number; updated_at: string | null })[];
+    return rows.filter(r => !isNodeWrapped(r.kdf_params)).map(r => crypto.createHash('sha256')
+        .update(JSON.stringify(['beanpool-recovery-clear-print/v1', r.owner_pubkey, Number(r.generation), r.holder_type, r.holder_ref,
+            r.updated_at, r.encrypted_share, r.share_iv, r.share_tag, r.kdf_params]))
+        .digest('hex').slice(0, 16));
 }
 
 /**
@@ -809,20 +863,24 @@ function forgetClearIfSentClientForm(imported: { kdfParams?: string | null }[]):
  * copies in the old form can still reach it, and the recorded clear still runs when wrapped ones arrive.
  *
  * A standby that has recorded its clear and is then sent a copy in the client's form forgets the record
- * ({@link forgetClearIfSentClientForm}), and clears again after an import that brings the wrapped copies back.
+ * ({@link forgetClearIfSentClientForm}), and clears again after an import that brings the wrapped copies back. So does
+ * one that finds such a copy at its boot that was not here when it cleared ({@link forgetClearIfClientFormArrivedWhileDown}):
+ * it ran the older code while its main server was rolled back.
  *
+ * `boot`: called at boot ({@link installRecoverySealAtBoot}), not after an import.
  * `wholeCopy`: on a standby, the rows of the whole copy of its main server just imported; null after a delta or at boot.
  * `imported`: on a standby, the recovery rows the import just wrote, a delta's included; null at boot.
  * Never throws and never stops a boot. A VACUUM that fails, or that the disks have no room for, is logged and tried again
  * at the next boot; one that finished is recorded ({@link CLEARED_KEY}) and never runs again.
  */
 export function clearCopiesDroppedBeforeSeal(opts: {
-    standby: boolean; wholeCopy?: RecoveryRowKey[] | null; imported?: { kdfParams?: string | null }[] | null;
+    standby: boolean; boot?: boolean; wholeCopy?: RecoveryRowKey[] | null; imported?: { kdfParams?: string | null }[] | null;
 }): void {
     const imported = Array.isArray(opts.imported) ? opts.imported : null;
     if (opts.standby) {
         try {
             if (imported) forgetClearIfSentClientForm(imported);
+            else if (opts.boot) forgetClearIfClientFormArrivedWhileDown();
         } catch (e) {
             console.warn(`⚠️ Recovery seal: checking whether this standby was sent sign-in recovery copies in the client's form failed: `
                 + `${(e as Error)?.message || e}.`);
@@ -881,8 +939,10 @@ export function clearCopiesDroppedBeforeSeal(opts: {
         }
         const { seconds, before, after } = vacuumAndCheckpoint();
         db.transaction(() => {
-            db.prepare(UPSERT_CONFIG)
-                .run(CLEARED_KEY, JSON.stringify({ at: new Date().toISOString(), seconds: Number(seconds.toFixed(2)), bytesBefore: before, bytesAfter: after }));
+            db.prepare(UPSERT_CONFIG).run(CLEARED_KEY, JSON.stringify({
+                at: new Date().toISOString(), seconds: Number(seconds.toFixed(2)), bytesBefore: before, bytesAfter: after,
+                clientForm: clientFormPrints(),
+            }));
             db.prepare('DELETE FROM node_config WHERE key = ?').run(REOPENED_KEY);
         })();
         clearedSettled = true;
@@ -980,7 +1040,7 @@ export function installRecoverySealAtBoot(opts: { standby: boolean }): void {
         if (opts.standby) {
             console.log(`🔐 Recovery seal: a standby holds no key of its own. A take-over brings its main server's data/${RECOVERY_SEAL_KEY_FILE} `
                 + 'inside the locked keys, when they carry it, so the promoted server opens the sign-in recovery copies it inherited.');
-            clearCopiesDroppedBeforeSeal(opts);
+            clearCopiesDroppedBeforeSeal({ ...opts, boot: true });
             return;
         }
         if (ensureRecoverySealKey().created) console.log(`🔐 Recovery seal: made data/${RECOVERY_SEAL_KEY_FILE}.`);
@@ -1000,7 +1060,7 @@ export function installRecoverySealAtBoot(opts: { standby: boolean }): void {
             console.warn(`⚠️ Recovery seal: ${unopenable} of them were locked with another recovery-seal key and cannot be opened `
                 + 'here. Those members\' 12 words still work; connecting their sign-in again makes a new copy.');
         }
-        clearCopiesDroppedBeforeSeal(opts);
+        clearCopiesDroppedBeforeSeal({ ...opts, boot: true });
     } catch (e) {
         installedAs = null;
         console.warn(`⚠️ Recovery seal: ${(e as Error)?.message || e} The server runs; the next boot tries again.`);

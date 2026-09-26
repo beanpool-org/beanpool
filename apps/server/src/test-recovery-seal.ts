@@ -45,6 +45,11 @@
  *  19. (S2) a carried key never loses one already there: the one it replaces is kept (retired), byte for byte, 0600;
  *      the reader opens what only the retired key opens; the boot locks those rows again with the live key; a crash
  *      between the two writes finishes at the next run; nothing is ever written over a different file.
+ *  20. (S2, the deciding pass on 45ee304a) 18 in a FLEET rollback, where the standby runs the older code too while it
+ *      lasts, so this code never sees a copy in the client's form arrive: at its next boot on this code it forgets its
+ *      clear, and clears again after the delta that brings the wrapped copies back, after which its running files hold
+ *      none of them. The copies its main server deleted before the seal, still rows here when it recorded its clear,
+ *      never make it forget, at any boot, whichever way the two servers' clocks differ.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-seal.ts
  *
@@ -125,14 +130,19 @@ function fakeCopy(): Sealed {
  * each owner's first and second deposit, the owners who then deleted theirs, and the owners whose second copy the app
  * really sealed (the rest are shaped like one), with the seed each opens to.
  */
-interface History { owners: string[]; gen1: Sealed[]; gen2: Sealed[]; deleted: number[]; real: { i: number; seedHex: string }[] }
+interface History {
+    owners: string[]; gen1: Sealed[]; gen2: Sealed[]; deleted: number[]; real: { i: number; seedHex: string }[];
+    /** When each deposit was stamped, by the main server's clock (default: 2026-06-01 and 2026-06-02). */
+    at?: [string, string];
+}
 
 /**
  * 16's and 17's standby (child 'standby-script'): what its main server answers to each of the puller's requests in turn
  * (the rows of `recoveryShares`, as the engine's export shapes them), whether it starts with a force-resync, its routine
- * whole-copy cadence, how many requests to wait for, and the copies to look for in its files.
+ * whole-copy cadence, how many requests to wait for, and the copies to look for in its files. `since`: the delta cursor
+ * its last pull left it at, for a standby that has none yet (without one, its first pull is a whole copy).
  */
-interface StandbyScript { resyncFirst: boolean; reconcileMinutes: number; pulls: number; steps: unknown[][]; watch: Sealed[] }
+interface StandbyScript { resyncFirst: boolean; reconcileMinutes: number; pulls: number; steps: unknown[][]; watch: Sealed[]; since?: string }
 
 /** Every piece of the client's box an attacker would look for, as base64 text and as raw bytes. */
 function needlesOf(sealed: Sealed): { label: string; bytes: Buffer }[] {
@@ -365,13 +375,45 @@ async function child(mode: string): Promise<void> {
             }))();
             db.pragma('wal_checkpoint(TRUNCATE)');
         };
-        stage(h.gen1, 1, '2026-06-01T00:00:00.000Z');
-        stage(h.gen2, 2, '2026-06-02T00:00:00.000Z');
+        stage(h.gen1, 1, h.at?.[0] ?? '2026-06-01T00:00:00.000Z');
+        stage(h.gen2, 2, h.at?.[1] ?? '2026-06-02T00:00:00.000Z');
         if (!standby) {
             // Left in the WAL, as the last writes before the upgrade.
             for (const i of h.deleted) db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(h.owners[i]);
         }
         out.rows = db.prepare('SELECT COUNT(*) FROM recovery_shares').pluck().get();
+    } else if (mode === 'older-standby-import') {
+        // 20's standby while a fleet rollback lasts: it runs the code before the seal too, and imports each of its main
+        // server's pulls (SEAL_BATCHES) with sync.ts's own statements, on a connection with secure_delete off (that code's
+        // default). That code has never heard of a recorded clear, so it keeps whatever node_config holds.
+        const { db } = await import('./db/db.js');
+        db.pragma('secure_delete = 0');
+        const batches: any[][] = JSON.parse(fs.readFileSync(process.env.SEAL_BATCHES!, 'utf-8'));
+        const dropOlder = db.prepare(`DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?`);
+        const insertShare = db.prepare(`INSERT OR REPLACE INTO recovery_shares
+            (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share,
+             share_iv, share_tag, ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt,
+             kdf_params, generation, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        for (const batch of batches) {
+            db.transaction(() => {
+                for (const rs of batch) {
+                    dropOlder.run(rs.ownerPubkey, rs.generation);
+                    insertShare.run(
+                        rs.ownerPubkey, rs.holderType, rs.holderRef, rs.shareIndex,
+                        rs.encryptedShare, rs.shareIv, rs.shareTag,
+                        rs.ephemeralPubkey ?? null, rs.ssoLookupHash ?? null,
+                        rs.ssoLookupSalt ?? null, rs.kdfParams ?? null,
+                        rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt,
+                    );
+                }
+            })();
+            db.pragma('wal_checkpoint(TRUNCATE)');
+        }
+        const kdfs = db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[];
+        out.cleared = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CLEARED_KEY) as any)?.value ?? null;
+        out.rows = kdfs.length;
+        out.unwrapped = kdfs.filter(k => !k?.includes('node-wrap-xc20p-v1')).length;
     } else if (mode === 'main-export') {
         // The main server after the upgrade's boot (the wrap and its VACUUM), and what its two pull routes send a standby:
         // a delta since the standby's last pull before the seal (sync-delta), and a whole copy (sync-snapshot).
@@ -455,7 +497,7 @@ async function child(mode: string): Promise<void> {
         // how many of the watched copies its state.db, -wal and -shm hold as they are while it runs: a clean close would
         // fold the WAL away, and a node that is stopped does not close its database (engine/shutdown-recovery.ts).
         const script: StandbyScript = JSON.parse(fs.readFileSync(process.env.SEAL_SCRIPT!, 'utf-8'));
-        const { initStateEngine, exportSyncState, signSyncPayload } = await import('./state-engine.js');
+        const { initStateEngine, exportSyncState, signSyncPayload, setSyncCursor } = await import('./state-engine.js');
         initStateEngine();
         const { db } = await import('./db/db.js');
         const state = () => {
@@ -498,6 +540,7 @@ async function child(mode: string): Promise<void> {
                 backupPrimaryUrl: `http://localhost:${(server.address() as { port: number }).port}`,
                 backupReplicationToken: 'test-replication-token', backupPullSeconds: 5, backupReconcileMinutes: script.reconcileMinutes,
             });
+            if (script.since) setSyncCursor('backup:primary', script.since);
             if (script.resyncFirst) out.resync = await puller.requestResync();
             if (pulls.length < script.pulls) {
                 puller.initBackupPuller();
@@ -1566,6 +1609,98 @@ async function main(): Promise<void> {
         check(o.releaseAfter === 're-locked, same inside', `the release, locked again, still opens to what was released (${o.releaseAfter})`);
         check(o.rewrapAgain?.shares === 0 && o.rewrapAgain.releases === 0 && o.retiredStill === 1 && o.tmpLeft === 0,
             `a second run finds nothing; the kept key stays; no temporary file is left (${JSON.stringify({ again: o.rewrapAgain, kept: o.retiredStill, tmp: o.tmpLeft })})`);
+    });
+
+    // ── 20. a fleet rollback: the standby runs the older code too ───────────────────────────────
+    await section('20. a fleet rollback, the standby on the older code too: at its next boot on this code it forgets its clear and clears again once the wrapped copies return; copies deleted before the seal never make it forget', async () => {
+        const seal = await import('./services/recovery-seal-key.js');
+        const brief = (x: any) => JSON.stringify(x && { cleared: !!x.cleared, rows: x.rows, unwrapped: x.unwrapped, inFiles: x.inFiles });
+        const forgetsAtBoot = /at this boot holds \d+ sign-in recovery cop(y|ies) in the client's form that (was|were) not here when it cleared .* So it forgets that clear/;
+        const vacuums = (r: ChildResult) => (r.stdout.match(/one VACUUM/g) ?? []).length;
+        const N = 12;
+        const owners = Array.from({ length: N }, () => crypto.randomBytes(32).toString('hex'));
+        const gen2 = owners.map(() => fakeCopy());
+        const gen3 = owners.map(() => fakeCopy());
+        // As in 18: this process's key stands in for the main server's, which the standby never holds.
+        const wrapped = (copiesOf: Sealed[], generation: number, at: string) => owners.map((o, i) =>
+            exportRow(o, i, seal.sealRecoveryFields(copiesOf[i], seal.shareRowAad(o, 'sso')), generation, at));
+        const clientForm = (copiesOf: Sealed[], generation: number, at: string) => owners.map((o, i) => exportRow(o, i, copiesOf[i], generation, at));
+        const watch = [...gen2, ...gen3];
+        const standbyDir = tempDir('fleet-standby');
+        const scriptFile = (label: string, script: StandbyScript) => {
+            const f = path.join(tempDir(label), 'script.json');
+            fs.writeFileSync(f, JSON.stringify(script));
+            return f;
+        };
+
+        // (1) This code: seeded with its main server's wrapped copies, the standby records its clear.
+        const r1 = await runChild([SCRIPT], standbyDir, {
+            RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup',
+            SEAL_SCRIPT: scriptFile('fleet-seed', { resyncFirst: true, reconcileMinutes: 0, pulls: 2, watch, steps: [wrapped(gen2, 2, '2026-06-02T00:00:00.000Z')] }),
+        });
+        const s1 = resultOf(r1);
+        const afterSeed = s1.pulls?.[1]?.before;
+        check(s1.resync?.ok === true && typeof afterSeed?.cleared === 'string' && afterSeed.unwrapped === 0 && afterSeed.inFiles === 0,
+            `control: seeded with its main server's wrapped copies, the standby records its clear (${brief(afterSeed)})`);
+
+        // (2) The rollback, on both servers. The main server's rollback command unwraps and stamps every copy, the older
+        // code there stores the re-deposits as the app sealed them, and the standby, on the older code too, imports both.
+        // The main server's clock is behind the standby's: every stamp is before the clear the standby recorded.
+        const batches = path.join(tempDir('fleet-batches'), 'batches.json');
+        fs.writeFileSync(batches, JSON.stringify([clientForm(gen2, 2, '2026-06-05T00:00:00.000Z'), clientForm(gen3, 3, '2026-06-06T00:00:00.000Z')]));
+        const older = resultOf(await runChild([SCRIPT], standbyDir, { RECOVERY_SEAL_CHILD: 'older-standby-import', NODE_ROLE: 'backup', SEAL_BATCHES: batches }));
+        const olderInFiles = copiesFoundIn(standbyDir, watch);
+        check(older.cleared === afterSeed?.cleared && older.rows === N && older.unwrapped === N && olderInFiles > 0,
+            `control: after the rollback on the older code the standby still records its clear, beside ${older.unwrapped} copies in the client's form, and its files hold ${olderInFiles} of the ${watch.length}`);
+
+        // (3) This code again, on both. The main server wrapped every copy at its own boot, before it served anything, so
+        // every pull this standby now makes is wrapped: no import shows it a copy in the client's form.
+        const r3 = await runChild([SCRIPT], standbyDir, {
+            RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup',
+            SEAL_SCRIPT: scriptFile('fleet-again', { resyncFirst: false, reconcileMinutes: 0, pulls: 3, watch, steps: [wrapped(gen3, 3, '2026-06-07T00:00:00.000Z')] }),
+        });
+        const s3 = resultOf(r3);
+        const [atWrapped, afterWrapped] = (s3.pulls ?? []).map((x: any) => x.before);
+        check(s3.atBoot?.cleared === null && s3.atBoot?.unwrapped === N,
+            `at its boot on this code it forgets its clear: ${N} copies in the client's form are here that were not when it cleared (${brief(s3.atBoot)})`);
+        check(forgetsAtBoot.test(r3.stdout + r3.stderr), `...and says why (${sealLines(r3)})`);
+        check(atWrapped?.cleared === null && (s3.pulls ?? [])[0]?.route === 'delta',
+            `...and waits until its main server's wrapped copies come (${brief(atWrapped)}; ${JSON.stringify((s3.pulls ?? []).map((p: any) => p.route))})`);
+        check(typeof afterWrapped?.cleared === 'string' && afterWrapped.cleared !== afterSeed?.cleared && afterWrapped.unwrapped === 0,
+            `the delta that brings the wrapped copies back is when it clears again, and records it (${brief(afterWrapped)})`);
+        check(afterWrapped?.inFiles === 0,
+            `...after which its running state.db, -wal and -shm hold none of the ${watch.length} copies it was sent in the client's form (found ${afterWrapped?.inFiles})`);
+        check(s3.final?.inFiles === 0 && s3.final?.cleared === afterWrapped?.cleared, `...nor after the next pull (found ${s3.final?.inFiles})`);
+        check(vacuums(r3) === 1, `it cleared once, after the wrapped copies came back (${vacuums(r3)})`);
+
+        // Control: a standby whose main server deleted copies before the seal still holds those as rows, in the client's
+        // form, when it records its clear (a delta cannot show which ones; the next whole copy removes them). Here that
+        // whole copy has not come yet, and the main server's clock runs a day ahead of the standby's, so every stamp is
+        // after the clear. None of that is a copy that arrived after the clear: no boot forgets it.
+        const ahead = (ms: number) => new Date(Date.now() + 86_400_000 + ms).toISOString();
+        const h: History = { owners, gen1: gen2, gen2: gen3, deleted: [0, 1, 2], real: [], at: [ahead(0), ahead(1000)] };
+        const historyFile = path.join(tempDir('fleet-orphans-history'), 'history.json');
+        fs.writeFileSync(historyFile, JSON.stringify(h));
+        const orphanDir = tempDir('fleet-orphans');
+        resultOf(await runChild([SCRIPT], orphanDir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: historyFile, SEAL_SIDE: 'standby' }));
+        const keptOwners = owners.map((_, i) => i).filter(i => !h.deleted.includes(i));
+        const delta = keptOwners.map(i => exportRow(owners[i], i, seal.sealRecoveryFields(gen3[i], seal.shareRowAad(owners[i], 'sso')), 2, ahead(5000)));
+        const o1 = await runChild([SCRIPT], orphanDir, {
+            RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup',
+            SEAL_SCRIPT: scriptFile('fleet-orphans-seal', { resyncFirst: false, since: ahead(2000), reconcileMinutes: 0, pulls: 1, watch: [], steps: [delta] }),
+        });
+        const t1 = resultOf(o1);
+        check((t1.pulls ?? [])[0]?.route === 'delta' && typeof t1.final?.cleared === 'string' && t1.final.unwrapped === h.deleted.length,
+            `control: the delta that brings the wrapped copies records its clear, with the ${h.deleted.length} copies its main server deleted before the seal still rows here (${brief(t1.final)})`);
+        for (const n of [1, 2]) {
+            const ob = await runChild([SCRIPT], orphanDir, {
+                RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup',
+                SEAL_SCRIPT: scriptFile(`fleet-orphans-boot-${n}`, { resyncFirst: false, reconcileMinutes: 0, pulls: 0, watch: [], steps: [] }),
+            });
+            const tb = resultOf(ob);
+            check(tb.atBoot?.cleared === t1.final?.cleared && tb.atBoot?.unwrapped === h.deleted.length && !forgetsAtBoot.test(ob.stdout + ob.stderr) && vacuums(ob) === 0,
+                `boot ${n} after it: the clear stays recorded beside those ${h.deleted.length}, with no VACUUM (${brief(tb.atBoot)}; ${sealLines(ob)})`);
+        }
     });
 
     console.log(`\n${passed}/${run} checks passed.`);

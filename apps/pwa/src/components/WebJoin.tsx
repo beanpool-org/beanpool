@@ -964,16 +964,25 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             body = (
                 <>
                     <h3 style={heading}>Bring your account here</h3>
-                    <p style={lede}>Use the sign-in you joined with, the phone app, or your 12 words.</p>
-                    <button type="button" data-testid="join-restore-signin" style={primaryButton} onClick={() => onRestore('signin')}>
-                        Use my sign-in
-                    </button>
-                    <button type="button" style={secondaryButton} onClick={() => onRestore('phone')}>
-                        Link with my phone
-                    </button>
-                    <button type="button" style={secondaryButton} onClick={() => onRestore('words')}>
-                        Use my 12 words
-                    </button>
+                    {/* Every way back ends with this browser holding the key, so a browser that can't hold one hears
+                        that here, as the lobby's Join does, instead of "can't reach the community" (review 4109643191). */}
+                    {canHoldKey === false ? (
+                        <p role="alert" data-testid="restore-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{TOO_OLD}</p>
+                    ) : (
+                        <>
+                            <p style={lede}>Use the sign-in you joined with, the phone app, or your 12 words.</p>
+                            <button type="button" data-testid="join-restore-signin" style={primaryButton} disabled={canHoldKey === null}
+                                onClick={() => onRestore('signin')}>
+                                Use my sign-in
+                            </button>
+                            <button type="button" style={secondaryButton} disabled={canHoldKey === null} onClick={() => onRestore('phone')}>
+                                Link with my phone
+                            </button>
+                            <button type="button" style={secondaryButton} disabled={canHoldKey === null} onClick={() => onRestore('words')}>
+                                Use my 12 words
+                            </button>
+                        </>
+                    )}
                     <button type="button" style={quietButton} onClick={() => setScreen({ name: 'lobby' })}>← Back</button>
                 </>
             );

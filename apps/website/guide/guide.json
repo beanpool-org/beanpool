@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 43,
-  "hash": "022f8961073339789c45419fd33458804401b8711714671a111c4b262c64f0bb",
+  "version": 44,
+  "hash": "44f91459bc3343283052ccf64a49ae764550a978f810cadeb38ac27788b8bbdf",
   "sections": [
     {
       "id": "about",
@@ -1632,6 +1632,7 @@
           "type": "ul",
           "items": [
             "Tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.)",
+            "A browser too old to hold a BeanPool account says so here instead of offering these, as it does in place of **Join**. Use an up-to-date Chrome, Firefox, Safari or Edge.",
             "Type your name here. Tap your account when it shows.",
             "Choose the sign-in you joined with: **Google**, **Apple**, **Facebook** or **GitHub**. As when joining, the page takes you to that company's own sign-in and brings you back, and GitHub shows a code instead.",
             "The page opens your account's locked copy in the browser, and checks that it really is the account you tapped. If it isn't, it says **That isn't** (the name) and saves nothing.",

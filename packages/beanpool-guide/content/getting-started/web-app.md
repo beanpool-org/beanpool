@@ -54,6 +54,7 @@ Your own local community has none of these limits.
 On the global community, the sign-in you joined with brings your account back to a browser: one whose saved data was cleared, or a new one on another computer. You get the same account, never a second one.
 
 - Tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.)
+- A browser too old to hold a BeanPool account says so here instead of offering these, as it does in place of **Join**. Use an up-to-date Chrome, Firefox, Safari or Edge.
 - Type your name here. Tap your account when it shows.
 - Choose the sign-in you joined with: **Google**, **Apple**, **Facebook** or **GitHub**. As when joining, the page takes you to that company's own sign-in and brings you back, and GitHub shows a code instead.
 - The page opens your account's locked copy in the browser, and checks that it really is the account you tapped. If it isn't, it says **That isn't** (the name) and saves nothing.

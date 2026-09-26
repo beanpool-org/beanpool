@@ -369,7 +369,8 @@ export function completeRekey(
         db.prepare('UPDATE group_convenor_votes SET voter_pubkey = ? WHERE voter_pubkey = ?').run(cleanNew, cleanOld);
 
         // (p) recovery shares / collections / releases
-        // Owner and keeper ref are what a wrapped copy is bound to, so the move opens and re-wraps each one.
+        // The owner is what a wrapped copy is bound to, so the move opens and re-wraps each copy the member owns. Without
+        // the recovery-seal key it throws and this whole re-key rolls back (engine/recovery-shares.ts).
         moveRecoverySharesToNewKey(cleanOld, cleanNew);
         db.prepare('UPDATE recovery_collections SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE recovery_releases SET released_by = ? WHERE released_by = ?').run(cleanNew, cleanOld);

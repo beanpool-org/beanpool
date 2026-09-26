@@ -504,9 +504,17 @@ export function deleteAllShares(ownerPubkey: string): number {
  * A member moved to a new key (the re-key wizard, engine/member-wizards.ts): the rows they own belong to the new key,
  * and the rows where they are the keeper name it. The owner is part of what a wrapped row is bound to, so each wrapped
  * row they own is opened under the old key and wrapped again under the new one; a keeper ref is not, so those rows are
- * only renamed. A row this server cannot open (no key, or another key's) moves as it is: it did not open here before
- * the move either, and the move must not wait on it. Every row it moves is stamped, so a standby is sent the move.
- * Runs inside the caller's transaction.
+ * only renamed.
+ *
+ * A wrapped row must never change owner without being wrapped again: bound to the old owner and filed under the new
+ * one, it would not open with any key, even once the key that locked it is back. So:
+ * - With no key file, it throws {@link RecoverySealKeyMissing} and the caller's transaction (the whole re-key) rolls
+ *   back. The re-enrolment code stays pending, and the re-key can be run again once the key is back.
+ * - A row this server's key does not open (another key locked it) stays where it is, under the old key it is bound
+ *   to, and the log says how many. The re-key must not wait on it, and left there it still opens if the key that
+ *   locked it comes back. The member's 12 words still work, and connecting the sign-in again makes a new copy.
+ *
+ * Every row it moves is stamped, so a standby is sent the move. Runs inside the caller's transaction.
  */
 export function moveRecoverySharesToNewKey(oldPubkey: string, newPubkey: string): void {
     const rows = db.prepare(`
@@ -519,7 +527,7 @@ export function moveRecoverySharesToNewKey(oldPubkey: string, newPubkey: string)
             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
         WHERE id = ?
     `);
-    let stranded = 0;
+    let leftBehind = 0;
     for (const r of rows) {
         const holderType = r.holder_type as string;
         const owner = r.owner_pubkey === oldPubkey ? newPubkey : r.owner_pubkey as string;
@@ -537,14 +545,18 @@ export function moveRecoverySharesToNewKey(oldPubkey: string, newPubkey: string)
                     shareRowAad(owner, holderType),
                 );
             } catch (e) {
-                if (!(e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable)) throw e;
-                stranded++;
+                if (e instanceof RecoverySealKeyMissing) throw e;
+                if (!(e instanceof RecoverySealUnopenable)) throw e;
+                leftBehind++;
+                continue;
             }
         }
         move.run(owner, ref, fields.encryptedShare, fields.shareIv, fields.shareTag, fields.kdfParams, r.id);
     }
-    if (stranded) {
-        console.warn(`[RecoverySeal] ${stranded} recovery cop${stranded === 1 ? 'y' : 'ies'} moved to a new key without `
-            + 'being opened (this server has no key that opens them); they stay unopenable.');
+    if (leftBehind) {
+        const one = leftBehind === 1;
+        console.warn(`[RecoverySeal] ${leftBehind} recovery cop${one ? 'y' : 'ies'} locked with another key `
+            + `${one ? 'stays' : 'stay'} under a re-keyed member's old key, where ${one ? 'it is' : 'they are'} bound: `
+            + `moved, ${one ? 'it' : 'they'} could never open again.`);
     }
 }

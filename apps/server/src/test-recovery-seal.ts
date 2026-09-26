@@ -15,7 +15,9 @@
  *   7. the reverse migration (the rollback command, run as a command) restores the rows byte for byte;
  *   8. a standby (NODE_ROLE=backup) makes no key file, a main server makes one (0600), and an unreadable key
  *      file never stops a boot;
- *   9. moving a member to a new key (the re-key wizard) keeps their copy openable, and stamps what it moves.
+ *   9. moving a member to a new key (the re-key wizard) keeps their copy openable, and stamps what it moves;
+ *  10. without the key file, a re-key is refused and changes nothing, and the same code works once the key is back;
+ *  11. a copy locked with another key stays under the old key it is bound to, and the re-key does not wait on it.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-seal.ts
  *
@@ -585,6 +587,74 @@ async function main(): Promise<void> {
         const keeper = db.prepare('SELECT holder_ref, updated_at FROM recovery_shares WHERE id = ?').get(keeperRowId) as any;
         check(keeper?.holder_ref === moved.pk && keeper.updated_at > STALE,
             `...and so is a copy the member keeps for someone else, renamed to the new key (updated_at ${keeper?.updated_at})`);
+    });
+
+    // ── 10. without the key file, a re-key moves nothing, and runs once the key is back ────────
+    await section('10. without the key file, a re-key is refused and changes nothing, and runs once the key is back', async () => {
+        const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+        const { getMember } = await import('./state-engine.js');
+        const m10 = newId();
+        addMember(m10, 'SealRekeyNoKey');
+        const sealed10 = await sealSeedToSso(new Uint8Array(m10.seed), 'google', GOOGLE_SUB) as Sealed;
+        const { res } = await deposit(m10, sealed10);
+        check(res.status === 200, `setup: the member deposits a copy (got ${res.status})`);
+        const moved = newId();
+        const { code } = issueRekeyCode(m10.pk, 'owner:password');
+        const saved = fs.existsSync(keyPath) ? fs.readFileSync(keyPath) : null;
+        check(!!saved, 'setup: the key file exists before it is deleted');
+        fs.rmSync(keyPath, { force: true });
+        try {
+            let refused = '';
+            try { completeRekey(m10.pk, moved.pk, code, 'owner:password'); } catch (e) { refused = (e as Error)?.message ?? String(e); }
+            check(refused === SENTENCE, `the re-key is refused with the sentence (got ${refused || 'no refusal'})`);
+            const under = (pk: string) => (db.prepare('SELECT COUNT(*) AS n FROM recovery_shares WHERE owner_pubkey = ?').get(pk) as any).n;
+            check(under(m10.pk) === 1 && under(moved.pk) === 0, 'the copy stays under the old key, where it is bound');
+            check(!!getMember(m10.pk) && !getMember(moved.pk), '...and nothing else moved: the whole re-key rolled back');
+            const req = db.prepare('SELECT status FROM rekey_requests WHERE code = ?').get(code) as any;
+            check(req?.status === 'pending', `the re-enrolment code is still pending (got ${req?.status})`);
+
+            if (saved) fs.writeFileSync(keyPath, saved, { mode: 0o600 });
+            completeRekey(m10.pk, moved.pk, code, 'owner:password');
+            const shares = getCurrentShares(moved.pk);
+            const seed = shares[0] ? await openShareFromSso(shares[0] as Sealed, 'google', GOOGLE_SUB) : null;
+            check(shares.length === 1 && !!seed && Buffer.from(seed).equals(m10.seed),
+                'with the key back, the same code moves the member, and the copy opens under the new key to their seed');
+        } finally {
+            if (saved && !fs.existsSync(keyPath)) fs.writeFileSync(keyPath, saved, { mode: 0o600 });
+        }
+    });
+
+    // ── 11. a copy another key locked stays where it is bound, and the re-key does not wait on it ──
+    await section('11. a copy locked with another key stays under the old key, where it still opens, and the re-key completes', async () => {
+        const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+        const { getMember } = await import('./state-engine.js');
+        const m11 = newId();
+        addMember(m11, 'SealRekeyLocked');
+        const sealed11 = await sealSeedToSso(new Uint8Array(m11.seed), 'google', GOOGLE_SUB) as Sealed;
+        const { res } = await deposit(m11, sealed11);
+        check(res.status === 200, `setup: the member deposits a copy (got ${res.status})`);
+        const rowId = (db.prepare('SELECT id FROM recovery_shares WHERE owner_pubkey = ?').get(m11.pk) as any)?.id;
+        const moved = newId();
+        const { code } = issueRekeyCode(m11.pk, 'owner:password');
+        const saved = fs.readFileSync(keyPath);
+        // Another server's key, as after a restore from a plain backup: this one does not open the copy.
+        fs.writeFileSync(keyPath, crypto.randomBytes(32), { mode: 0o600 });
+        try {
+            let threw = '';
+            try { completeRekey(m11.pk, moved.pk, code, 'owner:password'); } catch (e) { threw = (e as Error)?.message ?? String(e); }
+            check(threw === '' && !!getMember(moved.pk) && !getMember(m11.pk), `the re-key completes (${threw || 'no error'})`);
+            const row = db.prepare('SELECT owner_pubkey FROM recovery_shares WHERE id = ?').get(rowId) as any;
+            check(row?.owner_pubkey === m11.pk, 'the copy it cannot open stays under the old key it is bound to');
+            check(getCurrentShares(moved.pk).length === 0, '...so the new key holds no copy that could never open');
+
+            fs.writeFileSync(keyPath, saved, { mode: 0o600 });
+            const back = getCurrentShares(m11.pk);
+            const seed = back[0] ? await openShareFromSso(back[0] as Sealed, 'google', GOOGLE_SUB) : null;
+            check(back.length === 1 && back[0].encryptedShare === sealed11.encryptedShare && !!seed && Buffer.from(seed).equals(m11.seed),
+                'with the key that locked it back, the copy left there still opens, to the seed it was made from');
+        } finally {
+            fs.writeFileSync(keyPath, saved, { mode: 0o600 });
+        }
     });
 
     console.log(`\n${passed}/${run} checks passed.`);

@@ -28,6 +28,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+// The one definition of what an app signs. Not a workspace dependency of the repo root, so by path to its build.
+import { buildBoundRequestHeaders, ed25519Signer } from '../../packages/beanpool-core/dist/index.js';
 
 // fileURLToPath, not `.pathname` (review finding): `.pathname` yields "/C:/..." on Windows and leaves %20 in
 // any path containing a space, so it silently reads and writes the wrong file rather than failing.
@@ -101,8 +103,10 @@ export function adminHeaders(node) {
 }
 
 /**
- * Signed request — the replay-proof scheme the middleware requires on every mutating /api/ call:
- * signature covers METHOD\npath\ntimestamp\nnonce\nbody, with a single-use nonce.
+ * Signed request — as an app signs it (request binding, @beanpool/core request-signing.ts): the signature covers the
+ * host it is FOR, then METHOD, path, timestamp, a single-use nonce and the body, and names the host in X-Signed-For.
+ * The host is the node's public name (NODES[node].publicUrl), not the localhost forward the request travels over:
+ * a node accepts only its own names, as it would from a phone. Needs @beanpool/core built (pnpm --filter @beanpool/core build).
  */
 export async function signed(node, identity, method, path, body) {
     // A GET signs over an EMPTY body and must not carry one — the server canonicalises `rawBody ?? ''`, and
@@ -110,21 +114,18 @@ export async function signed(node, identity, method, path, body) {
     // a wrong key.
     const isGet = method === 'GET' || method === 'HEAD';
     const bodyString = isGet ? '' : JSON.stringify(body ?? {});
-    const ts = Date.now();
-    const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
-    const privateKey = crypto.createPrivateKey(identity.privateKeyPem);
-    const signature = crypto.sign(null, Buffer.from(canonical), privateKey).toString('base64');
+    const pkcs8 = crypto.createPrivateKey(identity.privateKeyPem).export({ type: 'pkcs8', format: 'der' });
+    const headers = await buildBoundRequestHeaders({
+        method,
+        url: `${NODES[node].publicUrl}${path}`,
+        body: bodyString,
+        publicKeyHex: identity.publicKey,
+        sign: ed25519Signer(new Uint8Array(pkcs8)),
+    });
 
     const res = await fetch(`${base(node)}${path}`, {
         method,
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Public-Key': identity.publicKey,
-            'X-Signature': signature,
-            'X-Timestamp': String(ts),
-            'X-Nonce': nonce,
-        },
+        headers: { 'Content-Type': 'application/json', ...headers },
         ...(isGet ? {} : { body: bodyString }),
     });
     let json = null;

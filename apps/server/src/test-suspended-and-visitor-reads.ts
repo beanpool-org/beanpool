@@ -164,6 +164,9 @@ async function main() {
     const { registerOpenJoin, openJoinHash, openJoinAddressHash } = await import('./engine/open-join.js');
     const { knockerRefusal, openKnockCount, tidyKnocks } = await import('./engine/knocks.js');
     const { registerVisitor } = await import('./engine/members.js');
+    // The signature middleware refuses a visitor's write that isn't its own (visitor-allowlist.ts) before any route. The
+    // writes below measure each route's own check behind it, with it off, then ask the gate's answer with it on.
+    const { setVisitorGateForTests } = await import('./visitor-allowlist.js');
 
     await initTls();
     se.initStateEngine();
@@ -683,10 +686,15 @@ async function main() {
         se.transfer('genesis', wes.pubKeyHex, 1, 'hello', 'direct', true);
         const nobody = keypair('NobodyNat');
         assert(visitorFlag(wes.pubKeyHex) === 1 && !row(nobody.pubKeyHex), 'Wes is a visitor (a transfer); Nat has no row');
+        setVisitorGateForTests(false);
         const wesMakes = await post('/api/invite/generate', { publicKey: wes.pubKeyHex }, wes);
         const natMakes = await post('/api/invite/generate', { publicKey: nobody.pubKeyHex }, nobody);
         assert(wesMakes.status === 403 && wesMakes.status === natMakes.status && wesMakes.text === natMakes.text,
             `a visitor can't make an invite: the answer a key with no row gets (${wesMakes.status} ${wesMakes.text.slice(0, 80)} / ${natMakes.status} ${natMakes.text.slice(0, 80)})`);
+        setVisitorGateForTests(true);
+        const wesMakesGated = await post('/api/invite/generate', { publicKey: wes.pubKeyHex }, wes);
+        assert(wesMakesGated.status === 403 && wesMakesGated.body?.code === 'not_a_member',
+            `…and through the signature middleware's gate, 403 not_a_member before the route (${wesMakesGated.status} ${wesMakesGated.text.slice(0, 80)})`);
         assert(se.generateInvite(wes.pubKeyHex) === null && !db.prepare('SELECT 1 FROM invite_codes WHERE created_by = ?').get(wes.pubKeyHex), '…and no code is written');
 
         // Members still do, a suspended and a disabled one included, as #1177 left them.
@@ -728,10 +736,15 @@ async function main() {
         const kayId = knockId(kay);
         assert(kayKnock.status === 201 && !!kayId, `Kay asks to join (${kayKnock.status} ${kayKnock.text.slice(0, 100)})`);
         for (const verb of ['approve', 'decline']) {
+            setVisitorGateForTests(false);
             const byWes = await post(`/api/join/knocks/${kayId}/${verb}`, {}, wes);
             const byNat = await post(`/api/join/knocks/${kayId}/${verb}`, {}, nobody);
             assert(byWes.status === 403 && byWes.body?.code === 'not_member' && byWes.status === byNat.status && byWes.body?.code === byNat.body?.code,
                 `a visitor can't ${verb} a knock: 403 not_member, as a key with no row (${byWes.status} ${byWes.body?.code} / ${byNat.status} ${byNat.body?.code})`);
+            setVisitorGateForTests(true);
+            const byWesGated = await post(`/api/join/knocks/${kayId}/${verb}`, {}, wes);
+            assert(byWesGated.status === 403 && byWesGated.body?.code === 'not_a_member',
+                `…and through the gate, 403 not_a_member before the route (${byWesGated.status} ${byWesGated.body?.code})`);
         }
         const kayRow = db.prepare('SELECT status, invite_code FROM join_requests WHERE id = ?').get(kayId) as { status: string; invite_code: string | null } | undefined;
         assert(kayRow?.status === 'pending' && !kayRow?.invite_code, `…and Kay's knock is still waiting, with no invite (${kayRow?.status})`);

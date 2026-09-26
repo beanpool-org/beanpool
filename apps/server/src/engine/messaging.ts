@@ -84,6 +84,41 @@ export function isVisitorsDirectLine(messageId: unknown, publicKey: string | und
     `).get(publicKey, messageId);
 }
 
+/**
+ * Whether `conversationId` is a direct conversation `publicKey`, a visitor's row (isLiveVisitor), is in: where it marks read
+ * and mutes (visitor-allowlist.ts VISITOR_WRITES).
+ */
+export function isVisitorsDirectConversation(conversationId: unknown, publicKey: string | undefined): boolean {
+    if (typeof conversationId !== 'string' || !conversationId || !publicKey || !isLiveVisitor(db, publicKey)) return false;
+    return !!db.prepare(`
+        SELECT 1 FROM conversations c
+        JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.public_key = ?
+        WHERE c.id = ? AND c.type = 'dm'
+    `).get(publicKey, conversationId);
+}
+
+/**
+ * Whether a visitor's row may send to `conversationId`: a direct conversation it is in, or an id that names no
+ * conversation, which sendMessage follows to the one it became (chat consolidation) and refuses a visitor anywhere but a
+ * direct conversation it is in.
+ */
+export function visitorMaySendTo(conversationId: unknown, publicKey: string | undefined): boolean {
+    if (isVisitorsDirectConversation(conversationId, publicKey)) return true;
+    return typeof conversationId === 'string' && !!conversationId && !!publicKey && isLiveVisitor(db, publicKey)
+        && !db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(conversationId);
+}
+
+/**
+ * Whether a visitor's row asks for a direct conversation it is already in (an app asks before it writes): two distinct
+ * participants, itself one of them, who have one. assertMayOpenConversation refuses it any other.
+ */
+export function isVisitorsDirectConversationWith(publicKey: string | undefined, participants: unknown): boolean {
+    if (!publicKey || !Array.isArray(participants) || !isLiveVisitor(db, publicKey)) return false;
+    const unique = [...new Set(participants)];
+    if (unique.length !== 2 || !unique.every(p => typeof p === 'string') || !unique.includes(publicKey)) return false;
+    return !!findDirectConversationRow(unique[0] as string, unique[1] as string);
+}
+
 /** An edit or a deletion by a visitor's row, of a line outside its direct conversations: the words a key with no row gets. */
 function refuseVisitorOutsideItsDirectConversations(messageId: string, publicKey: string): void {
     if (isLiveVisitor(db, publicKey) && !isVisitorsDirectLine(messageId, publicKey)) throw new MessagingError(VISITOR_SEND_REFUSAL);

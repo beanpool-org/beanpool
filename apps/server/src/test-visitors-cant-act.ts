@@ -49,6 +49,13 @@
  *     leaves that key without one; a send that goes through makes the recipient's visitor's row, holding the Beans.
  *  5. /ws: the visitor's socket gets its DM and its Beans, and neither the group's chat, nor the event's chat, nor the
  *     event's note (a member's socket gets all three); its RSVP is refused and hands back no note.
+ * 5b. The gate (the director, 2026-09-26): the signature middleware refuses every signed write from a visitor's row that
+ *     visitor-allowlist.ts VISITOR_WRITES doesn't name, before any route and any activity stamp, 403 not_a_member. The
+ *     allowlist is exactly what the rule gives (this file's own list); every other write the middleware sees, signed by
+ *     a visitor's row that keeps an enterprise, one holding admin and Vera, gets that answer and changes nothing, as does
+ *     an allowlisted write whose body names what isn't the visitor's own; what she keeps still works through it; members
+ *     and suspended members reach the route. Every other section measures the per-function checks behind the gate, as
+ *     each review round did, with the gate off (setVisitorGateForTests).
  *  6. After its own signed redeem of an invite the visitor is a member and does all of it.
  *  7. The global profile: three visitors' rows a week old are refused a report as a key with no row is, and hide
  *     nothing (three members of a week hide it); a place watch is refused as a key with no row is. A visitor changes its
@@ -191,10 +198,12 @@ globalThis.fetch = (async (input: any, init?: any) => {
 /**
  * The whole database, table by table, so an attempt can say which table changed. A signed write stamps its signer's
  * members.last_active_at before any route runs (https-server.ts requireSignature), whatever the route then answers, so
- * that column is left out: it is the activity stamp, not what the write asked for.
+ * that column is left out: it is the activity stamp, not what the write asked for. So is event_reminders_sent, which
+ * only the node's minute tick writes (engine/event-reminders.ts), whenever a reminder comes due during a long sweep; an
+ * event's own update, which clears its rows there, changes `posts` too.
  */
 function snapshot(): Map<string, string> {
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[];
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != 'event_reminders_sent' ORDER BY name").all() as { name: string }[];
     const out = new Map<string, string>();
     for (const { name } of tables) {
         const h = crypto.createHash('sha256');
@@ -229,6 +238,13 @@ async function main(): Promise<void> {
     initStateEngine();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
+    // The signature middleware refuses every signed write from a visitor's row that VISITOR_WRITES doesn't name
+    // (visitor-allowlist.ts). Every section but 5b measures the per-function checks behind that gate, as each review round
+    // measured them, so the gate is off for them; section 5b turns it on. Loaded so the suite runs to the end, and says
+    // what fails, on a tree without it.
+    const gate = await import('./visitor-allowlist.js').catch(() => null) as
+        { VISITOR_WRITES: readonly { method: string; path: string }[]; setVisitorGateForTests(on: boolean): void } | null;
+    gate?.setVisitorGateForTests(false);
 
     const founder = keypair('FounderVA');
     seedGenesisMember(founder.pk, founder.name);
@@ -402,7 +418,9 @@ async function main(): Promise<void> {
     assert(isVisitorRow(vera.pk) && (db.prepare('SELECT status, callsign FROM members WHERE public_key = ?').get(vera.pk) as any)?.status === 'active',
         "Vera's row is still an active visitor's, under her own name");
 
-    // Zed (section 1c): a visitor's row an owner made admin before this rule, swept again in section 2.
+    // Wes (section 1b): a visitor's row made after this rule, which keeps the mill from before it. Zed (section 1c): a visitor's row an
+    // owner made admin before this rule. Swept again in sections 2 and 5b.
+    let wes!: Id;
     let zed!: Id;
     /** A Settings session Zed opened while he could still open one (asBeforeThisRule), as verify-challenge and exchange open it. */
     const zedSessionBeforeThisRule = (): string => {
@@ -434,7 +452,7 @@ async function main(): Promise<void> {
         const canOperateFlag = (pk: string) => (db.prepare('SELECT can_operate FROM members WHERE public_key = ?').get(pk) as any)?.can_operate;
 
         // Wes, a visitor made after this rule by a member's DM: an admin appoints him to keep the mill, which nobody keeps.
-        const wes = keypair('WesVA');
+        wes = keypair('WesVA');
         createConversation('dm', [mia.pk, wes.pk], mia.pk);
         const appointWes = await admin('POST', `/api/local/admin/treasury/${mill}/operators`, { pubkey: wes.pk });
         const appointNobody = await admin('POST', `/api/local/admin/treasury/${mill}/operators`, { pubkey: nobody.pk });
@@ -598,37 +616,38 @@ async function main(): Promise<void> {
 
     // ── 2. The sweep ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. Every registered write: the visitor is answered as a key with no row is, but for what it may do');
+    // Every registered write, and how the sweeps below (and section 5b's) make one.
+    const outside = (p: string) => ['/api/local/', '/api/admin/', '/api/manager/', '/api/pair/', '/api/pricing-guide/admin/', '/api/pricing-guide/reports']
+        .some(prefix => p.startsWith(prefix)) || p === '/api/invite/redeem' || p === '/api/invite/redeem-offline';
+    const app = getKoaApp() as any;
+    const writes = [...new Set<string>(app.middleware.filter((m: any) => m.router).flatMap((m: any) => m.router.stack)
+        .flatMap((l: any) => (l.methods as string[]).filter(m => m !== 'HEAD' && m !== 'GET').map(m => `${m} ${l.path}`)))].sort();
+    const swept = writes.filter(r => !outside(r.split(' ')[1]));
+    // What a visitor may do: a line in its DM, marking it read, muting it, editing and deleting its own lines there and reacting
+    // there (the body names Alice's line in its DM), Beans (sections 3 and 4). Section 3 checks each, and that a line outside its
+    // DM is answered as for a key with no row.
+    const MAY = new Set(['POST /api/messages/send', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/ledger/transfer',
+        'POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react']);
+    const materialise = (p: string, treasury = enterpriseKey) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
+        if (name === 'id') return p.startsWith('/api/groups/') ? group.id : p.startsWith('/api/marketplace/') ? event.id
+            : p.startsWith('/api/crowdfund/') ? project : p.startsWith('/api/commons/decisions/') ? decision.id : 'sweep';
+        return ({ pubkey: alice.pk, postId: event.id, messageId: aliceLine.id, treasury, provider: 'google' } as Record<string, string>)[name] ?? 'sweep';
+    });
+    const bodyFor = (a: Id) => ({
+        publicKey: a.pk, authorPublicKey: a.pk, buyerPublicKey: a.pk, cancellerPublicKey: a.pk, confirmerPublicKey: a.pk, voterPublicKey: a.pk,
+        authorPubkey: a.pk, from: a.pk, createdBy: a.pk, reporterPubkey: a.pk, raterPubkey: a.pk, ownerPubkey: a.pk, fromPubkey: a.pk,
+        creatorPubkey: a.pk, proposerPubkey: a.pk,
+        targetPubkey: alice.pk, friendPubkey: carol.pk, memberPubkey: alice.pk, to: alice.pk, candidatePubkey: bob.pk,
+        participants: [a.pk, carol.pk], type: 'dm', id: aliceOffer.id, postId: aliceOffer.id, targetPostId: aliceOffer.id, groupId: group.id,
+        conversationId: veraDm.id, messageId: aliceLine.id, transactionId: miaBuys.id, projectId: project,
+        category: 'produce', title: `Swept ${a.name}`, description: 'Swept for the rule', credits: 1, priceType: 'fixed', amount: 1,
+        ciphertext: 'aGk=', nonce: `bm9uY2U${crypto.randomBytes(3).toString('hex')}`, emoji: '👍', stars: 5, reason: 'spam', callsign: `Swept ${a.name}`,
+        bio: 'Swept', text: 'Swept line', message: 'Swept line', status: 'going', support: true, choice: 'yes', optionId: 'a', enabled: false,
+        duration: '8h', offsets: [60], lat: -28.5, lng: 153.5, radiusKm: 10, name: `Swept ${a.name}`, goalAmount: 10, requestedAmount: 10,
+        platform: 'youtube', url: `https://www.youtube.com/@swept${a.name.toLowerCase()}`, touches: 'member', effect: 'grant_voucher', subject: bob.pk,
+        token: 'ExponentPushToken[swept]', preferences: { chat: true },
+    });
     {
-        const outside = (p: string) => ['/api/local/', '/api/admin/', '/api/manager/', '/api/pair/', '/api/pricing-guide/admin/', '/api/pricing-guide/reports']
-            .some(prefix => p.startsWith(prefix)) || p === '/api/invite/redeem' || p === '/api/invite/redeem-offline';
-        const app = getKoaApp() as any;
-        const writes = [...new Set<string>(app.middleware.filter((m: any) => m.router).flatMap((m: any) => m.router.stack)
-            .flatMap((l: any) => (l.methods as string[]).filter(m => m !== 'HEAD' && m !== 'GET').map(m => `${m} ${l.path}`)))].sort();
-        const swept = writes.filter(r => !outside(r.split(' ')[1]));
-        // What a visitor may do: a line in its DM, marking it read, muting it, editing and deleting its own lines there and reacting
-        // there (the body names Alice's line in its DM), Beans (sections 3 and 4). Section 3 checks each, and that a line outside its
-        // DM is answered as for a key with no row.
-        const MAY = new Set(['POST /api/messages/send', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/ledger/transfer',
-            'POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react']);
-        const materialise = (p: string, treasury = enterpriseKey) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
-            if (name === 'id') return p.startsWith('/api/groups/') ? group.id : p.startsWith('/api/marketplace/') ? event.id
-                : p.startsWith('/api/crowdfund/') ? project : p.startsWith('/api/commons/decisions/') ? decision.id : 'sweep';
-            return ({ pubkey: alice.pk, postId: event.id, messageId: aliceLine.id, treasury, provider: 'google' } as Record<string, string>)[name] ?? 'sweep';
-        });
-        const bodyFor = (a: Id) => ({
-            publicKey: a.pk, authorPublicKey: a.pk, buyerPublicKey: a.pk, cancellerPublicKey: a.pk, confirmerPublicKey: a.pk, voterPublicKey: a.pk,
-            authorPubkey: a.pk, from: a.pk, createdBy: a.pk, reporterPubkey: a.pk, raterPubkey: a.pk, ownerPubkey: a.pk, fromPubkey: a.pk,
-            creatorPubkey: a.pk, proposerPubkey: a.pk,
-            targetPubkey: alice.pk, friendPubkey: carol.pk, memberPubkey: alice.pk, to: alice.pk, candidatePubkey: bob.pk,
-            participants: [a.pk, carol.pk], type: 'dm', id: aliceOffer.id, postId: aliceOffer.id, targetPostId: aliceOffer.id, groupId: group.id,
-            conversationId: veraDm.id, messageId: aliceLine.id, transactionId: miaBuys.id, projectId: project,
-            category: 'produce', title: `Swept ${a.name}`, description: 'Swept for the rule', credits: 1, priceType: 'fixed', amount: 1,
-            ciphertext: 'aGk=', nonce: `bm9uY2U${crypto.randomBytes(3).toString('hex')}`, emoji: '👍', stars: 5, reason: 'spam', callsign: `Swept ${a.name}`,
-            bio: 'Swept', text: 'Swept line', message: 'Swept line', status: 'going', support: true, choice: 'yes', optionId: 'a', enabled: false,
-            duration: '8h', offsets: [60], lat: -28.5, lng: 153.5, radiusKm: 10, name: `Swept ${a.name}`, goalAmount: 10, requestedAmount: 10,
-            platform: 'youtube', url: `https://www.youtube.com/@swept${a.name.toLowerCase()}`, touches: 'member', effect: 'grant_voucher', subject: bob.pk,
-            token: 'ExponentPushToken[swept]', preferences: { chat: true },
-        });
         const differ: string[] = [];
         for (const route of swept) {
             const [method, path] = route.split(' ');
@@ -946,6 +965,110 @@ async function main(): Promise<void> {
             && !/4471|9902/.test(JSON.stringify(byId.body) + JSON.stringify(board.body)) && /9902/.test(JSON.stringify(bobReads.body)),
             `nor the event itself, by id or on the board, though a member going reads the note (visitor ${show(byId)}; member ${show(bobReads)})`);
         vs.ws.close(); bs.ws.close();
+    }
+
+    // ── 5b. The gate ────────────────────────────────────────────────────────────────────────────
+    console.log("\n── 5b. The gate: the signature middleware refuses every signed write from a visitor's row but what VISITOR_WRITES names");
+    {
+        gate?.setVisitorGateForTests(true);
+        const GATE_ANSWER = JSON.stringify({ error: NOT_A_MEMBER, code: 'not_a_member' });
+        // The allowlist is exactly what the rule gives a visitor: this list is the test's own, so the module's can't grow unseen.
+        const EXPECTED = [
+            // Its own direct conversations: asking for one it is in again, a reply, its own lines, reacting, marking read, muting.
+            'POST /api/messages/conversation', 'POST /api/messages/send', 'POST /api/messages/edit', 'POST /api/messages/delete',
+            'POST /api/messages/react', 'POST /api/messages/mark-read', 'POST /api/messages/mute',
+            // Its phone, so what is sent to it reaches it: a push token, taking it away, which pushes it wants.
+            'POST /api/push-tokens', 'DELETE /api/push-tokens', 'POST /api/members/preferences',
+            // Beans it holds (the send gate then decides).
+            'POST /api/ledger/transfer',
+            // The join doors, signed by the joiner (its invite or ticket redeem is one the middleware never sees).
+            'POST /api/join', 'POST /api/join/sso-nonce', 'POST /api/join/github/start', 'POST /api/join/github/poll', 'POST /api/join/knock',
+            // What anyone may do, signed or not.
+            'POST /api/pricing-guide/report',
+        ].sort();
+        const listed = (gate?.VISITOR_WRITES ?? []).map(w => `${w.method} ${w.path}`).sort();
+        assert(JSON.stringify(listed) === JSON.stringify(EXPECTED),
+            `the allowlist is exactly what the rule gives a visitor (${listed.join(', ') || 'no allowlist'})`);
+        assert(listed.length > 0 && listed.every(r => writes.includes(r) && !outside(r.split(' ')[1])),
+            'and each entry is a registered write the middleware sees');
+
+        // Every other write the middleware sees, signed by a visitor's row, gets the gate's answer and changes nothing: Wes, who keeps
+        // the mill from before this rule; Zed, admin from before it; Vera, with a seat, an RSVP, keeper's rows and her own lines
+        // elsewhere. An allowlisted write naming what isn't the visitor's own (the body names another's DM) is refused the same.
+        const OWN_ONLY = new Set(['POST /api/messages/conversation', 'POST /api/messages/send', 'POST /api/messages/edit', 'POST /api/messages/delete',
+            'POST /api/messages/react', 'POST /api/messages/mark-read', 'POST /api/messages/mute']);
+        for (const v of [wes, zed, vera]) {
+            const stampBefore = (db.prepare('SELECT last_active_at FROM members WHERE public_key = ?').get(v.pk) as any)?.last_active_at;
+            const notRefused: string[] = [];
+            let tried = 0;
+            for (const route of swept) {
+                if (listed.includes(route) && !OWN_ONLY.has(route)) continue;
+                const [method, path] = route.split(' ');
+                // Vera's own DM is the body's: for her, the own-conversation writes name a group's line and chat instead.
+                const body = v === vera && OWN_ONLY.has(route)
+                    ? { ...bodyFor(v), conversationId: group.id, messageId: veraGroupLine, participants: [v.pk, carol.pk] }
+                    : bodyFor(v);
+                resetLimits();
+                const before = snapshot();
+                const r = await call(method, v, materialise(path), body);
+                const changed = changedTables(before, snapshot());
+                tried++;
+                if (r.status !== 403 || JSON.stringify(r.body) !== GATE_ANSWER || changed.length) {
+                    notRefused.push(`${route} ${show(r)}${changed.length ? ` changed: ${changed.join(', ')}` : ''}`);
+                }
+            }
+            const stampAfter = (db.prepare('SELECT last_active_at FROM members WHERE public_key = ?').get(v.pk) as any)?.last_active_at;
+            assert(isVisitorRow(v.pk) && tried > 150 && notRefused.length === 0,
+                `${v.name}: every other write (${tried}) is refused 403 not_a_member "${NOT_A_MEMBER}", and changes nothing${notRefused.length ? `; ${notRefused.length} were not:\n    ${notRefused.join('\n    ')}` : ''}`);
+            assert(stampAfter === stampBefore, `and a refused write stamps no activity on ${v.name}'s row (${stampBefore} → ${stampAfter})`);
+        }
+
+        // What Vera keeps, through the gate.
+        const again = await call('POST', vera, '/api/messages/conversation', { type: 'dm', participants: [vera.pk, alice.pk], createdBy: vera.pk });
+        const reply = await call('POST', vera, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: vera.pk, ciphertext: 'Z2F0ZQ==', nonce: 'bjE3' });
+        const line = reply.body?.message?.id;
+        const edit = await call('POST', vera, '/api/messages/edit', { messageId: line, ciphertext: 'Z2F0ZSE=', nonce: 'bjE4' });
+        const react = await call('POST', vera, '/api/messages/react', { messageId: aliceLine.id, emoji: '🌻' });
+        const del = await call('POST', vera, '/api/messages/delete', { messageId: line });
+        const read = await call('POST', vera, '/api/messages/mark-read', { conversationId: veraDm.id });
+        const mute = await call('POST', vera, '/api/messages/mute', { conversationId: veraDm.id, duration: 'off' });
+        const kept = [again, reply, edit, react, del, read, mute];
+        assert(kept.every(r => r.status === 200) && again.body?.conversation?.id === veraDm.id,
+            `in her DM she asks for it again, replies, edits, reacts, deletes her line, marks it read and unmutes it (${kept.map(r => r.status).join(' ')})`);
+        const bobBefore = balanceOf(bob.pk);
+        const send = await call('POST', vera, '/api/ledger/transfer', { from: vera.pk, to: bob.pk, amount: 1, memo: 'Through the gate' });
+        assert(send.status === 200 && Math.abs(balanceOf(bob.pk) - (bobBefore + 1)) < 1e-6, `she sends Beans she holds (${show(send)})`);
+        const token = await call('POST', vera, '/api/push-tokens', { publicKey: vera.pk, token: 'ExponentPushToken[vera-gate]', platform: 'android' });
+        const prefs = await call('POST', vera, '/api/members/preferences', { publicKey: vera.pk, preferences: { chat: false } });
+        const untoken = await call('DELETE', vera, '/api/push-tokens', { publicKey: vera.pk, token: 'ExponentPushToken[vera-gate]' });
+        assert(token.status === 200 && prefs.status === 200 && untoken.status === 200,
+            `she registers her phone's push token, sets which pushes she wants, and takes the token away (${token.status} ${prefs.status} ${untoken.status})`);
+        const balance = await call('GET', vera, `/api/ledger/balance/${vera.pk}`);
+        const convs = await call('GET', vera, `/api/messages/conversations/${vera.pk}`);
+        assert(balance.status === 200 && convs.status === 200, `and reads her own account (${balance.status} ${convs.status})`);
+        // The join doors reach their routes, which decide: a knock, and its status read; the open door and its sign-in; a price report.
+        const una = keypair('UnaVA');
+        createConversation('dm', [carol.pk, una.pk], carol.pk);
+        resetLimits();
+        const knock = await call('POST', una, '/api/join/knock', { callsign: 'Una', message: 'I grow tomatoes near the river' });
+        const status = await call('GET', una, '/api/join/knock/status');
+        assert(isVisitorRow(una.pk) && knock.status === 201 && status.status === 200 && status.body?.status === 'pending',
+            `a visitor's row knocks and reads its knock (${show(knock)}; ${show(status)})`);
+        for (const [path, body] of [['/api/join', { provider: 'google', idToken: 'x', nonce: 'y', callsign: 'Una' }], ['/api/join/sso-nonce', {}],
+            ['/api/pricing-guide/report', { itemId: 'no-such-item', reportType: 'too_high' }]] as const) {
+            resetLimits();
+            const r = await call('POST', una, path, body);
+            assert(JSON.stringify(r.body) !== GATE_ANSWER, `${path} reaches its route, which answers (${show(r)})`);
+        }
+
+        // Members and suspended members are not the gate's: each reaches the route as before.
+        const aliceSays = await call('POST', alice, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: alice.pk, ciphertext: 'b2s=', nonce: 'bjE5' });
+        const sid = makeMember('SidVA');
+        db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(sid.pk);
+        const sidPosts = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Sid chutney', description: 'Jars', credits: 2, priceType: 'fixed', authorPublicKey: sid.pk });
+        assert(aliceSays.status === 200 && JSON.stringify(sidPosts.body) !== GATE_ANSWER,
+            `a member writes in the DM, and a suspended member is answered by the route, not the gate (${show(aliceSays)}; ${show(sidPosts)})`);
+        gate?.setVisitorGateForTests(false);
     }
 
     // ── 6. Joining ──────────────────────────────────────────────────────────────────────────────

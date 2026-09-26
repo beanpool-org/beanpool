@@ -292,6 +292,16 @@ export function topModal(page) {
 }
 
 /**
+ * Wait, up to 10 s, for a step's button or field to be on the page and visible. It may render only once the step
+ * before it has finished, which settle() does not wait for: Generate asks the node for each of its 5 passes in turn,
+ * and View Printable Sheet and Enlarge appear after the last answer. On a busy runner that took longer than settle's
+ * pause, and invite-print-sheet failed on main (8a4266a8). The caller still checks that the target is there.
+ */
+async function appeared(target) {
+    await target.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+}
+
+/**
  * Open a modal from ALL_MODALS on a page already showing its screen. The buttons are pressed with a DOM click, so a
  * button that a broken layout pushed out of sight still opens the next step (the check then reports the layout).
  * Returns the number of overlays open afterwards, or throws naming the step that could not be found.
@@ -302,6 +312,7 @@ export async function openModal(page, modal) {
         if (step.fill) {
             // A field the next button needs (it stays disabled while empty), typed as a person would.
             const field = scope.locator(step.fill).first();
+            await appeared(field);
             if (!(await field.count())) throw new Error(`${modal.name}: no field ${step.fill} in ${step.in}`);
             await field.fill(step.value);
             await settle(page);
@@ -310,6 +321,7 @@ export async function openModal(page, modal) {
         const target = step.title
             ? scope.locator(`button[title="${step.title}"]`).first()
             : scope.getByRole('button', { name: step.button }).first();
+        await appeared(target);
         if (!(await target.count())) throw new Error(`${modal.name}: no button ${step.title || step.button} in ${step.in}`);
         await target.evaluate((el) => el.click());
         await settle(page);

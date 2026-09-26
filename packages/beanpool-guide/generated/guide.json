@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 53,
-  "hash": "167bb20ea99272866fdb812d0a9fbd5fbcab7d129be10e5097f42153d4ca4aab",
+  "version": 54,
+  "hash": "2beaf5f57af7dbe2ceb7d1d21843dc3ec66d6ad04baa6b683d4645fc11d4323c",
   "sections": [
     {
       "id": "about",
@@ -1135,7 +1135,7 @@
           "type": "ul",
           "items": [
             "Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.",
-            "Or tap **Account Protection**, then **Show My 12 Recovery Words**, and pass your phone's lock screen check. Tap **Hide** when you are done."
+            "Or tap **Account Protection**, then **Show My 12 Recovery Words**, and pass your phone's lock screen check. Tap **Hide** when you are done. They also hide when you leave the screen, and the phone asks again next time."
           ]
         },
         {
@@ -1172,7 +1172,7 @@
         },
         {
           "type": "p",
-          "text": "A sign-in account you link from a phone that has your 12 words keeps them too, so restoring with it gives them back. One you linked on an older version of the app brings your account back without them: under **Account Protection**, tap **Connect again** next to it to include them. Keep the paper as well."
+          "text": "A sign-in account you link from a phone that has your 12 words keeps them too, so restoring with it gives them back. One you linked on an older version of the app brings your account back without them: under **Account Protection**, tap **Connect again** next to it and pass your phone's lock screen check to include them. Keep the paper as well."
         },
         {
           "type": "h2",
@@ -1843,7 +1843,7 @@
           "items": [
             "In the web app on the computer, choose to link with the mobile app. It shows a QR code.",
             "On the phone, open **Settings** and tap **Link Another Device**.",
-            "Point the phone's camera at the QR code and tap **Confirm & Link Device**."
+            "Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check. Your account goes to the computer only after that."
           ]
         },
         {
@@ -4901,6 +4901,7 @@
           "items": [
             "Open **Settings** and tap **Account Protection**.",
             "Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.",
+            "Pass your phone's lock screen check. The linked account can bring your account back, so the app asks first.",
             "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.",
             "With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back to BeanPool (an iPhone comes back by itself). The app links your account as soon as you are back. While the app is waiting for GitHub, **Cancel** stops it."
           ]
@@ -4911,7 +4912,7 @@
         },
         {
           "type": "p",
-          "text": "If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown."
+          "text": "If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown."
         },
         {
           "type": "p",
@@ -4951,7 +4952,7 @@
         },
         {
           "type": "p",
-          "text": "Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once you have signed in). Nothing changes until you type **WIPE** and tap **Replace Account**. Tap **Keep**, then the account's name, **go back** to leave everything as it was."
+          "text": "Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once you have signed in). Nothing changes until you type **WIPE**, tap **Replace Account** and pass your phone's lock screen check. Tap **Keep**, then the account's name, **go back** to leave everything as it was."
         },
         {
           "type": "p",

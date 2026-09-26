@@ -12,6 +12,7 @@
  *   biometric or passcode set up: let through, as Settings lets it through.
  * - A failed, cancelled or broken check reads nothing.
  * - The replace screen reads the outgoing account's words only when Show passes the check, never as it opens.
+ * - Every other way the account leaves the phone or comes off it asks the same check (the last describe lists them).
  *
  * The screens cannot be rendered here (see vitest.config.ts): their wiring is read from their source.
  */
@@ -253,5 +254,86 @@ describe('every other screen that draws an account\'s words', () => {
         };
         walk(path.resolve(__dirname, '../../app'));
         expect(found).toEqual(allowed);
+    });
+});
+
+describe("every way the account leaves this phone, or comes off it, asks the phone's lock first", () => {
+    // The rule (2026-09-27, from Settings, where Sign Out and View Recovery Phrase already ask it): showing or copying the
+    // 12 words, sending the account to a computer, linking a sign-in that can restore it, deleting it from the phone and
+    // replacing it all ask LocalAuth.authenticateUser first. A check that doesn't pass does nothing and reads nothing.
+    const ROOT = path.resolve(__dirname, '../..');
+    /** Every .ts/.tsx under app/ and components/, as code. */
+    function screens(): { rel: string; src: string }[] {
+        const out: { rel: string; src: string }[] = [];
+        const walk = (dir: string) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (/\.tsx?$/.test(entry.name)) out.push({ rel: path.relative(ROOT, full), src: code(fs.readFileSync(full, 'utf-8')) });
+            }
+        };
+        walk(path.join(ROOT, 'app'));
+        walk(path.join(ROOT, 'components'));
+        return out;
+    }
+
+    it('every door is one of these, and each is pinned to the check before it by the test named beside it', () => {
+        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountFromThisPhone\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(/g;
+        const doors: Record<string, number> = {
+            // View Recovery Phrase and Account Protection's Show (above; settings-words-put-away.test.ts).
+            'app/(tabs)/settings.tsx:readWordsBehindLock(': 2,
+            // Sign Out (Device Only) and Permanent Node Purge: authenticateUser first, as they always have.
+            'app/(tabs)/settings.tsx:signOutOfThisPhone(': 2,
+            // The replace screen's Show (above); Safety Backup's Show for the phone's own key (join-words-behind-lock.test.ts).
+            'app/welcome.tsx:readWordsBehindLock(': 2,
+            // Replace Account (account-removal-behind-lock.test.ts).
+            'app/welcome.tsx:answerReplace(true)': 1,
+            // The global door's sign-in with the phone's own key, and the join it signs in for (sign-in-link-behind-lock.test.ts).
+            'app/welcome.tsx:signInAtDoor(': 1,
+            'app/welcome.tsx:submitJoin(': 1,
+            // Delete this account from this phone (account-removal-behind-lock.test.ts).
+            'app/node-mismatch.tsx:readWordsBehindLock(': 1,
+            'app/node-mismatch.tsx:deleteAccountFromThisPhone(': 1,
+            // Confirm & Link Device (pair-device-behind-lock.test.ts).
+            'app/pair-device.tsx:encryptPairingPayload(': 1,
+            // Protect with / Connect again / Try again (sign-in-link-behind-lock.test.ts).
+            'components/SsoEnrolSheet.tsx:connectAndDeposit(': 1,
+        };
+        const found: Record<string, number> = {};
+        for (const { rel, src } of screens()) {
+            for (const m of src.matchAll(DOOR)) {
+                const key = `${rel}:${m[0]}`;
+                found[key] = (found[key] ?? 0) + 1;
+            }
+        }
+        expect(found).toEqual(doors);
+    });
+
+    it("the global door's join is sent only with a sign-in the door's own sign-in step made (after its check)", () => {
+        const s = source('welcome.tsx');
+        const join = slice(s, 'async function handleGlobalJoin() {', '\n    }\n');
+        expect(join).toMatch(/const signin = doorSignIn;\s*if \(!key \|\| !signin\) \{/);
+        expect(s.match(/setDoorSignIn\((?!null\))/g)).toEqual(['setDoorSignIn(']);
+        expect(slice(s, 'async function handleGlobalSignIn(provider: SsoProvider) {', '\n    }\n')).toContain('setDoorSignIn(result.signin);');
+    });
+
+    it("Sign Out and Permanent Node Purge ask the check before anything goes, as they always have", () => {
+        const s = source('(tabs)/settings.tsx');
+        for (const [start, reason] of [
+            ['async function handleLocalWipe() {', 'Confirm authentication to sign out of this device.'],
+            ['async function handleNodePurge() {', 'Confirm authentication to permanently purge your account from the node.'],
+        ] as const) {
+            const body = slice(s, start, '\n    }\n');
+            const asked = body.indexOf(`const success = await authenticateUser('${reason}');`);
+            const refused = body.indexOf('if (!success) return;');
+            expect(asked).toBeGreaterThan(-1);
+            expect(refused).toBeGreaterThan(asked);
+            expect(body.indexOf('await signOutOfThisPhone(identity);')).toBeGreaterThan(refused);
+        }
+    });
+
+    it("every check is Settings' own (LocalAuth.authenticateUser): no screen asks the phone's lock its own way", () => {
+        const own = screens().filter(({ src }) => src.includes('expo-local-authentication')).map(({ rel }) => rel);
+        expect(own).toEqual([]);
     });
 });

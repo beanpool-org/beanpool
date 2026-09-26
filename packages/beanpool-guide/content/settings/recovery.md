@@ -33,12 +33,13 @@ If the sign-in account was linked from a phone that had your 12 words, on an up-
 
 - Open **Settings** and tap **Account Protection**.
 - Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account.
+- Pass your phone's lock screen check. The linked account can bring your account back, so the app asks first.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.
 - With GitHub, the app shows a code and copies it. Tap **Open GitHub**, press and hold the first box and choose **Paste**, then approve. When GitHub says you're all set, tap **✕** at the top left to come back to BeanPool (an iPhone comes back by itself). The app links your account as soon as you are back. While the app is waiting for GitHub, **Cancel** stops it.
 
 This works on a phone with no 12 words too.
 
-If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown.
+If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown.
 
 GitHub works only once your community's server has been updated for it. Until then the app says so. Use Google, Apple or your 12 words instead.
 
@@ -58,7 +59,7 @@ If someone starts recovering your account, you get an alert, and Settings shows 
 
 ## If the phone already has an account
 
-Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once you have signed in). Nothing changes until you type **WIPE** and tap **Replace Account**. Tap **Keep**, then the account's name, **go back** to leave everything as it was.
+Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once you have signed in). Nothing changes until you type **WIPE**, tap **Replace Account** and pass your phone's lock screen check. Tap **Keep**, then the account's name, **go back** to leave everything as it was.
 
 Make sure you have the 12 words for the account you are replacing. If this phone has them, that screen shows them when you tap **Show** (the account's name) **12 words** and pass your phone's lock screen check. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back.
 

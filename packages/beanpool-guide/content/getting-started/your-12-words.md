@@ -24,7 +24,7 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 Open **Settings** with the sliders button at the top of the screen. Then either:
 
 - Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.
-- Or tap **Account Protection**, then **Show My 12 Recovery Words**, and pass your phone's lock screen check. Tap **Hide** when you are done.
+- Or tap **Account Protection**, then **Show My 12 Recovery Words**, and pass your phone's lock screen check. Tap **Hide** when you are done. They also hide when you leave the screen, and the phone asks again next time.
 
 A phone restored with a sign-in account gets your 12 words back only if that sign-in account was linked from a phone that had them, on an up-to-date app. Otherwise the phone has no copy of them: they can't be rebuilt from a sign-in. **View Recovery Phrase** is still there, and says **No copy on this phone yet**. On that phone a linked sign-in account is how you get back in, so keep one linked under **Account Protection**.
 
@@ -42,7 +42,7 @@ Your phone checks that the words belong to your account, the same check as **Che
 
 On the phone app you can also link a Google, Facebook or GitHub account (and Apple on an iPhone). If you lose your phone, that account together with your community's server can restore your account on a new phone. See "Getting your account back".
 
-A sign-in account you link from a phone that has your 12 words keeps them too, so restoring with it gives them back. One you linked on an older version of the app brings your account back without them: under **Account Protection**, tap **Connect again** next to it to include them. Keep the paper as well.
+A sign-in account you link from a phone that has your 12 words keeps them too, so restoring with it gives them back. One you linked on an older version of the app brings your account back without them: under **Account Protection**, tap **Connect again** next to it and pass your phone's lock screen check to include them. Keep the paper as well.
 
 ## In a web browser
 

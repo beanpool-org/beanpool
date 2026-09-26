@@ -227,65 +227,71 @@ export function redeemOfflineTicket(
     // nobody was trying to join at all.
     recordFunnelEvent('invite_attempt');
 
+    // Only the ticket's decoding and checking answer "malformed" (the route's 400, which the apps read as "this send
+    // made no member"). Nothing after it is caught here: a throw once registerMemberInternal has written the member (the
+    // invite_codes write after it failing on a full disk, say) must reach Koa as a 500, which the apps keep the key for,
+    // and never be told to them as a broken ticket (PR #1198, 4112075324). verifyOfflineTicket catches its own throws;
+    // this catch is for anything it lets through.
+    let verified: ReturnType<typeof verifyOfflineTicket>;
     try {
-        const verified = verifyOfflineTicket(db, ticketB64);
-        if (!verified.ok) {
-            recordFunnelEvent('invite_failed', 'invalid');
-            return { success: false, error: verified.error };
-        }
-        const { inviterPubkey, timestamp, intendedFor, codeHash } = verified;
-
-        // Never a key a re-key replaced, as in redeemInvite.
-        if (isInvalidatedKey(db, String(joinerPublicKey))) {
-            recordFunnelEvent('invite_failed', 'key_invalidated');
-            return { success: false, error: REPLACED_KEY };
-        }
-
-        // Check if identity is ALREADY a member before "already used" check. A visitor's row is not, as in redeemInvite.
-        const existingMember = getMember(db, joinerPublicKey);
-        if (existingMember) {
-            const closed = closedAccountRefusal(existingMember);
-            if (closed) return closed;
-        }
-        if (existingMember && !isVisitorKey(db, joinerPublicKey)) {
-            recordFunnelEvent('invite_reentry');
-            return { success: true, member: existingMember, alreadyMember: true };
-        }
-        // A visitor's row, only on a redeem its own key signed (unsignedVisitorRefusal). Before the ticket's code is
-        // written, so a refused ticket stays unused.
-        if (existingMember) {
-            const unsigned = unsignedVisitorRefusal(joinerSigned);
-            if (unsigned) return unsigned;
-        }
-
-        // As with redeemInvite: `intendedFor` rides along on the ticket for the inviter's
-        // records and is stored below, but never constrains the joiner's chosen callsign.
-        const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
-        if (existingInvite) {
-            if (existingInvite.used_by) {
-                recordFunnelEvent('invite_failed', 'already_used');
-                return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
-            }
-        } else {
-            const createdAt = new Date(timestamp).toISOString();
-            db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`).run(codeHash, inviterPubkey, createdAt, intendedFor || null);
-        }
-
-        // No recordActivity(inviterPubkey): the joiner redeems the ticket, possibly weeks after the inviter
-        // signed it and without the inviter present. Stamping the inviter active would reset lead-succession
-        // inactivity and cancel a succession vote on a lead who did nothing (#838 review).
-
-        const member = registerMemberInternal(broadcast, joinerPublicKey, callsign, inviterPubkey, codeHash);
-        if (!member) {
-            recordFunnelEvent('invite_failed', 'registration_failed');
-            return { success: false, error: 'Registration failed during state sync' };
-        }
-
-        db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code COLLATE NOCASE = ?").run(joinerPublicKey, new Date().toISOString(), codeHash);
-
-        return { success: true, member };
-    } catch (e) {
+        verified = verifyOfflineTicket(db, ticketB64);
+    } catch {
         recordFunnelEvent('invite_failed', 'malformed');
         return { success: false, error: 'Malformed or broken offline ticket payload' };
     }
+    if (!verified.ok) {
+        recordFunnelEvent('invite_failed', 'invalid');
+        return { success: false, error: verified.error };
+    }
+    const { inviterPubkey, timestamp, intendedFor, codeHash } = verified;
+
+    // Never a key a re-key replaced, as in redeemInvite.
+    if (isInvalidatedKey(db, String(joinerPublicKey))) {
+        recordFunnelEvent('invite_failed', 'key_invalidated');
+        return { success: false, error: REPLACED_KEY };
+    }
+
+    // Check if identity is ALREADY a member before "already used" check. A visitor's row is not, as in redeemInvite.
+    const existingMember = getMember(db, joinerPublicKey);
+    if (existingMember) {
+        const closed = closedAccountRefusal(existingMember);
+        if (closed) return closed;
+    }
+    if (existingMember && !isVisitorKey(db, joinerPublicKey)) {
+        recordFunnelEvent('invite_reentry');
+        return { success: true, member: existingMember, alreadyMember: true };
+    }
+    // A visitor's row, only on a redeem its own key signed (unsignedVisitorRefusal). Before the ticket's code is
+    // written, so a refused ticket stays unused.
+    if (existingMember) {
+        const unsigned = unsignedVisitorRefusal(joinerSigned);
+        if (unsigned) return unsigned;
+    }
+
+    // As with redeemInvite: `intendedFor` rides along on the ticket for the inviter's
+    // records and is stored below, but never constrains the joiner's chosen callsign.
+    const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
+    if (existingInvite) {
+        if (existingInvite.used_by) {
+            recordFunnelEvent('invite_failed', 'already_used');
+            return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
+        }
+    } else {
+        const createdAt = new Date(timestamp).toISOString();
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`).run(codeHash, inviterPubkey, createdAt, intendedFor || null);
+    }
+
+    // No recordActivity(inviterPubkey): the joiner redeems the ticket, possibly weeks after the inviter
+    // signed it and without the inviter present. Stamping the inviter active would reset lead-succession
+    // inactivity and cancel a succession vote on a lead who did nothing (#838 review).
+
+    const member = registerMemberInternal(broadcast, joinerPublicKey, callsign, inviterPubkey, codeHash);
+    if (!member) {
+        recordFunnelEvent('invite_failed', 'registration_failed');
+        return { success: false, error: 'Registration failed during state sync' };
+    }
+
+    db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code COLLATE NOCASE = ?").run(joinerPublicKey, new Date().toISOString(), codeHash);
+
+    return { success: true, member };
 }

@@ -124,8 +124,9 @@ On each server, main and standby, check that the seal has finished. Docker's log
 
 Once it has:
 
-- Delete the snapshots made before it, under **Point-in-Time Snapshots**. Or let them age out: data/snapshots keeps the last 7 daily ones, so they are gone in about a week.
-- Delete every backup that is not locked (.tar.gz, or a snapshot's .db) downloaded before the update, wherever it was copied: Downloads, other computers, Time Machine, cloud drives, email, the fleet manager's folder. Then download a new one.
+- First download a new backup, under **Download Sovereign Database**. Wait for "✅ Backup downloaded" and put the file where you keep backups, off the server. Delete nothing below until you have it.
+- Delete the snapshots made before the seal finished, under **Point-in-Time Snapshots**. Or let them age out: data/snapshots keeps the last 7 daily ones, so they are gone in about a week.
+- Delete every backup that is not locked (.tar.gz, or a snapshot's .db) downloaded before the update, wherever it was copied: Downloads, other computers, Time Machine, cloud drives, email, the fleet manager's folder.
 - The copy of the data folder you made before updating holds the old copies too. Delete it once you are sure you won't go back to it.
 - Think about locked backups (.bpsealed) made before the update as well. They need the recovery code or an owner's phone to open, but inside they hold the same copies.
 

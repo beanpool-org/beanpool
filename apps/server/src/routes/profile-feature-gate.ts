@@ -73,6 +73,13 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         needs: ['directoryMirror'],
         paths: [/^\/api\/global(\/|$)/],
     },
+    // "Ask to join" (G6, routes/knocks.ts): the applicant's knock and status, and the members' list and answers. Off on
+    // the global node, and wherever the operator opted out. Not the operator's count (/api/local/admin/knocks), which
+    // Settings shows beside the switch that turns them back on.
+    {
+        needs: ['knocks'],
+        paths: [/^\/api\/join\/knocks?(\/|$)/],
+    },
 ];
 
 /** The switch that has this path off right now, or null when it is served. Reads the switches only for a gated path. */

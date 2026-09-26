@@ -725,6 +725,48 @@ CREATE TABLE IF NOT EXISTS place_watches (
 );
 CREATE INDEX IF NOT EXISTS idx_place_watches_updated_at ON place_watches(updated_at);
 
+-- 14f. "Ask to join" (G6, design §3.3, engine/knocks.ts): a stranger's request to join this community, which any
+-- member may answer with an invite.
+--
+-- On every node; empty where the `knocks` switch is off (the global node, and a community whose operator opted out).
+-- `pubkey` is the key that SIGNED the knock (lower-case hex), never a body field, and is not a member here: the
+-- applicant is somebody else's member or nobody's. `status` is 'pending' until a member answers: 'approved' writes the
+-- invite (`invite_code`, made by `decided_by` for the applicant's key) and 'declined' ("not now") writes nothing the
+-- applicant can see: to them a decline stays "no answer yet", and blocks another knock for 30 days from `decided_at`.
+-- At most one pending knock per key (the partial unique index). `ip_hash` feeds the limit of 3 knocks an address a day
+-- (HMAC with the open door's key, engine/open-join.ts), is cleared once a day old, and never leaves this database.
+-- Node-wide, at most 30 knocks are made in any 24 hours and 50 are open at once.
+-- Only members read the rest (the callsign, message and avatar the applicant sent), and only while the knock is open;
+-- nothing here is in a public read. Once it isn't open, the main server's tidy-up clears those (callsign '', message
+-- '', avatar and from_node NULL), and deletes the row once past its windows (30 days after the decline, the approval
+-- or the lapse). An approved knock's invite admits the applicant's key and no other (`redeemInvite` looks the code up here).
+-- Replicated to a standby (SyncPayload.joinRequests, watermarked on `updated_at`, which every write stamps, the
+-- tidy-up's clearing included; its deletions as `join_requests` tombstones) and carried in file and sealed backups.
+-- A re-key moves a member's rows, as applicant and as `decided_by`, to the new key (stamped, so the move replicates).
+-- A prune or a self-deletion of the member the applicant became scrubs what they wrote and keeps the record.
+CREATE TABLE IF NOT EXISTS join_requests (
+    id TEXT PRIMARY KEY,
+    pubkey TEXT NOT NULL,
+    callsign TEXT NOT NULL,
+    message TEXT NOT NULL,
+    avatar TEXT,
+    from_node TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    decided_by TEXT,
+    invite_code TEXT UNIQUE,
+    decided_at TEXT,
+    ip_hash TEXT,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CHECK ((status = 'pending') = (decided_at IS NULL)),
+    CHECK ((status = 'approved') = (invite_code IS NOT NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_join_requests_one_open ON join_requests(pubkey) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_join_requests_pubkey ON join_requests(pubkey, created_at);
+CREATE INDEX IF NOT EXISTS idx_join_requests_status ON join_requests(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_join_requests_ip ON join_requests(ip_hash, created_at) WHERE ip_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_join_requests_updated_at ON join_requests(updated_at);
+
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

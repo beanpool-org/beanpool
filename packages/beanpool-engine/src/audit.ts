@@ -25,6 +25,7 @@ export interface AuditSyncPayload {
     groups?: any[];
     groupMembers?: any[];
     placeWatches?: any[];
+    joinRequests?: any[];
     directoryCache?: any[];
     commonsBalance?: number;
     generatedAt?: string;
@@ -194,6 +195,9 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // when a community starts near them after a take-over; a community it lost is a watcher told twice.
         ['place_watches', payload.placeWatches?.length ?? 0],
         ['directory_cache', payload.directoryCache?.length ?? 0],
+        // Requests to join (G6). A knock the replica lost is a stranger nobody answers after a take-over; an answer it
+        // lost is a decline forgotten, or an approved applicant told about an invite the new server doesn't have.
+        ['join_requests', payload.joinRequests?.length ?? 0],
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

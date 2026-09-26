@@ -19,7 +19,10 @@
  *     inbox) or by writing to them, when neither has reached the other before. A reply to someone who wrote or
  *     opened first is never limited, and neither is anyone they have reached before. A trade's conversation is
  *     nobody's opening (`dmContacts`).
- *   - 1 knock (asking a community to let them in). Knocks are G6: `knockRefusal` is the check it calls.
+ *   - 1 knock (asking a community to let them in): `knockRefusal`, for a node that keeps its members' knocks. G6 keeps
+ *     none on the global node: the app knocks on the community itself (routes/knocks.ts), which can't see how new the
+ *     applicant's global account is. There the limits are the community's own (engine/knocks.ts): one open knock per
+ *     key and 3 an address a day.
  *
  * Over a limit: `ProbationLimitError`, which the routes answer 429 with a plain message naming the limit and when
  * it lets up (`resetsAt`, and `Retry-After`). There is no counter table: every count is read from the rows the
@@ -241,8 +244,9 @@ export function assertMayMessage(sender: string, recipient: string, now: number 
 }
 
 /**
- * G6 (knocks) calls this with the times of the member's knocks in the last 24 hours, wherever it keeps them: the
- * refusal to answer 429 with, or null. Probation is read on the node the member belongs to.
+ * The probation knock limit, given the times of the member's knocks in the last 24 hours: the refusal to answer 429
+ * with, or null. Probation is read on the node the member belongs to. Not called yet: G6 keeps knocks on the community
+ * knocked on, not on the applicant's node (see the list above).
  */
 export function knockRefusal(pubkey: string, knockTimes: readonly string[], now: number = Date.now()): ProbationLimitError | null {
     if (!onProbation(pubkey, now)) return null;

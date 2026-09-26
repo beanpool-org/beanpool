@@ -3540,8 +3540,10 @@ export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: stri
     }
 
     const changeId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const appliesAt = new Date(Date.now() + KEEPER_CHANGE_OBJECTION_MS).toISOString();
+    // One clock read, so the span is exactly the window (a second read could land a millisecond later).
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const appliesAt = new Date(nowMs + KEEPER_CHANGE_OBJECTION_MS).toISOString();
     db.prepare(`
         INSERT INTO enterprise_keeper_changes (id, enterprise_pubkey, kind, member_pubkey, pledged_backing, proposed_by, status, created_at, applies_at)
         VALUES (?, ?, 'remove', ?, 0, ?, 'pending', ?, ?)
@@ -4024,8 +4026,10 @@ export function proposeLeadSuccession(
     }
 
     const proposalId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const deadlineAt = new Date(Date.now() + SUCCESSION_WINDOW_MS).toISOString();
+    // One clock read, so the span is exactly the window (a second read could land a millisecond later).
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const deadlineAt = new Date(nowMs + SUCCESSION_WINDOW_MS).toISOString();
 
     let outcome = 'open' as ReturnType<typeof settleSuccession>;
     db.transaction(() => {
@@ -4615,8 +4619,10 @@ export function initiateWindUp(enterprisePubkey: string, actorPubkey: string): {
         };
     }
 
-    const now = new Date().toISOString();
-    const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    // One clock read, so the span is exactly the window (a second read could land a millisecond later).
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const graceEndsAt = new Date(nowMs + 7 * 24 * 60 * 60 * 1000).toISOString();
 
     db.prepare(`
         UPDATE members

@@ -82,6 +82,20 @@ async function readCache(): Promise<Record<string, NodeProfile>> {
     }
 }
 
+/**
+ * How long a screen uses this phone's copy without asking the node again. The tab strip asks the node each time
+ * the phone switches community ((tabs)/_layout.tsx), which keeps the copy current; a screen asks only when the
+ * copy is missing or older than this, so opening a tab costs no request.
+ */
+export const NODE_PROFILE_FRESH_MS = 60 * 60 * 1000;
+
+/** Whether a copy is recent enough to use without asking the node. */
+export function nodeProfileIsFresh(profile: NodeProfile | null | undefined, nowMs: number = Date.now()): boolean {
+    if (!profile) return false;
+    const at = Date.parse(profile.checkedAt);
+    return Number.isFinite(at) && nowMs - at >= 0 && nowMs - at < NODE_PROFILE_FRESH_MS;
+}
+
 /** What this phone last heard from `url`, or null if it never has. No network. */
 export async function getCachedNodeProfile(url: string | null | undefined): Promise<NodeProfile | null> {
     if (!url) return null;

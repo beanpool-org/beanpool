@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 45,
-  "hash": "c4f36054efd3d0954a468015412564a02e00e90951080b0cd3dc34b4b7d43086",
+  "version": 46,
+  "hash": "0e3d8a0722f7d414f30f5ae17e3e1114ac735a1880bae29dd4f2cc079036a32f",
   "sections": [
     {
       "id": "about",
@@ -17,9 +17,10 @@
     {
       "id": "getting-started",
       "title": "Getting started",
-      "summary": "Joining, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "summary": "Joining, finding a community near you, your 12 words, your profile, the top bar, this guide, and getting help.",
       "slugs": [
         "joining",
+        "finding-a-community",
         "your-12-words",
         "your-profile",
         "the-top-bar",
@@ -792,9 +793,10 @@
     {
       "slug": "joining",
       "title": "Joining BeanPool",
-      "summary": "Two ways in: a community, with an invite from a member, or the global community when it is open, with one sign-in. And how to invite someone else.",
+      "summary": "Two ways in: a community, with an invite from a member, or the global community when it is open, with one sign-in. Asking a community to let you in, and how to invite someone else.",
       "section": "getting-started",
       "related": [
+        "finding-a-community",
         "your-12-words",
         "your-profile",
         "communities",
@@ -812,6 +814,10 @@
             "**With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.",
             "**Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans there. Beans, credit and the Commons live in local communities."
           ]
+        },
+        {
+          "type": "p",
+          "text": "No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can. See \"Finding a community near you\"."
         },
         {
           "type": "p",
@@ -934,6 +940,146 @@
         {
           "type": "p",
           "text": "A community's admins can turn invites off for the whole community."
+        },
+        {
+          "type": "h2",
+          "text": "Requests to join"
+        },
+        {
+          "type": "p",
+          "text": "People can ask to join your community from the global community. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Invite** makes an invite that only their account can use. Their app finds it by itself, so you don't send them anything, and they join with one tap.",
+            "**Not now** tells them nothing more than \"no answer yet\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Any member can answer. See \"Finding a community near you\"."
+        }
+      ]
+    },
+    {
+      "slug": "finding-a-community",
+      "title": "Finding a community near you",
+      "summary": "From the global community, find a community near you and ask to join it, be told when one starts near you, or start one yourself.",
+      "section": "getting-started",
+      "related": [
+        "joining",
+        "communities",
+        "near-you",
+        "recovery"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Why a local community"
+        },
+        {
+          "type": "p",
+          "text": "The global community is where people from everywhere meet. A local community is where neighbours trade: it has its own Beans, trades and Commons. The global community has no Beans, so there a post says what the person would like in return in its description: free, a swap, or ask them."
+        },
+        {
+          "type": "h2",
+          "text": "Communities near you"
+        },
+        {
+          "type": "p",
+          "text": "On the global community, the top of the **Market** shows **Find your community**, with the communities nearest you."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Communities near you** to see the whole list.",
+            "Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name.",
+            "Each one shows how far away it is and how many members it has, when the community has said."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A community that hasn't published its address is listed, but it can't be asked from here yet."
+        },
+        {
+          "type": "h2",
+          "text": "Asking to join"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Ask to join** on a community.",
+            "Check your name, and write a few words about yourself, up to 280 characters: where you live, what you would like to share or learn.",
+            "Tap **Send**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Your request goes straight to that community, with your name, your words and your picture. Only its members see it. Any member there can let you in: they tap **Invite**, and an invite is made that only your account can use."
+        },
+        {
+          "type": "p",
+          "text": "While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection."
+        },
+        {
+          "type": "p",
+          "text": "If nobody answers within 30 days, the card says **No answer came. You can ask again.**"
+        },
+        {
+          "type": "p",
+          "text": "If a community can't take your request, the card shows its own words, for example that too many requests came from your network today, or that it isn't taking requests to join right now."
+        },
+        {
+          "type": "h2",
+          "text": "When they say yes"
+        },
+        {
+          "type": "p",
+          "text": "The card says **A member invited you**. Tap **Join** with the community's name."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Your account comes with you: the same key and the same 12 words. Your name comes too. If someone there already has it, you choose another.",
+            "Your posts, chats and trades stay in each community. On the new one you start fresh.",
+            "Next you check your name and photo for the new community.",
+            "A sign-in that protects your account is kept by each community. The app asks you to protect your account in the new community too: tap **Protect it**, or **Later**, and do it any time in **Settings**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "You stay a member of the global community, and can switch between them: see \"More than one community\"."
+        },
+        {
+          "type": "h2",
+          "text": "Nothing near you"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Tell me when one starts here:** you get a notification when a community starts near where you are. Only the area is kept, about 10 km across, never where you are exactly. You can watch up to 3 places, and stop watching one with **Stop**.",
+            "**Start a community:** every community has its own small server, looked after by someone local. The app shows three ways to run one: a spare computer at home, a small rented server, or asking for help. Fill in the name, the place and how people can reach you, and tap **Copy my community's details** to paste them into your new server's settings."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "If you are a member of a local community"
+        },
+        {
+          "type": "p",
+          "text": "People can ask to join your community from the global community. Tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Invite:** makes an invite that only their account can use. Their app finds it by itself, and they join with one tap.",
+            "**Not now:** they are not told. They keep seeing \"no answer yet\", and can't ask again for 30 days."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Any member can answer: your trust badge does not matter. A community's admins can turn requests to join off."
         }
       ]
     },
@@ -1454,6 +1600,7 @@
       "section": "getting-started",
       "related": [
         "joining",
+        "finding-a-community",
         "leaving-or-deleting",
         "your-12-words",
         "faq",
@@ -1475,11 +1622,15 @@
         {
           "type": "ul",
           "items": [
-            "A community needs an invite from one of its members.",
+            "A community lets you in with an invite from one of its members. No invite? From the global community you can ask a community near you to let you in: see \"Finding a community near you\".",
             "Tap the invite icon (a person with a plus) at the top right of the screen to open **Invites**.",
             "Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.",
             "Tap **Join Community**."
           ]
+        },
+        {
+          "type": "p",
+          "text": "Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**."
         },
         {
           "type": "p",
@@ -2769,7 +2920,7 @@
           "items": [
             "**Friends:** people you have added.",
             "**Community:** every member. Search by name, and sort by **Newest**, **Name**, **Friends**, **Trusted** or **Active**.",
-            "**Invites:** invite someone new. See \"Joining BeanPool\". If you have not joined yet, this button says **Register**."
+            "**Invites:** invite someone new. See \"Joining BeanPool\". If you have not joined yet, this button says **Register**. When people have asked to join your community, it shows how many, and they are listed under **Wants to join**."
           ]
         },
         {

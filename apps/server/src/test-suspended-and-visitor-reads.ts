@@ -165,8 +165,10 @@ async function main() {
     const { knockerRefusal, openKnockCount, tidyKnocks } = await import('./engine/knocks.js');
     const { registerVisitor } = await import('./engine/members.js');
     // The signature middleware refuses a visitor's write that isn't its own (visitor-allowlist.ts) before any route. The
-    // writes below measure each route's own check behind it, with it off, then ask the gate's answer with it on.
-    const { setVisitorGateForTests } = await import('./visitor-allowlist.js');
+    // writes below measure each route's own check behind it, with it off, then ask the gate's answer with it on. Loaded so
+    // the suite runs to the end, and says what fails, on a tree without it.
+    const { setVisitorGateForTests } = await import('./visitor-allowlist.js')
+        .catch(() => ({ setVisitorGateForTests: (_on: boolean) => { /* no gate on this tree */ } }));
 
     await initTls();
     se.initStateEngine();

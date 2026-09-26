@@ -265,7 +265,7 @@ describe('the unregister itself', () => {
 });
 
 describe('each community\'s cached copy', () => {
-    it('closes the open copy, then removes each database with its WAL, index and journal from expo-sqlite\'s directory', async () => {
+    it('closes the open copy, then removes each database\'s WAL, index and journal and then the database, from expo-sqlite\'s directory', async () => {
         const real = await vi.importActual<typeof import('../community-cache')>('../community-cache');
         vi.mocked(FileSystem.deleteAsync).mockImplementation(async (uri: string) => {
             if (uri.endsWith('-shm') && uri.includes('bellingen')) throw new Error('busy');
@@ -277,7 +277,8 @@ describe('each community\'s cached copy', () => {
         expect(callOrder(closeDB)).toBeLessThan(callOrder(FileSystem.deleteAsync));
         const dir = 'file:///data/user/0/org.beanpool.app/files/SQLite';
         const removed = vi.mocked(FileSystem.deleteAsync).mock.calls.map(([uri]) => uri);
-        const files = (name: string) => ['', '-wal', '-shm', '-journal'].map((s) => `${dir}/${name}${s}`);
+        // The database file goes last: a WAL or journal it left behind would be replayed into the next copy of that name.
+        const files = (name: string) => ['-wal', '-shm', '-journal', ''].map((s) => `${dir}/${name}${s}`);
         // Each community once, and a file that can't be removed doesn't stop the rest.
         expect(removed).toEqual([
             ...files('beanpool_https___mullum_beanpool_org.db'),

@@ -12,8 +12,12 @@ import { closeDB } from './db';
 import { getDatabaseFilenameForNode } from './nodes';
 import { resetSyncFingerprints } from '../services/pillar-sync';
 
-/** The database file and SQLite's own files beside it: the write-ahead log (db.ts opens every copy in WAL mode), its index, a rollback journal. */
-const DATABASE_FILE_SUFFIXES = ['', '-wal', '-shm', '-journal'] as const;
+/**
+ * SQLite's own files beside each database: the write-ahead log (db.ts opens every copy in WAL mode), its index, a
+ * rollback journal. They go before the database file: one left behind by an interrupted removal would be replayed
+ * into the next copy opened under that name, the next account's, with this account's rows in it.
+ */
+const DATABASE_FILE_SUFFIXES = ['-wal', '-shm', '-journal', ''] as const;
 
 /**
  * Take each community's cached copy off this phone. The copy that is open is closed first: left open, it would go on

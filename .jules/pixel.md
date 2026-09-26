@@ -138,3 +138,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-09-25 - Remove incorrect accessibilityRole="button" from modal sheet inner container
 **Learning:** Container Pressable elements used solely to capture taps and stop event propagation (`e.stopPropagation()`) inside modal sheets should not have `accessibilityRole="button"`, as screen readers will announce the entire sheet container as a single button.
 **Action:** Ensure container Pressable elements used for event propagation stopping do not carry `accessibilityRole="button"`.
+
+## 2026-10-01 - Add dynamic accessibilityLabel and busy state to Suggest Change submit button
+**Learning:** Submit buttons in forms whose label text gets replaced by an ActivityIndicator during sending leave screen readers without feedback unless provided with a dynamic accessibilityLabel and accessibilityState={{ disabled, busy }}.
+**Action:** Provide dynamic accessibilityLabel (e.g. `sending ? "Sending suggestion..." : "Send suggestion"`) and accessibilityState={{ disabled: sending || over, busy: sending }} on form submit buttons rendering an ActivityIndicator.

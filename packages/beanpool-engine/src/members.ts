@@ -405,7 +405,11 @@ export function readsAsMember(db: Db, pubkey: string | null | undefined): boolea
  * verified signer.
  */
 export function passesReadGate(db: Db, pubkey: string | null | undefined): boolean {
-    return isNodeMember(db, pubkey) && !isVisitorKey(db, pubkey);
+    if (!pubkey) return false;
+    const row = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
+        { status: string | null; is_visitor: number | null } | undefined;
+    // isNodeMember's test, and not a visitor's row, in one lookup.
+    return !!row && !row.is_visitor && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
 }
 
 /** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade.ts). */

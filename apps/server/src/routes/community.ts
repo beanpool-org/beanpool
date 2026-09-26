@@ -40,7 +40,7 @@ import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword,
-    validatePasswordStrength,
+    validatePasswordStrength, removeFirstPasswordFile,
 } from '../config/local-config.js';
 import {
     getConnectors, addConnector, removeConnector,
@@ -367,6 +367,9 @@ router.post('/api/local/change-password', async (ctx) => {
     config.adminHash = hash;
     config.salt = salt;
     saveLocalConfig(config);
+    // The first boot's made-up password, if it was never changed before, no longer works. Only once the new one is on
+    // disk: saveLocalConfig reports a failed write in the log only, and then the file holds the password that works.
+    if (getLocalConfig().adminHash === hash) removeFirstPasswordFile('The admin password was changed');
     ctx.body = { success: true };
 });
 
@@ -700,6 +703,9 @@ router.post('/api/local/reset', async (ctx) => {
         contactEmail: null,
         contactPhone: null,
     });
+    // The admin password is gone (checked on disk, as in change-password). The next start takes ADMIN_PASSWORD from
+    // .env, or makes up a new one in a new file.
+    if (!getLocalConfig().adminHash) removeFirstPasswordFile('Wipe & Reset cleared the admin password');
 
     ctx.body = { success: true, message: 'Node reset. Restart to reconfigure.' };
 });

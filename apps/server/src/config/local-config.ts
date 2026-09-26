@@ -3,7 +3,8 @@
  *
  * First boot:
  *   - Reads ADMIN_PASSWORD env var → hashes with scrypt → saves to data/local-config.json
- *   - If no env var, auto-generates a random password and prints to console
+ *   - If no env var, auto-generates a random password and writes it to data/first-admin-password.txt (0600).
+ *     Never printed: the log says only where the file is. Changing the password deletes the file.
  *
  * Subsequent boots:
  *   - Loads existing config from disk (env var ignored)
@@ -291,21 +292,119 @@ export function generateStrongPassword(): string {
     return chars.join('');
 }
 
+// ===================== FIRST ADMIN PASSWORD =====================
+// The password a first boot makes up when .env has no ADMIN_PASSWORD. It is never printed: in Docker stdout IS the
+// container log, which outlives the password (docker logs, log shippers, support bundles, screenshots), and the
+// admin password counts as an owner. It goes in this file, readable by the server's user only, until the password
+// is changed. Backups never carry it: they take named files only.
+
+export const FIRST_PASSWORD_FILE = 'first-admin-password.txt';
+
+export function firstPasswordPath(): string {
+    return path.join(DATA_DIR, FIRST_PASSWORD_FILE);
+}
+
+/** The command that reads the file. The image keeps its data in /data (Dockerfile, docker-compose.yml). */
+function firstPasswordReadCommand(file: string): string {
+    return DATA_DIR === '/data' ? `docker compose exec beanpool-node cat ${file}` : `cat ${file}`;
+}
+
+/** Flush a directory's entries, where the filesystem lets a directory be opened and synced; elsewhere, nothing. */
+function fsyncDir(dir: string): void {
+    let fd: number | null = null;
+    try {
+        fd = fs.openSync(dir, 'r');
+        fs.fsyncSync(fd);
+    } catch { /* not every filesystem (or platform) syncs a directory */ } finally {
+        if (fd !== null) try { fs.closeSync(fd); } catch { /* closed */ }
+    }
+}
+
+/**
+ * Write the file whole or not at all: a fresh 0600 temp file beside it, renamed over it. A file left from an earlier
+ * password is replaced. Throws when it cannot be written; the error names the file, never the password.
+ */
+function writeFirstPasswordFile(password: string): void {
+    const target = firstPasswordPath();
+    const tmp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+    try {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+        const fd = fs.openSync(tmp, 'wx', 0o600);
+        try {
+            fs.writeSync(fd, password + '\n');
+            fs.fsyncSync(fd);
+        } finally {
+            fs.closeSync(fd);
+        }
+        fs.chmodSync(tmp, 0o600);
+        fs.renameSync(tmp, target);
+    } catch (e) {
+        try { fs.rmSync(tmp, { force: true }); } catch { /* never made */ }
+        throw new Error(`[Config] Could not write the first admin password to ${target} (${(e as NodeJS.ErrnoException).code || 'error'}). ` +
+            'Nothing was saved, so the next start makes one again. Check the data folder is writable and has free space, or set ADMIN_PASSWORD in .env.');
+    }
+    fsyncDir(DATA_DIR);
+}
+
+/**
+ * Delete the first-password file, if there is one, and say so in the log. Called wherever the admin password stops
+ * being the one in it: a change in Settings, Wipe & Reset, and a boot that finds it no longer matches.
+ */
+export function removeFirstPasswordFile(why: string): void {
+    const file = firstPasswordPath();
+    try {
+        fs.unlinkSync(file);
+    } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') return;
+        console.warn(`⚠️  ${why}, but ${file} could not be deleted (${code || 'error'}). It holds a password that no longer works: delete it by hand.`);
+        return;
+    }
+    fsyncDir(DATA_DIR);
+    console.log(`🔑 ${why}: deleted ${file}, which held the first admin password.`);
+}
+
+/**
+ * A later boot with the file still there. While it still holds the admin password, remind the operator to read it and
+ * change the password. Once it does not (a restore or a take-over brought another one), delete it: it would send
+ * them to a password that does not work.
+ */
+function checkFirstPasswordFile(config: LocalConfig): void {
+    const file = firstPasswordPath();
+    let held: string;
+    try {
+        held = fs.readFileSync(file, 'utf-8').trim();
+    } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT') console.warn(`⚠️  ${file} is there but could not be read (${code || 'error'}).`);
+        return;
+    }
+    if (held && config.adminHash && config.salt && verifyPassword(held, config.adminHash, config.salt)) {
+        console.log(`🔑 The first admin password is still in ${file}, and still works.`);
+        console.log(`   Read it with: ${firstPasswordReadCommand(file)}`);
+        console.log('   Then change it in Settings → Appliance & Data → Access & Security. The file is deleted when you do.');
+        return;
+    }
+    removeFirstPasswordFile('The admin password is no longer the one in it');
+}
+
 /**
  * Initialize admin password on first boot.
- * - If config already locked → skip (password already set)
+ * - If config already locked → skip (password already set), but look at the first-password file if it is there
  * - If ADMIN_PASSWORD env var set → hash and save
- * - If no env var → auto-generate and print to logs
+ * - If no env var → auto-generate, write it to the first-password file, and log only where it is
  */
 export function initAdminPassword(): void {
     const config = getLocalConfig();
 
     if (config.isLocked) {
         console.log('🔒 Node is locked — admin password already configured.');
+        checkFirstPasswordFile(config);
         return;
     }
 
     let password = process.env.ADMIN_PASSWORD;
+    const generated = !password;
 
     if (password) {
         const validation = validatePasswordStrength(password);
@@ -314,19 +413,14 @@ export function initAdminPassword(): void {
         }
     } else {
         password = generateStrongPassword();
-        console.log('');
-        console.log('╔══════════════════════════════════════════════╗');
-        console.log('║  🔑 Auto-generated admin password:          ║');
-        console.log(`║  ${password}                ║`);
-        console.log('║                                              ║');
-        console.log('║  Save this! It won\'t be shown again.        ║');
-        console.log('╚══════════════════════════════════════════════╝');
-        console.log('');
+        // Before the config is locked: if the file cannot be written this throws with nothing saved, and the
+        // next start tries again. Never a fall back to printing it.
+        writeFirstPasswordFile(password);
     }
 
     const { hash, salt } = hashPassword(password);
 
-    saveLocalConfig({
+    const saved: LocalConfig = {
         ...config,
         isLocked: true,
         adminHash: hash,
@@ -336,9 +430,32 @@ export function initAdminPassword(): void {
         // the admin password. Existing installs never reach this line (isLocked above), so
         // their setting is left as it is.
         replicationTokenOnly: config.replicationTokenOnly ?? true,
-    });
+    };
+    saveLocalConfig(saved);
+
+    if (generated && getLocalConfig().adminHash !== hash) {
+        // saveLocalConfig logs a failed write and carries on. Unsaved, the file would hold a password that does not
+        // work, and the next start makes another: take it away and stop here, as when the file cannot be written.
+        fs.rmSync(firstPasswordPath(), { force: true });
+        throw new Error(`[Config] Could not save the admin password to ${CONFIG_PATH}, so none was made. ` +
+            'Check the data folder is writable and has free space, or set ADMIN_PASSWORD in .env.');
+    }
 
     console.log('🔒 Admin password configured and saved.');
+
+    if (generated) {
+        const file = firstPasswordPath();
+        console.log('');
+        console.log('🔑 No ADMIN_PASSWORD was set, so this server made up an admin password. It is not in this log.');
+        console.log(`   It is in ${file}, which only the server's own user can read.`);
+        console.log(`   Read it with: ${firstPasswordReadCommand(file)}`);
+        console.log('   Sign in at /settings with it, then change it in Settings → Appliance & Data → Access & Security.');
+        console.log('   The file is deleted when you do.');
+        console.log('');
+    } else {
+        // A file left by an earlier install whose config was deleted: it holds a password this one does not use.
+        checkFirstPasswordFile(saved);
+    }
 }
 
 // ===================== REPLICATION TOKEN =====================

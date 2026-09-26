@@ -338,6 +338,7 @@ run_federation_suites() {
       test-admin-actor-name
       test-admin-queue
       test-admin-auth
+      test-first-admin-password
       test-admin-key-auth
       test-app-admin-handoff
       test-settings-qr-signin

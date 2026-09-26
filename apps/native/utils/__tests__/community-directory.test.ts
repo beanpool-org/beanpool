@@ -55,7 +55,8 @@ describe('a community’s address', () => {
         expect(communityOrigin('https://Mullum.BeanPool.org/some/path?q=1#x')).toBe('https://mullum.beanpool.org');
         expect(communityOrigin('https://node.example.org:8443/')).toBe('https://node.example.org:8443');
         for (const bad of ['http://mullum.beanpool.org', 'https://10.0.0.5', 'https://localhost', 'javascript:alert(1)',
-            '/api/x', 'https://user:pw@mullum.beanpool.org', 'https://-bad-.org', 42, null, undefined]) {
+            '/api/x', 'https://user:pw@mullum.beanpool.org', 'https://user.name:1234@mullum.beanpool.org',
+            'https://evil.example.org@mullum.beanpool.org', 'https://-bad-.org', 42, null, undefined]) {
             expect(communityOrigin(bad)).toBeNull();
         }
     });

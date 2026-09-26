@@ -84,7 +84,9 @@ function text(v: unknown, max: number): string | null {
 }
 
 function host(url: string): string | null {
-    const m = /^https:\/\/([^/?#@\s]+)/i.exec(url);
+    // The host must run to the end or to a path, query or fragment: a login (`user.name:1234@real-host`) would
+    // otherwise read as the host `user.name:1234`, so anything with an `@` before the path is no host at all.
+    const m = /^https:\/\/([^/?#@\s]+)(?=[/?#]|$)/i.exec(url);
     return m ? m[1].toLowerCase().replace(/:443$/, '') : null;
 }
 

@@ -93,7 +93,9 @@ export interface ProfileSwitches {
      *  their rough area, and not the people: no author, name, face, trade, voter or exact place (routes/viewer.ts,
      *  the engine's guestPost). The Commons decisions, pool balance and Pulse feed are members-only, and the membership
      *  probe names only the signer. Faces are served only to URLs carrying a member-only key (engine/avatar-keys.ts,
-     *  read at boot), and the recovery lookup matches the typed name exactly, with no photo or join date. */
+     *  read at boot), and the recovery lookup matches the typed name exactly, with no photo or join date. On, a main
+     *  server refuses to start with ENFORCE_READ_AUTH=false or ENFORCE_WS_AUTH=false, either of which would undo it
+     *  (GuestViewAuthOffError). */
     guestListingsOnly: boolean;
 }
 
@@ -467,6 +469,27 @@ export class NodeProfileMismatchError extends Error {
     }
 }
 
+/**
+ * The operator escape hatches that would quietly undo `guestListingsOnly`: ENFORCE_READ_AUTH=false lets an unsigned GET
+ * read the member routes (names and keyed faces), and ENFORCE_WS_AUTH=false hands every socket each new post in full,
+ * author, exact place and face. Read exactly as https-server.ts reads them: only the string `false` turns either off.
+ */
+const GUEST_VIEW_AUTH_FLAGS = ['ENFORCE_READ_AUTH', 'ENFORCE_WS_AUTH'] as const;
+
+/** Which of those flags are set to `false` here. */
+export function guestViewAuthFlagsOff(env: NodeJS.ProcessEnv = process.env): string[] {
+    return GUEST_VIEW_AUTH_FLAGS.filter((flag) => env[flag] === 'false');
+}
+
+export class GuestViewAuthOffError extends Error {
+    constructor(readonly flags: string[]) {
+        super(`guestListingsOnly is on (a visitor sees the listings, not the people), but ${flags.map((f) => `${f}=false`).join(' and ')} `
+            + `would show a visitor the people anyway, so this node will not start. Remove ${flags.join(' and ')} from this `
+            + `server's .env, or turn the view off on purpose with the node_config row ${NODE_PROFILE_KEY}.guestListingsOnly = false.`);
+        this.name = 'GuestViewAuthOffError';
+    }
+}
+
 function pinnedLine(profile: NodeProfile): string {
     const wanted = DEFAULTS[profile];
     const parts = (Object.keys(NOT_BUILT_YET) as ProfileSwitch[]).map((k) =>
@@ -496,11 +519,21 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
             console.warn(`⚠️  The main server this standby copies runs as ${recorded}, but NODE_PROFILE here is ${profile}. `
                 + `A take-over from here is refused until NODE_PROFILE=${recorded === 'local' ? '(unset)' : recorded} is set.`);
         }
+        // A standby never refuses (it only copies), but says so: promoted by hand, it meets the refusal at its first boot.
+        const authOff = getProfileSwitches(profile).guestListingsOnly ? guestViewAuthFlagsOff() : [];
+        if (authOff.length) console.warn(`⚠️  ${new GuestViewAuthOffError(authOff).message} (A standby starts anyway: it only copies.)`);
     } else {
         if (recorded === 'global' && profile !== 'global') {
             const allow = (process.env[ALLOW_CHANGE_ENV] ?? '').trim().toLowerCase();
             if (allow !== 'global') throw new NodeProfileMismatchError('global', profile);
             console.warn(`⚠️  ${ALLOW_CHANGE_ENV}=global: this database ran a global node and now runs as ${profile}, on purpose.`);
+        }
+        // Refused before anything is written, as above: a node that would promise visitors a view it doesn't keep.
+        const authOff = getProfileSwitches(profile).guestListingsOnly ? guestViewAuthFlagsOff() : [];
+        if (authOff.length) {
+            const refusal = new GuestViewAuthOffError(authOff);
+            console.error(`🛑 ${refusal.message}`);
+            throw refusal;
         }
         db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
             .run(NODE_PROFILE_KEY, profile);

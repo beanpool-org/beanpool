@@ -17,6 +17,10 @@
  *      switch (openJoin, distanceSortDefault, directoryMirror, publishToDirectory) reaches the code, bad ones are
  *      ignored with a log line, and a switch this build doesn't have yet (knocks) stays pinned, so the API never
  *      advertises it
+ *   6. the two operator escape hatches that would undo the visitors' view: with `guestListingsOnly` on, a main server
+ *      refuses to start with ENFORCE_READ_AUTH=false or ENFORCE_WS_AUTH=false (each alone, and both), says which and
+ *      why, and writes nothing; it starts with them unset, empty or true, and with them false where the view is off; a
+ *      standby starts and says so
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-node-profile.ts
  */
@@ -273,6 +277,62 @@ async function main() {
     delete process.env[ALLOW_CHANGE_ENV];
     assert(JSON.stringify(getConfiguredSwitches()) === JSON.stringify(profileDefaults('local')), 'with no overrides and no NODE_PROFILE, the node is set to the local defaults');
     assert(mirror() === 'local', 'and the mirror is back to local');
+
+    console.log('\n── 6. ENFORCE_READ_AUTH=false / ENFORCE_WS_AUTH=false with the visitors\' view on ──');
+    const { GuestViewAuthOffError } = profile;
+    const FLAGS = ['ENFORCE_READ_AUTH', 'ENFORCE_WS_AUTH'] as const;
+    const setFlags = (read?: string, ws?: string) => {
+        for (const [flag, value] of [[FLAGS[0], read], [FLAGS[1], ws]] as const) {
+            if (value === undefined) delete process.env[flag]; else process.env[flag] = value;
+        }
+    };
+    /** Boots and says what happened: the refusal, if any, and every line it wrote. */
+    const bootWith = (role: 'primary' | 'backup' = 'primary') => {
+        const errors: string[] = [];
+        const error = console.error;
+        console.error = (...a: unknown[]) => { errors.push(a.join(' ')); error(...a); };
+        let refused: unknown = null;
+        try {
+            const out = capture(() => { try { mirrorNodeProfileAtBoot(role); } catch (e) { refused = e; } });
+            return { refused: refused as any, errors, ...out };
+        } finally { console.error = error; }
+    };
+    process.env.NODE_PROFILE = 'global';
+    for (const [read, ws, off] of [['false', undefined, ['ENFORCE_READ_AUTH']], [undefined, 'false', ['ENFORCE_WS_AUTH']],
+        ['false', 'false', ['ENFORCE_READ_AUTH', 'ENFORCE_WS_AUTH']]] as const) {
+        setFlags(read, ws);
+        const b = bootWith();
+        const named = off.map(f => `${f}=false`);
+        assert(b.refused instanceof GuestViewAuthOffError && JSON.stringify(b.refused.flags) === JSON.stringify(off)
+            && named.every(n => b.refused.message.includes(n)) && FLAGS.filter(f => !off.includes(f as never)).every(f => !b.refused.message.includes(f)),
+            `global, ${named.join(' and ')}: the boot refuses and names exactly that (got ${String(b.refused)})`);
+        assert(b.errors.some(l => named.every(n => l.includes(n)) && l.includes('guestListingsOnly')),
+            'and says so in the log, with which flag and why');
+        assert(mirror() === 'local', 'and writes nothing: the record is still local');
+    }
+    setOverride('guestListingsOnly', 'false');
+    setFlags('false', 'false');
+    assert(bootWith().refused === null && mirror() === 'global', 'global with the view turned off by its operator: both flags false, it starts');
+    clearOverrides();
+    for (const [read, ws] of [[undefined, undefined], ['', ''], ['true', 'true']] as const) {
+        setFlags(read, ws);
+        assert(bootWith().refused === null, `global, the view on, the flags ${JSON.stringify([read, ws])} (docker-compose passes them through empty): it starts`);
+    }
+    setFlags('false', 'false');
+    const standby = bootWith('backup');
+    assert(standby.refused === null && standby.warns.some(l => l.includes('ENFORCE_READ_AUTH=false') && l.includes('A standby starts anyway')),
+        `a standby with the view on and both flags false starts, and says so (got ${String(standby.refused)})`);
+    delete process.env.NODE_PROFILE;
+    process.env[ALLOW_CHANGE_ENV] = 'global';
+    assert(bootWith().refused === null && mirror() === 'local', 'local (the view off), both flags false: it starts, as before');
+    delete process.env[ALLOW_CHANGE_ENV];
+    setOverride('guestListingsOnly', 'true');
+    setFlags(undefined, 'false');
+    const localGuest = bootWith();
+    assert(localGuest.refused instanceof GuestViewAuthOffError && localGuest.refused.message.includes('ENFORCE_WS_AUTH=false'),
+        `local with the view overridden on, ENFORCE_WS_AUTH=false: refuses as the global node does (got ${String(localGuest.refused)})`);
+    clearOverrides();
+    setFlags(undefined, undefined);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

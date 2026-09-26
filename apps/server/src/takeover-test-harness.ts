@@ -127,10 +127,14 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { checkAdminAuth } = await import('./admin-auth.js');
     const { identityReadOnlyGuard, startIdentityEpochWatch } = await import('./services/identity-epoch.js');
 
+    const { installRecoverySealAtBoot } = await import('./services/recovery-seal-key.js');
+
     await ensureGenesis();
     initAdminPassword();
     initStateEngine();
     const boot = resumeTakeoverAtBoot();
+    // index.ts step 2.65: the recovery seal for the role as it now stands (a take-over finished at this boot).
+    installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
     const node = await startP2P(0, 0);
     loadConnectors();
     await startTakeoverEnvelopeService({ standby: getNodeRole() === 'backup', checkIntervalMs: 3_600_000 });

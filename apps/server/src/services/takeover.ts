@@ -73,6 +73,7 @@ import {
     getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, type NodeProfile,
 } from '../config/node-profile.js';
 import { writeOpenJoinRecord } from '../engine/open-join.js';
+import { installCarriedRecoverySealKey, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
 
 export const TAKEOVER_JOURNAL_FILE = 'takeover-journal.json';
 export const TAKEOVER_BUNDLE_FILE = 'takeover-bundle.json';
@@ -491,6 +492,8 @@ export interface TakeoverPreview {
     publicAddress: string | null;
     /** The community's node profile and this server's NODE_PROFILE: equal, or the session would not have opened. */
     profile: { community: NodeProfile | null; thisServer: NodeProfile };
+    /** Whether the keys carry the key that opens members' sign-in recovery copies (recovery seal S2). A yes or no. */
+    recoverySealKey: boolean;
     tunnel: TunnelOutcome;
     mainServer: { url: string | null; answers: boolean | null; lastCopyAt: number | null; warning: string | null };
     missing: readonly string[];
@@ -559,6 +562,7 @@ async function startSession(
         connectors: connectors ? connectors.length : 0,
         publicAddress: pa ? (pa.hostname || pa.name || null) : null,
         profile: { community, thisServer: getNodeProfile() },
+        recoverySealKey: carriesSealKey(bundle),
         tunnel,
         mainServer: {
             url: main.url,
@@ -568,10 +572,20 @@ async function startSession(
                 ? 'The main server still answers. Take over only if it is really gone: two servers with one identity will compete, and the old one must never be started again.'
                 : null,
         },
-        missing: WHAT_WILL_BE_MISSING,
+        missing: carriesSealKey(bundle) ? WHAT_WILL_BE_MISSING : [...WHAT_WILL_BE_MISSING, MISSING_SEAL_KEY],
         afterwards: AFTER_A_TAKEOVER,
     };
 }
+
+/** Whether an opened bundle carries a recovery-seal key (one sealed before it travelled has no entry). */
+function carriesSealKey(bundle: TakeoverBundle): boolean {
+    const b64 = bundle.files[RECOVERY_SEAL_KEY_FILE];
+    return typeof b64 === 'string' && Buffer.from(b64, 'base64').length === 32;
+}
+
+/** In the preview's list of what will be missing, when the keys carry no recovery-seal key. */
+const MISSING_SEAL_KEY = "members' sign-in recovery copies: these keys were locked before they carried the key that opens them, so "
+    + 'members connect their sign-in again (their 12 words still work)';
 
 /** Does the main server answer? For the page an owner's phone reads before it unlocks (§5.2 step 3). */
 export async function mainServerStatus(): Promise<{ answers: boolean | null; lastCopyAt: number | null }> {
@@ -602,7 +616,9 @@ function bundleEpoch(bundle: TakeoverBundle): number {
     return Number.isSafeInteger(n) && n > 0 ? n : 0;
 }
 
-const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', 'tunnel-token'];
+// recovery-seal.key: a standby holds none of its own unless it was once a main server; then its key is kept here too,
+// byte for byte (and beside the carried one, installCarriedRecoverySealKey), so undoing puts back exactly what was there.
+const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', 'tunnel-token', RECOVERY_SEAL_KEY_FILE];
 
 function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined {
     const bundle = plan.bundle;
@@ -625,7 +641,7 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         }
         case 'identity-files': {
             for (const f of BUNDLED_FILES) {
-                if (f === 'connectors.json') continue;
+                if (f === 'connectors.json' || f === RECOVERY_SEAL_KEY_FILE) continue;
                 const b64 = bundle.files[f];
                 if (!b64) continue;
                 writeAtomic(dataPath(f), Buffer.from(b64, 'base64'), f === 'genesis.json' ? 0o644 : 0o600);
@@ -636,7 +652,7 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             // in this process writes it back.
             loadConnectors();
             j.result.connectors = connectors.length;
-            return `node key kept (${j.peerId}); ${connectors.length} link(s) with other communities`;
+            return `node key kept (${j.peerId}); ${connectors.length} link(s) with other communities; ${installSealKey(bundle)}`;
         }
         case 'admin-settings': {
             const updates: Record<string, unknown> = {};
@@ -726,6 +742,24 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         default:
             return undefined;
     }
+}
+
+/**
+ * The key that opens members' sign-in recovery copies, from the keys (services/recovery-seal-key.ts). Safe to run again:
+ * the same key is left as it is. A key this standby already held (it was once a main server) is kept beside it, never
+ * lost. Keys sealed before it travelled promote anyway, and say so.
+ */
+function installSealKey(bundle: TakeoverBundle): string {
+    const done = installCarriedRecoverySealKey(bundle.files[RECOVERY_SEAL_KEY_FILE]);
+    if (done.outcome === 'installed' || done.outcome === 'same') return "the key that opens members' sign-in recovery copies";
+    if (done.outcome === 'replaced') {
+        logger.warn('SYS', `[Takeover] This server already had a recovery-seal key of its own; it is kept as data/${done.retiredAs}, `
+            + "and the copies it locked are locked again with the community's key at the next start");
+        return `the key that opens members' sign-in recovery copies (this server's own is kept as data/${done.retiredAs})`;
+    }
+    const line = noCarriedKeyLine('envelope');
+    logger.warn('SYS', `[Takeover] ${line}`);
+    return line;
 }
 
 function runPreRestartSteps(j: Journal, plan: Plan): void {

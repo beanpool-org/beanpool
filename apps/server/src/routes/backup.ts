@@ -45,6 +45,7 @@ import {
     MISSING_MEMBER, readInBucketMember,
     type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
+import { countUnopenable, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from '../services/recovery-seal-key.js';
 
 /** After a restore the node restarts to load what was written. Tests replace it. */
 let restartAfterRestore: () => void = () => process.exit(0);
@@ -258,6 +259,42 @@ async function missingAfterRestore(dataDir: string, store: ImageStore): Promise<
 }
 
 /**
+ * How many of the sign-in recovery copies in the restored database open with the recovery-seal keys now in the data
+ * folder (the carried one, if the backup brought it), logged in words. Never throws: a database this cannot read is
+ * one the restart will fail on anyway, and then nothing is claimed.
+ */
+function recoveryCopiesAfterRestore(dataDir: string, carried: boolean): { copies: number; open: number; carriedKey: boolean; message: string } | null {
+    let counted: { wrapped: number; unopenable: number };
+    try {
+        const handle = new Database(path.join(dataDir, 'state.db'), { readonly: true });
+        try {
+            const hasTable = handle.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'recovery_shares'").get();
+            counted = countUnopenable(hasTable
+                ? handle.prepare('SELECT owner_pubkey, holder_type, encrypted_share, share_iv, share_tag, kdf_params FROM recovery_shares').all() as any[]
+                : []);
+        } finally {
+            try { handle.close(); } catch { /* the read is done */ }
+        }
+    } catch (e) {
+        console.error('[Restore] Could not read the restored database to check its sign-in recovery copies:', e);
+        return null;
+    }
+    const { wrapped, unopenable } = counted;
+    if (wrapped === 0) return null;
+    const open = wrapped - unopenable;
+    let message: string;
+    if (unopenable === 0) {
+        message = `The ${wrapped} sign-in recovery cop${wrapped === 1 ? 'y' : 'ies'} in this backup open on this server.`;
+        console.log(`[Restore] 🔐 ${message}`);
+    } else {
+        message = `${carried ? '' : `${noCarriedKeyLine('backup')} `}${unopenable} of the ${wrapped} sign-in recovery cop${wrapped === 1 ? 'y' : 'ies'} `
+            + `in it will not open on this server${carried ? ": they were locked with a key this backup does not carry" : ''}.`;
+        console.warn(`[Restore] ⚠️ ${message}`);
+    }
+    return { copies: wrapped, open, carriedKey: carried, message };
+}
+
+/**
  * The restore from an opened (or legacy plain) tar on: the hostile-archive checks, state.db, node_config.json, the
  * take-over bundle when a sealed file carries one, then a restart. Shared by restore-by-code and restore by an
  * owner's phone. Returns the answer body; throws on a bad archive (the caller cleans up).
@@ -338,6 +375,9 @@ async function restoreFromTar(
     }
     const restoredKeys = bundle ? applyBundle(bundle) : [];
     if (bundle) console.log(`[Restore] Restored the community's keys from the sealed backup: ${restoredKeys.join(', ')}`);
+    // Members' sign-in recovery copies in the database now in place, against the keys now beside it: said here, at the
+    // restore, never first at a member's recovery (recovery seal S2).
+    const recoverySeal = recoveryCopiesAfterRestore(DATA_DIR, !!bundle?.files[RECOVERY_SEAL_KEY_FILE]);
 
     // What this node is REALLY missing, counted off the restored database and the store now beside it —
     // not read off the archive's label. This is the number that decides `complete`.
@@ -429,6 +469,7 @@ async function restoreFromTar(
         ...(warning ? { warning } : {}),
         sealed: !!sealedHeader,
         restoredKeys: restoredKeys.length > 0,
+        ...(recoverySeal ? { recoverySeal } : {}),
         ...(signerAcceptedByName ? { keysIgnored: true, note: 'Accepted by its signer\'s name: the database came back; keys and passwords inside it were not used.' } : {}),
         ...(sealedHeader ? { backup: describeSealedHeader(sealedHeader) } : {}),
     };

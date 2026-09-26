@@ -528,7 +528,8 @@ async function main() {
         const exported = (pk: string) => (payload.members ?? []).find((m: any) => m.publicKey === pk);
         assert(exported(zed.pubKeyHex)?.isVisitor === true && exported(dee.pubKeyHex)?.isVisitor === false && exported(gen.pubKeyHex)?.isVisitor === false,
             'the export carries isVisitor: true for a visitor, false for a member and for a visitor who joined');
-        assert(!('isVisitor' in (await get('/api/members', gen)).body?.[0]), 'the member directory never carries it');
+        const directory = (await get('/api/members', gen)).body;
+        assert(Array.isArray(directory) && directory.length > 0 && directory.every((m: any) => !('isVisitor' in m)), 'the member directory never carries it');
         // A standby that never had Zed (the insert path), holds Yan as a member (an older copy: the update path), and
         // holds Dee as the visitor she was before she joined.
         const OLD = '2000-01-01T00:00:00.000Z';

@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "version": 43,
-  "hash": "98920a3175a212789e9e9cd029de4f7cdd7ea746fbbf459d0e927db789c8214f",
+  "hash": "e4edbe2dfe290ef487ebd2d278c7453c97dfd199b3dc80b8caed0883b51ae455",
   "sections": [
     {
       "id": "about",
@@ -952,7 +952,7 @@
         {
           "type": "ul",
           "items": [
-            "**Invite** makes an invite that only their account can use. Their app joins with it by itself, so you don't send them anything.",
+            "**Invite** makes an invite that only their account can use. Their app finds it by itself, so you don't send them anything, and they join with one tap.",
             "**Not now** tells them nothing more than \"no answer yet\"."
           ]
         },
@@ -1073,7 +1073,7 @@
         {
           "type": "ul",
           "items": [
-            "**Invite:** makes an invite that only their account can use. Their app joins with it by itself.",
+            "**Invite:** makes an invite that only their account can use. Their app finds it by itself, and they join with one tap.",
             "**Not now:** they are not told. They keep seeing \"no answer yet\", and can't ask again for 30 days."
           ]
         },

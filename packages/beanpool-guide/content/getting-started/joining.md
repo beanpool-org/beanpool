@@ -80,7 +80,7 @@ A community's admins can turn invites off for the whole community.
 
 People can ask to join your community from the global community. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**.
 
-- **Invite** makes an invite that only their account can use. Their app joins with it by itself, so you don't send them anything.
+- **Invite** makes an invite that only their account can use. Their app finds it by itself, so you don't send them anything, and they join with one tap.
 - **Not now** tells them nothing more than "no answer yet".
 
 Any member can answer. See "Finding a community near you".

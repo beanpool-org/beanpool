@@ -71,7 +71,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
             setRequests(list => (list ?? []).filter(k => k.id !== req.id));
             setTotal(t => { const n = Math.max(0, t - 1); onCount?.(n); return n; });
             setNotes(n => ({ ...n, [req.id]: '' }));
-            setDone(verb === 'approve' ? `You invited ${req.callsign}. Their app will join with it by itself.` : null);
+            setDone(verb === 'approve' ? `You invited ${req.callsign}. Their app will find the invite by itself.` : null);
             return;
         }
         // Another member got there first, or it lapsed: the community's words, then the list as it is now.

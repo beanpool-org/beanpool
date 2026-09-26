@@ -53,7 +53,7 @@ You stay a member of the global community, and can switch between them: see "Mor
 
 People can ask to join your community from the global community. Tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from.
 
-- **Invite:** makes an invite that only their account can use. Their app joins with it by itself.
+- **Invite:** makes an invite that only their account can use. Their app finds it by itself, and they join with one tap.
 - **Not now:** they are not told. They keep seeing "no answer yet", and can't ask again for 30 days.
 
 Any member can answer: your trust badge does not matter. A community's admins can turn requests to join off.

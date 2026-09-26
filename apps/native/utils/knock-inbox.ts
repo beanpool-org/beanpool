@@ -7,7 +7,7 @@
  *   POST /api/join/knocks/:id/decline        → { knock: { id, status: 'declined' } }
  *
  * "Invite" is an ordinary invite, made by the member who answers, that admits the applicant's key and no other;
- * the applicant's app finds it by itself and joins with it. "Not now" tells the applicant nothing beyond "no answer
+ * the applicant's app finds it by itself and they join with one tap. "Not now" tells the applicant nothing beyond "no answer
  * yet". Both go to the member's own community, signed by the member.
  *
  * A community that takes no requests (its operator switched them off, or a node older than them) answers 404:
@@ -131,5 +131,5 @@ export function joinRequestMeta(r: Pick<JoinRequest, 'createdAt' | 'fromNode'>, 
 }
 
 export const WANTS_TO_JOIN_HELP =
-    'People asking to join this community. Invite makes an invite that only their key can use, and their app joins with it. '
+    'People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. '
     + 'Not now tells them nothing more than "no answer yet".';

@@ -5,7 +5,7 @@
 //   2. scripts/bootstrap-d1-migrations.sql, run on a database at ANY stage of that hand path, records exactly the
 //      migrations it has, so `migrations apply` then adds only the rest — never re-running 0001 (proved by a
 //      name_policy row deleted beforehand, as the live table dropped `test`, staying deleted) — and ends at the same
-//      schema;
+//      schema; on an empty database, what it makes (0001's name_policy) still lets `migrations apply` build a new one;
 //   3. the deploy workflow's guard (deploy-checks.mjs `bootstrapped`) refuses a database that was never bootstrapped,
 //      including one whose empty d1_migrations table a `wrangler d1 migrations list` created.
 // Run by the registrar deploy workflow's dry-run job: node scripts/check-migrations.mjs
@@ -89,6 +89,14 @@ try {
             execFile(dir, BOOTSTRAP);
             check(isDeepStrictEqual(recorded(dir), []), 'bootstrap on an empty database records nothing');
             check(guard().length > 0, 'the workflow guard refuses it');
+            // What it made there (name_policy, so 0005's clause can look for rows) is exactly 0001's: applying every
+            // migration after it still builds a new database.
+            wrangler(dir, 'migrations', 'apply', DB);
+            check(isDeepStrictEqual(recorded(dir), MIGRATIONS), `migrations apply then adds ${MIGRATIONS.join(', ')}`, recorded(dir));
+            const got = schema(dir);
+            check(isDeepStrictEqual(got, want.schema), 'the same schema as a new database', diff(got, want.schema));
+            const p = policy(dir);
+            check(isDeepStrictEqual(p, want.policy), 'the same policy seed as a new database', diff(p, want.policy));
             continue;
         }
         rows(dir, "DELETE FROM name_policy WHERE pattern = 'test'");   // the live table dropped `test`; 0001 re-adds it

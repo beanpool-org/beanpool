@@ -27,7 +27,7 @@
 // below runs on those bytes, and the database, a copy of it, a snapshot and a standby hold only wrapped rows.
 
 
-import { db } from '../db/db.js';
+import { db, writeTombstone } from '../db/db.js';
 import { isSingleBlobSso } from '@beanpool/core';
 import {
     NODE_WRAP_ALG,
@@ -107,6 +107,48 @@ export function getCurrentGeneration(ownerPubkey: string): number {
         'SELECT MAX(generation) AS gen FROM recovery_shares WHERE owner_pubkey = ?'
     ).get(ownerPubkey) as { gen: number | null } | undefined;
     return row?.gen ?? 0;
+}
+
+// ## A deletion reaches a standby as a tombstone
+//
+// A standby drops a member's older copies when a newer generation arrives (engine/sync.ts), which is all a re-deposit
+// needs. A deletion writes no newer generation, so {@link deleteAllShares} writes a tombstone, `<owner>|<generation>`:
+// "this server holds none of this member's copies of this generation or any older one". A standby deletes those
+// (engine/sync.ts applyTombstoneLocally), at its next pull, a delta or a whole copy.
+//
+// Keyed by the owner and the generation, not by row, because the standby may hold another generation than the one
+// deleted: the member re-split (the older generation dropped here) and then deleted the new one, both between two pulls.
+// A row's key would name only copies the standby never had, and the older ones would stay there, each still bringing
+// the account back after a take-over.
+//
+// A re-deposit after the deletion is never one of those: generations never go back while the tombstone is here
+// ({@link deletedGeneration}), so the next one is newer than any it names, and the standby also keeps any copy stamped
+// after the deletion (a server rolled back to code from before this numbers from 1 again).
+
+/** The tombstone row key for a member's copies deleted up to `generation`. The owner is a hex key, with no `|`. */
+export function recoveryTombstoneKey(ownerPubkey: string, generation: number): string {
+    return `${ownerPubkey}|${generation}`;
+}
+
+/** A recovery_shares tombstone's owner and generation, or null for a row key that is not one. */
+export function parseRecoveryTombstoneKey(rowKey: string): { ownerPubkey: string; generation: number } | null {
+    const cut = rowKey.lastIndexOf('|');
+    if (cut <= 0) return null;
+    const generation = Number(rowKey.slice(cut + 1));
+    if (!Number.isSafeInteger(generation) || generation < 1) return null;
+    return { ownerPubkey: rowKey.slice(0, cut), generation };
+}
+
+/** The newest generation of this member's copies a tombstone here says were deleted, or 0. */
+function deletedGeneration(ownerPubkey: string): number {
+    const keys = db.prepare(`SELECT row_key FROM tombstones WHERE table_name = 'recovery_shares' AND substr(row_key, 1, ?) = ?`)
+        .pluck().all(ownerPubkey.length + 1, `${ownerPubkey}|`) as string[];
+    let newest = 0;
+    for (const k of keys) {
+        const t = parseRecoveryTombstoneKey(k);
+        if (t && t.ownerPubkey === ownerPubkey && t.generation > newest) newest = t.generation;
+    }
+    return newest;
 }
 
 /**
@@ -294,11 +336,14 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
     //
     // Keeping it correct under concurrency also means a later async refactor, a second process,
     // or WAL-mode readers cannot quietly reintroduce it.
+    //
+    // After a deletion it goes on from the generation deleted, never back to 1: the deletion's tombstone names that
+    // generation and every older one, and a standby must not take the new copies for those.
     const write = db.transaction(() => {
         const row = db.prepare(
             'SELECT MAX(generation) AS gen FROM recovery_shares WHERE owner_pubkey = ?'
         ).get(ownerPubkey) as { gen: number | null } | undefined;
-        const nextGeneration = (row?.gen ?? 0) + 1;
+        const nextGeneration = Math.max(row?.gen ?? 0, deletedGeneration(ownerPubkey)) + 1;
 
         dropOlder.run(ownerPubkey, nextGeneration);
         shares.forEach((s, i) => {
@@ -494,10 +539,19 @@ export function canRemoveKeeper(ownerPubkey: string): boolean {
  * Drop every fragment a member has.
  *
  * For account deletion and pruning. Not a keeper-removal path — see {@link canRemoveKeeper}.
+ *
+ * Every caller goes through here (disconnecting the last sign-in, removing every keeper, a member deleting their account),
+ * because this writes the tombstone that carries the deletion to a standby (see "A deletion reaches a standby" above).
+ * In one transaction with the delete, so neither is ever made without the other; inside a caller's own transaction, a
+ * savepoint of it.
  */
 export function deleteAllShares(ownerPubkey: string): number {
-    const r = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(ownerPubkey);
-    return r.changes;
+    return db.transaction(() => {
+        const generation = getCurrentGeneration(ownerPubkey);
+        const r = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(ownerPubkey);
+        if (r.changes > 0) writeTombstone('recovery_shares', recoveryTombstoneKey(ownerPubkey, generation));
+        return r.changes;
+    })();
 }
 
 /**

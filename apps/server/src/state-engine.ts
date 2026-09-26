@@ -35,6 +35,7 @@ import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyR
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
+import { deleteAllShares } from './engine/recovery-shares.js';
 import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -6756,9 +6757,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             scrubChannelRows({ ownerPubkey: publicKey }, now);
             scrubPulseItems({ ownerPubkey: publicKey }, now);
         } catch { }
-        try {
-            db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ?").run(publicKey);
-        } catch { }
+        // Through deleteAllShares, which writes the tombstone that deletes them on a standby too. Not in a try: a copy left
+        // behind here would still bring the deleted account back, so a failure fails the deletion instead.
+        deleteAllShares(publicKey);
         try {
             db.prepare("DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)").run(publicKey);
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);

@@ -334,6 +334,12 @@ export function followReplicatedRekeys(rekeys: ReplicatedRekey[], beforeMove?: (
  * The counterpart is looked for under every key that came after: the copy brings each row as the main server holds it
  * now, after all the re-keys between two pulls. One member re-keyed twice (K1 → K2 → K3) has theirs under K3 alone; a
  * keeper and the owner of the copy they keep, both re-keyed, have it under both new keys.
+ *
+ * A member who was re-keyed and then deleted their copies (engine/recovery-shares.ts deleteAllShares), between two pulls,
+ * leaves no counterpart: the copy brings a tombstone for the new key instead, which the import has applied by now. So a
+ * row the member owns also goes when a later key of theirs has a tombstone here for its generation or a newer one,
+ * stamped no earlier than the row (the tombstone's own rule, engine/sync.ts). A row the main server left under the old
+ * key, of that same generation, goes with them; it is one no key on that server opens.
  */
 export function dropMovedRecoveryCopies(followed: ReplicatedRekey[]): number {
     const next = new Map(followed.map((r) => [r.oldKey, r.newKey]));
@@ -343,21 +349,29 @@ export function dropMovedRecoveryCopies(followed: ReplicatedRekey[]): number {
         for (let k = next.get(key); k !== undefined && !keys.includes(k); k = next.get(k)) keys.push(k);
         return keys;
     };
-    const named = db.prepare(`SELECT id, owner_pubkey, holder_type, holder_ref, generation FROM recovery_shares
+    const named = db.prepare(`SELECT id, owner_pubkey, holder_type, holder_ref, generation, updated_at FROM recovery_shares
                               WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)`);
     const counterpart = db.prepare(`SELECT 1 FROM recovery_shares
                                     WHERE owner_pubkey = ? AND generation = ? AND holder_type = ? AND holder_ref = ? AND id != ?`);
+    // The recovery tombstones for an owner: `<owner>|<generation>` (engine/recovery-shares.ts recoveryTombstoneKey).
+    const deletions = db.prepare(`SELECT row_key, deleted_at FROM tombstones WHERE table_name = 'recovery_shares' AND substr(row_key, 1, ?) = ?`);
+    const deletedThere = (owner: string, generation: number, stamp: string | null): boolean =>
+        (deletions.all(owner.length + 1, `${owner}|`) as { row_key: string; deleted_at: string }[]).some((t) => {
+            const g = Number(t.row_key.slice(owner.length + 1));
+            return Number.isSafeInteger(g) && g >= generation && (stamp === null || stamp <= t.deleted_at);
+        });
     const drop = db.prepare('DELETE FROM recovery_shares WHERE id = ?');
     let dropped = 0;
     for (const oldKey of next.keys()) {
-        const rows = named.all(oldKey, oldKey) as { id: number; owner_pubkey: string; holder_type: string; holder_ref: string; generation: number }[];
+        const rows = named.all(oldKey, oldKey) as { id: number; owner_pubkey: string; holder_type: string; holder_ref: string; generation: number; updated_at: string | null }[];
         for (const o of rows) {
             const owners = keysOf(o.owner_pubkey);
             const holders = o.holder_type === 'member' ? keysOf(o.holder_ref) : [o.holder_ref];
             // One row at a time, against what is here now: of two rows that could each pass for the other's
             // counterpart (a chain that loops back, which no main server writes), the second finds the first gone.
             const moved = owners.some((owner) => holders.some((holder) => (owner !== o.owner_pubkey || holder !== o.holder_ref)
-                && counterpart.get(owner, o.generation, o.holder_type, holder, o.id)));
+                && counterpart.get(owner, o.generation, o.holder_type, holder, o.id)))
+                || owners.some((owner) => owner !== o.owner_pubkey && deletedThere(owner, o.generation, o.updated_at));
             if (moved) dropped += drop.run(o.id).changes;
         }
     }

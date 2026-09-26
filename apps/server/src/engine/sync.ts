@@ -10,6 +10,7 @@ import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type Pho
 import { readProfileRecord } from '../config/node-profile.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { recoverySealEpoch } from '../services/recovery-seal-key.js';
+import { parseRecoveryTombstoneKey } from './recovery-shares.js';
 import { importedArea } from './member-area.js';
 import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
@@ -313,7 +314,7 @@ export async function exportSyncState(
     return signSyncPayload(cb, payload);
 }
 
-function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
+function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: string): boolean {
     switch (tableName) {
         case 'friends': {
             const [owner, friend] = rowKey.split('|');
@@ -399,6 +400,18 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             const r = db.prepare(`DELETE FROM moderation_notices WHERE id=?`).run(rowKey);
             return r.changes > 0;
         }
+        // A member's recovery copies the main server deleted: every one of this generation or an older one
+        // (engine/recovery-shares.ts deleteAllShares). A copy it holds now is newer on both counts, so it stays: its
+        // generation is newer (the main server never numbers one back after a deletion), and it is stamped after the
+        // deletion (a main server rolled back to code from before this numbers from 1 again). No lookup below: a later
+        // copy must not keep the older ones, so each row is judged by itself. The connection deletes securely (db.ts).
+        case 'recovery_shares': {
+            const t = parseRecoveryTombstoneKey(rowKey);
+            if (!t) return false;
+            const r = db.prepare(`DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation <= ?
+                                  AND (updated_at IS NULL OR updated_at <= ?)`).run(t.ownerPubkey, t.generation, deletedAt);
+            return r.changes > 0;
+        }
         default:
             console.warn(`[Sync] Ignoring tombstone for unknown table: ${tableName}`);
             return false;
@@ -416,6 +429,10 @@ const MEMBER_KEY_PARTS: Record<string, number[]> = {
     event_rsvps: [1],
     conversation_participants: [1],
     group_members: [1],
+    // The owner (engine/recovery-shares.ts recoveryTombstoneKey). Its copies stay under the old key when this standby
+    // follows (dropMovedRecoveryCopies goes by the main server's), so either order ends the same; this keeps the main
+    // server's.
+    recovery_shares: [0],
 };
 
 function tombstoneNamesKey(ts: { tableName: string; rowKey: string }, key: string): boolean {
@@ -651,7 +668,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         conflictsSkipped++;
                         continue;
                     }
-                    const deleted = applyTombstoneLocally(ts.tableName, ts.rowKey);
+                    const deleted = applyTombstoneLocally(ts.tableName, ts.rowKey, ts.deletedAt);
                     db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at)
                                 VALUES (?, ?, ?)`).run(ts.tableName, ts.rowKey, ts.deletedAt);
                     if (deleted) tombstonesApplied++;
@@ -1300,6 +1317,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     if (res.changes > 0) recoverySharesImported++;
                 }
             }
+            // The copies the main server deleted (engine/recovery-shares.ts deleteAllShares), after this copy's own and
+            // before a followed re-key's: a member re-keyed and then deleted theirs, so the copy brings none under the new
+            // key, and dropMovedRecoveryCopies knows they went by this tombstone instead.
+            const recoveryTombstones = tombstones.filter((ts) => ts.tableName === 'recovery_shares' && !appliedBeforeRekey.has(ts));
+            applyTombstones(recoveryTombstones);
             // A followed re-key's recovery copies: the ones the main server moved to the new key go from the old one.
             if (followedRekeys.length > 0) dropMovedRecoveryCopies(followedRekeys);
 
@@ -1480,7 +1502,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             applyTombstones(knockTombstones);
             if (remote.joinRequests) mergeReplicatedKnocks(remote.joinRequests);
 
-            applyTombstones(tombstones.filter((ts) => ts.tableName !== 'join_requests' && !appliedBeforeRekey.has(ts)));
+            applyTombstones(tombstones.filter((ts) => ts.tableName !== 'join_requests' && ts.tableName !== 'recovery_shares'
+                && !appliedBeforeRekey.has(ts)));
         })();
     } finally {
         currentImportOrigin = null;

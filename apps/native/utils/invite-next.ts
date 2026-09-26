@@ -76,12 +76,14 @@ export async function afterSpentInvite(nodeUrl: string, stored: BeanPoolIdentity
  * A redeem the node refused (redeemInvite threw), and whether this key is in all the same. `already a member` is the
  * node's own word. `already been used` says only that the code is spent: by this key (a node from before it answered
  * its own member `alreadyMember`) when the node says the key is one of its members, otherwise by someone else, and then
- * going on would tell the member they had joined when the node never took them.
+ * going on would tell the member they had joined when the node never took them. An offline ticket's `already been
+ * redeemed` (engine/invites.ts redeemOfflineTicket) says the same of a ticket, and such a node gave it to the ticket's
+ * own member too.
  */
 export async function redeemRefusalMeansIn(message: unknown, nodeUrl: string, publicKey: string): Promise<boolean> {
     const text = typeof message === 'string' ? message : '';
     if (text.includes('already a member')) return true;
-    if (text.includes('already been used')) return nodeSaysMember(nodeUrl, publicKey);
+    if (text.includes('already been used') || text.includes('already been redeemed')) return nodeSaysMember(nodeUrl, publicKey);
     return false;
 }
 

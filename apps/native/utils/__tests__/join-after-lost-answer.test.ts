@@ -47,6 +47,8 @@ const MADE: BeanPoolIdentity = { publicKey: 'ef'.repeat(32), privateKey: '09'.re
 const HAD: BeanPoolIdentity = { publicKey: 'ab'.repeat(32), privateKey: '07'.repeat(32), callsign: 'Kim', createdAt: '' };
 const JOIN = { inviteCode: 'INV-ABC', anchorUrl: NODE, callsign: 'Kim' };
 const USED_BY_ANOTHER = 'This invite has already been used';
+/** engine/invites.ts redeemOfflineTicket's refusal of a spent ticket. */
+const TICKET_SPENT = 'This exact mathematical offline ticket has already been redeemed';
 
 /**
  * The community node, as far as Next sees it. `members` are the keys it has; the invite is single-use (engine/invites.ts:
@@ -344,6 +346,42 @@ describe('redeemRefusalMeansIn: a refused redeem that means the key is in all th
         expect(await redeemRefusalMeansIn(USED_BY_ANOTHER, NODE, MADE.publicKey)).toBe(true);
         node.probe = 'fails';
         expect(await redeemRefusalMeansIn(USED_BY_ANOTHER, NODE, MADE.publicKey)).toBe(false);
+    });
+
+    /**
+     * An offline ticket's refusal says the same thing in its own words (engine/invites.ts redeemOfflineTicket), and a node
+     * from before 2026-07-24 (78adfa86) gave it to the ticket's own member, as it gave `already been used` to a code's
+     * (PR #1218, 4112785991).
+     */
+    it("an offline ticket's 'already been redeemed' the same: only when the node says the key is in", async () => {
+        expect(await redeemRefusalMeansIn(TICKET_SPENT, NODE, MADE.publicKey)).toBe(false);
+        node.members.add(MADE.publicKey);
+        expect(await redeemRefusalMeansIn(TICKET_SPENT, NODE, MADE.publicKey)).toBe(true);
+        node.probe = 'fails';
+        expect(await redeemRefusalMeansIn(TICKET_SPENT, NODE, MADE.publicKey)).toBe(false);
+    });
+
+    it('a ticket whose first redeem landed, on a node that refuses its own member by the ticket: on, with the new words', async () => {
+        const phone = { key: null as BeanPoolIdentity | null };
+        await expect(next(phone, 'lost')).rejects.toThrow('Relay Node Offline');
+        const quietCheck = vi.spyOn(node, 'check').mockReturnValue(null);
+        const oldNode = vi.spyOn(node, 'redeem').mockRejectedValue(new Error(TICKET_SPENT));
+
+        const again = await next(phone);
+        expect(again).toMatchObject({ went: 'profileSetup', identity: { publicKey: MADE.publicKey }, pendingNewKey: MADE.publicKey });
+        expect(wordsWithNoLock(again)).toBe(true);
+        expect(await getPendingOnboarding()).toEqual({ step: 'profileSetup', ...JOIN, redeemed: true, newKey: MADE.publicKey });
+        quietCheck.mockRestore();
+        oldNode.mockRestore();
+    });
+
+    it('a ticket someone else spent: told, never on as joined', async () => {
+        const quietCheck = vi.spyOn(node, 'check').mockReturnValue(null);
+        const spentTicket = vi.spyOn(node, 'redeem').mockRejectedValue(new Error(TICKET_SPENT));
+        await expect(next({ key: null })).rejects.toThrow(TICKET_SPENT);
+        expect(await getPendingOnboarding()).toMatchObject({ step: 'create', redeemed: false });
+        quietCheck.mockRestore();
+        spentTicket.mockRestore();
     });
 
     it('anything else is not', async () => {

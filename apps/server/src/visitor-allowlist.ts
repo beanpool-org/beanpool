@@ -24,7 +24,7 @@
  * member there; a visitor's row signing one here gets this refusal where it had the route's ("buy from home").
  */
 
-import { getConversation, isLiveVisitor, PUSH_PREFERENCE_KEYS } from './state-engine.js';
+import { getConversation, isLiveVisitor, namesOnlyPushSettings } from './state-engine.js';
 import { isVisitorsDirectLine, isVisitorsDirectConversation, isVisitorsDirectConversationWith, visitorMaySendTo } from './engine/messaging.js';
 import { isOwnListing } from './engine/posts.js';
 
@@ -39,15 +39,6 @@ export interface VisitorWrite {
      * listing, or its own push settings.
      */
     own?: (body: Record<string, unknown>, signer: string) => boolean;
-}
-
-/**
- * Only push settings (PUSH_PREFERENCE_KEYS): setMemberPreferences stores every key it is given, holiday mode among them,
- * which the gate refuses the visitor at /api/members/holiday (4111438819).
- */
-function onlyPushSettings(preferences: unknown): boolean {
-    return !!preferences && typeof preferences === 'object' && !Array.isArray(preferences)
-        && Object.keys(preferences).every(key => PUSH_PREFERENCE_KEYS.includes(key));
 }
 
 export const VISITOR_WRITES: readonly VisitorWrite[] = [
@@ -68,8 +59,10 @@ export const VISITOR_WRITES: readonly VisitorWrite[] = [
     // and a key with no row may make it too.
     { method: 'POST', path: '/api/push-tokens', why: "its phone's push token: its messages and Beans reach it" },
     { method: 'DELETE', path: '/api/push-tokens', why: "taking its phone's push token away when the account leaves the phone" },
+    // Only push settings (PUSH_PREFERENCE_KEYS), the keys setMemberPreferences takes from anyone: holiday mode isn't one,
+    // and the gate refuses the visitor at /api/members/holiday (4111438819). The route checks the values.
     { method: 'POST', path: '/api/members/preferences', why: 'which of its pushes reach its phone, and no other preference',
-        own: b => onlyPushSettings(b.preferences) },
+        own: b => namesOnlyPushSettings(b.preferences) },
     // Beans.
     { method: 'POST', path: '/api/ledger/transfer', why: 'Beans it holds; the send gate then decides (a first completed trade), and it pays no key with no row' },
     // Its own content from before the rule (the director, 2026-09-26, choice 5 of #1187): taking its own listing down, direct-author

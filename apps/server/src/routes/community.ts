@@ -1460,8 +1460,10 @@ router.post('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    // setMemberPreferences THROWS on a rejected eventReminderOffsets rather than saving the rest and
-    // dropping it, so a member never believes they set a reminder they will never get.
+    // setMemberPreferences THROWS on a body it refuses (a key that isn't a push setting, holiday mode
+    // among them, a toggle that isn't true or false, or a rejected eventReminderOffsets) rather than
+    // saving the rest, so a member never believes they set something they didn't. Holiday mode is
+    // POST /api/members/holiday's alone, below.
     try {
         const success = setMemberPreferences(activeKey, preferences);
         ctx.body = { success };

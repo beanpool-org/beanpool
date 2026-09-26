@@ -89,7 +89,7 @@ import {
     postGroupThreadMessage, postEventThreadMessage,
     adminAssignTreasuryOperator, requestToJoinEnterprise, approveKeeperRequest, proposeKeeperRemoval, stepDownAsKeeper,
     applyDueKeeperChanges, postEnterpriseThreadMessage, treasuryKeepers, keeperOf, canOperate, grantNodeRole, revokeNodeRole,
-    dispatchPushNotification, isOnHoliday, getMemberPreferences,
+    dispatchPushNotification, isOnHoliday, getMemberPreferences, NOT_A_PUSH_SETTING_MESSAGE,
 } from './state-engine.js';
 import { runEventReminderSweep, reminderPushTitle } from './engine/event-reminders.js';
 import { EVENT_UPDATED_PUSH_TITLE, EVENT_CANCELLED_PUSH_TITLE } from './engine/posts.js';
@@ -1227,8 +1227,13 @@ async function main(): Promise<void> {
         const rowsOf = (pk: string) => (db.prepare('SELECT COUNT(*) AS n FROM member_preferences WHERE public_key = ?').get(pk) as { n: number }).n;
         assert(!isOnHoliday(vera.pk) && getMemberPreferences(vera.pk).notify_marketplace === 'false',
             `she is not on holiday, and her push settings are as she set them (${rowsOf(vera.pk)} rows)`);
-        const miaSets = await measured(() => call('POST', mia, '/api/members/preferences', { publicKey: mia.pk, preferences: { notify_chat: true, chat: true } }));
+        // A member's body isn't the gate's to judge: it reaches the route, which takes the same push settings from anyone and refuses
+        // a body with any other key whole (so a member's made-up key is the route's 400 now, where it was stored before).
+        const miaSets = await measured(() => call('POST', mia, '/api/members/preferences', { publicKey: mia.pk, preferences: { notify_chat: true } }));
         assert(miaSets.r.status === 200 && miaSets.r.body?.success === true, `a member's preferences reach the route as before (${told(miaSets)})`);
+        const miaMore = await measured(() => call('POST', mia, '/api/members/preferences', { publicKey: mia.pk, preferences: { notify_chat: true, chat: true } }));
+        assert(miaMore.r.status === 400 && miaMore.r.body?.error === NOT_A_PUSH_SETTING_MESSAGE && miaMore.changed.length === 0,
+            `and one with a key that isn't a push setting reaches it too, where the route, not the gate, refuses it whole (${told(miaMore)})`);
         gate?.setVisitorGateForTests(false);
     }
 

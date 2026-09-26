@@ -155,7 +155,7 @@ async function main() {
         { method: 'POST', path: '/api/profile/update', body: { publicKey: victim.pub, bio: 'changed by someone else' } },
         { method: 'POST', path: '/api/push-tokens', body: { publicKey: victim.pub, token: 'foreign-token', platform: 'android' } },
         { method: 'DELETE', path: '/api/push-tokens', body: { publicKey: victim.pub, token: 'victim-existing-token' } },
-        { method: 'POST', path: '/api/members/preferences', body: { publicKey: victim.pub, preferences: { messages: false } } },
+        { method: 'POST', path: '/api/members/preferences', body: { publicKey: victim.pub, preferences: { notify_chat: false } } },
         { method: 'POST', path: '/api/reports', body: { reporterPubkey: victim.pub, targetPubkey: other.pub, reason: 'filed in their name' } },
         { method: 'POST', path: '/api/friends/add', body: { ownerPubkey: victim.pub, friendPubkey: third.pub } },
         { method: 'POST', path: '/api/friends/remove', body: { ownerPubkey: victim.pub, friendPubkey: other.pub } },
@@ -255,7 +255,7 @@ async function main() {
         assert(d.status === 200, `signed push-token delete succeeds (got ${d.status} ${d.error ?? ''})`);
     }
     {
-        const r = await send('POST', '/api/members/preferences', { publicKey: victim.pub, preferences: { messages: false } }, victim);
+        const r = await send('POST', '/api/members/preferences', { publicKey: victim.pub, preferences: { notify_chat: false } }, victim);
         assert(r.status === 200, `signed preferences update succeeds (got ${r.status} ${r.error ?? ''})`);
     }
     {

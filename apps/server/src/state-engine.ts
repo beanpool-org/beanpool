@@ -364,7 +364,7 @@ export {
 } from './engine/event-thread.js';
 import {
     parseReminderOffsets, getMemberDefaultReminderOffsets, setMemberDefaultReminderOffsets,
-    tickEventReminders, EVENT_REMINDER_PREF_KEY, BAD_OFFSETS_MESSAGE,
+    tickEventReminders, BAD_OFFSETS_MESSAGE,
     setEventReminderOffsets as setEventReminderOffsetsEngine,
     listMyEvents as listMyEventsEngine,
 } from './engine/event-reminders.js';
@@ -7464,13 +7464,29 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
 }
 
 /**
- * The preferences that say which pushes reach a member's phone: one per dispatchPushNotification category (`notify_<category>`)
- * and the event reminders, as the apps send them. A visitor's row sets these and no other (visitor-allowlist.ts).
+ * The preferences a member sets (setMemberPreferences), and the only ones they set: which pushes reach their phone, one per
+ * dispatchPushNotification category (`notify_<category>`), and their event reminders, as the apps send them. Holiday mode is
+ * not one of them; setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too
+ * (visitor-allowlist.ts).
  */
 export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
 
+/** A body of preferences that names push settings and nothing else: an object, not a list, whose every key is in PUSH_PREFERENCE_KEYS. */
+export function namesOnlyPushSettings(preferences: unknown): preferences is Record<string, unknown> {
+    return !!preferences && typeof preferences === 'object' && !Array.isArray(preferences)
+        && Object.keys(preferences).every(key => PUSH_PREFERENCE_KEYS.includes(key));
+}
+
+export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
+    "Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.";
+export const NOT_A_PUSH_SETTING_MESSAGE =
+    `Only your notification settings are saved here: ${PUSH_PREFERENCE_KEYS.join(', ')}, each sent by name.`;
+export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send true or false.';
+
 /**
- * Every preference this member has, with the defaults for the ones they have never touched.
+ * Every preference this member has, with the defaults for the ones they have never touched, and holiday mode once
+ * setHolidayMode has written it. A row under any other key (setMemberPreferences stored whatever it was given until it
+ * took only PUSH_PREFERENCE_KEYS) stays in the table and is served to nobody.
  *
  * `eventReminderOffsets` is the odd one out and is spelled in camelCase, as a real array: the notification
  * toggles are booleans-as-strings because that is all they have ever needed, while a reminder choice is a
@@ -7486,21 +7502,29 @@ export function getMemberPreferences(publicKey: string): Record<string, string |
         notify_recovery: 'true',
     };
     for (const r of rows) {
-        if (r.pref_key === EVENT_REMINDER_PREF_KEY) continue; // served as eventReminderOffsets below
-        prefs[r.pref_key] = r.pref_value;
+        // The stored reminders key (EVENT_REMINDER_PREF_KEY) isn't one of these either: it is served as eventReminderOffsets below.
+        if (r.pref_key === 'holiday_mode' || PUSH_PREFERENCE_KEYS.includes(r.pref_key)) prefs[r.pref_key] = r.pref_value;
     }
     prefs.eventReminderOffsets = getMemberDefaultReminderOffsets(publicKey);
     return prefs;
 }
 
 /**
- * THROWS on a rejected `eventReminderOffsets`, and still returns false for a storage failure — the route
- * turns the throw into a 400 and the false into its existing `{ success: false }`. Silently storing four
- * valid toggles and dropping a fifth, invalid value is how a member ends up believing they set a reminder
- * they will never get.
+ * THROWS on a body it refuses: a key that isn't one of PUSH_PREFERENCE_KEYS (holiday mode among them, which only
+ * setHolidayMode switches, after its open-trades check), a notification toggle that isn't true or false, or a rejected
+ * `eventReminderOffsets`. Still returns false for a storage failure — the route turns the throw into a 400 and the false
+ * into its existing `{ success: false }`. A refused body writes nothing: silently storing four valid toggles and dropping
+ * a fifth, invalid value is how a member ends up believing they set a reminder they will never get.
  */
-export function setMemberPreferences(publicKey: string, preferences: Record<string, boolean | number[] | null>): boolean {
-    // Validated BEFORE the transaction opens: a bad offset refuses the whole write.
+export function setMemberPreferences(publicKey: string, preferences: unknown): boolean {
+    // Validated BEFORE the transaction opens: anything refused here refuses the whole write.
+    if (!!preferences && typeof preferences === 'object' && Object.prototype.hasOwnProperty.call(preferences, 'holiday_mode')) {
+        throw new Error(HOLIDAY_NOT_A_PREFERENCE_MESSAGE);
+    }
+    if (!namesOnlyPushSettings(preferences)) throw new Error(NOT_A_PUSH_SETTING_MESSAGE);
+    for (const [key, value] of Object.entries(preferences)) {
+        if (key !== 'eventReminderOffsets' && typeof value !== 'boolean') throw new Error(PUSH_TOGGLE_MESSAGE);
+    }
     const hasOffsets = Object.prototype.hasOwnProperty.call(preferences, 'eventReminderOffsets');
     const offsets = hasOffsets ? parseReminderOffsets(preferences.eventReminderOffsets) : undefined;
     if (hasOffsets && offsets === null) {

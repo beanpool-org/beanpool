@@ -495,3 +495,15 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Why not to re-file as-is:** #1127's diff against `main` was empty (0 files changed) although its body described a
   change: rule 11 (no-op). **The defect is real and still open:** the `<a>` in `NodeAdminLink.tsx` has no focus-visible
   styling on `main`. Re-file it ONCE, with an actual diff and a test that checks the class reaches the rendered anchor.
+
+### 2026-09-27 — Bolt: O(1) case-insensitive profile lookups in MembersModule (#1212) — CLOSED, CHANGES WHO A MEMBER IS SHOWN AS
+- **Category:** REGRESSION (not a suppression of the idea, only of this shape)
+- **Claim:** `getMemberDisplayName`'s case-insensitive fallback scans `profilesMap.entries()` per member; also store
+  lower-cased keys in `profilesMap` so the fallback is one `Map.get`.
+- **Why not to re-file as-is:** the map build writes each profile's lower-cased key OVER an exact key another profile
+  already holds. Keys have one spelling (#1195), but older doors could create a second row for a member's key in
+  capitals, with a callsign the caller picked. With this change the real member shows in the Members list under that
+  stray row's name and avatar. Measured with the PR's map build and lookup logic verbatim: main shows the real name, the
+  PR the stray's. The scan it replaces runs only when the exact lookup misses. Bolt: in any lookup rewrite, an exact key
+  must still win over a normalised one when two keys collide, and name the loop the lookup runs in and how large the
+  list can grow (#1034).

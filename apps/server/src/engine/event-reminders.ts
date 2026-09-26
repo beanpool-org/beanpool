@@ -286,6 +286,9 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
                AND p.hidden_by_reports_at IS NULL
                AND p.event_start_at > ?
                AND p.event_start_at <= ?
+               -- A visitor's row has no RSVP here (setEventReminderOffsets), whatever row it holds from before visitors
+               -- were refused one: its push token gets what is sent to it, its messages and Beans.
+               AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = r.member_pubkey AND m.is_visitor = 1)
              ORDER BY p.event_start_at ASC
         `).all(nowIso, horizonIso) as any[];
     } catch {

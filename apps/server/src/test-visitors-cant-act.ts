@@ -117,17 +117,26 @@ const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString(
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 const NOT_A_MEMBER = 'Only members of this community can do this.';
 const NOTE = 'Gate code 4471, back shed';
+/**
+ * Whether a body holds the event's note, as first written or as changed in section 5, found by its words: its digits alone
+ * turn up in the random ids and keys every body carries (on the board, about one run in fifty).
+ */
+const holdsNote = (s: string) => /code 4471|code 9902/.test(s);
 
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any };
 
-function keypair(name: string): Id {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-    return { pk: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey, name };
+/** A fresh key; with `holding`, one whose hex holds those digits (about a thousand tries for four). */
+function keypair(name: string, holding?: string): Id {
+    for (;;) {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+        const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+        if (!holding || pk.includes(holding)) return { pk, priv: privateKey, name };
+    }
 }
 
-function makeMember(name: string, beans = 100, joinedDaysAgo = 30): Id {
-    const id = keypair(name);
+function makeMember(name: string, beans = 100, joinedDaysAgo = 30, holding?: string): Id {
+    const id = keypair(name, holding);
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status, updated_at)
                 VALUES (?, ?, ?, 'genesis', 'TEST', ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(id.pk, name, ago(joinedDaysAgo * DAY), AVATAR);
@@ -260,7 +269,9 @@ async function main(): Promise<void> {
 
     const founder = keypair('FounderVA');
     seedGenesisMember(founder.pk, founder.name);
-    const alice = makeMember('AliceVA');
+    // Alice's key holds the note's digits, as a random id or key in a body does about one run in fifty (CI run 36258867751):
+    // a check that looks for the note by its digits alone then fails every run, not one in fifty. Every check looks for its words.
+    const alice = makeMember('AliceVA', 100, 30, '4471');
     const bob = makeMember('BobVA');
     const carol = makeMember('CarolVA');
     const mia = makeMember('MiaVA');          // the control: a member making every write in the table
@@ -545,7 +556,9 @@ async function main(): Promise<void> {
         const veraReads = await call('GET', vera, `/api/marketplace/posts?id=${orchardEvent.id}`);
         assert(kaiReads.body?.[0]?.eventPrivateNote === 'Orchard gate 5580' && Array.isArray(kaiReads.body?.[0]?.eventRsvps),
             `a member who keeps the orchard hosts its event: its note and who is going (control: ${show(kaiReads)})`);
-        assert(veraReads.status === 200 && veraReads.body?.[0]?.id === orchardEvent.id && !JSON.stringify(veraReads.body).includes('5580') && !veraReads.body?.[0]?.eventRsvps,
+        // The note found by its words and its field, not its digits, which a random id or key in the body can hold.
+        assert(veraReads.status === 200 && veraReads.body?.[0]?.id === orchardEvent.id && veraReads.body[0].eventPrivateNote === undefined
+            && !JSON.stringify(veraReads.body).includes('gate 5580') && !veraReads.body?.[0]?.eventRsvps,
             `Vera, who keeps it too, reads the event without its note or who is going (${show(veraReads)})`);
 
         // ── 1c. Node roles (4111202677) ──
@@ -959,23 +972,28 @@ async function main(): Promise<void> {
         const text = (s: Sock) => JSON.stringify(s.events);
         assert(vs.events.some(e => e.type === 'new_message' && e.conversationId === veraDm.id) && vs.events.some(e => e.type === 'transaction'),
             `the visitor's socket gets its DM line and its Beans (${vs.events.map(e => e.type).join(', ')})`);
-        assert(!vs.events.some(e => e.conversationId === group.id || e.conversationId === event.id) && !/Group secret|Event secret|9902|4471/.test(text(vs))
+        assert(!vs.events.some(e => e.conversationId === group.id || e.conversationId === event.id) && !/Group secret|Event secret/.test(text(vs)) && !holdsNote(text(vs))
             && !vs.events.some(e => e.type === 'post_updated' && e.post),
             "and not the group's chat, the event's chat, or the event's note, though a seat and a Going RSVP from before still name it");
         assert(bs.events.some(e => e.conversationId === group.id) && bs.events.some(e => e.conversationId === event.id),
             "a member's socket in the group and going to the event gets both chats (control)");
         const rsvp = await call('POST', vera, `/api/marketplace/posts/${event.id}/rsvp`, { status: 'going' });
-        assert(rsvp.status === 400 && rsvp.body?.error === 'Member not found' && !JSON.stringify(rsvp.body).includes('4471'),
+        assert(rsvp.status === 400 && rsvp.body?.error === 'Member not found' && !holdsNote(JSON.stringify(rsvp.body)),
             `its RSVP is refused, and hands back no note (${show(rsvp)})`);
         const chat = await call('GET', vera, `/api/marketplace/posts/${event.id}/chat`);
-        assert(chat.status === 403 && !JSON.stringify(chat.body).includes('4471'), `nor does the event's chat read (${chat.status})`);
-        // Nor the event itself, by id or on the board: its Going RSVP from before this rule hands her no note.
+        assert(chat.status === 403 && !holdsNote(JSON.stringify(chat.body)), `nor does the event's chat read (${chat.status})`);
+        // Nor the event itself, by id or on the board: its Going RSVP from before this rule hands her no note, in its field
+        // or anywhere in the body; Bob, going, reads it as changed.
         const byId = await call('GET', vera, `/api/marketplace/posts?id=${event.id}`);
         const board = await call('GET', vera, '/api/marketplace/posts?types=offer,need,poll,event');
         const bobReads = await call('GET', bob, `/api/marketplace/posts?id=${event.id}`);
-        assert(byId.status === 200 && byId.body?.[0]?.id === event.id && board.status === 200 && board.body?.some((p: any) => p.id === event.id)
-            && !/4471|9902/.test(JSON.stringify(byId.body) + JSON.stringify(board.body)) && /9902/.test(JSON.stringify(bobReads.body)),
-            `nor the event itself, by id or on the board, though a member going reads the note (visitor ${show(byId)}; member ${show(bobReads)})`);
+        const listed = Array.isArray(board.body) ? board.body.find((p: any) => p.id === event.id) : undefined;
+        const noteSeen = byId.body?.[0]?.eventPrivateNote !== undefined || listed?.eventPrivateNote !== undefined
+            || holdsNote(JSON.stringify(byId.body) + JSON.stringify(board.body));
+        const bobsNote = bobReads.body?.[0]?.eventPrivateNote;
+        assert(byId.status === 200 && byId.body?.[0]?.id === event.id && board.status === 200 && !!listed && !noteSeen
+            && bobsNote === `${NOTE}, new code 9902`,
+            `nor the event itself, by id or on the board, though a member going reads the note (visitor: by id ${byId.status} ${byId.body?.[0]?.id === event.id ? 'the event' : 'not it'}, board ${board.status} ${listed ? 'lists it' : 'lacks it'}, note ${noteSeen ? 'SEEN' : 'unseen'}; member ${bobReads.status}, note ${JSON.stringify(bobsNote ?? null)})`);
         vs.ws.close(); bs.ws.close();
     }
 

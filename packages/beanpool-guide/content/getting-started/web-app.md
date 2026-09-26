@@ -90,7 +90,7 @@ If you sign in with an account that isn't the one you joined with, the page says
 
 - In the web app on the computer, choose to link with the mobile app. It shows a QR code.
 - On the phone, open **Settings** and tap **Link Another Device**.
-- Point the phone's camera at the QR code and tap **Confirm & Link Device**.
+- Point the phone's camera at the QR code, tap **Confirm & Link Device** and pass your phone's lock screen check. Your account goes to the computer only after that.
 
 ## Installing it
 

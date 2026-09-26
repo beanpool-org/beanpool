@@ -33,9 +33,12 @@
  * "single blob or two-layer?" reads `inner` without the key ({@link isSingleBlobSsoStored}). The lookup hash and its
  * salt stay in the clear: they find the row and reveal nothing.
  *
- * Bound (AAD) to where the row sits: a stored copy to (owner, holder type, holder ref), never the generation, because a
+ * Bound (AAD) to where the row sits: a stored copy to (owner, holder type), never the generation, because a
  * carry-forward writes the same copy into the next generation; a released copy to (collection, share id, holder type),
- * because the share row it came from is deleted by the next re-split while the release stays as history.
+ * because the share row it came from is deleted by the next re-split while the release stays as history. Not the holder
+ * ref, which the design named: this codebase treats it as decorative for a machine keeper (engine/recovery-shares.ts,
+ * "the constraint is on the COUNT, not on the name"; a hub stored under an older name must still release), and binding
+ * it would add nothing, since every copy one owner holds opens to that owner's own seed.
  *
  * ## Migration, both ways
  *
@@ -201,9 +204,9 @@ export function isSingleBlobSsoStored(kdfParams: string | null | undefined): boo
     return parsed.alg === NODE_WRAP_ALG ? parsed.inner === KEEPER_ALG_SSO_SINGLE : parsed.alg === KEEPER_ALG_SSO_SINGLE;
 }
 
-/** Where a stored copy sits: its owner, holder type and holder ref. */
-export function shareRowAad(ownerPubkey: string, holderType: string, holderRef: string): Uint8Array {
-    return Buffer.from(JSON.stringify([AAD_ROW, ownerPubkey, holderType, holderRef]), 'utf-8');
+/** Where a stored copy sits: its owner and holder type. */
+export function shareRowAad(ownerPubkey: string, holderType: string): Uint8Array {
+    return Buffer.from(JSON.stringify([AAD_ROW, ownerPubkey, holderType]), 'utf-8');
 }
 
 /** Where a released copy sits: its collection, the share id it was released from, and the holder type. */
@@ -282,7 +285,7 @@ function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySe
     if (shares.length === 0 && releases.length === 0) return { shares: 0, releases: 0 };
 
     // Every row mapped before anything is written: a row that cannot be mapped fails the run and changes nothing.
-    const newShares = shares.map(r => ({ id: r.id, f: map(shareFields(r), shareRowAad(r.owner_pubkey, r.holder_type, r.holder_ref)) }));
+    const newShares = shares.map(r => ({ id: r.id, f: map(shareFields(r), shareRowAad(r.owner_pubkey, r.holder_type)) }));
     const newReleases = releases.map(r => ({ id: r.id, f: map(releaseFields(r), releaseRowAad(r.collection_id, r.share_id, r.holder_type)) }));
 
     const priorSecureDelete = Number(db.pragma('secure_delete', { simple: true })) || 0;
@@ -326,7 +329,7 @@ function countWrapped(): { wrapped: number; unopenable: number } {
     for (const r of rows) {
         if (!isNodeWrapped(r.kdf_params)) continue;
         wrapped++;
-        try { openRecoveryFields(shareFields(r), shareRowAad(r.owner_pubkey, r.holder_type, r.holder_ref)); }
+        try { openRecoveryFields(shareFields(r), shareRowAad(r.owner_pubkey, r.holder_type)); }
         catch { unopenable++; }
     }
     return { wrapped, unopenable };

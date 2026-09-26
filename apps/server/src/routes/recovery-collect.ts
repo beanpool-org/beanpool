@@ -64,7 +64,7 @@ import {
     type SsoProvider,
 } from '../sso.js';
 import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
-import { isSingleBlobSsoStored } from '../services/recovery-seal-key.js';
+import { isSingleBlobSsoStored, requireRecoverySealKey } from '../services/recovery-seal-key.js';
 import { recoverySealFailure, signInFailure } from './keepers.js';
 import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import type { RouteDeps } from './types.js';
@@ -338,6 +338,9 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             return;
         }
         try {
+            // Every release is recorded wrapped, so a server without its recovery-seal key refuses before the sign-in
+            // is checked: the device keeps its nonce (or its GitHub session) for when the key is back.
+            requireRecoverySealKey();
             const identity = await verifySignIn(
                 body.provider,
                 // `idToken` for Google, Apple and Facebook; `proof: { sessionId }` for GitHub.

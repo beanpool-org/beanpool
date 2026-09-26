@@ -279,7 +279,7 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
     // wrapped or not.
     const sealed = shares.map(s => sealRecoveryFields(
         { encryptedShare: s.encryptedShare, shareIv: s.shareIv, shareTag: s.shareTag, kdfParams: s.kdfParams ?? null },
-        shareRowAad(ownerPubkey, s.holderType, s.holderRef),
+        shareRowAad(ownerPubkey, s.holderType),
     ));
 
     // The generation is read INSIDE the transaction, so the read-modify-write is atomic.
@@ -328,7 +328,7 @@ function rowToShare(r: Record<string, unknown>): StoredKeeperShare {
             shareTag: r.share_tag as string,
             kdfParams: (r.kdf_params as string | null) ?? null,
         },
-        shareRowAad(r.owner_pubkey as string, r.holder_type as string, r.holder_ref as string),
+        shareRowAad(r.owner_pubkey as string, r.holder_type as string),
     );
     return {
         id: r.id as number,
@@ -502,10 +502,11 @@ export function deleteAllShares(ownerPubkey: string): number {
 
 /**
  * A member moved to a new key (the re-key wizard, engine/member-wizards.ts): the rows they own belong to the new key,
- * and the rows where they are the keeper name it. Owner and holder ref are part of what a wrapped row is bound to, so
- * each wrapped row is opened where it sat and wrapped again where it now sits. A row this server cannot open (no key,
- * or another key's) moves as it is: it did not open here before the move either, and the move must not wait on it.
- * Runs inside the caller's transaction; stamps nothing, as the two UPDATEs it replaces did not.
+ * and the rows where they are the keeper name it. The owner is part of what a wrapped row is bound to, so each wrapped
+ * row they own is opened under the old key and wrapped again under the new one; a keeper ref is not, so those rows are
+ * only renamed. A row this server cannot open (no key, or another key's) moves as it is: it did not open here before
+ * the move either, and the move must not wait on it. Runs inside the caller's transaction; stamps nothing, as the two
+ * UPDATEs it replaces did not.
  */
 export function moveRecoverySharesToNewKey(oldPubkey: string, newPubkey: string): void {
     const rows = db.prepare(`
@@ -528,11 +529,11 @@ export function moveRecoverySharesToNewKey(oldPubkey: string, newPubkey: string)
             shareTag: r.share_tag as string,
             kdfParams: (r.kdf_params as string | null) ?? null,
         };
-        if (isNodeWrapped(fields.kdfParams)) {
+        if (owner !== r.owner_pubkey && isNodeWrapped(fields.kdfParams)) {
             try {
                 fields = sealRecoveryFields(
-                    openRecoveryFields(fields, shareRowAad(r.owner_pubkey as string, holderType, r.holder_ref as string)),
-                    shareRowAad(owner, holderType, ref),
+                    openRecoveryFields(fields, shareRowAad(r.owner_pubkey as string, holderType)),
+                    shareRowAad(owner, holderType),
                 );
             } catch (e) {
                 if (!(e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable)) throw e;

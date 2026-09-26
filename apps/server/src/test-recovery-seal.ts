@@ -297,10 +297,11 @@ async function main(): Promise<void> {
         const opened = await call(eph, '/api/recovery/collect', { callsign });
         const collectionId = opened.body?.collectionId;
         const n = (await call(eph, '/api/recovery/collect/sso-nonce', { collectionId })).body?.nonce;
+        const token = googleToken(sub, n);
         const released = await call(eph, '/api/recovery/collect/sso', {
-            collectionId, provider: 'google', idToken: googleToken(sub, n), nonce: n,
+            collectionId, provider: 'google', idToken: token, nonce: n,
         });
-        return { eph, opened, collectionId, released };
+        return { eph, opened, collectionId, released, nonce: n, token };
     }
 
     /** Every piece of the client's box an attacker would look for, as base64 text and as raw bytes. */
@@ -443,6 +444,11 @@ async function main(): Promise<void> {
             const again = await deposit(m4, sealed4, d.nonce, d.token);
             check(again.res.status === 200,
                 `with the key back, the same sign-in deposits: the refusal did not spend its nonce (got ${again.res.status} ${JSON.stringify(again.res.body)})`);
+            const releasedNow = await call(c.eph, '/api/recovery/collect/sso', {
+                collectionId: c.collectionId, provider: 'google', idToken: c.token, nonce: c.nonce,
+            });
+            check(releasedNow.status === 200 && releasedNow.body?.enough === true,
+                `...and the recovering device's same sign-in releases: its nonce was not spent either (got ${releasedNow.status} ${JSON.stringify(releasedNow.body)})`);
         } finally {
             if (saved && !fs.existsSync(keyPath)) fs.writeFileSync(keyPath, saved, { mode: 0o600 });
         }

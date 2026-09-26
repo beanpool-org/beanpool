@@ -3,6 +3,10 @@
  * another account it asks first, and Cancel keeps the key, its onboarding record and its community. Onto a phone with
  * no account, or with this same account, it restores as it always did.
  *
+ * Replace takes the old account's app storage with it (its guest markers, the communities it asked to join, its sync
+ * cursors), as the screen said it would, and a replace this phone then can't save leaves neither account (#1179
+ * review 4109902595).
+ *
  * Nothing here contacts a node: the node's name for the key is a stub.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -14,6 +18,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         getItem: vi.fn(async (key: string) => mem.async.get(key) ?? null),
         setItem: vi.fn(async (key: string, value: string) => { mem.async.set(key, value); }),
         removeItem: vi.fn(async (key: string) => { mem.async.delete(key); }),
+        getAllKeys: vi.fn(async () => [...mem.async.keys()]),
+        multiRemove: vi.fn(async (keys: string[]) => { keys.forEach((k) => mem.async.delete(k)); }),
     },
 }));
 vi.mock('expo-secure-store', () => ({
@@ -26,8 +32,11 @@ vi.mock('expo-crypto', async () => {
     return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
 });
 
-import { restoreFromWords } from '../restore-account';
+import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { restoreFromWords, ReplaceNotSaved } from '../restore-account';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
+import { KNOCKS_STORE_KEY } from '../storage-keys';
 import { mnemonicToKeypair } from '../crypto';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
 
@@ -37,6 +46,37 @@ const NODE = 'https://test.beanpool.org';
 const MULLUM = 'https://mullum.beanpool.org';
 const ANCHOR = 'beanpool_anchor_url';
 const INVITE_RECORD = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: MULLUM, callsign: 'Kim', redeemed: true };
+/** What stays through any restore: a list of community addresses, and a setting about the phone, not the member. */
+const PHONE_KEPT = { beanpool_saved_nodes: JSON.stringify([{ url: MULLUM, name: 'Mullum' }]), beanpool_light_palette: 'sand' };
+
+/**
+ * The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors, its
+ * profile (photo, bio, contact) with a photo parked for the next sync, the invite codes it made, an unfinished post,
+ * and the reports it has yet to send.
+ */
+function accountStorage(publicKey: string): Record<string, string> {
+    return {
+        beanpool_guest_nodes: JSON.stringify(['https://byron.beanpool.org']),
+        beanpool_canonical_profile: JSON.stringify({ avatar: 'bundled://koala', bio: 'Grows tomatoes', contactValue: '0400 000 000' }),
+        pending_profile_avatar: 'bundled://koala',
+        pending_profile_sync: 'true',
+        [`bp_offline_invites_${publicKey}`]: JSON.stringify([{ code: 'INV-ABC', intendedFor: 'Robin' }]),
+        beanpool_offer_draft: JSON.stringify({ anchorUrl: MULLUM, postTitle: 'Tomatoes', postPhotos: ['bundled://koala'], postLat: -28.55, postLng: 153.5 }),
+        beanpool_pending_abuse_reports: JSON.stringify([
+            { reporterPubkey: publicKey, targetPubkey: 'cd'.repeat(32), reason: 'User Blocked by Member', timestamp: Date.parse('2026-09-25T00:00:00.000Z') },
+        ]),
+        [KNOCKS_STORE_KEY]: JSON.stringify({
+            pubkey: publicKey,
+            knocks: [{ url: 'https://near.example', name: 'Near Home', key: 'k1', sentAt: '2026-09-20T00:00:00.000Z' }],
+        }),
+        'pillar_sync_beanpool_https___mullum_beanpool_org.db_last-sync': '2026-09-25T00:00:00.000Z',
+        'pillar:outbox': '[]',
+    };
+}
+
+function asyncStorage(): Record<string, string> {
+    return Object.fromEntries(mem.async);
+}
 
 let phone: BeanPoolIdentity;
 let restoredPub: string;
@@ -62,12 +102,14 @@ async function phoneWithInviteJoin() {
     await importIdentity(phone);
     await setPendingOnboarding(INVITE_RECORD);
     mem.async.set(ANCHOR, MULLUM);
+    for (const [k, v] of Object.entries({ ...accountStorage(phone.publicKey), ...PHONE_KEPT })) mem.async.set(k, v);
 }
 
 async function expectPhoneKept() {
     expect(await loadIdentity()).toEqual(phone);
     expect(await getPendingOnboarding()).toEqual(INVITE_RECORD);
     expect(mem.async.get(ANCHOR)).toBe(MULLUM);
+    expect(asyncStorage()).toMatchObject({ ...accountStorage(phone.publicKey), ...PHONE_KEPT });
 }
 
 describe('a 12-word restore onto a phone that holds another account', () => {
@@ -99,6 +141,76 @@ describe('a 12-word restore onto a phone that holds another account', () => {
         expect(mem.async.get(ANCHOR)).toBe(NODE);
     });
 
+    it('Replace: nothing of the old account stays in app storage, only the new account\'s community and the phone\'s own', async () => {
+        await phoneWithInviteJoin();
+
+        await restoreFromWords(WORDS, NODE, { confirmReplace: async () => true, nameOnNode: async () => 'Marty' });
+
+        // Kim's guest markers, the communities Kim asked to join, Kim's sync cursors, Kim's wizard: all gone.
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+        expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, callsign: 'Marty' });
+    });
+
+    it('a replace this phone can\'t save: Kim\'s account is gone as promised, no success is claimed, and trying again works', async () => {
+        await phoneWithInviteJoin();
+        const confirmReplace = vi.fn(async (_outgoing: BeanPoolIdentity) => true);
+        // The key write fails: by then the new community's address has been written.
+        vi.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore unavailable'));
+
+        const failed = restoreFromWords(WORDS, NODE, { confirmReplace, nameOnNode: async () => 'Marty' });
+
+        await expect(failed).rejects.toBeInstanceOf(ReplaceNotSaved);
+        await expect(failed).rejects.toThrow('Keystore unavailable');
+        expect(await loadIdentity()).toBeNull();
+        expect(await getPendingOnboarding()).toBeNull();
+        expect(asyncStorage()).toEqual(PHONE_KEPT);
+
+        // Again: nothing left to ask about, and the account comes back.
+        const restored = await restoreFromWords(WORDS, NODE, { confirmReplace, nameOnNode: async () => 'Marty' });
+
+        expect(confirmReplace).toHaveBeenCalledTimes(1);
+        expect(restored).toMatchObject({ publicKey: restoredPub, callsign: 'Marty', mnemonic: WORDS });
+        expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, callsign: 'Marty', mnemonic: WORDS });
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+    });
+
+    it('a replace whose community address can\'t be saved ends the same way: neither account, and nothing of Kim\'s', async () => {
+        await phoneWithInviteJoin();
+        vi.mocked(AsyncStorage.setItem).mockRejectedValueOnce(new Error('Disk full'));
+
+        await expect(restoreFromWords(WORDS, NODE, { confirmReplace: async () => true, nameOnNode: async () => 'Marty' }))
+            .rejects.toBeInstanceOf(ReplaceNotSaved);
+
+        expect(await loadIdentity()).toBeNull();
+        expect(await getPendingOnboarding()).toBeNull();
+        expect(asyncStorage()).toEqual(PHONE_KEPT);
+    });
+
+    it('a replace that can\'t save, when even Kim\'s key can\'t be removed: still a ReplaceNotSaved, and trying again asks again', async () => {
+        await phoneWithInviteJoin();
+        const confirmReplace = vi.fn(async (_outgoing: BeanPoolIdentity) => true);
+        vi.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore unavailable'));
+        vi.mocked(SecureStore.deleteItemAsync).mockRejectedValueOnce(new Error('Keystore locked'));
+
+        const failed = restoreFromWords(WORDS, NODE, { confirmReplace, nameOnNode: async () => 'Marty' });
+
+        // Kim's wizard record and app storage are gone either way. welcome.tsx lets go of the account it holds only on a
+        // ReplaceNotSaved: anything else, and _layout.tsx routes Kim, with none of Kim's app storage, into the app.
+        await expect(failed).rejects.toBeInstanceOf(ReplaceNotSaved);
+        await expect(failed).rejects.toThrow('Keystore unavailable');
+        expect(await loadIdentity()).toEqual(phone);
+        expect(await getPendingOnboarding()).toBeNull();
+        expect(asyncStorage()).toEqual(PHONE_KEPT);
+
+        // Again: Kim's key is still on the phone, so the member is asked again, and a yes restores.
+        const restored = await restoreFromWords(WORDS, NODE, { confirmReplace, nameOnNode: async () => 'Marty' });
+
+        expect(confirmReplace).toHaveBeenCalledTimes(2);
+        expect(restored).toMatchObject({ publicKey: restoredPub, callsign: 'Marty', mnemonic: WORDS });
+        expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, callsign: 'Marty', mnemonic: WORDS });
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+    });
+
     it('a caller that cannot ask is refused rather than allowed to replace', async () => {
         await phoneWithInviteJoin();
 
@@ -119,6 +231,31 @@ describe('a 12-word restore with nothing to replace', () => {
         expect(confirmReplace).not.toHaveBeenCalled();
         expect(restored.mnemonic).toEqual(WORDS);
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, mnemonic: WORDS });
+    });
+
+    it('the same account keeps what is its own: its guest markers, the communities it asked, its sync cursors', async () => {
+        const keys = await mnemonicToKeypair(WORDS);
+        await importIdentity({ publicKey: keys.publicKeyHex, privateKey: keys.privateKeyHex, callsign: 'Marty', createdAt: '2026-01-01T00:00:00.000Z' });
+        for (const [k, v] of Object.entries({ [ANCHOR]: MULLUM, ...accountStorage(keys.publicKeyHex), ...PHONE_KEPT })) mem.async.set(k, v);
+
+        await restoreFromWords(WORDS, NODE, { nameOnNode: async () => 'Marty' });
+
+        expect(asyncStorage()).toEqual({ ...accountStorage(keys.publicKeyHex), ...PHONE_KEPT, [ANCHOR]: NODE });
+    });
+
+    it('the same account, when this phone can\'t save it: its key stays, and it is not a ReplaceNotSaved', async () => {
+        const keys = await mnemonicToKeypair(WORDS);
+        const same: BeanPoolIdentity = { publicKey: keys.publicKeyHex, privateKey: keys.privateKeyHex, callsign: 'Marty', createdAt: '2026-01-01T00:00:00.000Z' };
+        await importIdentity(same);
+        for (const [k, v] of Object.entries(accountStorage(keys.publicKeyHex))) mem.async.set(k, v);
+        vi.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore unavailable'));
+
+        const failed = restoreFromWords(WORDS, NODE, { nameOnNode: async () => 'Marty' });
+
+        await expect(failed).rejects.toThrow('Keystore unavailable');
+        await expect(failed).rejects.not.toBeInstanceOf(ReplaceNotSaved);
+        expect(await loadIdentity()).toEqual(same);
+        expect(asyncStorage()).toMatchObject(accountStorage(keys.publicKeyHex));
     });
 
     it('no account on the phone: restores as it always did, never asking; a node that can\'t say leaves the name empty', async () => {

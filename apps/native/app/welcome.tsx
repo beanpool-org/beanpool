@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView,
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
-import { restoreFromWords, type ConfirmReplace } from '../utils/restore-account';
+import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
 import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
@@ -838,6 +838,9 @@ export default function WelcomeScreen() {
             setOutgoingIdentity(null);
             setIdentity(identity);
         } catch (err) {
+            // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
+            // its key unless even that failed): the app must not go on as it.
+            if (err instanceof ReplaceNotSaved) setIdentity(null);
             // Keep on the confirm-replace screen has already gone back, with nothing changed.
             if ((err as { reason?: string } | null)?.reason !== 'cancelled') {
                 setError('Recovery failed. Check words and try again.');
@@ -959,6 +962,9 @@ export default function WelcomeScreen() {
             setMode('home');
             router.replace('/');
         } catch (e: any) {
+            // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
+            // its key unless even that failed): the app must not go on as it.
+            if (e instanceof ReplaceNotSaved) setIdentity(null);
             if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
                 setError(null);
             } else {

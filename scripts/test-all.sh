@@ -283,6 +283,7 @@ run_federation_suites() {
       test-keeper-release
       test-recovery-collect
       test-sso-recovery-roundtrip
+      test-recovery-seal
       test-keeper-http
       test-open-join
       test-web-door

@@ -53,6 +53,7 @@ import {
     type KeeperType,
 } from '../engine/recovery-shares.js';
 import { depositSsoKeeperGeneration, KeeperDepositError, type SsoKeeperResult } from '../engine/keeper-deposit.js';
+import { RecoverySealKeyMissing, RecoverySealUnopenable } from '../services/recovery-seal-key.js';
 import { startGithubSession, pollGithubSession, GITHUB_FLOW } from '../engine/github-device.js';
 import { githubPollRateLimit } from '../github-poll-rate-limit.js';
 import {
@@ -253,6 +254,18 @@ export function signInFailure(ctx: any, e: unknown): void {
     throw e;
 }
 
+/**
+ * This server cannot open members' sign-in copies: its recovery-seal key is missing (or is not a key), or the copy was
+ * locked with a key it does not have (services/recovery-seal-key.ts). 503: the member did nothing wrong, nothing was
+ * stored, and the sentence says why. Returns false for any other error, which the caller handles.
+ */
+export function recoverySealFailure(ctx: any, e: unknown): boolean {
+    if (!(e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable)) return false;
+    ctx.status = 503;
+    ctx.body = { error: e.message, code: e.code };
+    return true;
+}
+
 export function createKeeperRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { rateLimit } = deps;
@@ -351,7 +364,13 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         const owner = activeSigner(ctx);
         if (!owner) return unauthenticated(ctx);
 
-        const hub = getCurrentShares(owner).find(s => s.holderType === 'hub');
+        let hub;
+        try {
+            hub = getCurrentShares(owner).find(s => s.holderType === 'hub');
+        } catch (e) {
+            if (recoverySealFailure(ctx, e)) return;
+            throw e;
+        }
         ctx.status = 200;
         ctx.body = hub
             ? {
@@ -394,8 +413,10 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             ctx.body = ssoDepositBody(owner, result);
         } catch (e) {
             // A provider that could not be asked is 503, try again (signInFailure); nothing was stored.
+            // So is a server that cannot lock the copy (recoverySealFailure): refused before the sign-in was checked.
             // Otherwise 400 rather than 401/403 throughout: none of these mean "you are not signed in" —
             // the caller is a verified member — they mean the sign-in they attached did not check out.
+            if (recoverySealFailure(ctx, e)) return;
             if (e instanceof SsoVerificationError) return signInFailure(ctx, e);
             if (e instanceof KeeperDepositError || e instanceof RecoveryShareError) {
                 ctx.status = 400;
@@ -453,7 +474,13 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const current = getCurrentShares(owner);
+        let current;
+        try {
+            current = getCurrentShares(owner);
+        } catch (e) {
+            if (recoverySealFailure(ctx, e)) return;
+            throw e;
+        }
         const ssoShares = current.filter(s => s.holderType === 'sso');
         const targetShare = ssoShares.find(s => s.holderRef === provider);
         if (!targetShare) {
@@ -522,6 +549,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 keepers: listKeeperTypes(owner),
             };
         } catch (e) {
+            if (recoverySealFailure(ctx, e)) return;
             if (e instanceof RecoveryShareError) {
                 ctx.status = 400;
                 ctx.body = { error: e.message };
@@ -546,7 +574,14 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
 
         const keepers = listKeeperTypes(owner);
         const total = countCurrentShares(owner);
-        const currentShares = getCurrentShares(owner);
+        // A copy this server cannot open is answered as such (503, the sentence), never counted as protection.
+        let currentShares;
+        try {
+            currentShares = getCurrentShares(owner);
+        } catch (e) {
+            if (recoverySealFailure(ctx, e)) return;
+            throw e;
+        }
         const enrolledSso = currentShares.filter(s => s.holderType === 'sso').map(s => s.holderRef);
         const countOf = (t: KeeperType) => keepers.find(k => k.holderType === t)?.count ?? 0;
 

@@ -42,6 +42,7 @@ import { logger } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { movePlaceWatches } from './place-watches.js';
+import { moveRecoverySharesToNewKey } from './recovery-shares.js';
 import { moveKnocks } from './knocks.js';
 
 // ===================== TYPES =====================
@@ -379,8 +380,9 @@ export function completeRekey(
         db.prepare('UPDATE group_convenor_votes SET voter_pubkey = ? WHERE voter_pubkey = ?').run(cleanNew, cleanOld);
 
         // (p) recovery shares / collections / releases
-        db.prepare('UPDATE recovery_shares SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare("UPDATE recovery_shares SET holder_ref = ? WHERE holder_type = 'member' AND holder_ref = ?").run(cleanNew, cleanOld);
+        // The owner is what a wrapped copy is bound to, so the move opens and re-wraps each copy the member owns. Without
+        // the recovery-seal key it throws and this whole re-key rolls back (engine/recovery-shares.ts).
+        moveRecoverySharesToNewKey(cleanOld, cleanNew);
         db.prepare('UPDATE recovery_collections SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE recovery_releases SET released_by = ? WHERE released_by = ?').run(cleanNew, cleanOld);
         // The sign-in account the member joined with through the open door (engine/open-join.ts). Left on the

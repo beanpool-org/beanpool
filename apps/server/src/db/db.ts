@@ -112,6 +112,11 @@ export function setMoneyGuardHook(fn: (() => void) | null): void {
 // Enable WAL mode for better concurrency and performance
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
+// Zero what is deleted or replaced, where it lay, rather than leaving it in the file's free space for anyone who copies
+// state.db: a re-deposit's dropped recovery copy, a copy a member removed, a purged member's rows, what a standby's
+// import replaces and a force-resync clears. ON, not FAST: FAST leaves whole freed pages as they were. The connection
+// default was off, so the recovery seal clears what was deleted before this once (services/recovery-seal-key.ts).
+db.pragma('secure_delete = ON');
 
 // Cheap "has the ledger changed?" probe for the backup snapshot endpoint.
 // PRAGMA data_version only increments for changes made by OTHER connections, and

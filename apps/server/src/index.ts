@@ -71,6 +71,7 @@ import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
+import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
@@ -121,6 +122,11 @@ async function main() {
     // NODE_ROLE in .env), and run the ledger conservation audit once if a take-over left it pending. Never blocks
     // the boot; a failure is in data/takeover-journal.json and Settings.
     resumeTakeoverAtBoot();
+
+    // Step 2.65: the recovery seal for the role as it now stands. initStateEngine installed it for the role it read; a
+    // take-over finished at this boot (2.6) makes this the main server, which needs its key before anything serves.
+    // Does nothing when the role did not change; never throws (services/recovery-seal-key.ts).
+    installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
 
     // Step 2.7: The image store (storage design §7). IMAGE_STORE=s3 with a setting missing, a bucket these
     // credentials cannot reach or cannot write to (proved with a test object, written, read back and deleted),

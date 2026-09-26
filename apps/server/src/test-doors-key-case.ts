@@ -28,9 +28,10 @@
  *     nothing. Such a row signs in to Settings with no role it holds, names no admin, is re-keyed and offboarded by
  *     nobody (which would have acted on the member whose key it is). The key's holder can't act as it by a road that
  *     names a key inside what is signed either: an offline ticket naming it as the inviter (in capitals, or with …zz
- *     after the key) is refused and stays unrecorded, and a code it made before this rule admits nobody. Once an
- *     operator removes it the member whose key it is still acts, keeps what they wrote when they knocked, and their
- *     open app still gets their messages.
+ *     after the key) is refused and stays unrecorded, a code it made before this rule admits nobody, its "No" to a
+ *     Settings sign-in is refused, "sign me out everywhere" signed in capitals is the member's own, and holding the
+ *     owner role it locks no take-over envelope to the key. Once an operator removes it the member whose key it is
+ *     still acts, keeps what they wrote when they knocked, and their open app still gets their messages.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-doors-key-case.ts
  */
@@ -42,6 +43,8 @@ delete process.env.NODE_PROFILE;
 process.env.ADMIN_PASSWORD = 'DoorsKeyCase123!';
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
@@ -484,9 +487,10 @@ async function main(): Promise<void> {
     try { noraRekey = issueRekeyCode(nora.pk.toUpperCase(), founder.pk).oldPubkey; } catch (e: any) { noraRekey = `threw ${e.message}`; }
     assert(noraRekey === nora.pk, `a member's key named in capitals with no stray row still finds that member to re-key, as before (${noraRekey.slice(0, 20)})`);
 
-    // Bob's key signs a stray row's part by the roads that name a key inside what is signed: an offline ticket's inviter,
-    // and a code the stray row made. The stray rows are still active here, as until an operator removes them; Bob's own
-    // row is too.
+    // Bob's key signs a stray row's part by the roads that name a key inside what is signed, or check a signer themselves:
+    // an offline ticket's inviter, a code the stray row made, the phone's "No" to a Settings sign-in, "sign me out
+    // everywhere", and the take-over envelope's owners. The stray rows are still active here, as until an operator
+    // removes them; Bob's own row is too.
     const tia = keypair('Tia');   // a new key, holding the tickets
     const inviteCheck = (c: string) => call('GET', null, `/api/invite/check?code=${encodeURIComponent(c)}`);
     // A refused redeem is counted in the join funnel (engine/funnel.ts: a refusal leaves nothing else to count it from),
@@ -524,6 +528,42 @@ async function main(): Promise<void> {
             && !hasRow(uma.pk) && (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(strayCode) as any)?.used_by == null,
             `a code the stray row made before this rule admits nobody: the preflight says its maker can't bring anyone in, the redeem is refused, the code unused, nothing written but the funnel's count of a refusal (${show(check)}; ${show(r)}; changed: ${changed.join(', ') || 'nothing'})`);
     }
+    {
+        const pairing = async () => (await call('POST', null, '/api/local/admin/auth/pairing', {})).body as { pairingId: string; shortCode: string };
+        const decline = (p: { pairingId: string; shortCode: string }, memberPubkey: string) => call('POST', null, `/api/local/admin/auth/pairing/${p.pairingId}/decline`, {
+            memberPubkey,
+            signature: crypto.sign(null, Buffer.from(`beanpool-settings-signin:v1:decline:${p.pairingId}:${p.shortCode}`), bob.priv).toString('base64'),
+        });
+        const asStray = await decline(await pairing(), bobCaps);
+        const asBob = await decline(await pairing(), bob.pk);
+        assert(asStray.status === 403 && asBob.status === 200,
+            `the phone's "No" to a Settings sign-in, signed by Bob's key as the stray row, is refused; as Bob it ends the pairing (${show(asStray)}; ${show(asBob)})`);
+    }
+    {
+        const epoch = (k: string) => (db.prepare('SELECT session_epoch FROM node_roles WHERE member_pubkey = ?').get(k) as any)?.session_epoch;
+        const strayEpoch = epoch(bobCaps), bobEpoch = epoch(bob.pk);
+        const r = await call('POST', bob, '/api/local/admin/auth/revoke-all', {}, bobCaps);
+        assert(r.status === 200 && r.body?.memberPubkey === bob.pk && epoch(bob.pk) === bobEpoch + 1 && epoch(bobCaps) === strayEpoch,
+            `"sign me out everywhere" signed by Bob in capitals ends Bob's own sessions, not the stray row's (${show(r)}; Bob ${bobEpoch}→${epoch(bob.pk)}, stray ${strayEpoch}→${epoch(bobCaps)})`);
+    }
+    {
+        // Were the stray row an owner, the take-over envelope and every sealed backup would be locked to Bob's key through it.
+        const dataDir = process.env.BEANPOOL_DATA_DIR!;
+        const { ensureGenesis } = await import('./genesis.js');
+        await ensureGenesis();
+        if (!fs.existsSync(path.join(dataDir, 'libp2p_key'))) {
+            const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
+            fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
+        }
+        const { readSealingInputs } = await import('./services/takeover-envelope.js');
+        db.prepare("UPDATE node_roles SET role = 'owner' WHERE member_pubkey = ?").run(bobCaps);
+        const inputs = readSealingInputs();
+        db.prepare("UPDATE node_roles SET role = 'admin' WHERE member_pubkey = ?").run(bobCaps);
+        const owners = inputs.ok ? inputs.owners.map(o => o.pubkey) : [];
+        assert(!owners.includes(bob.pk) && !owners.includes(bobCaps) && inputs.skipped.some(s => s.pubkey === bobCaps),
+            `a stray row holding the owner role locks no take-over envelope to Bob's key: it is left out and named as skipped (owners ${owners.map(k => k.slice(0, 6)).join(', ') || 'none'}; skipped ${inputs.skipped.map(s => s.pubkey.slice(0, 6)).join(', ') || 'none'})`);
+    }
+
     // Bob's app is open while the operator tidies up.
     const bobOpen = await socket(bob);
 

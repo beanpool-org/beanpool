@@ -48,6 +48,7 @@ import { readOpenJoinRecord, OPEN_JOINS_IN_BUNDLE, type OpenJoinRecord } from '.
 import { logger } from '../logger.js';
 import { setTakeoverChangeHandler } from './takeover-signal.js';
 import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
+import { isMemberKeySpelling } from '../engine/member-key.js';
 import { RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
 
 export const TAKEOVER_ENVELOPE_FILE = 'takeover-envelope.json';
@@ -187,9 +188,15 @@ export interface OwnerRecipient { pubkey: string; callsign: string }
 export interface SkippedOwner extends OwnerRecipient { why: string }
 
 /** An owner key that converts to a usable X25519 point. A malformed or small-order key would make sealEnvelope
- *  throw for everyone, so it is left out and named in the status instead. */
+ *  throw for everyone, so it is left out and named in the status instead. So is a key in another spelling than the one
+ *  this community keeps (engine/member-key.ts): a row an old door stored under a member's key in capitals, whose role
+ *  would otherwise lock the envelope, and every sealed backup, to that key through it, whatever became of the member. */
 function ownerKeyProblem(pubkey: string): string | null {
-    if (!/^[0-9a-f]{64}$/.test(pubkey)) return 'the key is not 32 bytes of hex';
+    if (!isMemberKeySpelling(pubkey)) {
+        return /^[0-9a-fA-F]{64}$/.test(pubkey)
+            ? 'the key has capital letters in it: an older version stored this row under another spelling of a member’s key. Remove it in Settings → People'
+            : 'the key is not 32 bytes of hex';
+    }
     try {
         const x = ed25519.utils.toMontgomery(Buffer.from(pubkey, 'hex'));
         x25519.getSharedSecret(x25519.utils.randomSecretKey(), x);
@@ -209,7 +216,8 @@ function currentOwners(): { owners: OwnerRecipient[]; skipped: SkippedOwner[] } 
     const owners: OwnerRecipient[] = [];
     const skipped: SkippedOwner[] = [];
     for (const r of rows) {
-        const pubkey = String(r.pubkey).toLowerCase();
+        // As the row holds it, never lower-cased onto another row's key (ownerKeyProblem).
+        const pubkey = String(r.pubkey);
         const callsign = (r.callsign && r.callsign.trim()) || pubkey.slice(0, 8);
         const problem = ownerKeyProblem(pubkey);
         if (problem) skipped.push({ pubkey, callsign, why: problem });

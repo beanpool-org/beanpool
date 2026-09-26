@@ -13,9 +13,9 @@
 //    (isMemberKeySpelling): it is never silently lower-cased into someone else's;
 //  - a key a request's own signature PROVES (the signature middleware's signer, a redeem signed by the key it names)
 //    is taken in that spelling (provenKeySpelling), and anything but 64 hexadecimal characters is refused;
-//  - a key named INSIDE what is signed, whose signature is then checked against it (an offline ticket's inviter), or a
-//    key a stored row names as someone who acts (an invite code's maker), must already be in that spelling: a row
-//    under another spelling acts for nobody.
+//  - a key named INSIDE what is signed, whose signature is then checked against it (an offline ticket's inviter, the
+//    phone's "No" to a Settings sign-in), or a key a stored row names as someone who acts (an invite code's maker, a
+//    node role's holder), must already be in that spelling: a row under another spelling acts for nobody.
 
 import { isSyntheticAccount } from '@beanpool/core';
 import { isMemberKeySpelling } from '@beanpool/engine';

@@ -41,7 +41,7 @@ import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
-import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
+import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
@@ -249,8 +249,11 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         }
         targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
     } else {
-        // Allow mobile app with signed headers (X-Public-Key, X-Signature)
-        const pubKeyHex = ctx.get('X-Public-Key');
+        // Allow mobile app with signed headers (X-Public-Key, X-Signature). This path skips the signature middleware, so
+        // the signer is taken here as the middleware takes it: in the one spelling (engine/member-key.ts
+        // provenKeySpelling). The signature check forgives case, so as sent, a key in capitals was the row an old door
+        // stored under that spelling, and "sign me out everywhere" ended that row's sessions instead of the member's.
+        const pubKeyHex = provenKeySpelling(ctx.get('X-Public-Key'));
         const signatureBase64 = ctx.get('X-Signature');
         if (pubKeyHex && signatureBase64 && nodeRoleOf(pubKeyHex)) {
             const timestampHeader = ctx.get('X-Timestamp');

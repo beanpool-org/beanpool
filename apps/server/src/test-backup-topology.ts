@@ -20,6 +20,8 @@
  *   4. promotionSanityCheck() reports OK on a conservation-consistent ledger.
  *   5. After promotion back to 'primary', importRemoteState refuses again — a
  *      promoted node stops importing.
+ *   2b. Recovery seal S2: a member's sign-in copy reaches the standby, in a whole
+ *      copy, as the main server's wrapped bytes, never the client's; the key never.
  */
 
 import {
@@ -28,6 +30,8 @@ import {
 } from './state-engine.js';
 import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -83,6 +87,43 @@ async function run() {
         const result = await importRemoteState(snapshot);
         assert(!!result, 'BACKUP imports the primary snapshot once role=backup + mirror trust');
 
+
+        // 2b. Recovery seal S2: a member's sign-in recovery copy reaches the standby as the main server's WRAPPED
+        //     bytes in whole copy (the snapshot a standby pulls), never the client's, and the recovery-seal key never travels. The deposit goes over
+        //     HTTPS through the signature middleware (recovery-seal-test-http.ts).
+        {
+            setNodeRole('primary');
+            const { startRecoveryHttps, fixtureWords } = await import('./recovery-seal-test-http.js');
+            const { db } = await import('./db/db.js');
+            const since = new Date(Date.now() - 1000).toISOString();
+            const w = fixtureWords(5);
+            const dep = await (await startRecoveryHttps()).deposit({ seedHex: w.seedHex, words: w.words, callsign: 'Dee', addMember: true });
+            assert(dep.status === 200, `2b. (setup) a member deposits a sign-in copy over HTTPS (${dep.status})`);
+            const row = () => db.prepare('SELECT encrypted_share, share_iv, share_tag, kdf_params FROM recovery_shares WHERE owner_pubkey = ?').get(dep.pk) as any;
+            const onMain = row();
+            const payload = await exportSyncState(nodeId);
+            const sent: any = (payload.recoveryShares ?? []).find((r: any) => r.ownerPubkey === dep.pk);
+            assert(!!sent && sent.encryptedShare === onMain.encrypted_share && sent.shareIv === onMain.share_iv
+                && sent.shareTag === onMain.share_tag && sent.kdfParams === onMain.kdf_params && JSON.parse(sent.kdfParams).alg === 'node-wrap-xc20p-v1',
+                `2b. the whole copy (the snapshot a standby pulls) carries the main server's wrapped row, byte for byte`);
+            const text = JSON.stringify(payload);
+            const kdf = JSON.parse(dep.sealed.kdfParams);
+            const clientPieces = [dep.sealed.encryptedShare, dep.sealed.shareIv, dep.sealed.shareTag, kdf.salt, kdf.words?.ct, kdf.words?.tag].filter(Boolean);
+            assert(!clientPieces.some((p: string) => text.includes(p)), `2b. …and none of the client's bytes (seed box, salt, words box)`);
+            const key = fs.readFileSync(path.join(process.env.BEANPOOL_DATA_DIR!, 'recovery-seal.key'));
+            assert(![key.toString('base64'), key.toString('hex'), key.toString('base64url')].some((n) => text.includes(n)),
+                `2b. …and never the recovery-seal key`);
+            // A standby that has not copied it yet: the same database, the row removed, then the import.
+            db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(dep.pk);
+            setNodeRole('backup');
+            await importRemoteState(payload);
+            const onStandby = row();
+            assert(!!onStandby && onStandby.encrypted_share === onMain.encrypted_share && onStandby.share_iv === onMain.share_iv
+                && onStandby.share_tag === onMain.share_tag && onStandby.kdf_params === onMain.kdf_params,
+                `2b. the standby's row equals the main server's wrapped bytes`);
+            assert(onStandby.encrypted_share !== dep.sealed.encryptedShare && onStandby.kdf_params !== dep.sealed.kdfParams,
+                `2b. …never the client's`);
+        }
         // 3. Safety net intact: a non-mirror (peer) signer is still rejected as a backup.
         removeConnector(trustedAddr);
         addConnector(trustedAddr, 'peer', 'self-test-peer');

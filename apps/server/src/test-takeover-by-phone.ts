@@ -26,6 +26,12 @@
  *  7. Restore: a sealed backup from the promoted server, uploaded to a FRESH server with "open with an owner's
  *     phone" → the QR → @Anna's phone (native raw seed) → restored, restarted: the community's PeerId and roles.
  *
+ * Recovery seal S2 (the key that opens members' sign-in recovery copies travels inside the take-over keys and a
+ * sealed backup): @Dee deposits a sign-in copy on the main server over HTTPS (1). The preview says the keys carry the
+ * key (4); the promoted server holds it byte for byte and releases @Dee's copy to a device with nothing but the
+ * sign-in, over HTTPS (5). Keys locked before they carried it promote by phone too, and the take-over logs the
+ * missing-key line (6c). The fresh server restored by phone holds the key and releases @Dee's copy too (7).
+ *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-takeover-by-phone.ts
  */
@@ -34,7 +40,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { spawnNode, post, copyDir, runNodeChild, inspectNode, type NodeProc } from './takeover-test-harness.js';
+import { spawnNode, post, copyDir, runNodeChild, inspectNode, recoverySealCommands, type NodeProc } from './takeover-test-harness.js';
+import { fixtureWords } from './recovery-seal-test-http.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Main-Server-Pw-907!';
@@ -46,6 +53,7 @@ const TUNNEL_TOKEN = 'eyJ0dW5uZWwiOiJwaG9uZXRvd24ifQ.' + crypto.randomBytes(12).
 
 async function child(): Promise<void> {
     await runNodeChild({
+        ...recoverySealCommands,
         'setup-primary': async (a: { ownerSeedHex: string; benSeedHex: string; replicationToken: string; tunnelToken: string }) => {
             const { ed25519 } = await import('@noble/curves/ed25519.js');
             const se = await import('./state-engine.js');
@@ -118,7 +126,12 @@ const AUDIT_BANNER = 'FAILOVER PROMOTION — running ledger conservation sanity 
 async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
-    const dirs = { main: path.join(root, 'main'), standby: path.join(root, 'standby'), probe: path.join(root, 'probe'), fresh: path.join(root, 'fresh') };
+    const dirs = {
+        main: path.join(root, 'main'), standby: path.join(root, 'standby'), probe: path.join(root, 'probe'), fresh: path.join(root, 'fresh'),
+        probeOld: path.join(root, 'probe-old'),
+    };
+    const SEAL_KEY = 'recovery-seal.key';
+    const dee = fixtureWords(3);
     const nodes: NodeProc[] = [];
     const standbyOutputs: string[] = [];
     const core = await import('@beanpool/core');
@@ -159,6 +172,11 @@ async function main(): Promise<void> {
         const mainPeerId = mainNode.ready.peerId;
         const communityId = JSON.parse(fs.readFileSync(path.join(dirs.main, 'genesis.json'), 'utf-8')).communityId;
         assert(setup.envelopeId && /^BPRC-1 /.test(setup.code), 'the main server has a take-over envelope (locked to @Anna and code #1)');
+        const deposited = await mainNode.send('recovery-deposit', { seedHex: dee.seedHex, words: dee.words, callsign: 'Dee', addMember: true });
+        assert(deposited.status === 200 && deposited.body?.threshold === 1,
+            `S2: @Dee deposits a sign-in recovery copy on the main server over HTTPS (${deposited.status} ${JSON.stringify(deposited.body)})`);
+        const mainSealKey = fs.readFileSync(path.join(dirs.main, SEAL_KEY));
+        // The envelope was sealed when the recovery code was made; the deposit changes nothing it holds.
 
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
@@ -169,6 +187,8 @@ async function main(): Promise<void> {
         assert(pulled.resync.ok && pulled.envelope === 'stored' && pulled.held.at(-1) === setup.envelopeId, 'the standby copied the database and holds the envelope');
         await standby.send('checkpoint');
         copyDir(dirs.standby, dirs.probe);
+        copyDir(dirs.standby, dirs.probeOld);
+        assert(!fs.existsSync(path.join(dirs.standby, SEAL_KEY)), 'S2: the standby holds no recovery-seal key of its own');
         await mainNode.kill('SIGKILL');
 
         // ── 2. Start the phone session ──
@@ -222,6 +242,8 @@ async function main(): Promise<void> {
         assert(JSON.stringify(pv.owners) === '["@Anna"]' && pv.admins === 1 && pv.connectors === 1 && pv.publicAddress === 'phonetown.beanpool.org',
             'owners @Anna, 1 admin, 1 link, the web address');
         assert(pv.tunnel.source === 'envelope', `the tunnel token came with the keys (${pv.tunnel.message})`);
+        assert(pv.recoverySealKey === true && !pv.missing.some((m: string) => /sign-in recovery copies/.test(m)),
+            `S2: the preview says the keys carry the key that opens members' sign-in recovery copies (${pv.recoverySealKey})`);
         assert(!JSON.stringify(followed.body).includes(TUNNEL_TOKEN) && !/adminHash|totpSecret|libp2p_key/.test(JSON.stringify(followed.body)),
             'the preview carries no secret from inside the keys');
 
@@ -256,6 +278,14 @@ async function main(): Promise<void> {
         assert(!after.heldDirExists && !after.bundleFileExists, 'the held copies and the opened keys are gone from disk');
         standbyOutputs.push(standby.output());
         assert(count(standbyOutputs.join('\n'), AUDIT_BANNER) === 1, 'the conservation audit ran exactly once');
+        const promotedKey = path.join(dirs.standby, SEAL_KEY);
+        assert(fs.readFileSync(promotedKey).equals(mainSealKey) && (fs.statSync(promotedKey).mode & 0o777) === 0o600,
+            "S2: the promoted server holds the main server's recovery-seal key, byte for byte, 0600");
+        assert(!/cannot be opened here|No recovery-seal key/.test(standbyOutputs.join('\n')), 'S2: no copy it cannot open, and no missing-key line');
+        const deeBack = await standby.send('recovery-recover', { callsign: 'Dee' });
+        assert(deeBack.released.status === 200 && deeBack.released.body?.enough === true && deeBack.seedHex === dee.seedHex
+            && JSON.stringify(deeBack.words) === JSON.stringify(dee.words),
+            `S2: it releases @Dee's wrapped copy to a device with only their sign-in, over HTTPS, and it opens to their seed and 12 words (${deeBack.released.status} ${deeBack.error ?? 'opened'})`);
 
         // ── 6. Another community's keys ──
         console.log('\n— 6. refused: a standby holding only another community\'s keys —');
@@ -309,6 +339,56 @@ async function main(): Promise<void> {
             await probe.kill();
         }
 
+        // ── 6c. Keys locked before they carried the recovery-seal key, by phone ──
+        console.log('\n— 6c. S2: by phone, keys locked before they carried the recovery-seal key —');
+        {
+            const { privateKeyFromProtobuf } = await import('@libp2p/crypto/keys');
+            const keyBytes = fs.readFileSync(path.join(dirs.main, 'libp2p_key'));
+            const mainSeed = new Uint8Array(privateKeyFromProtobuf(keyBytes).raw.subarray(0, 32));
+            const record = JSON.parse(fs.readFileSync(path.join(dirs.main, 'local-config.json'), 'utf-8')).recoveryCode;
+            // The bundle as the code before this change built it: no recovery-seal.key entry at all.
+            const oldBundle = {
+                v: 1,
+                files: {
+                    libp2p_key: keyBytes.toString('base64'),
+                    'community.key': fs.readFileSync(path.join(dirs.main, 'community.key')).toString('base64'),
+                    'genesis.json': fs.readFileSync(path.join(dirs.main, 'genesis.json')).toString('base64'),
+                    'connectors.json': null,
+                },
+                localConfig: { adminHash: 'x', salt: 'y', totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false },
+                nodeRoles: [], publicAddress: null, recoveryCode: record,
+            };
+            const oldEnvelope = await core.sealEnvelope(new TextEncoder().encode(JSON.stringify(oldBundle)), {
+                kind: 'takeover', communityId, nodePeerId: mainPeerId, signingKey: mainSeed, createdAt: new Date().toISOString(),
+                recipients: { owners: [{ pubkey: setup.anna, callsign: 'Anna' }], codes: [record] },
+            });
+            const oldId = core.readSealedHeader(oldEnvelope).envelopeId;
+            fs.writeFileSync(path.join(dirs.probeOld, 'held-takeover-envelopes', `${String(Date.now() + 2_000_000).padStart(13, '0')}-${oldId}.bpseal`), oldEnvelope, { mode: 0o600 });
+            let old = await spawnNode(SCRIPT, dirs.probeOld, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            nodes.push(old);
+            const oStart = await post(old.base, '/api/local/admin/takeover/phone/start', { serverUrl: old.base }, pw(PW_STANDBY));
+            assert(oStart.status === 200 && oStart.body.envelope.envelopeId === oldId, `a phone session on the keys locked before (${oStart.status})`);
+            const oAnna = await phone(oStart.body.qr, ownerSeedHex, { communityId, nodePeerId: mainPeerId });
+            const oUnlocked = await send(oAnna.qr, oAnna.request);
+            assert(oUnlocked.status === 200, `@Anna's phone unlocks them (${oUnlocked.status})`);
+            const oWait = await post(old.base, '/api/local/admin/takeover/phone/wait', { sessionId: oStart.body.sessionId }, pw(PW_STANDBY));
+            const opv = oWait.body.preview;
+            assert(opv?.recoverySealKey === false && opv.missing.some((m: string) => /^members' sign-in recovery copies: these keys were locked before they carried the key/.test(m)),
+                `the preview says they do not carry the recovery-seal key, and lists the copies in what will be missing (${opv?.recoverySealKey})`);
+            const oConfirm = await post(old.base, '/api/local/admin/takeover/confirm', { sessionId: opv.sessionId, confirm: true }, pw(PW_STANDBY));
+            assert(oConfirm.status === 200, `the take-over goes on: nothing blocks it (${oConfirm.status})`);
+            await old.exited;
+            const NO_KEY_LINE = "No recovery-seal key in this envelope: members' sign-in copies will not open on this server until they reconnect. Their 12 words still work.";
+            assert(old.output().includes(`[Takeover] ${NO_KEY_LINE}`), 'the take-over logs the missing-key line');
+            old = await spawnNode(SCRIPT, dirs.probeOld, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            nodes.push(old);
+            assert(old.ready.role === 'primary' && old.ready.peerId === mainPeerId, 'it is the main server, with the community\'s PeerId');
+            assert(/1 of them were locked with another recovery-seal key and cannot be opened here/.test(old.output()), 'its boot names the copy it cannot open');
+            const deeNot = await old.send('recovery-recover', { callsign: 'Dee' });
+            assert(deeNot.seedHex === null && deeNot.released.body?.enough !== true, `@Dee's copy does not open there (${deeNot.released.status})`);
+            await old.kill();
+        }
+
         // ── 7. Restore onto a fresh server with the phone ──
         console.log('\n— 7. restore a sealed backup onto a fresh server with @Anna\'s phone —');
         const dl = await fetch(standby.base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', ...pw(PW_MAIN) }, body: '{}' });
@@ -353,6 +433,14 @@ async function main(): Promise<void> {
         assert(communityPw.status === 200, "the community's admin password works on it");
         const freshPw = await post(fresh.base, '/api/local/admin/takeover/progress', {}, pw(PW_FRESH));
         assert(freshPw.status === 401, "and the fresh server's own no longer does: why the screen follows the restore with its token");
+        const restoredKey = path.join(dirs.fresh, SEAL_KEY);
+        assert(fs.readFileSync(restoredKey).equals(mainSealKey) && (fs.statSync(restoredKey).mode & 0o777) === 0o600,
+            "S2: the sealed backup brought the community's recovery-seal key, byte for byte, 0600");
+        assert(fs.readdirSync(dirs.fresh).filter((n) => n.startsWith('recovery-seal-retired-')).length === 1,
+            "S2: the fresh server's own key (made at its first start) is kept beside it, never lost");
+        const deeRestored = await fresh.send('recovery-recover', { callsign: 'Dee' });
+        assert(deeRestored.released.status === 200 && deeRestored.seedHex === dee.seedHex,
+            `S2: the restored server releases @Dee's copy to a device with only their sign-in, and it opens to their seed (${deeRestored.released.status} ${deeRestored.error ?? 'opened'})`);
 
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);
         console.log('⭐️ ALL TAKE-OVER-BY-PHONE CHECKS PASSED.');

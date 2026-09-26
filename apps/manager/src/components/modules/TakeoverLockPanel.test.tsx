@@ -31,7 +31,16 @@ const NO_CODE: TakeoverStatus = {
     recoveryCode: null,
 };
 const LOCKED = { locked: true, codeId: 2, message: 'Backups are locked to recovery code #2 and 2 owners.' };
-const NOT_LOCKED = { locked: false, reason: 'no-recovery-code', message: 'Backups are not locked yet: make a recovery code to lock them.' };
+const NOT_LOCKED = {
+    locked: false, reason: 'no-recovery-code',
+    message: "Backups are not locked yet: make a recovery code to lock them. Until then a backup file can be read by anyone who has it, and a server restored from it cannot open members' sign-in recovery copies.",
+};
+// The node's own words (services/takeover-envelope.ts recoverySealKeyStatus), recovery seal S2.
+const SEAL_KEY_CARRIED = { carried: true, message: "The locked keys carry the key that opens members' sign-in recovery copies, so a server that takes over opens them." };
+const SEAL_KEY_MISSING = {
+    carried: false,
+    message: "The locked keys do not carry the key that opens members' sign-in recovery copies: this server's data/recovery-seal.key is missing or is not a key. A server that takes over from them cannot open those copies; members' 12 words still work, and they connect their sign-in again.",
+};
 
 type Reply = { status?: number; json: unknown } | (() => { status?: number; json: unknown });
 function mockNode(routes: Record<string, Reply>) {
@@ -77,6 +86,36 @@ describe('TakeoverLockPanel — the status', () => {
         expect(screen.getByTestId('recovery-code-line')).toHaveTextContent(/Recovery code #2, made .*2026/);
     });
 
+    it('the recovery-seal key: says the lock carries it, warns in amber when it does not, and an older node says nothing', async () => {
+        mockNode({ [statusRoute]: { json: { ...SEALED, recoverySealKey: SEAL_KEY_CARRIED } }, [backupRoute]: { json: { role: 'primary', backupLock: LOCKED } } });
+        const first = render(<TakeoverLockPanel activeNode={node} />);
+        const carried = await screen.findByTestId('takeover-seal-key');
+        expect(carried).toHaveTextContent("🔑 The locked keys carry the key that opens members' sign-in recovery copies, so a server that takes over opens them.");
+        expect(carried.className).not.toMatch(/amber/);
+        first.unmount();
+
+        mockNode({ [statusRoute]: { json: { ...SEALED, recoverySealKey: SEAL_KEY_MISSING } }, [backupRoute]: { json: { role: 'primary', backupLock: LOCKED } } });
+        const second = render(<TakeoverLockPanel activeNode={node} />);
+        const missing = await screen.findByTestId('takeover-seal-key');
+        expect(missing).toHaveTextContent(/^⚠️ The locked keys do not carry the key that opens members' sign-in recovery copies: this server's data\/recovery-seal\.key is missing or is not a key\./);
+        expect(missing).toHaveTextContent("members' 12 words still work");
+        expect(missing.className).toMatch(/border-amber-800/);
+        second.unmount();
+
+        // A node older than S2 sends no such field; one with no envelope sends null. Neither shows a line.
+        mockNode({ [statusRoute]: { json: SEALED }, [backupRoute]: { json: { role: 'primary', backupLock: LOCKED } } });
+        const third = render(<TakeoverLockPanel activeNode={node} />);
+        await waitFor(() => expect(screen.getByTestId('takeover-state')).toHaveTextContent('Locked.'));
+        expect(screen.queryByTestId('takeover-seal-key')).toBeNull();
+        third.unmount();
+        mockNode({ [statusRoute]: { json: { ...NO_CODE, state: 'no-recipients', envelopeId: null, sealedAt: null, recipients: { owners: [], codes: [] }, recoverySealKey: null,
+            message: 'No take-over envelope: this server has no owner and no recovery code, so there is nobody to lock its keys to.' } },
+        [backupRoute]: { json: { backupLock: NOT_LOCKED } } });
+        render(<TakeoverLockPanel activeNode={node} />);
+        await waitFor(() => expect(screen.getByTestId('takeover-state')).toHaveTextContent('Not locked yet.'));
+        expect(screen.queryByTestId('takeover-seal-key')).toBeNull();
+    });
+
     it('after a take-over by code: "your recovery code was used, make a new one"; not shown otherwise', async () => {
         const used = { codeId: 2, at: '2026-09-20T01:00:00.000Z', message: 'Your recovery code #2 was used to take over on 2026-09-20T01:00:00.000Z. Make a new one: whoever has that paper can open this community\'s keys.' };
         mockNode({ [statusRoute]: { json: { ...SEALED, codeUsed: used } }, [backupRoute]: { json: { role: 'primary', backupLock: LOCKED } } });
@@ -99,6 +138,7 @@ describe('TakeoverLockPanel — the status', () => {
         await waitFor(() => expect(screen.getByTestId('takeover-state')).toHaveTextContent(/Not locked yet\..*no owner and no recovery code/));
         expect(screen.queryByTestId('takeover-recipients')).toBeNull();
         await waitFor(() => expect(screen.getByTestId('backup-lock')).toHaveTextContent('🔓 Backups are not locked yet'));
+        expect(screen.getByTestId('backup-lock')).toHaveTextContent("a server restored from it cannot open members' sign-in recovery copies.");
         expect(screen.getByTestId('recovery-code-line')).toHaveTextContent('No printed recovery code.');
         expect(screen.getByRole('button', { name: 'Make a recovery code' })).toBeInTheDocument();
     });

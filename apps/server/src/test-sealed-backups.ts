@@ -18,6 +18,14 @@
  *  6. A file let through by naming its signer (X-Accept-Signer) restores its database only: a take-over bundle inside
  *     it — which anyone who has seen a header can forge — is never applied (seal review round 1).
  *
+ * Recovery seal S2 (the key that opens members' sign-in recovery copies travels only inside a sealed backup):
+ *  1. @Dee deposits a sign-in copy on the main server over HTTPS. The sealed backup's bundle carries
+ *     data/recovery-seal.key byte for byte; the restore on a fresh data dir installs it (the fresh server's own key is
+ *     kept beside it), says the copy opens, and after the restart a device with only @Dee's sign-in recovers their seed
+ *     and 12 words over HTTPS.
+ *  2e. A plain backup (no recovery code) lists no recovery-seal.key and holds none of its bytes; a restore from it says
+ *     the copy will not open there, with the missing-key line, and after the restart it does not.
+ *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-sealed-backups.ts
  * (It re-runs itself as a child with `--child` for the fresh-server side.)
@@ -107,6 +115,18 @@ async function serveBackupRoutes() {
 async function child(): Promise<void> {
     const [, , , mode, file] = process.argv;
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
+    const sealKeyOf = () => { try { return sha(fs.readFileSync(path.join(dataDir, 'recovery-seal.key'))); } catch { return null; } };
+    const retiredKeys = () => Object.fromEntries(fs.readdirSync(dataDir).filter((n) => n.startsWith('recovery-seal-retired-'))
+        .map((n) => [n, { sha: sha(fs.readFileSync(path.join(dataDir, n))), mode: (fs.statSync(path.join(dataDir, n)).mode & 0o777).toString(8) }]));
+    if (mode === 'recover') {
+        // The restored server after its restart, and a device with nothing but @Dee's sign-in (recovery-seal-test-http.ts).
+        const { initStateEngine: boot } = await import('./state-engine.js');
+        boot();
+        const { startRecoveryHttps } = await import('./recovery-seal-test-http.js');
+        const recovered = await (await startRecoveryHttps()).recover({ callsign: 'Dee' });
+        console.log('CHILD_RESULT ' + JSON.stringify({ recovered, sealKey: sealKeyOf(), retired: retiredKeys() }));
+        process.exit(0);
+    }
     const { initStateEngine } = await import('./state-engine.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
@@ -123,6 +143,7 @@ async function child(): Promise<void> {
     const before = {
         key: sha(fs.readFileSync(path.join(dataDir, 'libp2p_key'))),
         communityId: JSON.parse(fs.readFileSync(path.join(dataDir, 'genesis.json'), 'utf-8')).communityId,
+        sealKey: sealKeyOf(),
     };
 
     // The real HTTPS server, with the request the operator manual gives (curl --data-binary sends
@@ -193,15 +214,18 @@ async function child(): Promise<void> {
             adminHash: localConfig.adminHash, salt: localConfig.salt, totpEnabled: localConfig.totpEnabled,
             totpSecret: localConfig.totpSecret, recoveryCodeId: localConfig.recoveryCode?.codeId ?? null,
             roles, members, marker: !!marker, leftovers, images,
+            sealKey: sealKeyOf(), sealKeyMode: fs.existsSync(path.join(dataDir, 'recovery-seal.key'))
+                ? (fs.statSync(path.join(dataDir, 'recovery-seal.key')).mode & 0o777).toString(8) : null,
+            retired: retiredKeys(),
         },
     }));
     process.exit(0);
 }
 
-function runChild(mode: 'sealed' | 'legacy', file: string, code?: string): any {
+function runChild(mode: 'sealed' | 'legacy', file: string, code?: string, opts: { thenRecover?: boolean } = {}): any {
     const freshDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sealed-restore-fresh-'));
-    try {
-        const r = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url), '--child', mode, file], {
+    const spawnChild = (m: string) => {
+        const r = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url), '--child', m, file], {
             env: { ...process.env, BEANPOOL_DATA_DIR: freshDir, TEST_RECOVERY_CODE: code ?? '' },
             encoding: 'utf-8', timeout: 180_000, maxBuffer: 64 * 1024 * 1024,
         });
@@ -210,7 +234,13 @@ function runChild(mode: 'sealed' | 'legacy', file: string, code?: string): any {
             console.error(r.stdout?.slice(-3000), r.stderr?.slice(-3000));
             throw new Error(`the fresh-server child printed no result (exit ${r.status})`);
         }
-        return JSON.parse(line.slice('CHILD_RESULT '.length));
+        return { ...JSON.parse(line.slice('CHILD_RESULT '.length)), logs: `${r.stdout}\n${r.stderr}` };
+    };
+    try {
+        const restored = spawnChild(mode);
+        // The node restarts after a restore (the child stood in for it); this is that restart, on the same data dir.
+        if (opts.thenRecover) restored.afterRestart = spawnChild('recover');
+        return restored;
     } finally {
         fs.rmSync(freshDir, { recursive: true, force: true });
     }
@@ -253,6 +283,13 @@ async function main(): Promise<void> {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run('ab'.repeat(32), 'RoundTripMarker', new Date().toISOString(), ownerPub, 'TEST');
     const code = await makeRecoveryCode();
+    // S2: @Dee's sign-in recovery copy, deposited over HTTPS through the signature middleware (recovery-seal-test-http.ts).
+    const { startRecoveryHttps, fixtureWords } = await import('./recovery-seal-test-http.js');
+    const dee = fixtureWords(4);
+    const deposited = await (await startRecoveryHttps()).deposit({ seedHex: dee.seedHex, words: dee.words, callsign: 'Dee', addMember: true });
+    assert(deposited.status === 200 && deposited.body?.threshold === 1, `S2 setup: @Dee deposits a sign-in copy on the main server over HTTPS (${deposited.status})`);
+    const mainSealKeyBytes = fs.readFileSync(path.join(dataDir!, 'recovery-seal.key'));
+    const mainSealKey = sha(mainSealKeyBytes);
     const main = {
         key: sha(nodeKeyBytes),
         communityKey: sha(fs.readFileSync(path.join(dataDir!, 'community.key'))),
@@ -277,16 +314,23 @@ async function main(): Promise<void> {
     const header = core.readSealedHeader(new Uint8Array(backupBytes));
     assert(header.kind === 'backup' && header.recipients.some((r: any) => r.type === 'owner' && r.pubkey === ownerPub)
         && header.recipients.some((r: any) => r.type === 'code' && r.codeId === code.codeId), 'it is locked to the owner and the recovery code');
-    assert((await core.openEnvelope(new Uint8Array(backupBytes), { type: 'owner', privateKey: ownerKey }, { kind: 'backup' })).payload.length > 0,
-        'the owner opens it with their member key');
+    const ownerOpened = (await core.openEnvelope(new Uint8Array(backupBytes), { type: 'owner', privateKey: ownerKey }, { kind: 'backup' })).payload;
+    assert(ownerOpened.length > 0, 'the owner opens it with their member key');
+    {
+        const tarFile = path.join(work, 'opened.tar.gz');
+        fs.writeFileSync(tarFile, ownerOpened);
+        const bundleText = spawnSync('tar', ['-xzOf', tarFile, './takeover-bundle.json'], { encoding: 'utf-8' }).stdout;
+        assert(JSON.parse(bundleText).files['recovery-seal.key'] === mainSealKeyBytes.toString('base64'),
+            "S2: the sealed backup's take-over bundle carries data/recovery-seal.key, byte for byte");
+    }
     updateLocalConfig({ totpEnabled: false, totpSecret: null });
 
     // ── 1. Round trip onto a fresh server ──
     console.log('\n— 1. seal → restore on a fresh data dir —');
-    const rt = runChild('sealed', backupFile, code.code);
+    const rt = runChild('sealed', backupFile, code.code, { thenRecover: true });
     const mc = rt.makeCode;
     assert(mc?.beforeCode.status === 200 && mc.beforeCode.gzip && mc.beforeCode.locked === 'no'
-        && mc.beforeCode.why === 'Backups are not locked yet: make a recovery code to lock them.',
+        && mc.beforeCode.why === "Backups are not locked yet: make a recovery code to lock them. Until then a backup file can be read by anyone who has it, and a server restored from it cannot open members' sign-in recovery copies.",
         `1. a fresh server with no recovery code sends a readable backup over HTTPS, flagged not locked (${JSON.stringify(mc?.beforeCode)})`);
     assert(mc?.status === 200 && mc.looksLikeCode, `1. the operator manual's make-a-code request (password header, JSON body) makes a code over HTTPS (got ${mc?.status})`);
     assert(mc?.afterCode.status === 200 && !mc.afterCode.gzip && mc.afterCode.locked === 'yes', `1. …after which its backups are locked (${JSON.stringify(mc?.afterCode)})`);
@@ -303,6 +347,19 @@ async function main(): Promise<void> {
     assert(JSON.stringify(rt.after.roles) === JSON.stringify(main.roles), '1. the roles are back');
     assert(rt.after.members === main.members && rt.after.marker, '1. the database is back (members, and the marker row)');
     assert(rt.after.leftovers.length === 0, `1. no restore temp files left (${rt.after.leftovers.join(', ')})`);
+    assert(rt.before.sealKey && rt.before.sealKey !== mainSealKey && rt.after.sealKey === mainSealKey && rt.after.sealKeyMode === '600',
+        "1. S2: the restore installs the community's recovery-seal key, byte for byte, 0600 (the fresh server had made its own)");
+    const keptOwn = Object.values(rt.after.retired as Record<string, { sha: string; mode: string }>);
+    assert(keptOwn.length === 1 && keptOwn[0].sha === rt.before.sealKey && keptOwn[0].mode === '600',
+        "1. S2: …and keeps the fresh server's own key beside it, never lost");
+    assert(rt.body.recoverySeal?.copies === 1 && rt.body.recoverySeal.open === 1 && rt.body.recoverySeal.carriedKey === true
+        && /\[Restore\] 🔐 The sign-in recovery copy in this backup opens on this server\./.test(rt.logs),
+        `1. S2: the restore says the sign-in copy in it opens here (${JSON.stringify(rt.body.recoverySeal)})`);
+    const rec1 = rt.afterRestart?.recovered;
+    assert(rec1?.released.status === 200 && rec1.released.body?.enough === true && rec1.seedHex === dee.seedHex
+        && JSON.stringify(rec1.words) === JSON.stringify(dee.words) && rt.afterRestart.sealKey === mainSealKey,
+        `1. S2: after the restart, a device with only @Dee's sign-in recovers their seed and 12 words over HTTPS (${rec1?.released.status} ${rec1?.error ?? 'opened'})`);
+    assert(!/cannot be opened here/.test(rt.afterRestart.logs), '1. S2: …and the restarted server names no copy it cannot open');
 
     // ── 2. A legacy plain tar still restores ──
     console.log('\n— 2. legacy .tar.gz —');
@@ -476,6 +533,45 @@ async function main(): Promise<void> {
             signingKey: opts.signingKey ?? nodeSeed,
         }));
     };
+
+    // ── 2e. S2: a plain backup never carries the recovery-seal key ──
+    console.log('\n— 2e. S2: a plain backup carries no recovery-seal key —');
+    {
+        const { createPlainBackup } = await import('./services/sealed-backup.js');
+        const plain = await createPlainBackup();
+        const parts: Buffer[] = [];
+        for await (const c of plain.body) parts.push(c as Buffer);
+        const plainFile = path.join(work, 'plain.tar.gz');
+        fs.writeFileSync(plainFile, Buffer.concat(parts));
+        const listing = spawnSync('tar', ['-tzf', plainFile], { encoding: 'utf-8' }).stdout.split('\n').filter(Boolean);
+        assert(listing.some((n) => /state\.db$/.test(n)) && !listing.some((n) => /recovery-seal/.test(n) || /takeover-bundle/.test(n)),
+            `2e. the plain backup tar lists no recovery-seal.key (and no take-over bundle): ${listing.filter((n) => !n.startsWith('./images')).join(', ')}`);
+        const out = path.join(work, 'plain-out');
+        fs.mkdirSync(out);
+        spawnSync('tar', ['-xzf', plainFile, '-C', out]);
+        const needles = [mainSealKeyBytes, Buffer.from(mainSealKeyBytes.toString('base64')), Buffer.from(mainSealKeyBytes.toString('hex'))];
+        const hits: string[] = [];
+        const walk = (d: string) => {
+            for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+                const p = path.join(d, e.name);
+                if (e.isDirectory()) walk(p);
+                else if (needles.some((n) => fs.readFileSync(p).includes(n))) hits.push(path.relative(out, p));
+            }
+        };
+        walk(out);
+        assert(hits.length === 0 && !fs.readFileSync(plainFile).includes(mainSealKeyBytes), `2e. …and no file in it holds the key's bytes, in any form (${hits.join(', ') || 'none'})`);
+        const pr = runChild('legacy', plainFile, undefined, { thenRecover: true });
+        assert(pr.status === 200 && pr.body.success === true && pr.body.sealed === false, `2e. the plain backup restores (${pr.status})`);
+        const NO_KEY_LINE = "No recovery-seal key in this backup: members' sign-in copies will not open on this server until they reconnect. Their 12 words still work.";
+        assert(pr.body.recoverySeal?.copies === 1 && pr.body.recoverySeal.open === 0 && pr.body.recoverySeal.carriedKey === false
+            && pr.logs.includes(`[Restore] ⚠️ ${NO_KEY_LINE} The sign-in recovery copy in it will not open on this server.`),
+            `2e. the restore from it logs the missing-key line, and says the copy will not open (${JSON.stringify(pr.body.recoverySeal)})`);
+        assert(pr.after.sealKey === pr.before.sealKey && Object.keys(pr.after.retired).length === 0,
+            "2e. …and the fresh server keeps its own key: nothing came to replace it");
+        const rec2 = pr.afterRestart?.recovered;
+        assert(rec2?.seedHex === null && rec2.released.body?.enough !== true && /cannot be opened here/.test(pr.afterRestart.logs),
+            `2e. after the restart @Dee's copy does not open there, and its boot says so (${rec2?.released.status})`);
+    }
 
     // ── 3. Hostile archives, through the sealed path ──
     console.log('\n— 3. the hostile-archive suite, sealed —');

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 40,
-  "hash": "779346622ac6b31ba9859a362bd5c99b38a049d26873029d71a411ecab77f2a2",
+  "version": 41,
+  "hash": "badec4a5dc62a8f2553df72e9d23f8993e4ba6ecb56d34c335d52a9316a7c2a3",
   "sections": [
     {
       "id": "setup",
@@ -1555,7 +1555,7 @@
         },
         {
           "type": "p",
-          "text": "A server with no recovery code says so every time. The download carries the words \"Backups are not locked yet: make a recovery code to lock them.\" and the server's log repeats them. The fleet manager shows that server as \"Partial: database, no keys\", with \"Make a recovery code on the node to lock its backups.\" In Settings, the **Who can unlock this community** card shows the same words (see below). The download button itself still says \"✅ Backup downloaded\", which is true, because the file opens."
+          "text": "A server with no recovery code says so every time. The download carries the words \"Backups are not locked yet: make a recovery code to lock them. Until then a backup file can be read by anyone who has it, and a server restored from it cannot open members' sign-in recovery copies.\" and the server's log repeats them. The fleet manager shows that server as \"Partial: database, no keys\", with \"Make a recovery code on the node to lock its backups.\" In Settings, the **Who can unlock this community** card shows the same words (see below). The download button itself still says \"✅ Backup downloaded\", which is true, because the file opens."
         },
         {
           "type": "h2",

@@ -46,6 +46,7 @@ import { readProfileRecord, type ProfileRecord } from '../config/node-profile.js
 import { readOpenJoinRecord, OPEN_JOINS_IN_BUNDLE, type OpenJoinRecord } from '../engine/open-join.js';
 import { logger } from '../logger.js';
 import { setTakeoverChangeHandler } from './takeover-signal.js';
+import { RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
 
 export const TAKEOVER_ENVELOPE_FILE = 'takeover-envelope.json';
 /** Chokepoints fire in bursts (a prune touches roles, status and config); one re-seal covers the burst. */
@@ -71,11 +72,17 @@ export const BUNDLED_LOCAL_CONFIG_FIELDS = [
  * Identity files, raw bytes as base64 so a take-over writes back exactly what was read.
  * Never in the bundle: the replication token hash, a standby's `backupReplicationToken`, the legacy plain-text
  * `backupAdminPassword` (§2.1).
+ *
+ * `recovery-seal.key` opens members' sign-in recovery copies (services/recovery-seal-key.ts). This bundle, so the
+ * envelope and a sealed backup, is the ONLY place it travels: never the database, a sync payload, a snapshot, a plain
+ * backup, a log or an HTTP answer. A take-over and a restore install it with installCarriedRecoverySealKey, never as a
+ * plain file write, so a different key already there is kept. A bundle sealed before it travelled has no such entry.
  */
-export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json'] as const;
+export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', RECOVERY_SEAL_KEY_FILE] as const;
 
 export interface TakeoverBundle {
     v: 1;
+    /** A bundle sealed before the recovery-seal key travelled has no `recovery-seal.key` entry at all. */
     files: Record<(typeof BUNDLED_FILES)[number], string | null>;
     localConfig: Record<(typeof BUNDLED_LOCAL_CONFIG_FIELDS)[number], unknown>;
     /** The raw table: a standby does not replicate roles (backups-and-replicas.md), so without these a promoted
@@ -240,6 +247,9 @@ interface StoredEnvelope {
     reason: string;
     /** The sealed bytes (u32 header length ‖ header ‖ chunks), base64. */
     envelope: string;
+    /** Whether the bundle sealed inside carries data/recovery-seal.key: a yes or no, never the key. Absent in an envelope
+     *  sealed before the key travelled, which did not carry it. */
+    carriesRecoverySealKey?: boolean;
 }
 
 function readStored(): StoredEnvelope | null {
@@ -297,6 +307,21 @@ export interface TakeoverStatus {
     /** Owners the envelope could not be sealed to, and why. */
     skippedOwners: SkippedOwner[];
     recoveryCode: { codeId: number; createdAt: string } | null;
+    /** Whether the envelope on disk carries the key that opens members' sign-in recovery copies, in words (recovery
+     *  seal S2); null when there is no envelope. A yes or no: never the key. */
+    recoverySealKey: { carried: boolean; message: string } | null;
+}
+
+/** What the take-over card says about the recovery-seal key in the envelope (design §4, "Status"). */
+export function recoverySealKeyStatus(carried: boolean): { carried: boolean; message: string } {
+    return carried
+        ? { carried, message: "The locked keys carry the key that opens members' sign-in recovery copies, so a server that takes over opens them." }
+        : {
+            carried,
+            message: "The locked keys do not carry the key that opens members' sign-in recovery copies: this server's data/recovery-seal.key is "
+                + "missing or is not a key. A server that takes over from them cannot open those copies; members' 12 words still work, and they "
+                + 'connect their sign-in again.',
+        };
 }
 
 function recipientsOf(header: SealedEnvelopeHeader): TakeoverStatus['recipients'] {
@@ -318,6 +343,7 @@ function statusWithout(state: TakeoverState, message: string, skipped: SkippedOw
         state, message, envelopeId: null, sealedAt: null, sealReason: null,
         recipients: { owners: [], codes: [] }, skippedOwners: skipped,
         recoveryCode: codeSummary((getLocalConfig() as any).recoveryCode),
+        recoverySealKey: null,
     };
 }
 
@@ -338,6 +364,7 @@ function sealedStatus(s: StoredEnvelope, skipped: SkippedOwner[]): TakeoverStatu
         recipients,
         skippedOwners: skipped,
         recoveryCode: codeSummary((getLocalConfig() as any).recoveryCode),
+        recoverySealKey: recoverySealKeyStatus(s.carriesRecoverySealKey === true),
     };
 }
 
@@ -399,7 +426,8 @@ export function readSealingInputs(): SealingInputs {
     const files = {} as TakeoverBundle['files'];
     for (const f of BUNDLED_FILES) {
         const b = f === 'libp2p_key' ? keyBytes : f === 'genesis.json' ? genesisBytes : readFileOrNull(f);
-        files[f] = b ? b.toString('base64') : null;
+        // A recovery-seal key file that is not a 32-byte key opens nothing: it is not carried (nor ever overwritten here).
+        files[f] = b && !(f === RECOVERY_SEAL_KEY_FILE && b.length !== 32) ? b.toString('base64') : null;
     }
     return { ok: true, identity, communityId, owners, skipped, code, bundle: buildBundle(files) };
 }
@@ -441,6 +469,7 @@ async function doEnsure(reason: string): Promise<TakeoverStatus> {
     const header = readSealedHeader(bytes);
     const next: StoredEnvelope = {
         v: 1, envelopeId: header.envelopeId, fingerprint, sealedAt, reason, envelope: Buffer.from(bytes).toString('base64'),
+        carriesRecoverySealKey: !!bundle.files[RECOVERY_SEAL_KEY_FILE],
     };
     writeStored(next);
     const who = [

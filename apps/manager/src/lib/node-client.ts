@@ -1866,6 +1866,9 @@ export interface TakeoverStatus {
     recoveryCode: { codeId: number; createdAt: string } | null;
     /** After a take-over by code: that code is spent until a new one is made (sealed keys slice 5). */
     codeUsed?: { codeId: number; at: string; message: string } | null;
+    /** Whether the envelope carries the key that opens members' sign-in recovery copies, in the node's words (recovery
+     *  seal S2). Null with no envelope; absent from a node older than S2. */
+    recoverySealKey?: { carried: boolean; message: string } | null;
 }
 
 /** Whether the next backup leaves locked (backup-status → backupLock, sealed backups #968). */

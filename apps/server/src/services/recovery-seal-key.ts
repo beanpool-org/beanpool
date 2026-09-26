@@ -15,10 +15,24 @@
  * `data/recovery-seal.key`: 32 random bytes, 0600, beside `libp2p_key`. Made at boot by a main server when there is
  * none (installRecoverySealAtBoot), never by a standby: a standby must not hold a key of its own that a later take-over
  * would overwrite or, worse, keep. It is never in the database, so never in a sync payload, a snapshot, or a plain
- * backup (a plain backup is state.db, node_config.json and images: sealed-backup.ts). Carrying it inside the take-over
- * bundle and a sealed backup is S2; until then a server restored from any backup, or promoted from a standby, makes a
- * key of its own and cannot open the copies it inherited: members' 12 words still work, and connecting the sign-in
- * again makes a new copy.
+ * backup (a plain backup is state.db, node_config.json and images: sealed-backup.ts).
+ *
+ * It travels only inside the take-over bundle (takeover-envelope.ts BUNDLED_FILES), so inside the take-over envelope
+ * and a sealed backup, and nowhere else (S2). A take-over and a sealed-backup restore write it here with
+ * {@link installCarriedRecoverySealKey}, so the server they bring up opens every copy it inherited. One without it (an
+ * envelope or a sealed backup made before it was carried, or a plain backup) still promotes or restores; the server
+ * then makes a key of its own and cannot open those copies: members' 12 words still work, and connecting the sign-in
+ * again makes a new copy. The take-over and the restore say so ({@link noCarriedKeyLine}).
+ *
+ * ## A key that opens copies is never lost
+ *
+ * A server can already hold a DIFFERENT key when one arrives: a standby that was once a main server, or one promoted
+ * before the key travelled, which made its own and took deposits under it. The key that arrives is the community's,
+ * and the rows that come with it (the standby's copy of the main server, the backup's database) are locked with it,
+ * so it becomes `recovery-seal.key`. The one it replaces is never deleted: it is kept beside it as
+ * `recovery-seal-retired-<id>.key` (0600), the reader tries it when the live key does not open a row, and at the next
+ * boot every row only a retired key opens is locked again with the live one ({@link rewrapRowsFromRetiredKeys}), so the
+ * next take-over bundle, which carries the live key only, opens everything the database holds.
  *
  * The file is read on every use (32 bytes; the derivation is cached against its contents). A key that is deleted while
  * the server runs is gone at once, rather than living on in memory to lock new deposits that would not open after the
@@ -61,6 +75,13 @@
  * one before the seal, so no wrapped copy comes) runs the VACUUM then too, without recording it.
  * Deletions after the seal still do not reach a standby; those copies are wrapped, and are left to a tombstone.
  *
+ * A standby that has recorded its clear and is then sent a copy in the client's form (its main server rolled back past
+ * the seal, or it now copies one that has not sealed) forgets the record, as the rollback command does on a main
+ * server, and clears again once an import brings the wrapped copies back ({@link REOPENED_KEY}). When the standby ran
+ * the older code too while the rollback lasted, this code saw none of those copies arrive: so at its boot it forgets the
+ * record too when it holds a copy in the client's form that was not here, as it is now, when the clear was recorded.
+ * Nothing on a standby needs a command for a rollback.
+ *
  * Rolling the server back past this change needs the rows unwrapped first, by the NEW code, with the server stopped:
  *
  *     node dist/services/recovery-seal-key.js --unwrap-recovery-rows          # in the image (/app/apps/server)
@@ -82,6 +103,9 @@ import { KEEPER_ALG_SSO_SINGLE } from '@beanpool/core';
 import { db } from '../db/db.js';
 
 export const RECOVERY_SEAL_KEY_FILE = 'recovery-seal.key';
+
+/** A key a carried one replaced, kept beside it: `recovery-seal-retired-<16 hex>.key`. */
+const RETIRED_KEY_FILE = /^recovery-seal-retired-[0-9a-f]{16}\.key$/;
 
 /** The scheme name a wrapped row's `kdf_params` carries. */
 export const NODE_WRAP_ALG = 'node-wrap-xc20p-v1';
@@ -149,9 +173,13 @@ function currentKey(): Uint8Array | null {
             `This server holds sign-in recovery copies it cannot open: data/${RECOVERY_SEAL_KEY_FILE} is not a ${KEY_BYTES}-byte key.`);
     }
     if (derived && derived.file.equals(file)) return derived.key;
-    const key = new Uint8Array(crypto.hkdfSync('sha256', file, Buffer.alloc(0), HKDF_INFO, KEY_BYTES));
+    const key = deriveKey(file);
     derived = { file, key };
     return key;
+}
+
+function deriveKey(file: Buffer): Uint8Array {
+    return new Uint8Array(crypto.hkdfSync('sha256', file, Buffer.alloc(0), HKDF_INFO, KEY_BYTES));
 }
 
 function requireKey(): Uint8Array {
@@ -163,6 +191,128 @@ function requireKey(): Uint8Array {
 /** Throws {@link RecoverySealKeyMissing} unless this server can wrap a copy right now. */
 export function requireRecoverySealKey(): void {
     requireKey();
+}
+
+let retired: { names: string; keys: Uint8Array[] } | null = null;
+
+/**
+ * The keys a carried key replaced ({@link installCarriedRecoverySealKey}), derived, in name order. Read when the live
+ * key does not open a row, which is rare: the directory listing is the cache's key, so a file added or removed by hand
+ * is seen at the next miss.
+ */
+function retiredKeys(): Uint8Array[] {
+    let names: string[];
+    try {
+        names = fs.readdirSync(dataDir()).filter(n => RETIRED_KEY_FILE.test(n)).sort();
+    } catch {
+        return [];
+    }
+    const sig = names.join('\n');
+    if (retired && retired.names === sig) return retired.keys;
+    const keys: Uint8Array[] = [];
+    for (const n of names) {
+        try {
+            const file = fs.readFileSync(path.join(dataDir(), n));
+            if (file.length === KEY_BYTES) keys.push(deriveKey(file));
+        } catch { /* unreadable: not a key this server can use */ }
+    }
+    retired = { names: sig, keys };
+    return keys;
+}
+
+/** A key file's name when it is retired: a hash of its bytes, never the bytes. */
+function retiredNameOf(file: Buffer): string {
+    const id = crypto.createHash('sha256').update('beanpool-recovery-seal-key-id/v1\n').update(file).digest('hex').slice(0, 16);
+    return `recovery-seal-retired-${id}.key`;
+}
+
+/** What {@link installCarriedRecoverySealKey} did. `retiredAs`: where the key it replaced is kept. */
+export type CarriedKeyOutcome =
+    | { outcome: 'absent' }
+    | { outcome: 'invalid' }
+    | { outcome: 'same' }
+    | { outcome: 'installed' }
+    | { outcome: 'replaced'; retiredAs: string };
+
+/** What a take-over or a restore says when the keys it opened carry no recovery-seal key (design §4). */
+export function noCarriedKeyLine(where: 'envelope' | 'backup'): string {
+    return `No recovery-seal key in this ${where}: members' sign-in copies will not open on this server until they reconnect. `
+        + 'Their 12 words still work.';
+}
+
+/** Write a file exclusively (never over another), 0600, synced. False when a file is already there. */
+function writeExclusive(target: string, bytes: Buffer): boolean {
+    let fd: number;
+    try {
+        fd = fs.openSync(target, 'wx', 0o600);
+    } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+        throw e;
+    }
+    try {
+        fs.writeSync(fd, bytes);
+        fs.fsyncSync(fd);
+    } catch (e) {
+        try { fs.closeSync(fd); } catch { /* closed */ }
+        fs.rmSync(target, { force: true });
+        throw e;
+    }
+    fs.closeSync(fd);
+    return true;
+}
+
+/**
+ * Install the recovery-seal key a take-over bundle carried (a take-over's identity-files step, a sealed-backup restore),
+ * as base64 from the bundle, or nothing when the bundle had none (sealed before the key travelled).
+ *
+ * - None, or not a 32-byte key: nothing is written ('absent', 'invalid'); the caller says so. A key this server already
+ *   has stays.
+ * - The same key: nothing to do. So running a take-over step again changes nothing.
+ * - No key here: written atomically, 0600 (a temporary file, synced, renamed into place, the directory synced).
+ * - A different file here (a key, or a file that is not one): it is never deleted. It is kept, byte for byte and 0600,
+ *   as `recovery-seal-retired-<id>.key` BEFORE the carried key takes its place, so a crash between the two leaves the
+ *   old key in both places and the next run finishes the swap. The reader tries it for a row the live key does not open,
+ *   and the next boot locks those rows again with the live key ({@link rewrapRowsFromRetiredKeys}). A file of that name
+ *   that holds other bytes (nothing here writes one) is left as it is, and the key is kept under a random name instead:
+ *   a take-over never stops over the key, and nothing is written over.
+ *
+ * An I/O error (a full or read-only disk) is thrown, as for the other identity files: the take-over step that asked
+ * is tried again at the next start. Never logs or returns a key's bytes.
+ */
+export function installCarriedRecoverySealKey(b64: string | null | undefined): CarriedKeyOutcome {
+    if (!b64) return { outcome: 'absent' };
+    const carried = Buffer.from(b64, 'base64');
+    if (carried.length !== KEY_BYTES) return { outcome: 'invalid' };
+    const target = recoverySealKeyPath();
+    const dir = path.dirname(target);
+    fs.mkdirSync(dir, { recursive: true });
+    let existing: Buffer | null = null;
+    try {
+        existing = fs.readFileSync(target);
+    } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    }
+    if (existing && existing.equals(carried)) return { outcome: 'same' };
+    let retiredAs: string | null = null;
+    if (existing) {
+        retiredAs = retiredNameOf(existing);
+        if (!writeExclusive(path.join(dir, retiredAs), existing) && !fs.readFileSync(path.join(dir, retiredAs)).equals(existing)) {
+            // Not ours: left alone. The key is kept under a name nothing else has.
+            do retiredAs = `recovery-seal-retired-${crypto.randomBytes(8).toString('hex')}.key`;
+            while (!writeExclusive(path.join(dir, retiredAs), existing));
+        }
+        fsyncDir(dir);
+        retired = null;
+    }
+    const tmp = `${target}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+    try {
+        if (!writeExclusive(tmp, carried)) throw new Error('a temporary key file was already there');
+        fs.renameSync(tmp, target);
+    } finally {
+        fs.rmSync(tmp, { force: true });
+    }
+    fsyncDir(dir);
+    return retiredAs ? { outcome: 'replaced', retiredAs } : { outcome: 'installed' };
 }
 
 /**
@@ -298,23 +448,39 @@ export function sealRecoveryFields(fields: RecoverySealFields, aad: Uint8Array):
     };
 }
 
-/**
- * A stored copy's client fields. A row stored before the wrap comes back as it is (the boot migration wraps it); a
- * wrapped one needs the key ({@link RecoverySealKeyMissing}) and must open under it ({@link RecoverySealUnopenable}).
- */
-export function openRecoveryFields(stored: RecoverySealFields, aad: Uint8Array): RecoverySealFields {
-    if (!isNodeWrapped(stored.kdfParams)) return stored;
-    const key = requireKey();
-    let plaintext: Uint8Array;
+/** The wrap opened with this key, or null when it does not open (another key, or altered). */
+function openWith(key: Uint8Array, stored: RecoverySealFields, aad: Uint8Array): Uint8Array | null {
     try {
         const ct = Buffer.from(stored.encryptedShare, 'base64');
         const tag = Buffer.from(stored.shareTag, 'base64');
         const nonce = Buffer.from(stored.shareIv, 'base64');
-        if (nonce.length !== NONCE_BYTES || tag.length !== TAG_BYTES) throw new Error('bad shape');
-        plaintext = xchacha20poly1305(key, nonce, aad).decrypt(Buffer.concat([ct, tag]));
+        if (nonce.length !== NONCE_BYTES || tag.length !== TAG_BYTES) return null;
+        return xchacha20poly1305(key, nonce, aad).decrypt(Buffer.concat([ct, tag]));
     } catch {
-        throw new RecoverySealUnopenable();
+        return null;
     }
+}
+
+/**
+ * A stored copy's client fields. A row stored before the wrap comes back as it is (the boot migration wraps it); a
+ * wrapped one needs the key ({@link RecoverySealKeyMissing}) and must open under it, or under a key a carried one
+ * replaced ({@link installCarriedRecoverySealKey}), or it is {@link RecoverySealUnopenable}.
+ */
+export function openRecoveryFields(stored: RecoverySealFields, aad: Uint8Array): RecoverySealFields {
+    return openRecoveryFieldsUnder(stored, aad, true);
+}
+
+function openRecoveryFieldsUnder(stored: RecoverySealFields, aad: Uint8Array, withRetired: boolean): RecoverySealFields {
+    if (!isNodeWrapped(stored.kdfParams)) return stored;
+    const key = requireKey();
+    let plaintext = openWith(key, stored, aad);
+    if (!plaintext && withRetired) {
+        for (const k of retiredKeys()) {
+            plaintext = openWith(k, stored, aad);
+            if (plaintext) break;
+        }
+    }
+    if (!plaintext) throw new RecoverySealUnopenable();
     const f = JSON.parse(Buffer.from(plaintext).toString('utf-8')) as Record<string, unknown>;
     if (typeof f.encryptedShare !== 'string' || typeof f.shareIv !== 'string' || typeof f.shareTag !== 'string'
         || (f.kdfParams !== null && typeof f.kdfParams !== 'string')) {
@@ -340,7 +506,7 @@ const releaseFields = (r: ReleaseRow): RecoverySealFields =>
  * truncate the WAL so no old frame keeps them. Stored copies are stamped (a standby is sent the new form); releases are
  * not replicated and keep their stamp.
  */
-function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySealFields, aad: Uint8Array) => RecoverySealFields):
+function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySealFields, aad: Uint8Array) => RecoverySealFields | null):
     { shares: number; releases: number } {
     const shares = (db.prepare(`SELECT id, owner_pubkey, holder_type, holder_ref, encrypted_share, share_iv, share_tag, kdf_params
         FROM recovery_shares`).all() as ShareRow[]).filter(r => which(r.kdf_params));
@@ -348,9 +514,13 @@ function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySe
         FROM recovery_releases`).all() as ReleaseRow[]).filter(r => which(r.kdf_params));
     if (shares.length === 0 && releases.length === 0) return { shares: 0, releases: 0 };
 
-    // Every row mapped before anything is written: a row that cannot be mapped fails the run and changes nothing.
-    const newShares = shares.map(r => ({ id: r.id, f: map(shareFields(r), shareRowAad(r.owner_pubkey, r.holder_type)) }));
-    const newReleases = releases.map(r => ({ id: r.id, f: map(releaseFields(r), releaseRowAad(r.collection_id, r.share_id, r.holder_type)) }));
+    // Every row mapped before anything is written: a row that cannot be mapped fails the run and changes nothing. A map
+    // that answers null leaves that row as it is.
+    const mapped = <T extends { id: number }>(rows: T[], fields: (r: T) => RecoverySealFields, aad: (r: T) => Uint8Array) =>
+        rows.map(r => ({ id: r.id, f: map(fields(r), aad(r)) })).filter((x): x is { id: number; f: RecoverySealFields } => x.f !== null);
+    const newShares = mapped(shares, shareFields, r => shareRowAad(r.owner_pubkey, r.holder_type));
+    const newReleases = mapped(releases, releaseFields, r => releaseRowAad(r.collection_id, r.share_id, r.holder_type));
+    if (newShares.length === 0 && newReleases.length === 0) return { shares: 0, releases: 0 };
 
     const priorSecureDelete = Number(db.pragma('secure_delete', { simple: true })) || 0;
     db.pragma('secure_delete = ON');
@@ -377,6 +547,26 @@ export function wrapRecoveryRows(): { shares: number; releases: number } {
 }
 
 /**
+ * Lock again with the live key every wrapped row that only a retired key opens ({@link installCarriedRecoverySealKey}):
+ * copies this server took under its own key before a take-over or a restore brought the community's. Stamped, so a
+ * standby is sent them in the live key's lock, and zeroed where they lay. A row no key here opens is left as it is.
+ * Idempotent; the retired key files stay. Throws {@link RecoverySealKeyMissing}.
+ */
+export function rewrapRowsFromRetiredKeys(): { shares: number; releases: number } {
+    const live = requireKey();
+    const keys = retiredKeys();
+    if (keys.length === 0) return { shares: 0, releases: 0 };
+    return rewriteRows(kdf => isNodeWrapped(kdf), (f, aad) => {
+        if (openWith(live, f, aad)) return null;
+        try {
+            return sealRecoveryFields(openRecoveryFieldsUnder(f, aad, true), aad);
+        } catch {
+            return null;
+        }
+    });
+}
+
+/**
  * The reverse, for a rollback past this change: every wrapped row back to the client's bytes. Refuses (and changes
  * nothing) if any wrapped row does not open with this key, because an older server would then serve it as garbage.
  * It also forgets that the database was cleared ({@link clearCopiesDroppedBeforeSeal}): the older server deletes
@@ -394,9 +584,21 @@ export function unwrapRecoveryRows(): { shares: number; releases: number } {
 /**
  * node_config: when this database was cleared of copies deleted before the seal. Written only after the VACUUM and its
  * checkpoint finished, so one that failed or was cut off runs again. node_config is not replicated: each server
- * clears its own file.
+ * clears its own file. `clientForm`: a print of each copy in the client's form still here then
+ * ({@link clientFormPrints}), what a standby's boot compares with ({@link forgetClearIfClientFormArrivedWhileDown}).
  */
 export const CLEARED_KEY = 'recovery_seal_cleared';
+
+/**
+ * node_config, on a standby: it had recorded its clear, and was then sent copies in the client's form, so it forgot the
+ * record ({@link forgetClearIfSentClientForm}). While this is here the standby clears again only after an import that
+ * brings its main server's wrapped copies and none in the client's form: the evidence that server has sealed again.
+ * Its copies deleted on the main server after the seal stay wrapped here (no deletion reaches a standby), so "a wrapped
+ * copy is here" no longer shows that. Removed with the clear it waits for.
+ */
+export const REOPENED_KEY = 'recovery_seal_reopened';
+
+const UPSERT_CONFIG = 'INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value';
 
 /** Head room left on a disk after the VACUUM, on top of what it writes. */
 const VACUUM_MARGIN_BYTES = 64 * 1024 * 1024;
@@ -563,6 +765,81 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
 }
 
 /**
+ * On a standby, after an import: when it has recorded its clear and the import wrote a copy in the client's form, forget
+ * the record, as the rollback command does on a main server. The recorded clear assumes nothing reaches it in that form
+ * afterwards, and a rollback breaks that: the command unwraps and stamps every copy the main server holds, and the older
+ * code stores re-deposits in the client's form, so all of them come here. Once the main server seals again the wrapped
+ * copies replace them, and their old page images would stay in earlier -wal frames with nothing to clear them. A standby
+ * re-pointed at a main server that has not sealed is the same case. So it forgets, waits ({@link REOPENED_KEY}), and runs
+ * the recorded clear again after the import that brings the wrapped copies back.
+ */
+function forgetClearIfSentClientForm(imported: { kdfParams?: string | null }[]): void {
+    const clientForm = imported.filter(r => !isNodeWrapped(r?.kdfParams ?? null)).length;
+    if (clientForm === 0) return;
+    if (!db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY)) return;
+    forgetClear(clientForm);
+    console.warn(`⚠️ Recovery seal: this standby had cleared state.db of sign-in recovery copies deleted before the seal, and was then sent `
+        + `${copies(clientForm)} in the client's form (its main server rolled back past the seal, or has not sealed). So it forgets that `
+        + 'clear, and clears again once its main server\'s wrapped copies come back.');
+}
+
+/**
+ * On a standby, at boot: {@link forgetClearIfSentClientForm} for the copies that came while it ran other code. In a
+ * rollback of every server at once the standby runs the older code too while it lasts, and imports the copies the
+ * rollback command unwrapped and the re-deposits in the client's form with no thought of a recorded clear. Its main
+ * server wraps them all again at its own boot, before it serves anything, so no import this code makes afterwards shows
+ * one in the client's form: this boot is the only place it can tell.
+ *
+ * A copy in the client's form here that was not here, as it is now, when the clear was recorded came after it: nothing
+ * else writes one on a standby. The record keeps a print of each copy in the client's form that was here then (the ones
+ * its main server deleted before the seal, rows here until a whole copy removes them), so those never make it forget, at
+ * this boot or any other. The print covers where the copy sits, its bytes and its stamp, and the stamp is the main
+ * server's: the rollback command stamps every copy it unwraps and the older code stamps each re-deposit, so neither is
+ * the copy that was here. Prints are compared, never clocks: the stamps are the main server's clock and the record's
+ * `at` is this server's, and no skew between the two changes what matches. A record made before it kept prints (the
+ * first code with the seal) is taken to have held none: every copy in the client's form here then forgets it, once,
+ * at the cost of one more VACUUM, and the clear recorded after that keeps them.
+ */
+function forgetClearIfClientFormArrivedWhileDown(): void {
+    const record = db.prepare('SELECT value FROM node_config WHERE key = ?').pluck().get(CLEARED_KEY) as string | undefined;
+    if (record === undefined) return;
+    let kept: unknown;
+    try { kept = (JSON.parse(record) as { clientForm?: unknown })?.clientForm; } catch { kept = null; }
+    const then = new Set(Array.isArray(kept) ? kept.filter((p): p is string => typeof p === 'string') : []);
+    const arrived = clientFormPrints().filter(p => !then.has(p)).length;
+    if (arrived === 0) return;
+    forgetClear(arrived);
+    console.warn(`⚠️ Recovery seal: this standby had cleared state.db of sign-in recovery copies deleted before the seal, and at this boot `
+        + `holds ${copies(arrived)} in the client's form that ${arrived === 1 ? 'was' : 'were'} not here when it cleared (its main server `
+        + 'rolled back past the seal while this standby ran older code). So it forgets that clear, and clears again once its main '
+        + 'server\'s wrapped copies come back.');
+}
+
+/** Forget the recorded clear, and wait for an import that brings the main server's wrapped copies ({@link REOPENED_KEY}). */
+function forgetClear(clientForm: number): void {
+    db.transaction(() => {
+        db.prepare('DELETE FROM node_config WHERE key = ?').run(CLEARED_KEY);
+        db.prepare(UPSERT_CONFIG).run(REOPENED_KEY, JSON.stringify({ at: new Date().toISOString(), copies: clientForm }));
+    })();
+    clearedSettled = false;
+    clearTriedThisProcess = false;
+    standbyWaitLogged = false;
+}
+
+/**
+ * A print of each copy in the client's form here: a hash of where it sits (the key the table is unique on), its stamp
+ * and its bytes, 16 hex characters. It shows only whether that same copy is still here; a copy cannot be read from it.
+ */
+function clientFormPrints(): string[] {
+    const rows = db.prepare(`SELECT owner_pubkey, generation, holder_type, holder_ref, updated_at, encrypted_share, share_iv, share_tag, kdf_params
+        FROM recovery_shares`).all() as (Omit<ShareRow, 'id'> & { generation: number; updated_at: string | null })[];
+    return rows.filter(r => !isNodeWrapped(r.kdf_params)).map(r => crypto.createHash('sha256')
+        .update(JSON.stringify(['beanpool-recovery-clear-print/v1', r.owner_pubkey, Number(r.generation), r.holder_type, r.holder_ref,
+            r.updated_at, r.encrypted_share, r.share_iv, r.share_tag, r.kdf_params]))
+        .digest('hex').slice(0, 16));
+}
+
+/**
  * Clear state.db of the copies deleted before the seal, once. Until this change the server deleted without zeroing
  * (secure_delete was off), so every copy a re-deposit dropped, a member removed or a purge took is still in the file's
  * free pages as the app sealed it: a whole seed box, its salt and the words box, which opens with the `sub` alone to the
@@ -585,12 +862,29 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
  * old form, and which now holds none, runs the same VACUUM then, and does not record it ({@link clearWithoutRecording}):
  * copies in the old form can still reach it, and the recorded clear still runs when wrapped ones arrive.
  *
+ * A standby that has recorded its clear and is then sent a copy in the client's form forgets the record
+ * ({@link forgetClearIfSentClientForm}), and clears again after an import that brings the wrapped copies back. So does
+ * one that finds such a copy at its boot that was not here when it cleared ({@link forgetClearIfClientFormArrivedWhileDown}):
+ * it ran the older code while its main server was rolled back.
+ *
+ * `boot`: called at boot ({@link installRecoverySealAtBoot}), not after an import.
  * `wholeCopy`: on a standby, the rows of the whole copy of its main server just imported; null after a delta or at boot.
+ * `imported`: on a standby, the recovery rows the import just wrote, a delta's included; null at boot.
  * Never throws and never stops a boot. A VACUUM that fails, or that the disks have no room for, is logged and tried again
  * at the next boot; one that finished is recorded ({@link CLEARED_KEY}) and never runs again.
  */
-export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean; wholeCopy?: RecoveryRowKey[] | null }): void {
+export function clearCopiesDroppedBeforeSeal(opts: {
+    standby: boolean; boot?: boolean; wholeCopy?: RecoveryRowKey[] | null; imported?: { kdfParams?: string | null }[] | null;
+}): void {
+    const imported = Array.isArray(opts.imported) ? opts.imported : null;
     if (opts.standby) {
+        try {
+            if (imported) forgetClearIfSentClientForm(imported);
+            else if (opts.boot) forgetClearIfClientFormArrivedWhileDown();
+        } catch (e) {
+            console.warn(`⚠️ Recovery seal: checking whether this standby was sent sign-in recovery copies in the client's form failed: `
+                + `${(e as Error)?.message || e}.`);
+        }
         try {
             dropCopiesMainServerDeleted(opts.wholeCopy ?? null);
         } catch (e) {
@@ -624,6 +918,17 @@ export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean; wholeCopy
             }
             return;
         }
+        if (opts.standby && db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(REOPENED_KEY)
+            && !(imported && imported.length > 0 && imported.every(r => isNodeWrapped(r?.kdfParams ?? null)))) {
+            // It forgot its clear: copies in the client's form came after it. Wrapped copies here (the ones its main server
+            // deleted after the seal stay, wrapped) do not show that server has sealed again; an import of wrapped ones does.
+            if (!standbyWaitLogged) {
+                standbyWaitLogged = true;
+                console.log('🔐 Recovery seal: this standby was sent sign-in recovery copies in the client\'s form after it had cleared '
+                    + 'state.db, so it clears again once an import brings its main server\'s wrapped copies back.');
+            }
+            return;
+        }
         if (clearTriedThisProcess) return;
         clearTriedThisProcess = true;
         const room = roomForVacuum();
@@ -633,8 +938,13 @@ export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean; wholeCopy
             return;
         }
         const { seconds, before, after } = vacuumAndCheckpoint();
-        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-            .run(CLEARED_KEY, JSON.stringify({ at: new Date().toISOString(), seconds: Number(seconds.toFixed(2)), bytesBefore: before, bytesAfter: after }));
+        db.transaction(() => {
+            db.prepare(UPSERT_CONFIG).run(CLEARED_KEY, JSON.stringify({
+                at: new Date().toISOString(), seconds: Number(seconds.toFixed(2)), bytesBefore: before, bytesAfter: after,
+                clientForm: clientFormPrints(),
+            }));
+            db.prepare('DELETE FROM node_config WHERE key = ?').run(REOPENED_KEY);
+        })();
         clearedSettled = true;
         console.log(`🔐 Recovery seal: cleared state.db of sign-in recovery copies deleted before the seal (one VACUUM, ${seconds.toFixed(1)} s, `
             + `${mb(before)} → ${mb(after)}). This runs once.`
@@ -690,14 +1000,27 @@ function clearWithoutRecording(removed: number): void {
 
 /** How many stored rows are wrapped, and how many of those this server's key does not open. Needs the key. */
 function countWrapped(): { wrapped: number; unopenable: number } {
-    const rows = db.prepare('SELECT owner_pubkey, holder_type, holder_ref, encrypted_share, share_iv, share_tag, kdf_params FROM recovery_shares')
-        .all() as ShareRow[];
+    return countUnopenable(db.prepare('SELECT owner_pubkey, holder_type, holder_ref, encrypted_share, share_iv, share_tag, kdf_params FROM recovery_shares')
+        .all() as ShareRow[]);
+}
+
+/**
+ * Of these recovery_shares rows (as stored, from any database), how many are wrapped and how many of those the keys in
+ * this data folder do not open (all of them when there is no key file). For a restore, which asks it of the database it
+ * just put in place, so the operator hears at the restore, not at a member's recovery, what will not open.
+ */
+export function countUnopenable(
+    rows: Pick<ShareRow, 'owner_pubkey' | 'holder_type' | 'encrypted_share' | 'share_iv' | 'share_tag' | 'kdf_params'>[],
+    opts: { retired?: boolean } = {},
+): { wrapped: number; unopenable: number } {
     let wrapped = 0, unopenable = 0;
     for (const r of rows) {
         if (!isNodeWrapped(r.kdf_params)) continue;
         wrapped++;
-        try { openRecoveryFields(shareFields(r), shareRowAad(r.owner_pubkey, r.holder_type)); }
-        catch { unopenable++; }
+        try {
+            openRecoveryFieldsUnder({ encryptedShare: r.encrypted_share, shareIv: r.share_iv, shareTag: r.share_tag, kdfParams: r.kdf_params },
+                shareRowAad(r.owner_pubkey, r.holder_type), opts.retired !== false);
+        } catch { unopenable++; }
     }
     return { wrapped, unopenable };
 }
@@ -715,9 +1038,9 @@ export function installRecoverySealAtBoot(opts: { standby: boolean }): void {
     installedAs = as;
     try {
         if (opts.standby) {
-            console.log(`🔐 Recovery seal: a standby holds no key of its own, and a take-over does not bring data/${RECOVERY_SEAL_KEY_FILE} yet: `
-                + 'once promoted, this server makes its own and cannot open the sign-in recovery copies it inherited (members\' 12 words still work).');
-            clearCopiesDroppedBeforeSeal(opts);
+            console.log(`🔐 Recovery seal: a standby holds no key of its own. A take-over brings its main server's data/${RECOVERY_SEAL_KEY_FILE} `
+                + 'inside the locked keys, when they carry it, so the promoted server opens the sign-in recovery copies it inherited.');
+            clearCopiesDroppedBeforeSeal({ ...opts, boot: true });
             return;
         }
         if (ensureRecoverySealKey().created) console.log(`🔐 Recovery seal: made data/${RECOVERY_SEAL_KEY_FILE}.`);
@@ -725,13 +1048,19 @@ export function installRecoverySealAtBoot(opts: { standby: boolean }): void {
         if (moved.shares || moved.releases) {
             console.log(`🔐 Recovery seal: wrapped ${moved.shares} recovery cop${moved.shares === 1 ? 'y' : 'ies'} and ${moved.releases} released cop${moved.releases === 1 ? 'y' : 'ies'} stored before it.`);
         }
+        const relocked = rewrapRowsFromRetiredKeys();
+        if (relocked.shares || relocked.releases) {
+            console.log(`🔐 Recovery seal: locked ${relocked.shares} recovery cop${relocked.shares === 1 ? 'y' : 'ies'} and ${relocked.releases} released `
+                + `cop${relocked.releases === 1 ? 'y' : 'ies'} again with data/${RECOVERY_SEAL_KEY_FILE}: only a key it replaced opened them `
+                + '(kept as data/recovery-seal-retired-….key).');
+        }
         const { wrapped, unopenable } = countWrapped();
         console.log(`🔐 Recovery seal: ${wrapped} recovery cop${wrapped === 1 ? 'y' : 'ies'}, key present.`);
         if (unopenable) {
             console.warn(`⚠️ Recovery seal: ${unopenable} of them were locked with another recovery-seal key and cannot be opened `
                 + 'here. Those members\' 12 words still work; connecting their sign-in again makes a new copy.');
         }
-        clearCopiesDroppedBeforeSeal(opts);
+        clearCopiesDroppedBeforeSeal({ ...opts, boot: true });
     } catch (e) {
         installedAs = null;
         console.warn(`⚠️ Recovery seal: ${(e as Error)?.message || e} The server runs; the next boot tries again.`);

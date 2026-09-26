@@ -16,8 +16,9 @@
  * Put away on purpose, never by accident: for a second after each alert appears its buttons ignore a press, as browsers
  * delay their own permission buttons, and so they do for a second after a letter is typed. A member typing when an
  * alert comes, whose Tab lands on Acknowledge, would otherwise put it away unread with the next Space (#1186's review,
- * measured). While an alert shows it is modal: Tab stays inside it, and when the last one is put away focus goes back
- * to where the member was.
+ * measured). The second starts again when Close all appears under the member: a second alert arriving while the first
+ * shows puts Close all where Acknowledge was on a long notice (#1192's review, measured). While an alert shows it is
+ * modal: Tab stays inside it, and when the last one is put away focus goes back to where the member was.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { onSystemAnnouncement, onSocketOpen } from '../lib/sync';
@@ -36,7 +37,7 @@ export interface ShownAlert {
 
 /** A second read this soon after one that answered is the same read: the app opening, then its socket connecting. */
 export const REREAD_GAP_MS = 5_000;
-/** How long after an alert appears, or after a letter is typed while it shows, its buttons ignore a press. */
+/** How long after an alert appears (or Close all appears under it), or after a letter is typed while it shows, its buttons ignore a press. */
 export const PRESS_GUARD_MS = 1_000;
 /** The most ids one mark sends (the node takes up to 100). */
 const MARK_BATCH = 100;
@@ -113,7 +114,7 @@ export interface SystemAlertsProps {
     onShown?: (alert: ShownAlert) => void;
     /** For tests: the gap between two reads of the kept notices. */
     rereadGapMs?: number;
-    /** For tests: how long the buttons ignore a press after an alert appears or a letter is typed. */
+    /** For tests: how long the buttons ignore a press after an alert (or Close all) appears or a letter is typed. */
     pressGuardMs?: number;
 }
 
@@ -191,6 +192,8 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
 
     const head = queue[0];
     const showing = !!head;
+    /** More than one waiting: the "1 of" count above Acknowledge, and Close all below it. */
+    const several = queue.length > 1;
 
     // While an alert shows it is modal (WCAG 2.1.2, 2.4.3): Tab and Shift+Tab go round its buttons and never out to the
     // page behind it, and focus that lands outside it all the same comes back to it. A typed character is noted (see
@@ -228,10 +231,13 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
         };
     }, [showing]);
 
-    // Each alert's second starts as it is drawn: a layout effect, so no press can come in between.
+    // Each alert's second starts as it is drawn, and again as Close all is: a second alert arriving while the first shows
+    // adds the count above Acknowledge and Close all below it, and on a long notice at 320px the buttons grow upwards, so
+    // Close all lands where Acknowledge was and a tap meant for Acknowledge would put the second away unread. A layout
+    // effect, so no press can come in between.
     useLayoutEffect(() => {
         if (head) shownAt.current = performance.now();
-    }, [head?.key]);
+    }, [head?.key, several]);
 
     useEffect(() => {
         if (!head) return;
@@ -308,7 +314,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                     </p>
                 </div>
                 <div style={{ flex: '0 0 auto', padding: '0.75rem 1.25rem 1.25rem' }}>
-                    {waiting > 1 && (
+                    {several && (
                         <p data-testid="system-alert-count" style={{ margin: '0 0 0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                             1 of {waiting}
                         </p>
@@ -325,7 +331,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                     >
                         Acknowledge
                     </button>
-                    {waiting > 1 && (
+                    {several && (
                         <button
                             type="button"
                             onClick={closeAll}

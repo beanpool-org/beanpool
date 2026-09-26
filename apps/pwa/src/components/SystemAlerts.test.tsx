@@ -401,6 +401,28 @@ describe('SystemAlerts: put away on purpose, and modal while it shows', () => {
         await waitFor(() => expect(markedIds()).toEqual([['k1'], ['k2', 'k3']]));
     });
 
+    it('a second alert arriving while the first shows starts the second again: Close all, drawn where Acknowledge was, does nothing at once', async () => {
+        render(<SystemAlerts memberPubkey="me" isGuest={false} />);
+        await announce({ type: 'system_announcement', title: 'Title k1', body: 'Body k1', severity: 'info', noticeId: 'k1' });
+        const dialog = await screen.findByRole('alertdialog', { name: 'Title k1' });
+        await afterTheGuard();
+
+        // A moderator's next notice, as the member taps: the count and Close all appear, and on a long notice at 320px
+        // Close all lands where Acknowledge was (#1192's review, measured).
+        await announce({ type: 'system_announcement', title: 'Title k2', body: 'Body k2', severity: 'info', noticeId: 'k2' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close all 2' }));
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Acknowledge' }));
+        await sleep(20);
+        expect(api.markNoticesSeen).not.toHaveBeenCalled();
+        expect(screen.getByRole('alertdialog', { name: 'Title k1' })).toBe(dialog);
+        expect(within(dialog).getByText('1 of 2')).toBeInTheDocument();
+
+        await afterTheGuard();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close all 2' }));
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+        await waitFor(() => expect(markedIds()).toEqual([['k1', 'k2']]));
+    });
+
     it('Tab and Shift+Tab go round the alert\'s buttons and never out to the page behind it; focus put outside comes back', async () => {
         const user = userEvent.setup();
         render(

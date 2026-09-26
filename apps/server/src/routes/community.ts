@@ -1365,9 +1365,10 @@ router.post('/api/ledger/transfer', async (ctx) => {
     if (!txn) {
         ctx.status = 400;
         // Direct sends are positive-balance-only and require a first completed trade, which a visitor makes only once it
-        // has joined.
-        ctx.body = { error: isLiveVisitor(from)
-            ? 'Send failed — you can only send beans you currently hold, and only after your first completed trade. You can trade once you join this community.'
+        // has joined: a visitor receives Beans and passes them on once it joins. (A visitor with a trade from before
+        // visitors were refused one is past the send gate, and gets the words anyone gets.)
+        ctx.body = { error: isLiveVisitor(from) && getMemberTrustProfile(from).earnedCredit <= 0
+            ? "Send failed — you can receive Beans before you join, and pass them on once you join this community."
             : 'Send failed — you can only send beans you currently hold, and only after your first completed trade.' };
         return;
     }

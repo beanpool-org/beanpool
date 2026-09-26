@@ -678,3 +678,81 @@ describe('the open door comes after a kept invite key (4112075367)', () => {
         await expectWordsOf(kept);
     });
 });
+
+/*
+ * Confirmation 4112213080 on #1198: on the open door, a sent door join that can no longer land, stored beside a kept
+ * invite record (two answers lost, and a failed door check in between), is settled only: it hands the page back, and
+ * the kept invite key is asked about next. Before, the door join was shown first and never handed back, so the invite
+ * key was never asked about and the door join's resend was refused because of it, on every load.
+ */
+describe('a sent door join that can no longer land, beside a kept invite key, on the open door (4112213080)', () => {
+    const GLOBAL_OPEN = { ...LOCAL, profile: 'global', features: { openJoin: true } };
+
+    /** A door join sent at t0 whose answer was lost, and, 30 minutes on, an invite sent with another key `inviteAgo` ago. */
+    async function bothStored(inviteAgo: number) {
+        const t0 = Date.now();
+        const doorKey = await generateIdentity('Alice');
+        const inviteKey = await generateIdentity('Rowan');
+        await savePendingJoin({ identity: doorKey, provider: 'google', nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0 });
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 30 * MIN);
+        await markInviteSent(inviteKey, 'hash', t0 + 30 * MIN - inviteAgo);
+        return { doorKey, inviteKey };
+    }
+
+    function node(members: Map<string, string>) {
+        const n = stubNode(GLOBAL_OPEN, {
+            '/api/community/membership/': (_body, call) => {
+                const key = decodeURIComponent(call.path.split('/').pop()!);
+                return json(200, { isMember: members.has(key), callsign: members.get(key) ?? null });
+            },
+            '/api/join/sso-nonce': () => json(200, {
+                nonce: 'n1', expiresInSeconds: 600, providers: ['github'], githubFlow: 'node', clientIds: {},
+            }),
+            '/api/join/github/start': () => json(200, { sessionId: 'sess-1', userCode: 'WDJB-MJHT', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 1 }),
+            '/api/join/github/poll': () => json(200, { status: 'ok', sub: 'gh-77' }),
+            '/api/join': () => json(200, { success: true, member: { callsign: 'Alice' } }),
+        });
+        const probes = () => n.calls.filter((c) => c.path.startsWith('/api/community/membership/')).map((c) => decodeURIComponent(c.path.split('/').pop()!));
+        const joins = () => n.calls.filter((c) => c.path === '/api/join');
+        return { ...n, probes, joins };
+    }
+
+    it('the node took the invite: the door join hands the page back, the invite key is asked about, saved, and its 12 words follow', async () => {
+        const { doorKey, inviteKey } = await bothStored(2 * MIN);
+        const n = node(new Map([[inviteKey.publicKey, 'Rowan']]));
+        render(<WelcomePage onComplete={vi.fn()} />);
+
+        await screen.findByText(/Choose your look/);
+        expect(n.probes()).toContain(doorKey.publicKey);
+        expect(n.probes()).toContain(inviteKey.publicKey);
+        expect(await loadIdentity()).toMatchObject({ publicKey: inviteKey.publicKey, callsign: 'Rowan' });
+        expect(peekInviteSent()).toBeUndefined();
+        // The door join's key: only the node's word or the member lets it go.
+        expect(peekPending()).toMatchObject({ identity: { publicKey: doorKey.publicKey }, sentAt: expect.any(Number) });
+        expect(screen.queryByTestId('join-screen-providers')).toBeNull();
+        expect(n.joins()).toHaveLength(0);
+        await expectWordsOf(inviteKey);
+    });
+
+    it('the invite never landed and no send with it can now: the invite key is let go, and the door join can be sent again and lands', async () => {
+        const { doorKey, inviteKey } = await bothStored(20 * MIN);
+        const n = node(new Map());
+        render(<WelcomePage onComplete={vi.fn()} />);
+
+        // The kept invite key was asked about, and let go.
+        await waitFor(() => expect(n.probes()).toContain(inviteKey.publicKey));
+        await waitFor(() => expect(peekInviteSent()).toBeUndefined());
+        // Then the door join, which can no longer land, is offered again with its own key.
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent("Your join didn't reach the community. Sign in again to finish.");
+        await screen.findByTestId('join-screen-providers');
+        fireEvent.click(await screen.findByTestId('join-provider-github'));
+        await screen.findByTestId('join-github-code');
+
+        // Sent, not refused because of the invite key.
+        await waitFor(() => expect(n.joins()).toHaveLength(1), { timeout: 4000 });
+        expect(n.joins()[0].headers['X-Public-Key']).toBe(doorKey.publicKey);
+        expect(screen.queryByText(/An invite sent from this browser is still being checked/)).toBeNull();
+        await screen.findByText(/Choose your look/);
+        expect((await loadIdentity())?.publicKey).toBe(doorKey.publicKey);
+    });
+});

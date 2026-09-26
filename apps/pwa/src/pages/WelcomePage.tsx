@@ -271,8 +271,9 @@ export function WelcomePage({ onComplete }: Props) {
      * A join that went out from this browser is settled wherever the page lands, the door open or shut (#1154 follow-up,
      * review 4106962311). While a sent pending join is stored, WebJoin is shown whatever the door says, and asks the node
      * about it (the membership probe, which the door doesn't gate): a member is in. With the door open it carries on as
-     * ever. With the door shut it only settles (`settleOnly`): a join that may still land is waited for, and one the node
-     * says never landed and can no longer land hands the page back (`settledNotLanded`), its key kept as it is. And
+     * ever. With the door shut, or a kept invite key waiting behind it (4112213080), it only settles (`settleOnly`): a
+     * join that may still land is waited for, and one the node says never landed and can no longer land hands the page
+     * back (`settledNotLanded`), its key kept as it is. And
      * nothing here writes an identity (an invite, a restore) while such a join is unsettled: every save carries
      * `sentJoinGuard()`.
      */
@@ -362,9 +363,11 @@ export function WelcomePage({ onComplete }: Props) {
      *     same key. On the open door there is no invite form: "Finish joining" waits for it with Retry, and the door's
      *     lobby comes once the key is settled, so a door join never makes a second key beside it (4112075367);
      *   - no answer: "Finish joining" with Retry. Never the invite form, whose pre-flight would call the code used.
-     * The open door's lobby is shown only once this is 'none', whatever the door says.
+     * The open door's lobby is shown only once this is 'none', whatever the door says. 'kept': a record is on disk and
+     * not asked about yet, because a sent door join is settled first; that join is then only settled, never offered
+     * again, so it hands the page back and this key is asked about next (4112213080).
      */
-    type SentInviteView = 'checking' | 'none' | { stuck: 'unreachable' | 'unsaved' | 'waiting'; name: string; busy: boolean; again: boolean };
+    type SentInviteView = 'checking' | 'none' | 'kept' | { stuck: 'unreachable' | 'unsaved' | 'waiting'; name: string; busy: boolean; again: boolean };
     const [sentInvite, setSentInvite] = useState<SentInviteView>('checking');
     const [sentInviteCheck, setSentInviteCheck] = useState(0);
     useEffect(() => {
@@ -401,7 +404,10 @@ export function WelcomePage({ onComplete }: Props) {
             setSentInvite('none');
             return;
         }
-        if (!mayAsk) return;
+        if (!mayAsk) {
+            setSentInvite('kept');
+            return;
+        }
         const kept = record.identity;
         const probe = await probeMembership(kept);
         if (cancelled()) return;
@@ -411,13 +417,14 @@ export function WelcomePage({ onComplete }: Props) {
                 await completeInviteSent(member, sentJoinGuard());
             } catch (e) {
                 if (cancelled()) return;
-                setSentInvite('none');
                 if (e instanceof SentJoinWaitingError) {
                     // A join that went out from this browser is settled first; this key stays on disk, and is asked
                     // about again once it is.
+                    setSentInvite('kept');
                     settleSentJoinFirst();
                     return;
                 }
+                setSentInvite('none');
                 if (e instanceof IdentityHeldError) {
                     showHeld(e.held, { identity: member, joined: true });
                     return;
@@ -1094,6 +1101,10 @@ export function WelcomePage({ onComplete }: Props) {
     // "Finish joining" for a kept invite key (settleSentInvite). A key the node says is not a member yet goes back to the
     // invite form, whose next try sends it; the open door has no such form, so it waits here instead (4112075367).
     const finishJoining = typeof sentInvite === 'object' && (sentInvite.stuck !== 'waiting' || webJoinForDoor);
+    // WebJoin only settles a sent join, sends nothing, and hands the page back once that join can no longer land: where
+    // the door isn't open, and wherever a kept invite key waits to be asked about after it (4112213080). Offered again
+    // in full on the open door, that join's resend would be refused because of the kept key, and never hand back.
+    const joinSettleOnly = !webJoinForDoor || sentInvite !== 'none';
     const waitMinutes = Math.round(INVITE_SEND_CAN_LAND_MS / 60_000);
 
     return (
@@ -2016,10 +2027,11 @@ export function WelcomePage({ onComplete }: Props) {
                         />
                     ) : restoreReturn === 'checking' ? (
                         <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>One moment…</p>
-                    ) : (webJoinForDoor && sentInvite === 'none') || sentJoin === 'settle' ? (
+                    ) : (webJoinForDoor && sentInvite === 'none') || (sentJoin === 'settle' && sentInvite !== 'checking') ? (
                         /* A sign-in coming back is met at once, before the node has said what it is; on a node that
                            turns out to be invite-only it is dropped, and the invite page shows as always. A join that
-                           went out from this browser is settled here first, whatever the door says (review 4106962311).
+                           went out from this browser is settled here first, whatever the door says (review 4106962311),
+                           once the invite slot has been read, so the mode it settles in is known before it starts.
                            A key an invite went with comes before the door's lobby: "One moment…" while it is read and
                            asked about, then "Finish joining" until it is settled (4112075367). */
                         /* ===== THE OPEN DOOR: join with a sign-in, no invite (design G11) ===== */
@@ -2033,9 +2045,9 @@ export function WelcomePage({ onComplete }: Props) {
                             <WebJoin
                                 // Settling only is a mode for the life of one WebJoin: when the door's answer moves the
                                 // page from one to the other, it starts again in the right one.
-                                key={!webJoinForDoor ? 'settle' : restoredForDoor?.publicKey ?? 'new'}
+                                key={joinSettleOnly ? 'settle' : restoredForDoor?.publicKey ?? 'new'}
                                 restored={restoredForDoor}
-                                settleOnly={!webJoinForDoor}
+                                settleOnly={joinSettleOnly}
                                 onSettled={handleSettled}
                                 onExisting={onComplete}
                                 onJoined={handleJoined}
@@ -2089,7 +2101,7 @@ export function WelcomePage({ onComplete }: Props) {
                                 {sentInvite.busy ? 'Checking…' : 'Retry'}
                             </button>
                         </>
-                    ) : door === 'checking' || sentJoin === 'checking' || sentInvite === 'checking' ? (
+                    ) : door === 'checking' || sentJoin === 'checking' || sentInvite === 'checking' || sentInvite === 'kept' ? (
                         <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>One moment…</p>
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */

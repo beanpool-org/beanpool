@@ -24,6 +24,7 @@ import {
     isEventHostView, isEventOpen,
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { visitorDistanceText } from '../lib/visitor-lobby';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -193,12 +194,19 @@ interface EventCardProps {
     viewMode?: 'grid' | 'list' | 'compact';
     onOpen?: () => void;
     onRsvpChange?: (post: MarketplacePost) => void;
+    /**
+     * A visitor to the global lobby (G9b): no RSVP row, and no typed place (the node sends none to a visitor); a
+     * distance only from a point the visitor shared, in whole km, since the node places the event at its area's centre.
+     */
+    visitor?: boolean;
 }
 
-export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange }: EventCardProps) {
+export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, visitor = false }: EventCardProps) {
     const rsvp = useEventRsvp(post, identity, onRsvpChange);
     const p = rsvp.livePost;
-    const place = [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ');
+    const place = visitor
+        ? (distanceKm != null ? visitorDistanceText(distanceKm) : '')
+        : [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ');
     // The host gave the event a photo; the card showed everything but. It is read straight off the post, the way
     // the offer cards and the event page read theirs — there is no second resolver on the web client.
     const firstPhoto = p.photos && p.photos.length > 0 ? p.photos[0] : null;
@@ -256,7 +264,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 )}
                 {asRow ? <span className="min-w-0 flex-1 flex flex-col gap-1">{lines}</span> : lines}
             </button>
-            <RsvpButtons rsvp={rsvp} />
+            {!visitor && <RsvpButtons rsvp={rsvp} />}
             {rsvp.error && (
                 <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>
             )}

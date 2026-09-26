@@ -119,6 +119,13 @@ interface Props {
     origin?: string;
     /** Tests only: a captured return, in place of this page's URL. */
     authReturn?: AuthReturn | null;
+    /**
+     * Opened from the global lobby (G9b), which is screen 0 itself: the screen to land on when nothing is in flight,
+     * instead of this lobby's. 'guard' from the lobby's Join, 'restore' from its "Already have BeanPool?".
+     */
+    start?: 'guard' | 'restore';
+    /** Back to the listings, from the screen this opened on (and from this lobby's own screen, with a notice). */
+    onLobby?: () => void;
 }
 
 type Screen =
@@ -159,7 +166,7 @@ const WENT_WRONG = 'Something went wrong on this page. Reload it to try again.';
 const WENT_WRONG_KEPT = "Something went wrong on this page before we could finish. Your join is kept on this device: reload the page and it will check whether you're in.";
 /** A nonce lives ten minutes on the node; one older than this is fetched again before it is sent to a provider. */
 const NONCE_FRESH_MS = 5 * 60 * 1000;
-const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
+export const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
 /** After the node's sign-up refusal: the limit is counted per network, so a class or a meetup joining together meets it. */
 const SHARED_NETWORK = "Everyone joining from the same network counts together: at a campus, an office or a meetup it may be other people joining, not you.";
 
@@ -229,7 +236,7 @@ export function NoticeLine({ notice }: { notice: Notice }) {
     );
 }
 
-export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = false, onSettled, onExisting, reload, navigate, origin, authReturn }: Props) {
+export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = false, onSettled, onExisting, reload, navigate, origin, authReturn, start, onLobby }: Props) {
     const [screen, setScreen] = useState<Screen>({ name: 'loading' });
     const [showWords, setShowWords] = useState(false);
     const wordsId = useId();
@@ -730,7 +737,8 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                 resume(p);
                 return;
             }
-            setScreen({ name: 'lobby' });
+            // Opened from the global lobby's Join or "Already have BeanPool?": that screen, the lobby being screen 0.
+            setScreen(start === 'guard' ? { name: 'guard' } : start === 'restore' ? { name: 'restore' } : { name: 'lobby' });
         })().catch((e) => {
             if (cancelled) return;
             // Another tab sent a join with another key while this one was starting: that one is settled first.
@@ -924,6 +932,13 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
 
     // ---------- drawing ----------
 
+    /** "← Back" from the screen this opened on: to the listings when the global lobby opened it there. */
+    const backFrom = (here: 'guard' | 'restore') => {
+        setNotice(null);
+        if (onLobby && start === here) onLobby();
+        else setScreen({ name: 'lobby' });
+    };
+
     const offered = nonce ? offeredProviders(nonce) : [];
     const callsign = pending?.identity.callsign ?? '';
 
@@ -953,6 +968,11 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                     <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'restore' }); }}>
                         Already have BeanPool?
                     </button>
+                    {onLobby && (
+                        <div>
+                            <button type="button" style={quietButton} onClick={onLobby}>← Back to the listings</button>
+                        </div>
+                    )}
                 </>
             );
             break;
@@ -962,20 +982,28 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             body = (
                 <>
                     <h3 style={heading}>Have you used BeanPool before?</h3>
-                    <p style={lede}>One person, one account. If you already have one, bring it here instead of making another.</p>
-                    <button type="button" data-testid="join-new" style={primaryButton} onClick={() => { setNotice(null); setScreen({ name: 'name' }); }}>
-                        I'm new to BeanPool
-                    </button>
-                    <button type="button" style={secondaryButton} onClick={() => onRestore('phone')}>
-                        I use BeanPool on my phone
-                    </button>
-                    <button type="button" style={secondaryButton} onClick={() => onRestore('words')}>
-                        I have my 12 words
-                    </button>
-                    <button type="button" data-testid="join-guard-signin" style={secondaryButton} onClick={() => onRestore('signin')}>
-                        I joined with a sign-in before
-                    </button>
-                    <button type="button" style={quietButton} onClick={() => setScreen({ name: 'lobby' })}>← Back</button>
+                    {/* Opened straight from the global lobby's Join, this screen is the first to need a key, so a
+                        browser that can't hold one hears it here, as the lobby's Join says it. */}
+                    {canHoldKey === false ? (
+                        <p role="alert" data-testid="guard-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{TOO_OLD}</p>
+                    ) : (
+                        <>
+                            <p style={lede}>One person, one account. If you already have one, bring it here instead of making another.</p>
+                            <button type="button" data-testid="join-new" style={primaryButton} onClick={() => { setNotice(null); setScreen({ name: 'name' }); }}>
+                                I'm new to BeanPool
+                            </button>
+                            <button type="button" style={secondaryButton} onClick={() => onRestore('phone')}>
+                                I use BeanPool on my phone
+                            </button>
+                            <button type="button" style={secondaryButton} onClick={() => onRestore('words')}>
+                                I have my 12 words
+                            </button>
+                            <button type="button" data-testid="join-guard-signin" style={secondaryButton} onClick={() => onRestore('signin')}>
+                                I joined with a sign-in before
+                            </button>
+                        </>
+                    )}
+                    <button type="button" style={quietButton} onClick={() => backFrom('guard')}>← Back</button>
                 </>
             );
             break;
@@ -1003,7 +1031,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                             </button>
                         </>
                     )}
-                    <button type="button" style={quietButton} onClick={() => setScreen({ name: 'lobby' })}>← Back</button>
+                    <button type="button" style={quietButton} onClick={() => backFrom('restore')}>← Back</button>
                 </>
             );
             break;

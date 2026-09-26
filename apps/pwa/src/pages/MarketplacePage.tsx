@@ -50,6 +50,22 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { matchesExpandedSearch } from '../lib/search';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
+import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
+import { VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
+
+/**
+ * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
+ * of each listing, and nothing to write with. The list has the Join card on top and the lobby's one line under the
+ * first card; a listing opens the visitor's detail sheet, whose one action is Join.
+ */
+export interface MarketVisitor {
+    /** The Join card at the top of the list (GuestLobby's: Join, "Already have BeanPool?", or why this browser can't). */
+    joinCard: React.ReactNode;
+    /** Screen 1 of the browser join, from the detail sheet's button. */
+    onJoin: () => void;
+    /** Whether the node trades in Beans: without, the terms are free, a swap, or ask. */
+    beans: boolean;
+}
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -66,6 +82,8 @@ interface Props {
      * waits for the answer. Omitted means a member.
      */
     isMember?: boolean | null;
+    /** A visitor to the global lobby, with no identity (G9b). */
+    visitor?: MarketVisitor;
 }
 
 // Turn a server trade-gate rejection into a friendly message. The covenant / contribution /
@@ -122,14 +140,17 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
     return filter;
 }
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+    // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
+    const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>('all');
     // The date chips under the Events pill — the map's chips, as on the phone's feed (#895).
     const [feedEventWindow, setFeedEventWindow] = useState<EventWindow>('all');
     // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,
     // so it persists across sessions.
-    const [beansOnly, setBeansOnly] = useState(() => localStorage.getItem('bp_beans_only') === 'true');
+    // Never for a visitor, whose list has no such chip to undo it.
+    const [beansOnly, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
     const [foundingOnly, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [groupFilter, setGroupFilter] = useState<string>('all');
@@ -421,13 +442,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
                 // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
-                const statusesPromise = getEnterpriseStatuses().catch(() => null);
+                // A visitor has no enterprises to hide: on the global node they are off, and their reads are members' only.
+                const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch(() => null);
                 const [homeData, myOwnPosts, statusesData, fallbackTreasuries] = await Promise.all([
                     getMarketplacePosts(filter),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
                     // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock)
-                    statusesPromise.then(res => res ? null : getTreasuries().catch(() => ({ treasuries: [] })))
+                    isVisitor ? Promise.resolve(null) : statusesPromise.then(res => res ? null : getTreasuries().catch(() => ({ treasuries: [] })))
                 ]);
 
                 const inactiveMap = new Map<string, { paused: boolean; status: string; name: string }>();
@@ -482,7 +504,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity]);
+    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity, isVisitor]);
 
     // Fetch peer nodes on mount
     useEffect(() => {
@@ -571,7 +593,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll
     useEffect(() => {
-        if (posts.length === 0) return;
+        if (posts.length === 0 || isVisitor) return;
         const now = Date.now();
         const uniqueAuthors = [...new Set(posts.map(p => p.authorPublicKey))];
         const uncachedAuthors = uniqueAuthors.filter(pk => {
@@ -611,8 +633,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         });
     }, [posts]);
 
-    // Fetch avatar cache from members list
+    // Fetch avatar cache from members list (members only: a visitor's list names nobody)
     useEffect(() => {
+        if (isVisitor) return;
         getMembers()
             .then(members => {
                 const cache: Record<string, string | null> = {};
@@ -655,6 +678,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         setShowRatingForm(false);
         setShowReportForm(false);
         setReportReason('');
+        // The visitor's sheet shows the listing only: nothing is asked about who posted it.
+        if (isVisitor) {
+            setLoadingProfile(false);
+            setRequests([]);
+            return;
+        }
 
         // Check if author is a paused / wound-up / completed enterprise (guards cached post copy & deep links)
         const cachedEnt = inactiveEnterprises.get(selectedPost.authorPublicKey);
@@ -780,6 +809,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     };
 
     // =================== DETAIL VIEW ===================
+    if (selectedPost && visitor) {
+        return (
+            <VisitorPostDetail
+                post={selectedPost}
+                beans={visitor.beans}
+                distanceKm={radiusSettings && selectedPost.lat != null && selectedPost.lng != null
+                    ? haversineDistance(radiusSettings.lat, radiusSettings.lng, selectedPost.lat, selectedPost.lng)
+                    : null}
+                onBack={() => setSelectedPost(null)}
+                onJoin={visitor.onJoin}
+            />
+        );
+    }
     if (selectedPost) {
         if (selectedPost.type === 'event') {
             return (
@@ -2202,6 +2244,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
 
                     {/* Highly Important My Deals Button */}
+                    {!isVisitor && (<>
                     <button
                         onClick={() => setShowDealsModal(true)}
                         className="h-9 px-3 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400 text-xs font-black whitespace-nowrap shadow-sm transition-all flex items-center gap-1.5 hover:bg-amber-200 dark:hover:bg-amber-900/60 hover:shadow-md cursor-pointer"
@@ -2227,6 +2270,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         {viewMode === 'grid' ? '⊞' : (viewMode === 'list' ? '☰' : '▤')}
                     </button>
+                    </>)}
                 </div>
 
                 {/* Row 2: Full-Width Type Segmented Control. Six types: two rows of three on a phone, so every type
@@ -2261,7 +2305,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* Row 2.5: Secondary Action & Filter Chips. Under Events only the group choice stays: beans only,
                     new members and the pricing guide are about listings. */}
                 <div className="flex flex-wrap items-center gap-2 my-1.5">
-                    {typeFilter !== 'event' && (<>
+                    {typeFilter !== 'event' && !isVisitor && (<>
                     <button
                         onClick={() => {
                             const next = !beansOnly;
@@ -2551,6 +2595,54 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     if (identity && post.authorPublicKey === identity.publicKey) return false;
                     return new Date(post.createdAt).getTime() >= startOfToday.getTime();
                 }).length;
+
+                if (visitor) {
+                    // One column on a phone (320px at 1.3x text), more from sm up. The Join card first, and the one line
+                    // about what joining shows under the first card, not on every card.
+                    const note = (
+                        <p data-testid="visitor-list-note" className="col-span-full m-0 px-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
+                            {VISITOR_LIST_NOTE}
+                        </p>
+                    );
+                    return (
+                        <div className="pb-32">
+                            {visitor.joinCard}
+                            {filtered.length === 0 ? (
+                                <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-3xl p-8 mt-2 text-center">
+                                    <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">
+                                        {posts.length > 0 || searchQuery.trim() ? 'No items found' : 'Nothing posted here yet'}
+                                    </h4>
+                                    <p className="text-nature-500 dark:text-nature-400 text-sm m-0">
+                                        {searchQuery.trim()
+                                            ? `No matches for "${searchQuery}".`
+                                            : posts.length > 0 ? 'Try adjusting your filters.' : 'Join to post the first offer.'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div data-testid="visitor-list" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {filtered.map((post, i) => (
+                                        <div key={post.id} className="contents">
+                                            {post.type === 'event' ? (
+                                                <EventCard post={post} visitor distanceKm={eventDistance(post)} viewMode="list" onOpen={() => setSelectedPost(post)} />
+                                            ) : post.type === 'poll' ? (
+                                                // As the member grid's tiles: the card holds blocks, so a role, not a <button>.
+                                                <div role="button" tabIndex={0} onClick={() => setSelectedPost(post)}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
+                                                    aria-label={`Open poll: ${post.title}`}
+                                                    className="self-start rounded-2xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
+                                                    <PollCard post={post} visitor viewMode="list" />
+                                                </div>
+                                            ) : (
+                                                <VisitorCard post={post} beans={visitor.beans} distanceKm={eventDistance(post)} onOpen={() => setSelectedPost(post)} />
+                                            )}
+                                            {i === 0 && note}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
 
                 return (
                     <div className="pb-32">
@@ -2961,7 +3053,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             )}
 
             {/* Floating 'Add Offer/Need' Button */}
-            {!selectedPost && (
+            {!selectedPost && !isVisitor && (
                 <button
                     onClick={() => onNavigate?.('map-post')}
                     className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"

@@ -11,11 +11,14 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react
 import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth, type MarketplaceTransaction } from './lib/api';
+import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth, type CommunityInfo, type MarketplaceTransaction } from './lib/api';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
+import { GuestLobby } from './pages/GuestLobby';
+import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
+import { visitorsSeeListings } from './lib/visitor-lobby';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -113,6 +116,22 @@ interface NodeHealthState {
 export function App() {
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
+    /*
+     * With no identity: the global lobby (G9b) when the node shows visitors its listings and nothing is part way through
+     * a join in this browser; otherwise the welcome page, as always. Decided once, from the node's own word; a node
+     * that can't be asked gets the welcome page, which says so.
+     */
+    const [visitorView, setVisitorView] = useState<{ kind: 'checking' } | { kind: 'welcome'; info: CommunityInfo | null } | { kind: 'lobby'; info: CommunityInfo }>({ kind: 'checking' });
+    useEffect(() => {
+        if (loading || identity || visitorView.kind !== 'checking') return;
+        let cancelled = false;
+        Promise.all([communityInfoOnce().catch(() => null), joinInFlight()])
+            .then(([info, inFlight]) => {
+                if (cancelled) return;
+                setVisitorView(info && visitorsSeeListings(info) && !inFlight ? { kind: 'lobby', info } : { kind: 'welcome', info });
+            });
+        return () => { cancelled = true; };
+    }, [loading, identity, visitorView.kind]);
     const [activeTab, setActiveTab] = useState<Tab>('marketplace');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
@@ -271,6 +290,7 @@ export function App() {
     // identity gate shows them the join page instead, which is the right landing for them.
     const [linkedPost, setLinkedPost] = useState<string | null>(null);
     useEffect(() => { setLinkedPost(takePostParam()); }, []);
+    const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
     useEffect(() => {
         if (!identity || !linkedPost) return;
         setActiveTab('marketplace');
@@ -467,7 +487,7 @@ export function App() {
         };
     }, [identity]);
 
-    if (loading) {
+    if (loading || (!identity && visitorView.kind === 'checking')) {
         return (
             <div style={{
                 display: 'flex',
@@ -482,9 +502,13 @@ export function App() {
         );
     }
 
-    // First-run gate
+    // First-run gate: the global lobby for a visitor with no key, where the node shows visitors its listings (G9b).
     if (!identity) {
-        return <WelcomePage onComplete={setIdentity} />;
+        if (visitorView.kind === 'lobby') {
+            return <GuestLobby info={visitorView.info} onComplete={setIdentity} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} />;
+        }
+        // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
+        return <WelcomePage onComplete={setIdentity} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />;
     }
 
     const TABS: { id: Tab; label: string; emoji: string }[] = [

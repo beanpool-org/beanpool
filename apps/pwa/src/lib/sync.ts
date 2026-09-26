@@ -343,6 +343,28 @@ export function connectToAnchor(url?: string): void {
         });
 }
 
+/**
+ * Close the socket and open it again, signed by the identity stored now. For a page whose visitor has just joined (the
+ * global lobby, G9b): its socket opened with no key gets only doorbells, and connectToAnchor keeps a socket that is open.
+ */
+export function reconnectToAnchor(): void {
+    const socket = ws;
+    if (socket) {
+        ws = null;
+        stopHeartbeat();
+        if (stabilityTimeoutId) {
+            clearTimeout(stabilityTimeoutId);
+            stabilityTimeoutId = null;
+        }
+        try { socket.close(); } catch { /* already closing */ }
+    }
+    if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+    }
+    connectToAnchor(currentUrl ?? undefined);
+}
+
 function scheduleReconnect(url: string): void {
     if (reconnectTimeoutId) return;
 

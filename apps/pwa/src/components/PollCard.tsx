@@ -23,9 +23,14 @@ interface PollCardProps {
     onOpenProfile?: (pubkey: string) => void;
     /** Where the card is drawn. In the Market grid it is given two columns, so the answers get two columns too. */
     viewMode?: 'grid' | 'list' | 'compact';
+    /**
+     * A visitor to the global lobby (G9b): the question, its answers and the counts, read only. No author row (the node
+     * sends none), no voting, and no voter list.
+     */
+    visitor?: boolean;
 }
 
-export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode }: PollCardProps) {
+export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, visitor = false }: PollCardProps) {
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
     const [isClosing, setIsClosing] = useState(false);
@@ -156,7 +161,8 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                 )}
             </div>
 
-            {/* Author Row */}
+            {/* Author Row: never for a visitor, whom the node sends no author. */}
+            {!visitor && (
             <div className="flex items-center gap-2 mb-2">
                 <button
                     type="button"
@@ -180,6 +186,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     </span>
                 </button>
             </div>
+            )}
 
             {/* Question Title */}
             <h3 className="font-extrabold text-base text-nature-950 dark:text-white mb-1 leading-snug">
@@ -201,19 +208,8 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     const pct = opt.percentage ?? (totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0);
                     const count = opt.votes ?? 0;
 
-                    return (
-                        <button
-                            key={opt.id || String(idx)}
-                            type="button"
-                            aria-pressed={isVoted}
-                            disabled={isClosed || Boolean(votingOptionId)}
-                            onClick={() => handleVote(opt.id)}
-                            className={`w-full relative overflow-hidden rounded-xl border text-left transition-all p-3 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-1 ${
-                                isVoted
-                                    ? 'border-purple-500 ring-2 ring-purple-400/40 bg-purple-50/30 dark:bg-purple-950/30'
-                                    : 'border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 hover:border-purple-300 dark:hover:border-purple-700'
-                            } ${isClosed ? 'cursor-default' : ''}`}
-                        >
+                    const row = (
+                        <>
                             {/* Live Progress Bar Fill */}
                             <div
                                 role="progressbar"
@@ -256,15 +252,42 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                     </span>
                                 </div>
                             </div>
+                        </>
+                    );
+                    // A visitor reads the answers and their counts; there is nothing to press.
+                    if (visitor) {
+                        return (
+                            <div key={opt.id || String(idx)} data-testid="poll-option-readonly"
+                                className="w-full relative overflow-hidden rounded-xl border text-left p-3 border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900">
+                                {row}
+                            </div>
+                        );
+                    }
+                    return (
+                        <button
+                            key={opt.id || String(idx)}
+                            type="button"
+                            aria-pressed={isVoted}
+                            disabled={isClosed || Boolean(votingOptionId)}
+                            onClick={() => handleVote(opt.id)}
+                            className={`w-full relative overflow-hidden rounded-xl border text-left transition-all p-3 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-1 ${
+                                isVoted
+                                    ? 'border-purple-500 ring-2 ring-purple-400/40 bg-purple-50/30 dark:bg-purple-950/30'
+                                    : 'border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 hover:border-purple-300 dark:hover:border-purple-700'
+                            } ${isClosed ? 'cursor-default' : ''}`}
+                        >
+                            {row}
                         </button>
                     );
                 })}
             </div>
 
             {/* Polls are an open ballot — say so before anyone votes (Decisions, by contrast, are secret). */}
+            {!visitor && (
             <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-open-ballot-note">
                 <span aria-hidden="true">👁️ </span>Your vote is visible to members
             </p>
+            )}
 
             {/* Error Message */}
             {error && (
@@ -279,7 +302,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     <span aria-hidden="true">📊 </span>{totalVotes} vote{totalVotes === 1 ? '' : 's'} cast
                 </span>
 
-                {votesList.length > 0 && (
+                {!visitor && votesList.length > 0 && (
                     <button
                         type="button"
                         onClick={() => setShowVoters(v => !v)}
@@ -293,7 +316,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             </div>
 
             {/* Collapsible Open Ballot Public Voter List */}
-            {showVoters && votesList.length > 0 && (
+            {!visitor && showVoters && votesList.length > 0 && (
                 <div id="poll-voters-list" className="mt-2.5 pt-2 border-t border-purple-100 dark:border-purple-900/40 max-h-36 overflow-y-auto space-y-1 text-xs">
                     <p className="text-[10px] uppercase tracking-wider font-extrabold text-nature-400 mb-1">
                         Public Village Ballot
@@ -319,9 +342,11 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             )}
 
             {/* Village Notice */}
+            {!visitor && (
             <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-500 text-center">
                 <span aria-hidden="true">ℹ️ </span>Public signed village voting · Re-voting overwrites choice
             </p>
+            )}
         </div>
     );
 }

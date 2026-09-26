@@ -21,7 +21,7 @@ import { validateMnemonic } from '../lib/mnemonic';
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership,
     recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl,
-    getCommunityInfo, isRouteMissing,
+    getCommunityInfo, isRouteMissing, type CommunityInfo,
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { WebRestore } from '../components/WebRestore';
@@ -36,6 +36,15 @@ const QRCodeSVGComponent: React.FC<any> = QRCodeSVG as any;
 
 interface Props {
     onComplete: (identity: BeanPoolIdentity) => void;
+    /**
+     * Opened over the global lobby (G9b), which is screen 0: 'guard' from its Join, 'restore' from its "Already have
+     * BeanPool?". The page lands there when nothing is in flight, instead of on its own first screen.
+     */
+    start?: 'guard' | 'restore';
+    /** Back to the lobby's listings, from the screen the page opened on. */
+    onBack?: () => void;
+    /** `/api/community/info` as the lobby already read it, so the page doesn't ask again. */
+    initialInfo?: CommunityInfo;
 }
 
 // ===================== INVITE CODE FORMATTING =====================
@@ -215,6 +224,20 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name' }: { step: 1 
     );
 }
 
+/** Over the global lobby (G9b), on the screens a node with its door shut shows: back to the listings. */
+function BackToListings({ onBack }: { onBack: () => void }) {
+    return (
+        <div>
+            <button type="button" onClick={onBack} style={{
+                background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem',
+                cursor: 'pointer', marginTop: '0.75rem', fontFamily: 'inherit',
+            }}>
+                ← Back to the listings
+            </button>
+        </div>
+    );
+}
+
 /**
  * Whether this node takes members without an invite, from `/api/community/info` (a public read): `open` only when it
  * says so (the global profile with its door open); `invite` for every other answer, an older node's included, which
@@ -222,16 +245,22 @@ export function OnboardingStepper({ step, firstLabel = 'Your Name' }: { step: 1 
  */
 type Door = 'checking' | 'open' | 'invite' | 'unreachable';
 
-export function WelcomePage({ onComplete }: Props) {
+function doorOf(info: CommunityInfo | null | undefined): Door {
+    return info?.profile === 'global' && info.features?.openJoin === true ? 'open' : 'invite';
+}
+
+export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
     const [authReturn] = useState(() => captureAuthReturn());
-    const [door, setDoor] = useState<Door>('checking');
+    const [door, setDoor] = useState<Door>(() => (initialInfo ? doorOf(initialInfo) : 'checking'));
     const [doorCheck, setDoorCheck] = useState(0);
     useEffect(() => {
+        // The lobby read it a moment ago: asked again only on Try again.
+        if (initialInfo && doorCheck === 0) return;
         let cancelled = false;
         setDoor('checking');
         getCommunityInfo()
-            .then((info) => { if (!cancelled) setDoor(info?.profile === 'global' && info.features?.openJoin === true ? 'open' : 'invite'); })
+            .then((info) => { if (!cancelled) setDoor(doorOf(info)); })
             .catch((e) => { if (!cancelled) setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); });
         return () => { cancelled = true; };
     }, [doorCheck]);
@@ -494,8 +523,9 @@ export function WelcomePage({ onComplete }: Props) {
     // than re-entering the wizard. If a resume path is ever added, this needs persisting too.
     const [inviteRedeemed, setInviteRedeemed] = useState(false);
     const [showOnboardingGuide, setShowOnboardingGuide] = useState(false);
-    const [showNewUser, setShowNewUser] = useState(() => true);
-    const [showMemberOptions, setShowMemberOptions] = useState(false);
+    // From the lobby's "Already have BeanPool?" on a node whose door is shut: the ways back, not the invite form.
+    const [showNewUser, setShowNewUser] = useState(() => start !== 'restore');
+    const [showMemberOptions, setShowMemberOptions] = useState(() => start === 'restore');
     const [openFaq, setOpenFaq] = useState<number | null>(null);
 
     const [showAvatarSetup, setShowAvatarSetup] = useState(false);
@@ -2048,6 +2078,8 @@ export function WelcomePage({ onComplete }: Props) {
                                 key={joinSettleOnly ? 'settle' : restoredForDoor?.publicKey ?? 'new'}
                                 restored={restoredForDoor}
                                 settleOnly={joinSettleOnly}
+                                start={restoredForDoor ? undefined : start}
+                                onLobby={onBack}
                                 onSettled={handleSettled}
                                 onExisting={onComplete}
                                 onJoined={handleJoined}
@@ -2281,6 +2313,7 @@ export function WelcomePage({ onComplete }: Props) {
                             >
                                 ← Back to Home
                             </button>
+                            {onBack && <BackToListings onBack={onBack} />}
                         </>
                     ) : (
                         /* ===== MAIN WELCOME — two simple choices ===== */
@@ -2376,6 +2409,7 @@ export function WelcomePage({ onComplete }: Props) {
                                     </button>
                                 </>
                             )}
+                            {onBack && <BackToListings onBack={onBack} />}
                         </>
                     )}
                 </div>

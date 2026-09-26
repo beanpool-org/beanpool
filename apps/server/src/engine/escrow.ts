@@ -1138,7 +1138,8 @@ export function resolveEscrowDispute(
             if (post && !post.repeatable) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
             } else if (post && post.repeatable) {
-                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+                // Not a listing a prune cancelled under this deal, as in completePostTransaction: it stays down.
+                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         } else if (action === 'refund_to_buyer') {
             const refundResult = cb.transfer(
@@ -1165,8 +1166,10 @@ export function resolveEscrowDispute(
                 }
             }
 
+            // Back on the board, unless a prune cancelled the listing under this deal (as in cancelPostTransaction): a
+            // removed member's listing stays down when an admin refunds the buyer.
             if (post) {
-                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         } else if (action === 'split') {
             // Buyer refund half (fee-exempt)
@@ -1224,7 +1227,8 @@ export function resolveEscrowDispute(
             if (post && !post.repeatable) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
             } else if (post && post.repeatable) {
-                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+                // Not a listing a prune cancelled under this deal, as in completePostTransaction: it stays down.
+                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         }
     });

@@ -745,7 +745,8 @@ router.post('/api/community/me/area', async (ctx) => {
     const { lat, lng } = (ctx as any).requestBody || {};
     const clear = lat === null && lng === null;
     // A pruned account is no longer in the community (its area was cleared with it), so it can't set a new one; clearing
-    // is never refused to anyone with a row here.
+    // is never refused here to anyone with a row. (Over HTTP a pruned account doesn't get this far: the signature
+    // middleware refuses everything it signs, https-server.ts CLOSED_ACCOUNT_REFUSAL.)
     const member = getMember(actor);
     if (!member || (member.status === 'pruned' && !clear)) {
         ctx.status = 403;

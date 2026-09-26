@@ -14,7 +14,8 @@
  * a delta read, the vote and close responses, and the /ws `post_updated` a vote sends — as:
  *   - nobody (unsigned),
  *   - a signed key that is not a member here,
- *   - a pruned member (the row stays and the key can still sign),
+ *   - a pruned member (the row stays and the key can still sign; over HTTP, the signature middleware refuses everything
+ *     it signs, a public read included: 403 account_closed, #1177),
  *   - the old key of a member whose phone was lost or stolen: an operator has issued a re-key code (issueRekeyCode), so the
  *     node has invalidated that key, though the row stays and the key can still sign until the new phone binds a new one
  *     (completeRekey). Read on a socket it opened while it was a member, on one it opens after, and over HTTP; then the
@@ -227,6 +228,13 @@ async function main() {
                 // REPLACED_KEY_REFUSAL, #1177). This was a 200 with the counts and no voters, as for any non-member.
                 assert(r.status === 403 && JSON.parse(r.text)?.code === 'key_invalidated' && !namesVoter(r.text),
                     `${label} is refused ${path}, 403 key_invalidated, and sent nothing that names the voter (got ${r.status})`);
+                continue;
+            }
+            if (id === pruned) {
+                // So is a closed account's key (https-server.ts CLOSED_ACCOUNT_REFUSAL, 4109713263). This too was a 200
+                // with the counts and no voters.
+                assert(r.status === 403 && JSON.parse(r.text)?.code === 'account_closed' && !namesVoter(r.text),
+                    `${label} is refused ${path}, 403 account_closed, and sent nothing that names the voter (got ${r.status})`);
                 continue;
             }
             assert(r.status === 200, `${label} reads ${path} → 200 (got ${r.status})`);

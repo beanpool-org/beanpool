@@ -1,6 +1,6 @@
 /**
  * A key that isn't a live member of this node can't act on other people (#1159 round 3, review comments 4109135691
- * and 4109135769). A pruned account keeps its member row, its group roles and its open trades, and the old key of a
+ * and 4109135769), and a closed account's key signs nothing at all (4109713263). A pruned account keeps its member row, its group roles and its open trades, and the old key of a
  * member being re-keyed (a lost or stolen phone) keeps its row too, set to 'suspended'. Both can still sign. Neither
  * may remove another member's event-chat message, close a trade, or bring someone in with an invite, and nothing
  * they are refused hands them a person.
@@ -34,8 +34,21 @@
  *  7. A re-key never brings back an account that was deleted (by its owner) or removed (pruned, by an admin or a
  *     community vote): completing it is refused in plain words, and nothing changes.
  *  8. Controls, unchanged: an ordinary member and a suspended one (the status a report suspension writes, not a re-key)
- *     still post, message and delete their own account; a member suspended by an admin or a vote ('disabled') is
- *     refused what it was before and can still delete their own account.
+ *     still post, message, pause, resume and edit their own listing, and delete their own account; a member suspended
+ *     by an admin or a vote ('disabled') is refused what it was before, still pauses, resumes and edits their own
+ *     listing, and can still delete their own account.
+ *  9. A closed account signs nothing (4109713263): a member removed by an admin, and one who deleted their own account
+ *     over HTTP, each with an offer, an event Bob is going to and a poll paused. The prune and the self-delete leave no
+ *     paused post behind (each ends as the same post up would: cancelled, the poll closed). The closed key can't edit
+ *     them, put them back up or move the event: 403 account_closed, nothing changes, Bob is pushed nothing, and none of
+ *     them is on Carol's board. A listing the prune cancelled under a deal in escrow stays down when an admin refunds
+ *     the buyer. A paused post a prune left before this fix (as a live node may hold) is refused over HTTP and to an
+ *     engine caller (resumePost, updatePost), which still serves a suspended or disabled author. Every registered write
+ *     the middleware sees, signed by each closed key with bodies that reach its own posts and other people's things, is
+ *     refused 403 account_closed before any handler runs, nothing changes and nobody is pushed; so are its signed reads,
+ *     gated or public; unsigned, a read is answered as before. Invite redemption, outside the middleware, refuses the
+ *     closed key itself and uses no code. A key with no member row still knocks, reads its knock, probes its
+ *     membership and gets the door's own answer. No flow needs a closed account's key.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-non-members-cant-act.ts
  */
@@ -53,7 +66,7 @@ import {
     initStateEngine, transfer, createPost, acceptPost, requestPost, completePostTransaction,
     createGroup, joinGroup, rsvpEvent, postEventThreadMessage, adminPruneUser, seedGenesisMember,
     postGroupThreadMessage, vouchMember, createConversation, sendMessage, getBalance, proposeGroupConvenor,
-    purgeMemberSelf,
+    purgeMemberSelf, pausePost, resumePost, updatePost,
 } from './state-engine.js';
 import { createCrowdfundProject } from './db/db.js';
 import { issueRekeyCode } from './engine/member-wizards.js';
@@ -540,19 +553,21 @@ async function main(): Promise<void> {
 
         // Vouching hands out a credit floor; a pruned voucher's can_vouch outlasts the prune.
         const vouchOf = (pk: string) => db.prepare('SELECT elder_vouched_by, vouch_credit FROM members WHERE public_key = ?').get(pk) as any;
+        // These four answered 400, the engine's own refusal; since 4109713263 the middleware refuses a closed account first.
+        const closedAccount = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'account_closed';
         const vouch = await signedFetch('POST', '/api/profile/vouch', pruney, { targetPubkey: bob.pubKeyHex });
-        assert(vouch.status === 400 && !vouchOf(bob.pubKeyHex)?.elder_vouched_by, `a pruned voucher vouches for nobody (got ${vouch.status})`);
+        assert(closedAccount(vouch) && !vouchOf(bob.pubKeyHex)?.elder_vouched_by, `a pruned voucher vouches for nobody (got ${vouch.status})`);
         const unvouch = await signedFetch('POST', '/api/profile/unvouch', pruney, { targetPubkey: carol.pubKeyHex });
-        assert(unvouch.status === 400 && vouchOf(carol.pubKeyHex)?.elder_vouched_by === pruney.pubKeyHex,
+        assert(closedAccount(unvouch) && vouchOf(carol.pubKeyHex)?.elder_vouched_by === pruney.pubKeyHex,
             `nor takes Carol's vouch away (got ${unvouch.status})`);
 
         // Ratings and reports land on another member's record.
         const rating = await signedFetch('POST', '/api/ratings', pruney,
             { targetPubkey: alice.pubKeyHex, stars: 1, comment: 'bad', transactionId: tPruneyDone.id });
-        assert(rating.status === 400 && !db.prepare('SELECT 1 FROM ratings WHERE rater_pubkey = ?').get(pruney.pubKeyHex),
+        assert(closedAccount(rating) && !db.prepare('SELECT 1 FROM ratings WHERE rater_pubkey = ?').get(pruney.pubKeyHex),
             `a pruned account rates nobody (got ${rating.status})`);
         const report = await signedFetch('POST', '/api/reports', pruney, { targetPubkey: alice.pubKeyHex, reason: 'spam' });
-        assert(report.status === 400 && !db.prepare('SELECT 1 FROM abuse_reports WHERE reporter_pubkey = ?').get(pruney.pubKeyHex),
+        assert(closedAccount(report) && !db.prepare('SELECT 1 FROM abuse_reports WHERE reporter_pubkey = ?').get(pruney.pubKeyHex),
             `nor reports anyone (got ${report.status})`);
 
         // A pruned participant's DM reaction still reached the other person.
@@ -583,60 +598,70 @@ async function main(): Promise<void> {
         assert(livePledge.status === 200, `a live member still pledges (got ${livePledge.status} ${JSON.stringify(livePledge.body)})`);
     }
 
+    // The middleware sweeps (sections 6 and 9): every registered write the signature middleware sees, each signed by one
+    // key with a body that would reach its data.
+    /** The routes the middleware never sees (https-server.ts isSignatureBypassed): each has its own authorization. */
+    const outside = (p: string) => ['/api/local/', '/api/admin/', '/api/manager/', '/api/pair/', '/api/pricing-guide/admin/', '/api/pricing-guide/reports']
+        .some(prefix => p.startsWith(prefix)) || p === '/api/invite/redeem' || p === '/api/invite/redeem-offline';
+    const app = getKoaApp() as any;
+    const writes = [...new Set<string>(app.middleware.filter((m: any) => m.router).flatMap((m: any) => m.router.stack)
+        .flatMap((l: any) => (l.methods as string[]).filter(m => m !== 'HEAD' && m !== 'GET').map(m => `${m} ${l.path}`)))].sort();
+    const swept = writes.filter(r => !outside(r.split(' ')[1]));
+    /** A path's parameters filled in: `ownPost` stands for `:id`/`:postId` under /api/marketplace/ and /api/events/ when the sweep is about the signer's own posts. */
+    const materialise = (p: string, ownPost?: string) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
+        if (name === 'id') return p.startsWith('/api/groups/') ? rekeyGroup.id : p.startsWith('/api/marketplace/') ? (ownPost ?? rekeyGroupEvent.id)
+            : p.startsWith('/api/crowdfund/') ? project : 'sweep';
+        if (name === 'postId' && ownPost) return ownPost;
+        return ({ pubkey: alice.pubKeyHex, postId: rekeyGroupEvent.id, messageId: bobRekeyLine.id, treasury: alice.pubKeyHex, provider: 'google' } as
+            Record<string, string>)[name] ?? 'sweep';
+    });
+    /** A body that would reach the route's data: the signer wherever a route names who acts, and someone else's things (or `own`, the signer's). */
+    const bodyFor = (signer: Id, own: Record<string, unknown> = {}) => {
+        const k = signer.pubKeyHex;
+        return {
+            publicKey: k, authorPublicKey: k, buyerPublicKey: k, cancellerPublicKey: k, confirmerPublicKey: k, voterPublicKey: k,
+            authorPubkey: k, from: k, createdBy: k, newPublicKey: k,
+            targetPubkey: alice.pubKeyHex, friendPubkey: alice.pubKeyHex, memberPubkey: alice.pubKeyHex, toPubkey: alice.pubKeyHex,
+            to: alice.pubKeyHex, candidatePubkey: bob.pubKeyHex, candidate: bob.pubKeyHex,
+            id: rekeyGroupEvent.id, postId: aliceOffer4.id, groupId: rekeyGroup.id, targetGroupId: rekeyGroup.id, conversationId: rekeyeeDm.id,
+            messageId: bobDmLine.id, transactionId: tRekeyee2.id, projectId: project, code: phonelessRekey.code,
+            type: 'offer', category: 'produce', title: 'Swept NM', description: 'Swept', credits: 1, priceType: 'fixed', amount: 1,
+            ciphertext: 'aGk=', nonce: 'c3dlcHQ=', emoji: '👍', stars: 5, reason: 'Swept', callsign: 'Swept NM', bio: 'Swept',
+            token: 'ExponentPushToken[swept]', platform: 'android', status: 'going', choice: 'yes', optionId: 'a',
+            ...own,
+        };
+    };
+    /** Every write in `swept`, signed by `key`: the ones not answered as `isRefusal` says, and whether any table changed or anyone was pushed. */
+    const sweepAs = async (key: Id, isRefusal: (r: { status: number; body: any }) => boolean, ownPost?: string, own?: Record<string, unknown>) => {
+        // Each refusal is charged to the caller's address as an unsigned request would be (gateway-rate-limit.ts
+        // gatewaySettle, as for a bad signature). This many from one address would trip it, so each pass starts clear.
+        resetGatewayRateLimit();
+        const before = snapshot();
+        const pushed = pushes.length;
+        const answered: string[] = [];
+        for (const route of swept) {
+            const [method, path] = route.split(' ') as ['POST' | 'PUT' | 'PATCH' | 'DELETE', string];
+            const r = await signedFetch(method, materialise(path, ownPost), key, bodyFor(key, own));
+            if (!isRefusal(r)) answered.push(`${route} → ${r.status} ${JSON.stringify(r.body ?? null).slice(0, 90)}`);
+        }
+        await settle();
+        return { answered, changed: changedTables(before, snapshot()), pushed: pushes.length - pushed };
+    };
+
     // ── 6. The middleware: every signed request from a key a re-key replaced ─────────────────────────
     console.log('\n── 6. The middleware refuses a replaced key');
     {
         const REPLACED = 'This key was replaced by a new one, so this community no longer accepts it. Use the device or the 12 words that hold the new key.';
         const isRefusal = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'key_invalidated' && r.body?.error === REPLACED;
-        /** The routes the middleware never sees (https-server.ts isSignatureBypassed): each has its own authorization. */
-        const outside = (p: string) => ['/api/local/', '/api/admin/', '/api/manager/', '/api/pair/', '/api/pricing-guide/admin/', '/api/pricing-guide/reports']
-            .some(prefix => p.startsWith(prefix)) || p === '/api/invite/redeem' || p === '/api/invite/redeem-offline';
-        const app = getKoaApp() as any;
-        const writes = [...new Set<string>(app.middleware.filter((m: any) => m.router).flatMap((m: any) => m.router.stack)
-            .flatMap((l: any) => (l.methods as string[]).filter(m => m !== 'HEAD' && m !== 'GET').map(m => `${m} ${l.path}`)))].sort();
-        const swept = writes.filter(r => !outside(r.split(' ')[1]));
         assert(swept.length > 150 && writes.length - swept.length > 100,
             `the sweep takes every registered write the middleware sees: ${swept.length} of ${writes.length} (the rest are the admin surface and invite redemption)`);
-        const materialise = (p: string) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
-            if (name === 'id') return p.startsWith('/api/groups/') ? rekeyGroup.id : p.startsWith('/api/marketplace/') ? rekeyGroupEvent.id
-                : p.startsWith('/api/crowdfund/') ? project : 'sweep';
-            return ({ pubkey: alice.pubKeyHex, postId: rekeyGroupEvent.id, messageId: bobRekeyLine.id, treasury: alice.pubKeyHex, provider: 'google' } as
-                Record<string, string>)[name] ?? 'sweep';
-        });
-        /** A body that would reach the route's data: the signer wherever a route names who acts, and someone else's things. */
-        const bodyFor = (signer: Id) => {
-            const k = signer.pubKeyHex;
-            return {
-                publicKey: k, authorPublicKey: k, buyerPublicKey: k, cancellerPublicKey: k, confirmerPublicKey: k, voterPublicKey: k,
-                authorPubkey: k, from: k, createdBy: k, newPublicKey: k,
-                targetPubkey: alice.pubKeyHex, friendPubkey: alice.pubKeyHex, memberPubkey: alice.pubKeyHex, toPubkey: alice.pubKeyHex,
-                to: alice.pubKeyHex, candidatePubkey: bob.pubKeyHex, candidate: bob.pubKeyHex,
-                id: rekeyGroupEvent.id, postId: aliceOffer4.id, groupId: rekeyGroup.id, targetGroupId: rekeyGroup.id, conversationId: rekeyeeDm.id,
-                messageId: bobDmLine.id, transactionId: tRekeyee2.id, projectId: project, code: phonelessRekey.code,
-                type: 'offer', category: 'produce', title: 'Swept NM', description: 'Swept', credits: 1, priceType: 'fixed', amount: 1,
-                ciphertext: 'aGk=', nonce: 'c3dlcHQ=', emoji: '👍', stars: 5, reason: 'Swept', callsign: 'Swept NM', bio: 'Swept',
-                token: 'ExponentPushToken[swept]', platform: 'android', status: 'going', choice: 'yes', optionId: 'a',
-            };
-        };
         const keys: Array<[string, Id]> = [['the old key of a member being re-keyed', rekeyee], ['the old key of a completed re-key', phoneless]];
         for (const [who, key] of keys) {
-            // Each refusal is charged to the caller's address as an unsigned request would be (gateway-rate-limit.ts
-            // gatewaySettle, as for a bad signature). This many from one address would trip it, so each pass starts clear.
-            resetGatewayRateLimit();
-            const before = snapshot();
-            const pushed = pushes.length;
-            const answered: string[] = [];
-            for (const route of swept) {
-                const [method, path] = route.split(' ') as ['POST' | 'PUT' | 'PATCH' | 'DELETE', string];
-                const r = await signedFetch(method, materialise(path), key, bodyFor(key));
-                if (!isRefusal(r)) answered.push(`${route} → ${r.status} ${JSON.stringify(r.body ?? null).slice(0, 90)}`);
-            }
-            await settle();
-            const changed = changedTables(before, snapshot());
+            const { answered, changed, pushed } = await sweepAs(key, isRefusal);
             assert(answered.length === 0, `${who}: every one of the ${swept.length} writes is refused 403 key_invalidated, in the middleware's words`
                 + `${answered.length ? ` — ${answered.length} were not: ${answered.slice(0, 6).join(' | ')}` : ''}`);
-            assert(changed.length === 0 && pushes.length === pushed,
-                `${who}: and nothing changed, in any table, and nobody was pushed${changed.length ? ` (changed: ${changed.join(', ')})` : ''} (${pushes.length - pushed} pushes)`);
+            assert(changed.length === 0 && pushed === 0,
+                `${who}: and nothing changed, in any table, and nobody was pushed${changed.length ? ` (changed: ${changed.join(', ')})` : ''} (${pushed} pushes)`);
         }
 
         resetGatewayRateLimit();
@@ -697,11 +722,20 @@ async function main(): Promise<void> {
         for (const [who, status, postWant, messageWant] of cases) {
             const member = makeMember(`Control ${status} NM`);
             const dm = createConversation('dm', [member.pubKeyHex, alice.pubKeyHex], member.pubKeyHex)!;
+            // Their own listing, from before the status changed: they pause it, put it back up and edit it (4109713263).
+            const own = offer(member, `Control ${status} marmalade`);
             db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, member.pubKeyHex);
             const post = await signedFetch('POST', '/api/marketplace/posts', member, { type: 'offer', category: 'produce', title: `Honey from ${status}`,
                 description: 'Jars', credits: 3, priceType: 'fixed', authorPublicKey: member.pubKeyHex });
             const message = await signedFetch('POST', '/api/messages/send', member,
                 { conversationId: dm.id, authorPubkey: member.pubKeyHex, ciphertext: 'aGk=', nonce: `bm9uY2Ut${status}` });
+            const pause = await signedFetch('POST', '/api/marketplace/posts/pause', member, { postId: own.id, authorPublicKey: member.pubKeyHex });
+            const resume = await signedFetch('POST', '/api/marketplace/posts/resume', member, { postId: own.id, authorPublicKey: member.pubKeyHex });
+            const edit = await signedFetch('POST', '/api/marketplace/posts/update', member,
+                { id: own.id, authorPublicKey: member.pubKeyHex, description: `Marmalade, ${status}` });
+            const ownRow = db.prepare('SELECT status, description FROM posts WHERE id = ?').get(own.id) as { status: string; description: string };
+            assert(pause.status === 200 && resume.status === 200 && edit.status === 200 && ownRow.status === 'active' && ownRow.description === `Marmalade, ${status}`,
+                `${who}: pauses, resumes and edits their own listing as before, 200 each (got ${pause.status} ${resume.status} ${edit.status}, ${JSON.stringify(ownRow)})`);
             const purge = await signedFetch('POST', '/api/member/purge', member, {});
             const after = accountOf(member.pubKeyHex);
             assert(post.status === postWant && message.status === messageWant,
@@ -709,6 +743,172 @@ async function main(): Promise<void> {
             assert(purge.status === 200 && after?.status === 'pruned' && after?.callsign === 'Deleted Member',
                 `${who}: and they can still delete their own account (got ${purge.status} ${JSON.stringify(purge.body)})`);
         }
+    }
+
+    // ── 9. A closed account signs nothing (4109713263) ───────────────────────────────────────────────
+    console.log('\n── 9. A closed account (removed, or deleted by its owner) signs nothing');
+    {
+        const CLOSED = 'This key’s account in this community was closed, so the community no longer accepts it.';
+        const isClosed = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'account_closed' && r.body?.error === CLOSED;
+        const row = (id: string) => db.prepare(
+            'SELECT status, active, title, description, event_place_name, event_start_at, event_state FROM posts WHERE id = ?').get(id) as Record<string, unknown>;
+        const outcome = (id: string) => { const r = row(id); return JSON.stringify({ status: r.status, active: r.active, event_state: r.event_state }); };
+        const toBob = () => pushes.filter(t => t === 'ExponentPushToken[bob-nm]').length;
+        const poll = (m: Id, title: string) => createPost('poll', 'community', title, '', 0, 'fixed', m.pubKeyHex, undefined, undefined, [], false,
+            undefined, false, { pollOptions: [{ id: 'a', text: 'Saturday' }, { id: 'b', text: 'Sunday' }], durationDays: 3 } as any)!;
+
+        // Each member has an offer, an event Bob is going to and a poll up, and the same three paused (over HTTP): what the
+        // prune's cancel does to the ones up is what it must do to the paused ones.
+        const seed = async (callsign: string) => {
+            const m = makeMember(callsign);
+            const paused = { pausedOffer: offer(m, `${callsign} paused jam`), pausedEvent: event(m, `${callsign} paused picnic`), pausedPoll: poll(m, `${callsign} paused poll`) };
+            rsvpEvent(paused.pausedEvent.id, bob.pubKeyHex, 'going');
+            for (const p of Object.values(paused)) {
+                const r = await signedFetch('POST', '/api/marketplace/posts/pause', m, { postId: p.id, authorPublicKey: m.pubKeyHex });
+                assert(r.status === 200 && postStatus(p.id) === 'paused', `${callsign} pauses "${p.title}" (got ${r.status})`);
+            }
+            // Only once the poll is paused: a member has one poll up at a time.
+            const s = { m, ...paused, liveOffer: offer(m, `${callsign} live jam`), liveEvent: event(m, `${callsign} live picnic`), livePoll: poll(m, `${callsign} live poll`) };
+            rsvpEvent(s.liveEvent.id, bob.pubKeyHex, 'going');
+            return s;
+        };
+        const removed = await seed('RemovedTwoNM');
+        const deleter = await seed('DeleterTwoNM');
+        // A deal in escrow on another of the removed member's listings: Carol is buying it when the prune comes.
+        const escrowed = offer(removed.m, 'RemovedTwoNM walnuts');
+        const escrowTx = acceptPost(escrowed.id, carol.pubKeyHex);
+
+        adminPruneUser(removed.m.pubKeyHex, 'owner:password');
+        const purge = await signedFetch('POST', '/api/member/purge', deleter.m, {});
+        assert(purge.status === 200 && accountOf(deleter.m.pubKeyHex)?.status === 'pruned',
+            `a member deletes their own account over HTTP (got ${purge.status} ${JSON.stringify(purge.body)})`);
+
+        const closed: Array<[string, typeof removed]> = [['removed by an admin', removed], ['deleted by its owner', deleter]];
+        for (const [how, s] of closed) {
+            // The prune and the self-delete leave no paused post behind: each ends as the same post up would.
+            assert(outcome(s.pausedOffer.id) === outcome(s.liveOffer.id) && row(s.pausedOffer.id).status === 'cancelled',
+                `${how}: the paused offer is cancelled, as the one up is (${outcome(s.pausedOffer.id)} vs ${outcome(s.liveOffer.id)})`);
+            assert(outcome(s.pausedEvent.id) === outcome(s.liveEvent.id) && row(s.pausedEvent.id).status === 'cancelled',
+                `${how}: the paused event is cancelled, as the one up is (${outcome(s.pausedEvent.id)} vs ${outcome(s.liveEvent.id)})`);
+            assert(outcome(s.pausedPoll.id) === outcome(s.livePoll.id) && row(s.pausedPoll.id).status === 'completed',
+                `${how}: the paused poll is closed, as the one up is (${outcome(s.pausedPoll.id)} vs ${outcome(s.livePoll.id)})`);
+
+            // The measured case reversed: the closed key edits nothing and brings nothing back, and nobody going is pushed.
+            const k = s.m.pubKeyHex;
+            const before = snapshot();
+            const told = toBob();
+            const tries: Array<[string, string, Record<string, unknown>]> = [
+                ['edit the offer', '/api/marketplace/posts/update', { id: s.pausedOffer.id, authorPublicKey: k, description: 'Text me on 0400 000 000, pay cash' }],
+                ['put the offer back up', '/api/marketplace/posts/resume', { postId: s.pausedOffer.id, authorPublicKey: k }],
+                ['put the event back up', '/api/marketplace/posts/resume', { postId: s.pausedEvent.id, authorPublicKey: k }],
+                ['move the event', '/api/marketplace/posts/update', { id: s.pausedEvent.id, authorPublicKey: k, eventPlaceName: 'Behind the servo', eventStartAt: inHours(30) }],
+                ['put the poll back up', '/api/marketplace/posts/resume', { postId: s.pausedPoll.id, authorPublicKey: k }],
+                ['move the event that was up', '/api/marketplace/posts/update', { id: s.liveEvent.id, authorPublicKey: k, eventPlaceName: 'Behind the servo' }],
+            ];
+            for (const [what, path, body] of tries) {
+                const r = await signedFetch('POST', path, s.m, body);
+                assert(isClosed(r), `${how}: the key cannot ${what} (got ${r.status} ${JSON.stringify(r.body)})`);
+            }
+            await settle();
+            const changed = changedTables(before, snapshot());
+            assert(changed.length === 0 && toBob() === told,
+                `${how}: nothing changed, in any table, and Bob is pushed nothing${changed.length ? ` (changed: ${changed.join(', ')})` : ''} (${toBob() - told} to Bob)`);
+            const board = await signedFetch('GET', '/api/marketplace/posts', carol);
+            const shown = JSON.stringify(board.body ?? null);
+            assert(board.status === 200 && ![s.pausedOffer, s.pausedEvent, s.pausedPoll].some(p => shown.includes(p.id)),
+                `${how}: none of the member's posts is on Carol's board (got ${board.status})`);
+        }
+
+        // A listing the prune cancelled under a deal in escrow stays down when an admin refunds the buyer.
+        const carolHeld = getBalance(carol.pubKeyHex).balance;
+        const refund = await unsigned('POST', `/api/local/admin/disputes/${escrowTx.id}/resolve`, { password: PW, action: 'refund_to_buyer' });
+        assert(refund.status === 200 && tradeStatus(escrowTx.id) === 'cancelled' && getBalance(carol.pubKeyHex).balance > carolHeld,
+            `an admin refunds Carol the deal in escrow with the removed member (got ${refund.status} ${JSON.stringify(refund.body)}, ${tradeStatus(escrowTx.id)})`);
+        assert(postStatus(escrowed.id) === 'cancelled', `and the listing the prune cancelled stays down (got ${postStatus(escrowed.id)})`);
+
+        // A paused post a prune left behind before this fix, as a live node may hold one. Over HTTP the middleware refuses
+        // the key; an engine caller is refused by the post rules themselves (resumePost, updatePost).
+        db.prepare("UPDATE posts SET status = 'paused', active = 1 WHERE id IN (?, ?)").run(removed.pausedOffer.id, removed.pausedEvent.id);
+        {
+            const k = removed.m.pubKeyHex;
+            const before = snapshot();
+            const told = toBob();
+            const overHttp = await signedFetch('POST', '/api/marketplace/posts/resume', removed.m, { postId: removed.pausedOffer.id, authorPublicKey: k });
+            assert(isClosed(overHttp), `a paused post left from before: the key cannot put it back up over HTTP (got ${overHttp.status} ${JSON.stringify(overHttp.body)})`);
+            const refusedInEngine = (what: string, call: () => unknown) => {
+                let err: any = null;
+                let result: unknown;
+                try { result = call(); } catch (e) { err = e; }
+                assert(err?.code === 'not_a_member' && err?.status === 403, `an engine caller cannot ${what} for the removed author (got ${err ? `${err.code} ${err.message}` : `no refusal, ${JSON.stringify(result)?.slice(0, 80)}`})`);
+            };
+            refusedInEngine('put the offer back up', () => resumePost(removed.pausedOffer.id, k));
+            refusedInEngine('put the event back up', () => resumePost(removed.pausedEvent.id, k));
+            refusedInEngine('edit the offer', () => updatePost(removed.pausedOffer.id, k, { description: 'Text me on 0400 000 000, pay cash' }));
+            refusedInEngine('move the event', () => updatePost(removed.pausedEvent.id, k, { eventPlaceName: 'Behind the servo' } as any, k));
+            await settle();
+            const changed = changedTables(before, snapshot());
+            assert(changed.length === 0 && toBob() === told,
+                `and nothing changed, in any table, and Bob is pushed nothing${changed.length ? ` (changed: ${changed.join(', ')})` : ''} (${toBob() - told} to Bob)`);
+            // Suspension is unchanged there: a suspended or disabled author still puts their own post back up and edits it.
+            for (const status of ['suspended', 'disabled'] as const) {
+                const m = makeMember(`Engine ${status} NM`);
+                const own = offer(m, `Engine ${status} quinces`);
+                pausePost(own.id, m.pubKeyHex);
+                db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, m.pubKeyHex);
+                const back = resumePost(own.id, m.pubKeyHex);
+                const edited = updatePost(own.id, m.pubKeyHex, { description: `Quinces, ${status}` });
+                assert(back === true && edited?.description === `Quinces, ${status}` && postStatus(own.id) === 'active',
+                    `an engine caller still puts a ${status} author's post back up and edits it (got ${back}, ${edited?.description})`);
+            }
+        }
+
+        // The sweep: every write the middleware sees, signed by each closed key, with bodies that reach its own paused
+        // posts and other people's things, is refused before any handler runs. No flow needs a closed account's key.
+        for (const [how, s] of closed) {
+            const { answered, changed, pushed } = await sweepAs(s.m, isClosed, s.pausedEvent.id,
+                { id: s.pausedEvent.id, postId: s.pausedOffer.id });
+            assert(answered.length === 0, `${how}: every one of the ${swept.length} writes is refused 403 account_closed, in the middleware's words`
+                + `${answered.length ? ` — ${answered.length} were not: ${answered.slice(0, 6).join(' | ')}` : ''}`);
+            assert(changed.length === 0 && pushed === 0,
+                `${how}: and nothing changed, in any table, and nobody was pushed${changed.length ? ` (changed: ${changed.join(', ')})` : ''} (${pushed} pushes)`);
+            resetGatewayRateLimit();
+            // Reads too, gated or public; unsigned, a read is answered as before.
+            const gated = await signedFetch('GET', '/api/members', s.m);
+            assert(isClosed(gated), `${how}: a gated read it signs is refused the same way (got ${gated.status} ${JSON.stringify(gated.body)})`);
+            const own = await signedFetch('GET', '/api/community/me', s.m);
+            assert(isClosed(own), `${how}: so is a read of its own standing (got ${own.status})`);
+            const signedPublic = await signedFetch('GET', '/api/marketplace/posts', s.m);
+            assert(isClosed(signedPublic), `${how}: and a public read it signs (got ${signedPublic.status})`);
+        }
+        const unsignedPublic = await unsigned('GET', '/api/marketplace/posts');
+        assert(unsignedPublic.status === 200, `the same public read unsigned is answered as before (got ${unsignedPublic.status})`);
+
+        // Invite redemption, which the middleware never sees, refuses a closed account's key itself and uses no code.
+        const code = (await signedFetch('POST', '/api/invite/generate', alice, { publicKey: alice.pubKeyHex })).body?.invite?.code;
+        for (const [how, s] of closed) {
+            const account = JSON.stringify(accountOf(s.m.pubKeyHex));
+            const r = await unsigned('POST', '/api/invite/redeem', { code, publicKey: s.m.pubKeyHex, callsign: 'Back again NM' });
+            assert(r.status === 400 && /account in this community was closed/.test(r.body?.error ?? '') && r.body?.member === undefined,
+                `${how}: redeeming an invite with the key is refused, not answered as a member (got ${r.status} ${JSON.stringify(r.body)})`);
+            assert(JSON.stringify(accountOf(s.m.pubKeyHex)) === account, `${how}: and the account stays closed`);
+        }
+        const unused = db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(code) as { used_by: string | null } | undefined;
+        assert(!!unused && unused.used_by === null, 'and the code is still unused');
+
+        // A key with no member row is unchanged: it asks to join, reads its knock, and hears the door's own answer.
+        resetGatewayRateLimit();
+        const stranger = keypair('StrangerNM');
+        const knock = await signedFetch('POST', '/api/join/knock', stranger,
+            { message: 'I grow vegetables two streets away and would like to join.', callsign: stranger.callsign });
+        assert(knock.status === 201 && knock.body?.knock?.status === 'pending', `a key with no member row still asks to join (got ${knock.status} ${JSON.stringify(knock.body)})`);
+        const knockStatus = await signedFetch('GET', '/api/join/knock/status', stranger);
+        assert(knockStatus.status === 200 && knockStatus.body?.status === 'pending', `and reads its knock (got ${knockStatus.status} ${JSON.stringify(knockStatus.body)})`);
+        const probe = await signedFetch('GET', `/api/community/membership/${stranger.pubKeyHex}`, stranger);
+        assert(probe.status === 200 && probe.body?.isMember === false, `and asks whether it is a member (got ${probe.status} ${JSON.stringify(probe.body)})`);
+        // This node's door is shut (the local profile): its own answer, 404 invite_only, as before.
+        const door = await signedFetch('POST', '/api/join/sso-nonce', stranger, { provider: 'google' });
+        assert(door.status === 404 && door.body?.code === 'invite_only',
+            `and the open door answers it as before (got ${door.status} ${JSON.stringify(door.body)})`);
     }
 
     console.log(`\n${passed}/${run} passed`);

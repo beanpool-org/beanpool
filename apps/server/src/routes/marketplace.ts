@@ -964,7 +964,7 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         ctx.body = { success: false, error: 'Post not found, not paused, or not owned by author' };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
-        ctx.status = 400;
+        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to resume post' };
     }
 });

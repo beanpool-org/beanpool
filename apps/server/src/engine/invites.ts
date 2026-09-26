@@ -79,6 +79,19 @@ export function adminGenerateInvite(
 }
 
 const REPLACED_KEY = 'This key was replaced by a new one, so it can’t join with this invite. Use the device or the 12 words that hold the new key.';
+const CLOSED_ACCOUNT = 'This key’s account in this community was closed, so it can’t join again with this invite.';
+
+/**
+ * A key whose account here was closed (removed, or deleted by its owner: its row is 'pruned') joins with no invite. It
+ * was answered as a member until 4109713263, and its app then carried on into a community that refuses everything that
+ * key signs (https-server.ts CLOSED_ACCOUNT_REFUSAL). The way back from a removal is a community vote, not a code.
+ * Nothing is written and the code stays unused.
+ */
+function closedAccountRefusal(member: Member): { success: false; error: string } | null {
+    if (member.status !== 'pruned') return null;
+    recordFunnelEvent('invite_failed', 'account_closed');
+    return { success: false, error: CLOSED_ACCOUNT };
+}
 
 /**
  * Validates and redeems standard INV- code, registering the member and seeding earned credit.
@@ -126,6 +139,8 @@ export function redeemInvite(
     // Check if identity is ALREADY a member before "already used" check
     const existingMember = getMember(db, publicKey);
     if (existingMember) {
+        const closed = closedAccountRefusal(existingMember);
+        if (closed) return closed;
         // Not a failure and not a new join — someone re-entering. Its own event so it
         // neither inflates signups nor drags down the rejection rate.
         recordFunnelEvent('invite_reentry');
@@ -198,6 +213,8 @@ export function redeemOfflineTicket(
         // Check if identity is ALREADY a member before "already used" check
         const existingMember = getMember(db, joinerPublicKey);
         if (existingMember) {
+            const closed = closedAccountRefusal(existingMember);
+            if (closed) return closed;
             recordFunnelEvent('invite_reentry');
             return { success: true, member: existingMember, alreadyMember: true };
         }

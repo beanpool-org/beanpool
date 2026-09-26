@@ -1,13 +1,13 @@
 /**
  * The listings, not the people (global node G9a, scratch/global-node/DESIGN-g9a-guest-view-fable.md §2, §3, §5, §8).
  *
- * On the global profile a guest (an unsigned request, a key that is not a member here, a pruned account) sees each
+ * On the global profile a guest (an unsigned request, a key that is not a member here) sees each
  * listing, its photos and its rough area, and nobody: no author key, name, face or standing, no trade, no voter, no
  * typed place, no exact spot. A member sees what they always saw. Over REAL HTTPS through the real signature
  * middleware, with the node's own public-read allowlist:
  *
  *   1. the allowlists are exported, and `features.guestListingsOnly` says which kind of node this is
- *   2. the sweep: for an unsigned caller, a signed key that is not a member and a pruned account, every entry of
+ *   2. the sweep: for an unsigned caller and a signed key that is not a member, every entry of
  *      PUBLIC_READ_EXACT (the posts listing in each of its read shapes) and one materialised example of every
  *      PUBLIC_READ_PATTERNS entry (a pattern with no example fails, so a new public route must be listed here). No body
  *      holds a member's key or name, an /api/avatar/ URL, the event's typed place or a place finer than its area; no
@@ -21,6 +21,9 @@
  *   4. a member's body is the engine's member read, byte for byte, with `X-BeanPool-View: member`
  *   5. ETag: a guest's token never gets a member a 304, a member's never gets a guest one, a key that joins or is
  *      pruned is never confirmed its old view
+ *
+ *   A pruned account is no guest: the signature middleware refuses every request it signs, a public read included
+ *   (403 account_closed, #1177), so each section checks it gets exactly that, and nobody named.
  *   6. the socket: an unsigned socket, and one signed by a non-member, get `{ type }` doorbells only
  *   7. precision: 200 query points (the antimeridian and both poles among them), on both nearest-first paths (circles,
  *      and one pass with a radius or a filter): each guest lat/lng is roundToArea of the place, each distance the
@@ -38,7 +41,8 @@
  *      header is sent; an enterprise names its keepers; faces are public by key, avatar URLs
  *      carry no `k=`, and the recovery lookup matches a prefix with photos; where an operator keeps the directory there,
  *      the landing card's count is from each listing's place, as the listing shows it; a non-member signer reads a trust
- *      profile, a code's holder gets a member's card and a pruned account passes the gated reads, as before; and a HEAD
+ *      profile and a code's holder gets a member's card, as before; a pruned account is refused every read it signs,
+ *      as on every node (#1177 settles #1156's call); and a HEAD
  *      to a gated read is refused as its GET is, on this node too
  *   9. faces and names (G9a-2): /api/avatar/:pk without its key is 404 to anyone; the member-only key a member's
  *      members list carries opens it, unsigned as an <img> asks; a wrong key, another member's, or the key of a photo
@@ -444,7 +448,7 @@ async function main(): Promise<void> {
     }
 
     // ── 2. the sweep ───────────────────────────────────────────────────────────────────────────
-    console.log('\n── 2. the sweep: every public read, as an unsigned caller, a non-member signer and a pruned account ──');
+    console.log('\n── 2. the sweep: every public read, as an unsigned caller and a non-member signer (a pruned account is refused them all) ──');
     /** One materialised request per pattern, with what that route may echo because the caller typed it. */
     const patternExamples: Array<{ path: string; echoes?: string[] }> = [
         { path: `/api/community/membership/${alice.pk}`, echoes: [alice.pk] },
@@ -470,7 +474,21 @@ async function main(): Promise<void> {
     const exactReads = [...(EXACT ?? [])].flatMap(p => p === POSTS ? postReads
         : withPoint.has(p) ? [p, `${p}?lat=-28.55&lng=153.51`, `${p}?lat=${LONE_AT.lat}&lng=${LONE_AT.lng}`]
             : [p === '/api/invite/check' ? `${p}?code=NOPE-NOPE` : p]);
-    const guests: Array<[string, Id | null]> = [['unsigned', null], ['a non-member signer', outsider], ['a pruned account', pruned]];
+    const guests: Array<[string, Id | null]> = [['unsigned', null], ['a non-member signer', outsider]];
+    /**
+     * A pruned account is no guest: the signature middleware refuses every request it signs, a public read included
+     * (https-server.ts CLOSED_ACCOUNT_REFUSAL, #1177). Each read below answered it as a guest until then.
+     */
+    const closedAccount = (r: { status: number; body: any; text: string }) => r.status === 403 && r.body?.code === 'account_closed' && leaks(r.text).length === 0;
+    const prunedRefused = async (label: string, paths: string[]) => {
+        const wrong: string[] = [];
+        for (const p of paths) {
+            const r = await call('GET', pruned, p);
+            if (!closedAccount(r) || r.text.includes('/api/avatar/')) wrong.push(`${p} → ${r.status} ${r.text.slice(0, 80)}`);
+        }
+        assert(wrong.length === 0, `a pruned account: ${label}, all ${paths.length} of them, refused 403 account_closed and naming nobody`
+            + `${wrong.length ? ` — ${wrong.slice(0, 4).join(' | ')}` : ''}`);
+    };
     const allowPerson = (route: string) => (p: string) =>
         // The peers are communities, not people; a callsign check echoes the name it was asked about; the health
         // tree's branch is a fixed placeholder (state-engine getCommunityHealth), never a member.
@@ -494,6 +512,8 @@ async function main(): Promise<void> {
         assert(failures.length === 0, `${who}: none of ${n} public reads holds a member's key or name, a face URL, the typed place or a place finer than its area${failures.length ? ` — ${failures.slice(0, 6).join(' | ')}` : ''}`);
         assert(persons.length === 0, `${who}: no person field holds a real value in any of them${persons.length ? ` — ${persons.slice(0, 6).join(' | ')}` : ''}`);
     }
+    // Not the device-pairing poll: the middleware never sees /api/pair/ (isSignatureBypassed), a relay that knows no member.
+    await prunedRefused('every public read it signs', [...exactReads, ...patternExamples.map(e => e.path)].filter(p => !p.startsWith('/api/pair/')));
 
     // ── 2b. every read that takes a point is measured ──────────────────────────────────────────
     console.log('\n── 2b. every read a visitor can send a point to is one this suite measures ──');
@@ -562,6 +582,7 @@ async function main(): Promise<void> {
         }
         assert(refused.length === 0, `${who}: the People lists refuse a guest's point (${refused.join(', ') || `${PEOPLE_POINT_READS.length} refused`})`);
     }
+    await prunedRefused("the People lists, with a point", PEOPLE_POINT_READS.map(p => `${p}?lat=-28.55&lng=153.51`));
 
     // ── 10. the Beans constructs ───────────────────────────────────────────────────────────────
     console.log(`\n── 10. the enterprise, treasury, crowdfund and Commons project reads (${MONEY_ON ? 'switched on' : 'switched off'}) ──`);
@@ -579,6 +600,7 @@ async function main(): Promise<void> {
         assert(wrong.length === 0, `${who}: every one of them, trailing slash or not, is ${MONEY_ON ? 'for members only' : 'refused, switched off'} `
             + `and names nobody (${MONEY_READS.length * 2} reads)${wrong.length ? ` — ${wrong.slice(0, 4).join(' | ')}` : ''}`);
     }
+    await prunedRefused('the enterprise, treasury, crowdfund and Commons project reads, trailing slash or not', MONEY_READS.flatMap(p => [p, `${p}/`]));
     {
         const r = Object.fromEntries(await Promise.all(MONEY_READS.map(async p => [p, await call('GET', bob, p)] as const)));
         const statuses = MONEY_READS.map(p => r[p].status);
@@ -658,6 +680,10 @@ async function main(): Promise<void> {
             assert(slashed.status === (id ? 403 : 401), `${who}: ${p}/ is for members only too (got ${slashed.status})`);
         }
     }
+    await prunedRefused('the listings in every shape, the membership probe and the members-only reads', [
+        `${POSTS}?${ALL_TYPES}`, `${POSTS}?${ALL_TYPES}&sync=true`, `${POSTS}?author=${alice.pk}`, `/api/community/membership/${alice.pk}`,
+        `/api/community/membership/${pruned.pk}`, '/api/commons/decisions', '/api/commons/balance', '/api/pulse/feed',
+    ]);
     {
         const own = await call('GET', alice, `/api/community/membership/${alice.pk}`);
         assert(own.body?.callsign === 'SentinelAlice', `the membership probe, signed by that very key, names its holder (got ${JSON.stringify(own.body)})`);
@@ -719,8 +745,9 @@ async function main(): Promise<void> {
         const asMember = await call('GET', joiner, url);
         db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(joiner.pk);
         const prunedNow = await call('GET', joiner, url, undefined, { 'If-None-Match': asMember.headers.get('etag')! });
-        assert(prunedNow.status === 200 && prunedNow.headers.get('x-beanpool-view') === 'guest' && !prunedNow.text.includes(alice.pk),
-            `pruned, the same key sending its member ETag gets 200 and the guest view (got ${prunedNow.status})`);
+        // Refused outright since #1177 (it was a 200 with the guest view): never a 304, and nothing of the member's view.
+        assert(prunedNow.status === 403 && prunedNow.body?.code === 'account_closed' && !prunedNow.text.includes(alice.pk),
+            `pruned, the same key sending its member ETag is refused 403 account_closed, never confirmed its old view (got ${prunedNow.status})`);
     }
 
     // ── 6. the socket ──────────────────────────────────────────────────────────────────────────
@@ -862,10 +889,11 @@ async function main(): Promise<void> {
             `a member's members lists carry Alice's face with its member-only key (${direct.url})`);
         assert(!!plain.cache?.startsWith('private'), `and /api/members, holding those keys, is private to a shared cache (${plain.cache})`);
         const keyless = `/api/avatar/${alice.pk}?size=thumb&v=${new URL(`https://x${direct.url}`).searchParams.get('v')}`;
-        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider], ['a pruned account', pruned], ['a member', bob]] as const) {
+        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider], ['a member', bob]] as const) {
             const r = await call('GET', id, keyless);
             assert(r.status === 404 && r.body?.error === 'Avatar not found', `${who}: Alice's face without its key is 404 Avatar not found (got ${r.status})`);
         }
+        await prunedRefused("Alice's face without its key", [keyless]);
         const img = await call('GET', null, direct.url!);
         assert(img.status === 200 && img.headers.get('content-type') === 'image/png' && Buffer.from(img.text, 'utf8').length > 0,
             `the keyed URL opens it unsigned, as an <img> asks (got ${img.status} ${img.headers.get('content-type')})`);
@@ -1562,9 +1590,10 @@ async function main(): Promise<void> {
         assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !members.text.includes('&k=') && !posts.text.includes('&k='),
             'avatar URLs carry no key here');
 
-        // Round 3's rules are the visitors' view's: here a signer who is no member still reads a trust profile, a code's
-        // holder still gets a member's card, a pruned account still passes the gated reads (#1156's call). A HEAD to a
-        // gated read is refused as its GET is on every node.
+        // Round 3's rules are the visitors' view's: here a signer who is no member still reads a trust profile, and a
+        // code's holder still gets a member's card. A pruned account is refused every read it signs, here as on every node
+        // (#1177 settles #1156's call: it passed the gated reads here until then). A HEAD to a gated read is refused as its
+        // GET is on every node.
         db.prepare('UPDATE members SET invited_by = ?, elder_vouched_by = ? WHERE public_key = ?').run(bob.pk, bob.pk, alice.pk);
         const tp = await call('POST', outsider, '/api/trust/profile', { targetPubkey: alice.pk });
         assert(tp.status === 200 && tp.body?.callsign === 'SentinelAlice' && tp.body?.vouchedInBy?.publicKey === bob.pk,
@@ -1573,8 +1602,11 @@ async function main(): Promise<void> {
         const card = await call('POST', null, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
         assert(card.status === 200 && card.body?.alreadyMember === true && card.body?.member?.callsign === 'SentinelAlice',
             `an unsigned redeem naming Alice's key gets her card, as before (${card.status})`);
-        const prunedRead = await call('GET', pruned, '/api/members');
-        assert(prunedRead.status === 200, `a pruned account still passes the gated reads here (${prunedRead.status})`);
+        for (const p of ['/api/members', `${POSTS}?${ALL_TYPES}`]) {
+            const prunedRead = await call('GET', pruned, p);
+            assert(prunedRead.status === 403 && prunedRead.body?.code === 'account_closed' && !prunedRead.text.includes(alice.pk),
+                `a pruned account is refused ${p} here too, 403 account_closed, naming nobody (${prunedRead.status})`);
+        }
         for (const [who, id, want] of [['unsigned', null, 401], ['a non-member signer', outsider, 403]] as const) {
             const got = await Promise.all([`/api/groups?member=${alice.pk}`, '/api/members'].map(async p => [(await call('GET', id, p)).status, (await call('HEAD', id, p)).status]));
             assert(got.every(([g, h]) => g === want && h === want), `${who}: a HEAD to a gated read is ${want}, as its GET (GET/HEAD ${got.map(x => x.join('/')).join(', ')})`);

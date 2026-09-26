@@ -1256,6 +1256,16 @@ export function isInvalidatedKey(pubkey: string | null | undefined): boolean {
     return isInvalidatedKeyEngine(db, pubkey);
 }
 
+/**
+ * A key whose account here was closed: its member row is 'pruned', written by a removal (adminPruneUser) or by the
+ * member deleting their own account (purgeMemberSelf). Ignores case, as isInvalidatedKey does: the signature check
+ * forgives it, and the member table keeps lower-case hex. False for a key with no row. Pass the verified signer.
+ */
+export function isClosedAccountKey(pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    return !!db.prepare("SELECT 1 FROM members WHERE public_key IN (?, ?) AND status = 'pruned'").get(pubkey, pubkey.toLowerCase());
+}
+
 export function updateProfile(publicKey: string, update: any): MemberProfile | null {
     return updateProfileEngine(broadcast, publicKey, update);
 }
@@ -6331,6 +6341,16 @@ export function assertMayPrune(publicKey: string, actor: string): void {
 }
 
 /**
+ * The posts a closed account (adminPruneUser, purgeMemberSelf) leaves behind, as SQL lists. A post's status is one of
+ * active, pending (a deal in escrow), paused, completed and cancelled. The last two are where a post ends; each of the
+ * first three can come back up (pending when its deal is cancelled, paused when its author resumes it), so the account's
+ * posts in those are cancelled, and its open or paused polls closed with their votes kept. Paused was missed until
+ * 4109713263: its author, removed or self-deleted, put it back up and moved it.
+ */
+const PRUNE_CLOSES_POSTS_IN = "('active', 'pending', 'paused')";
+const POLLS_A_PRUNE_CLOSES = "('active', 'paused')";
+
+/**
  * `actor` is the authenticated admin actor (a pubkey or 'owner:password'), the member themselves, or
  * COMMUNITY_DECISION_ACTOR — never one read from a request body.
  */
@@ -6384,8 +6404,10 @@ export function adminPruneUser(publicKey: string, actor: string) {
         setUserStatusRow(publicKey, 'pruned');
         // A person's coarse area (G4) goes too: a pruned account can't sign the request that clears it.
         db.prepare('UPDATE members SET area_lat = NULL, area_lng = NULL, area_updated_at = NULL WHERE public_key = ? AND area_lat IS NOT NULL').run(publicKey);
-        db.prepare("UPDATE posts SET status='completed', active=0, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey=? AND type='poll' AND status='active'").run(publicKey);
-        db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
+        // Every post that could come back (PRUNE_CLOSES_POSTS_IN): a paused one too, or its author could put it back up
+        // and move it (4109713263). The cancel now stamps updated_at, as the poll close does, so it replicates.
+        db.prepare(`UPDATE posts SET status='completed', active=0, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey=? AND type='poll' AND status IN ${POLLS_A_PRUNE_CLOSES}`).run(publicKey);
+        db.prepare(`UPDATE posts SET status='cancelled', active=0, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey=? AND status IN ${PRUNE_CLOSES_POSTS_IN}`).run(publicKey);
         // Same scrub as purgeMemberSelf, and it has to happen here rather than being left to the
         // member: a pruned account can no longer sign a request, deleteChannel is owner-scoped, and
         // there is no admin route for it — so anything left behind stays on every mirror and backup
@@ -6414,7 +6436,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
  * 1. Validates no active escrows as buyer or seller.
  * 2. Settles positive or negative balance with COMMONS_POOL.
  * 3. Anonymizes member profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact, coarse area).
- * 4. Cancels active marketplace listings.
+ * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused).
  * 5. Purges push tokens, guardian shares, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
  */
@@ -6501,20 +6523,20 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE public_key = ?
         `).run(now, now, publicKey);
 
-        // 5. Close active polls immediately, retaining votes; cancel active/pending offers/needs
+        // 5. Close open polls immediately, retaining votes; cancel every other post that could come back (as adminPruneUser)
         db.prepare(`
             UPDATE posts 
             SET status = 'completed', 
                 active = 0, 
                 updated_at = ? 
-            WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'
+            WHERE author_pubkey = ? AND type = 'poll' AND status IN ${POLLS_A_PRUNE_CLOSES}
         `).run(now, publicKey);
         db.prepare(`
             UPDATE posts 
             SET status = 'cancelled', 
                 active = 0, 
                 updated_at = ? 
-            WHERE author_pubkey = ? AND status IN ('active', 'pending')
+            WHERE author_pubkey = ? AND status IN ${PRUNE_CLOSES_POSTS_IN}
         `).run(now, publicKey);
 
         // 6. Purge private device tokens, communication links, and recovery metadata

@@ -48,7 +48,7 @@ import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
 import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
 import {
-    registerMember, getMembers, getAllMembers, isNodeMember, isLiveMemberKey, isInvalidatedKey,
+    registerMember, getMembers, getAllMembers, isNodeMember, isInvalidatedKey, isClosedAccountKey,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
     acceptPost, completePostTransaction, cancelPostTransaction,
@@ -350,18 +350,6 @@ function namesMembers(path: string): boolean {
     const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
     return isAllowlisted(routed)
         && (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed)));
-}
-
-/**
- * Who may make a gated read, once signed. A member of this node always (isNodeMember). A pruned account keeps its row and
- * can still sign: it passes on a node without the visitors' view (isLiveMemberKey, #1156's separate call), except the
- * reads gated only because of that view (namesMembers). On a node with the view (`guestListingsOnly`) it reads as a
- * visitor would, everywhere: nothing a gated read holds is for a visitor (G9a round 3). The switch is read only for a key
- * that is live but no member, so a member's read pays nothing for it.
- */
-function mayMakeGatedRead(pubKeyHex: string, path: string): boolean {
-    if (isNodeMember(pubKeyHex)) return true;
-    return !namesMembers(path) && isLiveMemberKey(pubKeyHex) && !getProfileSwitches().guestListingsOnly;
 }
 
 function isPublicRead(path: string): boolean {
@@ -774,6 +762,38 @@ function isSignatureBypassed(p: string): boolean {
  * named here, with its reason.
  */
 const REPLACED_KEY_REFUSAL = 'This key was replaced by a new one, so this community no longer accepts it. Use the device or the 12 words that hold the new key.';
+
+/**
+ * The answer to every signed request from a key whose account here was closed (isClosedAccountKey: its member row is
+ * 'pruned'). Two paths write that, and both keep the row:
+ * - removal, `adminPruneUser`: by an admin (prune, prune branch, the offboarding wizard) or by a `remove_member` vote,
+ *   including the one its grace period carries out on its own;
+ * - self-delete, `purgeMemberSelf` (`/api/member/purge`).
+ * The knock door's code and the first half of its sentence (routes/knocks.ts `account_closed`); the rest as the replaced
+ * key's sentence above.
+ *
+ * One place, as for a replaced key (4109713263). Each review round found one more engine function whose author branch
+ * never asked whether the author was still a member (updatePost's convenor branch, then its author branch and
+ * resumePost): a pruned account brought back its own paused event, moved it, and everyone going was pushed. The prune
+ * already assumed this rule ("a pruned account can no longer sign a request": the area clear, the channel scrub, place
+ * watches); this makes it true. Writes and reads alike: a closed account's "own data" is posts, a profile and a name
+ * other members see.
+ *
+ * Not refused: a key with no member row (a stranger, a knock, a join; each route allows it what it did) and any other
+ * status, 'suspended' and 'disabled' included (suspension is a separate rule, left to the routes).
+ *
+ * No flow needs a closed account's key to sign, so there is no exception:
+ * - the way back from a removal is a `reinstate_member` vote, which live members propose and cast and the engine
+ *   carries out (decisions-engine.ts), and after which this key signs again;
+ * - the key can't come back by any door: the join doors and knocks refused it already, and invite redemption (which
+ *   this middleware never sees) refuses it itself;
+ * - its push tokens and place watches went with the prune or the delete, and a self-delete it asks for again had
+ *   nothing left to do ("Account is already pruned").
+ * The routes this middleware never sees keep their own checks: the admin surface (a session follows node_roles on
+ * every request, and a prune deletes the role), device pairing (a relay that knows no member), invite redemption. A
+ * flow that ever must take a closed account's key is named here, with its reason.
+ */
+const CLOSED_ACCOUNT_REFUSAL = 'This key’s account in this community was closed, so the community no longer accepts it.';
 
 // The administrative rate limiter's buckets (its middleware is in startHttpsServer): each client's requests in the last minute.
 const adminRateLimits = new Map<string, number[]>();
@@ -1219,6 +1239,12 @@ export async function startHttpsServer(port: number): Promise<number> {
                 ctx.body = { error: REPLACED_KEY_REFUSAL, code: 'key_invalidated' };
                 return;
             }
+            // Nor does a key whose account here was closed, removed or deleted by its owner (CLOSED_ACCOUNT_REFUSAL).
+            if (isClosedAccountKey(pubKeyHex)) {
+                ctx.status = 403;
+                ctx.body = { error: CLOSED_ACCOUNT_REFUSAL, code: 'account_closed' };
+                return;
+            }
 
             // Bind cryptographically verified public key to state actor
             ctx.state.actor = pubKeyHex;
@@ -1230,15 +1256,14 @@ export async function startHttpsServer(port: number): Promise<number> {
 
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
             // keypair — an attacker can mint one. For gated reads, require the
-            // signer to be a known member so the directory, balances, ledger and
-            // social graph aren't readable by an anonymous key. (The old key of a
-            // member being re-keyed, a lost or stolen phone, was refused above, for
-            // every request. Writes otherwise keep their own per-route authorization;
+            // signer to be a member of this node (isNodeMember) so the directory,
+            // balances, ledger and social graph aren't readable by an anonymous key.
+            // (The old key of a member being re-keyed, a lost or stolen phone, and a
+            // closed account's key were refused above, for every request, so a
+            // pruned account no longer reads as a member would on a node without the
+            // visitors' view. Writes otherwise keep their own per-route authorization;
             // membership isn't required there — e.g. first-time registration.)
-            // Where this node shows visitors the listings and not the
-            // people (G9a), every gated read takes the member test itself
-            // (mayMakeGatedRead): a pruned account reads as a visitor would.
-            if (isGatedRead && !mayMakeGatedRead(pubKeyHex, ctx.path)) {
+            if (isGatedRead && !isNodeMember(pubKeyHex)) {
                 ctx.status = 403;
                 ctx.body = { error: 'Read access requires a member identity' };
                 return;

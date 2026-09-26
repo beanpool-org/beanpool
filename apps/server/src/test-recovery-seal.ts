@@ -26,8 +26,9 @@
  *      there that open with the sub alone. Its one VACUUM waits while every copy is in the old form and runs after the
  *      delta that brings the main server's wrapped ones; that delta removes nothing, and the standby's real puller then
  *      pulls one whole copy, after which none of the deleted copies is a row, none of any dropped or replaced copy is left
- *      in its state.db, -wal or -shm, and after a take-over (with the main server's key, as S2 will carry it) every
- *      current copy opens to exactly what its member deposited and no deleted one came back;
+ *      in its state.db, -wal or -shm, and after a take-over (the real one, by recovery code: the main server's key comes
+ *      inside its take-over envelope, S2) every current copy opens to exactly what its member deposited and no deleted
+ *      one came back;
  *  14. a data folder without hard links (link() fails with EPERM, ENOTSUP, EMLINK, ENOSYS or EXDEV) still gets its key,
  *      made in place, never over a file already there, and a failed write leaves nothing behind;
  *  15. on a standby, only a whole copy removes a copy in the old form, and only one its main server no longer holds;
@@ -37,7 +38,13 @@
  *      which its running state.db, -wal and -shm hold none of the copies it was sent in the client's form;
  *  17. a standby whose main server deleted every copy before the seal: a routine whole copy of that server removes all
  *      of them and a force-resync clears them, and either way its running files hold none of them, nor of the older copies
- *      its re-deposits dropped, while it records no clear until the first wrapped copy arrives.
+ *      its re-deposits dropped, while it records no clear until the first wrapped copy arrives;
+ *  18. (S2, S1's last finding) a standby that recorded its clear and is then sent copies in the client's form (its main
+ *      server rolled back past the seal) forgets the record, waits through the rollback's deltas, and clears again after
+ *      the delta that brings the wrapped copies back, after which its running files hold none of them;
+ *  19. (S2) a carried key never loses one already there: the one it replaces is kept (retired), byte for byte, 0600;
+ *      the reader opens what only the retired key opens; the boot locks those rows again with the live key; a crash
+ *      between the two writes finishes at the next run; nothing is ever written over a different file.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-seal.ts
  *
@@ -538,6 +545,103 @@ async function child(mode: string): Promise<void> {
             }
         }
         Object.assign(out, { same: same.length, differ, missing, unopenable, held, opened });
+    } else if (mode === 'main-envelope') {
+        // The main server's take-over envelope, as its own service seals it (S2): its node key, its genesis, and a
+        // recovery code, over the database main-export left.
+        const { initStateEngine } = await import('./state-engine.js');
+        initStateEngine();
+        const { ensureGenesis } = await import('./genesis.js');
+        await ensureGenesis();
+        const keyFile = path.join(dataDir, 'libp2p_key');
+        const { generateKeyPair, privateKeyToProtobuf, privateKeyFromProtobuf } = await import('@libp2p/crypto/keys');
+        if (!fs.existsSync(keyFile)) fs.writeFileSync(keyFile, privateKeyToProtobuf(await generateKeyPair('Ed25519')), { mode: 0o600 });
+        const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
+        const { makeRecoveryCode, getSealedTakeoverEnvelope } = await import('./services/takeover-envelope.js');
+        const made = await makeRecoveryCode();
+        const got = await getSealedTakeoverEnvelope();
+        if (got.envelopeId === null) throw new Error(`no envelope: ${got.status.message}`);
+        Object.assign(out, {
+            code: made.code, envelopeId: got.envelopeId, envelope: got.bytes.toString('base64'),
+            peerId: peerIdFromPrivateKey(privateKeyFromProtobuf(fs.readFileSync(keyFile))).toString(),
+        });
+    } else if (mode === 'takeover-confirm') {
+        // The standby takes over by recovery code through the real take-over (services/takeover.ts): the envelope its
+        // puller keeps, pinned to its main server; the code opens it; the confirm runs every step up to the restart.
+        const { initStateEngine } = await import('./state-engine.js');
+        initStateEngine();
+        const { addConnector } = await import('./connector-manager.js');
+        addConnector(`/ip4/127.0.0.1/tcp/1/p2p/${process.env.SEAL_MAIN_PEER}`, 'mirror', 'main-server');
+        const envelope = Buffer.from(fs.readFileSync(process.env.SEAL_ENVELOPE!, 'utf-8'), 'base64');
+        const { readSealedHeader } = await import('@beanpool/core');
+        const held = path.join(dataDir, 'held-takeover-envelopes');
+        fs.mkdirSync(held, { recursive: true });
+        fs.writeFileSync(path.join(held, `${String(Date.now()).padStart(13, '0')}-${readSealedHeader(new Uint8Array(envelope)).envelopeId}.bpseal`), envelope, { mode: 0o600 });
+        const t = await import('./services/takeover.js');
+        t.setTakeoverRestartForTests(() => { /* the next child is the restart */ });
+        const code = process.env.SEAL_CODE!;
+        const preview = await t.openTakeoverSession(code, t.pickEnvelope(t.parseTypedCode(code).codeId));
+        t.confirmTakeover(preview.sessionId);
+        const journal = JSON.parse(fs.readFileSync(path.join(dataDir, 'takeover-journal.json'), 'utf-8'));
+        Object.assign(out, { recoverySealKey: preview.recoverySealKey, identityFiles: journal.steps['identity-files']?.detail ?? null });
+    } else if (mode === 'carried-key-rewrap') {
+        // 19: a main server (key K1) holds copies and a release under K1; a carried key K2 takes its place.
+        const { initStateEngine } = await import('./state-engine.js');
+        initStateEngine();
+        const { db } = await import('./db/db.js');
+        const seal = await import('./services/recovery-seal-key.js');
+        const { storeVerifiedSsoKeeperGeneration } = await import('./engine/keeper-deposit.js');
+        const { getCurrentShares } = await import('./engine/recovery-shares.js');
+        const k1 = fs.readFileSync(path.join(dataDir, KEY_FILE));
+        // Each owner's own 12 words (the fixture phrase turned round), and the seed they make, as the apps derive it.
+        const phrases = [1, 2, 3].map(n => [...WORDS.slice(n), ...WORDS.slice(0, n)]);
+        const owners = phrases.map(w => idFromSeed(crypto.createHash('sha256').update(crypto.createHash('sha256').update(w.join(' ')).digest()).digest()));
+        const deposits: Sealed[] = [];
+        for (const [i, o] of owners.entries()) {
+            db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                        VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seal-test', 'TEST')`).run(o.pk, `S2-${o.pk.slice(0, 6)}`);
+            const c = await sealSeedToSso(new Uint8Array(o.seed), 'google', GOOGLE_SUB, { words: phrases[i] }) as Sealed;
+            deposits.push(c);
+            await storeVerifiedSsoKeeperGeneration({ provider: 'google', sub: GOOGLE_SUB } as any, o.pk, [{ holderType: 'sso', holderRef: 'google', shareIndex: 1, ...c } as any]);
+        }
+        // A release of the first owner's copy, stored as the release path stores it: wrapped, bound to where it sits.
+        db.prepare(`INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, created_at, expires_at)
+                    VALUES ('s2-collection', ?, 1, 'eph', 'complete', ?, ?)`).run(owners[0].pk, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z');
+        const rel = seal.sealRecoveryFields(deposits[0], seal.releaseRowAad('s2-collection', 7, 'sso'));
+        db.prepare(`INSERT INTO recovery_releases (collection_id, share_id, holder_type, share_index, payload, payload_iv, payload_tag, kdf_params, released_at)
+                    VALUES ('s2-collection', 7, 'sso', 1, ?, ?, ?, ?, ?)`).run(rel.encryptedShare, rel.shareIv, rel.shareTag, rel.kdfParams, '2026-09-01T00:00:00.000Z');
+        // The third owner's row is altered: no key opens it.
+        db.prepare("UPDATE recovery_shares SET share_tag = ? WHERE owner_pubkey = ?").run(Buffer.alloc(16, 9).toString('base64'), owners[2].pk);
+        const raw = (pk: string) => db.prepare('SELECT encrypted_share, share_iv, share_tag, kdf_params, updated_at FROM recovery_shares WHERE owner_pubkey = ?').get(pk) as any;
+        const before = owners.map(o => raw(o.pk));
+        const rows = () => db.prepare('SELECT owner_pubkey, holder_type, encrypted_share, share_iv, share_tag, kdf_params FROM recovery_shares').all() as any[];
+
+        const k2 = crypto.randomBytes(32);
+        out.install = seal.installCarriedRecoverySealKey(k2.toString('base64'));
+        out.liveIsK2 = fs.readFileSync(path.join(dataDir, KEY_FILE)).equals(k2);
+        const retired = fs.readdirSync(dataDir).filter(n => n.startsWith('recovery-seal-retired-'));
+        out.retired = retired.map(n => ({ n, isK1: fs.readFileSync(path.join(dataDir, n)).equals(k1), mode: (fs.statSync(path.join(dataDir, n)).mode & 0o777).toString(8) }));
+        out.liveOnlyBefore = seal.countUnopenable(rows(), { retired: false });
+        out.withRetiredBefore = seal.countUnopenable(rows());
+        // The reader opens what only the retired key opens, before anything is locked again.
+        try {
+            const got = getCurrentShares(owners[0].pk).find(x => x.holderType === 'sso')!;
+            out.readerBefore = got.encryptedShare === deposits[0].encryptedShare && got.kdfParams === deposits[0].kdfParams ? 'the deposit' : 'other bytes';
+        } catch (e) { out.readerBefore = thrown(e); }
+        await new Promise(r => setTimeout(r, 5));
+        out.rewrap = seal.rewrapRowsFromRetiredKeys();
+        const after = owners.map(o => raw(o.pk));
+        out.liveOnlyAfter = seal.countUnopenable(rows(), { retired: false });
+        out.stamped = [0, 1].every(i => after[i].updated_at !== before[i].updated_at && after[i].encrypted_share !== before[i].encrypted_share);
+        out.alteredLeft = JSON.stringify(after[2]) === JSON.stringify(before[2]);
+        const relRow = db.prepare("SELECT payload, payload_iv, payload_tag, kdf_params FROM recovery_releases WHERE collection_id = 's2-collection'").get() as any;
+        try {
+            const back = seal.openRecoveryFields({ encryptedShare: relRow.payload, shareIv: relRow.payload_iv, shareTag: relRow.payload_tag, kdfParams: relRow.kdf_params },
+                seal.releaseRowAad('s2-collection', 7, 'sso'));
+            out.releaseAfter = relRow.payload !== rel.encryptedShare && back.encryptedShare === deposits[0].encryptedShare ? 're-locked, same inside' : 'unchanged';
+        } catch (e) { out.releaseAfter = thrown(e); }
+        out.rewrapAgain = seal.rewrapRowsFromRetiredKeys();
+        out.retiredStill = fs.readdirSync(dataDir).filter(n => n.startsWith('recovery-seal-retired-')).length;
+        out.tmpLeft = fs.readdirSync(dataDir).filter(n => n.includes('.tmp')).length;
     } else {
         out.error = `unknown child mode ${mode}`;
     }
@@ -1101,8 +1205,20 @@ async function main(): Promise<void> {
         const orphanAfter = resultOf(await runChild([SCRIPT], snapshotOf(standbyDir), { RECOVERY_SEAL_CHILD: 'open-without-key', SEAL_OWNER: owners[18] }));
         check(orphanAfter.rowFound === false, `the copy member 18 deleted is no longer a row on the standby (${orphanAfter.rowFound})`);
 
-        // A take-over. Carrying the main server's key there is S2; this copies the file by hand, as S2 will.
-        fs.copyFileSync(path.join(mainDir, KEY_FILE), path.join(standbyDir, KEY_FILE));
+        // A take-over, the real one (S2): the main server's own envelope service seals its keys, the key that opens these
+        // copies among them; the standby keeps that envelope, pinned to its main server, and the recovery code opens it.
+        const env = resultOf(await runChild([SCRIPT], mainDir, { RECOVERY_SEAL_CHILD: 'main-envelope', NODE_ROLE: 'primary' }));
+        check(!fs.existsSync(path.join(standbyDir, KEY_FILE)), 'control: before the take-over the standby has no key file');
+        fs.copyFileSync(path.join(mainDir, 'genesis.json'), path.join(standbyDir, 'genesis.json'));
+        const envFile = path.join(tempDir('history-envelope'), 'envelope.b64');
+        fs.writeFileSync(envFile, env.envelope);
+        const tc = resultOf(await runChild([SCRIPT], standbyDir, {
+            RECOVERY_SEAL_CHILD: 'takeover-confirm', NODE_ROLE: 'backup', SEAL_ENVELOPE: envFile, SEAL_MAIN_PEER: env.peerId, SEAL_CODE: env.code,
+        }));
+        const standbyKey = path.join(standbyDir, KEY_FILE);
+        check(tc.recoverySealKey === true && /the key that opens members' sign-in recovery copies/.test(tc.identityFiles ?? '')
+            && fs.existsSync(standbyKey) && fs.readFileSync(standbyKey).equals(fs.readFileSync(path.join(mainDir, KEY_FILE))) && (fs.statSync(standbyKey).mode & 0o777) === 0o600,
+            `the take-over by recovery code brings the main server's key inside its envelope, byte for byte, 0600 (${JSON.stringify({ carried: tc.recoverySealKey, step: tc.identityFiles })})`);
         const t = await runChild([SCRIPT], standbyDir, { RECOVERY_SEAL_CHILD: 'takeover-open', NODE_ROLE: 'primary', SEAL_HISTORY: historyFile });
         const o = resultOf(t);
         check(o.same === current.length && o.differ.length === 0 && o.missing.length === 0 && o.unopenable.length === 0,
@@ -1322,6 +1438,131 @@ async function main(): Promise<void> {
         check(t.final?.inFiles === 0,
             `...and its running state.db, -wal and -shm hold none of the ${watch.length} copies deleted or dropped before the seal (found ${t.final?.inFiles})`);
         check(t.final?.cleared === null && unrecorded.test(rr.stdout), `...and it records no clear, and says so (${brief(t.final)}; ${sealLines(rr)})`);
+    });
+
+    // ── 18. a rollback after the standby recorded its clear ────────────────────────────────────────
+    await section('18. a standby that recorded its clear and is then sent copies in the client\'s form (a rollback) forgets it, and clears again once the wrapped copies return', async () => {
+        const seal = await import('./services/recovery-seal-key.js');
+        const standbyDir = tempDir('rollback-standby');
+        const N = 12;
+        const owners = Array.from({ length: N }, () => crypto.randomBytes(32).toString('hex'));
+        const gen2 = owners.map(() => fakeCopy());
+        const gen3 = owners.map(() => fakeCopy());
+        // What its main server sends, wrapped the way that server wraps (this process's key stands in for it: the standby
+        // holds none and never opens a copy, it only tells the forms apart).
+        const wrapped = (copiesOf: Sealed[], generation: number, at: string) => owners.map((o, i) =>
+            exportRow(o, i, seal.sealRecoveryFields(copiesOf[i], seal.shareRowAad(o, 'sso')), generation, at));
+        const clientForm = (copiesOf: Sealed[], generation: number, at: string) => owners.map((o, i) => exportRow(o, i, copiesOf[i], generation, at));
+        const scriptFile = path.join(tempDir('rollback-script'), 'script.json');
+        const script: StandbyScript = {
+            resyncFirst: true, reconcileMinutes: 0, pulls: 5, watch: [...gen2, ...gen3],
+            steps: [
+                wrapped(gen2, 2, '2026-06-02T00:00:00.000Z'),      // its main server has sealed: the seed is all wrapped
+                clientForm(gen2, 2, '2026-06-05T00:00:00.000Z'),   // the rollback command unwraps and stamps every copy
+                clientForm(gen3, 3, '2026-06-06T00:00:00.000Z'),   // the older code stores the re-deposits as the app sealed them
+                wrapped(gen3, 3, '2026-06-07T00:00:00.000Z'),      // the upgrade again: the wrap stamps every copy
+            ],
+        };
+        fs.writeFileSync(scriptFile, JSON.stringify(script));
+        const r = await runChild([SCRIPT], standbyDir, { RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup', SEAL_SCRIPT: scriptFile });
+        const st = resultOf(r);
+        const [, afterSeed, afterRollback, afterRedeposits, afterReseal] = (st.pulls ?? []).map((x: any) => x.before);
+        const brief = (x: any) => JSON.stringify(x && { cleared: !!x.cleared, rows: x.rows, unwrapped: x.unwrapped, inFiles: x.inFiles });
+        check(st.resync?.ok === true && typeof afterSeed?.cleared === 'string' && afterSeed.unwrapped === 0 && afterSeed.inFiles === 0,
+            `control: seeded with its main server's wrapped copies, the standby records its clear (${brief(afterSeed)})`);
+        check(afterRollback?.cleared === null && afterRollback.unwrapped === N,
+            `the rollback's delta brings every copy in the client's form, and it forgets the clear (${brief(afterRollback)})`);
+        check(/was then sent 12 sign-in recovery copies in the client's form .* So it forgets that clear/.test(r.stdout + r.stderr),
+            `...and says why (${sealLines(r)})`);
+        check(afterRedeposits?.cleared === null && afterRedeposits.inFiles > 0,
+            `control: after the re-deposits it still waits, and its files hold copies in the client's form (${brief(afterRedeposits)})`);
+        check(typeof afterReseal?.cleared === 'string' && afterReseal.unwrapped === 0,
+            `the delta that brings the wrapped copies back is when it clears again, and records it (${brief(afterReseal)})`);
+        check(afterReseal?.inFiles === 0,
+            `...after which its running state.db, -wal and -shm hold none of the ${script.watch.length} copies it was sent in the client's form (found ${afterReseal?.inFiles})`);
+        check(st.final?.inFiles === 0 && st.final?.cleared === afterReseal?.cleared, `...nor after the next pull (found ${st.final?.inFiles})`);
+        check((r.stdout.match(/one VACUUM/g) ?? []).length === 2, `it cleared twice: at the seed, and after the wrapped copies came back (${(r.stdout.match(/one VACUUM/g) ?? []).length})`);
+    });
+
+    // ── 19. a carried key never loses one already there ──────────────────────────────────────────
+    await section('19. a carried key never loses one already there: the one it replaces is kept, opens what it locked, and those rows are locked again', async () => {
+        const seal = await import('./services/recovery-seal-key.js');
+        const savedDir = process.env.BEANPOOL_DATA_DIR;
+        const b64 = (b: Buffer) => b.toString('base64');
+        const listing = (dir: string) => fs.readdirSync(dir).sort();
+        try {
+            // Nothing carried, or not a key: nothing is written, and a key already there stays.
+            const d1 = tempDir('carried-none');
+            process.env.BEANPOOL_DATA_DIR = d1;
+            const own = crypto.randomBytes(32);
+            fs.writeFileSync(path.join(d1, KEY_FILE), own, { mode: 0o600 });
+            const absent = seal.installCarriedRecoverySealKey(null);
+            const invalid = seal.installCarriedRecoverySealKey(b64(crypto.randomBytes(31)));
+            check(absent.outcome === 'absent' && invalid.outcome === 'invalid' && fs.readFileSync(path.join(d1, KEY_FILE)).equals(own)
+                && JSON.stringify(listing(d1)) === JSON.stringify([KEY_FILE]),
+                `nothing carried, or not a 32-byte key: nothing is written, and the key already there stays (${absent.outcome}, ${invalid.outcome})`);
+            // No key here: it is written, 0600, nothing beside it.
+            const d2 = tempDir('carried-fresh');
+            process.env.BEANPOOL_DATA_DIR = d2;
+            const community = crypto.randomBytes(32);
+            const fresh = seal.installCarriedRecoverySealKey(b64(community));
+            check(fresh.outcome === 'installed' && fs.readFileSync(path.join(d2, KEY_FILE)).equals(community)
+                && (fs.statSync(path.join(d2, KEY_FILE)).mode & 0o777) === 0o600 && JSON.stringify(listing(d2)) === JSON.stringify([KEY_FILE]),
+                `no key here: the carried one is written, 0600, and nothing is left beside it (${fresh.outcome})`);
+            const same = seal.installCarriedRecoverySealKey(b64(community));
+            check(same.outcome === 'same' && JSON.stringify(listing(d2)) === JSON.stringify([KEY_FILE]), 'the same key again (a take-over step run twice) changes nothing');
+            // A different key here: kept beside it, byte for byte, 0600, before the carried one takes its place.
+            const replaced = seal.installCarriedRecoverySealKey(b64(crypto.randomBytes(32)));
+            const kept = replaced.outcome === 'replaced' ? path.join(d2, replaced.retiredAs) : '';
+            check(replaced.outcome === 'replaced' && /^recovery-seal-retired-[0-9a-f]{16}\.key$/.test(replaced.retiredAs)
+                && fs.readFileSync(kept).equals(community) && (fs.statSync(kept).mode & 0o777) === 0o600 && listing(d2).length === 2,
+                `a different key here is never lost: it is kept as ${replaced.outcome === 'replaced' ? replaced.retiredAs : '?'}, byte for byte, 0600`);
+            check(!listing(d2).some(n => n.includes(b64(community).slice(0, 12)) || n.includes(community.toString('hex').slice(0, 16))),
+                "...under a name that is a hash of it, never its bytes");
+            // A crash between the two writes: the old key is in both places; the next run finishes the swap.
+            const d3 = tempDir('carried-crash');
+            process.env.BEANPOOL_DATA_DIR = d3;
+            const old3 = crypto.randomBytes(32), new3 = crypto.randomBytes(32);
+            fs.writeFileSync(path.join(d3, KEY_FILE), old3, { mode: 0o600 });
+            const first = seal.installCarriedRecoverySealKey(b64(new3));
+            const retiredName = first.outcome === 'replaced' ? first.retiredAs : '';
+            fs.writeFileSync(path.join(d3, KEY_FILE), old3, { mode: 0o600 }); // as if the rename never happened
+            const rerun = seal.installCarriedRecoverySealKey(b64(new3));
+            check(rerun.outcome === 'replaced' && rerun.retiredAs === retiredName && fs.readFileSync(path.join(d3, KEY_FILE)).equals(new3)
+                && fs.readFileSync(path.join(d3, retiredName)).equals(old3) && listing(d3).length === 2,
+                'a crash between keeping the old key and writing the new one: the next run finishes it, with the same kept file');
+            // A kept file of that name that holds other bytes is never written over: nothing changes, and it says why.
+            const d4 = tempDir('carried-collision');
+            process.env.BEANPOOL_DATA_DIR = d4;
+            const old4 = crypto.randomBytes(32);
+            fs.writeFileSync(path.join(d4, KEY_FILE), old4, { mode: 0o600 });
+            const probe = seal.installCarriedRecoverySealKey(b64(crypto.randomBytes(32)));
+            const name4 = probe.outcome === 'replaced' ? probe.retiredAs : '';
+            fs.writeFileSync(path.join(d4, KEY_FILE), old4, { mode: 0o600 });
+            fs.writeFileSync(path.join(d4, name4), Buffer.from('other bytes'), { mode: 0o600 });
+            let collided = '';
+            try { seal.installCarriedRecoverySealKey(b64(crypto.randomBytes(32))); } catch (e) { collided = thrown(e); }
+            check(/holds other bytes/.test(collided) && fs.readFileSync(path.join(d4, KEY_FILE)).equals(old4)
+                && fs.readFileSync(path.join(d4, name4)).equals(Buffer.from('other bytes')),
+                `a kept file of that name holding other bytes: nothing is written over, the live key stays, and it says why (${collided})`);
+        } finally {
+            process.env.BEANPOOL_DATA_DIR = savedDir;
+        }
+
+        // The rows: a main server's copies and a release under its own key (K1), then a carried key (K2).
+        const r = await runChild([SCRIPT], tempDir('carried-rewrap'), { RECOVERY_SEAL_CHILD: 'carried-key-rewrap', NODE_ROLE: 'primary' });
+        const o = resultOf(r);
+        check(o.install?.outcome === 'replaced' && o.liveIsK2 === true && o.retired?.length === 1 && o.retired[0].isK1 && o.retired[0].mode === '600',
+            `the carried key takes the place of K1, which is kept (${JSON.stringify({ install: o.install?.outcome, retired: o.retired })})`);
+        check(o.liveOnlyBefore?.wrapped === 3 && o.liveOnlyBefore.unopenable === 3 && o.withRetiredBefore?.unopenable === 1,
+            `before anything is locked again, the live key alone opens none of the 3, and with the kept key only the altered one stays shut (${JSON.stringify({ live: o.liveOnlyBefore, all: o.withRetiredBefore })})`);
+        check(o.readerBefore === 'the deposit', `the reader opens a copy only the kept key opens, to exactly what was deposited (${o.readerBefore})`);
+        check(o.rewrap?.shares === 2 && o.rewrap.releases === 1 && o.liveOnlyAfter?.unopenable === 1 && o.stamped === true,
+            `locking again: the 2 copies and the release K1 locked, with the live key, stamped so a standby is sent them (${JSON.stringify({ rewrap: o.rewrap, live: o.liveOnlyAfter, stamped: o.stamped })})`);
+        check(o.alteredLeft === true, 'a row no key here opens is left exactly as it was');
+        check(o.releaseAfter === 're-locked, same inside', `the release, locked again, still opens to what was released (${o.releaseAfter})`);
+        check(o.rewrapAgain?.shares === 0 && o.rewrapAgain.releases === 0 && o.retiredStill === 1 && o.tmpLeft === 0,
+            `a second run finds nothing; the kept key stays; no temporary file is left (${JSON.stringify({ again: o.rewrapAgain, kept: o.retiredStill, tmp: o.tmpLeft })})`);
     });
 
     console.log(`\n${passed}/${run} checks passed.`);

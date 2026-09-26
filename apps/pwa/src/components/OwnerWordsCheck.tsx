@@ -15,10 +15,12 @@ import {
 type Outcome = 'match' | 'mismatch' | 'count' | null;
 type RecordState = 'none' | 'sending' | 'saved' | 'failed';
 
-export function OwnerWordsCheck({ identity, startOpen = false }: {
+export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }: {
     identity: { publicKey: string; privateKey: string } | null;
     /** Opened from the home prompt's "Check now". */
     startOpen?: boolean;
+    /** Whether this browser holds the 12 words: without them, "View Recovery Phrase shows them" would send the owner nowhere. */
+    hasWords?: boolean;
 }) {
     const [status, setStatus] = useState<OwnerWordsStatus | null>(null);
     const [open, setOpen] = useState(startOpen);
@@ -153,7 +155,7 @@ export function OwnerWordsCheck({ identity, startOpen = false }: {
                                 {outcome === 'match' ? 'Done' : 'Close'}
                             </button>
                         </div>
-                        <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">{COPY.findThem}</p>
+                        <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">{hasWords ? COPY.findThem : COPY.findThemNotHere}</p>
                     </div>
                 )}
             </div>

@@ -108,6 +108,7 @@ export const OWNER_WORDS_COPY = {
     mismatch: "These aren't the words for this account.",
     count: (n: number) => `That's ${n} word${n === 1 ? '' : 's'}. Type all 12, in order.`,
     findThem: "Can't find them? If this browser still has them, View Recovery Phrase (below) shows them.",
+    findThemNotHere: "Can't find them? They aren't saved in this browser, so View Recovery Phrase can't show them.",
     promptTitleNever: "Your 12 words aren't checked",
     promptBodyNever: "If you lose this device you couldn't take over the server or open a backup.",
     promptTitleRenew: 'Time to check your 12 words',

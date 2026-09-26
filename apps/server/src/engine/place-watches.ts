@@ -23,9 +23,15 @@
  * Everything a member is owed goes in one notice: one push and one live announcement to their own sockets. It counts,
  * and is stamped, only when it reached them: a push handed to the push service for a phone of theirs, or the
  * announcement written to an open socket of theirs. One that reached nobody (no phone of theirs has registered its
- * push token here, no socket open, their Marketplace notifications off) spends nothing: the next run, or their phone
- * registering its token (notifyOwedPlaceWatcher), tells them, once. After PLACE_WATCH_NOTICE_KEEP_MS it is dropped
- * rather than told late: the community has been on the card that long.
+ * push token here, no socket open, their Marketplace notifications off) spends nothing: it waits for a push to be
+ * able to reach them. Their phone registering its token (notifyOwedPlaceWatcher) tells them then, or the next run
+ * does, once. After PLACE_WATCH_NOTICE_KEEP_MS it is dropped rather than told late: the community has been on the card
+ * that long.
+ *
+ * A run compares the week's sightings only with the watches of members a push reaches now, and only near each watch
+ * (owedFrom, SightingIndex); every other watch only with that run's new communities, so a socket alone is told only of
+ * those. The registry is open, so the week can be full of rows placed where they reach nobody: they cost a run nothing
+ * per watch unless they are near it.
  *
  * ## A standby holds every watch (mergeReplicatedWatches)
  *
@@ -57,7 +63,7 @@
  */
 import crypto from 'node:crypto';
 import { db, writeTombstone } from '../db/db.js';
-import { haversineKm, type SyncPlaceWatch } from '@beanpool/engine';
+import { EARTH_RADIUS_KM, haversineKm, type SyncPlaceWatch } from '@beanpool/engine';
 import { roundToArea } from './member-area.js';
 import { firstSightings, type DirectoryRow, type FirstSighting } from './directory-cache.js';
 
@@ -231,6 +237,8 @@ export interface PlaceWatchNoticeCallbacks {
     dispatchPushNotification: PushFn;
     /** A member who may still hear from this node (not pruned, not a replaced key). */
     isMember: (pubkey: string) => boolean;
+    /** The members a marketplace push would reach now (a phone registered here, the category on); only `pubkey`, when given. */
+    pushable: (pubkey?: string) => ReadonlySet<string>;
 }
 
 export const COMMUNITY_NEAR_TITLE = '🌱 A community near you';
@@ -245,22 +253,116 @@ export function communitiesNearBody(count: number, km: number): string {
     return `${count} new communities are now in the BeanPool directory near a place you're watching. The nearest is about ${km} km away.`;
 }
 
-type Owed = Map<string, { c: FirstSighting; km: number }>;
+// ── which sightings can reach a watch ────────────────────────────────────────────────────────────────────────────
+
+/** A community first seen, as a run compares it with the watches. */
+export interface Sighting {
+    c: FirstSighting;
+    seenMs: number;
+    /** How much of its own service radius counts toward reaching a watch: up to SERVICE_REACH_CAP_KM, none if it has none. */
+    extraKm: number;
+}
+
+export function toSighting(c: FirstSighting): Sighting {
+    const r = c.radiusKm ?? 0;
+    return { c, seenMs: Date.parse(c.firstSeenAt), extraKm: r > 0 ? Math.min(r, SERVICE_REACH_CAP_KM) : 0 };
+}
+
+const KM_PER_DEGREE = EARTH_RADIUS_KM * Math.PI / 180;
+const RADIANS = Math.PI / 180;
+/** The index's rows, in degrees of latitude. A watch reaches at most 300 km, about 2.7°: two to four rows. */
+const ROW_DEGREES = 2;
+const ROWS = 180 / ROW_DEGREES + 1;
+const rowOf = (lat: number): number => Math.min(ROWS - 1, Math.max(0, Math.floor((lat + 90) / ROW_DEGREES)));
 
 /**
- * What each member is owed at `now` (see the header), by member: each community once, at its nearest to one of their
- * watches. Only `pubkey`'s, when given.
+ * One run's sightings by place, so a watch compares only those near enough to reach it and a sighting far from every
+ * watch costs each one nothing, however many there are (#1202 review 4112143174). Rows of latitude, each sorted by
+ * longitude: a watch looks in the rows its reach spans and, in each, at the longitudes its reach spans (a binary
+ * search), then measures what it finds (haversineKm) as before.
+ *
+ * It may leave out only a sighting that can't reach, so it bounds with a kilometre to spare against rounding, and:
+ *   - north and south: two places are never nearer than the difference in their latitudes (along the meridian);
+ *   - east and west: every place within an angle δ of a watch at latitude φ is within asin(sin δ / cos φ) of its
+ *     longitude, as long as that circle doesn't take in a pole. When it does (|φ| + δ ≥ 90°), every longitude counts;
+ *   - longitudes wrap at ±180°: a watch by the antimeridian looks on both sides of it.
+ * Every stored place is on the Earth (the checks on place_watches, normaliseRegistryRow for a community).
  */
-function owedNotices(now: string, pubkey?: string): Map<string, Owed> {
+export class SightingIndex {
+    private readonly rows: Sighting[][] = Array.from({ length: ROWS }, () => []);
+    /** The most any sighting here adds to a watch's radius. */
+    private readonly extraKm: number = 0;
+
+    constructor(sightings: readonly Sighting[]) {
+        for (const s of sightings) {
+            this.rows[rowOf(s.c.lat)].push(s);
+            if (s.extraKm > this.extraKm) this.extraKm = s.extraKm;
+        }
+        for (const row of this.rows) row.sort((a, b) => a.c.lng - b.c.lng);
+    }
+
+    /** Visits every sighting that can reach a watch of `radiusKm` at `lat`, `lng` (and a few that can't), once each. */
+    near(lat: number, lng: number, radiusKm: number, visit: (s: Sighting) => void): void {
+        const reach = (radiusKm + this.extraKm + 1) / KM_PER_DEGREE;
+        if (!(reach >= 0 && Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) {
+            for (const row of this.rows) for (const s of row) visit(s);
+            return;
+        }
+        const span = Math.abs(lat) + reach >= 90 ? 180 : Math.asin(Math.sin(reach * RADIANS) / Math.cos(lat * RADIANS)) / RADIANS;
+        const west = lng - span, east = lng + span;
+        for (let r = rowOf(lat - reach); r <= rowOf(lat + reach); r++) {
+            const row = this.rows[r];
+            if (row.length === 0) continue;
+            if (span >= 180) {
+                scanRow(row, -180, 180, lat, reach, visit);
+            } else if (west < -180) {
+                scanRow(row, west + 360, 180, lat, reach, visit);
+                scanRow(row, -180, east, lat, reach, visit);
+            } else if (east > 180) {
+                scanRow(row, west, 180, lat, reach, visit);
+                scanRow(row, -180, east - 360, lat, reach, visit);
+            } else {
+                scanRow(row, west, east, lat, reach, visit);
+            }
+        }
+    }
+}
+
+/** A row's sightings from longitude `west` to `east`, within `reach` degrees of latitude of `lat`. */
+function scanRow(row: readonly Sighting[], west: number, east: number, lat: number, reach: number, visit: (s: Sighting) => void): void {
+    let lo = 0, hi = row.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (row[mid].c.lng < west) lo = mid + 1;
+        else hi = mid;
+    }
+    for (let i = lo; i < row.length && row[i].c.lng <= east; i++) {
+        if (Math.abs(row[i].c.lat - lat) <= reach) visit(row[i]);
+    }
+}
+
+// ── who is owed what ─────────────────────────────────────────────────────────────────────────────────────────────
+
+export type Owed = Map<string, { c: FirstSighting; km: number }>;
+
+/** A watch as the notices read it. */
+export type NoticeWatch = Pick<WatchRecord, 'pubkey' | 'lat' | 'lng' | 'radius_km' | 'created_at' | 'last_notified_at'>;
+
+/**
+ * What each member is owed at `nowMs` (see the header), by member: each community once, at its nearest to one of their
+ * watches. `week` is every sighting still owed (firstSightings); `fresh` the keys of this run's new communities.
+ *
+ * Only a member a push reaches now (`pushable`) is compared with the whole week: anyone else has no phone to be told
+ * on, so what an earlier run owed them waits, within the week, for one to register its token (notifyOwedPlaceWatcher
+ * and the next run then find it). They are compared with this run's new communities only, as before notices waited,
+ * and are told of those on an open socket. So however many rows fill the week, a run compares them only with the
+ * watches of members who can hear, and only near those watches (SightingIndex).
+ */
+export function owedFrom(watches: readonly NoticeWatch[], week: readonly Sighting[], fresh: ReadonlySet<string>,
+    pushable: ReadonlySet<string>, nowMs: number): Map<string, Owed> {
     const byMember = new Map<string, Owed>();
-    const watches = (pubkey === undefined
-        ? db.prepare('SELECT * FROM place_watches').all()
-        : db.prepare('SELECT * FROM place_watches WHERE pubkey = ?').all(pubkey)) as WatchRecord[];
-    if (watches.length === 0) return byMember;
-    const nowMs = Date.parse(now);
-    const sightings = firstSightings(new Date(nowMs - PLACE_WATCH_NOTICE_KEEP_MS).toISOString(), now, PLACE_WATCH_FLOOD)
-        .map(c => ({ c, seenMs: Date.parse(c.firstSeenAt) }));
-    if (sightings.length === 0) return byMember;
+    const everyone = new SightingIndex(week);
+    const thisRun = new SightingIndex(week.filter(s => fresh.has(s.c.key)));
     const lastHeard = new Map<string, number>();
     for (const w of watches) {
         const t = w.last_notified_at ? Date.parse(w.last_notified_at) : NaN;
@@ -272,20 +374,33 @@ function owedNotices(now: string, pubkey?: string): Map<string, Owed> {
         if (last !== undefined && nowMs - last < PLACE_WATCH_NOTICE_GAP_MS) continue;
         const setMs = Date.parse(w.created_at);
         if (!Number.isFinite(setMs)) continue;
-        for (const { c, seenMs } of sightings) {
+        (pushable.has(w.pubkey) ? everyone : thisRun).near(w.lat, w.lng, w.radius_km, ({ c, seenMs, extraKm }) => {
             // Set after the community was first seen: it was already there to find.
-            if (seenMs <= setMs) continue;
+            if (seenMs <= setMs) return;
             // First seen before they last heard (told then) or in the quiet day after it (not pushed, on the card).
-            if (last !== undefined && seenMs - last < PLACE_WATCH_NOTICE_GAP_MS) continue;
+            if (last !== undefined && seenMs - last < PLACE_WATCH_NOTICE_GAP_MS) return;
             const d = haversineKm(w.lat, w.lng, c.lat, c.lng);
-            if (d > w.radius_km + Math.min(c.radiusKm ?? 0, SERVICE_REACH_CAP_KM)) continue;
+            if (d > w.radius_km + extraKm) return;
             const found: Owed = byMember.get(w.pubkey) ?? new Map();
             const prev = found.get(c.key);
             if (!prev || d < prev.km) found.set(c.key, { c, km: d });
             byMember.set(w.pubkey, found);
-        }
+        });
     }
     return byMember;
+}
+
+/** What each member is owed at `now` (owedFrom), from the database. Only `pubkey`'s, when given. */
+function owedNotices(cb: PlaceWatchNoticeCallbacks, now: string, fresh: ReadonlySet<string>, pubkey?: string): Map<string, Owed> {
+    const nowMs = Date.parse(now);
+    const week = firstSightings(new Date(nowMs - PLACE_WATCH_NOTICE_KEEP_MS).toISOString(), now, PLACE_WATCH_FLOOD).map(toSighting);
+    if (week.length === 0) return new Map();
+    const columns = 'pubkey, lat, lng, radius_km, created_at, last_notified_at';
+    const watches = (pubkey === undefined
+        ? db.prepare(`SELECT ${columns} FROM place_watches`).all()
+        : db.prepare(`SELECT ${columns} FROM place_watches WHERE pubkey = ?`).all(pubkey)) as NoticeWatch[];
+    if (watches.length === 0) return new Map();
+    return owedFrom(watches, week, fresh, cb.pushable(pubkey), nowMs);
 }
 
 /**
@@ -293,11 +408,11 @@ function owedNotices(now: string, pubkey?: string): Map<string, Owed> {
  * (marketplace category, so their Marketplace notification setting applies) and one `system_announcement` to their own
  * sockets. Stamped only when it reached them (see the header). Returns how many members it reached.
  */
-function tellOwed(cb: PlaceWatchNoticeCallbacks, now: string, pubkey?: string): number {
+function tellOwed(cb: PlaceWatchNoticeCallbacks, now: string, fresh: ReadonlySet<string>, pubkey?: string): number {
     // Stamped, so the quiet day travels to a standby with the watch, and nothing in this notice is owed again.
     const heard = db.prepare('UPDATE place_watches SET last_notified_at = ?, updated_at = ? WHERE pubkey = ?');
     let told = 0;
-    for (const [member, found] of owedNotices(now, pubkey)) {
+    for (const [member, found] of owedNotices(cb, now, fresh, pubkey)) {
         if (!cb.isMember(member)) continue;
         const near = [...found.values()].sort((a, b) => a.km - b.km || (a.c.key < b.c.key ? -1 : 1));
         const km = Math.max(1, Math.round(near[0].km));
@@ -325,8 +440,9 @@ function tellOwed(cb: PlaceWatchNoticeCallbacks, now: string, pubkey?: string): 
 
 /**
  * A mirror run (services/directory-mirror.ts), after it wrote `added`, the communities it saw for the first time at
- * `now`: every member owed a notice is told (tellOwed), for this run's communities and any still owed from earlier
- * ones. A run whose new communities are a flood says so here; they are left out of every notice (firstSightings).
+ * `now`: every member owed a notice is told (tellOwed), for this run's communities and, if a push reaches them now,
+ * any still owed from earlier ones (owedFrom). A run whose new communities are a flood says so here; they are left out
+ * of every notice (firstSightings).
  * Returns how many members it reached.
  */
 export function notifyPlaceWatchers(cb: PlaceWatchNoticeCallbacks, added: readonly DirectoryRow[], now: string): number {
@@ -335,10 +451,10 @@ export function notifyPlaceWatchers(cb: PlaceWatchNoticeCallbacks, added: readon
         console.warn(`[Place watches] ⚠️ ${placed} new communities with a place in one run, more than ${PLACE_WATCH_FLOOD}: `
             + 'a flood, not communities starting, so no watcher is told about them. They are listed as usual.');
     }
-    return tellOwed(cb, now);
+    return tellOwed(cb, now, new Set(added.map(c => c.key)));
 }
 
 /** A member's phone registered its push token here: they are told what they are owed now, not at the next run. */
 export function notifyOwedPlaceWatcher(cb: PlaceWatchNoticeCallbacks, pubkey: string): boolean {
-    return tellOwed(cb, new Date().toISOString(), pubkey) > 0;
+    return tellOwed(cb, new Date().toISOString(), new Set(), pubkey) > 0;
 }

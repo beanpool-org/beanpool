@@ -7709,6 +7709,18 @@ export function dispatchPushNotification(
 }
 
 /**
+ * The members a push of this category would reach now, as dispatchPushNotification decides it: a phone of theirs has
+ * registered its token here, and they haven't switched the category off. Only `publicKey`, when given.
+ */
+export function pushableMembers(categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', publicKey?: string): Set<string> {
+    const off = `NOT EXISTS (SELECT 1 FROM member_preferences p WHERE p.public_key = t.public_key AND p.pref_key = ? AND p.pref_value = 'false')`;
+    const rows = (publicKey === undefined
+        ? db.prepare(`SELECT DISTINCT t.public_key AS pk FROM push_tokens t WHERE ${off}`).all(`notify_${categoryId}`)
+        : db.prepare(`SELECT DISTINCT t.public_key AS pk FROM push_tokens t WHERE t.public_key = ? AND ${off}`).all(publicKey, `notify_${categoryId}`)) as { pk: string }[];
+    return new Set(rows.map(r => r.pk));
+}
+
+/**
  * Dispatches Expo Push Notifications for Escrow lifecycle events.
  * Delegates to the generic dispatchPushNotification with categoryId='escrow'.
  */

@@ -25,18 +25,24 @@
  *      good fetch saw, and the status says what went wrong.
  *   2. Every row is checked (engine/directory-cache.ts normaliseRegistryRow); a row with no key is left out.
  *   3. One transaction writes the run (new, changed, gone), then the place watches (engine/place-watches.ts) tell each
- *      watcher what they are owed: the communities seen for the first time, and any an earlier run's notice could not
- *      reach them with (no phone of theirs registered here then). Each watcher hears about a community once.
+ *      watcher what they are owed: the communities seen for the first time, and, when a push reaches them now, any an
+ *      earlier run's notice could not reach them with (no phone of theirs registered here then). Each watcher hears
+ *      about a community once.
  *
  * A phone registering its push token (routes/community.ts) tells its member what they are owed at once
  * (tellOwedWatcher), on the same conditions as a run: a main server with the switch on.
  */
-import { getNodeRole, broadcast, dispatchPushNotification, isNodeMember } from '../state-engine.js';
+import { getNodeRole, broadcast, dispatchPushNotification, isNodeMember, pushableMembers } from '../state-engine.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import {
     normaliseRegistryRow, writeDirectoryRows, writeMirrorStatus, MAX_DIRECTORY_ROWS, type DirectoryRow,
 } from '../engine/directory-cache.js';
-import { notifyPlaceWatchers, notifyOwedPlaceWatcher } from '../engine/place-watches.js';
+import { notifyPlaceWatchers, notifyOwedPlaceWatcher, type PlaceWatchNoticeCallbacks } from '../engine/place-watches.js';
+
+/** How the place watches reach a member: their sockets, and their phones where a marketplace push reaches them. */
+const watchNotices = (): PlaceWatchNoticeCallbacks => ({
+    broadcast, dispatchPushNotification, isMember: isNodeMember, pushable: (pubkey) => pushableMembers('marketplace', pubkey),
+});
 
 export const DEFAULT_DIRECTORY_MIRROR_URL = 'https://dpemwoermzkaxoctafzg.supabase.co/rest/v1/directory_nodes?select=*';
 /** The website's publishable key (apps/website/main.js): public by design, read-only under the registry's row rules. */
@@ -164,7 +170,7 @@ export async function runDirectoryMirror(opts: { pageRows?: number } = {}): Prom
         writeMirrorStatus({ fetchedAt: now, lastAttemptAt: attemptAt, lastError: null });
         let notified = 0;
         try {
-            notified = notifyPlaceWatchers({ broadcast, dispatchPushNotification, isMember: isNodeMember }, written.added, now);
+            notified = notifyPlaceWatchers(watchNotices(), written.added, now);
         } catch (e: any) {
             // The cache is written; the communities are on the card. Nothing was stamped for a watcher not told: the next
             // run tells them.
@@ -197,7 +203,7 @@ let timer: ReturnType<typeof setInterval> | null = null;
  */
 export function tellOwedWatcher(pubkey: string): boolean {
     if (getNodeRole() !== 'primary' || !getProfileSwitches().directoryMirror) return false;
-    return notifyOwedPlaceWatcher({ broadcast, dispatchPushNotification, isMember: isNodeMember }, pubkey);
+    return notifyOwedPlaceWatcher(watchNotices(), pubkey);
 }
 
 /**

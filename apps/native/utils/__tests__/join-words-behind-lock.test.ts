@@ -346,7 +346,7 @@ describe('welcome.tsx: Next writes that record once the key it made is on the ph
         const recorded = create.indexOf(
             'if (!storedIdentity) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);',
         );
-        const redeemed = create.indexOf('await redeemInvite(parsedCode, identity.callsign, identity);');
+        const redeemed = create.indexOf('await redeemInvite(parsedCode, identity.callsign, identity, { timeoutMs: NEXT_REQUEST_TIMEOUT_MS });');
         expect(made).toBeGreaterThan(-1);
         expect(recorded).toBeGreaterThan(made);
         expect(redeemed).toBeGreaterThan(recorded);

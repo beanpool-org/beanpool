@@ -4103,6 +4103,9 @@ export async function checkInvite(code: string, nodeUrl: string): Promise<Invite
     }
 }
 
+/** What a redeem with no answer by its `timeoutMs` throws (redeemInvite). */
+export const REDEEM_NO_ANSWER = 'No answer from the community node in time. Check your connection and try again.';
+
 /**
  * Redeem an invite against the active node.
  *
@@ -4117,8 +4120,17 @@ export async function checkInvite(code: string, nodeUrl: string): Promise<Invite
  * A self-referential `/api/avatar/<pk>` value is the broken-row case and counts as NO photo —
  * the node cannot serve it, so there is nothing there worth protecting. A brand-new join is
  * likewise no photo: there is no row yet.
+ *
+ * `timeoutMs`: the redeem is stopped with REDEEM_NO_ANSWER when the node hasn't answered by then
+ * (the join wizard's Next, whose ways off are closed while it waits). It may still have landed:
+ * the node answers a retry by the same key `alreadyMember`, and the wizard asks it (invite-next.ts).
  */
-export async function redeemInvite(code: string, callsign: string, identityToRegister?: any): Promise<{ success: true; alreadyMember: boolean; nodeHasPhoto: boolean }> {
+export async function redeemInvite(
+    code: string,
+    callsign: string,
+    identityToRegister?: any,
+    options: { timeoutMs?: number } = {},
+): Promise<{ success: true; alreadyMember: boolean; nodeHasPhoto: boolean }> {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || (__DEV__ ? 'https://127.0.0.1:8443' : '');
 
@@ -4134,11 +4146,22 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
         const endpoint = isOfflineTicket ? '/api/invite/redeem-offline' : '/api/invite/redeem';
         const headers = await buildSignedHeaders('POST', endpoint, bodyString, identity.privateKey, identity.publicKey);
 
-        const res = await fetch(`${anchorUrl}${endpoint}`, {
-            method: 'POST',
-            headers,
-            body: bodyString,
-        });
+        const stop = new AbortController();
+        const timer = options.timeoutMs ? setTimeout(() => stop.abort(), options.timeoutMs) : undefined;
+        let res: Response;
+        try {
+            res = await fetch(`${anchorUrl}${endpoint}`, {
+                method: 'POST',
+                headers,
+                body: bodyString,
+                signal: stop.signal,
+            });
+        } catch (e) {
+            if (stop.signal.aborted) throw new Error(REDEEM_NO_ANSWER);
+            throw e;
+        } finally {
+            clearTimeout(timer);
+        }
 
         if (!res.ok) {
             let errorMsg = `Failed to redeem invite (HTTP ${res.status})`;

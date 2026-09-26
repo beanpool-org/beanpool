@@ -49,7 +49,9 @@ export class RestoreStopped extends Error {
 /**
  * A replace the member said yes to that this phone then could not save ({@link saveRestoredAccount}). The account it
  * replaced is gone, as "Replace this phone's account?" said it would be, and so is anything the restore had written:
- * the phone holds no account, and the restore can be tried again. The message is the failure's own.
+ * the phone holds no account, and the restore can be tried again. Only if even the old key could not be removed does it
+ * stay, alone, and trying again asks about it again. Either way its app storage and join wizard are gone, so the app
+ * must not go on as that account (welcome.tsx). The message is the failure's own.
  */
 export class ReplaceNotSaved extends Error {
     constructor(failure: unknown) {
@@ -123,14 +125,14 @@ export async function saveRestoredAccount({ identity, replacesAnother }: Cleared
 
 /**
  * The phone after a replace it could not save: neither account, nor any of the old one's app storage, nor the new
- * community's address. Returns the error to throw: {@link ReplaceNotSaved} once the key is off the phone, otherwise the
- * failure itself (the old key is still here, and a retry asks about it again).
+ * community's address. Returns the {@link ReplaceNotSaved} to throw. It is one even when the key could not be removed
+ * (the old key is still here, and a retry asks about it again): the join wizard is gone by then, so an app still
+ * holding the old account would route it, with none of its app storage, into the app (_layout.tsx, PR #1183 review
+ * 4110094956).
  */
-async function removeUnsavedReplace(failure: unknown): Promise<unknown> {
-    let keyRemoved = false;
+async function removeUnsavedReplace(failure: unknown): Promise<ReplaceNotSaved> {
     try {
         await removeStoredIdentity();
-        keyRemoved = true;
     } catch (e) {
         console.error('[Restore] The replaced account\'s key could not be removed after a failed save', e);
     }
@@ -140,7 +142,7 @@ async function removeUnsavedReplace(failure: unknown): Promise<unknown> {
         console.error('[Restore] App storage could not be cleared after a failed save', e);
     }
     await clearPendingOnboarding();
-    return keyRemoved ? new ReplaceNotSaved(failure) : failure;
+    return new ReplaceNotSaved(failure);
 }
 
 /**

@@ -181,6 +181,31 @@ describe('a 12-word restore onto a phone that holds another account', () => {
         expect(asyncStorage()).toEqual(PHONE_KEPT);
     });
 
+    it('a replace that can\'t save, when even Kim\'s key can\'t be removed: still a ReplaceNotSaved, and trying again asks again', async () => {
+        await phoneWithInviteJoin();
+        const confirmReplace = vi.fn(async (_outgoing: BeanPoolIdentity) => true);
+        vi.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore unavailable'));
+        vi.mocked(SecureStore.deleteItemAsync).mockRejectedValueOnce(new Error('Keystore locked'));
+
+        const failed = restoreFromWords(WORDS, NODE, { confirmReplace, nameOnNode: async () => 'Marty' });
+
+        // Kim's wizard record and app storage are gone either way. welcome.tsx lets go of the account it holds only on a
+        // ReplaceNotSaved: anything else, and _layout.tsx routes Kim, with none of Kim's app storage, into the app.
+        await expect(failed).rejects.toBeInstanceOf(ReplaceNotSaved);
+        await expect(failed).rejects.toThrow('Keystore unavailable');
+        expect(await loadIdentity()).toEqual(phone);
+        expect(await getPendingOnboarding()).toBeNull();
+        expect(asyncStorage()).toEqual(PHONE_KEPT);
+
+        // Again: Kim's key is still on the phone, so the member is asked again, and a yes restores.
+        const restored = await restoreFromWords(WORDS, NODE, { confirmReplace, nameOnNode: async () => 'Marty' });
+
+        expect(confirmReplace).toHaveBeenCalledTimes(2);
+        expect(restored).toMatchObject({ publicKey: restoredPub, callsign: 'Marty', mnemonic: WORDS });
+        expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, callsign: 'Marty', mnemonic: WORDS });
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+    });
+
     it('a caller that cannot ask is refused rather than allowed to replace', async () => {
         await phoneWithInviteJoin();
 

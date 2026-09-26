@@ -838,7 +838,8 @@ export default function WelcomeScreen() {
             setOutgoingIdentity(null);
             setIdentity(identity);
         } catch (err) {
-            // A replace this phone couldn't save has already taken the old account off it: the app must not go on as it.
+            // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
+            // its key unless even that failed): the app must not go on as it.
             if (err instanceof ReplaceNotSaved) setIdentity(null);
             // Keep on the confirm-replace screen has already gone back, with nothing changed.
             if ((err as { reason?: string } | null)?.reason !== 'cancelled') {
@@ -961,7 +962,8 @@ export default function WelcomeScreen() {
             setMode('home');
             router.replace('/');
         } catch (e: any) {
-            // A replace this phone couldn't save has already taken the old account off it: the app must not go on as it.
+            // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
+            // its key unless even that failed): the app must not go on as it.
             if (e instanceof ReplaceNotSaved) setIdentity(null);
             if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
                 setError(null);

@@ -317,7 +317,8 @@ async function main(): Promise<void> {
     const byStranger = await list(newId('Stranger'));
     assert(byStranger.status === 403, `a signed non-member can't list (${byStranger.status})`);
     const byPruned = await list(gone);
-    assert(byPruned.status === 403 && byPruned.body?.code === 'not_member', `a pruned member can't list (${byPruned.status} ${byPruned.body?.code})`);
+    // Refused by the signature middleware before the route's own `not_member` (4109713263): a closed account signs nothing.
+    assert(byPruned.status === 403 && byPruned.body?.code === 'account_closed', `a pruned member can't list (${byPruned.status} ${byPruned.body?.code})`);
     const bySuspended = await list(quiet);
     assert(bySuspended.status === 403 && bySuspended.body?.code === 'not_active', `a suspended member can't list (${bySuspended.status} ${bySuspended.body?.code})`);
     const byMax = await list(max);

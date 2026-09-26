@@ -30,10 +30,11 @@ import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody } from './event-post.js';
 import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
+import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { viewerTier, VIEW_HEADER } from './viewer.js';
+import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { guestPost } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 
@@ -439,7 +440,7 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         }
         ctx.body = { success: removed };
     } catch (e: any) {
-        ctx.status = 400;
+        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to remove post' };
     }
 });
@@ -453,6 +454,9 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        // The answer is the post as its author has it, and for an event a convenor may edit, that is someone else, with
+        // their name. The engine refuses a non-member convenor on every node (updatePost); here the visitors' view answers first.
+        if (!membersOnlyHere(ctx)) return;
         // G3, global profile: an edit publishes too, so a muted member can't make one; on probation, an edit can't
         // bring in photos past the day's allowance. A photo the post already has comes back as its own URL.
         const actor = ctx.state?.actor as string;
@@ -471,7 +475,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
-        ctx.status = 400;
+        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to update post' };
     }
 });
@@ -650,6 +654,7 @@ function eventChatStatus(msg: string): number {
     if (msg.includes('no longer available')) return 410;
     if (msg === EVENT_CHAT_HIDDEN) return 409;
     if (msg.includes('Only the host and people going') || msg.includes('Only the host can remove')) return 403;
+    if (msg === NOT_A_MEMBER_ERROR) return 403;
     if (msg.includes('Frozen') || msg.includes('disabled') || msg.includes('suspended')
         || msg.includes('pruned') || msg.includes('Account closed')
         || msg.includes('Device key has been invalidated') || msg.includes('Member not found')) return 403;
@@ -730,6 +735,9 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
         ctx.body = { error: 'Authentication required' };
         return;
     }
+    // The answer names the writer. The engine refuses a non-member on every node (removeEventThreadMessage); here, as
+    // on every route that hands its caller a person, the visitors' view answers first.
+    if (!membersOnlyHere(ctx)) return;
     const body = (ctx as any).requestBody || {};
     const messageId = body.messageId || body.id;
     if (!messageId || typeof messageId !== 'string') {
@@ -820,6 +828,7 @@ router.post('/api/marketplace/transactions/reject', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
         const tx = rejectPostRequest(transactionId, authorPublicKey);
         if (!tx) {
             ctx.status = 400;
@@ -841,6 +850,7 @@ router.post('/api/marketplace/transactions/cancel-request', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
+        if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
         const tx = cancelPostRequest(transactionId, buyerPublicKey);
         if (!tx) {
             ctx.status = 400;
@@ -861,6 +871,7 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
         return;
     }
     if (!assertActorEntitled(ctx, confirmerPublicKey)) return;
+    if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
     const rawHours = finalHours !== undefined ? finalHours : hours;
     const parsedFinalHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
     try {
@@ -892,6 +903,7 @@ router.post('/api/marketplace/transactions/cancel', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, cancellerPublicKey)) return;
+        if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
         const tx = cancelPostTransaction(transactionId, cancellerPublicKey);
         if (!tx) {
             ctx.status = 400;
@@ -952,7 +964,7 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         ctx.body = { success: false, error: 'Post not found, not paused, or not owned by author' };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
-        ctx.status = 400;
+        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to resume post' };
     }
 });

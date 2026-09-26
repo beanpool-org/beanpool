@@ -392,7 +392,7 @@ export function approveKnock(id: string, member: string, now = Date.now()): Answ
         const found = answerable(id, now);
         if ('reason' in found) return { ok: false, reason: found.reason };
         const invite = generateInvite(member, found.row.pubkey);
-        // generateInvite refuses only a key with no member row, which the route has ruled out. Thrown, so nothing commits.
+        // generateInvite refuses only a key that isn't a member here (isNodeMember), which the route has ruled out. Thrown, so nothing commits.
         if (!invite) throw new Error('knock approval: the invite could not be made');
         db.prepare(`UPDATE join_requests SET status = 'approved', decided_by = ?, decided_at = ?, invite_code = ?, updated_at = ?
                     WHERE id = ? AND status = 'pending'`)

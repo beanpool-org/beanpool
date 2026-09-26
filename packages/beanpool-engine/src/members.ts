@@ -193,7 +193,9 @@ export function verifyOfflineTicket(db: Db, ticketB64: string):
         const payloadObj = JSON.parse(payloadJson);
         const { i: inviterPubkey, t: timestamp, f: intendedFor } = payloadObj;
 
-        if (!getMember(db, inviterPubkey)) {
+        // A member of this node, not just a row: a pruned account keeps its row, and so does the old key of a member
+        // being re-keyed, and a ticket either signs would bring its holder in as someone new (engine/invites.ts).
+        if (!isNodeMember(db, inviterPubkey)) {
             return { ok: false, reason: 'unknown_inviter', error: 'Inviter is not a formally recognized member of this decentralized mesh' };
         }
 
@@ -253,6 +255,8 @@ export function checkInvite(db: Db, codeOrTicket: string): InviteCheckResult {
     // standard online codes generated more than 30 days ago expire
     const ageMs = Date.now() - new Date(row.created_at).getTime();
     if (ageMs > 30 * 24 * 60 * 60 * 1000) return { valid: false, reason: 'expired' };
+    // Its maker has since been pruned or re-keyed: redeemInvite refuses it (apps/server engine/invites.ts), so say so now.
+    if (!isNodeMember(db, row.created_by)) return { valid: false, reason: 'unknown_inviter' };
 
     const inviter = getMember(db, row.created_by);
     return { valid: true, inviterCallsign: inviter?.callsign || null };

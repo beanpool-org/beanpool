@@ -102,6 +102,9 @@ export interface OffboardOptions {
 
 export const REKEY_CODE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/** completeRekey's refusal for an account deleted or removed after its code was issued. */
+export const REKEY_ACCOUNT_GONE = 'This account was deleted or removed from this community, so it can’t be moved to a new key.';
+
 // ===================== KEY INVALIDATION HELPERS =====================
 
 /**
@@ -261,6 +264,14 @@ export function completeRekey(
     }
     if (req.status !== 'pending') {
         throw new Error(`Re-enrolment code is no longer active (status: ${req.status})`);
+    }
+    // An account deleted by its owner (purgeMemberSelf) or removed (adminPruneUser, by an admin or a community vote)
+    // since the code was issued stays that way: issueRekeyCode refuses a pruned member, and this is its other half.
+    // Completing used to set the row back to 'active' and hand it to the new key: a deleted account came back emptied
+    // ("Deleted Member", no Beans), and a removed one came back with no decision after the removal. The way back from a
+    // removal is the community's reinstate_member vote, after which a re-key works as usual. Refused before any write.
+    if (getMember(cleanOld)?.status === 'pruned') {
+        throw new Error(REKEY_ACCOUNT_GONE);
     }
     if (new Date(req.expires_at).getTime() < Date.now()) {
         db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(req.id);

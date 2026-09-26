@@ -10,6 +10,7 @@ import { bumpPostsVersion } from './versions.js';
 import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
+import { assertNodeMember } from './members.js';
 import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
@@ -550,6 +551,9 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     if (!isAuthor && !isConvenor) {
         return false;
     }
+    // Someone else's post, as a keeper or a convenor: only from a member of this node. Both rows read above outlast a
+    // prune, and a pending re-key leaves them on the old key.
+    if (!isDirectAuthor) assertNodeMember(callerPublicKey);
 
     const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'`).get(id) as any;
     if (pendingTx && pendingTx.c > 0) throw new Error('This post has a deal in escrow — complete or cancel the deal before deleting it');
@@ -611,6 +615,11 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (eventRow?.type === 'event') {
         // Every host may edit, not only the author (§2.2) — so the author check below is the host check.
         if (!isEventHost(db, eventRow, authorPublicKey)) return null;
+        // Only from a member of this node, whichever host: the edit goes out under the author's name and moves everyone
+        // going. A convenor's group row outlasts a prune (4109566615), and so does the author's own event when a prune
+        // left it paused (4109713263). A keeper sends the enterprise's own key (the author), and isEventHost's keeper
+        // branch already needs an active keeper. Suspended and disabled hosts pass, as before.
+        assertNodeMember(authorPublicKey);
         if (eventRow.event_state === 'cancelled' || eventRow.status === 'cancelled' || !eventRow.active) {
             throw new Error('Cannot edit a cancelled event');
         }
@@ -624,6 +633,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         authorPublicKey = existingPost.authorPublicKey;
     } else if (existingPost.authorPublicKey !== authorPublicKey) {
         return null;
+    } else {
+        // Their own post, from its author only while a member here: an edit publishes under their name (4109713263).
+        assertNodeMember(authorPublicKey);
     }
     // G3: an edit goes out under the author's name, so a muted author's post takes none, whoever makes it: a keeper
     // or convenor editing a muted enterprise's or member's event is refused as the author would be. The route checks
@@ -1128,7 +1140,10 @@ export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKe
 }
 
 export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string): boolean {
-    const postRow = db.prepare("SELECT audience_scope, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
+    const postRow = db.prepare("SELECT author_pubkey, audience_scope, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
+    // Putting a post back up publishes it again, an event for everyone going: only from an author who is still a member
+    // here (4109713263). A post that isn't theirs stays a plain false. Suspended and disabled authors pass, as before.
+    if (postRow?.author_pubkey === authorPublicKey) assertNodeMember(authorPublicKey);
     const res = db.prepare(`UPDATE posts SET status = 'active', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'paused'`).run(postId, authorPublicKey);
     if (res.changes > 0) {
         let recipients: string[] | undefined;

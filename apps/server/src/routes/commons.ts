@@ -11,8 +11,9 @@ import {
     createDecision, getDecision, publicDecision, getAllDecisions, getOpenDecisions,
     castDecisionVote, tallyDecision,
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
-    checkProposalStanding,
+    checkProposalStanding, isNodeMember,
 } from '../state-engine.js';
+import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
     createCrowdfundProject, updateCrowdfundProject,
@@ -408,6 +409,13 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     // pledger's home balance and then pledged locally, so a visitor's pledge was minted
     // on this node. Refuse until charge-home settlement exists (#104).
     if (blockCrossNodeSettlement(ctx, actor)) return;
+    // pledgeToProject moves the Beans itself, not through transfer(), so nothing below asks who the pledger is: a
+    // pruned account, or the old key of a member being re-keyed (a lost or stolen phone), still holds its balance.
+    if (!isNodeMember(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
+        return;
+    }
     // A note with a pledge is words the project's creator reads: a muted member (G3) pledges without one.
     if (isNote(memo) && respondIfMuted(ctx, actor)) return;
 

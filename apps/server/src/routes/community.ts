@@ -195,8 +195,9 @@ router.post('/api/admin/seed-invite', async (ctx) => {
     // Check if there are already members
     const info = getCommunityInfo();
     if (info.memberCount > 0) {
-        // Already have members — generate a tiered invite from the genesis member
-        const members = getAllMembers();
+        // Already have members — generate a tiered invite from the genesis member. Only a live member: a code hung off
+        // a pruned or re-keyed one never redeems (engine/invites.ts), so past one the fallbacks below pick another.
+        const members = getAllMembers().filter(m => isNodeMember(m.publicKey));
         let genesisMember = members.find(m => m.invitedBy === 'genesis');
         if (!genesisMember) {
             // Restored DB fallback: find the 'Admin' or first non-system member to act as genesis
@@ -744,7 +745,8 @@ router.post('/api/community/me/area', async (ctx) => {
     const { lat, lng } = (ctx as any).requestBody || {};
     const clear = lat === null && lng === null;
     // A pruned account is no longer in the community (its area was cleared with it), so it can't set a new one; clearing
-    // is never refused to anyone with a row here.
+    // is never refused here to anyone with a row. (Over HTTP a pruned account doesn't get this far: the signature
+    // middleware refuses everything it signs, https-server.ts CLOSED_ACCOUNT_REFUSAL.)
     const member = getMember(actor);
     if (!member || (member.status === 'pruned' && !clear)) {
         ctx.status = 403;

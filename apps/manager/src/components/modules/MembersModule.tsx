@@ -102,10 +102,15 @@ interface MembersModuleProps {
 }
 
 export function getMemberRawAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
-    const pub = m?.publicKey || m?.pubkey || '';
-    const profile = profiles instanceof Map
-        ? profiles.get(pub)
-        : profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
+    const rawPub = m?.publicKey || m?.pubkey || (m as any)?.public_key || (m as any)?.member_pubkey || (m as any)?.memberPubkey;
+    const pub = typeof rawPub === 'string' ? rawPub.trim() : '';
+    let profile: ProfileItem | undefined;
+    if (profiles instanceof Map) {
+        // ⚡ Bolt: Constant-time O(1) Map lookup including lowercased key fallback
+        profile = profiles.get(pub) || (pub ? profiles.get(pub.toLowerCase()) : undefined);
+    } else if (Array.isArray(profiles) && pub) {
+        profile = profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
+    }
     return profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
 }
 
@@ -141,16 +146,8 @@ export function getMemberDisplayName(m: MemberItem | null | undefined, profiles:
     // Look up in profiles Map or array
     let profile: ProfileItem | undefined;
     if (profiles instanceof Map) {
-        profile = profiles.get(pub);
-        if (!profile && pub) {
-            const lower = pub.toLowerCase();
-            for (const [k, v] of profiles.entries()) {
-                if (k.toLowerCase() === lower) {
-                    profile = v;
-                    break;
-                }
-            }
-        }
+        // ⚡ Bolt: O(1) Map lookup for lowercased public keys instead of linear O(P) scan over profiles.entries()
+        profile = profiles.get(pub) || (pub ? profiles.get(pub.toLowerCase()) : undefined);
     } else if (Array.isArray(profiles) && pub) {
         profile = profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
         if (!profile && pub) {
@@ -484,6 +481,13 @@ export function MembersModule({
         if (Array.isArray(profiles)) {
             for (const p of profiles) {
                 if (!p) continue;
+                const pk = p.publicKey || p.pubkey || (p as any).public_key || (p as any).member_pubkey || (p as any).memberPubkey;
+                if (typeof pk === 'string' && pk.trim()) {
+                    const trimmed = pk.trim();
+                    const lower = trimmed.toLowerCase();
+                    map.set(trimmed, p);
+                    map.set(lower, p);
+                }
                 if (p.publicKey) map.set(p.publicKey, p);
                 if (p.pubkey) map.set(p.pubkey, p);
             }

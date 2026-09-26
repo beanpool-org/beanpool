@@ -191,10 +191,6 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 **Learning:** In `apps/native/app/(tabs)/people.tsx`, `loadOfflineInvites` iterated over `localInvites` and called `serverInvites.find(...)` for every local invite, followed by `serverInvites.forEach` calling `updatedInvites.some(...)` for every server invite. This resulted in an $O(N \times M)$ nested array scan during offline invite synchronization.
 **Action:** Pre-computed `serverInvitesMap` (indexed by lowercase invite code) and `updatedCodes` Set before array operations, converting invite code lookups and uniqueness checks into $O(1)$ retrievals ($O(N + M)$ overall).
 
-## 2026-09-30 - O(1) Option Lookups in Poll Open Ballot Voter Lists
-**Learning:** In `apps/pwa/src/components/PollCard.tsx` and `apps/native/components/PollCard.tsx`, rendering open ballot voter lists iterated over `votesList` and ran `options.find(o => o.id === ...)` for every vote, causing $O(V \times O)$ linear array scans when displaying voter choices.
-**Action:** Pre-computed `optionsById` Map (indexed by option ID via `useMemo`) at component scope to reduce poll option resolution to constant-time $O(1)$ retrievals ($O(V + O)$ overall).
-
 ## 2026-10-01 - O(1) Member Lookups in ProposeDecisionModal
 **Learning:** In `apps/pwa/src/components/ProposeDecisionModal.tsx`, resolving selected member details on input keystrokes executed `members.find(...)` scans across `members` for each keystroke.
 **Action:** Pre-computed `membersByKeyMap` using `useMemo` indexed by both public key and callsign to convert selected member resolution into $O(1)$ Map retrievals.
@@ -222,3 +218,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-07 - O(1) Transaction Lookups for System Messages in PWA MessagesPage
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, rendering system messages and system message action buttons repeatedly scanned `userTransactions` via `.find(t => t.postId === ...)` inside message mapping loops, creating an $O(M \times T)$ linear array scan during message rendering in chat threads.
 **Action:** Pre-computed `userTransactionsByPostId` Map via `useMemo` and updated `formatSystemMessage` and system message action button rendering to use constant-time $O(1)$ Map retrievals.
+
+## 2026-10-08 - O(1) Case-Insensitive Profile Lookups in MembersModule
+**Learning:** In `apps/manager/src/components/modules/MembersModule.tsx`, `getMemberDisplayName` and `getMemberRawAvatar` were previously performing $O(P)$ linear scans over `profiles.entries()` when looking up profiles by lowercased public keys if the initial exact match on `profilesMap.get(pub)` returned undefined.
+**Action:** Pre-indexed lowercased public keys and alternate property names (`publicKey`, `pubkey`, `memberPubkey`) in `profilesMap` within `MembersModule.tsx`, enabling constant-time $O(1)$ Map lookups for lowercased public key fallbacks without linear scans over `profiles.entries()`.

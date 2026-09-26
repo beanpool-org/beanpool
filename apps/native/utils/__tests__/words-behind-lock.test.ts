@@ -233,7 +233,8 @@ describe('every other screen that draws an account\'s words', () => {
             // Safety Backup, only for a key this join made (the member's own new words). A key the phone already had is
             // read through readWordsBehindLock instead (join-words-behind-lock.test.ts; review 4112404374).
             'welcome.tsx:getMnemonic(pendingIdentity)': 1,
-            // Sends the account (key and words) to a desktop the member pairs with; draws nothing. See the PR.
+            // Confirm & Link Device sends the account (key and words) to a computer: read only after the phone's lock
+            // (pair-device-behind-lock.test.ts).
             'pair-device.tsx:getMnemonic(identity)': 1,
         };
         const found: Record<string, number> = {};

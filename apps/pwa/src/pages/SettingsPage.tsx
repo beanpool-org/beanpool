@@ -12,7 +12,7 @@ import {
     updateNotificationPreferences, getNodeStats, purgeAccountApi, getSignInRecovery,
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
-import { SignInRecoveryLine } from '../components/SignInRecoveryLine';
+import { NO_WORDS_HERE, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { resolveAvatarUrl } from '../lib/avatar';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
@@ -126,6 +126,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         return () => { cancelled = true; };
     }, [identity.publicKey]);
     const signInRecoveryNames = signInRecovery ? signInNames(signInRecovery) : null;
+    // Whether this browser holds the 12 words. One restored from a sign-in copy without them (web-restore.ts) does not:
+    // nothing here tells it to save, view or rely on words it hasn't got, and each place says what brings it back.
+    const hasWords = hasMnemonic(identity);
 
     // Holiday mode
     const [holidayMode, setHolidayMode] = useState(false);
@@ -549,7 +552,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {/* Owners and admins only — the node answers the role. */}
                         <NodeAdminLink />
                         {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}
-                        <OwnerWordsCheck identity={identity} startOpen={openOwnerWordsCheck} />
+                        <OwnerWordsCheck identity={identity} startOpen={openOwnerWordsCheck} hasWords={hasWords} />
                         {/* Owners only, remembered: take over or restore with this browser (sealed keys slice 6). */}
                         <OwnerUnlockCard identity={identity} />
                         {/* ─── COMMUNITY WORKING STYLE ─── */}
@@ -676,8 +679,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             </div>
                             <div className="space-y-2.5">
 
-                                {/* Sovereignty banner — shown until the member has viewed their 12 words */}
-                                {!seedViewed && (
+                                {/* Sovereignty banner — shown until the member has viewed their 12 words, when this browser has them */}
+                                {!seedViewed && hasWords && (
                                     <div role="alert" className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 space-y-2">
                                         <p className="text-sm font-bold text-amber-900 dark:text-amber-300">
                                             <span aria-hidden="true">⚠️</span> You haven't saved your recovery phrase yet
@@ -719,11 +722,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">🔑</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">View Recovery Phrase</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">View your 12-word backup seed</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">
+                                            {hasWords ? 'View your 12-word backup seed' : 'Not saved in this browser'}
+                                        </div>
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
-                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasMnemonic(identity)} />
+                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} />
                             </div>
                         </div>
 
@@ -939,8 +944,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <div className="font-bold text-sm text-nature-900 dark:text-white flex items-center gap-2">
                                             <span>🚪</span> Remove from This Device Only
                                         </div>
-                                        <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                            Signs out and clears local browser storage. Your account and listings remain safely stored on the community node and can be restored anytime with your 12-word recovery phrase.
+                                        <p data-testid="sign-out-device-way-back" className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                            {hasWords
+                                                ? 'Signs out and clears local browser storage. Your account and listings remain safely stored on the community node and can be restored anytime with your 12-word recovery phrase.'
+                                                : `Signs out and clears local browser storage. Your account and listings remain safely stored on the community node. ${NO_WORDS_HERE} ${waysBackWithoutWords(signInRecovery)}`}
                                         </p>
                                         <button
                                             onClick={() => setDeletionMode('confirm_local')}
@@ -977,8 +984,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <h4 className="text-nature-900 dark:text-white font-bold text-sm m-0">
                                         🚪 Confirm Device Sign Out
                                     </h4>
-                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                        Are you sure you want to remove your account from this device? Ensure you have written down your 12-word recovery phrase if you plan to sign in again later.
+                                    <p data-testid="sign-out-device-confirm" className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                        {hasWords
+                                            ? 'Are you sure you want to remove your account from this device? Ensure you have written down your 12-word recovery phrase if you plan to sign in again later.'
+                                            : `Are you sure you want to remove your account from this device? ${NO_WORDS_HERE} ${waysBackWithoutWords(signInRecovery)}`}
                                     </p>
                                     <div className="flex gap-3 pt-2">
                                         <button
@@ -1097,8 +1106,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             Your 12-word recovery phrase allows you to restore your identity on any device. Anyone with these words can control your account. Keep them secret and offline.
                         </p>
 
-                        {/* Browser eviction warning */}
-                        <div className="bg-amber-50 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800 mb-5">
+                        {/* Browser eviction warning: to write down the words shown below, so only when there are some */}
+                        {hasWords && <div className="bg-amber-50 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800 mb-5">
                             <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">
                                 ⚠️ Browser storage is not permanent
                             </p>
@@ -1107,9 +1116,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 wipes your local keys. Write these words on paper — it's the only offline backup
                                 that can't be wiped by your browser.
                             </p>
-                        </div>
+                        </div>}
 
-                        {hasMnemonic(identity) ? (
+                        {hasWords ? (
                             <>
                                 {/*
                                   The grid holds its height while the words load. They arrive a
@@ -1138,8 +1147,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 </button>
                             </>
                         ) : (
-                            <div className="bg-amber-50 dark:bg-amber-950/30 p-4 rounded-xl text-xs text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 mb-6">
-                                This identity was generated without seed phrase storage. Your raw Private Key is available under Advanced settings.
+                            // Not "generated without seed phrase storage": most often it was brought back from a sign-in copy
+                            // that did not carry them (web-restore.ts). What brings it back if this browser is cleared.
+                            <div data-testid="seed-not-here" className="bg-amber-50 dark:bg-amber-950/30 p-4 rounded-xl text-xs leading-relaxed text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 mb-6 space-y-1.5">
+                                <p className="font-bold m-0">Your 12 words aren't saved in this browser, so they can't be shown here.</p>
+                                <p className="m-0">{waysBackWithoutWords(signInRecovery)}</p>
+                                <p className="m-0">Browsers can clear saved data without warning: Safari does it after 7 days without a visit.</p>
                             </div>
                         )}
 

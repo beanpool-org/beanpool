@@ -7233,6 +7233,12 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
 
 // ===================== PUSH NOTIFICATIONS =====================
 
+/**
+ * Adds this key's row for the device token and touches no other key's row. Every community a phone registered with
+ * holds its token, so a take-over by token would let any of them remove a member's rows and silence their recovery
+ * alerts (#1184 review 4110460184). The phone removes a leaving account's rows itself, signed by that account's key
+ * (apps/native utils/account-leaves-phone.ts). The key is the request's signer (routes/community.ts).
+ */
 export function registerPushToken(publicKey: string, token: string, platform: string = 'ios'): boolean {
     try {
         db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, ?)`).run(publicKey, token, platform);

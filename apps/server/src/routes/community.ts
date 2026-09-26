@@ -1363,7 +1363,7 @@ router.get('/api/ledger/export', async (ctx) => {
 
 router.post('/api/push-tokens', async (ctx) => {
     const { publicKey, token, platform } = (ctx as any).requestBody || {};
-    if (!publicKey || !token) {
+    if (!publicKey || !token || typeof token !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey or token' };
         return;

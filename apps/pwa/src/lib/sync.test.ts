@@ -14,6 +14,7 @@ vi.mock('./api', async (importOriginal) => {
 
 import {
     connectToAnchor,
+    reconnectToAnchor,
     onSyncActivity,
     onSyncChange,
     onSocketOpen,
@@ -497,6 +498,54 @@ describe('PWA WebSocket Pong Watchdog', () => {
         wsInstance.readyState = 1;
         wsInstance.onopen();
         await vi.advanceTimersByTimeAsync(200);
+        expect(activityListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('a visitor who joins while the key-less socket is still being opened ends up on a signed one, never the key-less one', async () => {
+        // The lobby's socket (G9b) is part way open: its identity read, which found no key, has not come back yet.
+        let visitorRead!: (ident: null) => void;
+        vi.mocked(loadIdentity)
+            .mockImplementationOnce(() => new Promise((resolve) => { visitorRead = resolve; }))
+            .mockResolvedValueOnce({ publicKey: ME, privateKey: '00', callsign: 'Rowan', createdAt: '' } as any);
+        const opened: any[] = [];
+        const Base = (globalThis as any).WebSocket;
+        (globalThis as any).WebSocket = class extends Base {
+            constructor(url: string) { super(url); opened.push(this); }
+        };
+        connectToAnchor('ws://localhost:9000/ws');
+        await vi.advanceTimersByTimeAsync(10);
+        expect(opened).toHaveLength(0);
+
+        // The visitor has joined: the socket opens again, signed by the key stored now.
+        reconnectToAnchor();
+        await vi.advanceTimersByTimeAsync(10);
+        // The key-less read comes back late: it opens nothing.
+        visitorRead(null);
+        await vi.advanceTimersByTimeAsync(10);
+
+        expect(opened.map(s => s.url)).toEqual(['ws://localhost:9000/ws?callsign=Rowan']);
+    });
+
+    it('reopening for a member who has just joined starts afresh: at once, and syncing at once', async () => {
+        const activityListener = vi.fn();
+        onSyncActivity(activityListener);
+        const first = await openSocket();
+        // The key-less socket has dropped twice and waits out a long retry.
+        vi.spyOn(Math, 'random').mockReturnValue(0.999);
+        first.close();
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(wsInstance).not.toBe(first);
+        wsInstance.close();
+        const dropped = wsInstance;
+
+        reconnectToAnchor();
+        await vi.advanceTimersByTimeAsync(10);
+        expect(wsInstance).not.toBe(dropped);
+        activityListener.mockClear();
+        wsInstance.readyState = 1;
+        wsInstance.onopen();
+        await vi.advanceTimersByTimeAsync(200);
+        // Not the retry's 0–3 s spread: the member's lists load now.
         expect(activityListener).toHaveBeenCalledTimes(1);
     });
 });

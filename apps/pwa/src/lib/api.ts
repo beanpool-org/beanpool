@@ -257,7 +257,11 @@ export interface CommunityInfo {
     commonsBalance: number;
     /** What kind of node this is, and what it does (config/node-profile.ts). Absent on a node older than both. */
     profile?: 'local' | 'global';
-    features?: { openJoin?: boolean };
+    /**
+     * `guestListingsOnly`: a visitor gets the listings and their rough area, not the people (G9a), so the web app shows
+     * a key-less visitor the lobby (G9b). `beans`: false where there are no Beans (the global profile).
+     */
+    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean };
 }
 
 export interface Member {

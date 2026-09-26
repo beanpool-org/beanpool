@@ -21,9 +21,13 @@
  *  12. copies a main server dropped BEFORE the seal (re-deposits, removals, a purge, the way the code before it deleted:
  *      secure_delete off) are gone from state.db and its WAL after the upgrade's boot: one VACUUM, once, retried at the
  *      next boot when the disk has no room, and posts' search still finds the right post after it;
- *  13. the same on a standby, which never wraps: its one VACUUM waits until the main server's wrapped copies have
- *      replaced its own, runs after the import that does it (here, a force-resync past copies the main deleted), and
- *      leaves none of the copies it replaced or dropped in its files;
+ *  13. the same on a standby, which never wraps, with the history of a real one: it imported deposits and re-deposits,
+ *      then its main server's members disconnected or were purged, which no pull carries, so their copies are still rows
+ *      there that open with the sub alone. Its one VACUUM waits while every copy is in the old form and runs after the
+ *      delta that brings the main server's wrapped ones; that delta removes nothing, and the standby's real puller then
+ *      pulls one whole copy, after which none of the deleted copies is a row, none of any dropped or replaced copy is left
+ *      in its state.db, -wal or -shm, and after a take-over (with the main server's key, as S2 will carry it) every
+ *      current copy opens to exactly what its member deposited and no deleted one came back;
  *  14. a data folder without hard links (link() fails with EPERM, ENOTSUP, EMLINK, ENOSYS or EXDEV) still gets its key,
  *      made in place, never over a file already there, and a failed write leaves nothing behind.
  *
@@ -100,6 +104,13 @@ function fakeCopy(): Sealed {
         kdfParams: JSON.stringify({ alg: 'scrypt-xc20p-single-v1', salt: b64(32), N: 16384, r: 8, p: 1, words: { ct: b64(120), iv: b64(24), tag: b64(16) } }),
     };
 }
+
+/**
+ * 13's history, made in the parent and written by the code before the seal on both sides (child 'pre-seal-history'):
+ * each owner's first and second deposit, the owners who then deleted theirs, and the owners whose second copy the app
+ * really sealed (the rest are shaped like one), with the seed each opens to.
+ */
+interface History { owners: string[]; gen1: Sealed[]; gen2: Sealed[]; deleted: number[]; real: { i: number; seedHex: string }[] }
 
 const CLEARED_KEY = 'recovery_seal_cleared';
 const FTS_PROBE_WORD = 'sealprobe40';
@@ -231,15 +242,14 @@ async function child(mode: string): Promise<void> {
         const { db, initSchema } = await import('./db/db.js');
         initSchema();
         db.pragma('secure_delete = 0');
-        const standby = process.env.SEAL_FIXTURE === 'standby';
         const N = 30;
         const owners = Array.from({ length: N }, () => crypto.randomBytes(32).toString('hex'));
         const gen1 = owners.map(() => fakeCopy());
         const gen2 = owners.map(() => fakeCopy());
         const T = '2026-06-01T00:00:00.000Z';
         const dropOlder = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?');
-        // A main server stored a deposit with a plain INSERT (putShareGeneration); a standby with sync.ts's own statement.
-        const put = db.prepare(`INSERT${standby ? ' OR REPLACE' : ''} INTO recovery_shares
+        // A main server stored a deposit with a plain INSERT (putShareGeneration).
+        const put = db.prepare(`INSERT INTO recovery_shares
             (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, ephemeral_pubkey,
              sso_lookup_hash, sso_lookup_salt, kdf_params, generation, created_at, updated_at)
             VALUES (?, 'sso', 'google', 1, ?, ?, ?, NULL, ?, 'lookup-salt', ?, ?, ?, ?)`);
@@ -251,89 +261,169 @@ async function child(mode: string): Promise<void> {
         db.pragma('wal_checkpoint(TRUNCATE)');
         db.transaction(() => owners.forEach((_, i) => deposit(i, gen2[i], 2)))();
         db.pragma('wal_checkpoint(TRUNCATE)');
-        if (!standby) {
-            // Posts with gaps in their rowids, to show the search still finds the right post after the VACUUM.
-            const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey)
-                VALUES (?, 'offer', 'general', ?, ?, ?)`);
-            for (let i = 0; i < 60; i++) post.run(`fixture-post-${i}`, `fixture post ${i}`, `sealprobe${i}`, owners[0]);
-            db.prepare("DELETE FROM posts WHERE CAST(substr(id, 14) AS INTEGER) % 3 = 0").run();
-            // Owners 25-29 had a copy released before they were purged.
-            const col = db.prepare(`INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, created_at, expires_at)
-                VALUES (?, ?, 2, 'eph', 'complete', ?, ?)`);
-            const rel = db.prepare(`INSERT INTO recovery_releases (collection_id, share_id, holder_type, share_index, payload, payload_iv, payload_tag, kdf_params, released_at)
-                VALUES (?, 0, 'sso', 1, ?, ?, ?, ?, ?)`);
-            for (let i = 25; i < N; i++) {
-                col.run(`fixture-collection-${i}`, owners[i], T, T);
-                rel.run(`fixture-collection-${i}`, gen2[i].encryptedShare, gen2[i].shareIv, gen2[i].shareTag, gen2[i].kdfParams, T);
-            }
-            db.pragma('wal_checkpoint(TRUNCATE)');
-            // Owners 20-24 removed their copy (DELETE /api/recovery/shares); 25-29 were purged (state-engine's purge).
-            // Left in the WAL, as the last writes before the upgrade.
-            for (let i = 20; i < 25; i++) db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(owners[i]);
-            for (let i = 25; i < N; i++) {
-                db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(owners[i]);
-                db.prepare('DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)').run(owners[i]);
-                db.prepare('DELETE FROM recovery_collections WHERE owner_pubkey = ?').run(owners[i]);
-            }
-            out.dropped = [...gen1, ...gen2.slice(20)];
-            out.live = gen2.slice(0, 20);
-        } else {
-            // A force-resync before the seal: every row cleared (clearReplicatedTables) and the snapshot imported again.
-            db.prepare('DELETE FROM recovery_shares').run();
-            db.transaction(() => owners.forEach((_, i) => deposit(i, gen2[i], 2)))();
-            out.dropped = gen1;
-            out.live = gen2;
-            // The main server has since deleted the last two members' copies; a deletion of a copy does not reach a
-            // standby, so these stay here, unwrapped, until a force-resync.
-            out.orphans = owners.slice(N - 2);
-            out.owners = owners;
+        // Posts with gaps in their rowids, to show the search still finds the right post after the VACUUM.
+        const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey)
+            VALUES (?, 'offer', 'general', ?, ?, ?)`);
+        for (let i = 0; i < 60; i++) post.run(`fixture-post-${i}`, `fixture post ${i}`, `sealprobe${i}`, owners[0]);
+        db.prepare("DELETE FROM posts WHERE CAST(substr(id, 14) AS INTEGER) % 3 = 0").run();
+        // Owners 25-29 had a copy released before they were purged.
+        const col = db.prepare(`INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, created_at, expires_at)
+            VALUES (?, ?, 2, 'eph', 'complete', ?, ?)`);
+        const rel = db.prepare(`INSERT INTO recovery_releases (collection_id, share_id, holder_type, share_index, payload, payload_iv, payload_tag, kdf_params, released_at)
+            VALUES (?, 0, 'sso', 1, ?, ?, ?, ?, ?)`);
+        for (let i = 25; i < N; i++) {
+            col.run(`fixture-collection-${i}`, owners[i], T, T);
+            rel.run(`fixture-collection-${i}`, gen2[i].encryptedShare, gen2[i].shareIv, gen2[i].shareTag, gen2[i].kdfParams, T);
         }
-    } else if (mode === 'standby-import') {
-        // A standby (NODE_ROLE=backup) meeting its main server's wrapped copies through the real import path: a signed
-        // payload from a trusted mirror. The main server has deleted the orphans, so its payload does not carry them.
-        const { initStateEngine, exportSyncState, signSyncPayload, importRemoteState, clearReplicatedTables } = await import('./state-engine.js');
+        db.pragma('wal_checkpoint(TRUNCATE)');
+        // Owners 20-24 removed their copy (DELETE /api/recovery/shares); 25-29 were purged (state-engine's purge).
+        // Left in the WAL, as the last writes before the upgrade.
+        for (let i = 20; i < 25; i++) db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(owners[i]);
+        for (let i = 25; i < N; i++) {
+            db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(owners[i]);
+            db.prepare('DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)').run(owners[i]);
+            db.prepare('DELETE FROM recovery_collections WHERE owner_pubkey = ?').run(owners[i]);
+        }
+        out.dropped = [...gen1, ...gen2.slice(20)];
+        out.live = gen2.slice(0, 20);
+    } else if (mode === 'pre-seal-history') {
+        // 13's history as the code before the seal made it, on connections with secure_delete off (its default then).
+        // The main server: every member deposits, then re-deposits (a re-deposit drops the older generation); then three
+        // disconnect their only sign-in (deleteAllShares) and three are purged (purgeMemberSelf), both a DELETE of their
+        // rows. Its standby: each of the main server's pulls, written with sync.ts's own statements. The deletions never
+        // reach it: a deletion of a copy has no tombstone.
+        const { db, initSchema } = await import('./db/db.js');
+        initSchema();
+        db.pragma('secure_delete = 0');
+        const h: History = JSON.parse(fs.readFileSync(process.env.SEAL_HISTORY!, 'utf-8'));
+        const standby = process.env.SEAL_SIDE === 'standby';
+        const dropOlder = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?');
+        const put = db.prepare(`INSERT${standby ? ' OR REPLACE' : ''} INTO recovery_shares
+            (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, ephemeral_pubkey,
+             sso_lookup_hash, sso_lookup_salt, kdf_params, generation, created_at, updated_at)
+            VALUES (?, 'sso', 'google', 1, ?, ?, ?, NULL, ?, 'lookup-salt', ?, ?, ?, ?)`);
+        const stage = (copies: Sealed[], generation: number, at: string) => {
+            db.transaction(() => h.owners.forEach((o, i) => {
+                dropOlder.run(o, generation);
+                const c = copies[i];
+                put.run(o, c.encryptedShare, c.shareIv, c.shareTag, `lookup-${i}`, c.kdfParams, generation, at, at);
+            }))();
+            db.pragma('wal_checkpoint(TRUNCATE)');
+        };
+        stage(h.gen1, 1, '2026-06-01T00:00:00.000Z');
+        stage(h.gen2, 2, '2026-06-02T00:00:00.000Z');
+        if (!standby) {
+            // Left in the WAL, as the last writes before the upgrade.
+            for (const i of h.deleted) db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ?').run(h.owners[i]);
+        }
+        out.rows = db.prepare('SELECT COUNT(*) FROM recovery_shares').pluck().get();
+    } else if (mode === 'main-export') {
+        // The main server after the upgrade's boot (the wrap and its VACUUM), and what its two pull routes send a standby:
+        // a delta since the standby's last pull before the seal (sync-delta), and a whole copy (sync-snapshot).
+        const { initStateEngine, exportSyncState } = await import('./state-engine.js');
         initStateEngine();
         const { db } = await import('./db/db.js');
-        const clearedNow = () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CLEARED_KEY) as any)?.value ?? null;
-        const stored = () => db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as string[];
+        out.cleared = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CLEARED_KEY) as any)?.value ?? null;
+        out.delta = (await exportSyncState('main-server', process.env.SEAL_SINCE!)).recoveryShares ?? [];
+        out.full = (await exportSyncState('main-server')).recoveryShares ?? [];
+    } else if (mode === 'standby-pull') {
+        // A standby (NODE_ROLE=backup) running its real puller against its main server's two pull routes, served here on
+        // localhost: each answers with the main server's own rows (SEAL_MAIN_EXPORT) in a payload signed by the key this
+        // standby trusts as its mirror, and records what the puller asked for and what the standby held at that moment.
+        // Routine whole copies are off (as on a large database), so the pull after the seal is a delta.
+        const { initStateEngine, exportSyncState, signSyncPayload, setSyncCursor } = await import('./state-engine.js');
+        initStateEngine();
+        const { db } = await import('./db/db.js');
+        const state = () => {
+            const kdfs = db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[];
+            return {
+                cleared: (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CLEARED_KEY) as any)?.value ?? null,
+                rows: kdfs.length,
+                unwrapped: kdfs.filter(k => !k?.includes('node-wrap-xc20p-v1')).length,
+                owners: db.prepare('SELECT owner_pubkey FROM recovery_shares ORDER BY owner_pubkey').pluck().all(),
+            };
+        };
         out.secureDelete = db.pragma('secure_delete', { simple: true });
         out.keyExists = fs.existsSync(path.join(dataDir, KEY_FILE));
-        out.clearedAtBoot = clearedNow();
+        out.atBoot = state();
+        const main: { delta: unknown[]; full: unknown[] } = JSON.parse(fs.readFileSync(process.env.SEAL_MAIN_EXPORT!, 'utf-8'));
         const { startP2P } = await import('./p2p.js');
         const { addConnector } = await import('./connector-manager.js');
+        const { updateLocalConfig } = await import('./config/local-config.js');
+        const puller = await import('./services/backup-puller.js');
+        const http = await import('node:http');
         const node = await startP2P(0, 0);
-        try {
-            const nodeId = node.peerId.toString();
-            addConnector(`/ip4/127.0.0.1/tcp/1/p2p/${nodeId}`, 'mirror', 'main-server');
-            const owners: string[] = JSON.parse(process.env.SEAL_OWNERS!);
-            const orphans = new Set<string>(JSON.parse(process.env.SEAL_ORPHANS!));
-            const now = new Date().toISOString();
-            const wrapped = owners.filter(o => !orphans.has(o)).map((o) => {
-                const i = owners.indexOf(o);
-                return {
-                    ownerPubkey: o, holderType: 'sso', holderRef: 'google', shareIndex: 1,
-                    encryptedShare: crypto.randomBytes(200).toString('base64'), shareIv: crypto.randomBytes(24).toString('base64'),
-                    shareTag: crypto.randomBytes(16).toString('base64'), ephemeralPubkey: null,
-                    ssoLookupHash: `lookup-${i}`, ssoLookupSalt: 'lookup-salt',
-                    kdfParams: JSON.stringify({ alg: 'node-wrap-xc20p-v1', inner: 'scrypt-xc20p-single-v1' }),
-                    generation: 2, createdAt: now, updatedAt: now,
-                };
+        const nodeId = node.peerId.toString();
+        const pulls: { route: string; since: string | null; snapshotCursor: string | null; at: number; before: ReturnType<typeof state> }[] = [];
+        const server = http.createServer((req, res) => {
+            const route = (req.url ?? '').split('?')[0];
+            const which = route === '/api/local/admin/sync-delta' ? 'delta' : route === '/api/local/admin/sync-snapshot' ? 'snapshot' : null;
+            if (!which) { res.writeHead(404).end(); return; }
+            pulls.push({
+                route: which, since: (req.headers['x-since-cursor'] as string) ?? null,
+                snapshotCursor: (req.headers['x-snapshot-cursor'] as string) ?? null, at: Date.now(), before: state(),
             });
-            const importWrapped = async () => {
+            void (async () => {
                 const payload: any = await exportSyncState(nodeId);
-                payload.recoveryShares = wrapped;
+                payload.recoveryShares = which === 'delta' ? main.delta : main.full;
                 delete payload.signature;
                 delete payload.publicKey;
-                await importRemoteState(await signSyncPayload(payload));
-            };
-            await importWrapped();
-            out.afterImport = { cleared: clearedNow(), unwrapped: stored().filter(k => !k?.includes('node-wrap-xc20p-v1')).length };
-            clearReplicatedTables();
-            await importWrapped();
-            out.afterResync = { cleared: clearedNow(), unwrapped: stored().filter(k => !k?.includes('node-wrap-xc20p-v1')).length, rows: stored().length };
+                res.writeHead(200, { 'Content-Type': 'application/json', 'X-Node-Role': 'primary' })
+                    .end(JSON.stringify(await signSyncPayload(payload)));
+            })();
+        });
+        await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+        try {
+            addConnector(`/ip4/127.0.0.1/tcp/1/p2p/${nodeId}`, 'mirror', 'main-server');
+            updateLocalConfig({
+                backupPrimaryUrl: `http://localhost:${(server.address() as { port: number }).port}`,
+                backupReplicationToken: 'test-replication-token', backupPullSeconds: 5, backupReconcileMinutes: 0,
+            });
+            // Where its last pull before the seal left it: the puller resumes deltas from here.
+            setSyncCursor('backup:primary', process.env.SEAL_SINCE!);
+            puller.initBackupPuller();
+            const deadline = Date.now() + 45_000;
+            while (Date.now() < deadline && !(pulls.length >= 3 && (puller.getBackupStatus().lastSuccessAt ?? 0) >= pulls[2].at)) {
+                await new Promise(r => setTimeout(r, 100));
+            }
         } finally {
+            puller.stopBackupPuller();
+            server.close();
             await node.stop();
         }
+        out.pulls = pulls.map(p => ({ route: p.route, since: p.since, snapshotCursor: p.snapshotCursor, before: p.before }));
+        out.final = state();
+    } else if (mode === 'takeover-open') {
+        // The standby promoted (NODE_ROLE=primary), then every member's copy read through the server's own reader.
+        const { initStateEngine } = await import('./state-engine.js');
+        initStateEngine();
+        const { getCurrentShares } = await import('./engine/recovery-shares.js');
+        const h: History = JSON.parse(fs.readFileSync(process.env.SEAL_HISTORY!, 'utf-8'));
+        const deleted = new Set(h.deleted);
+        const same: number[] = [], differ: number[] = [], missing: number[] = [], unopenable: string[] = [], held: number[] = [];
+        const opened: Record<number, string> = {};
+        for (let i = 0; i < h.owners.length; i++) {
+            let sso;
+            try { sso = getCurrentShares(h.owners[i]).find(s => s.holderType === 'sso'); }
+            catch (e) { unopenable.push(`${i}: ${thrown(e)}`); continue; }
+            if (deleted.has(i)) { if (sso) held.push(i); continue; }
+            if (!sso) { missing.push(i); continue; }
+            const c = h.gen2[i];
+            const exact = sso.encryptedShare === c.encryptedShare && sso.shareIv === c.shareIv
+                && sso.shareTag === c.shareTag && sso.kdfParams === c.kdfParams;
+            (exact ? same : differ).push(i);
+            const real = h.real.find(r => r.i === i);
+            if (real) {
+                try {
+                    const o = await openSeedFromSso(
+                        { encryptedShare: sso.encryptedShare, shareIv: sso.shareIv, shareTag: sso.shareTag, kdfParams: sso.kdfParams ?? '' },
+                        'google', GOOGLE_SUB,
+                    );
+                    opened[i] = Buffer.from(o.seed).toString('hex') === real.seedHex ? 'its seed' : 'another seed';
+                } catch (e) { opened[i] = thrown(e); }
+            }
+        }
+        Object.assign(out, { same: same.length, differ, missing, unopenable, held, opened });
     } else {
         out.error = `unknown child mode ${mode}`;
     }
@@ -813,7 +903,7 @@ async function main(): Promise<void> {
     const sealLines = (r: ChildResult) => (r.stdout + r.stderr).split('\n').filter(l => l.includes('Recovery seal')).join(' | ');
     await section('12. copies a main server dropped before the seal are gone from state.db and its WAL after the upgrade', async () => {
         const dir = tempDir('dropped-main');
-        const fx = resultOf(await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'pre-seal-node', SEAL_FIXTURE: 'main' }));
+        const fx = resultOf(await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'pre-seal-node' }));
         const dropped: Sealed[] = fx.dropped;
         const live: Sealed[] = fx.live;
         const before = copiesFoundIn(dir, dropped);
@@ -845,28 +935,90 @@ async function main(): Promise<void> {
     });
 
     // ── 13. the same on a standby, which never wraps ────────────────────────────────────────────
-    await section('13. a standby clears the copies it dropped before the seal once its main server\'s wrapped copies replace its own', async () => {
-        const dir = tempDir('dropped-standby');
-        const fx = resultOf(await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'pre-seal-node', SEAL_FIXTURE: 'standby' }));
-        const before = copiesFoundIn(dir, fx.dropped);
-        check(before > 0, `control: before the upgrade, ${before} of the ${fx.dropped.length} copies the standby's imports and a force-resync dropped are still in its state.db`);
-        const r = await runChild([SCRIPT], dir, {
-            RECOVERY_SEAL_CHILD: 'standby-import', NODE_ROLE: 'backup',
-            SEAL_OWNERS: JSON.stringify(fx.owners), SEAL_ORPHANS: JSON.stringify(fx.orphans),
-        });
+    await section('13. a standby holding copies its main server deleted before the seal clears its files, then the copies, and keeps every current one', async () => {
+        const mainDir = tempDir('history-main');
+        const standbyDir = tempDir('history-standby');
+        const N = 24;
+        const owners = Array.from({ length: N }, () => crypto.randomBytes(32).toString('hex'));
+        const h: History = { owners, gen1: owners.map(() => fakeCopy()), gen2: owners.map(() => fakeCopy()), deleted: [18, 19, 20, 21, 22, 23], real: [] };
+        // Two members who keep their copy and one who deletes it have copies the app really sealed, so each can be opened.
+        for (const i of [0, 1, 18]) {
+            const words = [...WORDS.slice(i % WORDS.length), ...WORDS.slice(0, i % WORDS.length)].reverse();
+            const seed = crypto.createHash('sha256').update(crypto.createHash('sha256').update(words.join(' ')).digest()).digest();
+            h.gen2[i] = await sealSeedToSso(new Uint8Array(seed), 'google', GOOGLE_SUB, { words }) as Sealed;
+            h.real.push({ i, seedHex: seed.toString('hex') });
+        }
+        const historyFile = path.join(tempDir('history'), 'history.json');
+        fs.writeFileSync(historyFile, JSON.stringify(h));
+        const deleted = new Set(h.deleted);
+        const current = owners.filter((_, i) => !deleted.has(i));
+        const orphanCopies = h.gen2.filter((_, i) => deleted.has(i));
+        const currentCopies = h.gen2.filter((_, i) => !deleted.has(i));
+
+        const m = resultOf(await runChild([SCRIPT], mainDir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: historyFile, SEAL_SIDE: 'main' }));
+        const sb = resultOf(await runChild([SCRIPT], standbyDir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: historyFile, SEAL_SIDE: 'standby' }));
+        check(m.rows === N - h.deleted.length && sb.rows === N,
+            `control: before the upgrade the main server holds ${m.rows} copies and its standby ${sb.rows}: the ${h.deleted.length} deleted there are still rows here`);
+        const before = copiesFoundIn(standbyDir, h.gen1);
+        check(before > 0, `control: ${before} of the ${N} copies the re-deposits dropped are still in the standby's state.db`);
+        // What anyone holding a copy of the standby's database could do before: open a deleted member's copy with the sub.
+        const snapshotOf = (dir: string) => {
+            const copy = tempDir('standby-copy');
+            for (const f of ['state.db', 'state.db-wal', 'state.db-shm']) if (fs.existsSync(path.join(dir, f))) fs.copyFileSync(path.join(dir, f), path.join(copy, f));
+            return copy;
+        };
+        const orphanBefore = resultOf(await runChild([SCRIPT], snapshotOf(standbyDir), { RECOVERY_SEAL_CHILD: 'open-without-key', SEAL_OWNER: owners[18] }));
+        check(orphanBefore.rowFound === true && orphanBefore.asStored === 'opened',
+            `control: on the standby, the copy member 18 deleted is still a row that opens with the sub alone (${orphanBefore.asStored})`);
+
+        // The main server upgrades: the wrap stamps every copy it holds, and its VACUUM runs. SINCE: its standby's last pull
+        // before that, after the deletions.
+        const SINCE = '2026-06-03T00:00:00.000Z';
+        const me = resultOf(await runChild([SCRIPT], mainDir, { RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: SINCE }));
+        const wrappedOnly = (rows: any[]) => rows.every(r => String(r.kdfParams).includes('node-wrap-xc20p-v1'));
+        check(typeof me.cleared === 'string' && me.delta.length === current.length && me.full.length === current.length
+            && wrappedOnly(me.delta) && wrappedOnly(me.full),
+            `the main server seals, and its next delta, like a whole copy, carries every copy it holds, wrapped (${me.delta.length} and ${me.full.length} of ${current.length})`);
+        const exportFile = path.join(tempDir('main-export'), 'export.json');
+        fs.writeFileSync(exportFile, JSON.stringify({ delta: me.delta, full: me.full }));
+
+        const r = await runChild([SCRIPT], standbyDir, { RECOVERY_SEAL_CHILD: 'standby-pull', NODE_ROLE: 'backup', SEAL_MAIN_EXPORT: exportFile, SEAL_SINCE: SINCE });
         const s = resultOf(r);
-        check(s.keyExists === false && s.secureDelete === 1 && s.clearedAtBoot === null,
-            `at boot the standby makes no key, zeroes what it deletes, and waits: it still holds its copies in the old form (${JSON.stringify({ key: s.keyExists, secureDelete: s.secureDelete, cleared: s.clearedAtBoot })})`);
-        check(s.afterImport?.cleared === null && s.afterImport?.unwrapped === 2,
-            `after its main server's wrapped copies arrive, the 2 copies the main server deleted are still here unwrapped, so it still waits (${JSON.stringify(s.afterImport)})`);
-        check(/still holds 2 sign-in recovery copies in the form stored before the seal.*A force-resync removes them/.test(r.stderr),
-            `...and says so, and what removes them (${sealLines(r)})`);
-        check(typeof s.afterResync?.cleared === 'string' && s.afterResync.unwrapped === 0 && s.afterResync.rows === 28,
-            `after a force-resync it holds only wrapped copies, and has run its one VACUUM (${JSON.stringify(s.afterResync)})`);
-        const dropped = copiesFoundIn(dir, fx.dropped);
-        check(dropped === 0, `none of the ${fx.dropped.length} copies it dropped before the seal is left in its state.db, -wal or -shm (found ${dropped}; ${before} before)`);
-        const replaced = copiesFoundIn(dir, fx.live);
-        check(replaced === 0, `nor any of the ${fx.live.length} it held until the wrapped copies and the force-resync replaced them (found ${replaced})`);
+        const [p1, p2, p3] = s.pulls ?? [];
+        const brief = (x: any) => JSON.stringify(x && { cleared: !!x.cleared, rows: x.rows, unwrapped: x.unwrapped });
+        check(s.keyExists === false && s.secureDelete === 1 && s.atBoot?.cleared === null && s.atBoot?.unwrapped === N,
+            `at boot the standby makes no key, zeroes what it deletes, and waits: every copy it holds is in the old form (${JSON.stringify({ key: s.keyExists, secureDelete: s.secureDelete, cleared: s.atBoot?.cleared, unwrapped: s.atBoot?.unwrapped })})`);
+        check(/every sign-in recovery copy it holds \(24\) is still in the form stored before the seal/.test(r.stdout + r.stderr),
+            `...and says why it waits (${sealLines(r)})`);
+        check(p1?.route === 'delta' && p1.since === SINCE, `its first pull after the seal is a delta from where it left off (${JSON.stringify(p1 && { route: p1.route, since: p1.since })})`);
+        check(typeof p2?.before?.cleared === 'string' && p2.before.rows === N && p2.before.unwrapped === h.deleted.length,
+            `after that delta brings the wrapped copies, it runs its one VACUUM, and a delta removes nothing: the ${h.deleted.length} deleted copies are still rows (${brief(p2?.before)})`);
+        check(p2?.route === 'snapshot' && p2.snapshotCursor === null && /6 sign-in recovery copies in the form stored before the seal/.test(r.stdout + r.stderr),
+            `...its next pull is a whole copy, never a 304, which it asked for and says why (${JSON.stringify(p2 && { route: p2.route, snapshotCursor: p2.snapshotCursor })})`);
+        check(p3?.route === 'delta' && s.final?.unwrapped === 0 && s.final.rows === current.length
+            && JSON.stringify(s.final.owners) === JSON.stringify([...current].sort()) && JSON.stringify(p3.before) === JSON.stringify(s.final),
+            `after the whole copy, no copy the main server deleted is left, every copy it holds is here, wrapped, and the pulls go back to deltas (${brief(p3?.before)}, then ${p3?.route})`);
+        check(/removed 6 sign-in recovery copies its main server deleted before the seal/.test(r.stdout),
+            `...and says so (${sealLines(r)})`);
+        check((r.stdout.match(/one VACUUM/g) ?? []).length === 1, `the VACUUM ran once (${(r.stdout.match(/one VACUUM/g) ?? []).length})`);
+
+        const dropped = copiesFoundIn(standbyDir, [...h.gen1, ...orphanCopies]);
+        check(dropped === 0, `none of the ${N + orphanCopies.length} copies dropped or deleted before the seal is left in the standby's state.db, -wal or -shm (found ${dropped}; ${before} re-deposits before)`);
+        const replaced = copiesFoundIn(standbyDir, currentCopies);
+        check(replaced === 0, `nor any current copy in the form the wrapped ones replaced (found ${replaced} of ${currentCopies.length})`);
+        const orphanAfter = resultOf(await runChild([SCRIPT], snapshotOf(standbyDir), { RECOVERY_SEAL_CHILD: 'open-without-key', SEAL_OWNER: owners[18] }));
+        check(orphanAfter.rowFound === false, `the copy member 18 deleted is no longer a row on the standby (${orphanAfter.rowFound})`);
+
+        // A take-over. Carrying the main server's key there is S2; this copies the file by hand, as S2 will.
+        fs.copyFileSync(path.join(mainDir, KEY_FILE), path.join(standbyDir, KEY_FILE));
+        const t = await runChild([SCRIPT], standbyDir, { RECOVERY_SEAL_CHILD: 'takeover-open', NODE_ROLE: 'primary', SEAL_HISTORY: historyFile });
+        const o = resultOf(t);
+        check(o.same === current.length && o.differ.length === 0 && o.missing.length === 0 && o.unopenable.length === 0,
+            `after a take-over, all ${current.length} current copies open to exactly what each member deposited (same ${o.same}, differ ${JSON.stringify(o.differ)}, missing ${JSON.stringify(o.missing)}, unopenable ${JSON.stringify(o.unopenable)})`);
+        check(o.opened?.[0] === 'its seed' && o.opened?.[1] === 'its seed',
+            `...and the two the app really sealed open with the sub to their member's seed (${JSON.stringify(o.opened)})`);
+        check(o.held.length === 0 && o.opened?.[18] === undefined, `...and none of the ${h.deleted.length} deleted copies came back (${JSON.stringify(o.held)})`);
+        check(!/cannot be opened here/.test(t.stderr), `...and the promoted server's boot names no copy it cannot open (${sealLines(t)})`);
     });
 
     // ── 14. a data folder without hard links ─────────────────────────────────────────────────────
@@ -932,6 +1084,39 @@ async function main(): Promise<void> {
             fsw.fsyncSync = realFsync;
             process.env.BEANPOOL_DATA_DIR = savedDir;
         }
+    });
+
+    // ── 15. only a whole copy removes a copy, and only one the main server no longer holds ───────
+    await section('15. on a standby, only a whole copy removes a copy in the old form, and only one its main server no longer holds', async () => {
+        const seal = await import('./services/recovery-seal-key.js');
+        // This database's other copies are all wrapped, as a standby's are once its main server has sealed.
+        const owner = newId().pk, other = newId().pk;
+        const put = db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv,
+            share_tag, sso_lookup_hash, sso_lookup_salt, kdf_params, generation) VALUES (?, 'sso', ?, 1, ?, ?, ?, ?, 'lookup-salt', ?, ?)`);
+        const add = (o: string, ref: string, generation: number, c: { encryptedShare: string; shareIv: string; shareTag: string; kdfParams: string | null }) =>
+            put.run(o, ref, c.encryptedShare, c.shareIv, c.shareTag, crypto.randomBytes(16).toString('hex'), c.kdfParams, generation);
+        const held = fakeCopy(), deleted = fakeCopy(), otherSignIn = fakeCopy();
+        add(owner, 'google', 2, held);          // still held by the main server in the old form (one rolled back, say)
+        add(owner, 'github', 2, otherSignIn);   // same owner and generation, a sign-in the main server no longer holds
+        add(other, 'google', 1, deleted);       // deleted there before the seal
+        add(other, 'facebook', 1, seal.sealRecoveryFields(fakeCopy(), seal.shareRowAad(other, 'sso')));  // deleted there after it: wrapped
+        const count = () => db.prepare('SELECT COUNT(*) FROM recovery_shares').pluck().get() as number;
+        const refsOf = (o: string) => db.prepare('SELECT holder_ref FROM recovery_shares WHERE owner_pubkey = ? ORDER BY holder_ref').pluck().all(o);
+        const before = count();
+
+        seal.clearCopiesDroppedBeforeSeal({ standby: true, wholeCopy: null });
+        check(count() === before && seal.takeRecoverySealFullPull() === true && seal.takeRecoverySealFullPull() === false,
+            `after a delta nothing is removed, and the puller is asked once for a whole copy (${before - count()} removed)`);
+
+        const wholeCopy = (db.prepare('SELECT owner_pubkey, generation, holder_type, holder_ref FROM recovery_shares').all() as any[])
+            .filter(r => !(r.owner_pubkey === other || (r.owner_pubkey === owner && r.holder_ref === 'github')))
+            .map(r => ({ ownerPubkey: r.owner_pubkey, generation: r.generation, holderType: r.holder_type, holderRef: r.holder_ref }));
+        seal.clearCopiesDroppedBeforeSeal({ standby: true, wholeCopy });
+        check(count() === before - 2 && JSON.stringify(refsOf(owner)) === '["google"]' && JSON.stringify(refsOf(other)) === '["facebook"]',
+            `a whole copy removes the 2 copies in the old form it does not hold, and keeps the one it holds in that form and the wrapped one (${JSON.stringify({ owner: refsOf(owner), other: refsOf(other) })})`);
+        const left = foundInDbFiles([...needlesOf(deleted), ...needlesOf(otherSignIn)]);
+        check(left.length === 0, `...zeroed: none of their bytes is left in state.db, -wal or -shm (found: ${left.join(', ') || 'none'})`);
+        db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey IN (?, ?)').run(owner, other);
     });
 
     console.log(`\n${passed}/${run} checks passed.`);

@@ -5258,13 +5258,21 @@ export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
     return signSyncPayloadEngine(getSyncCb(), payload);
 }
 
-export function importRemoteState(remote: SyncPayload): Promise<ImportResult> {
+/**
+ * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
+ * which recovery copies the main server no longer holds.
+ */
+export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } = {}): Promise<ImportResult> {
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
     return importRemoteStateEngine(getSyncCb(), remote)
         .then((result) => {
-            // A standby clears its database of recovery copies deleted before the seal once the main server's wrapped
-            // copies have replaced the ones it held (services/recovery-seal-key.ts). Once, and never throws.
-            clearCopiesDroppedBeforeSeal({ standby: getNodeRole() === 'backup' });
+            // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
+            // and at a whole copy removes the copies that server deleted before it (services/recovery-seal-key.ts).
+            // Never throws.
+            clearCopiesDroppedBeforeSeal({
+                standby: getNodeRole() === 'backup',
+                wholeCopy: opts.full && Array.isArray(remote.recoveryShares) ? remote.recoveryShares : null,
+            });
             return result;
         })
         .finally(forgetLedgerHistory);

@@ -48,10 +48,16 @@
  * and truncates the WAL after, so the unwrapped bytes do not linger in the database files.
  *
  * Copies DELETED before the seal are not rows any more, so the wrap cannot reach them: the server deleted without zeroing
- * until now, and each one is still in state.db's free pages as the app sealed it. So each server, the main and every
- * standby, runs one VACUUM once it holds no copy in the old form, and records it ({@link clearCopiesDroppedBeforeSeal}).
- * From this change on, db.ts zeroes whatever the server deletes or replaces (secure_delete). Backups and snapshots made
- * before the upgrade are copies of the live rows then, unwrapped ones included; no code here reaches them.
+ * until now, and each one is still in state.db's free pages as the app sealed it. So each server runs one VACUUM, once,
+ * and records it ({@link clearCopiesDroppedBeforeSeal}): a main server right after its wrap, a standby once its main
+ * server has sealed (its wrapped copies have arrived). From this change on, db.ts zeroes whatever the server deletes or
+ * replaces (secure_delete). Backups and snapshots made before the upgrade are copies of the live rows then, unwrapped
+ * ones included; no code here reaches them.
+ *
+ * A standby also holds, as ROWS, the copies its main server deleted before the seal (no deletion of a copy reaches a
+ * standby), still in the form that opens with the `sub` alone. It removes them once a whole copy of its main server
+ * shows which ones that server no longer holds, and asks its puller for one ({@link dropCopiesMainServerDeleted}).
+ * Deletions after the seal still do not reach a standby; those copies are wrapped, and are left to a tombstone.
  *
  * Rolling the server back past this change needs the rows unwrapped first, by the NEW code, with the server stopped:
  *
@@ -457,12 +463,89 @@ function roomForVacuum(): { ok: true } | { ok: false; why: string } {
     return { ok: true };
 }
 
-/** A stored copy still in the form it had before the seal, on the main server or on a standby. */
-function holdsUnwrappedCopy(): boolean {
-    for (const kdf of db.prepare('SELECT kdf_params FROM recovery_shares').pluck().iterate() as IterableIterator<string | null>) {
-        if (!isNodeWrapped(kdf)) return true;
+const copies = (n: number) => `${n} sign-in recovery cop${n === 1 ? 'y' : 'ies'}`;
+
+/** One recovery_shares row by the key the table is unique on: what a whole copy of the main server is compared by. */
+export interface RecoveryRowKey { ownerPubkey: string; generation: number; holderType: string; holderRef: string }
+
+const rowKey = (ownerPubkey: string, generation: number, holderType: string, holderRef: string) =>
+    JSON.stringify([ownerPubkey, Number(generation), holderType, holderRef]);
+
+let wholeCopyWanted = false;
+let wholeCopyAsked = false;
+let keptLogged = false;
+
+/**
+ * Asked by a standby's puller before each pull (services/backup-puller.ts): true once, when this standby needs a whole
+ * copy of its main server to tell which of its copies that server deleted before the seal ({@link dropCopiesMainServerDeleted}).
+ * Asking resets it, so a whole copy that fails is not tried again on every tick: the next routine one, or the next boot,
+ * brings it.
+ */
+export function takeRecoverySealFullPull(): boolean {
+    const wanted = wholeCopyWanted;
+    wholeCopyWanted = false;
+    return wanted;
+}
+
+/**
+ * On a standby, after an import: remove the copies its main server deleted before the seal. No deletion of a copy
+ * reaches a standby (a copy has no tombstone). A re-deposit's older generation does go, because the import drops it; a
+ * member disconnecting their only sign-in, removing their keepers or deleting their account does not. Each copy deleted
+ * that way before the seal is still a row here, as the app sealed it, and opens with the `sub` alone: what the seal is
+ * for. Once a take-over made this server a main one, its wrap would lock them in again, with its own key.
+ *
+ * Only once the main server has sealed, which this standby knows when its wrapped copies are here: before that, its own
+ * copies are in the old form too, and it may delete more of them.
+ *
+ * Only with a whole copy of the main server (the puller's snapshot, never a delta), and only the rows that copy does not
+ * hold, compared by the key the table is unique on. A whole copy is every row the main server held when it made it (the
+ * engine's export without a cursor: no WHERE and no LIMIT). The import that wrote it here was one transaction that
+ * either wrote every row or failed, with no row skipped: each under that same key (INSERT OR REPLACE). This runs only
+ * after that import succeeded. So a row here that the copy does not hold is one the main server did not hold, and no copy
+ * it still holds is ever removed, whatever the clocks, the order of the pulls, or the form its own copies are in. And a
+ * standby stores no copy of its own (it has no key to wrap one), so nothing else adds a row between the import and this.
+ *
+ * A delta is no such proof: it carries only the rows changed since the last pull, found by the main server's clock. So
+ * after a delta, or at boot, this asks the puller once for a whole copy ({@link takeRecoverySealFullPull}).
+ */
+function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
+    const rows = db.prepare('SELECT id, owner_pubkey, generation, holder_type, holder_ref, kdf_params FROM recovery_shares').all() as
+        { id: number; owner_pubkey: string; generation: number; holder_type: string; holder_ref: string; kdf_params: string | null }[];
+    if (!rows.some(r => isNodeWrapped(r.kdf_params))) return;
+    const old = rows.filter(r => !isNodeWrapped(r.kdf_params));
+    if (old.length === 0) return;
+    if (!wholeCopy) {
+        if (!wholeCopyAsked) {
+            wholeCopyAsked = true;
+            wholeCopyWanted = true;
+            console.warn(`⚠️ Recovery seal: this standby holds ${copies(old.length)} in the form stored before the seal beside its main `
+                + 'server\'s wrapped ones: copies deleted there before the seal (a deletion of a copy does not reach a standby). It asks '
+                + 'the main server for one whole copy, to tell them by what that server still holds, and removes them.');
+        }
+        return;
     }
-    return false;
+    wholeCopyWanted = false;
+    const held = new Set(wholeCopy.map(k => rowKey(k.ownerPubkey, k.generation, k.holderType, k.holderRef)));
+    const gone = old.filter(r => !held.has(rowKey(r.owner_pubkey, r.generation, r.holder_type, r.holder_ref)));
+    if (gone.length > 0) {
+        // db.ts turns secure_delete on for the connection; said again here, because these rows are the reason for it.
+        const priorSecureDelete = Number(db.pragma('secure_delete', { simple: true })) || 0;
+        db.pragma('secure_delete = ON');
+        try {
+            const del = db.prepare('DELETE FROM recovery_shares WHERE id = ?');
+            db.transaction(() => { for (const r of gone) del.run(r.id); })();
+        } finally {
+            db.pragma(`secure_delete = ${priorSecureDelete}`);
+        }
+        try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* best effort: the next checkpoint writes over them */ }
+        console.log(`🔐 Recovery seal: removed ${copies(gone.length)} its main server deleted before the seal, zeroed where they lay.`);
+    }
+    const kept = old.length - gone.length;
+    if (kept > 0 && !keptLogged) {
+        keptLogged = true;
+        console.warn(`⚠️ Recovery seal: ${copies(kept)} here in the form stored before the seal ${kept === 1 ? 'is one' : 'are ones'} this `
+            + 'standby\'s main server still holds in that form (it has not wrapped them), so they stay as they are.');
+    }
 }
 
 /**
@@ -472,27 +555,43 @@ function holdsUnwrappedCopy(): boolean {
  * member's current seed. The wrap cannot reach them; one VACUUM rewrites the file from the live rows only, and the
  * checkpoint after it empties the WAL. From here on db.ts zeroes whatever is deleted (secure_delete), so once is enough.
  *
- * It runs when this server holds no copy in the old form: on a main server, at boot right after the wrap; on a standby,
- * which never wraps, at boot and after each import, once its main server's wrapped copies have replaced the ones it had.
+ * On a main server it runs at boot, right after the wrap. On a standby, which never wraps, it runs at boot and after each
+ * import once its main server has sealed: once wrapped copies are here. The import that brought them replaced every copy
+ * the main server still holds (its wrap stamped every one), and the VACUUM after it clears those replaced copies from
+ * the WAL too. It waits only while every copy here is still in the old form: the main server has not sealed, or holds no
+ * copy at all, and nothing here says which. Copies its main server deleted before the seal are still rows here, which
+ * no VACUUM clears; they are removed at a whole copy ({@link dropCopiesMainServerDeleted}), zeroed, before or after it.
+ *
+ * `wholeCopy`: on a standby, the rows of the whole copy of its main server just imported; null after a delta or at boot.
  * Never throws and never stops a boot. A VACUUM that fails, or that the disks have no room for, is logged and tried again
  * at the next boot; one that finished is recorded ({@link CLEARED_KEY}) and never runs again.
  */
-export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean }): void {
+export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean; wholeCopy?: RecoveryRowKey[] | null }): void {
+    if (opts.standby) {
+        try {
+            dropCopiesMainServerDeleted(opts.wholeCopy ?? null);
+        } catch (e) {
+            console.warn(`⚠️ Recovery seal: removing the sign-in recovery copies this standby's main server deleted before the seal failed: `
+                + `${(e as Error)?.message || e}. The next whole copy of the main server tries again.`);
+        }
+    }
     if (clearedSettled || clearTriedThisProcess) return;
     try {
         if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY)) { clearedSettled = true; return; }
-        if (holdsUnwrappedCopy()) {
-            const kdfs = opts.standby && !standbyWaitLogged
-                ? db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[] : [];
-            const n = kdfs.filter(k => !isNodeWrapped(k)).length;
-            // Wrapped copies beside them: the main server has sealed, so these are not simply waiting for its next import.
-            if (n > 0 && n < kdfs.length) {
-                standbyWaitLogged = true;
-                console.warn(`⚠️ Recovery seal: this standby still holds ${n} sign-in recovery cop${n === 1 ? 'y' : 'ies'} in the form stored before `
-                    + 'the seal that its main server has not replaced: copies deleted there (a deletion of a copy does not reach a standby), '
-                    + 'or ones it has not wrapped yet. A force-resync removes them; then this server clears state.db of copies deleted before the seal, once.');
+        const kdfs = db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[];
+        const old = kdfs.filter(k => !isNodeWrapped(k)).length;
+        if (old > 0) {
+            // A main server whose wrap did not run has said why; the next boot tries again.
+            if (!opts.standby) return;
+            if (old === kdfs.length) {
+                if (!standbyWaitLogged) {
+                    standbyWaitLogged = true;
+                    console.log(`🔐 Recovery seal: this standby waits to clear state.db of sign-in recovery copies deleted before the seal: every `
+                        + `sign-in recovery copy it holds (${old}) is still in the form stored before the seal, so its main server has not sealed `
+                        + 'yet, or holds no copy at all. It clears once the main server\'s wrapped copies arrive.');
+                }
+                return;
             }
-            return;
         }
         clearTriedThisProcess = true;
         const room = roomForVacuum();
@@ -518,7 +617,9 @@ export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean }): void {
             .run(CLEARED_KEY, JSON.stringify({ at: new Date().toISOString(), seconds: Number(seconds.toFixed(2)), bytesBefore: before, bytesAfter: after }));
         clearedSettled = true;
         console.log(`🔐 Recovery seal: cleared state.db of sign-in recovery copies deleted before the seal (one VACUUM, ${seconds.toFixed(1)} s, `
-            + `${mb(before)} → ${mb(after)}). This runs once.`);
+            + `${mb(before)} → ${mb(after)}). This runs once.`
+            + (old > 0 ? ` ${copies(old)} in the form stored before the seal ${old === 1 ? 'is' : 'are'} still here as rows: the next whole copy `
+                + 'of the main server removes those it no longer holds.' : ''));
     } catch (e) {
         console.warn(`⚠️ Recovery seal: the one VACUUM that clears sign-in recovery copies deleted before the seal from state.db failed: `
             + `${(e as Error)?.message || e}. The server runs; the next boot tries again.`);

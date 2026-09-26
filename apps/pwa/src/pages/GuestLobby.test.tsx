@@ -148,6 +148,9 @@ function stubNode(info: unknown, members: Map<string, string> = new Map()) {
             const key = decodeURIComponent(path.split('/').pop()!);
             return json(200, { isMember: members.has(key), callsign: members.get(key) ?? null });
         }
+        // A member's polls, once someone has joined or restored (the node sends a list and a count, not an object).
+        if (path === '/api/marketplace/transactions') return json(200, []);
+        if (path.startsWith('/api/messages/conversations/')) return json(200, { conversations: [], totalUnread: 0 });
         return json(200, {});
     }));
     return calls;

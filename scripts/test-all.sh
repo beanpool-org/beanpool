@@ -292,6 +292,7 @@ run_federation_suites() {
       test-global-moderation
       test-community-me
       test-distance-search
+      test-distance-query-parsing
       test-guest-view
       test-distance-search-perf
       test-global-directory

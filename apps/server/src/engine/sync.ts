@@ -5,6 +5,7 @@
 import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainServer } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
+import { bodyOfSignedText, bytesOfSignedText } from '@beanpool/core';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
@@ -557,12 +558,16 @@ function verifyTransactionAuthorship(tx: Transaction): boolean {
             Buffer.from(tx.authSigner, 'hex'),
         ]);
         const key = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
+        // The stored payload is the text signed, in either request format (@beanpool/core request-signing.ts): a
+        // format-2 text (`beanpool-request/2\n<host>\n…`) was signed as 0xFF then the text, and its body starts after
+        // line 6; an old one was signed as plain text, its body after line 4. Which community it named was checked by
+        // the main server that accepted it; this re-checks who signed it and what it moved.
         const sigOk = crypto.verify(
-            undefined, Buffer.from(tx.authPayload), key, Buffer.from(tx.authSignature, 'base64'),
+            undefined, Buffer.from(bytesOfSignedText(tx.authPayload)), key, Buffer.from(tx.authSignature, 'base64'),
         );
         if (!sigOk) return false;
         if (tx.authSigner !== tx.from) return false;
-        const body = tx.authPayload.split('\n').slice(4).join('\n');
+        const body = bodyOfSignedText(tx.authPayload);
         const signed = JSON.parse(body || '{}');
         if (String(signed.to) !== String(tx.to)) return false;
         if (Number(signed.amount) !== Number(tx.amount)) return false;

@@ -37,7 +37,9 @@ import {
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { completeRekey } from '../engine/member-wizards.js';
-import { verifyEd25519Signature } from '../admin-key-auth.js';
+import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
+import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER } from '@beanpool/core';
+import { publishedAddresses } from '../engine/own-addresses.js';
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
     validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
@@ -741,7 +743,14 @@ router.post('/api/local/reset', async (ctx) => {
 router.get('/api/community/info', async (ctx) => {
     // The per-member transaction count is only for the verified signer. An unverified X-Public-Key header
     // or ?publicKey= gets the node-wide figures, like any anonymous caller.
-    ctx.body = getCommunityInfo(ctx.state.actor as string | undefined);
+    ctx.body = {
+        ...getCommunityInfo(ctx.state.actor as string | undefined),
+        // Request binding (@beanpool/core request-signing.ts): this server verifies format 2, so an app signs its
+        // requests here for the host it connects to. A server that doesn't say gets the old format. `addresses`: this
+        // community's own names (engine/own-addresses.ts), public by nature; empty on a node that knows none.
+        requestSigning: REQUEST_SIGNING_VERSION,
+        addresses: publishedAddresses(),
+    };
 });
 
 /**
@@ -988,11 +997,15 @@ function signedByKey(ctx: any, publicKey: string): boolean {
     const timestamp = ctx.get('X-Timestamp');
     const nonce = ctx.get('X-Nonce');
     if (!signer || !signature || !timestamp || !nonce || typeof publicKey !== 'string' || signer.toLowerCase() !== publicKey.toLowerCase()) return false;
-    if (!(Math.abs(Date.now() - Number(timestamp)) <= REDEEM_SIGNATURE_FRESHNESS_MS)) return false;
-    return verifyEd25519Signature(`${ctx.method}\n${ctx.path}\n${timestamp}\n${nonce}\n${ctx.rawBody ?? ''}`, signature, signer);
+    // The one verifier (engine/member-signature.ts), in the middleware's window: signed for this community (a redeem
+    // signed at another counts as unsigned here), or in the old format until the switch.
+    const signedForHeader = ctx.headers?.[SIGNED_FOR_HEADER.toLowerCase()];
+    const verdict = verifyMemberSignature({
+        pubKeyHex: signer, signature, timestamp, nonce, method: ctx.method, path: ctx.path, body: ctx.rawBody ?? '',
+        signedFor: typeof signedForHeader === 'string' ? signedForHeader : null,
+    }, { consumeNonce: false });
+    return verdict.ok;
 }
-/** The signature middleware's window (https-server.ts SIGNATURE_FRESHNESS_MS). */
-const REDEEM_SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
 
 /**
  * The key a redeem joins, in the one spelling this community keeps keys in (engine/member-key.ts), or null when the
@@ -1200,9 +1213,19 @@ router.post('/api/member/re-enroll', async (ctx) => {
         ctx.body = { error: 'Signature is required: proof of possession of new private key must be provided' };
         return;
     }
-    if (!verifyEd25519Signature(cleanCode, signature, cleanNew)) {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid signature: proof of possession failed for new public key' };
+    // Request binding: `0xFF ‖ beanpool-re-enroll/2\n<host>\n<code>` naming this community's host (`signedFor`), or the
+    // bare code from an app before it, until the switch (engine/member-signature.ts).
+    const proof = verifyStatementSignature({
+        signature,
+        pubKeyHex: cleanNew,
+        boundText: (host) => reEnrollText(host, cleanCode),
+        signedFor: body.signedFor,
+        oldTexts: [cleanCode],
+    });
+    if (!proof.ok) {
+        const bound = proof.status === 421 || proof.status === 426;
+        ctx.status = bound ? proof.status : 401;
+        ctx.body = bound ? { error: proof.error, code: proof.code } : { error: 'Invalid signature: proof of possession failed for new public key' };
         return;
     }
 

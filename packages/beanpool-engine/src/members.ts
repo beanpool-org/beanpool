@@ -7,6 +7,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
+import { parseInviteTicketText, signedRequestBytes } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -90,9 +91,22 @@ export interface InviteTreeNode {
 
 export interface InviteCheckResult {
     valid: boolean;
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed';
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | TicketBindingRefusal['reason'];
     inviterCallsign?: string | null;
 }
+
+/** Why a ticket's binding refused it: made for another community, or by an app from before binding after the switch. */
+export interface TicketBindingRefusal {
+    reason: 'wrong_community' | 'app_too_old';
+    error: string;
+}
+
+/**
+ * Whether a verified offline ticket may be used at this community (request binding, @beanpool/core request-signing.ts):
+ * the server decides, from the community it names (`format: 2`) or, for a ticket bound to none (`format: 1`), from the
+ * switch (apps/server engine/member-signature.ts ticketBinding). Null when it may.
+ */
+export type TicketBinding = (t: { format: 1 | 2; audience: string | null; inviter: string }) => TicketBindingRefusal | null;
 
 export function rowToMember(row: any): Member {
     if (!row) return row;
@@ -194,24 +208,38 @@ export function isMemberKeySpelling(key: unknown): key is string {
 
 const INVITER_KEY_SPELLING = 'This ticket names its inviter by a key written another way than this community keeps keys, so it can’t be used. Ask a member for a fresh one.';
 
-export function verifyOfflineTicket(db: Db, ticketB64: string):
+/**
+ * An offline ticket, checked. Two payloads: format 2, `beanpool-invite-ticket/2\n<host>\n<inviter>\n<ts>\n<intendedFor>`
+ * signed as 0xFF then that text (@beanpool/core inviteTicketText), which names the inviter's community; and the old
+ * `{i, t, f}` JSON, which names none. `binding` (the server's) decides whether either may be used here, once the
+ * signature has checked out; a ticket made for community A is refused at B, so it can't join B for 30 days in A's hands.
+ */
+export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketBinding):
     | { ok: true; inviterPubkey: string; timestamp: number; intendedFor?: string; codeHash: string }
-    | { ok: false; reason: 'unknown_inviter' | 'expired' | 'invalid' | 'malformed'; error: string } {
+    | { ok: false; reason: 'unknown_inviter' | 'expired' | 'invalid' | 'malformed' | TicketBindingRefusal['reason']; error: string } {
     try {
         const normalizedB64 = ticketB64.replace(/-/g, '+').replace(/_/g, '/');
         const ticketStr = Buffer.from(normalizedB64, 'base64').toString('utf8');
         const ticketObj = JSON.parse(ticketStr);
         const { p: payloadStr, s: signatureBase64 } = ticketObj;
 
-        let signedBytes = Buffer.from(payloadStr);
-        let payloadJson = payloadStr;
-        if (!payloadStr.trim().startsWith('{')) {
-            signedBytes = Buffer.from(payloadStr, 'base64');
-            payloadJson = signedBytes.toString('utf8');
+        let signedBytes: Uint8Array = Buffer.from(payloadStr);
+        let inviterPubkey: unknown, timestamp: unknown, intendedFor: string | undefined;
+        let audience: string | null = null;
+        const bound = parseInviteTicketText(payloadStr);
+        if (bound) {
+            signedBytes = signedRequestBytes(payloadStr);
+            ({ inviter: inviterPubkey, timestamp, intendedFor } = bound);
+            audience = bound.host;
+        } else {
+            let payloadJson = payloadStr;
+            if (!payloadStr.trim().startsWith('{')) {
+                signedBytes = Buffer.from(payloadStr, 'base64');
+                payloadJson = Buffer.from(signedBytes).toString('utf8');
+            }
+            const payloadObj = JSON.parse(payloadJson);
+            ({ i: inviterPubkey, t: timestamp, f: intendedFor } = payloadObj);
         }
-
-        const payloadObj = JSON.parse(payloadJson);
-        const { i: inviterPubkey, t: timestamp, f: intendedFor } = payloadObj;
 
         // The inviter in the one spelling (isMemberKeySpelling), before any lookup. The signature below decodes the
         // inviter's hex, so a ticket Bob's key signs naming `BOB…` or `bob…zz` verified; and a row an old door stored
@@ -254,6 +282,9 @@ export function verifyOfflineTicket(db: Db, ticketB64: string):
 
         if (!isValid) return { ok: false, reason: 'invalid', error: 'Invalid cryptographic signature structure' };
 
+        const refused = binding?.({ format: bound ? 2 : 1, audience, inviter: inviterPubkey });
+        if (refused) return { ok: false, reason: refused.reason, error: refused.error };
+
         const codeHash = crypto.createHash('sha256').update(signatureBase64).digest('hex').substring(0, 16);
         return { ok: true, inviterPubkey, timestamp, intendedFor, codeHash };
     } catch (e) {
@@ -261,12 +292,12 @@ export function verifyOfflineTicket(db: Db, ticketB64: string):
     }
 }
 
-export function checkInvite(db: Db, codeOrTicket: string): InviteCheckResult {
+export function checkInvite(db: Db, codeOrTicket: string, binding?: TicketBinding): InviteCheckResult {
     const raw = codeOrTicket.trim();
     if (!raw) return { valid: false, reason: 'invalid' };
 
     if (raw.startsWith('BP-')) {
-        const verified = verifyOfflineTicket(db, raw.substring(3));
+        const verified = verifyOfflineTicket(db, raw.substring(3), binding);
         if (!verified.ok) return { valid: false, reason: verified.reason };
 
         // Replay/Single-use enforcement check in database

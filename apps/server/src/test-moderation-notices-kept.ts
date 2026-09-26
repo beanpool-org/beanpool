@@ -351,15 +351,15 @@ async function main(): Promise<void> {
     const beaRead = (await readNotices(bea)).notices;
     assert(beaRead.length === 50 && beaRead[0]?.body === 'Body 5', `the read gives the 50 (${beaRead.length})`);
     // Three past 60 days, one just inside.
-    const setCreated = db.prepare('UPDATE moderation_notices SET created_at = ? WHERE id = ?');
+    const setCreated = (at: string, id: string | undefined) => attempt(() => db.prepare('UPDATE moderation_notices SET created_at = ? WHERE id = ?').run(at, id));
     const [o1, o2, o3, inside] = beaRows.slice(0, 4).map(r => r.id);
-    for (const id of [o1, o2, o3]) attempt(() => setCreated.run(ago(61 * DAY), id));
-    attempt(() => setCreated.run(ago(59 * DAY), inside));
+    for (const id of [o1, o2, o3]) setCreated(ago(61 * DAY), id);
+    setCreated(ago(59 * DAY), inside);
     const beforeTidy = (await readNotices(bea)).notices;
     assert(beforeTidy.length === 47 && !beforeTidy.some(n => [o1, o2, o3].includes(n.id)) && beforeTidy.some(n => n.id === inside),
         `nothing older than 60 days is read, even before the tidy runs (${beforeTidy.length})`);
     // And more than 50, as a copy could leave for a moment: the tidy trims those too.
-    const insertRaw = db.prepare(`INSERT INTO moderation_notices (id, recipient, title, body, data, created_at, updated_at) VALUES (?, ?, 'Extra', ?, '{}', ?, ?)`);
+    const insertRaw = { run: (...args: unknown[]) => db.prepare(`INSERT INTO moderation_notices (id, recipient, title, body, data, created_at, updated_at) VALUES (?, ?, 'Extra', ?, '{}', ?, ?)`).run(...args) };
     const extra = [0, 1, 2, 3, 4, 5].map(i => { const id = `extra-${i}`; attempt(() => insertRaw.run(id, bea.pk, `Extra ${i}`, ago((9 - i) * DAY), ago((9 - i) * DAY))); return id; });
     assert(rowsOf(bea).length === 56, `setup: Bea holds 56 for a moment (${rowsOf(bea).length})`);
     runMarketplaceHygiene();
@@ -429,8 +429,8 @@ async function main(): Promise<void> {
     attempt(() => db.prepare('DELETE FROM moderation_notices WHERE id IN (?, ?)').run(insId, deadId));
     attempt(() => db.prepare("UPDATE moderation_notices SET seen_at = NULL, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?").run(markId));
     attempt(() => db.prepare("UPDATE moderation_notices SET body = 'The standby''s own, newer', updated_at = '2999-01-01T00:00:00.000Z' WHERE id = ?").run(newerId));
-    db.prepare("INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('moderation_notices', ?, ?)").run(deadId, new Date().toISOString());
-    payload.tombstones = [...(payload.tombstones ?? []), { tableName: 'moderation_notices', rowKey: tombId, deletedAt: new Date().toISOString() }];
+    if (deadId) db.prepare("INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('moderation_notices', ?, ?)").run(deadId, new Date().toISOString());
+    if (tombId) payload.tombstones = [...(payload.tombstones ?? []), { tableName: 'moderation_notices', rowKey: tombId, deletedAt: new Date().toISOString() }];
     payload.moderationNotices = [...exported,
         { id: 'for-nobody-here', recipient: nobody.pk, title: 'Stray', body: 'For nobody here', data: '{}', createdAt: ago(0), seenAt: null, updatedAt: ago(0) },
         { id: 'malformed', recipient: ava.pk, title: 'x'.repeat(500), body: '', data: 7, createdAt: 'yesterday', seenAt: 3, updatedAt: null },
@@ -450,8 +450,8 @@ async function main(): Promise<void> {
         'a notice the standby never had is inserted, as the main server holds it');
     assert(typeof one(markId)?.seen_at === 'string' && one(markId)?.updated_at === exSeen?.updatedAt, 'a seen mark reaches an older copy');
     assert(one(newerId)?.body === "The standby's own, newer", 'a newer copy of its own is kept');
-    assert(one(deadId) === undefined, 'a notice it has a tombstone for stays deleted');
-    assert(one(tombId) === undefined && tombstoned(tombId), "the copy's tombstone deletes its notice");
+    assert(!!deadId && one(deadId) === undefined, 'a notice it has a tombstone for stays deleted');
+    assert(!!tombId && one(tombId) === undefined && tombstoned(tombId), "the copy's tombstone deletes its notice");
     assert(one('for-nobody-here') === undefined && one('malformed') === undefined, 'a row for nobody here and a malformed one are left out');
     if (kept?.mergeReplicatedNotices) {
         const m = kept.mergeReplicatedNotices([{ id: 'bad' }, null, 'x', exported.find(n => n.id === insId)]);

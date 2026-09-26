@@ -559,8 +559,10 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
  * On a main server it runs at boot, right after the wrap. On a standby, which never wraps, it runs at boot and after each
  * import once its main server has sealed: once wrapped copies are here. The import that brought them replaced every copy
  * the main server still holds (its wrap stamped every one), and the VACUUM after it clears those replaced copies from
- * the WAL too. It waits only while every copy here is still in the old form: the main server has not sealed, or holds no
- * copy at all, and nothing here says which. Copies its main server deleted before the seal are still rows here, which
+ * the WAL too. It waits while no wrapped copy is here, including while it holds no copy at all: the main server has not
+ * sealed, or holds no copy, and nothing here says which. A clear recorded then would come too early: copies in the old
+ * form that reach it afterwards go into the WAL, and once the wrapped ones replace them their old page images stay in
+ * its earlier frames, which nothing would truncate again. Copies its main server deleted before the seal are still rows here, which
  * no VACUUM clears; they are removed at a whole copy ({@link dropCopiesMainServerDeleted}), zeroed, before or after it.
  *
  * `wholeCopy`: on a standby, the rows of the whole copy of its main server just imported; null after a delta or at boot.
@@ -581,18 +583,20 @@ export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean; wholeCopy
         if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY)) { clearedSettled = true; return; }
         const kdfs = db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[];
         const old = kdfs.filter(k => !isNodeWrapped(k)).length;
-        if (old > 0) {
-            // A main server whose wrap did not run has said why; the next boot tries again.
-            if (!opts.standby) return;
-            if (old === kdfs.length) {
-                if (!standbyWaitLogged) {
-                    standbyWaitLogged = true;
-                    console.log(`🔐 Recovery seal: this standby waits to clear state.db of sign-in recovery copies deleted before the seal: every `
-                        + `sign-in recovery copy it holds (${old}) is still in the form stored before the seal, so its main server has not sealed `
-                        + 'yet, or holds no copy at all. It clears once the main server\'s wrapped copies arrive.');
-                }
-                return;
+        // A main server whose wrap did not run has said why; the next boot tries again.
+        if (old > 0 && !opts.standby) return;
+        if (opts.standby && old === kdfs.length) {
+            // No wrapped copy here, including no copy at all: nothing shows that the main server has sealed, and until it has,
+            // copies in the old form can still arrive, into the WAL, after a clear recorded now.
+            if (!standbyWaitLogged) {
+                standbyWaitLogged = true;
+                console.log('🔐 Recovery seal: this standby waits to clear state.db of sign-in recovery copies deleted before the seal: '
+                    + (old > 0
+                        ? `every sign-in recovery copy it holds (${old}) is still in the form stored before the seal`
+                        : 'it holds no sign-in recovery copy yet')
+                    + ', so its main server has not sealed yet, or holds no copy at all. It clears once the main server\'s wrapped copies arrive.');
             }
+            return;
         }
         clearTriedThisProcess = true;
         const room = roomForVacuum();

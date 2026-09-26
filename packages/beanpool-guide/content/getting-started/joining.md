@@ -1,14 +1,16 @@
 ---
 slug: joining
 title: Joining BeanPool
-summary: Two ways in: a community, with an invite from a member, or the global community when it is open, with one sign-in. And how to invite someone else.
-related: your-12-words, your-profile, communities, how-it-works, web-app
+summary: Two ways in: a community, with an invite from a member, or the global community when it is open, with one sign-in. Asking a community to let you in, and how to invite someone else.
+related: finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 ---
 
 ## Two ways in
 
 - **With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.
 - **Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans there. Beans, credit and the Commons live in local communities.
+
+No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can. See "Finding a community near you".
 
 Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password.
 
@@ -73,3 +75,12 @@ Any member can invite people. Your trust badge does not matter.
 - Invites nobody has used yet are listed under **Pending**, each with **Share** to send it again.
 
 A community's admins can turn invites off for the whole community.
+
+## Requests to join
+
+People can ask to join your community from the global community. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**.
+
+- **Invite** makes an invite that only their account can use. Their app joins with it by itself, so you don't send them anything.
+- **Not now** tells them nothing more than "no answer yet".
+
+Any member can answer. See "Finding a community near you".

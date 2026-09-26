@@ -138,7 +138,7 @@ export function InviteInfoModal({ isOpen, onClose }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        BeanPool is an invite-only network. To grow the community safely, we rely on a <Text style={styles.boldWhiteText}>Peer Vouching</Text> system.
+                        Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a <Text style={styles.boldWhiteText}>Peer Vouching</Text> system.
                     </Text>
 
                     <View style={styles.cardContainer}>

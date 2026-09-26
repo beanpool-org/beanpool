@@ -8,21 +8,31 @@
  * - A key this join made (the invite wizard's createIdentity, or the global door's own key) shows its words as before:
  *   they are the member's own new ones.
  * - A key the phone already had: its words are read only through readWordsBehindLock, when Show passes the lock.
- * - Which is which survives the app being stopped part-way (the wizard's record, `newKey`).
+ * - Which is which survives the app being stopped part-way (the wizard's record, `newKey`), and a first redeem that
+ *   fails: the record says so as soon as the key is on the phone (review 4112501801).
  * - The phone's own account's words go when the member leaves the step or the screen, so every Show asks the lock again
  *   (review 4112501763).
  *
  * The screen cannot be rendered here (see vitest.config.ts): its wiring is read from its source.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+/** The phone's app storage, where the wizard's record lives. */
+const storage = vi.hoisted(() => new Map<string, string>());
 vi.mock('@react-native-async-storage/async-storage', () => ({
-    default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) },
+    default: {
+        getItem: vi.fn(async (k: string) => storage.get(k) ?? null),
+        setItem: vi.fn(async (k: string, v: string) => { storage.set(k, v); }),
+        removeItem: vi.fn(async (k: string) => { storage.delete(k); }),
+    },
 }));
 
-import { keyMadeForThisJoin, resumePlan, type PendingOnboarding } from '../onboarding-state';
+import {
+    keyMadeForThisJoin, resumePlan, getPendingOnboarding, setPendingOnboarding, clearPendingOnboarding, recordJoinKeyMade,
+    type PendingOnboarding,
+} from '../onboarding-state';
 import type { BeanPoolIdentity } from '../identity';
 
 const KEY = 'ab'.repeat(32);
@@ -215,3 +225,134 @@ describe('welcome.tsx: every way into the wizard says whether it made the key', 
     });
 });
 
+/**
+ * PR #1205 review 4112501801. handleCreate saves the key it makes before it redeems the invite, but wrote the record that
+ * says the key is new only once the redeem had worked. A redeem that throws (offline, a 5xx, a captive portal, a node that
+ * doesn't confirm) or an app stopped before its answer left the new key on the phone with no record, and the next Next
+ * took it for the phone's own account: the member's own new words went behind the lock.
+ *
+ * The record now says so as soon as the key is on the phone, before the redeem, and still only for the key that Next made.
+ */
+describe('a first Next whose redeem fails: the key it made is still the member\'s new one', () => {
+    const MADE: BeanPoolIdentity = { publicKey: 'ef'.repeat(32), privateKey: '09'.repeat(32), callsign: 'Kim', createdAt: '' };
+    const JOIN = { inviteCode: 'INV-ABC', anchorUrl: 'https://node.example', callsign: 'Kim' };
+    const offline = async () => { throw new Error('Relay Node Offline'); };
+    const works = async () => {};
+
+    /**
+     * Next on "Your Name" (welcome.tsx handleCreate): its key and record steps, in its order, with the real record
+     * functions; the order is pinned against the screen's source below. `phone.key` is the key stored on the phone,
+     * `redeem` stands for redeemInvite. Returns `keyIsNew`: whether Safety Backup takes the key as the member's new one
+     * (its words drawn with no lock) or as the phone's own account (its words only through the lock).
+     * adoptJoinKey is left out: it only ever touches a record of the global door's.
+     */
+    async function next(phone: { key: BeanPoolIdentity | null }, redeem: () => Promise<void>): Promise<boolean> {
+        const storedIdentity = phone.key;
+        const joinRecord = storedIdentity ? await getPendingOnboarding() : null;
+        // createIdentity: the key is on the phone first.
+        const identity = storedIdentity ? { ...storedIdentity, callsign: JOIN.callsign } : (phone.key = MADE);
+        if (!storedIdentity) await recordJoinKeyMade(JOIN, identity.publicKey);
+        const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey);
+        await redeem();
+        await setPendingOnboarding({ step: 'profileSetup', ...JOIN, redeemed: true, ...(keyIsNew ? { newKey: identity.publicKey } : {}) });
+        return keyIsNew;
+    }
+
+    beforeEach(() => storage.clear());
+
+    it('a redeem that throws, then Next again: the words are the member\'s own, shown with no lock', async () => {
+        const phone = { key: null as BeanPoolIdentity | null };
+        await expect(next(phone, offline)).rejects.toThrow('Relay Node Offline');
+        expect(phone.key).toBe(MADE);
+
+        expect(await next(phone, works)).toBe(true);
+        const record = await getPendingOnboarding();
+        expect(record).toMatchObject({ step: 'profileSetup', redeemed: true, newKey: MADE.publicKey });
+        // And after a restart past that point.
+        expect(resumePlan(record, MADE)).toMatchObject({ action: 'resume', newKey: true });
+    });
+
+    it('the app stopped between the key and the redeem, then started again: back at Next, and the key is still new', async () => {
+        const phone = { key: null as BeanPoolIdentity | null };
+        // The redeem never answers: the app is stopped while it waits.
+        next(phone, () => new Promise<void>(() => {})).catch(() => {});
+        await vi.waitFor(async () => expect(await getPendingOnboarding()).not.toBeNull());
+
+        // The gatekeeper sees a record and keeps the phone in the wizard; the welcome screen resumes at Next with the
+        // name and invite, not yet redeemed, and without committing to the key (handleCreate reads it on Next).
+        const plan = resumePlan(await getPendingOnboarding(), MADE);
+        expect(plan).toMatchObject({
+            action: 'resume', mode: 'create', flow: 'invite', callsign: 'Kim', inviteCode: 'INV-ABC', anchorUrl: 'https://node.example',
+            redeemed: false, identity: null, newKey: true,
+        });
+
+        expect(await next(phone, works)).toBe(true);
+    });
+
+    it('an established account joining another community: still behind the lock, whether its first redeem works or not', async () => {
+        const phone = { key: STORED as BeanPoolIdentity | null };
+        await expect(next(phone, offline)).rejects.toThrow();
+        // Nothing was written for a key the phone already had.
+        expect(await getPendingOnboarding()).toBeNull();
+        expect(await next(phone, works)).toBe(false);
+        expect(await getPendingOnboarding()).not.toHaveProperty('newKey');
+        expect(resumePlan(await getPendingOnboarding(), STORED)).toMatchObject({ action: 'resume', newKey: false });
+
+        // The same with an earlier invite join's record on the phone.
+        await setPendingOnboarding({ ...INVITE_AT_BACKUP, step: 'create', redeemed: false });
+        expect(await next(phone, works)).toBe(false);
+    });
+
+    it('once the wizard is finished, its key joining another community is the phone\'s own account: behind the lock', async () => {
+        const phone = { key: null as BeanPoolIdentity | null };
+        await expect(next(phone, offline)).rejects.toThrow();
+        expect(await next(phone, works)).toBe(true);
+        // The wizard's finish (and a wipe, and a restore) end the record, as they always have.
+        await clearPendingOnboarding();
+        expect(await next(phone, works)).toBe(false);
+    });
+
+    it('the early record: at Next, not redeemed, naming only the key just made, with what the resume reads', async () => {
+        await recordJoinKeyMade(JOIN, MADE.publicKey);
+        expect(await getPendingOnboarding()).toEqual({
+            step: 'create', inviteCode: 'INV-ABC', anchorUrl: 'https://node.example', callsign: 'Kim', redeemed: false, newKey: MADE.publicKey,
+        });
+        // It replaces an invite join's record whose key is gone (the phone had none, or Next would not have made one).
+        await setPendingOnboarding({ ...INVITE_AT_BACKUP, avatar: 'bundled:fox', newKey: OTHER });
+        await recordJoinKeyMade(JOIN, MADE.publicKey);
+        expect(await getPendingOnboarding()).toEqual({
+            step: 'create', inviteCode: 'INV-ABC', anchorUrl: 'https://node.example', callsign: 'Kim', redeemed: false, newKey: MADE.publicKey,
+        });
+        // No key, no record.
+        storage.clear();
+        await recordJoinKeyMade(JOIN, '');
+        expect(await getPendingOnboarding()).toBeNull();
+    });
+
+    it("never writes over the global door's record, nor the invite join the door holds (`before`)", async () => {
+        const door: PendingOnboarding = { ...GLOBAL_AT_DOOR, freshKey: OTHER, joinsOut: 1, before: { ...INVITE_AT_BACKUP, newKey: OTHER } };
+        await setPendingOnboarding(door);
+        await recordJoinKeyMade(JOIN, MADE.publicKey);
+        expect(await getPendingOnboarding()).toEqual(door);
+        // Which leaves a retry asking the lock: never a key ungated that the record doesn't name.
+        expect(keyMadeForThisJoin(await getPendingOnboarding(), MADE.publicKey)).toBe(false);
+    });
+});
+
+describe('welcome.tsx: Next writes that record once the key it made is on the phone, before the redeem', () => {
+    it('after createIdentity, before redeemInvite, only for a key Next made', () => {
+        const create = slice(welcome(), 'async function handleCreate() {', '\n    }\n');
+        const made = create.indexOf(': await createIdentity(callsign.trim());');
+        const recorded = create.indexOf(
+            'if (!storedIdentity) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);',
+        );
+        const redeemed = create.indexOf('await redeemInvite(parsedCode, identity.callsign, identity);');
+        expect(made).toBeGreaterThan(-1);
+        expect(recorded).toBeGreaterThan(made);
+        expect(redeemed).toBeGreaterThan(recorded);
+        // The key it reads as new is decided as before: the record it read before this write, for a stored key.
+        expect(create.indexOf('const joinRecord = storedIdentity ? await getPendingOnboarding() : null;')).toBeLessThan(made);
+        // Nowhere else writes it.
+        expect(count(welcome(), 'recordJoinKeyMade(')).toBe(1);
+    });
+});

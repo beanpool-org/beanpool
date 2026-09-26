@@ -69,7 +69,8 @@ export interface PendingOnboarding {
      * door's own key). Its 12 words are the member's own new ones, and Safety Backup shows them as it always has. Absent,
      * or another key: the phone already had this key (an established account joining another community), and Safety
      * Backup reads its words only once the phone's lock has passed (words-behind-lock.ts; PR #1205 review 4112404374).
-     * A key, not a flag, as `freshKey` is: it never vouches for any key but that one.
+     * A key, not a flag, as `freshKey` is: it never vouches for any key but that one. The invite wizard writes it as soon
+     * as its key is on the phone, before the redeem ({@link recordJoinKeyMade}).
      */
     newKey?: string;
     /**
@@ -122,6 +123,38 @@ export async function clearPendingOnboarding(): Promise<void> {
         await AsyncStorage.removeItem(KEY);
     } catch {}
     notify();
+}
+
+/**
+ * The invite wizard's Next has just made a key and saved it (welcome.tsx handleCreate's createIdentity): the record says
+ * so now, before the invite is redeemed. A redeem that fails (offline, a 5xx, a captive portal, a node that doesn't
+ * confirm), or an app stopped before its answer, then still knows at the next Next, or after a restart, that the key is
+ * the member's own new one, and Safety Backup shows its words with no lock (PR #1205 review 4112501801). The key is on the
+ * phone first and the record after, as everywhere in this wizard: a record with no key behind it is dropped at the next
+ * start ({@link resumePlan}'s `clear`).
+ *
+ * - At `create`, not redeemed: a restart comes back to Next with the name and invite, and Next redeems. The redeem's own
+ *   write replaces the record, as before.
+ * - Only for the key that Next made. The caller never passes a key the phone already had.
+ * - Written over no record, or an invite join's (which then has no key behind it: Next made a key because the phone had
+ *   none). A record of the global door's, and the invite join it holds in `before`, is left as it is: a retry then asks
+ *   the phone's lock, never anything ungated that the record doesn't name.
+ * - It ends where the wizard's record always has: the wizard's finish, a wipe, a restore.
+ */
+export async function recordJoinKeyMade(
+    join: { inviteCode: string; anchorUrl: string; callsign: string },
+    publicKey: string,
+): Promise<void> {
+    if (!publicKey) return;
+    if ((await getPendingOnboarding())?.flow === 'global') return;
+    await setPendingOnboarding({
+        step: 'create',
+        inviteCode: join.inviteCode,
+        anchorUrl: join.anchorUrl,
+        callsign: join.callsign,
+        redeemed: false,
+        newKey: publicKey,
+    });
 }
 
 /** What the welcome screen does with a record it finds on arrival. */

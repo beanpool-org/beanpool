@@ -11,7 +11,7 @@ import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
 import {
     getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding, resumePlan, keyMadeForThisJoin,
-    type OnboardingFlow,
+    recordJoinKeyMade, type OnboardingFlow,
 } from '../utils/onboarding-state';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile } from '../utils/node-profile';
 import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
@@ -736,6 +736,9 @@ export default function WelcomeScreen() {
             const identity = storedIdentity
                 ? { ...storedIdentity, callsign: callsign.trim() }
                 : await createIdentity(callsign.trim());
+            // A key made here says so in the record now, before the redeem: a redeem that fails, or an app stopped before
+            // its answer, still knows at the next Next or after a restart that these are the member's own new words.
+            if (!storedIdentity) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);
             // A key made here is the member's own new account; the phone's own key is an established account, whose words
             // Safety Backup shows only once the phone's lock has passed.
             const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey);

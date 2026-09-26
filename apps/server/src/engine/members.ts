@@ -9,7 +9,7 @@ import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js'
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
-import { isSelfAvatarUrl } from '@beanpool/core';
+import { isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
 import { isMemberKeySpelling, badKeyError } from './member-key.js';
 
 /**
@@ -335,8 +335,9 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     // One key, one spelling (engine/member-key.ts): a new row only for a key in it, so a send, a message or a peer
     // naming a member's key in capitals makes no second row for it. Thrown before anything is written (the send route
     // and the conversation route refuse it first, 400 bad_key). An existing row under exactly this id is left to the
-    // lines below: an enterprise or a project is keyed on its id.
-    if (!existing && !isMemberKeySpelling(publicKey)) throw badKeyError();
+    // lines below: an enterprise or a project is keyed on its id. A reserved id is no one's key and no request names
+    // one (the send and conversation routes refuse it): the admin inbox's own `system` sender gets its row, as before.
+    if (!existing && !isMemberKeySpelling(publicKey) && !isSyntheticAccount(publicKey)) throw badKeyError();
     if (existing) {
         let changed = false;
         if (callsign && existing.callsign.startsWith('Visitor-')) {

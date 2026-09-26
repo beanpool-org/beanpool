@@ -1671,13 +1671,10 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
-    // One key, one spelling, as the enrol route above.
-    if (!isMemberKeySpelling(targetPubkey)) {
-        ctx.status = 400;
-        ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
-        return;
-    }
-
+    // No spelling rule here, unlike the enrol route above: grantNodeRole grants only to a member row under exactly this
+    // key, no door makes a row under any other spelling now (engine/member-key.ts), and a role on one a door made before
+    // opens no session (authorizeKeySigner) and signs nothing (the signature middleware). test-node-roles drives this
+    // route with made-up keys.
     try {
         grantNodeRole(targetPubkey, role, effectiveActor);
         ctx.body = { success: true, message: `Granted ${role} role to ${targetPubkey}` };

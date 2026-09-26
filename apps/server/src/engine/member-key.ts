@@ -14,6 +14,7 @@
 //  - a key a request's own signature PROVES (the signature middleware's signer, a redeem signed by the key it names)
 //    is taken in that spelling (provenKeySpelling), and anything but 64 hexadecimal characters is refused.
 
+import { isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
 
 const MEMBER_KEY = /^[0-9a-f]{64}$/;
@@ -71,9 +72,10 @@ export interface MisspeltMemberKey {
 }
 
 /**
- * Every person's row (not an enterprise, a project or SYSTEM) whose key is not in the one spelling: made before this
- * rule by a door that stored the key it was sent (an invite redeem, an offline ticket, a send or a message to a key
- * with no row, a federation peer). Read only: such a row is a person's data, so nothing is merged or deleted here.
+ * Every person's row (not an enterprise, a project, or a reserved id such as SYSTEM or the admin inbox's `system`)
+ * whose key is not in the one spelling: made before this rule by a door that stored the key it was sent (an invite
+ * redeem, an offline ticket, a send or a message to a key with no row, a federation peer). Read only: such a row is a
+ * person's data, so nothing is merged or deleted here.
  */
 export function findMisspeltMemberKeys(): MisspeltMemberKey[] {
     const rows = db.prepare(`
@@ -82,11 +84,11 @@ export function findMisspeltMemberKeys(): MisspeltMemberKey[] {
                (SELECT role FROM node_roles r WHERE r.member_pubkey = m.public_key) AS node_role,
                (SELECT t.callsign FROM members t WHERE t.public_key = lower(m.public_key) AND t.public_key != m.public_key) AS same_key_as
         FROM members m
-        WHERE COALESCE(m.is_treasury, 0) = 0 AND m.public_key != 'SYSTEM'
+        WHERE COALESCE(m.is_treasury, 0) = 0
           AND (length(m.public_key) != 64 OR m.public_key GLOB '*[^0-9a-f]*')
         ORDER BY m.joined_at
     `).all() as any[];
-    return rows.map(r => ({
+    return rows.filter(r => !isSyntheticAccount(r.public_key)).map(r => ({
         publicKey: r.public_key,
         callsign: r.callsign,
         status: r.status ?? null,

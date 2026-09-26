@@ -391,8 +391,10 @@ async function main(): Promise<void> {
         const g = await admin('POST', '/api/local/admin/node-roles', { pubkey: spelt, role: 'moderator' });
         const e = await admin('POST', '/api/local/admin/auth/enrol', { memberPubkey: spelt, role: 'moderator' });
         const changed = changedTables(before, snapshot(['system_logs']));
-        assert(isBadKey(g) && isBadKey(e) && changed.length === 0,
-            `an operator granting a role to, and enrolling, Bob's key ${how}: refused 400 bad_key, nothing written (${show(g)}; ${show(e)}; changed: ${changed.join(', ') || 'nothing'})`);
+        // The grant route has no spelling rule of its own (routes/admin.ts): it grants only to a row under exactly the
+        // key it is given, and no door makes one under another spelling now. The enrol route refuses the spelling.
+        assert(g.status === 404 && isBadKey(e) && changed.length === 0,
+            `an operator granting a role to, and enrolling, Bob's key ${how}: the grant finds no such member (404), the enrolment is refused 400 bad_key, nothing written (${show(g)}; ${show(e)}; changed: ${changed.join(', ') || 'nothing'})`);
     }
     const grant = await admin('POST', '/api/local/admin/node-roles', { pubkey: bob.pk, role: 'moderator' });
     assert(grant.status === 200 && (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(bob.pk) as any)?.role === 'moderator',

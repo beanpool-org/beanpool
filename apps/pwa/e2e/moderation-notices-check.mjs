@@ -5,7 +5,8 @@
  * the alert must fit the screen with its buttons in view (its words scroll inside it), and the pause card must render.
  * Nothing is marked seen as it is shown: a notice is marked when the member puts it away (Acknowledge, Close all).
  * Each title reads as the node wrote it ("🛡️ ...", no ℹ️ before it) with its icon hidden from a screen reader, and
- * focus is on Acknowledge for each notice in turn.
+ * focus is on the alert itself (not Acknowledge) for each notice in turn. And a member typing in a text box when the
+ * notices arrive puts none away with a Space, an Enter or the rest of their sentence; Acknowledge is one Tab away.
  * The first notice carries the longest body the node writes (a post title of 80 characters, one unbroken word).
  * Photographs each case to e2e/shots/.
  *
@@ -58,6 +59,14 @@ const STANDING = {
     mute: { muted: true, until: new Date(Date.now() + 9 * 24 * 60 * 60 * 1000).toISOString() },
 };
 
+/** Runs in the page: what has focus, as the check names it. */
+const FOCUSED = () => {
+    const a = document.activeElement;
+    if (!a || a === document.body) return null;
+    if (a.getAttribute('role') === 'alertdialog') return 'the alert';
+    return a.tagName === 'BUTTON' ? a.textContent : a.tagName.toLowerCase();
+};
+
 /** Runs in the page: anything reaching past the viewport sideways, whether the page scrolls sideways, and the alert's buttons. */
 const MEASURE = () => {
     const vw = document.documentElement.clientWidth;
@@ -86,7 +95,6 @@ const MEASURE = () => {
         count: document.querySelector('[data-testid="system-alert-count"]')?.textContent ?? null,
         title: document.getElementById('system-alert-title')?.textContent ?? null,
         titleIconHidden: document.querySelector('#system-alert-title > [aria-hidden="true"]')?.textContent ?? null,
-        focused: document.activeElement?.tagName === 'BUTTON' ? document.activeElement.textContent : null,
         pauseCards: document.querySelectorAll('[data-testid="moderation-pause-card"]').length,
     };
 };
@@ -143,7 +151,7 @@ try {
                 for (let i = 0; i < 20 && marked.length < expectMarked.length; i++) await page.waitForTimeout(100);
                 const shot = `moderation-notices-${c.name}-${theme}-${step}.png`;
                 await page.screenshot({ path: path.join(OUT_DIR, shot) });
-                const m = await page.evaluate(MEASURE);
+                const m = { ...(await page.evaluate(MEASURE)), focused: await page.evaluate(FOCUSED) };
                 if (m.pauseCards !== 1) failures.push(`${shot}: ${m.pauseCards} pause cards rendered, expected 1`);
                 if (m.pageScrollsSideways) failures.push(`${shot}: the page scrolls sideways`);
                 for (const o of m.overflow) failures.push(`${shot}: ${o}`);
@@ -160,7 +168,7 @@ try {
                     const title = step === 'first' ? NOTICES[0].title : NOTICES[1].title;
                     if (m.title !== title) failures.push(`${shot}: title reads ${JSON.stringify(m.title)}, expected ${JSON.stringify(title)}`);
                     if (m.titleIconHidden !== '🛡️ ') failures.push(`${shot}: the title's icon is not hidden from a screen reader (${JSON.stringify(m.titleIconHidden)})`);
-                    if (m.focused !== 'Acknowledge') failures.push(`${shot}: focus is on ${JSON.stringify(m.focused)}, expected Acknowledge`);
+                    if (m.focused !== 'the alert') failures.push(`${shot}: focus is on ${JSON.stringify(m.focused)}, expected the alert`);
                 }
                 if (JSON.stringify(marked) !== JSON.stringify(expectMarked))
                     failures.push(`${shot}: marked seen ${JSON.stringify(marked)}, expected ${JSON.stringify(expectMarked)}`);
@@ -169,6 +177,76 @@ try {
             }
             await context.close();
         }
+    }
+
+    // A member typing in a text box when the notices arrive (the open's read answers late): they keep typing, and a
+    // Space, an Enter (which sends in the event chat) or the rest of the sentence puts nothing away.
+    {
+        const context = await browser.newContext({ viewport: { width: 320, height: 568 } });
+        const marked = [];
+        let release;
+        const released = new Promise((r) => { release = r; });
+        await context.route('**/*', async (route) => {
+            const req = route.request();
+            const url = req.url();
+            if (url.includes('/api/notices/seen')) {
+                marked.push(...(JSON.parse(req.postData() || '{}').ids ?? []));
+                return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, marked: 1 }) });
+            }
+            if (url.includes('/api/notices')) {
+                await released;
+                return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ notices: NOTICES }) });
+            }
+            if (url.includes('/api/community/me')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(STANDING) });
+            if (url.includes('/api/') || url.startsWith('ws')) { blocked++; return route.abort(); }
+            return route.continue();
+        });
+        const page = await context.newPage();
+        const pageErrors = [];
+        page.on('pageerror', (e) => pageErrors.push(e.message));
+        await page.goto(`${base}/e2e/moderation-notices-harness.html`, { waitUntil: 'load' });
+        await page.waitForSelector('[data-testid="moderation-pause-card"]');
+        // Outside the React root, so the harness renders as it always does.
+        await page.evaluate(() => {
+            const box = document.createElement('textarea');
+            box.setAttribute('aria-label', 'Message');
+            document.body.appendChild(box);
+        });
+        const box = page.getByRole('textbox', { name: 'Message' });
+        await box.click();
+        await page.keyboard.type('hello', { delay: 50 });
+        release();
+        await page.waitForSelector('[role="alertdialog"]');
+        const typing = 'moderation-notices-typing';
+        const at = async (step) => {
+            await page.waitForTimeout(300);
+            const m = await page.evaluate(() => ({
+                title: document.getElementById('system-alert-title')?.textContent ?? null,
+                count: document.querySelector('[data-testid="system-alert-count"]')?.textContent ?? null,
+            }));
+            const focused = await page.evaluate(FOCUSED);
+            console.log(`${typing} ${step}: alert "${m.title}" (${m.count}), focus ${focused}, marked ${JSON.stringify(marked)}`);
+            return { ...m, focused };
+        };
+
+        const first = await at('arrived');
+        if (first.focused !== 'the alert') failures.push(`${typing}: focus is on ${JSON.stringify(first.focused)} when the alert arrives, expected the alert`);
+        await page.keyboard.press('Space');
+        await page.keyboard.press('Enter');
+        await page.keyboard.type(' see you soon', { delay: 120 });
+        const typed = await at('typed on');
+        if (marked.length) failures.push(`${typing}: typing on marked ${JSON.stringify(marked)} seen, expected nothing`);
+        if (typed.title !== NOTICES[0].title || typed.count !== '1 of 3') failures.push(`${typing}: after typing on the alert shows "${typed.title}" (${typed.count}), expected "${NOTICES[0].title}" (1 of 3)`);
+
+        await page.keyboard.press('Tab');
+        const tabbed = await at('Tab');
+        if (tabbed.focused !== 'Acknowledge') failures.push(`${typing}: one Tab reaches ${JSON.stringify(tabbed.focused)}, expected Acknowledge`);
+        await page.keyboard.press('Enter');
+        const next = await at('Enter on Acknowledge');
+        if (JSON.stringify(marked) !== JSON.stringify(['n-hidden'])) failures.push(`${typing}: Enter on Acknowledge marked ${JSON.stringify(marked)}, expected ["n-hidden"]`);
+        if (next.title !== NOTICES[1].title || next.focused !== 'the alert') failures.push(`${typing}: after Acknowledge the alert shows "${next.title}" with focus on ${JSON.stringify(next.focused)}, expected "${NOTICES[1].title}" with focus on the alert`);
+        if (pageErrors.length) failures.push(`${typing}: page errors ${JSON.stringify(pageErrors)}`);
+        await context.close();
     }
 } finally {
     await browser.close();
@@ -180,4 +258,4 @@ if (failures.length) {
     console.error(`\n✗ ${failures.length} problem(s):\n  ${failures.join('\n  ')}`);
     process.exit(1);
 }
-console.log('\n✓ nothing reaches past the viewport, nothing scrolls sideways, each alert fits, and each notice is marked seen once, when put away');
+console.log('\n✓ nothing reaches past the viewport, nothing scrolls sideways, each alert fits, and each notice is marked seen once, when put away, never by typing on');

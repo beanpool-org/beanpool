@@ -6,6 +6,7 @@
 import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
+import userEvent from '@testing-library/user-event';
 import { SystemAlerts } from './SystemAlerts';
 import * as api from '../lib/api';
 import type { KeptNotice } from '../lib/api';
@@ -208,7 +209,7 @@ describe('SystemAlerts: live and kept alerts, each once', () => {
         expect(within(dialog).getByRole('heading').textContent).toBe('⚠️ Maintenance');
     });
 
-    it('focus goes to Acknowledge when an alert appears, and again when the next one in the queue does', async () => {
+    it('focus goes to the alert itself when it appears, and again when the next one in the queue does', async () => {
         render(
             <>
                 <input aria-label="Message" />
@@ -219,12 +220,53 @@ describe('SystemAlerts: live and kept alerts, each once', () => {
         await announce({ type: 'system_announcement', title: 'First', body: 'Body first', severity: 'info', noticeId: 'f1' });
         await announce({ type: 'system_announcement', title: 'Second', body: 'Body second', severity: 'info', noticeId: 'f2' });
         const first = await screen.findByRole('alertdialog', { name: 'First' });
-        expect(within(first).getByRole('button', { name: 'Acknowledge' })).toHaveFocus();
+        expect(first).toHaveFocus();
         fireEvent.click(within(first).getByRole('button', { name: 'Acknowledge' }));
         const second = await screen.findByRole('alertdialog', { name: 'Second' });
         // A new dialog for the next alert (keyed on it), so a screen reader announces it as a new one.
         expect(second).not.toBe(first);
-        expect(within(second).getByRole('button', { name: 'Acknowledge' })).toHaveFocus();
+        expect(second).toHaveFocus();
+    });
+
+    it.each([
+        ['arrive live', async () => {
+            await announce({ type: 'system_announcement', title: 'First', body: 'Body first', severity: 'info', noticeId: 'k1' });
+            await announce({ type: 'system_announcement', title: 'Second', body: 'Body second', severity: 'info', noticeId: 'k2' });
+        }],
+        ['come from the open\'s read', async (answer: (n: KeptNotice[]) => void) => {
+            await act(async () => answer([{ ...notice('k1'), title: 'First' }, { ...notice('k2'), title: 'Second' }]));
+        }],
+    ] as const)('a member typing when alerts %s: Space and Enter put nothing away, and Acknowledge is one Tab away', async (_, arrive) => {
+        let answer: (n: KeptNotice[]) => void = () => {};
+        vi.mocked(api.getUnseenNotices).mockReturnValue(new Promise(r => { answer = r; }));
+        const user = userEvent.setup();
+        render(
+            <>
+                <textarea aria-label="Message" />
+                <SystemAlerts memberPubkey="me" isGuest={false} />
+            </>,
+        );
+        const box = screen.getByRole('textbox', { name: 'Message' });
+        await user.click(box);
+        await user.keyboard('hello');
+        await arrive(answer);
+        const first = await screen.findByRole('alertdialog', { name: 'First' });
+
+        // Still typing: a Space, an Enter (which sends in the event chat), and the rest of the sentence.
+        await user.keyboard(' ');
+        await user.keyboard('{Enter}');
+        await user.keyboard('see you soon');
+        await new Promise(r => setTimeout(r, 20));
+        expect(api.markNoticesSeen).not.toHaveBeenCalled();
+        expect(screen.getByRole('alertdialog', { name: 'First' })).toBe(first);
+        expect(within(first).getByTestId('system-alert-count')).toHaveTextContent('1 of 2');
+
+        // Acknowledge is one Tab away, and pressing it there puts the first away, once.
+        await user.tab();
+        expect(within(first).getByRole('button', { name: 'Acknowledge' })).toHaveFocus();
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(markedIds()).toEqual([['k1']]));
+        expect(await screen.findByRole('alertdialog', { name: 'Second' })).toHaveFocus();
     });
 
     it('reads nothing for a guest, before the membership check answers, or with no identity', async () => {

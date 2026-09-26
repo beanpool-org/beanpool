@@ -105,7 +105,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
     const marked = useRef(new Set<string>());
     const onShownRef = useRef(onShown);
     onShownRef.current = onShown;
-    const acknowledgeRef = useRef<HTMLButtonElement>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
 
     const enqueue = useCallback((alerts: (ShownAlert | null)[]) => {
         const fresh: ShownAlert[] = [];
@@ -170,8 +170,10 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
     useEffect(() => {
         if (!head) return;
         onShownRef.current?.(head);
-        // The keyboard and a screen reader go to the alert: to Acknowledge, and again for each next one in the queue.
-        acknowledgeRef.current?.focus();
+        // A screen reader goes to the alert, and again for each next one in the queue: to the dialog itself, not to
+        // Acknowledge, so a Space or an Enter the member was typing into a text box puts nothing away. Acknowledge is
+        // one Tab away.
+        dialogRef.current?.focus();
         // Once per alert shown: keyed on the alert, not on the queue behind it.
     }, [head?.key]);
 
@@ -205,6 +207,8 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
         >
             <div
                 key={head.key}
+                ref={dialogRef}
+                tabIndex={-1}
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby="system-alert-title"
@@ -217,7 +221,9 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                     // The words scroll and the buttons stay: a long notice at 320px with large text still shows Acknowledge.
                     display: 'flex', flexDirection: 'column', overflow: 'hidden',
                     boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                    textAlign: 'center'
+                    textAlign: 'center',
+                    // Focused for a screen reader, not a control: no ring around the whole card (Acknowledge keeps its own).
+                    outline: 'none'
                 }}
             >
                 <div data-testid="system-alert-text" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '1.5rem 1.25rem 0' }}>
@@ -236,7 +242,6 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                         </p>
                     )}
                     <button
-                        ref={acknowledgeRef}
                         type="button"
                         onClick={acknowledge}
                         style={{

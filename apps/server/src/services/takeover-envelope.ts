@@ -318,8 +318,9 @@ export function recoverySealKeyStatus(carried: boolean): { carried: boolean; mes
         ? { carried, message: "The locked keys carry the key that opens members' sign-in recovery copies, so a server that takes over opens them." }
         : {
             carried,
-            message: "The locked keys do not carry the key that opens members' sign-in recovery copies: data/recovery-seal.key is missing on this "
-                + "server. A server that takes over from them cannot open those copies; members' 12 words still work, and they connect their sign-in again.",
+            message: "The locked keys do not carry the key that opens members' sign-in recovery copies: this server's data/recovery-seal.key is "
+                + "missing or is not a key. A server that takes over from them cannot open those copies; members' 12 words still work, and they "
+                + 'connect their sign-in again.',
         };
 }
 

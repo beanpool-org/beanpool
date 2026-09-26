@@ -39,7 +39,7 @@ const NOT_LOCKED = {
 const SEAL_KEY_CARRIED = { carried: true, message: "The locked keys carry the key that opens members' sign-in recovery copies, so a server that takes over opens them." };
 const SEAL_KEY_MISSING = {
     carried: false,
-    message: "The locked keys do not carry the key that opens members' sign-in recovery copies: data/recovery-seal.key is missing on this server. A server that takes over from them cannot open those copies; members' 12 words still work, and they connect their sign-in again.",
+    message: "The locked keys do not carry the key that opens members' sign-in recovery copies: this server's data/recovery-seal.key is missing or is not a key. A server that takes over from them cannot open those copies; members' 12 words still work, and they connect their sign-in again.",
 };
 
 type Reply = { status?: number; json: unknown } | (() => { status?: number; json: unknown });
@@ -97,7 +97,7 @@ describe('TakeoverLockPanel — the status', () => {
         mockNode({ [statusRoute]: { json: { ...SEALED, recoverySealKey: SEAL_KEY_MISSING } }, [backupRoute]: { json: { role: 'primary', backupLock: LOCKED } } });
         const second = render(<TakeoverLockPanel activeNode={node} />);
         const missing = await screen.findByTestId('takeover-seal-key');
-        expect(missing).toHaveTextContent(/^⚠️ The locked keys do not carry the key that opens members' sign-in recovery copies: data\/recovery-seal\.key is missing/);
+        expect(missing).toHaveTextContent(/^⚠️ The locked keys do not carry the key that opens members' sign-in recovery copies: this server's data\/recovery-seal\.key is missing or is not a key\./);
         expect(missing).toHaveTextContent("members' 12 words still work");
         expect(missing.className).toMatch(/border-amber-800/);
         second.unmount();

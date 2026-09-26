@@ -1531,20 +1531,23 @@ async function main(): Promise<void> {
             check(rerun.outcome === 'replaced' && rerun.retiredAs === retiredName && fs.readFileSync(path.join(d3, KEY_FILE)).equals(new3)
                 && fs.readFileSync(path.join(d3, retiredName)).equals(old3) && listing(d3).length === 2,
                 'a crash between keeping the old key and writing the new one: the next run finishes it, with the same kept file');
-            // A kept file of that name that holds other bytes is never written over: nothing changes, and it says why.
+            // A file of the kept name that holds other bytes is never written over, and never stops the install: the key
+            // is kept under another name.
             const d4 = tempDir('carried-collision');
             process.env.BEANPOOL_DATA_DIR = d4;
-            const old4 = crypto.randomBytes(32);
+            const old4 = crypto.randomBytes(32), new4 = crypto.randomBytes(32);
             fs.writeFileSync(path.join(d4, KEY_FILE), old4, { mode: 0o600 });
             const probe = seal.installCarriedRecoverySealKey(b64(crypto.randomBytes(32)));
             const name4 = probe.outcome === 'replaced' ? probe.retiredAs : '';
             fs.writeFileSync(path.join(d4, KEY_FILE), old4, { mode: 0o600 });
             fs.writeFileSync(path.join(d4, name4), Buffer.from('other bytes'), { mode: 0o600 });
-            let collided = '';
-            try { seal.installCarriedRecoverySealKey(b64(crypto.randomBytes(32))); } catch (e) { collided = thrown(e); }
-            check(/holds other bytes/.test(collided) && fs.readFileSync(path.join(d4, KEY_FILE)).equals(old4)
-                && fs.readFileSync(path.join(d4, name4)).equals(Buffer.from('other bytes')),
-                `a kept file of that name holding other bytes: nothing is written over, the live key stays, and it says why (${collided})`);
+            let collided: any;
+            try { collided = seal.installCarriedRecoverySealKey(b64(new4)); } catch (e) { collided = thrown(e); }
+            const other4 = collided?.outcome === 'replaced' ? path.join(d4, collided.retiredAs) : '';
+            check(collided?.outcome === 'replaced' && collided.retiredAs !== name4 && /^recovery-seal-retired-[0-9a-f]{16}\.key$/.test(collided.retiredAs)
+                && fs.readFileSync(other4).equals(old4) && (fs.statSync(other4).mode & 0o777) === 0o600
+                && fs.readFileSync(path.join(d4, name4)).equals(Buffer.from('other bytes')) && fs.readFileSync(path.join(d4, KEY_FILE)).equals(new4),
+                `a file of the kept name holding other bytes is left as it is; the key is kept under another name, and the install goes on (${JSON.stringify(collided)})`);
         } finally {
             process.env.BEANPOOL_DATA_DIR = savedDir;
         }

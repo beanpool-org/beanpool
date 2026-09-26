@@ -190,15 +190,6 @@ export function requireRecoverySealKey(): void {
     requireKey();
 }
 
-/** Whether data/recovery-seal.key is here and is a key: what the take-over envelope's status says it carries. */
-export function hasRecoverySealKey(): boolean {
-    try {
-        return currentKey() !== null;
-    } catch {
-        return false;
-    }
-}
-
 let retired: { names: string; keys: Uint8Array[] } | null = null;
 
 /**
@@ -278,9 +269,12 @@ function writeExclusive(target: string, bytes: Buffer): boolean {
  * - A different file here (a key, or a file that is not one): it is never deleted. It is kept, byte for byte and 0600,
  *   as `recovery-seal-retired-<id>.key` BEFORE the carried key takes its place, so a crash between the two leaves the
  *   old key in both places and the next run finishes the swap. The reader tries it for a row the live key does not open,
- *   and the next boot locks those rows again with the live key ({@link rewrapRowsFromRetiredKeys}).
+ *   and the next boot locks those rows again with the live key ({@link rewrapRowsFromRetiredKeys}). A file of that name
+ *   that holds other bytes (nothing here writes one) is left as it is, and the key is kept under a random name instead:
+ *   a take-over never stops over the key, and nothing is written over.
  *
- * Never logs or returns a key's bytes.
+ * An I/O error (a full or read-only disk) is thrown, as for the other identity files: the take-over step that asked
+ * is tried again at the next start. Never logs or returns a key's bytes.
  */
 export function installCarriedRecoverySealKey(b64: string | null | undefined): CarriedKeyOutcome {
     if (!b64) return { outcome: 'absent' };
@@ -299,9 +293,10 @@ export function installCarriedRecoverySealKey(b64: string | null | undefined): C
     let retiredAs: string | null = null;
     if (existing) {
         retiredAs = retiredNameOf(existing);
-        const kept = path.join(dir, retiredAs);
-        if (!writeExclusive(kept, existing) && !fs.readFileSync(kept).equals(existing)) {
-            throw new Error(`data/${retiredAs} is already there and holds other bytes, so the key it would keep was left in place`);
+        if (!writeExclusive(path.join(dir, retiredAs), existing) && !fs.readFileSync(path.join(dir, retiredAs)).equals(existing)) {
+            // Not ours: left alone. The key is kept under a name nothing else has.
+            do retiredAs = `recovery-seal-retired-${crypto.randomBytes(8).toString('hex')}.key`;
+            while (!writeExclusive(path.join(dir, retiredAs), existing));
         }
         fsyncDir(dir);
         retired = null;

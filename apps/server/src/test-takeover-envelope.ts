@@ -490,7 +490,7 @@ async function main() {
     assert(gone.state === 'sealed' && stored().envelopeId !== withKey && openedGone.files['recovery-seal.key'] === null && stored().carriesRecoverySealKey === false,
         '14. the key file gone: the envelope is re-sealed without it');
     const stGone = await call('POST', '/api/local/admin/takeover/status', { headers: admin });
-    assert(stGone.body.recoverySealKey?.carried === false && /do not carry the key .*data\/recovery-seal\.key is missing on this server/.test(stGone.body.recoverySealKey.message)
+    assert(stGone.body.recoverySealKey?.carried === false && /do not carry the key .*this server.s data\/recovery-seal\.key is missing or is not a key\./.test(stGone.body.recoverySealKey.message)
         && /12 words still work/.test(stGone.body.recoverySealKey.message),
         `14. …and the status says so, and what it means (${stGone.body.recoverySealKey?.message})`);
     // The file appears again, and no chokepoint says so: the periodic check alone re-seals with it.

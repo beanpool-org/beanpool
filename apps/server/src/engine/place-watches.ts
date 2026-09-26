@@ -477,7 +477,15 @@ export function notifyPlaceWatchers(cb: PlaceWatchNoticeCallbacks, added: readon
         console.warn(`[Place watches] ⚠️ ${placed} new communities with a place in one run, more than ${PLACE_WATCH_FLOOD}: `
             + 'a flood, not communities starting, so no watcher is told about them. They are listed as usual.');
     }
-    return tellOwed(cb, now, new Set(added.map(c => c.key)));
+    try {
+        return tellOwed(cb, now, new Set(added.map(c => c.key)));
+    } catch (e) {
+        // A run that throws part way (a DB error) may have told nobody what it owed; weekCompared would then keep a
+        // member whose week no later run compares. Forget it all, so the next run compares every phone-holder's week once,
+        // as the first run after a boot does (#1202 4112303496).
+        weekCompared.clear();
+        throw e;
+    }
 }
 
 /** A member's phone registered its push token here: they are told what they are owed now, not at the next run. */

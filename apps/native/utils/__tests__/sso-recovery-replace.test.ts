@@ -5,6 +5,10 @@
  * "Restore my account" → "Recover with Social" brings back a different account. Before, `importIdentity` replaced that key
  * with no "Replace this phone's account?" screen, and the community kept a member nobody could use.
  *
+ * Replace takes the old account's app storage with it (its guest markers, the communities it asked to join, its sync
+ * cursors), as the screen said it would, and a replace this phone then can't save leaves neither account (#1179
+ * review 4109902595).
+ *
  * Nothing here contacts a node or a provider: the node's recovery routes and Google's sheet are stubbed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -16,6 +20,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         getItem: vi.fn(async (key: string) => mem.async.get(key) ?? null),
         setItem: vi.fn(async (key: string, value: string) => { mem.async.set(key, value); }),
         removeItem: vi.fn(async (key: string) => { mem.async.delete(key); }),
+        getAllKeys: vi.fn(async () => [...mem.async.keys()]),
+        multiRemove: vi.fn(async (keys: string[]) => { keys.forEach((k) => mem.async.delete(k)); }),
     },
 }));
 vi.mock('expo-secure-store', () => ({
@@ -35,6 +41,7 @@ vi.mock('../sso-signin', () => ({
 }));
 vi.mock('../node-post', () => ({ signedPost: vi.fn() }));
 
+import * as SecureStore from 'expo-secure-store';
 import { sealSeedToSso, type SealedShare } from '@beanpool/core';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
@@ -42,6 +49,8 @@ import { signedPost } from '../node-post';
 import { signInWithGoogle } from '../sso-signin';
 import { recoverAccountWithSso } from '../sso-recovery';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
+import { ReplaceNotSaved } from '../restore-account';
+import { KNOCKS_STORE_KEY } from '../storage-keys';
 import { mnemonicToKeypair } from '../crypto';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
 
@@ -54,6 +63,37 @@ const MULLUM = 'https://mullum.beanpool.org';
 const ANCHOR = 'beanpool_anchor_url';
 /** An invite join that has just redeemed the phone's key at Mullum: its words not shown yet. */
 const INVITE_RECORD = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: MULLUM, callsign: 'Kim', redeemed: true };
+/** What stays through any restore: a list of community addresses, and a setting about the phone, not the member. */
+const PHONE_KEPT = { beanpool_saved_nodes: JSON.stringify([{ url: MULLUM, name: 'Mullum' }]), beanpool_light_palette: 'sand' };
+
+/**
+ * The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors, its
+ * profile (photo, bio, contact) with a photo parked for the next sync, the invite codes it made, an unfinished post,
+ * and the reports it has yet to send.
+ */
+function accountStorage(publicKey: string): Record<string, string> {
+    return {
+        beanpool_guest_nodes: JSON.stringify(['https://byron.beanpool.org']),
+        beanpool_canonical_profile: JSON.stringify({ avatar: 'bundled://koala', bio: 'Grows tomatoes', contactValue: '0400 000 000' }),
+        pending_profile_avatar: 'bundled://koala',
+        pending_profile_sync: 'true',
+        [`bp_offline_invites_${publicKey}`]: JSON.stringify([{ code: 'INV-ABC', intendedFor: 'Robin' }]),
+        beanpool_offer_draft: JSON.stringify({ anchorUrl: MULLUM, postTitle: 'Tomatoes', postPhotos: ['bundled://koala'], postLat: -28.55, postLng: 153.5 }),
+        beanpool_pending_abuse_reports: JSON.stringify([
+            { reporterPubkey: publicKey, targetPubkey: 'cd'.repeat(32), reason: 'User Blocked by Member', timestamp: Date.parse('2026-09-25T00:00:00.000Z') },
+        ]),
+        [KNOCKS_STORE_KEY]: JSON.stringify({
+            pubkey: publicKey,
+            knocks: [{ url: 'https://near.example', name: 'Near Home', key: 'k1', sentAt: '2026-09-20T00:00:00.000Z' }],
+        }),
+        'pillar_sync_beanpool_https___mullum_beanpool_org.db_last-sync': '2026-09-25T00:00:00.000Z',
+        'pillar:outbox': '[]',
+    };
+}
+
+function asyncStorage(): Record<string, string> {
+    return Object.fromEntries(mem.async);
+}
 
 /** Google hands back a token whose `sub` is SUB; the node releases `sealed` as a single blob. */
 function mockSignInAndNode(sealed: SealedShare) {
@@ -112,12 +152,14 @@ async function phoneWithInviteJoin() {
     await importIdentity(phone);
     await setPendingOnboarding(INVITE_RECORD);
     mem.async.set(ANCHOR, MULLUM);
+    for (const [k, v] of Object.entries({ ...accountStorage(phone.publicKey), ...PHONE_KEPT })) mem.async.set(k, v);
 }
 
 async function expectPhoneKept() {
     expect(await loadIdentity()).toEqual(phone);
     expect(await getPendingOnboarding()).toEqual(INVITE_RECORD);
     expect(mem.async.get(ANCHOR)).toBe(MULLUM);
+    expect(asyncStorage()).toMatchObject({ ...accountStorage(phone.publicKey), ...PHONE_KEPT });
 }
 
 describe('a sign-in restore onto a phone that holds another account', () => {
@@ -150,6 +192,46 @@ describe('a sign-in restore onto a phone that holds another account', () => {
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, mnemonic: WORDS });
         expect(await getPendingOnboarding()).toBeNull();
         expect(mem.async.get(ANCHOR)).toBe(NODE);
+    });
+
+    it('Replace: nothing of the old account stays in app storage, only the new account\'s community and the phone\'s own', async () => {
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        await phoneWithInviteJoin();
+
+        await restore(async () => true);
+
+        // Kim's guest markers, the communities Kim asked to join, Kim's sync cursors, Kim's wizard: all gone.
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+        expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, callsign: 'Marty', mnemonic: WORDS });
+    });
+
+    it('a replace this phone can\'t save: Kim\'s account is gone as promised, no success is claimed, and trying again works', async () => {
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        await phoneWithInviteJoin();
+        const confirmReplace = vi.fn(async (_outgoing: BeanPoolIdentity) => true);
+        const progress: string[] = [];
+        // The key write fails: by then the new community's address has been written.
+        vi.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore unavailable'));
+
+        const failed = recoverAccountWithSso({
+            callsign: 'Marty', anchorUrl: NODE, provider: 'google', onDeviceCode: () => {}, confirmReplace,
+            onProgress: (p) => progress.push(p.step),
+        });
+
+        await expect(failed).rejects.toBeInstanceOf(ReplaceNotSaved);
+        await expect(failed).rejects.toThrow('Keystore unavailable');
+        expect(progress).not.toContain('done');
+        expect(await loadIdentity()).toBeNull();
+        expect(await getPendingOnboarding()).toBeNull();
+        expect(asyncStorage()).toEqual(PHONE_KEPT);
+
+        // Again: nothing left to ask about, and the account comes back.
+        const result = await restore(confirmReplace);
+
+        expect(confirmReplace).toHaveBeenCalledTimes(1);
+        expect(result.identity.publicKey).toBe(restoredPub);
+        expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, mnemonic: WORDS });
+        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
     });
 
     it('a caller that cannot ask is refused rather than allowed to replace', async () => {
@@ -189,6 +271,17 @@ describe('a sign-in restore with nothing to replace', () => {
         expect(confirmReplace).not.toHaveBeenCalled();
         expect(result.identity.mnemonic).toEqual(WORDS);
         expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub, mnemonic: WORDS });
+    });
+
+    it('the same account keeps what is its own: its guest markers, the communities it asked, its sync cursors', async () => {
+        mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
+        const keys = await mnemonicToKeypair(WORDS);
+        await importIdentity({ publicKey: keys.publicKeyHex, privateKey: keys.privateKeyHex, callsign: 'Marty', createdAt: '2026-01-01T00:00:00.000Z', mnemonic: WORDS });
+        for (const [k, v] of Object.entries({ [ANCHOR]: MULLUM, ...accountStorage(keys.publicKeyHex), ...PHONE_KEPT })) mem.async.set(k, v);
+
+        await restore();
+
+        expect(asyncStorage()).toEqual({ ...accountStorage(keys.publicKeyHex), ...PHONE_KEPT, [ANCHOR]: NODE });
     });
 
     it('no account on the phone: restores as it always did, never asking', async () => {

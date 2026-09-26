@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CANONICAL_PROFILE_STORE_KEY } from './storage-keys';
 
 // The user's ONE profile, stored once per device and independent of which node
 // is currently active. A phone holds a single identity used across every
@@ -12,8 +13,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Values are portable: the avatar is a data: URI or a `bundled://<id>`
 // reference (never a device-local file path), so it re-uploads cleanly to any
 // node.
+//
+// It is the person's, so it goes when their account leaves the phone
+// (identity.ts `wipeIdentityScopedStorage`): left behind, the next account on
+// the phone would publish this photo, bio and contact as its own.
 
-const KEY = 'beanpool_canonical_profile';
+const KEY = CANONICAL_PROFILE_STORE_KEY;
 
 export interface CanonicalProfile {
     avatar?: string | null;

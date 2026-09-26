@@ -6,7 +6,7 @@ import {
     type OwnerWordsCheckResult,
 } from '@beanpool/core';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
-import { KNOCKS_STORE_KEY } from './storage-keys';
+import { CANONICAL_PROFILE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY } from './storage-keys';
 import { Platform } from 'react-native';
 
 const isWeb = Platform.OS === 'web';
@@ -241,6 +241,18 @@ interface WipeableStorage {
  * THIS key joined as a guest; left behind, a fresh identity inherits them and a real 'stranger'
  * result on those nodes is treated as guest mode. The communities this key asked to join (utils/knock.ts)
  * tie the key to places near where the member lives, so they go too (#1179 review 4109868126).
+ *
+ * So does the member's profile: the one profile copy (canonical-profile.ts: photo, bio, contact) and a
+ * photo parked for the next sync with the flag that sends it (avatar-value.ts). None of them is keyed to
+ * the account, and the next account's profile publish (db.ts `pushProfileToServer`) and its knocks
+ * (find-community.tsx) fall back on them: left behind, they would go out under the new key. The invite
+ * codes this key made (people.tsx) name who the member invited; the node keeps them, so the list comes back.
+ * So does an unfinished post (map.tsx `OFFER_DRAFT_KEY`: its words, photos and map pin). It is kept per
+ * community, not per account, so the next account there would be offered it to finish and post as its own
+ * (PR #1183 review 4110094960).
+ * And so do the reports this key queued while offline (blocklist.ts). A node files a report as whoever
+ * signs it, whatever reporter the body names, so the next account's retry would file them in its own name.
+ *
  * `beanpool_saved_nodes` stays on purpose: it is a list of community addresses, not anything about
  * who the member is.
  */
@@ -249,20 +261,31 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promi
     await storage.removeItem('beanpool:identity');
     await storage.removeItem('beanpool_guest_nodes');
     await storage.removeItem(KNOCKS_STORE_KEY);
+    await storage.removeItem(CANONICAL_PROFILE_STORE_KEY);
+    await storage.removeItem('pending_profile_avatar');
+    await storage.removeItem('pending_profile_sync');
+    await storage.removeItem('beanpool_offer_draft');
+    await storage.removeItem(PENDING_ABUSE_REPORTS_STORE_KEY);
 
     const allKeys = await storage.getAllKeys();
-    const syncKeys = allKeys.filter((k: string) => k.startsWith('pillar_sync_') || k.startsWith('pillar:'));
-    if (syncKeys.length > 0) {
-        await storage.multiRemove(syncKeys);
+    const accountKeys = allKeys.filter((k: string) =>
+        k.startsWith('pillar_sync_') || k.startsWith('pillar:') || k.startsWith('bp_offline_invites_'));
+    if (accountKeys.length > 0) {
+        await storage.multiRemove(accountKeys);
     }
 }
 
-export async function wipeIdentity(): Promise<void> {
+/** Take the key off this phone, and nothing else. {@link wipeIdentity} is the whole wipe. */
+export async function removeStoredIdentity(): Promise<void> {
     if (isWeb) {
         localStorage.removeItem(KEY_ID);
     } else {
         await SecureStore.deleteItemAsync(KEY_ID);
     }
+}
+
+export async function wipeIdentity(): Promise<void> {
+    await removeStoredIdentity();
 
     // A wiped device has no half-finished join wizard to resume.
     try {

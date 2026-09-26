@@ -9,6 +9,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { App } from '../App';
 import { generateIdentity, loadIdentity, savePendingJoin, PENDING_JOIN_TTL_MS, type BeanPoolIdentity } from '../lib/identity';
 import { resetCapturedAuthReturn } from '../lib/web-join';
+import * as gate from '../lib/visitor-lobby-gate';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { saveRadiusSettings, clearRadiusSettings } from '../lib/geo';
@@ -398,6 +399,16 @@ describe('where the lobby does not show', () => {
         vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
         render(<App />);
         expect(await screen.findByTestId('door-unreachable')).toBeInTheDocument();
+        expect(screen.queryByTestId('guest-lobby')).toBeNull();
+    });
+
+    it('a check for a join part way through that fails: the welcome page, never the loading screen for good', async () => {
+        vi.spyOn(gate, 'joinInFlight').mockRejectedValue(new Error('the store could not be read'));
+        stubNode(GLOBAL);
+        render(<App />);
+        // Taken as a join in flight, as a store that can't be read is: the welcome page reads it again.
+        await screen.findByTestId('join-screen-lobby');
+        expect(screen.queryByText('Loading...')).toBeNull();
         expect(screen.queryByTestId('guest-lobby')).toBeNull();
     });
 

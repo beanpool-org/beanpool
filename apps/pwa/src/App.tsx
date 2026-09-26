@@ -119,13 +119,14 @@ export function App() {
     /*
      * With no identity: the global lobby (G9b) when the node shows visitors its listings and nothing is part way through
      * a join in this browser; otherwise the welcome page, as always. Decided once, from the node's own word; a node
-     * that can't be asked gets the welcome page, which says so.
+     * that can't be asked gets the welcome page, which says so; a check for a join in flight that fails is taken as one
+     * in flight (the welcome page reads it again), so nothing leaves the visitor on the loading screen.
      */
     const [visitorView, setVisitorView] = useState<{ kind: 'checking' } | { kind: 'welcome'; info: CommunityInfo | null } | { kind: 'lobby'; info: CommunityInfo }>({ kind: 'checking' });
     useEffect(() => {
         if (loading || identity || visitorView.kind !== 'checking') return;
         let cancelled = false;
-        Promise.all([communityInfoOnce().catch(() => null), joinInFlight()])
+        Promise.all([communityInfoOnce().catch(() => null), joinInFlight().catch(() => true)])
             .then(([info, inFlight]) => {
                 if (cancelled) return;
                 setVisitorView(info && visitorsSeeListings(info) && !inFlight ? { kind: 'lobby', info } : { kind: 'welcome', info });

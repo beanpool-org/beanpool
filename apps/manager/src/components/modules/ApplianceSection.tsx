@@ -22,6 +22,7 @@ import {
 import { restoreShortfall } from '../../lib/backup-shortfall';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { PublicAddressPanel } from './PublicAddressPanel';
+import { AppAddressesPanel } from './AppAddressesPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
 import { StandbyReplicationPanel } from './StandbyReplicationPanel';
 import { ReplicationAccessPanel } from './ReplicationAccessPanel';
@@ -1301,13 +1302,18 @@ export function ApplianceSection({
 
             {/* Subtab: Public Address & Tunnel */}
             {subTab === 'network' && (
-                <SectionErrorBoundary sectionName="Public Address" resetKey={activeNode.id}>
-                    <PublicAddressPanel
-                        key={activeNode.id}
-                        activeNode={activeNode}
-                        onRefreshDiag={onRefreshDiag}
-                    />
-                </SectionErrorBoundary>
+                <div className="space-y-6">
+                    <SectionErrorBoundary sectionName="Public Address" resetKey={activeNode.id}>
+                        <PublicAddressPanel
+                            key={activeNode.id}
+                            activeNode={activeNode}
+                            onRefreshDiag={onRefreshDiag}
+                        />
+                    </SectionErrorBoundary>
+                    <SectionErrorBoundary sectionName="App addresses" resetKey={activeNode.id}>
+                        <AppAddressesPanel key={activeNode.id} activeNode={activeNode} />
+                    </SectionErrorBoundary>
+                </div>
             )}
 
             {/* Subtab: Node Identity */}

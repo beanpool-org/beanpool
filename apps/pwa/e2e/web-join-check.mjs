@@ -11,6 +11,10 @@
  *   - the rate-limit and expired-sign-in paths, 409 already_joined → the restore buttons
  *   - a 200 whose body is cut off (asked about, never read as a refusal), and a key restored while a sent join holds
  *     the slot: its own screen with the time left and a way back, and letting that join go only when the member says
+ *   - the invite join (deciding pass 4111943146): a redeem the node took whose answer was lost, then a reload, finds the
+ *     key it kept ("Finish joining" while the node is unreachable) and shows its 12 words; and another tab's account
+ *     saved while the invite was out leaves the held screen offering the sent key's words; and a kept key the node
+ *     doesn't have yet, with the door open at the reload (4112075367), waits on "Finish joining", never the door's lobby
  *   - G11-d: a browser cleared after joining gets the same key back with the sign-in it joined with, Google (the round
  *     trip through the same return page) and GitHub (the node's device flow): the stub node keeps the copy each join
  *     carried and answers the recovery routes as apps/server/src/routes/recovery-collect.ts does, and the copy is opened
@@ -24,7 +28,7 @@
  * Run: pnpm --filter @beanpool/pwa web-join-check   (WEB_JOIN_ONLY=<text> runs only the scenarios whose name has it)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global Buffer, URL, URLSearchParams, console, process, document, window, indexedDB, location, localStorage, sessionStorage -- Node, and the page's side of evaluate() */
+/* global Buffer, URL, URLSearchParams, console, process, document, window, indexedDB, IDBObjectStore, DOMException, location, localStorage, sessionStorage -- Node, and the page's side of evaluate() */
 import { build, preview, transformWithEsbuild } from 'vite';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
@@ -77,6 +81,10 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
         doorShut: false, probes: [], enrolled: new Map(),
         // G11-d: key → the sign-in copy its join carried, with the sign-in's own sub; the recovery sessions and calls.
         copies: new Map(), collections: new Map(), restoreNonces: [], restoreCalls: [],
+        // The invite join: every redeem, each member's name, the key the one code went to, and whether the answer to
+        // the redeem that takes it is lost (loseInviteAnswer) or something happens first (onInviteTaken). dropInvite:
+        // the redeem never reaches the node (the connection drops on the way there).
+        redeems: [], names: new Map(), inviteUsedBy: null, loseInviteAnswer: false, onInviteTaken: null, dropInvite: false,
     };
     const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce' });
     await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
@@ -224,6 +232,23 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
             }
             return reply(404, { error: 'Not Found' });
         }
+        // The invite routes as routes/community.ts and engine/invites.ts answer them: one code, used once; a key that
+        // is a member answered as one before the code is looked at.
+        if (p === '/api/invite/check') return reply(200, seen.inviteUsedBy ? { valid: false, reason: 'used' } : { valid: true });
+        if (p === '/api/invite/redeem') {
+            const body = JSON.parse(req.postData() || '{}');
+            seen.redeems.push({ body, key });
+            if (seen.dropInvite) return route.abort('connectionreset');
+            if (seen.members.has(body.publicKey)) return reply(200, { success: true, alreadyMember: true });
+            if (seen.inviteUsedBy) return reply(400, { error: 'This invite has already been used' });
+            seen.inviteUsedBy = body.publicKey;
+            seen.members.add(body.publicKey);
+            seen.names.set(body.publicKey, body.callsign);
+            await seen.onInviteTaken?.();
+            // Taken, and the answer lost on the way back: the connection drops.
+            if (seen.loseInviteAnswer) return route.abort('connectionreset');
+            return reply(200, { success: true, member: { publicKey: body.publicKey, callsign: body.callsign } });
+        }
         if (p === '/api/join') {
             const body = JSON.parse(req.postData() || '{}');
             const raw = req.postData() || '';
@@ -239,7 +264,7 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
             if (seen.membershipDown) return route.abort('internetdisconnected');
             const k = decodeURIComponent(p.split('/').pop());
             seen.probes.push(k);
-            return reply(200, { isMember: seen.members.has(k), callsign: seen.members.has(k) ? 'Alice' : null });
+            return reply(200, { isMember: seen.members.has(k), callsign: seen.members.has(k) ? seen.names.get(k) ?? 'Alice' : null });
         }
         if (p === '/api/community/health') return reply(200, { status: 'ok', memberCount: 4, version: 'harness' });
         // Settings asks which sign-ins bring the account back (G11-c): the ones this stub stored with a join.
@@ -306,6 +331,29 @@ async function pendingJoin(page) {
     }));
 }
 
+/** The invite-sent record as stored (a key an invite went with, and its 12 words: this is a test page). */
+async function inviteSentRecord(page) {
+    return page.evaluate(() => new Promise((resolve, reject) => {
+        const open = indexedDB.open('beanpool-identity', 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('keys');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const req = open.result.transaction('keys', 'readonly').objectStore('keys').get('invite-sent');
+            req.onsuccess = () => resolve(req.result ?? null);
+            req.onerror = () => reject(req.error);
+        };
+    }));
+}
+
+/** The invite page on a node whose door is shut, a code and a name typed, and Create pressed. */
+async function sendInvite(page, origin, name) {
+    await page.goto(`${origin}/app`, { waitUntil: 'load' });
+    await page.getByText('Join with Invite Code').waitFor({ timeout: 20_000 });
+    await page.getByLabel('Invite Code').fill('BP-7K3X-9M2W');
+    await page.getByLabel('Your Callsign (Name)').fill(name);
+    await page.getByRole('button', { name: 'Create Identity & Join →' }).click();
+}
+
 /** Twelve words from the BIP-39 list, for a key restored at the door. A fixture: no account anywhere holds them. */
 const RESTORED_WORDS = 'abandon ability able about above absent absorb abstract absurd abuse access accident';
 
@@ -323,6 +371,28 @@ async function agePendingJoin(page, minutes) {
                 if (!p) return;
                 for (const k of ['startedAt', 'expiresAt', 'sentAt', 'earlierSentAt']) if (typeof p[k] === 'number') p[k] -= ms;
                 store.put(p, 'pending-join');
+            };
+            tx.oncomplete = () => resolve(req.result ?? null);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+        };
+    }), minutes * 60_000);
+}
+
+/** Move the kept invite-sent record's sends `minutes` into the past, as if they had gone that long ago. */
+async function ageInviteSent(page, minutes) {
+    return page.evaluate((ms) => new Promise((resolve, reject) => {
+        const open = indexedDB.open('beanpool-identity', 1);
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const tx = open.result.transaction('keys', 'readwrite');
+            const store = tx.objectStore('keys');
+            const req = store.get('invite-sent');
+            req.onsuccess = () => {
+                const r = req.result;
+                if (!r) return;
+                for (const k of ['sentAt', 'earlierSentAt']) if (typeof r[k] === 'number') r[k] -= ms;
+                store.put(r, 'invite-sent');
             };
             tx.oncomplete = () => resolve(req.result ?? null);
             tx.onerror = () => reject(tx.error);
@@ -945,6 +1015,11 @@ const SCENARIOS = [
                 .filter((s) => s.getClientRects().length > 1).map((s) => s.textContent));
             if (broken.length) throw new Failure(`12 words broken across lines: ${broken.length}`);
             await shot(page, view, 'taken-words');
+            // The same button hides them again (review 4108355858), and keeps focus.
+            await page.getByRole('button', { name: "Hide Bea's 12 words" }).click();
+            if (await page.getByTestId('join-taken-words').count()) throw new Failure('Hide left the 12 words on the screen');
+            const focused = await page.evaluate(() => document.activeElement?.textContent ?? '');
+            if (focused !== "Show Bea's 12 words") throw new Failure(`after Hide, focus is on "${focused}"`);
             if ((await storedIdentityKey(page)) !== OTHER_TAB_ACCOUNT.publicKey) throw new Failure("this browser's account was replaced");
             const kept = await pendingJoin(page);
             if (kept?.identity.publicKey !== bea || typeof kept.sentAt !== 'number') throw new Failure('the key the node took was not kept, marked sent');
@@ -952,6 +1027,121 @@ const SCENARIOS = [
         join: async (body, key, seen) => {
             await seen.beforeJoinAnswer?.();
             return { status: 200, body: { success: true, member: { publicKey: key, callsign: body.callsign } } };
+        },
+    },
+    {
+        name: "a yes this browser can't save (reviews 4108355843, 4108355867): the failed screen, with its heading and Reload",
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Alice');
+            // Every write in the page fails from here on, as a full disk's does, the way a put that throws reaches the store.
+            seen.beforeJoinAnswer = () => page.evaluate(() => {
+                IDBObjectStore.prototype.put = function () { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); };
+            });
+            await page.getByTestId('join-provider-google').click();
+            await screenIs(page, 'failed', "the node said yes and the browser couldn't save");
+            await page.getByRole('heading', { name: 'Not finished yet' }).waitFor();
+            const notice = await page.getByTestId('join-notice').innerText();
+            if (!/couldn't save your account/.test(notice)) throw new Failure(`the failed screen says "${notice}"`);
+            await page.getByRole('button', { name: 'Reload page' }).waitFor();
+            await noSideScroll(page, 'failed');
+            await shot(page, view, 'failed');
+        },
+        join: async (body, key, seen) => {
+            await seen.beforeJoinAnswer?.();
+            return { status: 200, body: { success: true, member: { publicKey: key, callsign: body.callsign } } };
+        },
+    },
+    {
+        name: 'an invite the node took, its answer lost, then a reload (deciding pass 4111943146): "Finish joining" while the node is unreachable, then the kept key saved and its 12 words',
+        async run(page, origin, view, seen) {
+            seen.doorShut = true;
+            seen.loseInviteAnswer = true;
+            await sendInvite(page, origin, 'Rowan');
+            await page.getByText("Can't reach the community right now. Try again in a minute.").first().waitFor({ timeout: 20_000 });
+            const sent = seen.redeems[0]?.body.publicKey;
+            if (!sent) throw new Failure('no redeem reached the node');
+            if ((await inviteSentRecord(page))?.identity?.publicKey !== sent) throw new Failure('the key the redeem went with is not on disk');
+            if ((await storedIdentityKey(page)) !== null) throw new Failure('a key was saved as the identity before the node answered');
+
+            // The tab is reloaded while the node can't be reached.
+            seen.membershipDown = true;
+            await page.reload({ waitUntil: 'load' });
+            await page.getByRole('heading', { name: 'Finish joining' }).waitFor({ timeout: 20_000 });
+            if (await page.getByText(/already been used/).count()) throw new Failure('the browser\'s own key was called "already used"');
+            if (await page.getByText('Join with Invite Code').count()) throw new Failure('the invite form showed before the kept key was settled');
+            await noSideScroll(page, 'finish joining');
+            await shot(page, view, 'invite-finish-joining');
+
+            seen.membershipDown = false;
+            await page.getByRole('button', { name: 'Retry' }).click();
+            await page.getByText(/Choose your look/).waitFor({ timeout: 20_000 });
+            if ((await storedIdentityKey(page)) !== sent) throw new Failure('the kept key was not saved');
+            if (await inviteSentRecord(page)) throw new Failure('the invite-sent record stayed after the save');
+            if (seen.redeems.length !== 1) throw new Failure(`${seen.redeems.length} redeems were sent`);
+            await page.getByTitle('Green Bean').click();
+            await page.getByRole('button', { name: 'Next →' }).click();
+            await page.getByText(/Your Safety Backup/).waitFor();
+            const words = await page.getByTestId('backup-words').locator('strong').allInnerTexts();
+            if (words.join(' ') !== (await storedIdentity(page)).mnemonic.join(' ')) throw new Failure("the 12 words shown are not the saved key's");
+            await noSideScroll(page, "the kept key's 12 words");
+            await shot(page, view, 'invite-kept-key-words');
+        },
+    },
+    {
+        name: 'an invite sent while the door was shut never reached the node, then the door opens (4112075367): "Finish joining" waits, never the lobby, and the lobby once no send can land',
+        async run(page, origin, view, seen) {
+            seen.doorShut = true;
+            seen.dropInvite = true;
+            await sendInvite(page, origin, 'Rowan');
+            await page.getByText("Can't reach the community right now. Try again in a minute.").first().waitFor({ timeout: 20_000 });
+            const sent = seen.redeems[0]?.body.publicKey;
+            if (!sent) throw new Failure('no redeem was sent');
+            if ((await inviteSentRecord(page))?.identity?.publicKey !== sent) throw new Failure('the key the redeem went with is not on disk');
+
+            // The door is open at the reload, and the node says the key is not a member yet.
+            seen.doorShut = false;
+            await page.reload({ waitUntil: 'load' });
+            await page.getByRole('heading', { name: 'Finish joining' }).waitFor({ timeout: 20_000 });
+            const text = await page.getByTestId('invite-sent-unreachable').innerText();
+            if (!/doesn't have you yet/.test(text) || !/Rowan/.test(text)) throw new Failure(`"Finish joining" says "${text}"`);
+            if (await page.getByTestId('join-screen-lobby').count()) throw new Failure("the door's lobby showed beside a kept invite key");
+            if (!seen.probes.includes(sent)) throw new Failure('the node was not asked about the kept key');
+            await noSideScroll(page, 'finish joining, waiting');
+            await shot(page, view, 'invite-waiting-open-door');
+
+            // No send with it can land any more: Retry lets it go, and the door's lobby follows.
+            await ageInviteSent(page, 20);
+            await page.getByRole('button', { name: 'Retry' }).click();
+            await screenIs(page, 'lobby', 'after the kept key was let go');
+            if (await inviteSentRecord(page)) throw new Failure('the invite-sent record stayed after it was let go');
+            if ((await storedIdentityKey(page)) !== null) throw new Failure('a key was saved');
+            if (seen.joins.length !== 0) throw new Failure(`${seen.joins.length} door joins were sent`);
+        },
+    },
+    {
+        name: "another tab saves an account while the invite is at the node (4111871903): it stays, and the held screen offers the sent key's 12 words",
+        async run(page, origin, view, seen) {
+            seen.doorShut = true;
+            seen.onInviteTaken = () => saveIdentityElsewhere(page, OTHER_TAB_ACCOUNT);
+            await sendInvite(page, origin, 'Rowan');
+            await page.getByTestId('welcome-held').waitFor({ timeout: 20_000 });
+            const sent = seen.redeems[0]?.body.publicKey;
+            const kept = await inviteSentRecord(page);
+            if (!sent || kept?.identity?.publicKey !== sent) throw new Failure('the key the node took is not kept on disk');
+            if ((await storedIdentityKey(page)) !== OTHER_TAB_ACCOUNT.publicKey) throw new Failure("the other tab's account was replaced");
+            const text = await page.getByTestId('welcome-held-sent').innerText();
+            if (!/The community took Rowan too/.test(text) || !/This browser keeps Alice/.test(text)) throw new Failure(`the held screen says "${text}"`);
+            await page.getByRole('button', { name: "Show Rowan's 12 words" }).click();
+            const list = page.getByTestId('welcome-held-words');
+            if ((await list.locator('strong').allInnerTexts()).join(' ') !== kept.identity.mnemonic.join(' ')) throw new Failure("the words shown are not the sent key's");
+            const broken = await list.locator('strong').evaluateAll((els) => els.filter((s) => s.getClientRects().length > 1).map((s) => s.textContent));
+            if (broken.length) throw new Failure(`12 words broken across lines: ${broken.length}`);
+            await noSideScroll(page, "welcome held, with the sent key's words");
+            await shot(page, view, 'welcome-held-sent-words');
+            await page.getByRole('button', { name: "Hide Rowan's 12 words" }).click();
+            if (await list.count()) throw new Failure('Hide left the 12 words on the screen');
+            const focused = await page.evaluate(() => document.activeElement?.textContent ?? '');
+            if (focused !== "Show Rowan's 12 words") throw new Failure(`after Hide, focus is on "${focused}"`);
         },
     },
     {

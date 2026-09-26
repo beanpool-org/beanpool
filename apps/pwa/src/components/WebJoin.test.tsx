@@ -4,12 +4,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { WebJoin, type JoinedResult } from './WebJoin';
+import { WebJoin, runStep, type JoinedResult } from './WebJoin';
 import {
     completePendingJoin,
     generateIdentity,
     loadIdentity,
     loadPendingJoin,
+    markInviteSent,
     savePendingJoin,
     PENDING_JOIN_TTL_MS,
     type BeanPoolIdentity,
@@ -924,6 +925,26 @@ describe('one browser, one account: a join in a second tab never replaces the ac
     });
 });
 
+describe('a key an invite went with, kept here unsettled (4112075367): no door join goes beside it', () => {
+    it("another tab's invite key is on disk: the join is not sent, this key is not marked sent, and the page says why", async () => {
+        await seedPending();
+        // Another tab's invite went out with a key of its own, and the node hasn't settled it.
+        const theirs = await generateIdentity('Rowan');
+        await markInviteSent(theirs, 'their-hash', Date.now());
+        const node = stubNode({ '/api/join': () => json(200, { success: true, member: { callsign: 'Alice' } }) });
+        const { onJoined } = renderJoin({ authReturn: googleReturn() });
+
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent('An invite sent from this browser is still being checked');
+        expect(node.joins()).toHaveLength(0);
+        expect(onJoined).not.toHaveBeenCalled();
+        expect(await loadIdentity()).toBeNull();
+        const kept = await loadPendingJoin();
+        expect(kept?.identity.publicKey).toBe(identity.publicKey);
+        expect(kept?.sentAt).toBeUndefined();
+        expect(idb.peek('beanpool-identity', 'keys', 'invite-sent')).toMatchObject({ identity: { publicKey: theirs.publicKey } });
+    });
+});
+
 describe('no screen without a way out: a write that fails after the join has gone (review 4106962149)', () => {
     const peekPending = () => idb.peek('beanpool-identity', 'keys', 'pending-join') as PendingJoin | undefined;
     const githubStart = () => json(200, { sessionId: 'sess-1', userCode: 'WDJB-MJHT', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 1 });
@@ -992,5 +1013,70 @@ describe('no screen without a way out: a write that fails after the join has gon
         expect(await screen.findByTestId('join-notice')).toHaveTextContent("You're in, but this browser couldn't save your account.");
         fireEvent.click(screen.getByRole('button', { name: 'Reload page' }));
         expect(reload).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("the taken screen's 12 words: one button shows them and hides them again (review 4108355858)", () => {
+    it('Show keeps focus where it was and says the words are open; Hide puts them away, focus still there', async () => {
+        const bea = await generateIdentity('Bea');
+        await seedPending({ identity: bea });
+        stubNode({
+            '/api/join': async () => {
+                await completePendingJoin(identity); // another tab's account, saved while this join was at the node
+                return json(200, { success: true, member: { callsign: 'Bea' } });
+            },
+        });
+        renderJoin({ authReturn: googleReturn() });
+
+        const toggle = await screen.findByRole('button', { name: "Show Bea's 12 words" });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByTestId('join-taken-words')).toBeNull();
+        toggle.focus();
+        fireEvent.click(toggle);
+
+        const words = screen.getByTestId('join-taken-words');
+        for (const w of bea.mnemonic!) expect(words).toHaveTextContent(w);
+        // The same button, still in the page and still focused, now saying what it will do next.
+        expect(screen.getByRole('button', { name: "Hide Bea's 12 words" })).toBe(toggle);
+        expect(document.activeElement).toBe(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(toggle).toHaveAttribute('aria-controls', words.id);
+
+        fireEvent.click(toggle);
+        expect(screen.queryByTestId('join-taken-words')).toBeNull();
+        expect(document.activeElement).toBe(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle).toHaveAccessibleName("Show Bea's 12 words");
+    });
+});
+
+describe('the failed screen has a heading, as every other screen does (review 4108355867)', () => {
+    it('read as a heading, with the notice and Reload under it', async () => {
+        await seedPending();
+        stubNode({ '/api/join': () => { idb.failNextCommit(); return json(200, { success: true, member: { callsign: 'Alice' } }); } });
+        renderJoin({ authReturn: googleReturn(), reload: vi.fn() });
+        await screen.findByTestId('join-screen-failed');
+        expect(screen.getByRole('heading')).toHaveTextContent('Not finished yet');
+        expect(screen.getByTestId('join-notice')).toHaveTextContent("You're in, but this browser couldn't save your account.");
+        expect(screen.getByRole('button', { name: 'Reload page' })).toBeInTheDocument();
+    });
+});
+
+describe('every step after a join reaches the failure handler, even one that throws before it returns a promise (review 4108355852)', () => {
+    it('a throw at once is handed over, not thrown out of the click; a rejection is too; the step starts at once', async () => {
+        const onFail = vi.fn();
+        const atOnce = new Error('thrown before any promise');
+        expect(() => runStep(() => { throw atOnce; }, onFail)).not.toThrow();
+        expect(onFail).toHaveBeenCalledWith(atOnce);
+
+        const later = new Error('rejected');
+        runStep(async () => { throw later; }, onFail);
+        await waitFor(() => expect(onFail).toHaveBeenCalledWith(later));
+
+        const order: string[] = [];
+        runStep(async () => { order.push('step'); }, onFail);
+        order.push('after');
+        expect(order).toEqual(['step', 'after']);
+        expect(onFail).toHaveBeenCalledTimes(2);
     });
 });

@@ -396,6 +396,7 @@ run_federation_suites() {
       test-node-config-public
       test-registrar-contract
       test-invite-trampoline
+      test-ticket-redeem-fault
       test-request-body
       test-admin-thresholds
       test-manager-backups

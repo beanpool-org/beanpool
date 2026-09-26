@@ -1,8 +1,9 @@
 /**
  * Tests only: an in-memory stand-in for `indexedDB`, as much of it as identity.ts uses (open, one object store,
- * get / put / delete in a transaction, oncomplete once the transaction's requests have answered). jsdom has no
+ * get / put / delete in a transaction, oncomplete once the transaction's requests have answered, abort). jsdom has no
  * IndexedDB. Values are structured-cloned in and out, as the real one does, so a test cannot pass by holding a
- * reference to what it saved. `failNextCommit` makes a write fail as a full disk does.
+ * reference to what it saved (and a value that can't be cloned throws DataCloneError from put, as there).
+ * `failNextCommit` makes a write fail as a full disk does.
  *
  *   vi.stubGlobal('indexedDB', memoryIndexedDB());
  */
@@ -49,6 +50,12 @@ export function memoryIndexedDB(): MemoryIndexedDB {
                 const failing = mode === 'readwrite' ? failCommit : null;
                 if (failing) failCommit = null;
                 const before = failing ? new Map(store) : null;
+                // What this transaction's own writes replaced, for abort(): the value each key held before its first write.
+                const undo = new Map<IDBValidKey, { had: boolean; value: unknown }>();
+                const remember = (key: IDBValidKey) => {
+                    if (!undo.has(key)) undo.set(key, { had: store.has(key), value: store.get(key) });
+                };
+                let finished = false;
                 const tx = {
                     oncomplete: null as null | (() => void),
                     onerror: null as null | (() => void),
@@ -66,18 +73,33 @@ export function memoryIndexedDB(): MemoryIndexedDB {
                                 return req;
                             },
                             put(value: unknown, key: IDBValidKey) {
-                                store.set(key, structuredClone(value));
+                                const copy = structuredClone(value);
+                                remember(key);
+                                store.set(key, copy);
                                 return request();
                             },
                             delete(key: IDBValidKey) {
+                                remember(key);
                                 store.delete(key);
                                 return request();
                             },
                         };
                     },
+                    /** As the real one: this transaction's writes are undone, `error` stays null, and `abort` fires, never `complete`. */
+                    abort() {
+                        if (finished) throw new DOMException('The transaction has finished.', 'InvalidStateError');
+                        finished = true;
+                        for (const [key, was] of undo) {
+                            if (was.had) store.set(key, was.value);
+                            else store.delete(key);
+                        }
+                        setTimeout(() => tx.onabort?.(), 0);
+                    },
                 };
                 // After the caller has queued its requests (synchronously), and after their answers.
                 queueMicrotask(() => setTimeout(() => {
+                    if (finished) return;
+                    finished = true;
                     if (failing && before) {
                         store.clear();
                         for (const [k, v] of before) store.set(k, v);

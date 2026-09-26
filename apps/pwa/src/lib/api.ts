@@ -153,18 +153,21 @@ export async function request<T>(method: string, path: string, body?: any): Prom
 
     const baseUrl = getNodeApiUrl();
     const res = await fetch(`${baseUrl}${path}`, opts);
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        const error = new Error(err.message || err.error || `Request failed: ${res.status}`);
-        // The status travels with the error: a node older than a route answers 404, and a screen that can
-        // hide a feature quietly needs to tell that apart from the node being down or refusing.
-        (error as Error & { status?: number }).status = res.status;
-        // So does the node's own code (a new account's limit, a moderation pause): a form shows those in place,
-        // in the node's words (lib/node-refusal.ts).
-        if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
-        throw error;
-    }
+    if (!res.ok) throw await refusalError(res);
     return res.json();
+}
+
+/** What `request` throws for an answer that isn't ok. */
+async function refusalError(res: Response): Promise<Error> {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const error = new Error(err.message || err.error || `Request failed: ${res.status}`);
+    // The status travels with the error: a node older than a route answers 404, and a screen that can
+    // hide a feature quietly needs to tell that apart from the node being down or refusing.
+    (error as Error & { status?: number }).status = res.status;
+    // So does the node's own code (a new account's limit, a moderation pause): a form shows those in place,
+    // in the node's words (lib/node-refusal.ts).
+    if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
+    return error;
 }
 
 /** True when a route does not exist on this node — an older node, not a failure worth showing anyone. */
@@ -404,12 +407,26 @@ export async function checkInvite(code: string): Promise<InviteCheck | null> {
     }
 }
 
-export async function redeemInvite(code: string, publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {
-    return request('POST', '/api/invite/redeem', { code, publicKey, callsign });
+/**
+ * The key a redeem names, when it isn't saved in this browser yet: the web invite join saves its new key only once the
+ * node has taken the invite (WelcomePage handleCreate). The redeem is signed with it all the same, as both apps sign
+ * theirs (apps/server/src/routes/community.ts signedByKey); `request` would sign with the saved identity, if any.
+ */
+export type RedeemSigner = { publicKey: string; privateKey: string };
+
+async function redeemRequest<T>(path: string, body: Record<string, string>, signWith?: RedeemSigner): Promise<T> {
+    if (!signWith) return request('POST', path, body);
+    const res = await signedFetchWithKey('POST', path, body, signWith.privateKey, signWith.publicKey);
+    if (!res.ok) throw await refusalError(res);
+    return res.json();
 }
 
-export async function redeemOfflineTicket(ticketB64: string, publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {
-    return request('POST', '/api/invite/redeem-offline', { ticketB64, publicKey, callsign });
+export async function redeemInvite(code: string, publicKey: string, callsign: string, signWith?: RedeemSigner): Promise<{ success: boolean; member: Member }> {
+    return redeemRequest('/api/invite/redeem', { code, publicKey, callsign }, signWith);
+}
+
+export async function redeemOfflineTicket(ticketB64: string, publicKey: string, callsign: string, signWith?: RedeemSigner): Promise<{ success: boolean; member: Member }> {
+    return redeemRequest('/api/invite/redeem-offline', { ticketB64, publicKey, callsign }, signWith);
 }
 
 export async function getInviteTree(root?: string): Promise<any[]> {

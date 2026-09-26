@@ -9,7 +9,9 @@
  * (apps/server/src/routes/recovery-collect.ts), which this does not change:
  *
  *   1. The member names their account: the node's public lookup (`GET /api/recovery/lookup/:name`) lists the members
- *      whose name starts so and who have a sign-in copy, each with their public key. The member picks theirs.
+ *      whose name starts so and who have a sign-in copy, each with their public key; a node that shows visitors the
+ *      listings and not the people (the global one, G9a-2) lists only the whole name, case forgiven. The member picks
+ *      theirs.
  *   2. A throwaway key is made for this restore (`makeEphemeralKey`). It is not an account and is never saved as one.
  *      It signs every call below, and the node binds the recovery session to it: the session id alone opens nothing.
  *   3. `POST /api/recovery/collect { callsign }` opens the session (the node tells the account's owner at once), and
@@ -57,9 +59,10 @@ export interface RestoreCandidate {
 const HEX_KEY = /^[0-9a-f]{64}$/;
 
 /**
- * The accounts here whose name starts with `name` and that a sign-in can bring back, as the node's public lookup lists
- * them (`GET /api/recovery/lookup/:callsign`, rate limited, unsigned: this browser has no key yet). Null when the node
- * could not be asked or did not answer with a list. Never throws.
+ * The accounts here whose name starts with `name` (on the global node: whose name is `name`, case forgiven) and that a
+ * sign-in can bring back, as the node's public lookup lists them (`GET /api/recovery/lookup/:callsign`, rate limited,
+ * unsigned: this browser has no key yet). Null when the node could not be asked or did not answer with a list. Never
+ * throws.
  */
 export async function lookupRestorable(name: string): Promise<RestoreCandidate[] | null> {
     const typed = name.trim();

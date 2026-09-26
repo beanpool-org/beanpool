@@ -500,7 +500,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             body = (
                 <>
                     <h3 style={heading}>Get your account back</h3>
-                    <p style={lede}>With the sign-in you joined with. First, what's your name here?</p>
+                    <p style={lede}>With the sign-in you joined with. First, type your whole name here.</p>
                     <label htmlFor="restore-callsign" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
                         Your name here
                     </label>
@@ -529,9 +529,12 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                         <p role="alert" style={{ ...lede, color: 'var(--text-primary)' }}>{UNREACHABLE}</p>
                     )}
                     {typed.length >= 2 && Array.isArray(candidates) && candidates.length === 0 && (
+                        // Said so it is true on both kinds of node: most list names that start with what was typed, but one that
+                        // shows visitors the listings and not the people (the global one) finds the whole name only
+                        // (server routes/community.ts), so a name part-typed there finds nothing yet (review 4109516319).
                         <p role="status" data-testid="restore-none" style={{ ...lede, color: 'var(--text-primary)' }}>
-                            No account here starting with {typed} can come back with a sign-in. Your 12 words or the phone app
-                            can still bring yours here.
+                            No account called {typed} here can come back with a sign-in. Check you've typed your whole name.
+                            Your 12 words or the phone app can still bring yours here.
                         </p>
                     )}
                     {typed.length >= 2 && Array.isArray(candidates) && candidates.length > 0 && (

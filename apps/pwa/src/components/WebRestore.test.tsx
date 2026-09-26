@@ -184,6 +184,29 @@ describe('from the name to the provider', () => {
         screen.getByRole('button', { name: 'Use my 12 words' });
         screen.getByRole('button', { name: 'Link with my phone' });
     });
+
+    it('the global node finds the whole name only: a name part-typed is never said to have no account starting so (review 4109516319)', async () => {
+        // As routes/community.ts answers on a node that shows visitors the listings and not the people: exact, case forgiven.
+        const lookups: string[] = [];
+        const node: ReturnType<typeof recoveryNode> = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/lookup/': () => {
+                const typed = decodeURIComponent(node.calls[node.calls.length - 1].path.split('/').pop() ?? '').toLowerCase();
+                lookups.push(typed);
+                return json(200, typed === 'alice' ? [{ publicKey: account.publicKey, callsign: 'Alice', canRecoverBySso: true }] : []);
+            },
+        });
+        renderRestore();
+        const input = await screen.findByTestId('restore-callsign');
+        fireEvent.change(input, { target: { value: 'Ali' } });
+        const none = await screen.findByTestId('restore-none');
+        expect(none).toHaveTextContent('No account called Ali here can come back with a sign-in.');
+        expect(none).toHaveTextContent("Check you've typed your whole name.");
+        expect(none).not.toHaveTextContent('starting with');
+        fireEvent.change(input, { target: { value: 'alice' } });
+        await screen.findByRole('button', { name: 'Alice' });
+        expect(screen.queryByTestId('restore-none')).toBeNull();
+        expect(lookups).toEqual(['ali', 'alice']);
+    });
 });
 
 describe('each provider\'s return: the copy released to the throwaway key, opened, and the account handed on only if it is the name\'s', () => {

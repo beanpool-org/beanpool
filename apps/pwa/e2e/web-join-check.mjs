@@ -167,10 +167,11 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer, g
             return reply(r.status, r.body, r.headers);
         }
         // The node's recovery routes (routes/recovery-collect.ts), for G11-d: a session bound to the key that opened it.
+        // The lookup as the global node answers it (routes/community.ts, guestListingsOnly): the whole name, case forgiven.
         if (p.startsWith('/api/recovery/lookup/')) {
             const typed = decodeURIComponent(p.split('/').pop()).toLowerCase();
             return reply(200, [...seen.copies.entries()]
-                .filter(([, c]) => c.callsign.toLowerCase().startsWith(typed))
+                .filter(([, c]) => c.callsign.toLowerCase() === typed)
                 .map(([publicKey, c]) => ({ publicKey, callsign: c.callsign, joinedAt: 1, avatarUrl: null, canRecoverByGuardians: false, canRecoverBySso: true })));
         }
         // The member's own view of recoveries against their account (the app asks once it is in): not a restore's call.
@@ -441,7 +442,13 @@ async function toRestoreSignIns(page, origin, view, { shots = false } = {}) {
     if (shots) await shot(page, view, 'restore-choices');
     await page.getByTestId('join-restore-signin').click();
     await restoreScreenIs(page, 'name', 'Use my sign-in');
+    // Part of the name finds nothing on the global node, and the page says so without claiming no name starts so.
     await page.getByTestId('restore-callsign').fill('Ali');
+    const none = page.getByTestId('restore-none');
+    await none.waitFor({ timeout: 10_000 });
+    if (!(await none.innerText()).includes("Check you've typed your whole name.")) throw new Failure(`a part-typed name said "${await none.innerText()}"`);
+    await noSideScroll(page, 'restore name, part-typed');
+    await page.getByTestId('restore-callsign').fill('alice');
     await page.getByRole('button', { name: 'Alice', exact: true }).waitFor({ timeout: 10_000 });
     await noSideScroll(page, 'restore name');
     if (shots) await shot(page, view, 'restore-name');

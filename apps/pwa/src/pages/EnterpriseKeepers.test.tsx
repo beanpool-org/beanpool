@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { signedRequestBytes, signedRequestText } from '@beanpool/core';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import * as api from '../lib/api';
 import * as identityLib from '../lib/identity';
@@ -512,9 +513,14 @@ describe('Enterprise map pin (keeper control)', () => {
 
         const headers = init.headers as Record<string, string>;
         expect(headers['X-Public-Key']).toBe(bobPublicKey);
-        const canonical = `POST\n${new URL(url, 'http://node').pathname}\n${headers['X-Timestamp']}\n${headers['X-Nonce']}\n${init.body}`;
+        // Signed for this community (the page's host, same origin) in @beanpool/core's format 2.
+        expect(headers['X-Signed-For']).toBe(window.location.hostname);
+        const signedText = signedRequestText({
+            host: window.location.hostname, method: 'POST', path: new URL(url, 'http://node').pathname,
+            timestamp: headers['X-Timestamp'], nonce: headers['X-Nonce'], body: String(init.body),
+        });
         const signature = Uint8Array.from(atob(headers['X-Signature']), (c) => c.charCodeAt(0));
-        expect(ed25519.verify(signature, new TextEncoder().encode(canonical), ed25519.getPublicKey(secretKey))).toBe(true);
+        expect(ed25519.verify(signature, signedRequestBytes(signedText), ed25519.getPublicKey(secretKey))).toBe(true);
 
         expect(screen.queryByTestId('enterprise-location-visibility')).not.toBeInTheDocument();
     });
@@ -536,9 +542,13 @@ describe('Enterprise map pin (keeper control)', () => {
         expect(init.method).toBe('DELETE');
         const headers = init.headers as Record<string, string>;
         expect(headers['X-Public-Key']).toBe(bobPublicKey);
-        const canonical = `DELETE\n/api/enterprise/${ENTERPRISE}/location\n${headers['X-Timestamp']}\n${headers['X-Nonce']}\n`;
+        expect(headers['X-Signed-For']).toBe(window.location.hostname);
+        const signedText = signedRequestText({
+            host: window.location.hostname, method: 'DELETE', path: `/api/enterprise/${ENTERPRISE}/location`,
+            timestamp: headers['X-Timestamp'], nonce: headers['X-Nonce'], body: '',
+        });
         const signature = Uint8Array.from(atob(headers['X-Signature']), (c) => c.charCodeAt(0));
-        expect(ed25519.verify(signature, new TextEncoder().encode(canonical), ed25519.getPublicKey(secretKey))).toBe(true);
+        expect(ed25519.verify(signature, signedRequestBytes(signedText), ed25519.getPublicKey(secretKey))).toBe(true);
     });
 
     it('keeps the web picker copy identical to the settings app picker it was ported from', () => {

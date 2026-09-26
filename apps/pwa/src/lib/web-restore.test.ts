@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-import { sealSeedToSso, toEd25519Seed, KEEPER_ALG_SSO, type SealedShare } from '@beanpool/core';
+import { sealSeedToSso, signedRequestBytes, signedRequestText, toEd25519Seed, KEEPER_ALG_SSO, type SealedShare } from '@beanpool/core';
 import {
     fetchSignInCopy,
     lookupRestorable,
@@ -42,13 +42,18 @@ function stubNode(handlers: Record<string, (body: any) => Response>) {
     return calls;
 }
 
-/** The node's own check: the request is signed, over its method, path, time, nonce and body, by the key it names. */
+/**
+ * The node's own check: the request is signed, over this community's host (the page's: same origin), its method, path,
+ * time, nonce and body (@beanpool/core's format 2), by the key it names.
+ */
 function signedBy(call: Call, publicKey: string): boolean {
     const h = call.headers;
     if (h['X-Public-Key'] !== publicKey) return false;
-    const canonical = `${call.method}\n${call.path.split('?')[0]}\n${h['X-Timestamp']}\n${h['X-Nonce']}\n${call.raw}`;
+    const host = window.location.hostname;
+    if (h['X-Signed-For'] !== host) return false;
+    const text = signedRequestText({ host, method: call.method, path: call.path.split('?')[0], timestamp: h['X-Timestamp'], nonce: h['X-Nonce'], body: call.raw });
     const sig = Uint8Array.from(atob(h['X-Signature']), (c) => c.charCodeAt(0));
-    return ed25519.verify(sig, new TextEncoder().encode(canonical), hexToBytes(publicKey));
+    return ed25519.verify(sig, signedRequestBytes(text), hexToBytes(publicKey));
 }
 
 let account: BeanPoolIdentity;

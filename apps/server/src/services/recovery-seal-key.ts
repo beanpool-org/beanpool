@@ -50,13 +50,15 @@
  * Copies DELETED before the seal are not rows any more, so the wrap cannot reach them: the server deleted without zeroing
  * until now, and each one is still in state.db's free pages as the app sealed it. So each server runs one VACUUM, once,
  * and records it ({@link clearCopiesDroppedBeforeSeal}): a main server right after its wrap, a standby once its main
- * server has sealed (its wrapped copies have arrived). From this change on, db.ts zeroes whatever the server deletes or
- * replaces (secure_delete). Backups and snapshots made before the upgrade are copies of the live rows then, unwrapped
- * ones included; no code here reaches them.
+ * server has sealed (its wrapped copies have arrived: until then copies in the old form can still reach it, even when it
+ * holds none). From this change on, db.ts zeroes whatever the server deletes or replaces (secure_delete). Backups and
+ * snapshots made before the upgrade are copies of the live rows then, unwrapped ones included; no code here reaches them.
  *
  * A standby also holds, as ROWS, the copies its main server deleted before the seal (no deletion of a copy reaches a
  * standby), still in the form that opens with the `sub` alone. It removes them once a whole copy of its main server
- * shows which ones that server no longer holds, and asks its puller for one ({@link dropCopiesMainServerDeleted}).
+ * shows which ones that server no longer holds, whether or not that server has sealed, and asks its puller for one once
+ * it has ({@link dropCopiesMainServerDeleted}). A standby left holding no copy that way (its main server deleted every
+ * one before the seal, so no wrapped copy comes) runs the VACUUM then too, without recording it.
  * Deletions after the seal still do not reach a standby; those copies are wrapped, and are left to a tombstone.
  *
  * Rolling the server back past this change needs the rows unwrapped first, by the NEW code, with the server stopped:
@@ -402,6 +404,12 @@ const VACUUM_MARGIN_BYTES = 64 * 1024 * 1024;
 let clearedSettled = false;
 let clearTriedThisProcess = false;
 let standbyWaitLogged = false;
+/**
+ * On a standby: how many copies in the old form it held at its last look (at boot, and after each import), so the look
+ * that finds it holding none after a whole copy or a force-resync knows that they were there ({@link clearWithoutRecording}).
+ * Null before the first.
+ */
+let standbyOldAtLastLook: number | null = null;
 let freeBytesForTests: number | null = null;
 
 /** Tests: pretend every disk has this many bytes free (null: measure). */
@@ -494,29 +502,34 @@ export function takeRecoverySealFullPull(): boolean {
  * that way before the seal is still a row here, as the app sealed it, and opens with the `sub` alone: what the seal is
  * for. Once a take-over made this server a main one, its wrap would lock them in again, with its own key.
  *
- * Only once the main server has sealed, which this standby knows when its wrapped copies are here: before that, its own
- * copies are in the old form too, and it may delete more of them.
+ * Whether or not the main server has sealed: nothing in the proof below asks it. Before the seal it may delete more,
+ * and the next whole copy removes those too. So a main server that deleted every copy before the seal leaves its
+ * standby holding none, where waiting for wrapped copies it will never send would keep them for good.
  *
  * Only with a whole copy of the main server (the puller's snapshot, never a delta), and only the rows that copy does not
  * hold, compared by the key the table is unique on. A whole copy is every row the main server held when it made it (the
- * engine's export without a cursor: no WHERE and no LIMIT). The import that wrote it here was one transaction that
- * either wrote every row or failed, with no row skipped: each under that same key (INSERT OR REPLACE). This runs only
- * after that import succeeded. So a row here that the copy does not hold is one the main server did not hold, and no copy
- * it still holds is ever removed, whatever the clocks, the order of the pulls, or the form its own copies are in. And
- * nothing else adds a row in the old form between the import and this: this code stores every copy wrapped, or not at
- * all without the key.
+ * engine's export without a cursor: no WHERE and no LIMIT, in every version that sends recovery rows at all since they
+ * were first replicated, #261; one that sends none removes nothing here). The import that wrote it here was one
+ * transaction that either wrote every row or failed, with no row skipped: each under that same key (INSERT OR REPLACE).
+ * This runs only after that import succeeded. So a row here that the copy does not hold is one the main server did not
+ * hold, and no copy it still holds is ever removed, whatever the clocks, the order of the pulls, or the form its own
+ * copies are in. And nothing else adds a row in the old form between the import and this: this code stores every copy
+ * wrapped, or not at all without the key.
  *
  * A delta is no such proof: it carries only the rows changed since the last pull, found by the main server's clock. So
- * after a delta, or at boot, this asks the puller once for a whole copy ({@link takeRecoverySealFullPull}).
+ * after a delta, or at boot, once the main server has sealed (its wrapped copies are here beside ones in the old form),
+ * this asks the puller once for a whole copy ({@link takeRecoverySealFullPull}). Before that it does not ask: until its
+ * main server seals, every standby holds only copies in the old form, and it takes the whole copies that come anyway
+ * (a routine one, a force-resync).
  */
 function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
     const rows = db.prepare('SELECT id, owner_pubkey, generation, holder_type, holder_ref, kdf_params FROM recovery_shares').all() as
         { id: number; owner_pubkey: string; generation: number; holder_type: string; holder_ref: string; kdf_params: string | null }[];
-    if (!rows.some(r => isNodeWrapped(r.kdf_params))) return;
     const old = rows.filter(r => !isNodeWrapped(r.kdf_params));
     if (old.length === 0) return;
+    const sealed = old.length < rows.length;
     if (!wholeCopy) {
-        if (!wholeCopyAsked) {
+        if (sealed && !wholeCopyAsked) {
             wholeCopyAsked = true;
             wholeCopyWanted = true;
             console.warn(`⚠️ Recovery seal: this standby holds ${copies(old.length)} in the form stored before the seal beside its main `
@@ -542,7 +555,7 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
         console.log(`🔐 Recovery seal: removed ${copies(gone.length)} its main server deleted before the seal, zeroed where they lay.`);
     }
     const kept = old.length - gone.length;
-    if (kept > 0 && !keptLogged) {
+    if (sealed && kept > 0 && !keptLogged) {
         keptLogged = true;
         console.warn(`⚠️ Recovery seal: ${copies(kept)} here in the form stored before the seal ${kept === 1 ? 'is one' : 'are ones'} this `
             + 'standby\'s main server still holds in that form (it has not wrapped them), so they stay as they are.');
@@ -562,8 +575,15 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
  * the WAL too. It waits while no wrapped copy is here, including while it holds no copy at all: the main server has not
  * sealed, or holds no copy, and nothing here says which. A clear recorded then would come too early: copies in the old
  * form that reach it afterwards go into the WAL, and once the wrapped ones replace them their old page images stay in
- * its earlier frames, which nothing would truncate again. Copies its main server deleted before the seal are still rows here, which
- * no VACUUM clears; they are removed at a whole copy ({@link dropCopiesMainServerDeleted}), zeroed, before or after it.
+ * its earlier frames, which nothing would truncate again. Copies its main server deleted before the seal are still rows
+ * here, which no VACUUM clears; they are removed at a whole copy ({@link dropCopiesMainServerDeleted}), zeroed, before
+ * or after it.
+ *
+ * One case would wait for good: a main server that deleted every copy before the seal sends no wrapped one, and its
+ * standby, once a whole copy (or a force-resync) has removed the copies it held in the old form, holds none. The copies
+ * its re-deposits dropped before the seal are still in its free pages. So a standby whose last look found copies in the
+ * old form, and which now holds none, runs the same VACUUM then, and does not record it ({@link clearWithoutRecording}):
+ * copies in the old form can still reach it, and the recorded clear still runs when wrapped ones arrive.
  *
  * `wholeCopy`: on a standby, the rows of the whole copy of its main server just imported; null after a delta or at boot.
  * Never throws and never stops a boot. A VACUUM that fails, or that the disks have no room for, is logged and tried again
@@ -578,16 +598,22 @@ export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean; wholeCopy
                 + `${(e as Error)?.message || e}. The next whole copy of the main server tries again.`);
         }
     }
-    if (clearedSettled || clearTriedThisProcess) return;
+    if (clearedSettled) return;
     try {
         if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(CLEARED_KEY)) { clearedSettled = true; return; }
         const kdfs = db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[];
         const old = kdfs.filter(k => !isNodeWrapped(k)).length;
+        const oldAtLastLook = standbyOldAtLastLook;
+        if (opts.standby) standbyOldAtLastLook = old;
         // A main server whose wrap did not run has said why; the next boot tries again.
         if (old > 0 && !opts.standby) return;
         if (opts.standby && old === kdfs.length) {
             // No wrapped copy here, including no copy at all: nothing shows that the main server has sealed, and until it has,
             // copies in the old form can still arrive, into the WAL, after a clear recorded now.
+            if (kdfs.length === 0 && oldAtLastLook) {
+                clearWithoutRecording(oldAtLastLook);
+                return;
+            }
             if (!standbyWaitLogged) {
                 standbyWaitLogged = true;
                 console.log('🔐 Recovery seal: this standby waits to clear state.db of sign-in recovery copies deleted before the seal: '
@@ -598,6 +624,7 @@ export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean; wholeCopy
             }
             return;
         }
+        if (clearTriedThisProcess) return;
         clearTriedThisProcess = true;
         const room = roomForVacuum();
         if (!room.ok) {
@@ -605,19 +632,7 @@ export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean; wholeCopy
                 + `Clearing them takes one VACUUM, and ${room.why}. The server runs; the next boot tries again.`);
             return;
         }
-        const before = fileBytes(dbFile());
-        const t0 = performance.now();
-        try {
-            db.exec('VACUUM');
-            const [cp] = db.pragma('wal_checkpoint(TRUNCATE)') as { busy: number; log: number; checkpointed: number }[];
-            if (!cp || cp.busy !== 0) throw new Error('the checkpoint after it could not finish (another connection was reading)');
-        } catch (e) {
-            // A VACUUM that stopped part way leaves its frames in the WAL: give the disk its space back.
-            try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* the next checkpoint does */ }
-            throw e;
-        }
-        const seconds = (performance.now() - t0) / 1000;
-        const after = fileBytes(dbFile());
+        const { seconds, before, after } = vacuumAndCheckpoint();
         db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
             .run(CLEARED_KEY, JSON.stringify({ at: new Date().toISOString(), seconds: Number(seconds.toFixed(2)), bytesBefore: before, bytesAfter: after }));
         clearedSettled = true;
@@ -628,6 +643,48 @@ export function clearCopiesDroppedBeforeSeal(opts: { standby: boolean; wholeCopy
     } catch (e) {
         console.warn(`⚠️ Recovery seal: the one VACUUM that clears sign-in recovery copies deleted before the seal from state.db failed: `
             + `${(e as Error)?.message || e}. The server runs; the next boot tries again.`);
+    }
+}
+
+/** One VACUUM, then a checkpoint that empties the WAL. Throws if either fails, after giving the disk its space back. */
+function vacuumAndCheckpoint(): { seconds: number; before: number; after: number } {
+    const before = fileBytes(dbFile());
+    const t0 = performance.now();
+    try {
+        db.exec('VACUUM');
+        const [cp] = db.pragma('wal_checkpoint(TRUNCATE)') as { busy: number; log: number; checkpointed: number }[];
+        if (!cp || cp.busy !== 0) throw new Error('the checkpoint after it could not finish (another connection was reading)');
+    } catch (e) {
+        // A VACUUM that stopped part way leaves its frames in the WAL: give the disk its space back.
+        try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* the next checkpoint does */ }
+        throw e;
+    }
+    return { seconds: (performance.now() - t0) / 1000, before, after: fileBytes(dbFile()) };
+}
+
+/**
+ * A standby that held copies in the old form at its last look and holds no copy now: a whole copy of its main server,
+ * or a force-resync, removed them (zeroed), because that server deleted every one before the seal. The same VACUUM as
+ * the recorded clear, for the copies its re-deposits dropped before the seal, still in its free pages; not recorded, so
+ * the recorded clear still runs once wrapped copies arrive. Disk room checked first; never throws. A clear that did not
+ * run here runs with the recorded one.
+ */
+function clearWithoutRecording(removed: number): void {
+    const room = roomForVacuum();
+    if (!room.ok) {
+        console.warn(`⚠️ Recovery seal: this standby holds no sign-in recovery copy now, but copies deleted before the seal may still be `
+            + `readable in state.db's free space. Clearing them takes one VACUUM, and ${room.why}. The server runs; it clears once its `
+            + 'main server\'s wrapped copies arrive.');
+        return;
+    }
+    try {
+        const { seconds, before, after } = vacuumAndCheckpoint();
+        console.log(`🔐 Recovery seal: this standby holds no sign-in recovery copy now: the ${copies(removed)} it held in the form stored `
+            + `before the seal are gone. It cleared state.db of copies deleted before the seal (one VACUUM, ${seconds.toFixed(1)} s, `
+            + `${mb(before)} → ${mb(after)}), and clears once more, and records it, when its main server's wrapped copies arrive.`);
+    } catch (e) {
+        console.warn(`⚠️ Recovery seal: the VACUUM that clears sign-in recovery copies deleted before the seal from this standby's state.db `
+            + `failed: ${(e as Error)?.message || e}. The server runs; it clears once its main server's wrapped copies arrive.`);
     }
 }
 

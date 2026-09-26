@@ -34,7 +34,10 @@
  *  16. a standby that holds no copy at its first boot on this code (a new one beside a main server that has not updated,
  *      or one whose main server holds none yet) records no clear: it seeds by its real force-resync from the main server
  *      before the seal, takes the members' re-deposits, and only the delta that brings the wrapped copies clears it, after
- *      which its running state.db, -wal and -shm hold none of the copies it was sent in the client's form.
+ *      which its running state.db, -wal and -shm hold none of the copies it was sent in the client's form;
+ *  17. a standby whose main server deleted every copy before the seal: a routine whole copy of that server removes all
+ *      of them and a force-resync clears them, and either way its running files hold none of them, nor of the older copies
+ *      its re-deposits dropped, while it records no clear until the first wrapped copy arrives.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-seal.ts
  *
@@ -1258,6 +1261,67 @@ async function main(): Promise<void> {
         check(s.final?.inFiles === 0 && s.final?.cleared === after?.before?.cleared,
             `...nor after the next pull (found ${s.final?.inFiles})`);
         check((r.stdout.match(/one VACUUM/g) ?? []).length === 1, `the VACUUM ran once (${(r.stdout.match(/one VACUUM/g) ?? []).length})`);
+    });
+
+    // ── 17. a standby whose main server deleted every copy before the seal ─────────────────────
+    await section('17. a standby whose main server deleted every copy before the seal clears its files once they are gone, and records the clear only when wrapped copies arrive', async () => {
+        const N = 12;
+        const owners = Array.from({ length: N }, () => crypto.randomBytes(32).toString('hex'));
+        const h: History = { owners, gen1: owners.map(() => fakeCopy()), gen2: owners.map(() => fakeCopy()), deleted: owners.map((_, i) => i), real: [] };
+        const historyFile = path.join(tempDir('all-deleted-history'), 'history.json');
+        fs.writeFileSync(historyFile, JSON.stringify(h));
+        // The standby before the seal: it imported every deposit and re-deposit. Its main server then deleted every copy,
+        // which never reached it: all N are still rows here, and the re-deposits' older copies are in its free pages.
+        const pristine = tempDir('all-deleted-standby');
+        const sb = resultOf(await runChild([SCRIPT], pristine, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: historyFile, SEAL_SIDE: 'standby' }));
+        const watch = [...h.gen1, ...h.gen2];
+        const before = copiesFoundIn(pristine, h.gen1);
+        check(sb.rows === N && before > 0,
+            `control: before the upgrade the standby holds all ${sb.rows} copies its main server deleted, and ${before} of the ${N} older ones in its free pages`);
+        const copyOf = (dir: string, label: string) => {
+            const d = tempDir(label);
+            for (const f of ['state.db', 'state.db-wal', 'state.db-shm']) if (fs.existsSync(path.join(dir, f))) fs.copyFileSync(path.join(dir, f), path.join(d, f));
+            return d;
+        };
+        const brief = (x: any) => JSON.stringify(x && { cleared: !!x.cleared, rows: x.rows, unwrapped: x.unwrapped, inFiles: x.inFiles });
+        // A member who deposits after the seal: the first wrapped copy the standby is sent.
+        const seal = await import('./services/recovery-seal-key.js');
+        const newcomer = newId().pk;
+        const later = exportRow(newcomer, N, seal.sealRecoveryFields(fakeCopy(), seal.shareRowAad(newcomer, 'sso')), 1, new Date().toISOString());
+
+        // (1) Its routine whole copy of the main server, which holds no copy, then a delta with the newcomer's.
+        const routineDir = copyOf(pristine, 'all-deleted-routine');
+        const routineFile = path.join(tempDir('all-deleted-routine-script'), 'script.json');
+        fs.writeFileSync(routineFile, JSON.stringify({ resyncFirst: false, reconcileMinutes: 60, pulls: 3, watch, steps: [[], [later]] } satisfies StandbyScript));
+        const r = await runChild([SCRIPT], routineDir, { RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup', SEAL_SCRIPT: routineFile });
+        const s = resultOf(r);
+        const [whole, delta, next] = s.pulls ?? [];
+        check(s.atBoot?.rows === N && s.atBoot?.unwrapped === N && s.atBoot?.cleared === null,
+            `at boot it waits: every copy it holds is in the old form (${brief(s.atBoot)})`);
+        check(whole?.route === 'snapshot' && whole.snapshotCursor === null && delta?.route === 'delta',
+            `its first pull is a routine whole copy, never a 304, then a delta (${JSON.stringify((s.pulls ?? []).map((p: any) => p.route))})`);
+        check(delta?.before?.rows === 0 && /removed 12 sign-in recovery copies its main server deleted before the seal/.test(r.stdout),
+            `the whole copy, which holds none of them, removes all ${N} (${brief(delta?.before)}; ${sealLines(r)})`);
+        check(delta?.before?.inFiles === 0,
+            `...after which its running state.db, -wal and -shm hold none of the ${watch.length} copies deleted or dropped before the seal (found ${delta?.before?.inFiles}; ${before} older ones before)`);
+        check(delta?.before?.cleared === null,
+            `...and it records no clear: nothing yet shows its main server has sealed (${brief(delta?.before)})`);
+        const unrecorded = /holds no sign-in recovery copy now: the 12 sign-in recovery copies it held in the form stored before the seal are gone\. It cleared state\.db/;
+        check(unrecorded.test(r.stdout), '...and says so');
+        check(typeof next?.before?.cleared === 'string' && next.before.rows === 1 && next.before.unwrapped === 0 && next.before.inFiles === 0,
+            `the delta that brings the first wrapped copy is when it records the clear (${brief(next?.before)})`);
+
+        // (2) The same standby force-resynced from the main server, which holds no copy.
+        const resyncDir = copyOf(pristine, 'all-deleted-resync');
+        const resyncFile = path.join(tempDir('all-deleted-resync-script'), 'script.json');
+        fs.writeFileSync(resyncFile, JSON.stringify({ resyncFirst: true, reconcileMinutes: 0, pulls: 1, watch, steps: [[]] } satisfies StandbyScript));
+        const rr = await runChild([SCRIPT], resyncDir, { RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup', SEAL_SCRIPT: resyncFile });
+        const t = resultOf(rr);
+        check(t.atBoot?.rows === N && t.resync?.ok === true && t.final?.rows === 0,
+            `a force-resync from it leaves the standby holding no copy (${JSON.stringify({ boot: t.atBoot?.rows, resync: t.resync, after: t.final?.rows })})`);
+        check(t.final?.inFiles === 0,
+            `...and its running state.db, -wal and -shm hold none of the ${watch.length} copies deleted or dropped before the seal (found ${t.final?.inFiles})`);
+        check(t.final?.cleared === null && unrecorded.test(rr.stdout), `...and it records no clear, and says so (${brief(t.final)}; ${sealLines(rr)})`);
     });
 
     console.log(`\n${passed}/${run} checks passed.`);

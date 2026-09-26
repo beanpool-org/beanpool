@@ -8,7 +8,7 @@
  * not have to move with them.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
     clearUnsentPendingJoin,
     completePendingJoin,
@@ -199,6 +199,21 @@ export const quietButton: React.CSSProperties = {
 export const heading: React.CSSProperties = { fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' };
 export const lede: React.CSSProperties = { color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem', lineHeight: 1.5 };
 
+/**
+ * Run `step` and hand any failure to `onFail`: a promise that rejects, and a throw before `step` has returned one
+ * (review 4108355852), which `step().catch(onFail)` would let escape. Started at once, as a direct call would be.
+ */
+export function runStep(step: () => Promise<unknown>, onFail: (e: unknown) => void): void {
+    let running: Promise<unknown>;
+    try {
+        running = step();
+    } catch (e) {
+        onFail(e);
+        return;
+    }
+    Promise.resolve(running).catch(onFail);
+}
+
 export function NoticeLine({ notice }: { notice: Notice }) {
     if (!notice) return null;
     return notice.tone === 'error' ? (
@@ -216,6 +231,7 @@ export function NoticeLine({ notice }: { notice: Notice }) {
 export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = false, onSettled, onExisting, reload, navigate, origin, authReturn }: Props) {
     const [screen, setScreen] = useState<Screen>({ name: 'loading' });
     const [showWords, setShowWords] = useState(false);
+    const wordsId = useId();
     const [notice, setNotice] = useState<Notice>(null);
     const [pending, setPending] = useState<PendingJoin | null>(null);
     const [name, setName] = useState('');
@@ -273,7 +289,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
 
     /** Every step after a join has gone runs through this, from a GitHub wait, a Try again or the return: none is left to fail unseen. */
     const afterJoin = useCallback((step: () => Promise<unknown>) => {
-        step().catch(failed);
+        runStep(step, failed);
     }, [failed]);
 
     /**
@@ -1251,28 +1267,34 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                             {` To use ${it} here instead, sign out of ${heldName ?? 'the other account'} in Settings, then restore ${it} with those words.`}
                         </p>
                     )}
-                    {words && (showWords ? (
-                        // As the Safety Backup step lays them out: as many columns as whole words fit (one on a 320px
-                        // phone at 1.3x text), and a word someone copies onto paper is never broken across lines.
-                        <ol data-testid="join-taken-words" style={{
-                            listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
-                            gap: '0.4rem', padding: 0, margin: '0 0 0.75rem', overflowWrap: 'normal',
-                        }}>
-                            {words.map((w, i) => (
-                                <li key={i} style={{
-                                    background: 'var(--bg-secondary, #1e293b)', borderRadius: 8, padding: '0.5rem 0.4rem',
-                                    fontSize: '0.8rem', fontFamily: 'monospace', textAlign: 'center', minWidth: 0,
+                    {words && (
+                        <>
+                            {/* One button that shows and hides them (review 4108355858): it stays where it is, so focus
+                                does too, and the words can be put away again on a shared screen. */}
+                            <button type="button" style={secondaryButton} aria-expanded={showWords}
+                                aria-controls={showWords ? wordsId : undefined} onClick={() => setShowWords((shown) => !shown)}>
+                                {`${showWords ? 'Hide' : 'Show'} ${mine ? `${mine}'s` : 'its'} 12 words`}
+                            </button>
+                            {showWords && (
+                                // As the Safety Backup step lays them out: as many columns as whole words fit (one on a
+                                // 320px phone at 1.3x text), and a word someone copies onto paper is never broken across lines.
+                                <ol id={wordsId} data-testid="join-taken-words" aria-label={`${mine ? `${mine}'s` : 'Its'} 12 words`} style={{
+                                    listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
+                                    gap: '0.4rem', padding: 0, margin: '0 0 0.75rem', overflowWrap: 'normal',
                                 }}>
-                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{i + 1}. </span>
-                                    <strong>{w}</strong>
-                                </li>
-                            ))}
-                        </ol>
-                    ) : (
-                        <button type="button" style={secondaryButton} onClick={() => setShowWords(true)}>
-                            {mine ? `Show ${mine}'s 12 words` : 'Show its 12 words'}
-                        </button>
-                    ))}
+                                    {words.map((w, i) => (
+                                        <li key={i} style={{
+                                            background: 'var(--bg-secondary, #1e293b)', borderRadius: 8, padding: '0.5rem 0.4rem',
+                                            fontSize: '0.8rem', fontFamily: 'monospace', textAlign: 'center', minWidth: 0,
+                                        }}>
+                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{i + 1}. </span>
+                                            <strong>{w}</strong>
+                                        </li>
+                                    ))}
+                                </ol>
+                            )}
+                        </>
+                    )}
                     <button type="button" style={primaryButton} onClick={() => (onExisting ? onExisting(screen.held) : reloadPage())}>
                         {heldName ? `Open ${heldName}` : 'Open it'}
                     </button>
@@ -1284,6 +1306,8 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         case 'failed':
             body = (
                 <>
+                    {/* A heading like every other screen's (review 4108355867); the notice under it says what happened. */}
+                    <h3 style={heading}>Not finished yet</h3>
                     <NoticeLine notice={notice ?? { tone: 'error', text: WENT_WRONG }} />
                     <button type="button" style={primaryButton} onClick={() => reloadPage()}>Reload page</button>
                 </>

@@ -73,17 +73,29 @@ async function withStoredSlots<T>(decide: (stored: StoredSlots) => SlotWrites<T>
         const pendingReq = store.get(PENDING_JOIN_ID);
         const restoreReq = store.get(PENDING_RESTORE_ID);
         restoreReq.onsuccess = () => {
-            const decision = decide({
-                identity: (identityReq.result ?? undefined) as BeanPoolIdentity | undefined,
-                pending: (pendingReq.result ?? undefined) as PendingJoin | undefined,
-                restore: restoreReq.result ?? undefined,
-            });
-            if (decision.identity) store.put(decision.identity, KEY_ID);
-            if (decision.pending === 'delete') store.delete(PENDING_JOIN_ID);
-            else if (decision.pending) store.put(decision.pending, PENDING_JOIN_ID);
-            if (decision.restore === 'delete') store.delete(PENDING_RESTORE_ID);
-            else if (decision.restore) store.put(decision.restore, PENDING_RESTORE_ID);
-            result = decision.result;
+            try {
+                const decision = decide({
+                    identity: (identityReq.result ?? undefined) as BeanPoolIdentity | undefined,
+                    pending: (pendingReq.result ?? undefined) as PendingJoin | undefined,
+                    restore: restoreReq.result ?? undefined,
+                });
+                if (decision.identity) store.put(decision.identity, KEY_ID);
+                if (decision.pending === 'delete') store.delete(PENDING_JOIN_ID);
+                else if (decision.pending) store.put(decision.pending, PENDING_JOIN_ID);
+                if (decision.restore === 'delete') store.delete(PENDING_RESTORE_ID);
+                else if (decision.restore) store.put(decision.restore, PENDING_RESTORE_ID);
+                result = decision.result;
+            } catch (err) {
+                // A `decide` that throws, or a value the store can't take (put's DataCloneError): the caller hears that
+                // error, not an uncaught one nor the bare abort it would cause, and nothing written here stays
+                // (review 4108355843). Rejected first, so the abort's own rejection below comes too late to replace it.
+                reject(err);
+                try {
+                    tx.abort();
+                } catch {
+                    // Already aborted (it can't have committed inside its own request's callback): nothing left to undo.
+                }
+            }
         };
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
@@ -102,6 +114,10 @@ async function withStoredSlots<T>(decide: (stored: StoredSlots) => SlotWrites<T>
  * without the member being told. The same key may be written again (a name change, a join finishing twice), and keeps
  * the 12 words stored with it when the new copy brings none. The one way to put another account here is the member's
  * own: sign out (wipeIdentity), then restore it.
+ *
+ * A save can also be told to wait for a join that went out from this browser (SaveIdentityOptions): then it is refused
+ * (SentJoinWaitingError) while such a join is stored unsettled, decided in the same transaction that would write the
+ * identity. A check in a transaction of its own would leave a gap in which another tab could mark a join sent.
  */
 
 /** This browser holds another account, and a write that would have replaced it was refused. Nothing changed. */
@@ -183,11 +199,11 @@ export function seedViewedKey(publicKey: string): string {
 /**
  * Generate a new Ed25519 identity from a 12-word mnemonic.
  * Returns the identity AND the mnemonic (for one-time display).
- * Refused, with nothing saved, when this browser holds another account (IdentityHeldError).
+ * Refused, with nothing saved, when this browser holds another account (IdentityHeldError), or as `options` says.
  */
-export async function createIdentity(callsign: string): Promise<BeanPoolIdentity> {
+export async function createIdentity(callsign: string, options: SaveIdentityOptions = {}): Promise<BeanPoolIdentity> {
     const identity = await generateIdentity(callsign);
-    await saveIdentity(identity);
+    await saveIdentity(identity, options);
     return identity;
 }
 
@@ -199,11 +215,11 @@ export async function generateIdentity(callsign: string): Promise<BeanPoolIdenti
 /**
  * Recover identity from a 12-word mnemonic phrase.
  * Derives the same keypair deterministically.
- * Refused, with nothing saved, when this browser holds another account (IdentityHeldError).
+ * Refused, with nothing saved, when this browser holds another account (IdentityHeldError), or as `options` says.
  */
-export async function createIdentityFromMnemonic(words: string[], callsign: string): Promise<BeanPoolIdentity> {
+export async function createIdentityFromMnemonic(words: string[], callsign: string, options: SaveIdentityOptions = {}): Promise<BeanPoolIdentity> {
     const identity = await identityFromMnemonic(words, callsign);
-    await saveIdentity(identity);
+    await saveIdentity(identity, options);
     return identity;
 }
 
@@ -298,6 +314,43 @@ export class PendingJoinHeldError extends Error {
         this.name = 'PendingJoinHeldError';
         this.held = held;
     }
+}
+
+/**
+ * A join that went out from this browser waits to be settled, and a save told to wait for one (SaveIdentityOptions)
+ * was refused. Nothing changed.
+ */
+export class SentJoinWaitingError extends Error {
+    /** The sent pending join as it is stored, for the page to settle first. */
+    readonly pending: PendingJoin;
+    constructor(pending: PendingJoin) {
+        super('A join that went out from this browser has not been settled, so no identity was saved.');
+        this.name = 'SentJoinWaitingError';
+        this.pending = pending;
+    }
+}
+
+/** A sent join the node has said never landed and can no longer land: its key, and when it was last sent (lastSentAt). */
+export interface SettledSentJoin {
+    publicKey: string;
+    sentAt: number;
+}
+
+export interface SaveIdentityOptions {
+    /**
+     * Refuse the save (SentJoinWaitingError) while a join that went out from this browser is stored unsettled, unless
+     * it is `except`, as last sent: one sent again since is waited for again. Decided on the pending join as stored, in
+     * the transaction that writes the identity.
+     */
+    refuseWhileSentJoinWaits?: { except: SettledSentJoin | null };
+}
+
+/** The sent pending join a save told `options` must wait for, or null. */
+function sentJoinToWaitFor(pending: PendingJoin | undefined, options: SaveIdentityOptions): PendingJoin | null {
+    const rule = options.refuseWhileSentJoinWaits;
+    if (!rule || !isSent(pending)) return null;
+    const settled = rule.except;
+    return settled && settled.publicKey === pending.identity.publicKey && settled.sentAt === lastSentAt(pending) ? null : pending;
 }
 
 /*
@@ -594,10 +647,23 @@ export async function clearPendingRestore(): Promise<void> {
 
 /**
  * Import a pre-existing identity (from another device) and store it in IndexedDB. Refused, with nothing changed, when
- * this browser holds another account (IdentityHeldError).
+ * this browser holds another account (IdentityHeldError), or as `options` says.
  */
-export async function importIdentity(identity: BeanPoolIdentity): Promise<void> {
-    await saveIdentity(identity);
+export async function importIdentity(identity: BeanPoolIdentity, options: SaveIdentityOptions = {}): Promise<void> {
+    await saveIdentity(identity, options);
+}
+
+/**
+ * Would importIdentity(identity, options) be refused as things are stored now? Throws the refusal it would, and writes
+ * nothing. For asking before something the save depends on is spent (an invite): the save decides again, in its own
+ * transaction, so a tab that changes things in between is still refused there.
+ */
+export async function checkIdentitySave(identity: BeanPoolIdentity, options: SaveIdentityOptions = {}): Promise<void> {
+    const refused = await withStoredSlots<SaveRefusal | null>((stored) => {
+        const verdict = saveVerdict(stored, identity, options);
+        return { result: 'write' in verdict ? null : verdict };
+    });
+    if (refused) throw saveRefusedError(refused);
 }
 
 /**
@@ -633,11 +699,28 @@ export async function updateCallsign(newCallsign: string): Promise<BeanPoolIdent
     });
 }
 
-/** Save `identity` as this browser's, unless it holds another account (IdentityHeldError, nothing changed). */
-async function saveIdentity(identity: BeanPoolIdentity): Promise<void> {
-    const held = await withStoredSlots<BeanPoolIdentity | null>(({ identity: stored }) => {
-        const next = identityToWrite(stored, identity);
-        return 'held' in next ? { result: next.held } : { identity: next.write, result: null };
+type SaveRefusal = { held: BeanPoolIdentity } | { sentJoin: PendingJoin };
+
+/** What a save of `incoming` does as things are stored: saveIdentity and checkIdentitySave decide it the same way. */
+function saveVerdict(stored: StoredSlots, incoming: BeanPoolIdentity, options: SaveIdentityOptions): { write: BeanPoolIdentity } | SaveRefusal {
+    // The sent join first, as the page settles it first: its key may be a member, and this browser its only copy.
+    const sentJoin = sentJoinToWaitFor(stored.pending, options);
+    if (sentJoin) return { sentJoin };
+    return identityToWrite(stored.identity, incoming);
+}
+
+function saveRefusedError(refused: SaveRefusal): Error {
+    return 'held' in refused ? new IdentityHeldError(refused.held) : new SentJoinWaitingError(refused.sentJoin);
+}
+
+/**
+ * Save `identity` as this browser's, unless it holds another account (IdentityHeldError), or `options` says to wait for
+ * a sent join that is stored (SentJoinWaitingError). Refused, nothing changes.
+ */
+async function saveIdentity(identity: BeanPoolIdentity, options: SaveIdentityOptions = {}): Promise<void> {
+    const refused = await withStoredSlots<SaveRefusal | null>((stored) => {
+        const verdict = saveVerdict(stored, identity, options);
+        return 'write' in verdict ? { identity: verdict.write, result: null } : { result: verdict };
     });
-    if (held) throw new IdentityHeldError(held);
+    if (refused) throw saveRefusedError(refused);
 }

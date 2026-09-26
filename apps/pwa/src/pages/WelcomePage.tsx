@@ -11,9 +11,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
-    clearUnsentPendingJoin, createIdentity, createIdentityFromMnemonic, identityFromMnemonic, importIdentity, updateCallsign, getMnemonic,
-    hasMnemonic, lastSentAt, loadPendingJoin, loadPendingRestore, pendingJoinSent, seedViewedKey, IdentityHeldError, type BeanPoolIdentity,
-    type JoinProvider,
+    checkIdentitySave, clearUnsentPendingJoin, createIdentityFromMnemonic, generateIdentity, identityFromMnemonic, importIdentity,
+    updateCallsign, getMnemonic, hasMnemonic, loadPendingJoin, loadPendingRestore, pendingJoinSent, seedViewedKey, IdentityHeldError,
+    SentJoinWaitingError, type BeanPoolIdentity, type JoinProvider, type SaveIdentityOptions,
 } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
@@ -265,7 +265,8 @@ export function WelcomePage({ onComplete }: Props) {
      * about it (the membership probe, which the door doesn't gate): a member is in. With the door open it carries on as
      * ever. With the door shut it only settles (`settleOnly`): a join that may still land is waited for, and one the node
      * says never landed and can no longer land hands the page back (`settledNotLanded`), its key kept as it is. And
-     * nothing here writes an identity (an invite, a restore) while such a join is unsettled: `noSentJoinWaiting` first.
+     * nothing here writes an identity (an invite, a restore) while such a join is unsettled: every save carries
+     * `sentJoinGuard()`.
      */
     const [sentJoin, setSentJoin] = useState<'checking' | 'none' | 'settle'>('checking');
     const settledNotLanded = useRef<{ publicKey: string; sentAt: number } | null>(null);
@@ -282,14 +283,13 @@ export function WelcomePage({ onComplete }: Props) {
     }, []);
 
     /**
-     * True when no join that went out from this browser waits to be settled: none is stored, or the node has said the
-     * one stored never landed and can no longer land. Read from the store every time, never from this page's memory.
+     * What every identity save here carries: refused (SentJoinWaitingError) while a join that went out from this browser
+     * waits to be settled, unless it is the one the node has said never landed and can no longer land. identity.ts
+     * decides it on the store as it is, in the transaction that writes the identity, so another tab can't send a join
+     * between the check and the write (#1171's deciding pass).
      */
-    async function noSentJoinWaiting(): Promise<boolean> {
-        const p = await loadPendingJoin();
-        if (!p || !pendingJoinSent(p)) return true;
-        const cleared = settledNotLanded.current;
-        return !!cleared && cleared.publicKey === p.identity.publicKey && cleared.sentAt === lastSentAt(p);
+    function sentJoinGuard(): SaveIdentityOptions {
+        return { refuseWhileSentJoinWaits: { except: settledNotLanded.current } };
     }
 
     /** Hand the page to WebJoin to settle the sent join first; the member comes back here once it is. */
@@ -324,6 +324,8 @@ export function WelcomePage({ onComplete }: Props) {
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
 
     const [pendingIdentity, setPendingIdentity] = useState<BeanPoolIdentity | null>(null);
+    // An invite join's new key, until the node takes the invite: held here only, never saved (handleCreate).
+    const inviteKey = useRef<BeanPoolIdentity | null>(null);
 
     // The words for the backup step. Read through the accessor and held in state, because
     // that read becomes a vault read in Phase C and a render cannot await.
@@ -421,17 +423,18 @@ export function WelcomePage({ onComplete }: Props) {
                             await finishRestoreAtDoor(decrypted);
                             return;
                         }
-                        if (!(await noSentJoinWaiting())) {
-                            setPairingStatus('idle');
-                            settleSentJoinFirst();
-                            return;
-                        }
-                        await importIdentity(decrypted);
+                        await importIdentity(decrypted, sentJoinGuard());
                         setPairingStatus('success');
                         setTimeout(() => {
                             onComplete(decrypted);
                         }, 600);
                     } catch (decryptErr: any) {
+                        if (decryptErr instanceof SentJoinWaitingError) {
+                            // Not while a join that went out from this browser is unsettled: that one is asked about first.
+                            setPairingStatus('idle');
+                            settleSentJoinFirst();
+                            return;
+                        }
                         if (decryptErr instanceof IdentityHeldError) {
                             setPairingStatus('idle');
                             setShowQrPairing(false);
@@ -526,48 +529,83 @@ export function WelcomePage({ onComplete }: Props) {
                 return;
             }
 
-            // No identity is made while a join that went out from this browser is unsettled: that one is asked about first.
-            if (!pendingIdentity && !(await noSentJoinWaiting())) {
-                setLoading(false);
-                settleSentJoinFirst();
-                return;
-            }
-            const identity = pendingIdentity
-                ? { ...pendingIdentity, callsign: trimmedCallsign }
-                : await createIdentity(trimmedCallsign);
-            setPendingIdentity(identity);
-            setPendingInviteCode(trimmedCode);
+            // The key is made on the first try and held in memory, not saved, until the node takes the invite (review
+            // 4108355836): a code the node refuses, or an answer that never comes, leaves nothing here to open on a
+            // reload. A retry sends the same key, so an invite the node took while its answer was lost is answered
+            // "already a member", and the key is saved then.
+            const identity = inviteKey.current
+                ? { ...inviteKey.current, callsign: trimmedCallsign }
+                : await generateIdentity(trimmedCallsign);
+            inviteKey.current = identity;
+            // Nothing is spent on a key this browser couldn't keep: another account saved here, or a join that went out
+            // from this browser and waits to be settled (asked about first). The save below decides it again.
+            await checkIdentitySave(identity, sentJoinGuard());
 
-            // Redeem invite immediately so user is registered on node right away
+            // Redeem invite immediately so user is registered on node right away. Signed with the key it names, which
+            // is not this browser's identity yet.
             try {
                 const { redeemInvite, redeemOfflineTicket } = await import('../lib/api');
                 if (trimmedCode.length > 20 && trimmedCode.startsWith('BP-')) {
                     const ticketB64 = trimmedCode.slice(3);
-                    await redeemOfflineTicket(ticketB64, identity.publicKey, identity.callsign);
+                    await redeemOfflineTicket(ticketB64, identity.publicKey, identity.callsign, identity);
                 } else {
-                    await redeemInvite(trimmedCode, identity.publicKey, identity.callsign);
+                    await redeemInvite(trimmedCode, identity.publicKey, identity.callsign, identity);
                 }
             } catch (redeemErr: any) {
-                if (!redeemErr?.message?.includes('already a member') && !redeemErr?.message?.includes('already been used')) {
-                    throw redeemErr;
+                // Only a node saying this key is a member already goes on (an older node says it this way; today's
+                // answers that with a success). "Already been used" does not: the node answers a key that is a member
+                // before it looks at the code, so that one means another key used it, and this key is not a member.
+                if (!redeemErr?.message?.includes('already a member')) {
+                    const status = redeemErr?.status;
+                    setError(typeof status === 'number' && status < 500 && redeemErr.message
+                        ? redeemErr.message
+                        : "Can't reach the community right now. Try again in a minute.");
+                    setLoading(false);
+                    return;
                 }
             }
-            // Either it just succeeded or the node says this member is already registered.
-            // Both mean the final step has nothing left to redeem.
+            // The node has this member: now the key is saved, through the guarded write.
+            await importIdentity(identity, sentJoinGuard());
+            inviteKey.current = null;
+            setPendingIdentity(identity);
+            setPendingInviteCode(trimmedCode);
+            // Redeemed here, so the final step has nothing left to redeem.
             setInviteRedeemed(true);
 
             setShowAvatarSetup(true);
             setLoading(false);
         } catch (err) {
             setLoading(false);
+            if (err instanceof SentJoinWaitingError) {
+                // A join that went out from this browser is asked about first. This page's key stays in memory for
+                // the next try, unsaved.
+                settleSentJoinFirst();
+                return;
+            }
             if (err instanceof IdentityHeldError) {
-                // Another tab saved an account here meanwhile. The key just made was never saved or sent.
+                // Another tab saved an account here meanwhile. The key made here was never saved.
                 setHeldIdentity(err.held);
                 return;
             }
             setError('Failed to generate identity. Please try again.');
             console.error(err);
         }
+    }
+
+    /**
+     * "← Back" on the photo step after an invite (the open door has none). By then the key is saved here and the node
+     * has taken the invite for it. Going back leaves both as they are and forgets them on this page only, so the name
+     * form's next try makes a new key, which the saved one refuses (IdentityHeldError: "This browser already has an
+     * account"). What Back should do instead is an open product call (board card invite-back-step): this is its seam.
+     */
+    function backFromPhotoStep() {
+        setPendingIdentity(null);
+        setPendingAvatar(null);
+        // Going back discards the identity, so what was redeemed
+        // no longer describes what is about to be submitted.
+        setInviteRedeemed(false);
+        setShowAvatarSetup(false);
+        setError(null);
     }
 
     const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -736,18 +774,18 @@ export function WelcomePage({ onComplete }: Props) {
         }
         if (membership.isMember) {
             const member = { ...identity, callsign: membership.callsign || identity.callsign };
-            if (!(await noSentJoinWaiting())) {
-                // A join that went out from this browser comes first (review 4106962311): the node may have that key as
-                // a member, and this browser its only copy. WebJoin asks about it with this key waiting, says what it
-                // found, and lets the member choose once that join can no longer land.
-                setShowQrPairing(false);
-                setShowRecovery(false);
-                setRestoredForDoor(member);
-                return true;
-            }
             try {
-                await importIdentity(member);
+                await importIdentity(member, sentJoinGuard());
             } catch (e) {
+                if (e instanceof SentJoinWaitingError) {
+                    // A join that went out from this browser comes first (review 4106962311): the node may have that key
+                    // as a member, and this browser its only copy. WebJoin asks about it with this key waiting, says what
+                    // it found, and lets the member choose once that join can no longer land.
+                    setShowQrPairing(false);
+                    setShowRecovery(false);
+                    setRestoredForDoor(member);
+                    return true;
+                }
                 if (!(e instanceof IdentityHeldError)) throw e;
                 setShowQrPairing(false);
                 setShowRecovery(false);
@@ -812,18 +850,13 @@ export function WelcomePage({ onComplete }: Props) {
             return;
         }
         try {
-            // Not while a join that went out from this browser is unsettled: that one is asked about first.
-            if (!(await noSentJoinWaiting())) {
-                settleSentJoinFirst();
-                return;
-            }
             // The 12 words ARE the identity. The callsign and avatar are just
             // node-held profile data that travel with the key, so we pull the
             // callsign down rather than asking for it (the avatar is read live
             // from the node on this app). We never push a typed/placeholder name
             // back up. If the node can't be reached the account still restores and
             // adopts its real name on the first online membership check.
-            let identity = await createIdentityFromMnemonic(words, '');
+            let identity = await createIdentityFromMnemonic(words, '', sentJoinGuard());
             try {
                 const mem = await checkMembership(identity.publicKey);
                 if (mem?.callsign) {
@@ -837,6 +870,11 @@ export function WelcomePage({ onComplete }: Props) {
             }
             onComplete(identity);
         } catch (e) {
+            if (e instanceof SentJoinWaitingError) {
+                // Not while a join that went out from this browser is unsettled: that one is asked about first.
+                settleSentJoinFirst();
+                return;
+            }
             if (e instanceof IdentityHeldError) {
                 setShowRecovery(false);
                 setHeldIdentity(e.held);
@@ -1146,15 +1184,7 @@ export function WelcomePage({ onComplete }: Props) {
                                 name screen to go back to, and discarding the identity would strand the account. */}
                             {!joinedByDoor && (
                             <button
-                                onClick={() => {
-                                    setPendingIdentity(null);
-                                    setPendingAvatar(null);
-                                    // Going back discards the identity, so what was redeemed
-                                    // no longer describes what is about to be submitted.
-                                    setInviteRedeemed(false);
-                                    setShowAvatarSetup(false);
-                                    setError(null);
-                                }}
+                                onClick={backFromPhotoStep}
                                 disabled={loading}
                                 style={{
                                     background: 'none',

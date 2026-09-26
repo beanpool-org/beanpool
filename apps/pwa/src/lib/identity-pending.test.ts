@@ -17,6 +17,7 @@ import {
     wipeIdentity,
     importIdentity,
     IdentityHeldError,
+    SentJoinWaitingError,
     PENDING_JOIN_TTL_MS,
     type BeanPoolIdentity,
     type NodeRefusedJoin,
@@ -365,4 +366,96 @@ describe('one browser, one identity: nothing writes a different key over the one
         await expect(updateCallsign('Alicia')).rejects.toMatchObject({ name: 'QuotaExceededError' });
         expect(await loadIdentity()).toEqual(IDENTITY);
     }, 2000);
+});
+
+describe('a save told to wait for a sent join decides it in the transaction that writes (#1171 deciding pass)', () => {
+    const OTHER: BeanPoolIdentity = { ...IDENTITY, publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(96), callsign: 'Bea' };
+    const peek = () => idb.peek('beanpool-identity', 'keys', 'pending-join') as PendingJoin | undefined;
+    const T = 1_800_000_000_000;
+    const WAIT = { refuseWhileSentJoinWaits: { except: null } };
+
+    it('refused while a join that went out from this browser is stored, whichever way the key comes, and nothing changes', async () => {
+        await markPendingJoinSent(pending({ identity: OTHER }), T);
+        for (const save of [
+            () => importIdentity(IDENTITY, WAIT),
+            () => createIdentityFromMnemonic(generateMnemonic(), '', WAIT),
+            () => createIdentity('Rowan', WAIT),
+        ]) {
+            const refused = await save().then(() => null, (e: unknown) => e);
+            expect(refused).toBeInstanceOf(SentJoinWaitingError);
+            expect((refused as SentJoinWaitingError).pending).toMatchObject({ identity: { publicKey: OTHER.publicKey }, sentAt: T });
+        }
+        expect(await loadIdentity()).toBeNull();
+        expect(peek()).toMatchObject({ identity: { publicKey: OTHER.publicKey, mnemonic: OTHER.mnemonic }, sentAt: T });
+    });
+
+    it('goes ahead past a pending join never sent, and past the sent one the node settled; not once it is sent again', async () => {
+        await savePendingJoin(pending({ identity: OTHER }));
+        await importIdentity(IDENTITY, WAIT);
+        expect((await loadIdentity())?.publicKey).toBe(IDENTITY.publicKey);
+
+        await wipeIdentity();
+        await markPendingJoinSent(pending({ identity: OTHER }), T);
+        const settled = { refuseWhileSentJoinWaits: { except: { publicKey: OTHER.publicKey, sentAt: T } } };
+        await markPendingJoinSent(pending({ identity: OTHER }), T + 1000); // another tab sends it again
+        await expect(importIdentity(IDENTITY, settled)).rejects.toBeInstanceOf(SentJoinWaitingError);
+        expect(await loadIdentity()).toBeNull();
+        await importIdentity(IDENTITY, { refuseWhileSentJoinWaits: { except: { publicKey: OTHER.publicKey, sentAt: T + 1000 } } });
+        expect((await loadIdentity())?.publicKey).toBe(IDENTITY.publicKey);
+        expect(peek()).toMatchObject({ identity: { publicKey: OTHER.publicKey }, sentAt: T + 1000 });
+    });
+
+    it("the two-tab gap: a check read in its own transaction is stale once another tab marks a join sent; the save's own check refuses", async () => {
+        // This tab reads the slot on its own first (as the welcome page did), and finds no sent join...
+        expect(await loadPendingJoin()).toBeNull();
+        // ...another tab sends one...
+        await markPendingJoinSent(pending({ identity: OTHER }), T);
+        // ...and the save, deciding again on what is stored as it writes, is refused.
+        await expect(importIdentity(IDENTITY, WAIT)).rejects.toBeInstanceOf(SentJoinWaitingError);
+        expect(await loadIdentity()).toBeNull();
+        expect(peek()).toMatchObject({ identity: { publicKey: OTHER.publicKey }, sentAt: T });
+    });
+
+    it('with a sent join waiting and another account here, the sent join is named first, as the page settles it first', async () => {
+        await importIdentity(OTHER);
+        await markPendingJoinSent(pending({ identity: { ...OTHER, publicKey: 'e'.repeat(64) } }), T);
+        await expect(importIdentity(IDENTITY, WAIT)).rejects.toBeInstanceOf(SentJoinWaitingError);
+        await expect(importIdentity(IDENTITY)).rejects.toBeInstanceOf(IdentityHeldError);
+    });
+});
+
+describe('a write that throws before it commits (review 4108355843)', () => {
+    /** Errors that escaped to the window, as an uncaught throw in an IndexedDB callback does. */
+    function watchEscapes() {
+        const escaped: unknown[] = [];
+        const onError = (e: ErrorEvent) => { escaped.push(e.error); e.preventDefault(); };
+        window.addEventListener('error', onError);
+        return { escaped, stop: () => window.removeEventListener('error', onError) };
+    }
+
+    it('a decision that throws: the caller gets that error, not an abort, nothing is written, and nothing escapes', async () => {
+        await importIdentity(IDENTITY);
+        const watch = watchEscapes();
+        try {
+            // No identity to compare with: the decision itself throws.
+            const refused = await importIdentity(null as unknown as BeanPoolIdentity).then(() => null, (e: unknown) => e);
+            expect(refused).toBeInstanceOf(TypeError);
+            expect(await loadIdentity()).toEqual(IDENTITY);
+            expect(watch.escaped).toEqual([]);
+        } finally {
+            watch.stop();
+        }
+    });
+
+    it("a value the store can't take (DataCloneError from put): that error, nothing written, nothing escapes", async () => {
+        const watch = watchEscapes();
+        try {
+            const unsaveable = { ...IDENTITY, sign: () => 'not cloneable' } as unknown as BeanPoolIdentity;
+            await expect(importIdentity(unsaveable)).rejects.toMatchObject({ name: 'DataCloneError' });
+            expect(await loadIdentity()).toBeNull();
+            expect(watch.escaped).toEqual([]);
+        } finally {
+            watch.stop();
+        }
+    });
 });

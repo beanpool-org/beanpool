@@ -454,6 +454,9 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        // The answer is the post as its author has it, and for an event a convenor may edit, that is someone else, with
+        // their name. The engine refuses a non-member convenor on every node (updatePost); here the visitors' view answers first.
+        if (!membersOnlyHere(ctx)) return;
         // G3, global profile: an edit publishes too, so a muted member can't make one; on probation, an edit can't
         // bring in photos past the day's allowance. A photo the post already has comes back as its own URL.
         const actor = ctx.state?.actor as string;
@@ -472,7 +475,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
-        ctx.status = 400;
+        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to update post' };
     }
 });

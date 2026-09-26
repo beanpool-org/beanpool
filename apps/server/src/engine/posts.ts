@@ -615,6 +615,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (eventRow?.type === 'event') {
         // Every host may edit, not only the author (§2.2) — so the author check below is the host check.
         if (!isEventHost(db, eventRow, authorPublicKey)) return null;
+        // Someone else's event, as a convenor of its group: only from a member of this node, as in removePost. The
+        // convenor's group row outlasts a prune, and the edit goes out under the author's name and moves everyone going.
+        // A keeper sends the enterprise's own key (the author), and isEventHost's keeper branch already needs an active keeper.
+        if (eventRow.author_pubkey !== authorPublicKey) assertNodeMember(authorPublicKey);
         if (eventRow.event_state === 'cancelled' || eventRow.status === 'cancelled' || !eventRow.active) {
             throw new Error('Cannot edit a cancelled event');
         }

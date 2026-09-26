@@ -1003,6 +1003,8 @@ async function main(): Promise<void> {
         const tradeStatuses = () => (db.prepare("SELECT id, status FROM marketplace_transactions WHERE id LIKE 'mt-pruned-%' ORDER BY id").all() as { id: string; status: string }[])
             .map(r => `${r.id}=${r.status}`).join(' ');
         const tradesBefore = tradeStatuses();
+        const clubEventNow = () => JSON.stringify(db.prepare('SELECT title, event_place_name, event_start_at, event_state FROM posts WHERE id = ?').get(clubEvent.id));
+        const clubEventBefore = clubEventNow();
         // A code and a paper ticket from Bob, as anyone he invites holds.
         const code = se.generateInvite(bob.pk)!.code;
         const ticketPayload = JSON.stringify({ i: bob.pk, t: Date.now() });
@@ -1097,6 +1099,9 @@ async function main(): Promise<void> {
             'POST /api/messages/send': { conversationId: 'conv-pruned', ciphertext: 'c2VudA==', nonce: 'bm9uY2U=' },
             // The event chat of the group it convenes (the URL's :id, below): Alice's line.
             'POST /api/marketplace/posts/:id/chat/remove': { messageId: aliceLines[1] },
+            // Moving that event, as its convenor: the answer is Alice's event, and the move tells everyone going (4109566615).
+            'POST /api/marketplace/posts/update': { id: clubEvent.id, authorPublicKey: pruned.pk, title: 'Sentinel picnic moved',
+                eventPlaceName: 'Sentinel car park', eventStartAt: new Date(Date.now() + 8 * 86_400_000).toISOString() },
             // Its trades: each answer is the trade, with the other party.
             'POST /api/marketplace/transactions/reject': { transactionId: 'mt-pruned-decides', authorPublicKey: pruned.pk },
             'POST /api/marketplace/transactions/cancel-request': { transactionId: 'mt-pruned-asks', buyerPublicKey: pruned.pk },
@@ -1354,7 +1359,7 @@ async function main(): Promise<void> {
             + `and a HEAD for each of the ${gets} GETs × ${guestsHere.length} = ${gets * guestsHere.length}; the admin tarpit answered at once ${tarpitsAnsweredAtOnce} times)`);
         const stillPruned = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pruned.pk) as { status: string }).status;
         assert(stillPruned === 'pruned', `the pruned account is still pruned after the sweep (${stillPruned})`);
-        // 11e. What the sweep sent it could not change: Alice's lines, its trades, and no invite of its own.
+        // 11e. What the sweep sent it could not change: Alice's lines, its trades, the event it convenes, and no invite of its own.
         {
             for (const [label, ev, line] of [['its own event', prunedEvent, aliceLines[0]], ['the group event it convenes', clubEvent, aliceLines[1]]] as const) {
                 const read = await call('GET', pruned, `/api/marketplace/posts/${ev.id}/chat`);
@@ -1364,6 +1369,7 @@ async function main(): Promise<void> {
                     `the pruned account neither reads nor removes Alice's line in ${label}, and it is kept (${read.status} ${remove.status} ${kept})`);
             }
             assert(tradeStatuses() === tradesBefore, `its trades are as they were (${tradeStatuses()})`);
+            assert(clubEventNow() === clubEventBefore, `the group event it convenes has not moved (${clubEventNow()})`);
             assert(!db.prepare('SELECT 1 FROM invite_codes WHERE created_by = ?').get(pruned.pk), 'and it made no invite');
         }
         beforeCall = earlier;

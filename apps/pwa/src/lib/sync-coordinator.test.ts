@@ -28,6 +28,7 @@ import {
     onSyncActivity,
     resetSyncForTest,
 } from './sync';
+import { loadIdentity } from './identity';
 
 describe('PWA Sync Coordinator', () => {
     let wsInstance: any = null;
@@ -70,6 +71,11 @@ describe('PWA Sync Coordinator', () => {
         }
         throw new Error('WebSocket instance not created in time');
     }
+
+    // The next socket opens as a member's. With no identity (this file's default) it is a visitor's, whose doorbells
+    // wait their turn (lib/visitor-doorbells): a test of what a member's doorbell does says it is a member's.
+    const asMember = () => vi.mocked(loadIdentity).mockResolvedValueOnce(
+        { publicKey: 'e'.repeat(64), privateKey: '00', callsign: 'Me', createdAt: '' } as any);
 
     describe('requestSync concurrency and debouncing', () => {
         it('concurrent calls collapse to one run', async () => {
@@ -295,6 +301,7 @@ describe('PWA Sync Coordinator', () => {
         });
 
         it('non-snapshot messages trigger coordinated sync', async () => {
+            asMember();
             const listener = vi.fn();
             onSyncActivity(listener);
 
@@ -322,6 +329,7 @@ describe('PWA Sync Coordinator', () => {
         // onSyncActivity specifically so an open conversation refreshes on arrival instead of
         // waiting for its poll tick. So new_message MUST reach the listeners here.
         it('notifies listeners on new_message, so an open chat refreshes on arrival', async () => {
+            asMember();
             const listener = vi.fn();
             onSyncActivity(listener);
 
@@ -341,6 +349,7 @@ describe('PWA Sync Coordinator', () => {
         });
 
         it('coalesces a burst of new_message broadcasts into one run', async () => {
+            asMember();
             const listener = vi.fn();
             onSyncActivity(listener);
 

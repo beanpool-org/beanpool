@@ -78,6 +78,11 @@ describe('PWA WebSocket Pong Watchdog', () => {
         throw new Error('WebSocket was never instantiated');
     }
 
+    // The next socket opens as a member's. With no identity (this file's default) it is a visitor's, whose doorbells
+    // wait their turn (lib/visitor-doorbells): a test of what a member's doorbell does says it is a member's.
+    const MEMBER = { publicKey: 'e'.repeat(64), privateKey: '00', callsign: 'Me', createdAt: '' } as any;
+    const asMember = () => vi.mocked(loadIdentity).mockResolvedValueOnce(MEMBER);
+
     it('sends opt-in ping with { type: "ping", wantPong: true } on open and on interval', async () => {
         connectToAnchor('ws://localhost:9000/ws');
         const socket = await waitForWs();
@@ -201,6 +206,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
     });
 
     it('pong does not trigger a sync or notify activity listeners', async () => {
+        asMember();
         const activityListener = vi.fn();
         onSyncActivity(activityListener);
 
@@ -230,6 +236,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
     // scopes the payload to the two parties). The views re-fetch on the doorbell exactly as on the full event.
     it.each(['post_accepted', 'transaction_completed', 'transaction_cancelled', 'dispute_resolved'])(
         'a bare %s doorbell (no payload) still refreshes the views', async (type) => {
+            asMember();
             const activityListener = vi.fn();
             onSyncActivity(activityListener);
 
@@ -387,6 +394,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
     });
 
     it('a change a page is tied to (an open deal, a chat about it) still runs the full sync', async () => {
+        asMember();
         const activityListener = vi.fn();
         onSyncActivity(activityListener);
         registerLivePostTie(() => true);
@@ -406,6 +414,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
         ['a removal that does not say its audience (older node)', { type: 'post_removed', id: 'post-1' }],
         ['a group removal', { type: 'post_removed', id: 'post-1', audienceScope: 'group' }],
     ])('%s still refreshes the views, and is never handed to them as a change', async (_name, event) => {
+        asMember();
         const activityListener = vi.fn();
         onSyncActivity(activityListener);
         const view = vi.fn();
@@ -547,5 +556,174 @@ describe('PWA WebSocket Pong Watchdog', () => {
         await vi.advanceTimersByTimeAsync(200);
         // Not the retry's 0–3 s spread: the member's lists load now.
         expect(activityListener).toHaveBeenCalledTimes(1);
+    });
+
+    // ── A visitor's socket (no key, the global lobby): bare doorbells, paced ───────────────────────────────
+    // A key-less socket gets only `{ type }` doorbells, and each has the whole guest list read again. Rung straight into
+    // the coordinator, every visitor's tab read within ~150 ms of every public change (lib/visitor-doorbells).
+
+    function setHidden(hidden: boolean): void {
+        Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
+        Object.defineProperty(document, 'visibilityState', { value: hidden ? 'hidden' : 'visible', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+    }
+
+    async function fiftyDoorbellsInTwoSeconds(socket: any): Promise<void> {
+        for (let i = 0; i < 50; i++) {
+            socket.onmessage({ data: JSON.stringify({ type: ['new_post', 'post_updated', 'post_removed', 'state_synced'][i % 4] }) });
+            await vi.advanceTimersByTimeAsync(40);
+        }
+    }
+
+    it('a visitor: fifty doorbells in two seconds are one list read, 5–15 s after the first, and no more', async () => {
+        const read = vi.fn();
+        onSyncActivity(read);
+        const socket = await openSocket();
+        read.mockClear();
+
+        await fiftyDoorbellsInTwoSeconds(socket);
+        expect(read).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(5_000 - 2_000 - 1);
+        expect(read).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(10_000 + 150 + 1);
+        expect(read).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        [0, 5_000 + 150],
+        [0.5, 10_000 + 150],
+        [0.9999, 14_999 + 150],
+    ])('a visitor: the read waits the 5 s window plus the tab\'s own 0–10 s (random %s → %s ms, the coordinator\'s 150 ms included)', async (r, at) => {
+        const read = vi.fn();
+        onSyncActivity(read);
+        const socket = await openSocket();
+        read.mockClear();
+        vi.spyOn(Math, 'random').mockReturnValue(r);
+
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post' }) });
+        await vi.advanceTimersByTimeAsync(at - 1);
+        expect(read).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    it('a visitor tab in the background reads nothing; back in front, it reads once', async () => {
+        const read = vi.fn();
+        onSyncActivity(read);
+        const socket = await openSocket();
+        read.mockClear();
+
+        setHidden(true);
+        for (let i = 0; i < 20; i++) {
+            socket.onmessage({ data: JSON.stringify({ type: 'post_updated' }) });
+            await vi.advanceTimersByTimeAsync(3_000);
+        }
+        await vi.advanceTimersByTimeAsync(300_000);
+        expect(read).not.toHaveBeenCalled();
+
+        setHidden(false);
+        await vi.advanceTimersByTimeAsync(1_500 + 150);
+        expect(read).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    it('a visitor tab back in front with its socket gone reads once, in the new socket\'s opening sync, and not again for the doorbells it held', async () => {
+        const read = vi.fn();
+        onSyncActivity(read);
+        const socket = await openSocket();
+        read.mockClear();
+
+        setHidden(true);
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post' }) });
+        socket.onmessage({ data: JSON.stringify({ type: 'state_synced' }) });
+        await vi.advanceTimersByTimeAsync(30_000);
+        vi.spyOn(Math, 'random').mockReturnValue(0.999);
+        socket.close(); // dropped while hidden; its retry is a few seconds off
+        expect(read).not.toHaveBeenCalled();
+
+        setHidden(false);
+        expect(await waitForNewSocket(socket, 1_000)).toBeLessThanOrEqual(100);
+        wsInstance.readyState = 1;
+        wsInstance.onopen();
+        await vi.advanceTimersByTimeAsync(150);
+        expect(read).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    it('a visitor: a doorbell while the list is being read has it read once more after, paced again, never alongside', async () => {
+        const pending: Array<() => void> = [];
+        const read = vi.fn(() => new Promise<void>((resolve) => { pending.push(resolve); }));
+        onSyncActivity(read);
+        const socket = await openSocket();
+        pending.shift()?.(); // the opening sync
+        await vi.advanceTimersByTimeAsync(5_000);
+        read.mockClear();
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post' }) });
+        await vi.advanceTimersByTimeAsync(5_000 + 150 - 1);
+        expect(read).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(read).toHaveBeenCalledTimes(1);
+
+        // Doorbells while that read is under way, which stays under way a long while.
+        socket.onmessage({ data: JSON.stringify({ type: 'post_updated' }) });
+        socket.onmessage({ data: JSON.stringify({ type: 'state_synced' }) });
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(read).toHaveBeenCalledTimes(1);
+
+        pending.shift()?.();
+        await vi.advanceTimersByTimeAsync(5_000 + 150 - 1);
+        expect(read).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(read).toHaveBeenCalledTimes(2);
+
+        pending.shift()?.();
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(read).toHaveBeenCalledTimes(2);
+    });
+
+    it('a member\'s doorbells are not paced: the views refresh within the coordinator\'s 150 ms, as before', async () => {
+        vi.mocked(loadIdentity).mockResolvedValueOnce(MEMBER);
+        const read = vi.fn();
+        onSyncActivity(read);
+        const socket = await openSocket();
+        read.mockClear();
+
+        socket.onmessage({ data: JSON.stringify({ type: 'new_post' }) });
+        await vi.advanceTimersByTimeAsync(150);
+        expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    it('a visitor who joins is a member from the signed socket on: a doorbell the lobby held reads nothing later, and the member\'s are not paced', async () => {
+        vi.mocked(loadIdentity)
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce(MEMBER);
+        const read = vi.fn();
+        onSyncActivity(read);
+        const lobby = await openSocket();
+        read.mockClear();
+        lobby.onmessage({ data: JSON.stringify({ type: 'new_post' }) });
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        reconnectToAnchor();
+        await waitForNewSocket(lobby, 1_000);
+        const signed = wsInstance;
+        expect(signed).not.toBe(lobby);
+        expect(signed.url).toBe('ws://localhost:9000/ws?callsign=Me');
+        signed.readyState = 1;
+        signed.onopen();
+        await vi.advanceTimersByTimeAsync(150);
+        expect(read).toHaveBeenCalledTimes(1); // the member's opening sync
+
+        signed.onmessage({ data: JSON.stringify({ type: 'new_post' }) });
+        await vi.advanceTimersByTimeAsync(150);
+        expect(read).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(read).toHaveBeenCalledTimes(2);
     });
 });

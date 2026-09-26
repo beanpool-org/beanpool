@@ -10,6 +10,7 @@ import {
     type AudienceScope
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
+import { isVisitorKey } from './members.js';
 import { avatarUrlFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
 
@@ -179,7 +180,8 @@ export const EVENT_READABLE_AFTER_END_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * The host set for an event, and for every host-only action on it: the author, an active keeper of an
- * enterprise author, or an active convenor of the target group. The same set `removePost` trusts.
+ * enterprise author, or an active convenor of the target group. The same set `removePost` trusts. A visitor's row
+ * keeps no enterprise, whatever keeper row it holds from before visitors were refused one (isVisitorKey).
  */
 export function isEventHost(
     db: Db,
@@ -191,7 +193,7 @@ export function isEventHost(
     const keeper = db.prepare(`
         SELECT 1 FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active'
+        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0
     `).get(pubkey, row.author_pubkey);
     if (keeper) return true;
     if (row.audience_scope === 'group' && row.target_group_id) {
@@ -625,6 +627,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     // Audience scoping (docs/the-commons.md §9, Item 10)
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
     const viewer = filter?.viewerPubkey;
+    const viewerIsVisitor = isVisitorKey(db, viewer);
     if (filter?.includeAllScopes) {
         // Internal engine lookup bypasses feed scoping
     } else if (filter?.audienceScope === 'public') {
@@ -804,8 +807,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         if (post.type === 'event') {
             const rsvps = rsvpsByPost.get(post.id) || [];
             const mine = viewer ? rsvps.find(v => v.member_pubkey === viewer) : undefined;
-            const host = isEventHost(db, r, viewer);
-            const going = mine?.status === 'going';
+            // A visitor's row reads an event as a key with no row does, whatever it hosts or is Going to from before visitors
+            // were refused both: no note, nobody's RSVP (the server's canReadEventThread, for the chat).
+            const host = !viewerIsVisitor && isEventHost(db, r, viewer);
+            const going = !viewerIsVisitor && mine?.status === 'going';
             // An ended event is readable by id to its host and Going only, and to nobody once the 30-day
             // window has passed. Internal lookups (includeAllScopes) and sync are not reader views.
             // A cancelled event read by id follows the same rule: host and Going only.

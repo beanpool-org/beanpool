@@ -6,8 +6,9 @@
  *
  * The visitor (Vera) is made by a member's DM and holds Beans, as every visitor is. So that nothing but the rule can
  * refuse her, she also holds what a visitor's row could get before this rule (her row briefly unmarked to make it): a
- * name and a photo, an offer, a completed trade, a seat in a group and a Going RSVP to an event with a private note, and a
- * line of her own in each one's chat.
+ * name and a photo, an offer, a completed trade, a seat in a group and a Going RSVP to an event with a private note, a
+ * line of her own in each one's chat, a keeper's row on two enterprises (with backing pledged to one) and the lead's row on
+ * a third, where as lead she approved a request to keep it that is still waiting out its objection window.
  * Every request goes over HTTP through the real signature middleware, or over /ws.
  *
  *  1. The table: each write a member may make that a key with no row can't (#1182 item 4 rows 4-12: vouching, rating,
@@ -17,10 +18,17 @@
  *     re-registering, deleting the row, event reminders). A member
  *     makes each one (so the body reaches the rule); the visitor and a key with no row are then refused it with the
  *     same status, code and words, and the visitor's attempt changes nothing, in any table (its activity stamp aside).
+ * 1b. Keeping an enterprise (4111054995): an admin appoints no visitor's row to keep one, nor switches its operator access
+ *     on, as for a key with no row. A visitor's row that keeps one anyway (from before this rule) approves, declines and
+ *     reads no request to keep it, objects to no keeper change, proposes and votes in no lead succession, removes no
+ *     keeper and no line from its discussion, marks it read and mutes it no more, steps down from none and releases no
+ *     backing: each refused as a key with no row is, and nothing changes. The lead passes over it, a vote doesn't count
+ *     it, an approval it made as lead doesn't land, the enterprise's page tells it nothing a key with no row isn't
+ *     told, and an event the enterprise hosts reads to it without the note or who is going.
  *  2. The sweep: every registered write the middleware sees, signed by the visitor and by a key with no row with the
  *     same body, is answered the same, but for what the visitor may do (a line in its DM, marking it read, muting it,
  *     changing its lines there, Beans). Then every enterprise write again on a crowdfund, an enterprise with a goal,
- *     which takes another path through some of them (a pledge goes to the crowdfund).
+ *     which takes another path through some of them (a pledge goes to the crowdfund), and on the enterprise it leads.
  *  3. What a visitor keeps: it replies in its DM (the app may ask for the DM again first), marks it read and mutes it,
  *     edits and deletes its own lines there and reacts there (the director, 2026-09-26); it sends Beans it holds to a
  *     member, under the send gate as anyone is, and a visitor that never traded is told in plain words that it receives
@@ -55,6 +63,8 @@ import {
     initStateEngine, transfer, createPost, acceptPost, completePostTransaction, createGroup, joinGroup, rsvpEvent,
     seedGenesisMember, createConversation, sendMessage, registerVisitor, getBalance, createTreasury,
     postGroupThreadMessage, postEventThreadMessage,
+    adminAssignTreasuryOperator, requestToJoinEnterprise, approveKeeperRequest, proposeKeeperRemoval, stepDownAsKeeper,
+    applyDueKeeperChanges, postEnterpriseThreadMessage, treasuryKeepers, keeperOf, canOperate,
 } from './state-engine.js';
 import { createPairing, declinePairing, describePairing, pairingMessage } from './settings-signin-pairing.js';
 import { createCrowdfundProject } from './db/db.js';
@@ -213,9 +223,19 @@ async function main(): Promise<void> {
     const project = `proj-${crypto.randomUUID()}`;
     createCrowdfundProject(project, alice.pk, 'Community oven VA', 'A wood-fired oven', [], 500, null);
     const enterprise = createTreasury('Seed bank VA', AVATAR, 0, { leadKeeperPubkey: alice.pk, purpose: 'Seeds for everyone' } as any);
-    const enterpriseKey = (enterprise as any).publicKey ?? (enterprise as any).treasury?.publicKey;
+    const keyOf = (t: any): string => t.publicKey ?? t.treasury?.publicKey;
+    const enterpriseKey = keyOf(enterprise);
     const decision = createDecision({ authorPubkey: alice.pk, title: 'Carol vouches', description: 'Carol has helped many of us',
         touches: 'member', effect: 'grant_voucher', subject: carol.pk } as any) as any;
+    // Enterprises for a visitor's keeper's rows (section 1b): Lena leads an orchard; Cody and Quinn keep, and ask to keep, an
+    // apiary the visitor leads; nobody keeps the mill.
+    const lena = makeMember('LenaVA');
+    const kai = makeMember('KaiVA');
+    const tom = makeMember('TomVA');
+    const cody = makeMember('CodyVA');
+    const quinn = makeMember('QuinnVA');
+    const orchard = keyOf(createTreasury('Orchard VA', AVATAR, 0, { leadKeeperPubkey: lena.pk, purpose: 'Apples' } as any));
+    const mill = keyOf(createTreasury('Mill VA', AVATAR, 0, { purpose: 'Flour' } as any));
 
     // The visitor: Alice writes to her, and Beans reach her, as they reach every visitor.
     const vera = keypair('VeraVA');
@@ -228,6 +248,8 @@ async function main(): Promise<void> {
     let veraTrade = '';
     let veraGroupLine = '';
     let veraEventLine = '';
+    let apiary = '';
+    let quinnChange = '';
     asBeforeThisRule(vera, () => {
         db.prepare("UPDATE members SET callsign = 'Vera', avatar_url = ? WHERE public_key = ?").run(AVATAR, vera.pk);
         veraOffer = offer(vera, 'Vera honey').id;
@@ -238,7 +260,25 @@ async function main(): Promise<void> {
         rsvpEvent(event.id, vera.pk, 'going');
         veraGroupLine = postGroupThreadMessage(group.id, vera.pk, 'Vera was here').id;
         veraEventLine = postEventThreadMessage(event.id, vera.pk, 'Vera is coming').id;
+        // And keeping enterprises (4111054995): a keeper's row on the seed bank, with 5 Beans of backing pledged, and on the
+        // orchard; a lead's row on an apiary of her own, where as lead she approved Quinn's request to keep it, which is
+        // still waiting out its objection window.
+        adminAssignTreasuryOperator(enterpriseKey, vera.pk, 'admin');
+        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, 5, ?, NULL)')
+            .run(crypto.randomUUID(), vera.pk, enterpriseKey, new Date().toISOString());
+        adminAssignTreasuryOperator(orchard, vera.pk, 'admin');
+        apiary = keyOf(createTreasury('Vera apiary VA', AVATAR, 0, { leadKeeperPubkey: vera.pk, purpose: 'Honey' } as any));
+        adminAssignTreasuryOperator(apiary, cody.pk, 'admin');
+        quinnChange = approveKeeperRequest(requestToJoinEnterprise(apiary, quinn.pk, 0).id, vera.pk).change!.id;
     });
+    // The orchard's other keepers, bound after Vera.
+    adminAssignTreasuryOperator(orchard, kai.pk, 'admin');
+    adminAssignTreasuryOperator(orchard, tom.pk, 'admin');
+    const keeperRole = (t: string, pk: string) =>
+        (db.prepare('SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(t, pk) as { role: string } | undefined)?.role;
+    assert(keeperRole(enterpriseKey, vera.pk) === 'keeper' && keeperRole(orchard, vera.pk) === 'keeper' && keeperRole(apiary, vera.pk) === 'lead'
+        && (db.prepare("SELECT status FROM enterprise_keeper_changes WHERE id = ?").get(quinnChange) as any)?.status === 'pending',
+        "setup: and a keeper's row on the seed bank (with a pledge) and the orchard, and the lead's on her apiary, with an approval pending");
     assert(isVisitorRow(vera.pk) && !!db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(group.id, vera.pk)
         && (db.prepare('SELECT status FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(event.id, vera.pk) as any)?.status === 'going',
         'setup: and from before this rule, a name and a photo, an offer, a completed trade, a group seat and a Going RSVP');
@@ -326,6 +366,114 @@ async function main(): Promise<void> {
     assert(isVisitorRow(vera.pk) && (db.prepare('SELECT status, callsign FROM members WHERE public_key = ?').get(vera.pk) as any)?.status === 'active',
         "Vera's row is still an active visitor's, under her own name");
 
+    // ── 1b. Keeping an enterprise ───────────────────────────────────────────────────────────────
+    console.log("\n── 1b. Keeping an enterprise: a visitor's keeper's or lead's row acts for none, and an admin appoints no visitor");
+    {
+        /** The visitor is refused as a key with no row is (same status, code and words), and nothing changes. */
+        const refusedAsNoRow = async (what: string, who: Id, method: string, path: string, body?: unknown): Promise<void> => {
+            const n = await call(method, nobody, path, body);
+            const before = snapshot();
+            const v = await call(method, who, path, body);
+            await settle(20);
+            const changed = changedTables(before, snapshot());
+            assert(v.status >= 400 && same(v, n) && changed.length === 0,
+                `${what}: refused as a key with no row is, and nothing changes (visitor ${show(v)}; no row ${show(n)}${changed.length ? `; changed: ${changed.join(', ')}` : ''})`);
+        };
+        const admin = async (method: string, path: string, body?: unknown): Promise<Res> => {
+            resetGatewayRateLimit();
+            const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', 'x-admin-password': process.env.ADMIN_PASSWORD! },
+                body: body !== undefined ? JSON.stringify(body) : undefined });
+            let json: any; try { json = await res.json(); } catch { /* empty */ }
+            return { status: res.status, body: json };
+        };
+        const canOperateFlag = (pk: string) => (db.prepare('SELECT can_operate FROM members WHERE public_key = ?').get(pk) as any)?.can_operate;
+
+        // Wes, a visitor made after this rule by a member's DM: an admin appoints him to keep the mill, which nobody keeps.
+        const wes = keypair('WesVA');
+        createConversation('dm', [mia.pk, wes.pk], mia.pk);
+        const appointWes = await admin('POST', `/api/local/admin/treasury/${mill}/operators`, { pubkey: wes.pk });
+        const appointNobody = await admin('POST', `/api/local/admin/treasury/${mill}/operators`, { pubkey: nobody.pk });
+        assert(isVisitorRow(wes.pk) && appointWes.status === 400 && appointWes.body?.error === 'Member not found' && same(appointWes, appointNobody)
+            && !keeperRole(mill, wes.pk) && !canOperateFlag(wes.pk),
+            `an admin can't appoint a visitor's row to keep an enterprise: "Member not found", as for a key with no row (visitor ${show(appointWes)}; no row ${show(appointNobody)})`);
+        const switchWes = await admin('POST', `/api/local/admin/users/${wes.pk}/operator`, { granted: true });
+        const switchNobody = await admin('POST', `/api/local/admin/users/${nobody.pk}/operator`, { granted: true });
+        assert(switchWes.status === 400 && same(switchWes, switchNobody) && !canOperateFlag(wes.pk),
+            `nor switch its operator access on (visitor ${show(switchWes)}; no row ${show(switchNobody)})`);
+
+        // Mia asks to keep the mill and writes in its discussion.
+        const miaAsks = requestToJoinEnterprise(mill, mia.pk, 0).id;
+        const miaLine = postEnterpriseThreadMessage(mill, mia.pk, 'Is the mill grinding this week?').id;
+        await refusedAsNoRow("Wes approves Mia's request to keep the mill", wes, 'POST', `/api/enterprise/${mill}/keepers/requests/${miaAsks}/approve`, {});
+        // Were he bound anyway, as a row from before this rule is, as the mill's only keeper:
+        asBeforeThisRule(wes, () => adminAssignTreasuryOperator(mill, wes.pk, 'admin'));
+        assert(isVisitorRow(wes.pk) && keeperRole(mill, wes.pk) === 'keeper', "setup: Wes holds the mill's only keeper's row, from before this rule");
+        await refusedAsNoRow("the mill's only keeper, a visitor, approves Mia's request", wes, 'POST', `/api/enterprise/${mill}/keepers/requests/${miaAsks}/approve`, {});
+        await refusedAsNoRow('or declines it', wes, 'POST', `/api/enterprise/${mill}/keepers/requests/${miaAsks}/decline`, {});
+        await refusedAsNoRow("or removes Mia's line from the mill's discussion", wes, 'POST', `/api/enterprise/${mill}/thread/remove`, { messageId: miaLine });
+        assert(!keeperRole(mill, mia.pk) && (db.prepare('SELECT status FROM enterprise_keeper_requests WHERE id = ?').get(miaAsks) as any)?.status === 'pending',
+            "Mia keeps no mill, and her request still waits");
+
+        // The orchard: Lena leads it, and Vera (from before this rule), Kai and Tom keep it. Lena asks to remove Tom.
+        const removeTom = proposeKeeperRemoval(orchard, lena.pk, tom.pk).change!.id;
+        await refusedAsNoRow("Vera objects to the lead's removing Tom", vera, 'POST', `/api/enterprise/${orchard}/keepers/changes/${removeTom}/object`, {});
+        const kaiObjects = await call('POST', kai, `/api/enterprise/${orchard}/keepers/changes/${removeTom}/object`, {});
+        assert(kaiObjects.status === 200 && kaiObjects.body?.change?.status === 'objected', `a member who keeps it objects (control: ${show(kaiObjects)})`);
+        // Lena has been away 40 days, so her keepers may choose another lead.
+        db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(ago(40 * DAY), lena.pk);
+        await refusedAsNoRow('Vera proposes herself as lead', vera, 'POST', `/api/enterprise/${orchard}/succession/propose`, { candidatePubkey: vera.pk });
+        const kaiProposes = await call('POST', kai, `/api/enterprise/${orchard}/succession/propose`, { candidatePubkey: tom.pk });
+        const proposal = kaiProposes.body?.proposal;
+        assert(kaiProposes.status === 200 && proposal?.status === 'active' && proposal?.totalEligible === 2,
+            `a member who keeps it proposes Tom, and the vote is Kai's and Tom's, not Vera's (control: ${show(kaiProposes)})`);
+        await refusedAsNoRow('Vera votes for it', vera, 'POST', `/api/enterprise/${orchard}/succession/${proposal?.id}/vote`, { choice: 'yes' });
+        // Lena steps down: the lead passes to the longest-serving keeper who can act, Kai, not Vera, whose row is older.
+        const lenaLeaves = stepDownAsKeeper(orchard, lena.pk);
+        assert(lenaLeaves.promoted === kai.pk && keeperRole(orchard, kai.pk) === 'lead' && keeperRole(orchard, vera.pk) === 'keeper',
+            `when the lead steps down the lead passes to Kai, not to Vera (promoted ${String(lenaLeaves.promoted).slice(0, 8)})`);
+
+        // The apiary Vera leads, from before this rule: Cody keeps it too, Pia asks to keep it, and Cody writes in its discussion.
+        const pia = makeMember('PiaVA');
+        const piaAsks = requestToJoinEnterprise(apiary, pia.pk, 0).id;
+        const codyLine = postEnterpriseThreadMessage(apiary, cody.pk, 'Hives inspected').id;
+        await refusedAsNoRow("Vera, its lead, approves Pia's request", vera, 'POST', `/api/enterprise/${apiary}/keepers/requests/${piaAsks}/approve`, {});
+        await refusedAsNoRow('or declines it', vera, 'POST', `/api/enterprise/${apiary}/keepers/requests/${piaAsks}/decline`, {});
+        await refusedAsNoRow('or reads who asks to keep it', vera, 'GET', `/api/enterprise/${apiary}/keepers/requests`);
+        await refusedAsNoRow('or asks to remove Cody', vera, 'POST', `/api/enterprise/${apiary}/keepers/${cody.pk}/remove`, {});
+        await refusedAsNoRow("or removes Cody's line from its discussion", vera, 'POST', `/api/enterprise/${apiary}/thread/remove`, { messageId: codyLine });
+        await refusedAsNoRow('or marks its discussion read', vera, 'POST', '/api/messages/mark-read', { conversationId: apiary });
+        await refusedAsNoRow('or mutes it', vera, 'POST', '/api/messages/mute', { conversationId: apiary, duration: '8h' });
+        await refusedAsNoRow('or steps down from it', vera, 'POST', `/api/enterprise/${apiary}/keepers/step-down`, {});
+        await refusedAsNoRow('or releases the backing she pledged the seed bank', vera, 'POST', `/api/enterprise/${enterpriseKey}/release`, {});
+        const codyRemoves = await call('POST', cody, `/api/enterprise/${apiary}/thread/remove`, { messageId: codyLine });
+        assert(codyRemoves.status === 200, `a member who keeps it removes the line (control: ${show(codyRemoves)})`);
+        // Quinn's request, which Vera approved as lead before this rule: when its window ends it doesn't land.
+        const due = applyDueKeeperChanges(apiary, Date.now() + 4 * DAY);
+        const quinnRow = db.prepare('SELECT status, reason FROM enterprise_keeper_changes WHERE id = ?').get(quinnChange) as any;
+        assert(due.applied === 0 && quinnRow?.status === 'failed' && quinnRow?.reason === 'The keeper who made this change is no longer the lead'
+            && !keeperRole(apiary, quinn.pk) && keeperRole(apiary, vera.pk) === 'lead',
+            `an approval Vera made as lead before this rule doesn't land when its window ends (${JSON.stringify(quinnRow)})`);
+
+        // What each enterprise's page tells her about keeping it: what it tells a key with no row.
+        const keeperView = (r: Res) => JSON.stringify([r.status, r.body?.isLeadOrSoleKeeperOrAdmin, r.body?.keeperRequests, r.body?.keeperChanges]);
+        for (const [name, t] of [['the apiary', apiary], ['the orchard', orchard], ['the seed bank', enterpriseKey]] as const) {
+            const v = await call('GET', vera, `/api/enterprise/${t}`);
+            const n = await call('GET', nobody, `/api/enterprise/${t}`);
+            assert(keeperView(v) === keeperView(n), `${name}'s page shows her what it shows a key with no row about keeping it (visitor ${keeperView(v)}; no row ${keeperView(n)})`);
+        }
+        assert(treasuryKeepers(apiary).find(k => k.publicKey === vera.pk)?.suspended === true && keeperOf(vera.pk).length === 0 && !canOperate(vera.pk),
+            "the keepers' list shows her rows as ones that can't act, and she operates nothing");
+        // An event the orchard hosts: whoever keeps it hosts it and reads its note and who is going; Vera doesn't.
+        const orchardEvent = createPost('event', 'community', 'Apple picking', 'Bring a basket', 0, 'fixed', orchard, -28.55, 153.5, [], false, undefined, false,
+            { eventStartAt: inHours(48), eventPlaceName: 'The orchard', eventPrivateNote: 'Orchard gate 5580' } as any)!;
+        const kaiReads = await call('GET', kai, `/api/marketplace/posts?id=${orchardEvent.id}`);
+        const veraReads = await call('GET', vera, `/api/marketplace/posts?id=${orchardEvent.id}`);
+        assert(kaiReads.body?.[0]?.eventPrivateNote === 'Orchard gate 5580' && Array.isArray(kaiReads.body?.[0]?.eventRsvps),
+            `a member who keeps the orchard hosts its event: its note and who is going (control: ${show(kaiReads)})`);
+        assert(veraReads.status === 200 && veraReads.body?.[0]?.id === orchardEvent.id && !JSON.stringify(veraReads.body).includes('5580') && !veraReads.body?.[0]?.eventRsvps,
+            `Vera, who keeps it too, reads the event without its note or who is going (${show(veraReads)})`);
+    }
+
     // ── 2. The sweep ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. Every registered write: the visitor is answered as a key with no row is, but for what it may do');
     {
@@ -381,6 +529,16 @@ async function main(): Promise<void> {
         }
         assert(onCrowdfund.length > 50 && differOnCrowdfund.length === 0,
             `every enterprise write, on a crowdfund (${onCrowdfund.length}), is answered to the visitor as to a key with no row${differOnCrowdfund.length ? `; ${differOnCrowdfund.length} were not:\n    ${differOnCrowdfund.join('\n    ')}` : ''}`);
+        // And again on the apiary she leads from before this rule: a lead's row takes other paths again (4111054995).
+        const differOnHers: string[] = [];
+        for (const route of onCrowdfund) {
+            const [method, path] = route.split(' ');
+            const n = await call(method, nobody, materialise(path, apiary), bodyFor(nobody));
+            const v = await call(method, vera, materialise(path, apiary), bodyFor(vera));
+            if (!same(v, n)) differOnHers.push(`${route}\n      visitor ${show(v)}\n      no row  ${show(n)}`);
+        }
+        assert(differOnHers.length === 0,
+            `every enterprise write, on the enterprise she leads (${onCrowdfund.length}), is answered to the visitor as to a key with no row${differOnHers.length ? `; ${differOnHers.length} were not:\n    ${differOnHers.join('\n    ')}` : ''}`);
         assert(isVisitorRow(vera.pk) && !db.prepare("SELECT 1 FROM members WHERE public_key = ? AND status = 'pruned'").get(vera.pk),
             'and the visitor is still a live visitor');
     }
@@ -513,6 +671,13 @@ async function main(): Promise<void> {
             `its RSVP is refused, and hands back no note (${show(rsvp)})`);
         const chat = await call('GET', vera, `/api/marketplace/posts/${event.id}/chat`);
         assert(chat.status === 403 && !JSON.stringify(chat.body).includes('4471'), `nor does the event's chat read (${chat.status})`);
+        // Nor the event itself, by id or on the board: its Going RSVP from before this rule hands her no note.
+        const byId = await call('GET', vera, `/api/marketplace/posts?id=${event.id}`);
+        const board = await call('GET', vera, '/api/marketplace/posts?types=offer,need,poll,event');
+        const bobReads = await call('GET', bob, `/api/marketplace/posts?id=${event.id}`);
+        assert(byId.status === 200 && byId.body?.[0]?.id === event.id && board.status === 200 && board.body?.some((p: any) => p.id === event.id)
+            && !/4471|9902/.test(JSON.stringify(byId.body) + JSON.stringify(board.body)) && /9902/.test(JSON.stringify(bobReads.body)),
+            `nor the event itself, by id or on the board, though a member going reads the note (visitor ${show(byId)}; member ${show(bobReads)})`);
         vs.ws.close(); bs.ws.close();
     }
 

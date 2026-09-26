@@ -2504,8 +2504,9 @@ export function canVouch(publicKey: string): boolean {
  */
 export function canOperate(publicKey: string): boolean {
     if (isAdminPubkey(publicKey)) return true;
-    const row = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(publicKey) as any;
-    return !!row?.can_operate;
+    // A visitor's row stewards nothing, whatever switch it holds from before visitors were refused one.
+    const row = db.prepare("SELECT can_operate, is_visitor FROM members WHERE public_key = ?").get(publicKey) as any;
+    return !!row?.can_operate && !row.is_visitor;
 }
 
 /**
@@ -2575,12 +2576,13 @@ function keeperRequestRecipients(enterprisePubkey: string, applicantPubkey: stri
  * keepers included: a suspended keeper keeps their row (adminSetOperator, the suspend_member Decision), a
  * removed one does not. Counting only active keepers would let a community's suspension of the lead turn
  * the remaining keeper into a "sole keeper" who could approve keepers and wind the enterprise up alone
- * (PR #838 B1).
+ * (PR #838 B1). A visitor's row is no actor here, whatever keeper row it holds from before visitors were refused one; it
+ * still counts as a binding, as a suspended keeper does.
  */
 export function isLeadOrSoleKeeperOrAdmin(enterprisePubkey: string, actorPubkey: string): boolean {
     if (isAdminPubkey(actorPubkey)) return true;
-    const mem = db.prepare("SELECT status, can_operate FROM members WHERE public_key = ?").get(actorPubkey) as any;
-    if (!mem || mem.status !== 'active' || mem.can_operate !== 1) return false;
+    const mem = db.prepare("SELECT status, can_operate, is_visitor FROM members WHERE public_key = ?").get(actorPubkey) as any;
+    if (!mem || mem.is_visitor || mem.status !== 'active' || mem.can_operate !== 1) return false;
     const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, actorPubkey) as any;
     if (!op) return false;
     const opCount = (db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(enterprisePubkey) as any)?.c ?? 0;
@@ -2611,7 +2613,7 @@ export function keeperOf(publicKey: string): string[] {
  * (docs/community-governance.md), so a community can see who is accountable for what.
  * Suspended keepers (operator switch off, or account not active) are listed with `suspended: true` rather
  * than hidden: they still count toward "sole keeper" (isLeadOrSoleKeeperOrAdmin), so hiding them would
- * show one keeper while the server says there are two. They cannot act.
+ * show one keeper while the server says there are two. They cannot act; nor can a visitor's row, listed the same way.
  */
 export function treasuryKeepers(treasuryPubkey: string): Array<{
     publicKey: string;
@@ -2625,7 +2627,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
 }> {
     return (db.prepare(`
         SELECT m.public_key, m.callsign, m.avatar_url, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
-               m.can_operate, m.status
+               m.can_operate, m.status, m.is_visitor
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
         WHERE o.treasury_pubkey = ?
@@ -2638,7 +2640,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
         role: r.role || 'keeper',
         backing: Number(r.backing || 0),
         lastActiveAt: lastActiveForViewer(r.last_active_at || r.joined_at, r.public_key),
-        suspended: r.can_operate !== 1 || r.status !== 'active',
+        suspended: r.can_operate !== 1 || r.status !== 'active' || !!r.is_visitor,
     }));
 }
 
@@ -2656,7 +2658,8 @@ export function getEnterpriseFloor(enterprisePubkey: string): engine.EnterpriseF
 }
 
 export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin', backing = 0): { ok: true } {
-    const member = getMember(memberPubkey);
+    // A visitor's row keeps nothing, as a key with no row keeps nothing (getActingMember).
+    const member = getActingMember(memberPubkey);
     if (!member) throw new Error('Member not found');
     if (member.isTreasury) throw new Error('A treasury cannot keep another treasury');
     const t = db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
@@ -2781,10 +2784,11 @@ export function promoteOrPauseAfterLeadLeft(enterprisePubkey: string, by: string
     db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'lead_changed'
                 WHERE enterprise_pubkey = ? AND status = 'active'`).run(enterprisePubkey);
 
+    // Never a visitor's row: it acts for no enterprise (isActiveKeeperOf).
     const next = db.prepare(`
         SELECT o.member_pubkey FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND COALESCE(m.can_operate, 0) = 1
+        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND COALESCE(m.can_operate, 0) = 1 AND m.is_visitor = 0
         ORDER BY o.granted_at ASC, o.rowid ASC
         LIMIT 1
     `).get(enterprisePubkey) as any;
@@ -2979,7 +2983,8 @@ export function releaseEnterpriseBacking(
 
         const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, keeperPubkey);
         const hasActivePledge = currentKeeperPledge > 0;
-        if (!bound && !hasActivePledge && !isAdminPubkey(keeperPubkey)) {
+        // A visitor's row is neither, whatever it holds from before visitors were refused a keeper's row.
+        if (((!bound && !hasActivePledge) || isVisitorKey(keeperPubkey)) && !isAdminPubkey(keeperPubkey)) {
             throw new Error('You are not an authorized keeper or pledge holder of this enterprise');
         }
 
@@ -3185,11 +3190,12 @@ export const KEEPER_CHANGE_OBJECTION_MS = 3 * 24 * 60 * 60 * 1000;
 /** How long a succession proposal stays open (answer M). */
 export const SUCCESSION_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
+/** Never a visitor's row, whatever keeper row it holds from before visitors were refused one. */
 function isActiveKeeperOf(enterprisePubkey: string, memberPubkey: string): boolean {
     return !!db.prepare(`
         SELECT 1 FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active' AND m.is_visitor = 0
     `).get(enterprisePubkey, memberPubkey);
 }
 
@@ -3220,8 +3226,9 @@ function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: st
     if (ent.status === 'completed') throw new KeeperChangeRefused('Completed enterprise accepts no requests');
     if (ent.status === 'disabled' || ent.status === 'pruned') throw new KeeperChangeRefused('This enterprise has been closed');
 
-    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
-    if (!km || km.status !== 'active') {
+    // A visitor's row, as when it asks (requestToJoinEnterprise): a request it made before visitors were refused one lands on nobody.
+    const km = db.prepare("SELECT status, credit_frozen, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!km || km.is_visitor || km.status !== 'active') {
         throw new KeeperChangeRefused('Applicant account is not active, so they cannot be approved as a keeper');
     }
     if (km.credit_frozen === 1) {
@@ -3634,7 +3641,9 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
 
     const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .get(enterprisePubkey, memberPubkey) as any;
-    if (!op) throw new Error('You are not a keeper of this enterprise');
+    // A visitor's row keeps nothing to step down from, as a key with no row keeps nothing: its row stays until it joins, the
+    // lead removes it, or an admin or the community does.
+    if (!op || isVisitorKey(memberPubkey)) throw new Error('You are not a keeper of this enterprise');
     if (keeperBindingCount(enterprisePubkey) <= 1) {
         throw new Error('You are the only keeper. Add another keeper first, or wind the enterprise up.');
     }
@@ -3814,11 +3823,12 @@ export function cancelActiveSuccessionIfLeadActive(leadPubkey: string): void {
     }
 }
 
+/** Who votes on a succession: the keepers who may act (isActiveKeeperOf), the lead aside. */
 function otherActiveKeepers(enterprisePubkey: string, leadPubkey: string): string[] {
     return (db.prepare(`
         SELECT o.member_pubkey FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active' AND m.is_visitor = 0
     `).all(enterprisePubkey, leadPubkey) as any[]).map(r => r.member_pubkey);
 }
 
@@ -6267,7 +6277,9 @@ export function adminSetVoucher(publicKey: string, granted: boolean): { ok: true
  * Toggling can_operate mints no beans and changes no floors. Idempotent.
  */
 export function adminSetOperator(publicKey: string, granted: boolean): { ok: true } {
-    if (!getMember(publicKey)) throw new Error('Member not found');
+    // Switched on only for a member: a visitor's row keeps nothing, as a key with no row keeps nothing (getActingMember).
+    // Switching it off is always allowed.
+    if (!(granted ? getActingMember(publicKey) : getMember(publicKey))) throw new Error('Member not found');
     db.prepare("UPDATE members SET can_operate=? WHERE public_key=?").run(granted ? 1 : 0, publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };

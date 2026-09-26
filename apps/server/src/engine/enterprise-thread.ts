@@ -45,8 +45,9 @@ export function isKeeperOfEnterprise(actorPubkey: string, enterprisePubkey: stri
         const invalidated = db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ?").get(cleanKey);
         if (invalidated) return false;
     } catch { }
-    const op = db.prepare("SELECT can_operate, status FROM members WHERE public_key = ?").get(actorPubkey) as any;
-    if (!op || op.status === 'disabled' || op.status === 'suspended' || op.status === 'pruned') return false;
+    // A visitor's row keeps nothing, whatever keeper row it holds from before visitors were refused one.
+    const op = db.prepare("SELECT can_operate, status, is_visitor FROM members WHERE public_key = ?").get(actorPubkey) as any;
+    if (!op || op.is_visitor || op.status === 'disabled' || op.status === 'suspended' || op.status === 'pruned') return false;
     if (!op.can_operate) return false;
     const row = db.prepare(
         "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"

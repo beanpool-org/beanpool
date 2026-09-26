@@ -25,7 +25,7 @@ import {
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
     getKeeperChanges, proposeKeeperRemoval, objectToKeeperChange, stepDownAsKeeper,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
-    isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly, getActingMember,
+    isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly, getActingMember, isVisitorKey,
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
@@ -1193,7 +1193,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
 
         const isOp = canOperateTreasury(actor, treasury);
-        const hasActivePledge = !!db.prepare(
+        // A visitor's row holds no pledge it can act on, whatever it pledged before visitors were refused a keeper's row.
+        const hasActivePledge = !isVisitorKey(actor) && !!db.prepare(
             "SELECT 1 FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL"
         ).get(treasury, actor);
 

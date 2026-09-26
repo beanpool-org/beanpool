@@ -10,7 +10,8 @@
  * ## Who may knock
  *
  * The key that signed the request, in the member table's spelling (lower-case hex). Never a key this community knows
- * as a member (409: they are already in), nor one whose account here was closed (403: pruned by the community, or
+ * as a member (409: they are already in; a visitor's row, a key a member messaged or paid, is no member and knocks like
+ * anyone new, its knock listed like theirs), nor one whose account here was closed (403: pruned by the community, or
  * deleted by its owner; a closed account's key can never be admitted again by an invite, so a knock would lead
  * nowhere), nor one a re-key replaced (403).
  *
@@ -195,10 +196,12 @@ function isOpen(row: Pick<KnockRow, 'status' | 'created_at'>, now: number): bool
 
 /**
  * What the members' list shows, as SQL: open knocks from keys that are neither members here nor replaced by a re-key.
- * Its one parameter is the oldest `created_at` still open (`openSince`).
+ * Its one parameter is the oldest `created_at` still open (`openSince`). "A member here" is the doors' test
+ * (alreadyJoined, the engine's): a row that isn't a visitor's, or a closed one. A visitor's row (a member messaged them,
+ * or sent them Beans) may knock (knockerRefusal), so its knock is listed, counted and kept like anyone new's.
  */
 const LISTED = `status = 'pending' AND created_at >= ?
-    AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey)
+    AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey AND (m.is_visitor = 0 OR m.status = 'pruned'))
     AND NOT EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = join_requests.pubkey)`;
 const openSince = (now: number) => iso(now - KNOCK_RULES.openDays * DAY_MS);
 

@@ -42,7 +42,9 @@
  *     nobody in: it can't make an invite (the answer a key with no row gets), a code it made before this version and a
  *     ticket it signs admit nobody, itself included, and it can neither approve nor decline a knock (403 not_member,
  *     as a key with no row). A member, and a suspended or a disabled one, still makes an invite; a member answers
- *     knocks; a suspended member still can't (#1177).
+ *     knocks; a suspended member still can't (#1177). A visitor's own knock is on the members' list and in the
+ *     operator's count, survives the tidy-up, and a member approves it from the list; the visitor then joins with its
+ *     own signed redeem of that invite (4110436318).
  *
  * Runs twice: here with every ENFORCE_* variable REMOVED (the fresh-download default: read auth on, the member-only
  * /ws feed), then in a child process with ENFORCE_READ_AUTH=false, where the gate doesn't run and each route's own
@@ -160,7 +162,7 @@ async function main() {
     const { db } = await import('./db/db.js');
     const { issueRekeyCode } = await import('./engine/member-wizards.js');
     const { registerOpenJoin, openJoinHash, openJoinAddressHash } = await import('./engine/open-join.js');
-    const { knockerRefusal } = await import('./engine/knocks.js');
+    const { knockerRefusal, openKnockCount, tidyKnocks } = await import('./engine/knocks.js');
     const { registerVisitor } = await import('./engine/members.js');
 
     await initTls();
@@ -720,6 +722,43 @@ async function main() {
         const kimKnock = await post('/api/join/knock', knockBody(kim), kim);
         const oliveDeclines = await post(`/api/join/knocks/${knockId(kim)}/decline`, {}, olive);
         assert(kimKnock.status === 201 && oliveDeclines.status === 200, `a member declines Kim's knock (${kimKnock.status}, ${oliveDeclines.status} ${oliveDeclines.text.slice(0, 100)})`);
+
+        // A visitor's knock (4110436318): its row is no member's, so what it sent is on the members' list and in the
+        // operator's count, the tidy-up leaves it, and a member's invite from the list lets it in with its own signed
+        // redeem. Not a knock accepted and then shown to nobody.
+        const kit = keypair('KnockingKit');
+        const kitConv = await post('/api/messages/conversation', { type: 'dm', participants: [olive.pubKeyHex, kit.pubKeyHex], createdBy: olive.pubKeyHex }, olive);
+        assert(kitConv.status === 200 && visitorFlag(kit.pubKeyHex) === 1, `Kit is a visitor: Olive messaged her (${kitConv.status}, is_visitor ${visitorFlag(kit.pubKeyHex)})`);
+        const countBefore = openKnockCount();
+        const kitKnock = await post('/api/join/knock', knockBody(kit), kit);
+        assert(kitKnock.status === 201 && kitKnock.body?.knock?.status === 'pending', `Kit asks to join (${kitKnock.status} ${kitKnock.text.slice(0, 100)})`);
+        const kitListed = async () => {
+            const list = await get('/api/join/knocks?limit=50', olive);
+            return { list, knock: (list.body?.knocks ?? []).find((k: any) => k.pubkey === kit.pubKeyHex) };
+        };
+        const listed = await kitListed();
+        assert(listed.list.status === 200 && listed.knock?.callsign === kit.callsign && listed.knock?.message === knockBody(kit).message && listed.knock?.fromNode === 'global.beanpool.org',
+            `a visitor's knock is on the members' list, with what it sent (${listed.list.status}, total ${listed.list.body?.total}, ${listed.knock ? 'listed' : 'not listed'})`);
+        assert(openKnockCount() === countBefore + 1 && listed.list.body?.total === openKnockCount(),
+            `…and in the operator's count (${countBefore} → ${openKnockCount()}, the list's total ${listed.list.body?.total})`);
+        tidyKnocks();
+        const kitRow = db.prepare('SELECT status, callsign, message, from_node FROM join_requests WHERE pubkey = ?').get(kit.pubKeyHex) as any;
+        const afterTidy = await kitListed();
+        assert(kitRow?.status === 'pending' && kitRow?.callsign === kit.callsign && kitRow?.message === knockBody(kit).message && kitRow?.from_node === 'global.beanpool.org'
+            && afterTidy.knock?.id === listed.knock?.id,
+            `the tidy-up leaves it whole and listed (${kitRow?.status}, callsign '${kitRow?.callsign}', ${afterTidy.knock ? 'listed' : 'not listed'})`);
+        const kitApproved = await post(`/api/join/knocks/${listed.knock?.id}/approve`, {}, olive);
+        assert(kitApproved.status === 200 && !!kitApproved.body?.invite?.code, `a member approves it from the list (${kitApproved.status} ${kitApproved.text.slice(0, 100)})`);
+        const kitStatus = await get('/api/join/knock/status', kit);
+        assert(kitStatus.body?.status === 'approved' && kitStatus.body?.invite === kitApproved.body?.invite?.code,
+            `Kit's app reads the invite (${kitStatus.status} ${kitStatus.body?.status})`);
+        const kitJoin = await post('/api/invite/redeem', { code: kitStatus.body?.invite, publicKey: kit.pubKeyHex, callsign: kit.callsign }, kit);
+        const kitMember = row(kit.pubKeyHex);
+        assert(kitJoin.status === 200 && kitJoin.body?.success === true && !kitJoin.body?.alreadyMember && visitorFlag(kit.pubKeyHex) === 0
+            && kitMember.invite_code === kitStatus.body?.invite && kitMember.invited_by === olive.pubKeyHex && codeUser(kitStatus.body?.invite) === kit.pubKeyHex,
+            `Kit joins with her own signed redeem of that invite: her row is a member's, invited by Olive, the code used (${kitJoin.status} ${kitJoin.text.slice(0, 100)})`);
+        assert(knockerRefusal(kit.pubKeyHex) === 'already_member' && !(await kitListed()).knock,
+            `…and, a member now, she knocks no more and her knock is off the list (${knockerRefusal(kit.pubKeyHex)})`);
     }
 
     for (const s of Object.values(sockets)) s.ws.close();

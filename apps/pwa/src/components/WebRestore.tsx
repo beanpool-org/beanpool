@@ -455,6 +455,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
 
     async function backToName() {
         await clearPendingRestore().catch(() => {});
+        opened.current = null; // an account left on the save-failed screen is let go, not kept in memory
         setSession(null);
         setNonceHeld(null);
         setNotice(null);
@@ -666,6 +667,9 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                         {' '}Nothing has been saved yet.
                     </p>
                     <button type="button" style={primaryButton} onClick={() => void retrySave()}>Try again</button>
+                    {/* A browser that can never save it (no storage, say) is not a dead end: the other ways, or the name. */}
+                    {otherWays}
+                    <button type="button" style={quietButton} onClick={() => void backToName()}>← Start again</button>
                 </>
             );
             break;

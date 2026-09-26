@@ -245,6 +245,26 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         expect(onRestored.mock.calls[1][0].publicKey).toBe(account.publicKey);
     });
 
+    it("a browser that can never save it is not a dead end: the other ways, and Start again back to the name (review 4109516322)", async () => {
+        await leftFor('google', makeEphemeralKey());
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'));
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const onRestored = vi.fn<(identity: BeanPoolIdentity) => Promise<boolean>>()
+            .mockRejectedValue(new DOMException('The quota has been exceeded.', 'QuotaExceededError'));
+        const onOtherWay = vi.fn();
+        renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1'), onRestored, onOtherWay });
+        await screen.findByTestId('restore-save-failed');
+        fireEvent.click(screen.getByRole('button', { name: 'Use my 12 words' }));
+        expect(onOtherWay).toHaveBeenCalledWith('words');
+        fireEvent.click(screen.getByRole('button', { name: 'Link with my phone' }));
+        expect(onOtherWay).toHaveBeenCalledWith('phone');
+        fireEvent.click(screen.getByRole('button', { name: '← Start again' }));
+        await screen.findByTestId('restore-screen-name');
+        expect(onRestored).toHaveBeenCalledTimes(1);
+        expect(await loadIdentity()).toBeNull();
+        expect(await loadPendingRestore()).toBeNull();
+    });
+
     it('the node let the session go before the sign-ins: back to the name, said, never an empty sign-in screen', async () => {
         recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
             '/api/recovery/collect/sso-nonce': () => json(404, { error: 'No recovery session for this device.' }),

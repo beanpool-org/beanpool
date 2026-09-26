@@ -1,5 +1,6 @@
 /**
- * SystemAlerts: the node's alerts, live and kept (GET /api/notices), each shown once and each kept copy marked seen.
+ * SystemAlerts: the node's alerts, live and kept (GET /api/notices), each shown once and each kept copy marked seen
+ * when the member puts it away (Acknowledge, Close all), never as it is shown.
  * The socket's subscriptions are mocked at lib/sync, the node's reads at lib/api.
  */
 import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/react';
@@ -54,6 +55,9 @@ describe('SystemAlerts: live and kept alerts, each once', () => {
         expect(next).toHaveTextContent('Body b');
         expect(within(next).queryByText(/1 of/)).toBeNull();
         expect(api.getUnseenNotices).toHaveBeenCalledTimes(2);
+        await new Promise(r => setTimeout(r, 20));
+        expect(markedIds()).toEqual([['a']]);
+        await acknowledge();
         await waitFor(() => expect(markedIds()).toEqual([['a'], ['b']]));
     });
 
@@ -65,18 +69,55 @@ describe('SystemAlerts: live and kept alerts, each once', () => {
         expect(api.getUnseenNotices).toHaveBeenCalledTimes(1);
     });
 
-    it('a live notice carrying its kept copy is marked seen as it is shown, and the same notice read later is not shown again', async () => {
+    it('a live notice carrying its kept copy is marked seen when acknowledged, and the same notice read later is not shown again', async () => {
         render(<SystemAlerts memberPubkey="me" isGuest={false} rereadGapMs={0} />);
         await waitFor(() => expect(api.getUnseenNotices).toHaveBeenCalledTimes(1));
         await announce({ type: 'system_announcement', title: 'Title live', body: 'Body live', severity: 'info', noticeId: 'live-1', kind: 'post_hidden' });
         expect(await screen.findByRole('alertdialog')).toHaveTextContent('Body live');
-        await waitFor(() => expect(markedIds()).toEqual([['live-1']]));
+        await new Promise(r => setTimeout(r, 20));
+        expect(api.markNoticesSeen).not.toHaveBeenCalled();
         await acknowledge();
+        await waitFor(() => expect(markedIds()).toEqual([['live-1']]));
         vi.mocked(api.getUnseenNotices).mockResolvedValue([{ ...notice('live-1'), body: 'Body live' }]);
         await reconnect();
         await waitFor(() => expect(api.getUnseenNotices).toHaveBeenCalledTimes(2));
         await new Promise(r => setTimeout(r, 20));
         expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+
+    it('a tab nobody is looking at marks nothing: a notice is marked seen when the member acknowledges it, once', async () => {
+        // A background tab (Chrome's Memory Saver, or Android on a low-memory phone, may close it before the member looks).
+        let hidden = true;
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+        try {
+            render(<SystemAlerts memberPubkey="me" isGuest={false} rereadGapMs={0} />);
+            await waitFor(() => expect(api.getUnseenNotices).toHaveBeenCalledTimes(1));
+            // A live notice on the hidden tab's open socket; then the socket drops and reconnects while still hidden.
+            await announce({ type: 'system_announcement', title: 'Title live', body: 'Body live', severity: 'info', noticeId: 'live-1', kind: 'post_hidden' });
+            vi.mocked(api.getUnseenNotices).mockResolvedValue([{ ...notice('live-1'), body: 'Body live' }, notice('k1')]);
+            await reconnect();
+            await waitFor(() => expect(api.getUnseenNotices).toHaveBeenCalledTimes(2));
+            const dialog = await screen.findByRole('alertdialog');
+            expect(dialog).toHaveTextContent('Body live');
+            await waitFor(() => expect(within(dialog).getByText('1 of 2')).toBeInTheDocument());
+            await new Promise(r => setTimeout(r, 20));
+            expect(api.markNoticesSeen).not.toHaveBeenCalled();
+
+            // The member comes back to the tab: still nothing, until they tap Acknowledge. Then that one, once.
+            hidden = false;
+            act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+            await new Promise(r => setTimeout(r, 20));
+            expect(api.markNoticesSeen).not.toHaveBeenCalled();
+            await acknowledge();
+            await waitFor(() => expect(markedIds()).toEqual([['live-1']]));
+            expect(await screen.findByRole('alertdialog')).toHaveTextContent('Body k1');
+            await new Promise(r => setTimeout(r, 20));
+            expect(markedIds()).toEqual([['live-1']]);
+        } finally {
+            delete (document as any).hidden;
+            delete (document as any).visibilityState;
+        }
     });
 
     it('a live alert with no kept copy (a node older than this, or not a moderation notice) still shows, and marks nothing', async () => {
@@ -103,13 +144,25 @@ describe('SystemAlerts: live and kept alerts, each once', () => {
         expect(await screen.findByRole('alertdialog')).toHaveTextContent('Body y');
     });
 
-    it('"Close all" marks the rest seen in one go and closes them', async () => {
+    it('"Close all" marks the one showing and the rest seen in one go and closes them', async () => {
         vi.mocked(api.getUnseenNotices).mockResolvedValue([notice('p'), notice('q'), notice('r')]);
         render(<SystemAlerts memberPubkey="me" isGuest={false} />);
         const dialog = await screen.findByRole('alertdialog');
         expect(within(dialog).getByText('1 of 3')).toBeInTheDocument();
-        await waitFor(() => expect(markedIds()).toEqual([['p']]));
+        await new Promise(r => setTimeout(r, 20));
+        expect(api.markNoticesSeen).not.toHaveBeenCalled();
         fireEvent.click(within(dialog).getByRole('button', { name: 'Close all 3' }));
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+        await waitFor(() => expect(markedIds()).toEqual([['p', 'q', 'r']]));
+    });
+
+    it('"Close all" after an Acknowledge marks only what is left, and nothing twice', async () => {
+        vi.mocked(api.getUnseenNotices).mockResolvedValue([notice('p'), notice('q'), notice('r')]);
+        render(<SystemAlerts memberPubkey="me" isGuest={false} />);
+        await acknowledge();
+        const dialog = await screen.findByRole('alertdialog');
+        expect(within(dialog).getByText('1 of 2')).toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close all 2' }));
         await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
         await waitFor(() => expect(markedIds()).toEqual([['p'], ['q', 'r']]));
     });

@@ -1,7 +1,8 @@
 /**
  * The web app hears about moderation on its member's next visit (#1175's deciding pass): the node keeps each moderation
  * notice for its member (GET /api/notices), and the app shell shows the unseen ones when it opens, each once, as the live
- * alert shows them, and marks each seen. A paused member sees that plainly (GET /api/community/me `mute`).
+ * alert shows them, and marks each seen when the member puts it away (never as it is shown: #1186's deciding pass).
+ * A paused member sees that plainly (GET /api/community/me `mute`).
  *
  * The whole App, with the node's reads mocked at lib/api and the socket's subscriptions at lib/sync.
  */
@@ -87,7 +88,7 @@ describe('The web app shows moderation notices kept while it was closed', () => 
         vi.mocked(api.markNoticesSeen).mockResolvedValue({ success: true, marked: 1 });
     });
 
-    it('on opening, shows each unseen notice once, as the live alert does, and marks each seen as it is shown', async () => {
+    it('on opening, shows each unseen notice once, as the live alert does, and marks each seen when it is acknowledged', async () => {
         vi.mocked(api.getUnseenNotices).mockResolvedValue([REMOVED, HIDDEN]);
         render(<App />);
 
@@ -95,34 +96,56 @@ describe('The web app shows moderation notices kept while it was closed', () => 
         expect(first).toHaveTextContent(REMOVED.title);
         expect(first).toHaveTextContent(REMOVED.body);
         expect(within(first).getByText('1 of 2')).toBeInTheDocument();
-        await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([REMOVED.id]));
-        expect(api.markNoticesSeen).not.toHaveBeenCalledWith([HIDDEN.id]);
+        await new Promise(r => setTimeout(r, 20));
+        expect(api.markNoticesSeen).not.toHaveBeenCalled();
 
         fireEvent.click(within(first).getByRole('button', { name: 'Acknowledge' }));
+        await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([REMOVED.id]));
         const second = await screen.findByRole('alertdialog');
         expect(second).toHaveTextContent(HIDDEN.title);
         expect(second).toHaveTextContent(HIDDEN.body);
-        await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([HIDDEN.id]));
+        expect(api.markNoticesSeen).not.toHaveBeenCalledWith([HIDDEN.id]);
 
         fireEvent.click(within(second).getByRole('button', { name: 'Acknowledge' }));
         await waitFor(() => expect(alertDialog()).toBeNull());
+        await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([HIDDEN.id]));
         expect(api.getUnseenNotices).toHaveBeenCalledTimes(1);
         expect(api.markNoticesSeen).toHaveBeenCalledTimes(2);
     });
 
-    it('a live notice the node also kept is shown once, and marked seen, so the next open does not show it again', async () => {
+    it('a notice nobody put away is not used up: the tab closed before Acknowledge, the next open shows it again', async () => {
+        vi.mocked(api.getUnseenNotices).mockResolvedValue([REMOVED]);
+        const first = render(<App />);
+        expect(await screen.findByRole('alertdialog')).toHaveTextContent(REMOVED.body);
+        await new Promise(r => setTimeout(r, 20));
+        // The tab is closed (or the browser discards it) before the member taps anything.
+        first.unmount();
+        expect(api.markNoticesSeen).not.toHaveBeenCalled();
+
+        render(<App />);
+        const again = await screen.findByRole('alertdialog');
+        expect(again).toHaveTextContent(REMOVED.body);
+        fireEvent.click(within(again).getByRole('button', { name: 'Acknowledge' }));
+        await waitFor(() => expect(alertDialog()).toBeNull());
+        await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([REMOVED.id]));
+        expect(api.markNoticesSeen).toHaveBeenCalledTimes(1);
+    });
+
+    it('a live notice the node also kept is shown once, and marked seen when acknowledged, so the next open does not show it again', async () => {
         render(<App />);
         await screen.findByTestId('marketplace-page');
         await waitFor(() => expect(hooks.announce).not.toBeNull());
         await announce({ type: 'system_announcement', title: REMOVED.title, body: REMOVED.body, severity: 'info', kind: 'post_removed', noticeId: REMOVED.id });
         const shown = await screen.findByRole('alertdialog');
         expect(shown).toHaveTextContent(REMOVED.body);
-        await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([REMOVED.id]));
         // The same notice arriving live a second time (another tab's socket, say) is not queued again.
         await announce({ type: 'system_announcement', title: REMOVED.title, body: REMOVED.body, severity: 'info', kind: 'post_removed', noticeId: REMOVED.id });
         expect(within(shown).queryByText(/1 of/)).toBeNull();
+        expect(api.markNoticesSeen).not.toHaveBeenCalled();
         fireEvent.click(within(shown).getByRole('button', { name: 'Acknowledge' }));
         await waitFor(() => expect(alertDialog()).toBeNull());
+        await waitFor(() => expect(api.markNoticesSeen).toHaveBeenCalledWith([REMOVED.id]));
+        expect(api.markNoticesSeen).toHaveBeenCalledTimes(1);
     });
 
     it('a read that fails shows nothing and breaks nothing: the app loads, and a live alert still shows', async () => {

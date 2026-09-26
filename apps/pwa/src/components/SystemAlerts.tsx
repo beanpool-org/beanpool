@@ -7,8 +7,11 @@
  * each time its socket connects again, since anything sent while it was down never arrived.
  *
  * Each is shown once. A live notice carries its kept copy's id, so the same notice read later is not shown again; and
- * each kept copy is marked seen on the node as it is shown (or when the member closes the rest). A read or a mark that
- * fails shows nothing and breaks nothing: an unmarked notice is read again at the next open, never lost.
+ * each kept copy is marked seen on the node when the member puts it away (Acknowledge, or Close all), never as it is
+ * shown: a tab nobody is looking at (a live notice on a background tab's socket, or its reconnect's read) shows it and
+ * marks nothing, so a tab closed or discarded before the member looks leaves it for the next open. Two tabs may both
+ * show it; none may use it up unseen. A read or a mark that fails shows nothing and breaks nothing: an unmarked notice
+ * is read again at the next open, never lost.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { onSystemAnnouncement, onSocketOpen } from '../lib/sync';
@@ -19,7 +22,7 @@ export interface ShownAlert {
     title: string;
     body: string;
     severity: string;
-    /** The node's kept copy, when it keeps one: marked seen once shown. */
+    /** The node's kept copy, when it keeps one: marked seen once the member puts it away. */
     noticeId?: string;
     /** What it is about (`moderation_muted`, `post_removed`, ...), when the node says. */
     kind?: string;
@@ -142,14 +145,17 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
         };
     }, [readsKept, memberPubkey, enqueue, rereadGapMs]);
 
+    /** Marks the kept copies of alerts the member has put away, each once. Only a tap calls this: never a render. */
+    const putAway = (alerts: ShownAlert[]) => {
+        const ids = alerts.map(a => a.noticeId).filter((id): id is string => !!id && !marked.current.has(id));
+        for (const id of ids) marked.current.add(id);
+        if (ids.length > 0) markSeen(ids);
+    };
+
     const head = queue[0];
     useEffect(() => {
         if (!head) return;
         onShownRef.current?.(head);
-        if (head.noticeId && !marked.current.has(head.noticeId)) {
-            marked.current.add(head.noticeId);
-            markSeen([head.noticeId]);
-        }
         // Once per alert shown: keyed on the alert, not on the queue behind it.
     }, [head?.key]);
 
@@ -157,13 +163,15 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
 
     const colour = COLOURS[head.severity] ?? '#3b82f6';
     const waiting = queue.length;
+    const acknowledge = () => {
+        putAway([head]);
+        setQueue(q => (q[0]?.key === head.key ? q.slice(1) : q));
+    };
     const closeAll = () => {
         const closed = queue.slice(1);
         // Closed unread, the app still hears of each: a pause behind another notice still puts "Posting paused" up.
         for (const a of closed) onShownRef.current?.(a);
-        const rest = closed.map(a => a.noticeId).filter((id): id is string => !!id && !marked.current.has(id));
-        for (const id of rest) marked.current.add(id);
-        if (rest.length > 0) markSeen(rest);
+        putAway(queue);
         setQueue([]);
     };
 
@@ -211,7 +219,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                     )}
                     <button
                         type="button"
-                        onClick={() => setQueue(q => q.slice(1))}
+                        onClick={acknowledge}
                         style={{
                             width: '100%', padding: '0.8rem',
                             background: colour,

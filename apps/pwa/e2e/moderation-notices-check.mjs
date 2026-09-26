@@ -3,6 +3,7 @@
  * (ModerationPauseCard) in a real Chromium layout at the documented floor, a 320x568 phone with 1.3x text (and a
  * 260px stress case), light and dark: nothing may reach past the viewport sideways, the page may not scroll sideways,
  * the alert must fit the screen with its buttons in view (its words scroll inside it), and the pause card must render.
+ * Nothing is marked seen as it is shown: a notice is marked when the member puts it away (Acknowledge, Close all).
  * The first notice carries the longest body the node writes (a post title of 80 characters, one unbroken word).
  * Photographs each case to e2e/shots/.
  *
@@ -125,10 +126,16 @@ try {
             await page.evaluate(() => document.fonts.ready);
 
             // The first notice, with the longest body; then the second; then the pause card with the alerts closed.
-            const steps = [['first', null], ['second', 'Acknowledge'], ['closed', /^Close all/]];
-            for (const [step, click] of steps) {
+            // What is marked seen by then: nothing while a notice only shows, then each as the member puts it away.
+            const steps = [
+                ['first', null, []],
+                ['second', 'Acknowledge', ['n-hidden']],
+                ['closed', /^Close all/, ['n-hidden', 'n-muted', 'n-outcome']],
+            ];
+            for (const [step, click, expectMarked] of steps) {
                 if (click) await page.getByRole('button', { name: click }).click();
                 await page.waitForTimeout(100);
+                for (let i = 0; i < 20 && marked.length < expectMarked.length; i++) await page.waitForTimeout(100);
                 const shot = `moderation-notices-${c.name}-${theme}-${step}.png`;
                 await page.screenshot({ path: path.join(OUT_DIR, shot) });
                 const m = await page.evaluate(MEASURE);
@@ -146,11 +153,11 @@ try {
                     const expected = step === 'first' ? '1 of 3' : '1 of 2';
                     if (m.count !== expected) failures.push(`${shot}: count reads ${m.count}, expected ${expected}`);
                 }
+                if (JSON.stringify(marked) !== JSON.stringify(expectMarked))
+                    failures.push(`${shot}: marked seen ${JSON.stringify(marked)}, expected ${JSON.stringify(expectMarked)}`);
                 if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
-                console.log(`${shot}: alert ${m.dialog}${m.dialog ? ` (fits ${m.dialogFits}, buttons in view ${m.buttonsInView}, ${m.count})` : ''}, ${m.pauseCards} pause card, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}`);
+                console.log(`${shot}: alert ${m.dialog}${m.dialog ? ` (fits ${m.dialogFits}, buttons in view ${m.buttonsInView}, ${m.count})` : ''}, ${m.pauseCards} pause card, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}, marked ${JSON.stringify(marked)}`);
             }
-            if (JSON.stringify(marked) !== JSON.stringify(['n-hidden', 'n-muted', 'n-outcome']))
-                failures.push(`${c.name}-${theme}: marked seen ${JSON.stringify(marked)}, expected each notice once, in order`);
             await context.close();
         }
     }
@@ -164,4 +171,4 @@ if (failures.length) {
     console.error(`\n✗ ${failures.length} problem(s):\n  ${failures.join('\n  ')}`);
     process.exit(1);
 }
-console.log('\n✓ nothing reaches past the viewport, nothing scrolls sideways, each alert fits and each notice is marked seen once');
+console.log('\n✓ nothing reaches past the viewport, nothing scrolls sideways, each alert fits, and each notice is marked seen once, when put away');

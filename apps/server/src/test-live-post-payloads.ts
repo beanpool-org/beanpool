@@ -33,9 +33,11 @@ function assert(cond: boolean, msg: string): void {
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const PEER = '12D3KooWLivePayloadTestPeer000000000';
 
-type Sock = { _memberPubkey: string | null; _openFeed?: boolean; events: any[]; send(m: string): void };
+// As the /ws upgrade tags a socket: a member's key, and the member feed for a member who reads as one (each here is an
+// active member), or neither for a stranger.
+type Sock = { _memberPubkey: string | null; _memberFeed: boolean; _openFeed?: boolean; events: any[]; send(m: string): void };
 function socket(memberPubkey: string | null): Sock {
-    return { _memberPubkey: memberPubkey, events: [], send(m: string) { this.events.push(JSON.parse(m)); } };
+    return { _memberPubkey: memberPubkey, _memberFeed: !!memberPubkey, events: [], send(m: string) { this.events.push(JSON.parse(m)); } };
 }
 const last = (s: Sock, type: string) => [...s.events].reverse().find(e => e.type === type);
 

@@ -480,10 +480,12 @@ async function main() {
         // (d) Password auth CAN access key enrolment route (/api/local/admin/auth/enrol)
         // The break-glass alert is a security notice for the community's members (it names the member whose
         // admin key was replaced), so it is watched on a member's socket: a /ws socket signed by a member is
-        // tagged with _memberPubkey at upgrade. A stranger's socket must not receive it at all.
+        // tagged with _memberPubkey at upgrade (and _memberFeed, for a member who reads as one). A stranger's socket
+        // must not receive it at all.
         const receivedWsEvents: any[] = [];
         const mockWs = {
             _memberPubkey: charlieKeys.pub,
+            _memberFeed: true,
             send: (data: string) => {
                 try { receivedWsEvents.push(JSON.parse(data)); } catch {}
             },

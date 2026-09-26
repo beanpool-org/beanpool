@@ -20,8 +20,8 @@
  *   F. A file that no longer holds the admin password (a restore or a take-over replaced it) is deleted at boot.
  *   G. The file cannot be written: the server does not start, prints no password, locks nothing; the next start
  *      after the fix works.
- *   H. A password change that never reached the disk keeps the file: it still holds the password that works. A first
- *      start whose config cannot be saved does not start, and leaves no file.
+ *   H. A password change that never reached the disk is reported as a failure and keeps the file: it still holds the
+ *      password that works. A first start whose config cannot be saved does not start, and leaves no file.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-first-admin-password.ts
  */
@@ -291,8 +291,9 @@ async function main(): Promise<void> {
         const pwH = fs.existsSync(fileIn(dirH)) ? readFile(dirH) : '';
         const cfgH = path.join(dirH, 'local-config.json');
         fs.chmodSync(cfgH, 0o444); // saveLocalConfig's write fails, and it only logs that
-        await post(h.base, '/api/local/change-password', { currentPassword: pwH, newPassword: NEW_PW });
+        const failedChange = await post(h.base, '/api/local/change-password', { currentPassword: pwH, newPassword: NEW_PW });
         fs.chmodSync(cfgH, 0o644);
+        assert(failedChange >= 500, `H0. the change is reported as a failure, not a success (${failedChange})`);
         assert(!!pwH && fs.existsSync(fileIn(dirH)) && readFile(dirH) === pwH, 'H1. the file is kept: the password in it is still the one on disk');
         assert(await signsIn(h, pwH), 'H2. and it still signs in');
         assert(!(await signsIn(h, NEW_PW)), 'H3. (control) the new one was never saved');

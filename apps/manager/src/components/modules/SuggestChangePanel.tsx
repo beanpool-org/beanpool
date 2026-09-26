@@ -145,9 +145,16 @@ export function SuggestChangePanel({ appVersion, submit = submitFeedback }: Prop
                         <button
                             type="submit"
                             disabled={sending || over}
-                            className="flex-1 min-h-[48px] px-5 rounded-lg bg-terra-600 hover:bg-terra-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold text-white"
+                            className="flex-1 min-h-[48px] px-5 rounded-lg bg-terra-600 hover:bg-terra-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold text-white flex items-center justify-center gap-2"
                         >
-                            {sending ? 'Sending…' : 'Send'}
+                            {sending ? (
+                                <>
+                                    <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" aria-hidden="true" />
+                                    <span>Sending…</span>
+                                </>
+                            ) : (
+                                'Send'
+                            )}
                         </button>
                         <button
                             type="button"

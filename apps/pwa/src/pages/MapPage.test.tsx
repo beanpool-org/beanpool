@@ -7,6 +7,7 @@ import * as api from '../lib/api';
 import L from 'leaflet';
 import { livePostChange } from '@beanpool/core';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
+import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 
 vi.mock('leaflet.markercluster', () => ({}));
 
@@ -1087,6 +1088,81 @@ describe('MapPage: a listing pushed over the live feed', () => {
 
         await waitFor(() => expect(offerPins().length).toBeGreaterThan(0));
         expect(vi.mocked(api.getMarketplacePosts).mock.calls.length).toBe(calls);
+    });
+});
+
+/*
+ * G9b (design G9a §7): on a node that shows visitors its listings (the global one), a member's composer says, under
+ * the photos, who else will see them; and a visitor to the lobby, with no key, gets the map with nothing to post and
+ * a pin card of the listing alone.
+ */
+describe('the global lobby on the map (G9b)', () => {
+    const GLOBAL_INFO = { memberCount: 3, postCount: 1, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
+    const guestPost = {
+        id: 'post-bread', type: 'offer', category: 'food', title: 'Sourdough loaves', description: 'Swap for eggs',
+        credits: 0, priceType: 'fixed', authorPublicKey: 'hidden', authorCallsign: '', authorEnergyCycled: 5000,
+        createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: false,
+        lat: -28.55, lng: 153.55,
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([guestPost] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    it("a member on the global node: the composer says visitors can see the listing's photos and rough area", async () => {
+        const info = vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(GLOBAL_INFO as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        expect(await within(panel).findByTestId('composer-visitor-note'))
+            .toHaveTextContent("Visitors to the global community can see this listing's photos and its rough area before they join.");
+        expect(info).toHaveBeenCalledTimes(1);
+    });
+
+    it('a local node: no such note, as today', async () => {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ ...GLOBAL_INFO, profile: 'local', features: { openJoin: false, guestListingsOnly: false, beans: true } } as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(within(panel).queryByTestId('composer-visitor-note')).toBeNull();
+    });
+
+    it('a visitor with no key: no New Post button, nothing asked about people or enterprises, and a pin card of the title and "near here"', async () => {
+        const info = vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(GLOBAL_INFO as any);
+        const onNavigate = vi.fn();
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={null} isMember={false} visitor onNavigate={onNavigate} />); });
+        await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true));
+
+        expect(view!.queryByRole('button', { name: 'New Post' })).toBeNull();
+        for (const read of [api.getBalance, api.getReachablePeers, api.getEnterpriseMapPins, api.getEnterpriseStatuses, api.getTreasuries, api.getGroups]) {
+            expect(read).not.toHaveBeenCalled();
+        }
+        expect(info).not.toHaveBeenCalled();
+
+        const pin = mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!;
+        expect(pin.coords).toEqual([-28.55, 153.55]);
+        // No badge glow for a visitor, whatever the post says.
+        expect(pin.opts.html).not.toContain('#fbbf24');
+        act(() => { pin.listeners['click']?.(); });
+        const card = await view!.findByTestId('map-preview-card');
+        expect(within(card).getByTestId('map-preview-title')).toHaveTextContent('Sourdough loaves');
+        expect(within(card).getByTestId('map-preview-near')).toHaveTextContent('near here');
+        expect(card).not.toHaveTextContent(/0B|Elder|hidden/);
+        fireEvent.click(within(card).getByRole('button', { name: 'View Details' }));
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-bread');
     });
 });
 

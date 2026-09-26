@@ -40,6 +40,8 @@ import { approximateLocation, tierForCredit, type AddressResult } from '@beanpoo
 import { AddressSearch } from '../components/AddressSearch';
 import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
+import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
@@ -83,7 +85,8 @@ export function resetSavedMapView() {
 }
 
 interface Props {
-    identity: BeanPoolIdentity;
+    /** Null for a visitor to the global lobby (`visitor`), who has no key at all. */
+    identity: BeanPoolIdentity | null;
     openNewPost?: boolean;
     initialGroupId?: string;
     onOpenNewPostHandled?: () => void;
@@ -116,13 +119,19 @@ interface Props {
      */
     editEventPostId?: string | null;
     onEditEventHandled?: () => void;
+    /**
+     * A visitor to the global lobby (G9b): the node's guest view of each listing, pinned where the node puts it (the
+     * centre of its area); a pin's card has the title, "near here" and the way to its detail sheet, and nothing on the
+     * map can post. Nothing is asked about people or enterprises.
+     */
+    visitor?: boolean;
 }
 
 /** Event form limits, as the node enforces them (docs/events-on-the-map.md §2.2). */
 const EVENT_PLACE_NAME_MAX = 80;
 const EVENT_PRIVATE_NOTE_MAX = 1000;
 
-export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, visitor = false }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
@@ -180,6 +189,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // form above the button, and the limits card for a limit. Cleared when the form closes.
     const [postRefusal, setPostRefusal] = useState<NodeRefusal | null>(null);
     useEffect(() => { if (!showNewPost) setPostRefusal(null); }, [showNewPost]);
+    // On a node that shows visitors its listings (the global one), the composer says so under the photos (G9a §7). Read
+    // when the composer first opens, from the page's one shared read of /api/community/info; said only when it answers.
+    const [visitorNote, setVisitorNote] = useState<string | null>(null);
+    useEffect(() => {
+        if (!showNewPost || visitorNote !== null || !identity) return;
+        let cancelled = false;
+        communityInfoOnce()
+            .then(info => { if (!cancelled && visitorsSeeListings(info)) setVisitorNote(composerVisitorNote(info.profile)); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [showNewPost, visitorNote, identity]);
     /** A failed save: the node's refusal in the form, anything else as before. */
     function showPostError(e: any, fallback: string) {
         const refusal = nodeRefusal(e);
@@ -251,7 +271,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const canLoadBalance = isMember !== false && isMember !== null;
 
     useEffect(() => {
-        if (!canLoadBalance) return;
+        if (!canLoadBalance || !identity) return;
         let cancelled = false;
         getBalance(identity.publicKey)
             .then(b => {
@@ -263,7 +283,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, [identity.publicKey, canLoadBalance]);
+    }, [identity?.publicKey, canLoadBalance]);
 
     const needBlocked = blockedFromTrading && newPostType === 'need';
 
@@ -289,6 +309,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // leaves the list empty, which hides the reach chooser. That is the right failure: a member should not be
     // shown a partner they might not have, and 'local' is what they get, which is the safe answer anyway.
     useEffect(() => {
+        if (visitor) return;
         let cancelled = false;
         getReachablePeers()
             .then(r => { if (!cancelled) setReachablePeerList(r.peers ?? []); })
@@ -307,6 +328,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // Listing requires a name + photo — checked up front (here and at the FAB) so
     // nobody fills in a whole post first. Incomplete → a prompt that opens the wizard.
     const tryOpenComposer = useCallback(async () => {
+        // A visitor has no key to post with; the lobby's Join is the way.
+        if (!identity) return;
         const status = await getProfileStatus(identity);
         if (!status.complete) {
             setProfileGateMsg(`Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can post. It only takes a moment.`);
@@ -520,7 +543,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             // Listings pushed while this read is in flight are replayed over it: it left before them.
             const liveMark = liveChangeMark();
             try {
-                getEnterpriseStatuses().then(res => {
+                // A visitor's map has no enterprises: off on the global node, and their reads are members' only.
+                if (!visitor) getEnterpriseStatuses().then(res => {
                     const inactiveKeys = new Set(
                         (res?.enterprises || [])
                             .filter((t: any) => t.paused || t.status === 'winding_up' || t.status === 'completed')
@@ -538,15 +562,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     }).catch(() => {});
                 });
                 const [pinsRes, localData] = await Promise.all([
-                    getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
+                    visitor ? Promise.resolve({ enterprises: [] }) : getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
                     // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them.
                     getMarketplacePosts({ ...MAP_LIST_FILTER }),
                 ]);
                 setEnterprises(pinsRes?.enterprises || []);
                 let allPosts: MarketplacePost[] = [...localData];
 
-                // Only fetch from peers the user has toggled on
-                const enabledPeers = loadEnabledPeers();
+                // Only fetch from peers the user has toggled on; never for a visitor, whose lobby reads this node's
+                // guest list and no other community's (G9a §7).
+                const enabledPeers = visitor ? new Set<string>() : loadEnabledPeers();
                 if (enabledPeers.size > 0) {
                     const nodeInfo = await getNodeInfo('');
                     const peersToFetch = (nodeInfo.peerNodes || [])
@@ -577,7 +602,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, []);
+    }, [visitor]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -707,7 +732,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setPosting(true);
         try {
             // The signed caller's own key: the node checks it against the host set (author, keeper, convenor).
-            await updateMarketplacePost(id, identity.publicKey || '', payload);
+            await updateMarketplacePost(id, identity?.publicKey || '', payload);
             closeEventForm();
             refreshPosts();
             onNavigate?.('marketplace', id);
@@ -763,7 +788,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     category: 'community',
                     credits: 0,
                     priceType: 'fixed',
-                    authorPublicKey: identity.publicKey || '',
+                    authorPublicKey: identity?.publicKey || '',
                     repeatable: false,
                     ...event,
                 });
@@ -824,7 +849,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     description: newPostDescription.trim(),
                     credits: 0,
                     priceType: 'fixed',
-                    authorPublicKey: identity.publicKey || '',
+                    authorPublicKey: identity?.publicKey || '',
                     repeatable: false,
                     pollOptions: validOptions.map((text, idx) => ({ id: `opt_${idx + 1}`, text })),
                     durationDays: pollDurationDays,
@@ -874,7 +899,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 description: newPostDescription.trim(),
                 credits: Number(newPostCredits) || 0,
                 priceType: newPostPriceType,
-                authorPublicKey: identity.publicKey || '',
+                authorPublicKey: identity?.publicKey || '',
                 repeatable: newPostRepeatable,
                 cashAlsoNeeded: newPostCashAlsoNeeded,
                 reach: audienceScope === 'group' ? 'local' : newPostReach,
@@ -1080,8 +1105,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             }
 
             const typeLabel = post.type === 'offer' ? 'Offer' : 'Need';
-            // Elder Glow: highlight established community members
-            const hasElderGlow = tierForCredit(post.authorEnergyCycled ?? 0).name === 'Elder';
+            // Elder Glow: highlight established community members. Never for a visitor, who is shown no badges.
+            const hasElderGlow = !visitor && tierForCredit(post.authorEnergyCycled ?? 0).name === 'Elder';
             
             let html: string;
             if (useModernMarkers) {
@@ -1269,7 +1294,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 });
                 marker.addTo(markersRef.current!);
             });
-    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, nodeRadius]);
+    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, nodeRadius, visitor]);
 
     // No location from the node: centre once on this community's own pins, which are its real centre. Posts from
     // partner communities are left out — they are somewhere else. Nothing to centre on leaves the neutral view and
@@ -1505,6 +1530,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <p className={`text-xs font-semibold mt-2 uppercase tracking-wide ${required && validationErrors.has('photos') && newPostPhotos.length === 0 ? 'text-red-500' : 'text-nature-400'}`}>
                     {newPostPhotos.length}/5 photos {newPostPhotos.length === 0 ? (required ? '(at least 1 required)' : '(optional)') : ''}
                 </p>
+                {visitorNote && (
+                    <p data-testid="composer-visitor-note" className="m-0 mt-2 text-sm text-nature-600 dark:text-nature-300">{visitorNote}</p>
+                )}
             </div>
         );
     }
@@ -1658,8 +1686,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 </button>
             </div>
 
-            {/* Floating Add Button — bottom right */}
-            {!showNewPost && (
+            {/* Floating Add Button — bottom right. A visitor posts nothing; the lobby's Join is the way. */}
+            {!showNewPost && !visitor && (
                 <button
                     onClick={tryOpenComposer}
                     aria-label="New Post"
@@ -1687,6 +1715,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     <EventCard
                         post={previewPost}
                         identity={identity}
+                        visitor={visitor}
                         distanceKm={userLocation && previewPost.lat != null && previewPost.lng != null
                             ? haversineDistance(userLocation.lat, userLocation.lng, previewPost.lat, previewPost.lng)
                             : null}
@@ -1713,7 +1742,39 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 </div>
             </div>
         )}
-        {previewPost && previewPost.type !== 'event' && (
+        {previewPost && previewPost.type !== 'event' && visitor && (
+            // A visitor's pin card (G9a §7): the listing's title and "near here", since the pin is its area's centre, and
+            // the way to its detail sheet. No price, no name, no badge.
+            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
+                <div className="bg-white dark:bg-nature-900 m-4 rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800">
+                    <button
+                        onClick={() => setPreviewPost(null)}
+                        aria-label="Close preview"
+                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-400 cursor-pointer"
+                    >
+                        ✕
+                    </button>
+                    <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
+                        {previewPost.photos && previewPost.photos.length > 0
+                            ? <img src={previewPost.photos[0]} alt="" className="w-full h-full object-cover" />
+                            : <span className="text-3xl" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
+                    </div>
+                    <div className="flex-1 min-w-0 flex flex-col justify-center pr-6">
+                        <span data-testid="map-preview-title" className="text-base font-extrabold text-gray-900 dark:text-white leading-tight break-words">
+                            {previewPost.title}
+                        </span>
+                        <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">near here</span>
+                        <button
+                            onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
+                            className="min-h-[44px] py-2 px-4 rounded-xl border-none font-bold text-white text-sm cursor-pointer bg-indigo-600 hover:bg-indigo-700"
+                        >
+                            View Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        {previewPost && previewPost.type !== 'event' && !visitor && (
             <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
                 <div className="bg-white dark:bg-nature-900 m-4 rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
                     <button 

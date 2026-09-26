@@ -53,6 +53,8 @@ let reconnectSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
 /** The member this socket signed in as, so a pushed change about their own listing takes the full refresh. */
 let memberPubkey: string | null = null;
 let isConnecting = false;
+/** Bumped by reconnectToAnchor: a connect still reading the identity from before it opens nothing. */
+let connectGeneration = 0;
 let currentUrl: string | null = null;
 
 export const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -315,12 +317,14 @@ export function connectToAnchor(url?: string): void {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     if (isConnecting) return;
     isConnecting = true;
+    const generation = connectGeneration;
 
     const baseWsUrl = url ?? getNodeWsUrl('/ws');
     currentUrl = baseWsUrl;
 
     loadIdentity()
         .then(async (ident) => {
+            if (generation !== connectGeneration) return;
             memberPubkey = ident?.publicKey ?? null;
             const params: string[] = [];
             if (ident && ident.callsign) {
@@ -332,15 +336,51 @@ export function connectToAnchor(url?: string): void {
                 const signed = await buildSignedWsParams('/ws');
                 if (signed) params.push(signed);
             } catch { /* unsigned fallback */ }
+            if (generation !== connectGeneration) return;
             const wsUrl = params.length ? `${baseWsUrl}?${params.join('&')}` : baseWsUrl;
             establishConnection(wsUrl, baseWsUrl);
         })
         .catch(() => {
+            if (generation !== connectGeneration) return;
             establishConnection(baseWsUrl, baseWsUrl);
         })
         .finally(() => {
-            isConnecting = false;
+            if (generation === connectGeneration) isConnecting = false;
         });
+}
+
+/**
+ * Close the socket and open it again, signed by the identity stored now. For a page whose visitor has just joined (the
+ * global lobby, G9b): its socket opened with no key gets only doorbells, and connectToAnchor keeps a socket that is open.
+ * A connect still part way through, which read the identity from before, opens nothing; and the new socket starts as a
+ * first connect does, with no backoff or delayed sync carried over from the key-less one's drops.
+ */
+export function reconnectToAnchor(): void {
+    const socket = ws;
+    if (socket) {
+        ws = null;
+        stopHeartbeat();
+        if (stabilityTimeoutId) {
+            clearTimeout(stabilityTimeoutId);
+            stabilityTimeoutId = null;
+        }
+        try { socket.close(); } catch { /* already closing */ }
+    }
+    if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+    }
+    if (reconnectSyncTimeoutId) {
+        clearTimeout(reconnectSyncTimeoutId);
+        reconnectSyncTimeoutId = null;
+    }
+    connectGeneration++;
+    isConnecting = false;
+    reconnectAttempt = 0;
+    isRetry = false;
+    watchdogArmed = false;
+    lastPongAt = null;
+    connectToAnchor(currentUrl ?? undefined);
 }
 
 function scheduleReconnect(url: string): void {

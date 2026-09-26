@@ -7,19 +7,23 @@
  * another host.
  *
  *  1. A global main server. Members watch places; the mirror sees Mullumbimby for the first time and Wes and Quinn
- *     (whose watches it reaches) are told.
+ *     (whose watches it reaches, and whose phones are registered there) are told: one push each.
  *  2. Its standby copies it (a force-resync): every watch, its cell, radius and quiet day (`last_notified_at`), and the
  *     directory cache with each community's first sighting.
  *  3. On the main server: Wanda removes a watch, Pru is pruned, Del deletes her account, Wes widens his radius, Vic sets
- *     a watch, and Wes's last notice is two days old. A delta copy brings the standby to exactly the main server's
+ *     a watch, and two days pass for Wes: his last notice, and Mullumbimby's first sighting it was about, are two days
+ *     old. A delta copy brings the standby to exactly the main server's
  *     watches, the removed ones gone (a tombstone each). Then Rex is re-keyed: the delta copy carries his watch under
  *     the new key, and the standby, which follows the re-key (engine/key-move.ts), takes it there.
  *  4. A force-resync clears a watch and a cached community the main server doesn't have, and Rex's watch is his new
  *     key's on the standby.
  *  5. The main server dies and the standby takes over. It has every watch, and Wes and Rex list theirs over HTTPS.
- *     The phones register their push tokens again (as the app does at start), and the first mirror run sees
- *     Byron and Kiezpool, new since the main server stopped: Wes hears about Byron only (not Mullumbimby again),
- *     Wanda about Kiezpool, and Quinn, told a moment before the take-over, keeps his quiet day.
+ *     A take-over restarts the server, and its first mirror run comes before any phone has started the app again and
+ *     registered its push token (push tokens are each server's own): it sees Byron and Kiezpool, new since the main
+ *     server stopped, and tells nobody, so it stamps nothing and spends nobody's notice (#1158 review 4107881683). Wes's
+ *     phone then registers over HTTPS and he is told at once, about Byron only (not Mullumbimby again). Wanda's, Vic's
+ *     and Quinn's register, and the next run tells Wanda about Kiezpool and Vic about Byron, once each; Quinn, told a
+ *     moment before the take-over, keeps his quiet day. The run after that tells nobody.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-place-watch-failover.ts
@@ -115,6 +119,12 @@ async function child(): Promise<void> {
                 db.prepare('UPDATE place_watches SET last_notified_at = ? WHERE pubkey = ?').run(a.at, a.pk);
             }
             return true;
+        },
+        // A community first seen at `at`, stamped as a run's change is, so a delta copy carries it.
+        'age-sighting': async (a: { key: string; at: string }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare('UPDATE directory_cache SET first_seen_at = ?, updated_at = ? WHERE community_key = ?')
+                .run(a.at, new Date().toISOString(), a.key).changes === 1;
         },
         // Rows a standby holds that the main server doesn't: what a force-resync exists to clear.
         strays: async (a: { pk: string }) => {
@@ -225,6 +235,27 @@ async function signedGet(port: number, id: Id, route: string): Promise<{ status:
     return { status: res.status, body: json };
 }
 
+async function signedPost(port: number, id: Id, route: string, body: unknown): Promise<{ status: number; body: any }> {
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const raw = JSON.stringify(body);
+    const res = await fetch(`https://127.0.0.1:${port}${route}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Public-Key': id.pk,
+            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${route}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+            'X-Timestamp': String(ts),
+            'X-Nonce': nonce,
+        },
+        body: raw,
+    });
+    const text = await res.text();
+    let json: any = null;
+    try { json = JSON.parse(text); } catch { json = text; }
+    return { status: res.status, body: json };
+}
+
 // The registry's rows. Mullumbimby reaches Wes's and Quinn's watches; Byron (new while the main server is down) does
 // too; Kiezpool reaches Wanda's.
 const MULLUM = { node_id: 'peer-mullum', community_name: 'Mullumbimby Commons', node_url: 'https://mullum.beanpool.org',
@@ -281,9 +312,16 @@ async function main(): Promise<void> {
         const wPru = await main.send('watch', { pk: pru.pk, lat: -33.87, lng: 151.21, radiusKm: 40 });
         const wDel = await main.send('watch', { pk: del.pk, lat: -37.81, lng: 144.96, radiusKm: 40 });
         const wRex = await main.send('watch', { pk: rex.pk, lat: -27.47, lng: 153.03, radiusKm: 100 });
+        // Wes's and Quinn's phones registered with the main server long ago.
+        await main.send('push-tokens', { tokens: { [wes.pk]: token(wes), [quinn.pk]: token(quinn) } });
+        await main.send('pushes');
         rows = [MULLUM];
         const run1 = await main.send('mirror');
         require_(run1.ok === true && run1.added === 1 && run1.notified === 2, `the main server's mirror sees Mullumbimby and tells two watchers (${JSON.stringify(run1)})`);
+        const pushes1 = await main.send('pushes');
+        const toIn = (list: any[], id: Id) => list.filter((m: any) => m.to === token(id));
+        assert(pushes1.length === 2 && toIn(pushes1, wes).length === 1 && toIn(pushes1, quinn).length === 1,
+            `a watcher with a phone registered is told at the run that first sees the community: one push each to Wes and Quinn (${pushes1.length})`);
         const mainWatches1 = await main.send('watches');
         const heard = (list: any[], pk: string) => list.filter((w) => w.pubkey === pk).map((w) => w.last_notified_at);
         require_(mainWatches1.length === 7 && heard(mainWatches1, wes.pk)[0] && heard(mainWatches1, quinn.pk)[0] && !heard(mainWatches1, wanda.pk)[0],
@@ -318,7 +356,11 @@ async function main(): Promise<void> {
         assert(wider.id === wWes.id && wider.radiusKm === 60, 'Wes widens his watch to 60 km (the same watch)');
         const wVic = await main.send('watch', { pk: vic.pk, lat: -28.80, lng: 153.28, radiusKm: 20 });
         const twoDaysAgo = new Date(Date.now() - 2 * DAY_MS).toISOString();
+        // Two days pass for Wes: his last notice, and Mullumbimby's first sighting it was about, are two days old. (A
+        // notice is owed for a community first seen a quiet day or more after the member last heard, so moving his
+        // notice alone would make Mullumbimby news to him again.)
         await main.send('age-notice', { pk: wes.pk, at: twoDaysAgo });
+        require_(await main.send('age-sighting', { key: 'peer-mullum', at: twoDaysAgo }), 'Mullumbimby was first seen two days ago');
         const mainWatches2 = await main.send('watches');
         require_(mainWatches2.length === 5, `five watches on the main server now (${mainWatches2.length})`);
 
@@ -390,23 +432,48 @@ async function main(): Promise<void> {
         assert(rexList.status === 200 && rexList.body?.watches?.length === 1 && rexList.body.watches[0].id === wRex.id,
             `and Rex lists his, under his new key (${rexList.status} ${JSON.stringify(rexList.body)})`);
 
-        // The app registers its push token again when it starts; push tokens are the node's own.
-        await standby.send('push-tokens', { tokens: { [wes.pk]: token(wes), [quinn.pk]: token(quinn), [wanda.pk]: token(wanda) } });
+        // The take-over restarted the server, and its first mirror run comes 10 s after boot: before any phone has
+        // started the app again and registered its push token here (push tokens are each server's own).
         await standby.send('pushes');
+        const beforeRun = await standby.send('watches');
         rows = [MULLUM, BYRON, KIEZ];
         const run2 = await standby.send('mirror');
         assert(run2.ok === true && run2.added === 2,
             `the new main server's first mirror run finds two communities new: Byron and Kiezpool, not Mullumbimby, which the old one had already seen (${JSON.stringify(run2)})`);
+        const firstRunPushes = await standby.send('pushes');
+        assert(run2.notified === 0 && firstRunPushes.length === 0,
+            `with no phone registered with it yet, that run tells nobody (${JSON.stringify(run2)}, ${firstRunPushes.length} pushes)`);
+        const afterRun = await standby.send('watches');
+        assert(same(afterRun, beforeRun),
+            `and stamps nothing: no watcher's last notice moves, so nothing they are owed is spent (${JSON.stringify(afterRun.filter((w: any, i: number) => !same(w, beforeRun[i])))})`);
+
+        // Wes's phone starts the app, which registers its token over HTTPS: he is told then, not at the next run.
+        const wesRegisters = await signedPost(port, wes, '/api/push-tokens', { publicKey: wes.pk, token: token(wes), platform: 'android' });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const atRegister = await standby.send('pushes');
+        assert(wesRegisters.status === 200 && wesRegisters.body?.success === true, `Wes's phone registers its token (${wesRegisters.status} ${JSON.stringify(wesRegisters.body)})`);
+        assert(toIn(atRegister, wes).length === 1 && same(toIn(atRegister, wes)[0]?.data?.communities, ['peer-byron']),
+            `Wes hears once, about Byron alone: never again about Mullumbimby (${JSON.stringify(toIn(atRegister, wes).map((m: any) => m.data))})`);
+        assert(atRegister.length === 1, `and his phone registering tells nobody else (${atRegister.length})`);
+
+        // Wanda's, Vic's and Quinn's phones register too (written here as the app's registration writes them): the next run
+        // tells each of them what they are owed, once.
+        await standby.send('push-tokens', { tokens: { [quinn.pk]: token(quinn), [wanda.pk]: token(wanda), [vic.pk]: token(vic) } });
+        const run3 = await standby.send('mirror');
         const pushes = await standby.send('pushes');
-        const to = (id: Id) => pushes.filter((m: any) => m.to === token(id));
-        assert(to(wes).length === 1 && same(to(wes)[0]?.data?.communities, ['peer-byron']),
-            `Wes hears once, about Byron alone: never again about Mullumbimby (${JSON.stringify(to(wes).map((m: any) => m.data))})`);
+        const to = (id: Id) => toIn(pushes, id);
+        assert(run3.ok === true && run3.added === 0 && run3.notified === 2,
+            `the next run finds nothing new, and tells the two still owed a notice (${JSON.stringify(run3)})`);
         assert(to(wanda).length === 1 && same(to(wanda)[0]?.data?.communities, ['peer-kiez']),
             `Wanda hears about Kiezpool (${JSON.stringify(to(wanda).map((m: any) => m.data))})`);
+        assert(to(vic).length === 1 && same(to(vic)[0]?.data?.communities, ['peer-byron']),
+            `Vic hears about Byron, which reaches his watch (${JSON.stringify(to(vic).map((m: any) => m.data))})`);
+        assert(to(wes).length === 0, `Wes, told when his phone registered, isn't told again (${to(wes).length})`);
         assert(to(quinn).length === 0,
             `Quinn, told on the old main server a moment ago, keeps his quiet day: no second notice today (${to(quinn).length})`);
-        const run3 = await standby.send('mirror');
-        assert(run3.ok === true && run3.added === 0 && (await standby.send('pushes')).length === 0, 'the next run finds nothing new and tells nobody');
+        const run4 = await standby.send('mirror');
+        assert(run4.ok === true && run4.added === 0 && run4.notified === 0 && (await standby.send('pushes')).length === 0,
+            'the run after that finds nothing new and tells nobody');
     } finally {
         for (const n of nodes) await n.kill();
         registry.close();

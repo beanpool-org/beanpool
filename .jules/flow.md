@@ -99,3 +99,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-11-12 - Add loading state and remove any assertion in PostModerationPanel
 **Learning:** `PostModerationPanel.tsx` rendered "No marketplace posts match..." when `posts` was `null` (loading state), misleading operators into thinking 0 posts existed.
 **Action:** Render an explicit loading state (`Loading marketplace posts...` with spinner) when `posts == null` and replace `as any` filter type assertion with a strict union type.
+
+## 2026-11-20 - Add loading spinner for SuggestChangePanel
+**Learning:** `SuggestChangePanel.tsx` disabled the button during feedback submission but provided text-only feedback ("Sending..."), leaving room for a visual loading spinner indicator.
+**Action:** Include an animated CSS spinner inline alongside loading text inside submit buttons during async feedback operations.

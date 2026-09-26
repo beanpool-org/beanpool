@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "version": 54,
-  "hash": "2beaf5f57af7dbe2ceb7d1d21843dc3ec66d6ad04baa6b683d4645fc11d4323c",
+  "hash": "fe9a57ebfc65896af8432a9d1f7559faaa5b9e90b1856105e1a23f49c8750650",
   "sections": [
     {
       "id": "about",
@@ -1706,6 +1706,10 @@
           "text": "The global community at global.beanpool.org is open to anyone, and you can join it right there in a web browser. You need no invite and no phone app."
         },
         {
+          "type": "p",
+          "text": "Before you join, the page shows the **Market** and the **Map** as a visitor sees them: the listings, their photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings."
+        },
+        {
           "type": "ul",
           "items": [
             "Tap **Join**, then **I'm new to BeanPool**.",
@@ -2037,6 +2041,14 @@
         {
           "type": "p",
           "text": "Until everything needed is filled in, the button tells you what is missing, like **Add a photo** or **Set a price**."
+        },
+        {
+          "type": "h2",
+          "text": "On the global community"
+        },
+        {
+          "type": "p",
+          "text": "Visitors to the global community can see this listing's photos and its rough area before they join. They see the post's words and photos and roughly where it is, not your name, your face or the exact spot. In the web app the form says so under the photos."
         },
         {
           "type": "h2",

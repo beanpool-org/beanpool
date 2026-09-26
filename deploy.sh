@@ -187,10 +187,14 @@ for NODE in "${TARGETS[@]}"; do
   PROJ_NAME=$(echo "$DIR" | tr '[:upper:]' '[:lower:]')
 
   # Azure nodes use the lattice SSH key; others use default
+  # accept-new, never "no": ssh-qld / ssh-vic / ssh-global are names in DNS that point at a tunnel. If one were re-pointed at
+  # another server (a registrar claim, a DNS mistake), "no" would hand that server our deploy and everything it sends; accept-new
+  # refuses a host whose key changed and still accepts a host's key the first time. A real key change: check the new fingerprint
+  # out of band, then ssh-keygen -R <host>.
   if [ "$USER" = "azureuser" ]; then
-    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes -i ~/.ssh/id_azure_lattice"
+    SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes -i ~/.ssh/id_azure_lattice"
   else
-    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes"
+    SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes"
   fi
 
   echo "====================================="
@@ -473,9 +477,9 @@ for HOST in $UNIQUE_HOSTS; do
   USER=$(echo "$HOST" | cut -d@ -f1)
   IP=$(echo "$HOST" | cut -d@ -f2)
   if [ "$USER" = "azureuser" ]; then
-    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes -i ~/.ssh/id_azure_lattice"
+    SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes -i ~/.ssh/id_azure_lattice"
   else
-    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes"
+    SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes"
   fi
   # Every DEPLOY_TAG pull leaves a TAGGED 1.2 GB image, and image prune -f / system prune -f only remove
   # dangling ones — 30 of them filled qld's 40 GB disk on 2026-09-19. prune -a removes every image no

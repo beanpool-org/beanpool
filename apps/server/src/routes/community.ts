@@ -39,9 +39,10 @@ import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
 import {
-    getLocalConfig, saveLocalConfig, hashPassword,
-    validatePasswordStrength, removeFirstPasswordFile,
+    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
+    validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
 } from '../config/local-config.js';
+import { verifyTotpCode, verifyAndFindBackupCodeHash } from '../totp.js';
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
@@ -70,8 +71,9 @@ import { membersOnlyHere, memberReadsOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
-import { requireAdminRole, type AdminRole } from '../admin-auth.js';
+import { issue2faSessionToken, requireAdminRole, type AdminRole } from '../admin-auth.js';
 import { avatarUrlFor } from '@beanpool/core';
+import { tellOwedWatcher } from '../services/directory-mirror.js';
 
 /**
  * Who may do what on the routes below. Every admin route takes checkAdminAuth (a key-signed session of an owner or
@@ -104,7 +106,6 @@ router.get('/api/local/status', async (ctx) => {
 
 router.post('/api/local/verify-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
-    const config = getLocalConfig();
     const body = (ctx as any).requestBody || {};
     const password = body.password;
     const headerPass = ctx.request?.headers?.['x-admin-password'] || (ctx as any).headers?.['x-admin-password'];
@@ -127,7 +128,10 @@ router.post('/api/local/verify-password', async (ctx) => {
         return;
     }
 
-    // #135: Check TOTP 2FA if enabled
+    // #135: Check TOTP 2FA if enabled. Read after the password check's wait, and nothing below waits: another request
+    // may have spent a backup code or replaced the authenticator meanwhile, and writing back a list read before the
+    // wait would bring those codes back.
+    const config = getLocalConfig();
     if (config.totpEnabled && config.totpSecret) {
         const totpCode = body.totpCode || ctx.request?.headers?.['x-admin-totp'] || (ctx as any).headers?.['x-admin-totp'] || '';
         if (!totpCode) {
@@ -135,14 +139,12 @@ router.post('/api/local/verify-password', async (ctx) => {
             ctx.body = { error: '2FA code required', totpRequired: true };
             return;
         }
-        const { verifyTotpCode, verifyAndFindBackupCodeHash } = await import('../totp.js');
         const cleanCode = String(totpCode).trim();
         let totpValid = verifyTotpCode(cleanCode, config.totpSecret);
 
         // Check backup codes if TOTP didn't match
         const backupHashes = config.totpBackupCodesHashes || [];
         if (!totpValid && backupHashes.length > 0) {
-            const { updateLocalConfig } = await import('../config/local-config.js');
             const codeIndex = verifyAndFindBackupCodeHash(cleanCode, backupHashes);
             if (codeIndex !== -1) {
                 totpValid = true;
@@ -162,7 +164,6 @@ router.post('/api/local/verify-password', async (ctx) => {
     }
 
     // Issue 2FA session token so subsequent API calls can skip TOTP re-entry
-    const { issue2faSessionToken } = await import('../admin-auth.js');
     const tfaSession = config.totpEnabled ? issue2faSessionToken() : undefined;
 
     logger.security('AUTH', 'Successful administrative login.');
@@ -250,24 +251,26 @@ router.post('/api/admin/seed-invite', async (ctx) => {
 
 router.post('/api/local/update-identity', async (ctx) => {
     if (!rateLimit(ctx)) return;
-    const config = getLocalConfig();
     const { callsign, lat, lng, communityName, contactEmail, contactPhone } = (ctx as any).requestBody || {};
 
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its name, place or contact details')) return;
 
-    if (callsign !== undefined) config.callsign = (callsign || '').slice(0, 20);
+    // Only the fields sent, merged into the file as it is now: a copy read before the wait above would undo whatever
+    // another request wrote meanwhile (two-factor setup, a password change).
+    const updates: Partial<LocalConfig> = {};
+    if (callsign !== undefined) updates.callsign = (callsign || '').slice(0, 20);
     if (lat !== undefined && lng !== undefined && lat !== null && lng !== null) {
         const parsedLat = parseFloat(lat);
         const parsedLng = parseFloat(lng);
         if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
-            config.location = { lat: parsedLat, lng: parsedLng };
+            updates.location = { lat: parsedLat, lng: parsedLng };
         }
     }
-    if (communityName !== undefined) config.communityName = (communityName || '').slice(0, 60) || null;
-    if (contactEmail !== undefined) config.contactEmail = (contactEmail || '').slice(0, 100) || null;
-    if (contactPhone !== undefined) config.contactPhone = (contactPhone || '').slice(0, 30) || null;
-    saveLocalConfig(config);
+    if (communityName !== undefined) updates.communityName = (communityName || '').slice(0, 60) || null;
+    if (contactEmail !== undefined) updates.contactEmail = (contactEmail || '').slice(0, 100) || null;
+    if (contactPhone !== undefined) updates.contactPhone = (contactPhone || '').slice(0, 30) || null;
+    updateLocalConfig(updates);
     ctx.body = { success: true };
 });
 
@@ -326,7 +329,9 @@ router.post('/api/funnel-event', async (ctx) => {
 
 router.post('/api/local/change-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
-    const config = getLocalConfig();
+    // The password this request replaces, read before any wait. It must still be the one on disk when the new one is
+    // written (below).
+    const replacing = getLocalConfig();
     const body = (ctx as any).requestBody || {};
     const { currentPassword, newPassword } = body;
 
@@ -364,12 +369,33 @@ router.post('/api/local/change-password', async (ctx) => {
     }
 
     const { hash, salt } = hashPassword(newPassword);
-    config.adminHash = hash;
-    config.salt = salt;
-    saveLocalConfig(config);
-    // The first boot's made-up password, if it was never changed before, no longer works. Only once the new one is on
-    // disk: saveLocalConfig reports a failed write in the log only, and then the file holds the password that works.
-    if (getLocalConfig().adminHash === hash) removeFirstPasswordFile('The admin password was changed');
+    // The checks above waited (scrypt runs off the event loop), and any other request may have written the settings
+    // file meanwhile: two-factor setup, a gateway setting, the replication token. From here to the answer nothing
+    // waits: read the file as it is now, and write only the password into it (updateLocalConfig), so none of that
+    // is lost.
+    const current = getLocalConfig();
+    if (current.adminHash !== replacing.adminHash || current.salt !== replacing.salt) {
+        // Another owner changed it while this one was being checked: the current password this request proved is
+        // not the one it would replace.
+        ctx.status = 409;
+        ctx.body = { error: 'The admin password was changed while this was being checked. Sign in with the new one and try again.' };
+        return;
+    }
+    updateLocalConfig({ adminHash: hash, salt });
+    // saveLocalConfig reports a failed write in the log only: success only once the new hash is read back from disk.
+    const saved = getLocalConfig();
+    if (saved.adminHash !== hash || saved.salt !== salt) {
+        ctx.status = 500;
+        ctx.body = {
+            error: saved.adminHash === replacing.adminHash && saved.salt === replacing.salt
+                ? 'The new password could not be saved: check the data folder is writable and has free space. The current password still works.'
+                : 'The new password could not be saved, and the settings file could not be read back. Check the server log.',
+        };
+        return;
+    }
+    // The first boot's made-up password, if it was never changed before, no longer works. Only now the new one is on
+    // disk: until then the file holds the password that works.
+    removeFirstPasswordFile('The admin password was changed');
     ctx.body = { success: true };
 });
 
@@ -1452,6 +1478,15 @@ router.post('/api/push-tokens', async (ctx) => {
         return;
     }
     const success = registerPushToken(activeKey, token, platform || 'ios');
+    // A place-watch notice that reached nobody while this phone had no token here (after a take-over, the new main
+    // server has none) is told now (services/directory-mirror.ts). Never fails the registration.
+    if (success) {
+        try {
+            tellOwedWatcher(activeKey);
+        } catch (e: any) {
+            console.warn('[Place watches] Telling a watcher at their token registration failed:', e?.message || e);
+        }
+    }
     ctx.body = { success };
 });
 

@@ -338,8 +338,11 @@ export function parseRetryAfter(value: string | null): number | null {
  */
 export const DOOR_TIMEOUT_MS = 45_000;
 
-/** A door call signed by the joining key (never the stored identity: there is none yet). */
-async function door(method: string, path: string, body: unknown, identity: BeanPoolIdentity): Promise<DoorAnswer> {
+/**
+ * A door call signed by the joining key (never the stored identity: there is none yet). Also how a sign-in restore
+ * (lib/web-restore.ts) makes its calls, signed by its throwaway key: the same timeout, and the same reading of an answer.
+ */
+export async function door(method: string, path: string, body: unknown, identity: BeanPoolIdentity): Promise<DoorAnswer> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new DOMException('The community took too long to answer.', 'TimeoutError')), DOOR_TIMEOUT_MS);
     try {
@@ -625,7 +628,7 @@ export function doorOutcome(answer: DoorAnswer, provider: JoinProvider): DoorOut
     }
     if (status === 409 && body.code === 'already_member') return { kind: 'already_member' };
     if (status === 409 && body.code === 'already_joined') {
-        // The node's sentence offers "your sign-in" too, which the web cannot do yet (G11-d).
+        // Said here rather than in the node's words: the screen under it offers the ways back (G11-d: the sign-in too).
         return { kind: 'already_joined', message: `This ${providerLabel(provider)} account already has a BeanPool identity here. Restore it instead.` };
     }
     if (status === 401) return { kind: 'expired', message: EXPIRED };

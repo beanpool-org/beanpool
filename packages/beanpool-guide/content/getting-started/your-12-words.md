@@ -46,4 +46,4 @@ A sign-in account you link from a phone that has your 12 words keeps them too, s
 
 ## In a web browser
 
-On the global community you join in a browser with a sign-in, and that sign-in is kept as a second way back: Settings shows **Sign-in recovery: connected**. Getting your account back with it in a browser comes in a later update. Until then your 12 words bring it back, or linking from the phone app if your account is on your phone too. On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app.
+On the global community you join in a browser with a sign-in, and that sign-in is kept as a second way back: Settings shows **Sign-in recovery: connected**. In a cleared or new browser, tap **Already have BeanPool?**, then **Use my sign-in**, and it brings your account back, with its 12 words (see "Using BeanPool in a web browser"). On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app.

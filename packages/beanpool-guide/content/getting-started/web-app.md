@@ -1,7 +1,7 @@
 ---
 slug: web-app
 title: Using BeanPool in a web browser
-summary: The web app does most of what the phone app does. Joining the global community in a browser, and where the web app's buttons have different names.
+summary: The web app does most of what the phone app does. Joining the global community in a browser, getting your account back there with your sign-in, and where the web app's buttons have different names.
 related: the-bean, your-12-words, joining, messages, reporting
 ---
 
@@ -26,7 +26,7 @@ If you would rather the community did not keep that copy, the web app can't remo
 
 If someone else here already has the name you chose, you get it with a number added. You can change it in Settings.
 
-**Already use BeanPool?** Don't make a second account. After **Join**, choose **I use BeanPool on my phone** to link from the phone app, or **I have my 12 words**. If that account has not joined the global community yet, the page asks you to sign in once, and it joins as the account you already have.
+**Already use BeanPool?** Don't make a second account. After **Join**, choose **I use BeanPool on my phone** to link from the phone app, or **I have my 12 words**. If that account has not joined the global community yet, the page asks you to sign in once, and it joins as the account you already have. If you joined the global community before with a sign-in, choose **I joined with a sign-in before** (see below).
 
 If you close the page halfway, open it again within 10 minutes and it carries on with the same name.
 
@@ -49,6 +49,23 @@ On the global community a new account has a few daily limits for its first 3 day
 
 Your own local community has none of these limits.
 
+## Getting your account back with your sign-in
+
+On the global community, the sign-in you joined with brings your account back to a browser: one whose saved data was cleared, or a new one on another computer. You get the same account, never a second one.
+
+- Tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.)
+- A browser too old to hold a BeanPool account says so here instead of offering these, as it does in place of **Join**. Use an up-to-date Chrome, Firefox, Safari or Edge.
+- Type your name here. Tap your account when it shows.
+- Choose the sign-in you joined with: **Google**, **Apple**, **Facebook** or **GitHub**. As when joining, the page takes you to that company's own sign-in and brings you back, and GitHub shows a code instead.
+- The page opens your account's locked copy in the browser, and checks that it really is the account you tapped. If it isn't, it says **That isn't** (the name) and saves nothing.
+- You're in, with your 12 words when the copy kept them: an account that joined in a browser always has them.
+
+Your account's devices are told that it is being brought back, in case it isn't you.
+
+If you sign in with an account that isn't the one you joined with, the page says so and lets you choose again. If you tap **Join** and sign in with an account that has already joined, the page says **You're already here** and offers **Restore with** (that sign-in).
+
+**One account per browser** holds here too. If this browser already has another account, nothing replaces it: the page says **This browser already has an account** and offers to open it. To bring yours here instead, sign out of that one first. If this browser already has your account, the page says it is already here.
+
 ## Different names and places
 
 - **Tabs:** the web app has **Market**, **Pulse**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.
@@ -60,7 +77,7 @@ Your own local community has none of these limits.
 
 ## What the web app does not have
 
-- Getting your account back with Google, Facebook, GitHub or Apple, in the browser. The sign-in you join the global community with is kept as a way back (see above), but getting your account back with it in a browser comes in a later update. Until then, on the web, your 12 words bring it back, or linking from the phone app if your account is on your phone too.
+- Getting your account back with a sign-in on a community other than the global one. There, your 12 words bring it back, or linking from the phone app if your account is on your phone too.
 - The Pulse's **Learn** lane.
 - The phone's app lock.
 - Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Sign in on a computer**).

@@ -171,6 +171,7 @@ import {
     assertNodeMember,
 } from './engine/members.js';
 import { isMemberKeySpelling, badKeyError, reportMisspeltMemberKeys } from './engine/member-key.js';
+import { ticketBinding } from './engine/member-signature.js';
 import {
     generateInvite,
     adminGenerateInvite,
@@ -538,6 +539,12 @@ export interface NodeConfig {
         status?: string;
         tunnelToken?: string;
     } | null;
+    /**
+     * Addresses an owner or admin confirmed in Settings as this community's own (engine/own-addresses.ts, source 3): a
+     * custom domain or a proxy name the node can't learn from its config. Beside `publicAddress`, and carried with it
+     * in the take-over envelope, so a promoted standby accepts the same names.
+     */
+    ownerAddresses?: string[];
 }
 
 const wsClients: Set<any> = new Set();
@@ -1323,7 +1330,7 @@ export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, 
 }
 
 export function checkInvite(codeOrTicket: string): InviteCheckResult {
-    return checkInviteEngine(db, codeOrTicket);
+    return checkInviteEngine(db, codeOrTicket, ticketBinding);
 }
 
 export function getInvitesByMember(pubkey: string): InviteCode[] {
@@ -6916,7 +6923,8 @@ export function getNodeConfig(): NodeConfig {
         publishHealth: config.publishHealth !== false,
         directoryPushIntervalHours: typeof config.directoryPushIntervalHours === 'number' ? config.directoryPushIntervalHours : 12,
         lastDirectoryPush: config.lastDirectoryPush,
-        publicAddress: config.publicAddress ?? null
+        publicAddress: config.publicAddress ?? null,
+        ...(Array.isArray(config.ownerAddresses) ? { ownerAddresses: config.ownerAddresses.filter((a: unknown) => typeof a === 'string') } : {}),
     };
 
     if (migrated) {
@@ -6932,6 +6940,7 @@ export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('node_config', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(next));
     // The public address (with its tunnel token) is in the take-over envelope.
     if ('publicAddress' in update) noteTakeoverInputsChanged('public address changed');
+    if ('ownerAddresses' in update) noteTakeoverInputsChanged('confirmed app addresses changed');
     return next;
 }
 

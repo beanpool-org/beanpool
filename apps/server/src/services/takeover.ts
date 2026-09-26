@@ -693,10 +693,15 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         }
         case 'public-address': {
             const pa: any = plan.publicAddress;
-            updateNodeConfig({ publicAddress: pa ?? null } as any);
+            // The app addresses an owner confirmed there (engine/own-addresses.ts) come too, so members' apps that
+            // reach the community at one of them keep working. A bundle sealed before they travelled keeps this
+            // standby's own.
+            const owned = Array.isArray(bundle.ownerAddresses) ? bundle.ownerAddresses.filter((a) => typeof a === 'string') : null;
+            updateNodeConfig({ publicAddress: pa ?? null, ...(owned ? { ownerAddresses: owned } : {}) } as any);
             j.result.publicAddress = pa ? (pa.hostname || pa.name || null) : null;
             j.result.tunnel = plan.tunnel;
-            return pa ? `${pa.hostname || pa.name}; ${plan.tunnel.message}` : 'no web address from the registrar';
+            const extra = owned && owned.length ? `; confirmed app address(es) ${owned.join(', ')}` : '';
+            return (pa ? `${pa.hostname || pa.name}; ${plan.tunnel.message}` : 'no web address from the registrar') + extra;
         }
         case 'profile': {
             // The community's profile and switch overrides, into this database (config/node-profile.ts), so the

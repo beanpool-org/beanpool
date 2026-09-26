@@ -42,6 +42,8 @@ import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
+import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
+import { SIGNED_FOR_HEADER } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
@@ -57,7 +59,6 @@ import {
     revokeAllMemberSessions,
     revokeAdminSession,
     enrolAdminOwnerKey,
-    verifyEd25519Signature,
 } from '../admin-key-auth.js';
 import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
 import {
@@ -123,17 +124,20 @@ router.post('/api/local/admin/auth/challenge', async (ctx) => {
  */
 router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    const { challengeId, memberPubkey, signature, totpCode } = body;
+    const { challengeId, memberPubkey, signature, totpCode, signedFor } = body;
     if (!challengeId || !memberPubkey || !signature) {
         ctx.status = 400;
         ctx.body = { error: 'challengeId, memberPubkey, and signature are required' };
         return;
     }
 
-    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode });
+    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode, signedFor });
     if (!res.ok) {
         let status = 400;
-        if (res.totpRequired) {
+        if (res.status) {
+            // 421 wrong_community, 426 app_too_old (engine/member-signature.ts)
+            status = res.status;
+        } else if (res.totpRequired) {
             status = 401;
         } else if (res.error?.includes('Challenge not found')) {
             status = 404;
@@ -141,7 +145,7 @@ router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
             status = 403;
         }
         ctx.status = status;
-        ctx.body = { error: res.error, totpRequired: res.totpRequired };
+        ctx.body = { error: res.error, totpRequired: res.totpRequired, ...(res.code ? { code: res.code } : {}) };
         return;
     }
 
@@ -217,16 +221,8 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
     };
 });
 
-const seenRevocationNonces = new Map<string, number>();
-function consumeRevocationNonce(nonce: string, now: number): boolean {
-    if (seenRevocationNonces.size > 10_000) {
-        for (const [n, exp] of seenRevocationNonces) if (exp <= now) seenRevocationNonces.delete(n);
-    }
-    const exp = seenRevocationNonces.get(nonce);
-    if (exp !== undefined && exp > now) return false;
-    seenRevocationNonces.set(nonce, now + 60_000);
-    return true;
-}
+// "Sign me out everywhere" from the app: its own nonces, within a 60-second window (engine/member-signature.ts).
+const revocationNonces = new NonceStore(60_000);
 
 /**
  * POST /api/local/admin/auth/revoke-all
@@ -253,30 +249,30 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         // the signer is taken here as the middleware takes it: in the one spelling (engine/member-key.ts
         // provenKeySpelling). The signature check forgives case, so as sent, a key in capitals was the row an old door
         // stored under that spelling, and "sign me out everywhere" ended that row's sessions instead of the member's.
+        // Verified as every signed request is (engine/member-signature.ts): signed for this community (421 for
+        // another's, 426 for the old format after the switch), and the nonce spent only once all of that holds.
         const pubKeyHex = provenKeySpelling(ctx.get('X-Public-Key'));
         const signatureBase64 = ctx.get('X-Signature');
         if (pubKeyHex && signatureBase64 && nodeRoleOf(pubKeyHex)) {
             const timestampHeader = ctx.get('X-Timestamp');
             const nonce = ctx.get('X-Nonce');
             const ts = Number(timestampHeader);
-            const now = Date.now();
-            if (!Number.isFinite(ts) || Math.abs(now - ts) > 60_000 || !nonce) {
+            if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > 60_000 || !nonce) {
                 ctx.status = 401;
                 ctx.body = { error: 'Missing or stale timestamp / nonce headers' };
                 return;
             }
-            if (!consumeRevocationNonce(nonce, now)) {
-                ctx.status = 401;
-                ctx.body = { error: 'Replay detected: nonce already used' };
-                return;
-            }
-            const rawBody = (ctx as any).rawBody ?? '';
-            const msg = `${ctx.method}\n${ctx.path}\n${timestampHeader}\n${nonce}\n${rawBody}`;
-            if (verifyEd25519Signature(msg, signatureBase64, pubKeyHex)) {
-                targetPubkey = pubKeyHex;
+            const signedForHeader = ctx.headers[SIGNED_FOR_HEADER.toLowerCase()];
+            const verdict = verifyMemberSignature({
+                pubKeyHex, signature: signatureBase64, timestamp: timestampHeader, nonce,
+                method: ctx.method, path: ctx.path, body: (ctx as any).rawBody ?? '',
+                signedFor: typeof signedForHeader === 'string' ? signedForHeader : null,
+            }, { consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces });
+            if (verdict.ok) {
+                targetPubkey = verdict.signer;
             } else {
-                ctx.status = 401;
-                ctx.body = { error: 'Invalid cryptographic signature' };
+                ctx.status = verdict.status === 403 || verdict.status === 400 ? 401 : verdict.status;
+                ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
                 return;
             }
         } else {

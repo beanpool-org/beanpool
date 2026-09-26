@@ -96,6 +96,9 @@ export interface TakeoverBundle {
     }[];
     /** node_config.publicAddress, including the tunnel token, so the tunnel comes back up on the new host. */
     publicAddress: unknown;
+    /** node_config.ownerAddresses: the app addresses an owner confirmed (engine/own-addresses.ts), so the promoted
+     *  server accepts members' signatures for the same names. Absent in a bundle sealed before this field existed. */
+    ownerAddresses?: string[];
     /** The public record of the current code, so the new main server can keep sealing to it. */
     recoveryCode: RecoveryCodeRecord | null;
     /** How many take-overs this identity has been through (services/identity-epoch.ts). A take-over writes this + 1.
@@ -161,6 +164,17 @@ function readPublicAddress(): unknown {
     }
 }
 
+function readOwnerAddresses(): string[] {
+    const row = db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value?: string } | undefined;
+    if (!row?.value) return [];
+    try {
+        const list = JSON.parse(row.value)?.ownerAddresses;
+        return Array.isArray(list) ? list.filter((a: unknown): a is string => typeof a === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
 function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
     const config = getLocalConfig() as any;
     const localConfig = {} as TakeoverBundle['localConfig'];
@@ -175,6 +189,7 @@ function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
         localConfig,
         nodeRoles,
         publicAddress: readPublicAddress(),
+        ownerAddresses: readOwnerAddresses(),
         recoveryCode: config.recoveryCode ?? null,
         identityEpoch: Number.isSafeInteger(config.identityEpoch) && config.identityEpoch > 0 ? config.identityEpoch : 0,
         nodeProfile: readProfileRecord(),

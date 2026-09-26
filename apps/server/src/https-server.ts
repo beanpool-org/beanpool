@@ -105,6 +105,7 @@ import { createBackupRoutes } from './routes/backup.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
+import { createAppAddressesRoutes } from './routes/app-addresses.js';
 import { createOwnerUnlockRoutes } from './routes/owner-unlock.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createEventsRoutes } from './routes/events.js';
@@ -150,24 +151,15 @@ import { gatewayAdmit, gatewayAdmitMember, gatewaySettle, pruneGatewayBuckets } 
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
+import { requestNonces, verifyMemberSignature } from './engine/member-signature.js';
+import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER } from '@beanpool/core';
 
 
-// X-1: replay protection for signed requests.
-// A signed request is valid for SIGNATURE_FRESHNESS_MS around its timestamp, and
-// each nonce may be used once within that window. `consumeNonce` is atomic
-// (check-and-set) so concurrent duplicates can't both pass.
-const SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
-const seenNonces = new Map<string, number>();  // nonce -> expiry (ms epoch)
-function consumeNonce(nonce: string, now: number): boolean {
-    // Bounded store: opportunistically evict expired entries when it grows.
-    if (seenNonces.size > 10_000) {
-        for (const [n, exp] of seenNonces) if (exp <= now) seenNonces.delete(n);
-    }
-    const exp = seenNonces.get(nonce);
-    if (exp !== undefined && exp > now) return false;  // already used → replay
-    seenNonces.set(nonce, now + SIGNATURE_FRESHNESS_MS);
-    return true;
-}
+// X-1: replay protection for signed requests. A signed request is valid for SIGNATURE_FRESHNESS_MS around its
+// timestamp, and each nonce may be used once within that window (engine/member-signature.ts `requestNonces`, spent only
+// once everything else about the request has checked out). A request also names the community it was signed for
+// (request binding): verifyMemberSignature refuses one signed for another community's host (421), and one in the old
+// format, bound to none, once the switch has passed (426).
 
 // SRV-2 / SRV-4: read (GET) authorization.
 //
@@ -217,11 +209,12 @@ type WsConnectResult =
     | { kind: 'non_member'; pubkey: string };
 
 /**
- * SRV-4: verify the signed connect token on a /ws upgrade. The client signs
- * `WS\n<path>\n<ts>\n<nonce>\n` (replay-proof scheme, method=WS, empty body) and
- * passes pubkey/ts/nonce/sig as query params. `unsigned` when none of them is
- * present; `invalid` for a partial, stale, replayed or forged token; otherwise
- * whether the proven key belongs to a known member.
+ * SRV-4: verify the signed connect token on a /ws upgrade. The client signs the replay-proof scheme with method=WS and
+ * an empty body, and passes pubkey/ts/nonce/sig as query params; a current app also passes `for=<host>&v=2` and signs
+ * format 2 (@beanpool/core request-signing.ts). `unsigned` when none of them is present, and for a token signed for
+ * another community or, after the switch, one in the old format (engine/member-signature.ts): no member feed, public
+ * doorbells in the default mode and 401 under ENFORCE_WS_AUTH=true, and the app still opens. `invalid` for a partial,
+ * stale, replayed or forged token; otherwise whether the proven key belongs to a known member.
  */
 function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectResult {
     const pubKeyHex = params.get('pubkey');
@@ -230,26 +223,21 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
     const nonce = params.get('nonce');
     if (!pubKeyHex && !sigB64 && !ts && !nonce) return { kind: 'unsigned' };
     if (!pubKeyHex || !sigB64 || !ts || !nonce) return { kind: 'invalid' };
-    // One key, one spelling (engine/member-key.ts), as the signature middleware takes it: the socket is the key's in lower
-    // case, and a spelling the hex decoder would read as some other key (a prefix, a suffix, 63 or 65 characters) is refused.
-    const signerKey = provenKeySpelling(pubKeyHex);
-    if (!signerKey) return { kind: 'invalid' };
+    // Format 2 names its host with `for=` and says `v=2`; either without the other is a damaged token.
+    const signedFor = params.get('for');
+    const version = params.get('v');
+    if ((signedFor === null) !== (version === null)) return { kind: 'invalid' };
+    if (version !== null && version !== String(REQUEST_SIGNING_VERSION)) return { kind: 'invalid' };
     try {
-        const tsNum = Number(ts);
-        const now = Date.now();
-        if (!Number.isFinite(tsNum) || Math.abs(now - tsNum) > SIGNATURE_FRESHNESS_MS) return { kind: 'invalid' };
-
-        const signedMessage = `WS\n${pathname}\n${ts}\n${nonce}\n`;
-        const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
-        const spki = Buffer.concat([spkiHeader, Buffer.from(signerKey, 'hex')]);
-        const publicKeyObject = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
-        const isValid = crypto.verify(
-            undefined, Buffer.from(signedMessage), publicKeyObject, Buffer.from(sigB64, 'base64'),
+        // One key, one spelling (engine/member-key.ts), as the signature middleware takes it; the nonce is spent only
+        // after the signature and the community it names check out, so a forged token cannot burn (or fill the cache
+        // with) nonces it does not own, and one signed for another community leaves its nonce unspent.
+        const verdict = verifyMemberSignature(
+            { pubKeyHex, signature: sigB64, timestamp: ts, nonce, method: 'WS', path: pathname, body: '', signedFor },
+            { consumeNonce: true },
         );
-        if (!isValid) return { kind: 'invalid' };
-        // Atomic check-and-consume — a replayed connect nonce is rejected. Only after the signature
-        // checks out, so a forged token cannot burn (or fill the cache with) nonces it does not own.
-        if (!consumeNonce(nonce, now)) return { kind: 'invalid' };
+        if (!verdict.ok) return verdict.status === 421 || verdict.status === 426 ? { kind: 'unsigned' } : { kind: 'invalid' };
+        const signerKey = verdict.signer;
 
         // A valid signature only proves key possession — only a member (isNodeMember), or a visitor's row
         // for its own direct conversations and Beans (`visitor`), gets a member socket, so an anonymous
@@ -956,13 +944,13 @@ export async function startHttpsServer(port: number): Promise<number> {
                 // Explicitly allowed origin: set origin & credentials
                 ctx.set('Access-Control-Allow-Origin', requestOrigin);
                 ctx.set('Access-Control-Allow-Credentials', 'true');
-                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce');
+                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
             } else if (isWildcardAllowed) {
                 // Wildcard allowed: set '*' origin, DO NOT set Access-Control-Allow-Credentials to true
                 ctx.set('Access-Control-Allow-Origin', '*');
-                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce');
+                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
             } else if (/^\/api\/local\/admin\/unlock\/[0-9a-f]{64}$/.test(ctx.path)) {
@@ -1115,9 +1103,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         pruneAuthAttempts(now);
         pruneGithubPolls(now);
         pruneChatLines(now);
-        for (const [nonce, exp] of seenNonces) {
-            if (exp <= now) seenNonces.delete(nonce);
-        }
+        requestNonces.prune(now);
     }, 60 * 1000);
     if (rateLimitCleaner.unref) rateLimitCleaner.unref();
     // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once
@@ -1258,44 +1244,39 @@ export async function startHttpsServer(port: number): Promise<number> {
             return;
         }
 
+        // Request binding (engine/member-signature.ts): freshness, then the signature over the bytes the request's
+        // format names (format 2 when it carries X-Signed-For, the old bytes when not), then the community it was
+        // signed for (421 wrong_community for another's host; 426 app_too_old for the old format after the
+        // switch), and only then the nonce is spent: a forged request can't burn a real one, and a request refused
+        // for naming another community leaves its nonce unspent. Outside the try below, so the route that runs after
+        // an answer-as-unsigned is never inside it.
+        const signedForHeader = ctx.headers[SIGNED_FOR_HEADER.toLowerCase()];
+        const signedFor = typeof signedForHeader === 'string' ? signedForHeader : Array.isArray(signedForHeader) ? signedForHeader.join(',') : null;
+        const verdict = verifyMemberSignature({
+            pubKeyHex: signerKey,
+            signature: signatureBase64,
+            timestamp: timestampHeader,
+            nonce,
+            method: ctx.method,
+            path: ctx.path,
+            body: (ctx as any).rawBody ?? '',
+            signedFor,
+        }, { consumeNonce: true });
+        // An old app's signature on a PUBLIC read after the switch is answered as that read unsigned, which anyone
+        // may send: every app before binding signs its GETs to its node (native node-request-signing.ts), and it
+        // reads its "update BeanPool" banner's minimum version from /api/community/health. A 426 there would hide
+        // the one message that tells the member what to do. Its gated reads and writes are refused (426) below.
+        if (!verdict.ok && verdict.status === 426 && !isMutatingApi && !isGatedRead && !isOptionallySignedWrite) {
+            return await next();
+        }
+        if (!verdict.ok) {
+            ctx.status = verdict.status;
+            ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
+            return;
+        }
+
         try {
-            const ts = Number(timestampHeader);
-            const now = Date.now();
-            if (!Number.isFinite(ts) || Math.abs(now - ts) > SIGNATURE_FRESHNESS_MS) {
-                ctx.status = 401;
-                ctx.body = { error: 'Request timestamp is stale or invalid' };
-                return;
-            }
-            // Atomic check-and-consume: a replayed nonce is rejected here.
-            if (!consumeNonce(nonce, now)) {
-                ctx.status = 403;
-                ctx.body = { error: 'Replay detected: nonce already used' };
-                return;
-            }
-            const rawBody = (ctx as any).rawBody ?? '';
-            const signedMessage = `${ctx.method}\n${ctx.path}\n${timestampHeader}\n${nonce}\n${rawBody}`;
-
-            // Convert hex pubkey to SPKI format for Node.js verify
-            const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
-            const spki = Buffer.concat([spkiHeader, Buffer.from(signerKey, 'hex')]);
-            const publicKeyObject = crypto.createPublicKey({
-                key: spki,
-                format: 'der',
-                type: 'spki'
-            });
-
-            const isValid = crypto.verify(
-                undefined,
-                Buffer.from(signedMessage),
-                publicKeyObject,
-                Buffer.from(signatureBase64, 'base64')
-            );
-
-            if (!isValid) {
-                ctx.status = 403;
-                ctx.body = { error: 'Invalid cryptographic signature' };
-                return;
-            }
+            const signedMessage = verdict.text;
 
             // A key a re-key replaced signs nothing here, write or read (REPLACED_KEY_REFUSAL). Only once the signature
             // checks out, so a forged request learns nothing about which keys are replaced.
@@ -1334,6 +1315,8 @@ export async function startHttpsServer(port: number): Promise<number> {
             // SRV-20: stash the verified signing material so a route that creates a
             // transaction can persist it on the row (auth_signer/signature/payload),
             // making the transaction's authorship re-verifiable by any importing node.
+            // `payload` is the text signed; in format 2 the signed bytes are 0xFF then that text (engine/sync.ts
+            // verifyTransactionAuthorship puts it back); @beanpool/core parseSignedText reads either format.
             ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage };
 
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
@@ -1462,6 +1445,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createCommonsRoutes(deps),
         createTreasuryRoutes(deps),
         createPublicAddressRoutes(deps),
+        createAppAddressesRoutes(deps),
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
         createOpenJoinRoutes(deps),

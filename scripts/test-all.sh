@@ -348,6 +348,7 @@ run_federation_suites() {
       test-moderator-routes
       test-backend-monitors
       test-backup-hardening
+      test-request-binding-ledger
       test-backup-identity-bundle
       test-sealed-backups
       test-takeover-envelope
@@ -358,6 +359,7 @@ run_federation_suites() {
       test-takeover-by-code
       test-takeover-crash-resume
       test-takeover-by-phone
+      test-takeover-keeps-app-addresses
       test-takeover-split-brain
       test-profile-takeover
       test-open-join-failover
@@ -382,6 +384,7 @@ run_federation_suites() {
       test-funnel-cohort
       test-request-auth
       test-api-path-auth
+      test-request-binding
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility

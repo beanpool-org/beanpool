@@ -95,6 +95,8 @@ describe('The web app shows moderation notices kept while it was closed', () => 
         const first = await screen.findByRole('alertdialog');
         expect(first).toHaveTextContent(REMOVED.title);
         expect(first).toHaveTextContent(REMOVED.body);
+        // The notice's own icon, not "ℹ️ 🛡️ ...".
+        expect(within(first).getByRole('heading', { level: 2 }).textContent).toBe(REMOVED.title);
         expect(within(first).getByText('1 of 2')).toBeInTheDocument();
         await new Promise(r => setTimeout(r, 20));
         expect(api.markNoticesSeen).not.toHaveBeenCalled();

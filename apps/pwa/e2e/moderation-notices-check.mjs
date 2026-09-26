@@ -4,6 +4,8 @@
  * 260px stress case), light and dark: nothing may reach past the viewport sideways, the page may not scroll sideways,
  * the alert must fit the screen with its buttons in view (its words scroll inside it), and the pause card must render.
  * Nothing is marked seen as it is shown: a notice is marked when the member puts it away (Acknowledge, Close all).
+ * Each title reads as the node wrote it ("🛡️ ...", no ℹ️ before it) with its icon hidden from a screen reader, and
+ * focus is on Acknowledge for each notice in turn.
  * The first notice carries the longest body the node writes (a post title of 80 characters, one unbroken word).
  * Photographs each case to e2e/shots/.
  *
@@ -82,6 +84,9 @@ const MEASURE = () => {
         buttonsInView,
         buttons,
         count: document.querySelector('[data-testid="system-alert-count"]')?.textContent ?? null,
+        title: document.getElementById('system-alert-title')?.textContent ?? null,
+        titleIconHidden: document.querySelector('#system-alert-title > [aria-hidden="true"]')?.textContent ?? null,
+        focused: document.activeElement?.tagName === 'BUTTON' ? document.activeElement.textContent : null,
         pauseCards: document.querySelectorAll('[data-testid="moderation-pause-card"]').length,
     };
 };
@@ -152,11 +157,15 @@ try {
                     if (!m.buttons.includes('Acknowledge')) failures.push(`${shot}: no Acknowledge button`);
                     const expected = step === 'first' ? '1 of 3' : '1 of 2';
                     if (m.count !== expected) failures.push(`${shot}: count reads ${m.count}, expected ${expected}`);
+                    const title = step === 'first' ? NOTICES[0].title : NOTICES[1].title;
+                    if (m.title !== title) failures.push(`${shot}: title reads ${JSON.stringify(m.title)}, expected ${JSON.stringify(title)}`);
+                    if (m.titleIconHidden !== '🛡️ ') failures.push(`${shot}: the title's icon is not hidden from a screen reader (${JSON.stringify(m.titleIconHidden)})`);
+                    if (m.focused !== 'Acknowledge') failures.push(`${shot}: focus is on ${JSON.stringify(m.focused)}, expected Acknowledge`);
                 }
                 if (JSON.stringify(marked) !== JSON.stringify(expectMarked))
                     failures.push(`${shot}: marked seen ${JSON.stringify(marked)}, expected ${JSON.stringify(expectMarked)}`);
                 if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
-                console.log(`${shot}: alert ${m.dialog}${m.dialog ? ` (fits ${m.dialogFits}, buttons in view ${m.buttonsInView}, ${m.count})` : ''}, ${m.pauseCards} pause card, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}, marked ${JSON.stringify(marked)}`);
+                console.log(`${shot}: alert ${m.dialog}${m.dialog ? ` (fits ${m.dialogFits}, buttons in view ${m.buttonsInView}, ${m.count}, "${m.title}", focus ${m.focused})` : ''}, ${m.pauseCards} pause card, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}, marked ${JSON.stringify(marked)}`);
             }
             await context.close();
         }

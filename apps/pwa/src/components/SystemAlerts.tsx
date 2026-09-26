@@ -72,6 +72,19 @@ function markSeen(ids: string[]): void {
 
 const COLOURS: Record<string, string> = { critical: '#ef4444', warning: '#f59e0b' };
 const ICONS: Record<string, string> = { critical: '🚨 ', warning: '⚠️ ' };
+/** A title's own icon: the node's moderation notices start with one ("🛡️ Your post was removed"). */
+const LEADING_EMOJI = /^\s*(\p{Extended_Pictographic}[\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F\u200D]*)\s*/u;
+
+/**
+ * The title's words, and the icons before them: the severity's, or ℹ️ for a title with no icon of its own (never
+ * "ℹ️ 🛡️ ..."). The icons are shown but hidden from a screen reader, which would read out each emoji's name.
+ */
+function titleParts(title: string, severity: string): { icon: string; words: string } {
+    const own = LEADING_EMOJI.exec(title);
+    const words = own ? title.slice(own[0].length) : '';
+    if (!own || !words) return { icon: ICONS[severity] ?? 'ℹ️ ', words: title };
+    return { icon: `${ICONS[severity] ?? ''}${own[1]} `, words };
+}
 
 export interface SystemAlertsProps {
     /** The member this browser holds. Nothing is read or shown without one. */
@@ -92,6 +105,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
     const marked = useRef(new Set<string>());
     const onShownRef = useRef(onShown);
     onShownRef.current = onShown;
+    const acknowledgeRef = useRef<HTMLButtonElement>(null);
 
     const enqueue = useCallback((alerts: (ShownAlert | null)[]) => {
         const fresh: ShownAlert[] = [];
@@ -156,12 +170,15 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
     useEffect(() => {
         if (!head) return;
         onShownRef.current?.(head);
+        // The keyboard and a screen reader go to the alert: to Acknowledge, and again for each next one in the queue.
+        acknowledgeRef.current?.focus();
         // Once per alert shown: keyed on the alert, not on the queue behind it.
     }, [head?.key]);
 
     if (!head) return null;
 
     const colour = COLOURS[head.severity] ?? '#3b82f6';
+    const { icon, words } = titleParts(head.title, head.severity);
     const waiting = queue.length;
     const acknowledge = () => {
         putAway([head]);
@@ -187,6 +204,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
             }}
         >
             <div
+                key={head.key}
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby="system-alert-title"
@@ -204,8 +222,8 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
             >
                 <div data-testid="system-alert-text" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '1.5rem 1.25rem 0' }}>
                     <h2 id="system-alert-title" style={{ margin: '0 0 1rem', fontSize: 'min(1.5rem, 7vw)', lineHeight: 1.25, color: colour, overflowWrap: 'anywhere' }}>
-                        {ICONS[head.severity] ?? 'ℹ️ '}
-                        {head.title}
+                        <span aria-hidden="true">{icon}</span>
+                        {words}
                     </h2>
                     <p id="system-alert-body" style={{ margin: '0 0 1.25rem', lineHeight: 1.5, fontSize: '1.05rem', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
                         {head.body}
@@ -218,6 +236,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                         </p>
                     )}
                     <button
+                        ref={acknowledgeRef}
                         type="button"
                         onClick={acknowledge}
                         style={{

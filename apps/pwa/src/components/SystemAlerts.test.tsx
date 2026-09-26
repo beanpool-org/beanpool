@@ -187,6 +187,46 @@ describe('SystemAlerts: live and kept alerts, each once', () => {
         expect(onShown).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'moderation_muted' }));
     });
 
+    it('a title with its own icon reads as the node wrote it (no ℹ️ before it), and a screen reader hears only the words', async () => {
+        vi.mocked(api.getUnseenNotices).mockResolvedValue([{ ...notice('own'), title: '🛡️ Your post was removed' }, notice('plain')]);
+        render(<SystemAlerts memberPubkey="me" isGuest={false} />);
+        const first = await screen.findByRole('alertdialog', { name: 'Your post was removed' });
+        const title = within(first).getByRole('heading');
+        expect(title.textContent).toBe('🛡️ Your post was removed');
+        expect(title.querySelector('[aria-hidden="true"]')?.textContent).toBe('🛡️ ');
+        await acknowledge();
+        // A title with no icon of its own still gets ℹ️, hidden from a screen reader all the same.
+        const second = await screen.findByRole('alertdialog', { name: 'Title plain' });
+        expect(within(second).getByRole('heading').textContent).toBe('ℹ️ Title plain');
+        expect(within(second).getByRole('heading').querySelector('[aria-hidden="true"]')?.textContent).toBe('ℹ️ ');
+    });
+
+    it('a warning keeps its own icon, hidden from a screen reader', async () => {
+        render(<SystemAlerts memberPubkey="me" isGuest={false} />);
+        await announce({ type: 'system_announcement', title: 'Maintenance', body: 'Back soon', severity: 'warning' });
+        const dialog = await screen.findByRole('alertdialog', { name: 'Maintenance' });
+        expect(within(dialog).getByRole('heading').textContent).toBe('⚠️ Maintenance');
+    });
+
+    it('focus goes to Acknowledge when an alert appears, and again when the next one in the queue does', async () => {
+        render(
+            <>
+                <input aria-label="Message" />
+                <SystemAlerts memberPubkey="me" isGuest={false} />
+            </>,
+        );
+        screen.getByRole('textbox', { name: 'Message' }).focus();
+        await announce({ type: 'system_announcement', title: 'First', body: 'Body first', severity: 'info', noticeId: 'f1' });
+        await announce({ type: 'system_announcement', title: 'Second', body: 'Body second', severity: 'info', noticeId: 'f2' });
+        const first = await screen.findByRole('alertdialog', { name: 'First' });
+        expect(within(first).getByRole('button', { name: 'Acknowledge' })).toHaveFocus();
+        fireEvent.click(within(first).getByRole('button', { name: 'Acknowledge' }));
+        const second = await screen.findByRole('alertdialog', { name: 'Second' });
+        // A new dialog for the next alert (keyed on it), so a screen reader announces it as a new one.
+        expect(second).not.toBe(first);
+        expect(within(second).getByRole('button', { name: 'Acknowledge' })).toHaveFocus();
+    });
+
     it('reads nothing for a guest, before the membership check answers, or with no identity', async () => {
         const { rerender } = render(<SystemAlerts memberPubkey="me" isGuest={true} />);
         rerender(<SystemAlerts memberPubkey="me" isGuest={null} />);

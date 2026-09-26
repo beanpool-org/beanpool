@@ -359,6 +359,7 @@ run_federation_suites() {
       test-standby-visitor-marks
       test-place-watch-failover
       test-standby-rekey
+      test-recovery-tombstones
       test-unlock-cancel
       test-cash-also-needed
       test-posts-ignore-archetypes

@@ -99,6 +99,10 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    before the Worker; a rerun stops at the ALTER.
    Then `--file migrations/0004_teardown.sql` (one table, `teardown`: deletions Cloudflare refused, which the
    sweep retries). Before the Worker; a rerun changes nothing.
+   Then `--file migrations/0005_reserve_global.sql` (three `name_policy` rows, `blocked`: `global` and `earth`,
+   the global node's names, and `ssh-global`, the global server's only way in). The live table already has
+   `global` and `earth`, so there it adds only `ssh-global`: it adds a row only where the table has none for
+   that name, never changing one it has. The Worker doesn't depend on it; a rerun changes nothing.
 3. Deploy the Worker.
 
 Or let the deploy workflow apply them (below), once the live database is bootstrapped.
@@ -117,16 +121,22 @@ npx wrangler d1 execute beanpool-registrar --remote --file scripts/bootstrap-d1-
 
 It creates `d1_migrations` exactly as wrangler would and records each migration whose objects the database
 already has (0001's tables; 0002's seven columns, two tables and three indexes; 0003's column; 0004's table and
-index), then prints the table. Safe to re-run. Whatever it didn't record — say 0002–0004, if they were never
-applied by hand — the workflow applies next, before the Worker that needs them is deployed. The workflow refuses
-to apply anything until `d1_migrations` records `0001_init.sql`.
+index; 0005's three policy rows, `global`, `earth` and `ssh-global`), then prints the table. Safe to re-run.
+Whatever it didn't record — say 0002–0005, if they were never applied by hand — the workflow applies next, before
+the Worker that needs them is deployed. The live table has only two of 0005's rows (`ssh-global` was never added
+by hand), so there 0005 is not recorded and the workflow applies it, adding just `ssh-global`. The workflow
+refuses to apply anything until `d1_migrations` records `0001_init.sql`. (To look for 0005's rows it needs
+`name_policy`, so on a database that has none — only an empty one — it first makes it exactly as 0001 does; on
+any other it makes nothing but `d1_migrations`.)
 
 `node scripts/check-migrations.mjs` (the workflow's dry-run job runs it on every registrar PR) proves this on
 local throwaway databases only: `migrations apply` builds exactly the schema and policy seed that applying the
 files by hand does (and that the tests' `node:sqlite` database does); the bootstrap, run on a database at any
 stage of the hand path, records exactly what it has, after which `migrations apply` adds only the rest, never
-re-runs 0001 (a policy row deleted beforehand stays deleted) and ends at the same schema; and the guard refuses
-a database never bootstrapped, including one whose empty `d1_migrations` a `migrations list` made.
+re-runs 0001 (a policy row deleted beforehand stays deleted) and ends at the same schema; on the live database's
+shape (`global` and `earth` by hand, no `ssh-global`) it leaves 0005 unrecorded, and `migrations apply` adds only
+`ssh-global`; and the guard refuses a database never bootstrapped, including one whose empty `d1_migrations` a
+`migrations list` made.
 
 ## Signed request scheme (node → registrar)
 

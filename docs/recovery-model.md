@@ -33,45 +33,90 @@ holding its fragment. Keeper/social recovery has been scrapped.
 
 ## The construction
 
-The two-layer construction survives exclusively for **SSO Sign-In Recovery** on Native:
+A sign-in copy has two locks: the app's, and the node's around it.
 
 ```
-seed  =  A  ⊕  B
-
-  A  →  the hub. Plaintext in the node's database.
-  B  →  sealed to the SSO provider sub (Google/Apple). Never readable by the node alone.
+the app's lock   seed (+ the 12 words)  under  scrypt(provider:sub, salt)   sealSeedToSso, scrypt-xc20p-single-v1
+the node's lock  that whole copy        under  data/recovery-seal.key       recovery seal S1 #1178, S2 #1185
 ```
 
-`A` is 32 random bytes; `B` is `seed ⊕ A`. Both halves are required — this is a 2-of-2 XOR,
-not a threshold.
+**The app's lock** (unchanged since #750 on the phone, and the same bytes from the global node's
+browsers since G11-c): `sealSeedToSso` in `packages/beanpool-core/src/keeper-crypto.ts` seals the
+whole 32-byte seed, and the 12 words when the device has them, under one key,
+`scrypt(provider:sub, salt)` (N = 16384). The salt, the scrypt cost and the words box sit beside it
+in `kdfParams`. There is no hub half. The only secret in it is the `sub`.
 
-The former second layer that split `B` with Shamir across human friends/guardians was scrapped
-in September 2026. Zero human-keeper shares exist on live nodes, and all client entry points
-have been removed. The member's 12 words and native SSO recovery are the only live recovery paths.
+**The node's lock** (the recovery seal; design `scratch/global-node/DESIGN-sso-seal-db-fable.md`
+option B, Marty 2026-09-26, card sso-copy-lock), in `apps/server/src/services/recovery-seal-key.ts`:
+
+- **The key** is `data/recovery-seal.key`: 32 random bytes, 0600, beside `libp2p_key`, never in the
+  database. A main server makes it at boot when it has none; a standby never makes one. It is read
+  on every use, so a key deleted while the server runs is gone at once.
+- **The wrap** is XChaCha20-Poly1305 under HKDF-SHA256(key, `beanpool-recovery-row/v1`), with a
+  random 24-byte nonce per row. Its plaintext is the JSON of the app's four fields
+  (`encryptedShare`, `shareIv`, `shareTag`, `kdfParams`), so the words box is inside it too. The
+  row stores the wrap's ciphertext, nonce and tag, and
+  `kdf_params = {"alg":"node-wrap-xc20p-v1","inner":"<the app's alg>"}`. The lookup hash and its
+  salt stay in the clear: they find the row and reveal nothing.
+- **Bound to where it sits** (AAD): a stored copy to (owner, holder type); a released copy in
+  `recovery_releases` to (collection, share id, holder type). Never the generation, so a
+  carry-forward can write the same copy into the next one.
+- **Where:** `engine/recovery-shares.ts` wraps in `putShareGeneration`, after every check has run
+  on the app's bytes, and `rowToShare` unwraps. The release path reads through the same reader.
+  A released copy is stored wrapped, and unwrapped only when `/api/recovery/collect/fragments`
+  serves it. `sync.ts` and the snapshot export copy rows without opening them.
+- **No key, no copy:** without the key file, deposits, collect/sso, fragments, status and
+  disconnect answer 503 with *"This server holds sign-in recovery copies it cannot open:
+  data/recovery-seal.key is missing."* Nothing is ever stored unwrapped.
+- **Copies made before the seal** are wrapped in place at the first boot of the new server, and
+  each server then runs one `VACUUM`, so the copies it had already deleted are gone from
+  `state.db`'s free pages. From then on the connection runs with `secure_delete = ON`.
+- **Where the key travels:** only inside the take-over bundle (`BUNDLED_FILES` in
+  `takeover-envelope.ts`), so only inside the take-over envelope and a sealed backup. A take-over
+  and a sealed-backup restore install it. It is never in a sync payload, a snapshot, a plain backup,
+  a log line or an HTTP answer.
+- **A server that already holds a different key** (a standby that was once a main server) keeps
+  it as `recovery-seal-retired-<id>.key`. The reader tries it when the live key does not open a
+  row, and the next boot locks those rows again with the live key.
+- **Keys without it** (an envelope or sealed backup made before S2, or a plain backup restored on
+  another machine): the take-over or restore goes on, the server makes a key of its own, and the
+  copies it inherited don't open. Members' 12 words still work, and connecting the sign-in again
+  makes a new copy (a deposit leaves out the rows this key cannot open).
+
+The apps changed nothing for this: `sso-share-vectors` and `test-sso-recovery-roundtrip` are
+unchanged, which is the proof.
+
+**Before #750** the phone made two-part copies, `seed = A ⊕ B`: `A` (the hub) in the clear in the
+node's database, `B` sealed to the `sub`. #750 replaced them for correctness (an unauthenticated
+XOR gave silent wrong seeds, #489), not for security: `A` never protected against anyone holding
+the database. The server still serves such copies, and the seal wraps their rows the same way.
+
+The former layer that split `B` with Shamir across human friends/guardians was scrapped in
+September 2026. Zero human-keeper shares exist on live nodes, and all client entry points have
+been removed.
 
 ---
 
 ## The two recovery paths
 
-### 1. SSO — custodial by choice (Native only)
+### 1. SSO — custodial by choice (phones; the global node's browsers)
 
-```
-A  →  hub                          node reads it
-B  →  sealed to the provider sub   node can obtain the sub
-```
-
-**The node operator can reconstruct these accounts.** This is a deliberate trade, taken
+**The node operator can open these copies.** This is a deliberate trade, taken
 2026-08-10: stability over sovereignty for people who would otherwise have no recovery at
-all. It must be stated in the product, not buried.
+all. It is stated in the product, not buried (Marty, 2026-09-26, card sso-copy-lock, D-2 = a):
+the members' guide (`settings/recovery.md`, "Who can open the copy") and, under a connected
+sign-in, the phone's Account Protection screen and the web app's Settings say that the people
+who run the community's server can open the copy, that a stolen copy of its database can't,
+and (where the device has the 12 words) that only the words keep everyone else out.
 
-Sealing `B` to the `sub` still earns its place — it locks out anyone holding only the
-*data* (stolen database, backup tarball, decommissioned disk, an operator who never
-bothers). It does not lock out an operator who decides to, because the `sub` arrives in
-every id_token and the operator's own code receives it.
+The two locks earn their place against anyone holding only the *data*: the node's lock
+against a stolen database, a snapshot, a plain backup, a standby's disk or a decommissioned
+disk (see [The construction](#the-construction)); the app's lock against anyone who also has the
+key file but not the member's `sub`. Neither locks out an operator who decides to, because the
+operator's process holds the key and the `sub` arrives in every id_token it verifies.
 
-That seal has to be **expensive**: `sealShareToSso` uses scrypt at the same cost
-`ssoLookupHash` uses for the same value. The raw `sub` itself is never stored — the
-node keeps only a scrypt hash with a per-share random salt.
+The app's lock is scrypt, at the same cost `ssoLookupHash` uses for the same value. The raw
+`sub` itself is never stored: the node keeps only a scrypt hash with a per-copy random salt.
 
 A Google `sub` is the same value handed to every OAuth client that user has ever signed
 into — an identifier, not a secret. Apple's is scoped per developer team and genuinely
@@ -92,14 +137,17 @@ the only recovery path that works across any node independently.
 
 ---
 
-## Where the fragments actually live
+## Where the copies actually live
 
-For members enrolled in SSO on Native, fragments live as rows in `recovery_shares` on the node's disk:
+Each sign-in copy is one row in `recovery_shares` on the node's disk. Every copy a recovery
+released is also kept, for good, in `recovery_releases`: that table is the record of each
+recovery, permanent by design (`pruneCollectionsFor` in `engine/recovery-release.ts` never deletes
+a collection that released anything). Every row in both is wrapped with `data/recovery-seal.key`:
 
-| Fragment | Stored | Node can read |
+| Row | Stored | Node can open |
 |---|---|---|
-| hub (`A`) | node | **yes** — `hubShareKey` was withdrawn 2026-08-08 |
-| sso (`B`) | node | only while verifying the provider `sub` during active recovery |
+| sign-in copy (single-blob: every copy made since #750) | node, wrapped | the node's lock always, with the key file; the app's lock only with the member's `sub`, which arrives at a verified sign-in |
+| hub (`A`, two-part copies from before #750) | node, wrapped | **yes**, with the key file: `hubShareKey` was withdrawn 2026-08-08 |
 
 Consequences worth stating plainly:
 
@@ -155,8 +203,8 @@ said plainly, with the words and the phone as the ways back.
 
 ```
 1  enter callsign
-2  sign in with Google or Apple
-3  A ⊕ B → in
+2  sign in (Google, Apple, Facebook or GitHub)
+3  the node verifies it, unwraps the copy and releases it; the device opens it with the sub → in
 ```
 
 No PIN. No delay. **The sign-in is the authentication.**
@@ -200,36 +248,53 @@ Friends and keepers are not notified because keeper/social recovery has been scr
 
 ## What each party can reach
 
+With the recovery seal (S1 #1178, S2 #1185), on a server that has run the upgrade's first boot:
+
 | | SSO tier (phones; the global node's browsers) | Sovereign (12 words) |
 |---|---|---|
-| Cold DB / backup thief | **GitHub: the account**, and its 12 words when the copy carries them. Google, Apple, Facebook: the same, given that member's `sub` from elsewhere (below) | nothing |
+| A copy of the database: a stolen or decommissioned disk, a snapshot, a plain backup, a standby's disk | **nothing**, for every provider | nothing |
+| The sign-in provider (Google, Apple, GitHub, Facebook), from what it holds | nothing: it has the `sub` but none of our data | nothing |
 | Node operator, passively | nothing | nothing |
-| **Node operator, deliberately** | **the account** | nothing |
-| Hijacked Google/Apple account | **the account** — the sign-in is the authentication | nothing |
+| **Node operator, deliberately** | **the account**, and its 12 words when the copy carries them | nothing |
+| **A hijacked sign-in account** (or a provider signing in as the member) | **the account**, through the recovery routes while the server runs: the sign-in is the authentication. The member's devices are told a recovery started | nothing |
 
-**The database row.** Every sign-in copy either client makes today is single-blob
-(`sealSeedToSso`, `scrypt-xc20p-single-v1`; the phone since #750, the global node's browsers since
-G11-c): the whole seed, and the 12 words when it carries them, under one key,
-`scrypt(provider:sub, salt)`. The salt and the scrypt cost are stored beside it in `kdfParams`, and
-there is no hub half. (The `A ⊕ B` construction above describes copies made before #750.) So the
-only secret is the `sub`, and whoever holds the database and knows a member's `sub` opens that
-member's copy with one scrypt:
+**Why the operator, deliberately.** The operator's process holds `data/recovery-seal.key` and
+receives the `sub` in every id_token it verifies (`apps/server/src/sso.ts`), so logging one
+sign-in is enough to open that member's copy. For GitHub it does not even need a sign-in: the
+node's `sub` is the public numeric user id (`readGithubUser` in
+`apps/server/src/engine/github-device.ts`), one lookup from the member's GitHub name. Google's
+`sub` is the same value every OAuth client the person has used receives. Apple's is scoped to
+BeanPool's developer team. (Facebook's scope is not checked here.) "The operator" is anyone who
+holds the database **and** the key:
 
-- **GitHub:** the node's `sub` is the numeric user id (`readGithubUser` in
-  `apps/server/src/engine/github-device.ts`), which is public at `api.github.com/users/<login>`.
-  So a GitHub-sealed copy is open to anyone with the database: the id is one public lookup from
-  the member's GitHub name, and opening the copy with it is one scrypt.
-- **Google:** the same `sub` goes to every OAuth client the person has signed into (§1 above), so
-  anyone holding it from another service can open the copy.
-- **Apple:** scoped to BeanPool's developer team, so out of reach of anyone who never sees the
-  node's sign-ins.
+- whoever runs the machine, or has a copy of the whole `data/` folder;
+- whoever opens a **sealed backup**: its take-over bundle carries the key, and it opens with the
+  recovery code or any one owner's phone;
+- a standby, once it takes over: the take-over bundle installs the key.
 
-"The database" is more than the node's disk: its snapshots, a standby's replica, and backup files.
-A backup file is locked only when the node has a recovery code (`backupLockState` in
-`apps/server/src/services/sealed-backup.ts`, `sendBackup` in `apps/server/src/routes/backup.ts`);
-without one the backup is the readable `state.db`, and a stolen backup reaches what the database
-does. Sealed backups need their recovery code. A secret the database does not hold, for the phone
-and the browser alike, is a separate design pass.
+**Why a copy of the database, nothing.** The key is never in the database, so never in a sync
+payload, a snapshot, a snapshot download or a plain backup (`state.db`, `node_config.json` and
+images: `sealed-backup.ts`). A standby holds the main server's wrapped rows and no key until it
+takes over. What such a copy holds opens only with the key and the `sub` together.
+
+**What is still open.**
+
+- **Copies made before the upgrade.** Snapshots, backups and copies of the data folder made
+  before a server first booted with the seal hold the copies as the app sealed them, openable with
+  the `sub` alone (for GitHub, by anyone who holds the file). No code reaches files that already exist; the operator
+  manual (`operators/server/backups-and-replicas.md`, "Backups made before the recovery seal")
+  tells operators to delete them.
+- **Disconnecting a sign-in deletes its row in `recovery_shares`, not the copies earlier
+  recoveries released**, which stay wrapped in `recovery_releases`, nor the ones in snapshots and
+  backups. The operator can still open those. The members' guide says so.
+- **A copy deleted after the seal still reaches no standby** (no tombstone for
+  `recovery_shares`), so it stays there, wrapped, and after a take-over it would open again. Its
+  own PR, with `invalidated_keys`. Until then the members' guide (`settings/recovery.md`) and the
+  operator manual's take-over steps say so.
+- **The operator.** Only a secret the server never sees would lock the operator out: a passkey
+  with the PRF extension (design option C). It cannot cover the old Android phones this app is
+  for, so it could only ever sit on top, as an opt-in. Marty, 2026-09-26 (D-3 = a): not now;
+  revisit after launch, web first.
 
 ---
 
@@ -248,7 +313,14 @@ silently and cannot be probed.
 never meets again and has never been asked to hold anything.
 
 **`sso ×2 + hub` at threshold 3 — rejected in that form.** Replaced by the two-layer
-`A ⊕ B` construction where `A` is the hub fragment and `B` is sealed to the SSO provider `sub`.
+`A ⊕ B` construction where `A` is the hub fragment and `B` is sealed to the SSO provider `sub`,
+itself replaced by the single-blob copy in #750.
+
+**The recovery seal — taken 2026-09-26 (Marty, card sso-copy-lock).** A sign-in copy's only
+secret was the `sub`, and GitHub's is public, so any copy of the database opened every
+GitHub-linked account in it. D-1 = a: the node locks every copy with a key kept outside its
+database, with no app change (S1 #1178, S2 #1185). D-2 = a: say plainly that the server's
+operators can open the copy (S3). D-3 = a: a passkey lock later, not now.
 
 **A mandatory PIN in front of `A` — rejected.** It would have locked out more members through
 forgetting than it ever protected. The PIN table is unused and no recovery route checks it.
@@ -259,9 +331,10 @@ forgetting than it ever protected. The PIN table is unused and no recovery route
 
 - **12-word seed phrase**: BIP-39 mnemonic recovery implemented across both Native (`apps/native`)
   and PWA (`apps/pwa`). Sovereign, node-independent, works everywhere.
-- **SSO recovery (Native only)**: Google and Apple sign-in recovery verified on physical hardware,
-  operating on the two-layer `A ⊕ B` model where `A` is the hub fragment and `B` is sealed to
-  the provider `sub`.
+- **SSO recovery (phones; the global node's browsers)**: Google, Apple, Facebook and GitHub, one
+  single-blob copy per sign-in (`sealSeedToSso`), wrapped on the node with
+  `data/recovery-seal.key` (see [The construction](#the-construction)). Copies made before #750
+  are two-part (`A ⊕ B`) and still served.
 - **`RecoveryAlertBanner`**: Rendered on both Native and PWA to alert members to active recovery
   sessions via `/api/recovery/collect/mine` and allow cancellation via `/api/recovery/collect/cancel`.
 - **Scrapped**: Friend keeper enrolment, guardian approvals, recovery PINs, and 3-of-N social
@@ -274,8 +347,10 @@ forgetting than it ever protected. The PIN table is unused and no recovery route
 
 1. ~~**Does the node persist the raw `sub`?**~~ **Answered 2026-08-11: it does not.**
    `ssoLookupHash` stores a scrypt hash with a per-share random salt and the raw value is
-   never written. The cold-database protection stands — but only against an attacker who
-   never sees a live sign-in, since the `sub` does arrive in plaintext during verification.
+   never written. That alone never protected a GitHub copy (its `sub` is public); since the
+   recovery seal (2026-09-26) the cold-database protection rests on `data/recovery-seal.key`,
+   for every provider. The `sub` still arrives in plaintext during verification, which is why
+   the operator is not locked out.
 2. **How many members are on the PWA?** The decision above excludes them from recovery
    entirely. Marty's read (2026-08-11) is that the native share is much the larger and the
    PWA is an edge case; still unmeasured numerically, and it determines how loudly that

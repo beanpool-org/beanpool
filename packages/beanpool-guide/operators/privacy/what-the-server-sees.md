@@ -26,6 +26,12 @@ Votes on Decisions are secret in the apps and in Settings: everyone sees only th
 
 So others can read how each member voted. Whoever runs the machine can copy the files. While the server has no recovery code, every owner and admin can download a backup from Settings that is not locked. With a recovery code, whoever holds the code can open a backup, and an admin can download one but cannot open it. Tell your members this plainly, make a recovery code (see Backups and replicas), and let only people the community trusts hold it.
 
+## Members' sign-in recovery copies
+
+A member who connects Google, Apple, Facebook or GitHub in the app, and everyone who joins the global community with a sign-in, has a locked copy of their account on the server, so that sign-in can bring the account back. The server locks every copy again with data/recovery-seal.key, which is never in the database. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk opens none of them.
+
+Whoever holds the database and that key can open a member's copy, though, with the id that member's sign-in account gives the server. The server receives that id every time the member signs in, and a GitHub id is public. That means whoever runs the machine, anyone with a copy of the whole data folder, and whoever opens a locked backup. The members' guide tells members this plainly, and that only their 12 words keep everyone else out. Don't look.
+
 ## Who can read what over the internet
 
 - Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.

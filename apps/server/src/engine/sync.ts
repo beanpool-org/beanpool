@@ -2,11 +2,11 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { db, afterTransactionCommit } from '../db/db.js';
+import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainServer } from '../db/db.js';
+import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
-import { getLocalConfig } from '../config/local-config.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { importedArea } from './member-area.js';
@@ -19,30 +19,9 @@ import {
     type Transaction
 } from '@beanpool/engine';
 
-export type NodeRole = 'primary' | 'backup';
-let nodeRole: NodeRole | null = null;
-
-/**
- * local-config.json's `nodeRole` wins over NODE_ROLE in the environment (sealed-keys.md §5.4 step 4). Only a
- * take-over writes it, so a promoted standby needs no .env edit, and a later redeploy with the standby's old .env
- * (NODE_ROLE=backup) cannot demote it. Read once, on first use; setNodeRole replaces it for this process.
- */
-function resolveNodeRole(): NodeRole {
-    try {
-        const configured = getLocalConfig().nodeRole;
-        if (configured === 'primary' || configured === 'backup') return configured;
-    } catch { /* no readable config: the environment decides */ }
-    return process.env.NODE_ROLE === 'backup' ? 'backup' : 'primary';
-}
-
-export function getNodeRole(): NodeRole {
-    return (nodeRole ??= resolveNodeRole());
-}
-
-export function setNodeRole(role: NodeRole): void {
-    nodeRole = role;
-    console.log(`[Topology] NODE_ROLE set to '${role}'`);
-}
+// The node's role lives in config/node-role.ts, a leaf module the database's boot can ask too (db.ts
+// markExistingVisitors); re-exported here, where the rest of the server imports it from.
+export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js';
 
 export function getSyncCursor(peerId: string): string | null {
     const row = db.prepare(`SELECT last_synced_at FROM sync_cursors WHERE peer_id=?`).get(peerId) as { last_synced_at: string } | undefined;
@@ -315,6 +294,9 @@ export async function exportSyncState(
     // The key the `openJoins` rows are hashed with, or they match nothing on a promoted standby (engine/open-join.ts).
     // A node_config row, so here rather than in the table export. Signed with the rest.
     payload.openJoinSalt = readOpenJoinSalt();
+    // Whether this node's visitors' rows are marked (db.ts markExistingVisitors), so a standby, which marks none itself,
+    // knows the marks in its copy are the main server's and a promotion doesn't mark again on less. A node_config row.
+    payload.visitorsMarked = visitorsMarked();
     return signSyncPayload(cb, payload);
 }
 
@@ -1373,6 +1355,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             if (remote.openJoinSalt !== undefined || remote.openJoins) {
                 writeOpenJoinRecord(remote.openJoinSalt, remote.openJoins);
             }
+
+            // The main server's word that its visitors' rows are marked: its marks are in this copy (each marked row is
+            // stamped, so it travels), and this standby, which marks none itself, takes them as its own (db.ts
+            // markExistingVisitors). A main server older than that sends nothing, and the pass is left for a promotion.
+            if (remote.visitorsMarked === true) noteVisitorsMarkedByMainServer();
 
             // The global node's place watches and its mirror of the directory (G5), so a server that takes over has every
             // member's watch and quiet day, and knows which communities the old one had already told them about

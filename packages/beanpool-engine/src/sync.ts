@@ -438,6 +438,13 @@ export interface SyncPayload {
      * key of its own and let it join again. Secret like the recovery shares beside it; signed with the rest.
      */
     openJoinSalt?: string | null;
+    /**
+     * Whether the main server's visitors' rows are marked (its node_config `migration_mark_visitors_v1`; apps/server
+     * db.ts markExistingVisitors). A standby marks none itself, so this tells it the marks in its copy are the main
+     * server's, and a promotion doesn't mark again on less than the main server had. Absent from a main server that
+     * predates visitors' rows. Signed with the rest.
+     */
+    visitorsMarked?: boolean;
     nodeId: string;
     generatedAt?: string;
     signature?: string;

@@ -8,6 +8,7 @@ import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { isSelfAvatarUrl } from '@beanpool/core';
 import { registerGeoFunctions } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
+import { getNodeRole } from '../config/node-role.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -173,6 +174,22 @@ const USED_AS_A_MEMBER = `
     OR m.profile_updated_at IS NOT NULL
     OR EXISTS (SELECT 1 FROM invite_codes c WHERE c.created_by = m.public_key)`;
 
+/** node_config: this node's visitors' rows are marked, by its own pass or by its main server's (markExistingVisitors). */
+const VISITORS_MARKED = 'migration_mark_visitors_v1';
+
+/** Whether this node's visitors' rows are marked (VISITORS_MARKED): the sync export tells a standby so. */
+export function visitorsMarked(): boolean {
+    return !!db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(VISITORS_MARKED);
+}
+
+/**
+ * A standby's import, when its main server's copy says its visitors are marked: the marks are in this copy, so this node
+ * never runs the pass itself, not even once promoted, where it would judge on less than its main server did.
+ */
+export function noteVisitorsMarkedByMainServer(): void {
+    db.prepare("INSERT OR IGNORE INTO node_config (key, value) VALUES (?, 'copied')").run(VISITORS_MARKED);
+}
+
 /**
  * Marks the visitors' rows a node already holds, once: the first boot with members.is_visitor (node_config
  * `migration_mark_visitors_v1`, written in the same transaction, so a crash leaves it to run again). A row is marked
@@ -182,10 +199,23 @@ const USED_AS_A_MEMBER = `
  * record of joining that shows a sign of use is kept, and counted in the log as such. A member wrongly marked would
  * still hold their account, Beans and history, and joining with an invite makes the same row a member's again. Each
  * marked row's updated_at is stamped, so delta sync takes the mark to a standby.
+ *
+ * Never on a standby (NODE_ROLE=backup, 4110268549): its copy lacks some of what the rule reads (profile_updated_at isn't
+ * imported; invite_codes, node_roles and the activity feed don't replicate), and its stamp would outlive its main
+ * server's answer. It writes no marker either: its main server's marks reach it by delta sync, with the main's word
+ * that they are made (noteVisitorsMarkedByMainServer). A standby promoted without that word (its main server predates
+ * the column, so nobody ever marked) runs the pass at its first boot as the main server, or when a take-over finishes
+ * at boot (services/takeover.ts), on what it holds: the members' own columns (inviter, code, photo, bio, contact), the
+ * open door's record and, after a take-over, the node roles it brings; not profile edits, invites made or used, or the
+ * activity feed.
  */
-function markExistingVisitors(): void {
+export function markExistingVisitors(): void {
     try {
-        if (db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_mark_visitors_v1'").get()) return;
+        if (visitorsMarked()) return;
+        if (getNodeRole() === 'backup') {
+            console.log("[DB] Visitors' rows: a standby marks none itself; its main server's marks arrive with its copies");
+            return;
+        }
         db.transaction(() => {
             const marked = db.prepare(`
                 SELECT m.public_key FROM members m WHERE m.is_visitor = 0 AND ${NO_RECORD_OF_JOINING} AND NOT (${USED_AS_A_MEMBER})
@@ -195,7 +225,7 @@ function markExistingVisitors(): void {
             `).get() as { n: number }).n;
             const mark = db.prepare(`UPDATE members SET is_visitor = 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`);
             for (const r of marked) mark.run(r.public_key);
-            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_mark_visitors_v1', '1')").run();
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(VISITORS_MARKED);
             if (marked.length > 0 || kept > 0) {
                 console.log(`[DB] Visitors' rows marked: ${marked.length}${marked.length > 0 ? ` (${marked.slice(0, 20).map(r => r.public_key.slice(0, 12)).join(', ')}${marked.length > 20 ? ', …' : ''})` : ''}; `
                     + `kept as members, with no record of joining but used as a member here: ${kept}`);

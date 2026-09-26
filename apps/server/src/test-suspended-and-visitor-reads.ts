@@ -33,7 +33,8 @@
  *  5. Invites refuse a key a re-key replaced: an invite code and an offline ticket, and neither is used.
  *  6. Replication: the export carries the mark (never the member directory); a standby takes it on a row it never had
  *     and on an older copy, takes a visitor's join (who invited them, the code), and keeps its own mark when a main
- *     server from before the column sends none.
+ *     server from before the column sends none. The main server's copy says its visitors are marked, and a standby
+ *     that copies it writes the one-time marker; a copy from before the column writes none.
  *  7. Only a visitor's own key makes its row a member's: an unsigned redeem, or one signed by another key, naming a
  *     visitor (by a DM, or federation), code or ticket, is refused and writes nothing (no rename, no inviter or code,
  *     no joined_at, no feed line, the code and the ticket unused); the visitor's own signed redeem of the same code and
@@ -557,8 +558,8 @@ async function main() {
             `a visitor who joined on the main server is a member on the standby, with who invited her and the code (is_visitor ${deeBack.is_visitor}, invited_by ${String(deeBack.invited_by).slice(0, 8)})`);
         // A main server from before the column sends no isVisitor: the standby keeps its own mark.
         db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(OLD, yan.pubKeyHex);
-        const { signature: _sig, publicKey: _pub, ...unsigned } = payload;
-        void _sig; void _pub;
+        const { signature: _sig, publicKey: _pub, visitorsMarked: _marked, ...unsigned } = payload;
+        void _sig; void _pub; void _marked;
         const legacy = await se.signSyncPayload({ ...unsigned, members: (payload.members ?? []).filter((m: any) => m.publicKey === yan.pubKeyHex).map((m: any) => {
             const { isVisitor: _dropped, ...rest } = m;
             void _dropped;
@@ -568,6 +569,22 @@ async function main() {
         await se.importRemoteState(legacy);
         se.setNodeRole('primary');
         assert(visitorFlag(yan.pubKeyHex) === 1, `a copy from a main server that predates the column leaves the mark as it is (is_visitor ${visitorFlag(yan.pubKeyHex)})`);
+
+        // A standby marks nobody itself (db.ts markExistingVisitors): its copy lacks some of what the rule reads. The main
+        // server says in every copy that its marks are made, and the standby then writes the one-time marker, so a
+        // promotion doesn't mark again on less evidence. A copy from a main server that predates the column says nothing,
+        // and the standby's pass is left to run if it is promoted.
+        const marker = () => (db.prepare("SELECT value FROM node_config WHERE key = 'migration_mark_visitors_v1'").get() as { value: string } | undefined)?.value ?? null;
+        assert(payload.visitorsMarked === true, `the main server's copy says its visitors are marked (visitorsMarked ${payload.visitorsMarked})`);
+        db.prepare("DELETE FROM node_config WHERE key = 'migration_mark_visitors_v1'").run();
+        se.setNodeRole('backup');
+        await se.importRemoteState(legacy);
+        se.setNodeRole('primary');
+        assert(marker() === null, `a standby that copies a main server from before the column writes no marker, so its own pass runs if it is promoted (${marker()})`);
+        se.setNodeRole('backup');
+        await se.importRemoteState(payload);
+        se.setNodeRole('primary');
+        assert(marker() !== null, `a standby that copies a main server whose visitors are marked writes the marker: a promotion keeps the main server's marks (${marker()})`);
         await p2p.stop();
     }
 

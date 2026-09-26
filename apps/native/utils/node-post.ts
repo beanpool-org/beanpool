@@ -2,10 +2,12 @@
  * A signed POST to the member's own node.
  *
  * Extracted from `keeper-enrolment.ts` rather than copied, because the one interesting line in it
- * is a fix that would not survive being retyped: the headers sign `path`, so a stored anchor of
- * `https://node/` sends the request to `https://node//api/...`, the server verifies over
- * `ctx.path`, sees the doubled slash, and every call 401s with nothing to suggest a URL was the
- * cause. Two copies of this function is two chances to lose that.
+ * is a fix that would not survive being retyped: a stored anchor of `https://node/` would send the
+ * request to `https://node//api/...`. When the headers signed `path` on its own, the server verified
+ * over `ctx.path`, saw the doubled slash, and every call 401'd with nothing to suggest a URL was the
+ * cause. The headers now sign the URL fetched (request binding: its host and its path), so the two
+ * can't disagree, but the slash is still trimmed so the request reaches the route it names. Two copies
+ * of this function is two chances to lose that.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';

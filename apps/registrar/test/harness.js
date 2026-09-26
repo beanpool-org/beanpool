@@ -18,7 +18,7 @@ export const migration = (m) => readFileSync(new URL(`../migrations/${m}`, impor
 // once, just before the first run() whose SQL matches `re` writes, `run` runs to completion — a request landing
 // between another request's last Cloudflare call and its write. `atWrite(n, run)`: the same, just before the n-th run()
 // from now; `writes()` counts the run() calls so far.
-export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql']) {
+export function sqliteD1(migrations = ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql']) {
     const sqlite = new DatabaseSync(':memory:');
     for (const m of migrations) sqlite.exec(migration(m));
     const readHooks = [];

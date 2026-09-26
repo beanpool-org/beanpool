@@ -1386,6 +1386,48 @@ test('migration 0002: incident victims go back to their original key, paused; a 
     } finally { w.restore(); }
 });
 
+// ── Migration 0005 ────────────────────────────────────────────────────────────────────────────────────────────
+// The global node is global.beanpool.org (earth.beanpool.org redirects to it), routed by records made by hand at
+// Cloudflare, outside the registrar, as our own nodes' names are. The live policy table reserves both; a registrar
+// built from these migrations must too. A claim that got through would re-point the hand-made record: ensure()
+// PATCHes a record it finds at the hostname.
+test('migration 0005: a fresh registrar refuses global and earth to any node key, the way it refuses www', async () => {
+    const w = await world();
+    try {
+        const [fresh, holder] = await Promise.all([makeKey(), makeKey()]);
+        await liveName(w, 'riverside', holder);   // a key that already holds a name is refused all the same
+        const calls = w.cf.calls.length;
+        for (const name of ['www', 'global', 'earth']) {
+            assert.deepEqual((await w.available(name)).body, { available: false, reason: 'reserved' }, name);
+            for (const key of [fresh, holder]) {
+                for (const body of [{ name }, { name: name.toUpperCase() }, { name, mode: 'direct', public_ip: '203.0.113.9' }]) {
+                    const r = await w.claim(key, body);
+                    assert.equal(r.status, 403, `${name}: ${JSON.stringify(body)}`);
+                    assert.deepEqual(r.body, { error: 'name reserved' }, name);
+                }
+            }
+            assert.equal(await w.row(name), null, `${name}: no row`);
+            assert.deepEqual(w.events(name), [], name);
+            assert.deepEqual(routing(w, name), { dns: null, tunnels: [] }, `${name}: nothing at Cloudflare`);
+        }
+        assert.equal(w.cf.calls.length, calls, 'no refused claim reached Cloudflare');
+    } finally { w.restore(); }
+});
+
+test('migration 0005 on a database that already reserves the names, as the live one does, changes nothing', async () => {
+    const w = await world({ migrations: ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql'] });
+    try {
+        const policy = () => w.sqlite.prepare('SELECT pattern, tier FROM name_policy ORDER BY pattern').all().map((r) => ({ ...r }));
+        // Put there by hand; one since moved to another tier by the admin, which 0005 must not undo.
+        w.sqlite.exec("INSERT INTO name_policy (pattern, tier) VALUES ('global', 'blocked'), ('earth', 'gated')");
+        const before = policy();
+        w.sqlite.exec(migration('0005_reserve_global.sql'));
+        assert.deepEqual(policy(), before);
+        w.sqlite.exec(migration('0005_reserve_global.sql'));
+        assert.deepEqual(policy(), before, 'a rerun changes nothing either');
+    } finally { w.restore(); }
+});
+
 // ── No name left dark, no tunnel orphaned (registrar PR 1b) ──────────────────────────────────────────────────────
 // PR 1's last confirmation (on f806687c) found orderings that end with a live name whose hostname routes nothing —
 // which nothing re-makes today: a node never heals a name /status calls live — or with a bp-<name> tunnel no row

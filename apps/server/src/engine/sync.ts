@@ -1382,15 +1382,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             if (remote.placeWatches) mergeReplicatedWatches(remote.placeWatches);
             if (remote.directoryCache) mergeReplicatedDirectory(remote.directoryCache);
 
-            // Requests to join (G6, engine/knocks.ts): every knock and every answer, so a server that takes over still
-            // has them. After the members, because an approved row's invite is made again here only by a member this
-            // database has. The main server's tidy-up clears rows (stamped, so they come in here) and deletes them
-            // (the tombstones below); a row this database already has a tombstone for is not written again. A main
-            // server older than this sends none and changes nothing here.
-            if (remote.joinRequests) mergeReplicatedKnocks(remote.joinRequests);
-
-            if (remote.tombstones) {
-                for (const ts of remote.tombstones) {
+            const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
+                for (const ts of tombstones) {
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
                     if (localTs && localTs > ts.deletedAt) {
                         conflictsSkipped++;
@@ -1402,7 +1395,23 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     if (deleted) tombstonesApplied++;
                     if (deleted && ts.tableName === 'group_members') groupChanges++;
                 }
-            }
+            };
+
+            // Requests to join (G6, engine/knocks.ts): every knock and every answer, so a server that takes over still
+            // has them. After the members, because an approved row's invite is made again here only by a member this
+            // database has. The main server's tidy-up clears rows (stamped, so they come in here) and deletes them
+            // (`join_requests` tombstones); a row this database already has a tombstone for is not written again. A
+            // main server older than this sends none and changes nothing here.
+            // This copy's knock tombstones go first. The tidy-up deletes a lapsed knock 60 days after it was made, and
+            // the key's next knock is a new row, so one copy can carry both (one pull, or the first after the standby
+            // was down). Still here, the old row would keep the new one out of the one-open index, and then be deleted
+            // itself: neither. The other tables a function merges above lose nothing this way: place_watches replaces
+            // a watch on the same cell itself, and directory_cache and open_joins have no tombstones.
+            const knockTombstones = (remote.tombstones ?? []).filter((ts) => ts.tableName === 'join_requests');
+            applyTombstones(knockTombstones);
+            if (remote.joinRequests) mergeReplicatedKnocks(remote.joinRequests);
+
+            applyTombstones((remote.tombstones ?? []).filter((ts) => ts.tableName !== 'join_requests'));
         })();
     } finally {
         currentImportOrigin = null;

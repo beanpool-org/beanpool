@@ -742,7 +742,8 @@ CREATE INDEX IF NOT EXISTS idx_place_watches_updated_at ON place_watches(updated
 -- applicant can see: to them a decline stays "no answer yet", and blocks another knock for 30 days from `decided_at`.
 -- At most one pending knock per key (the partial unique index). `ip_hash` feeds the limit of 3 knocks an address a day
 -- (HMAC with the open door's key, engine/open-join.ts), is cleared once a day old, and never leaves this database.
--- Node-wide, at most 30 knocks are made in any 24 hours and 50 are open at once.
+-- Node-wide, at most 30 knocks are made in any 24 hours, and 50 open ones made in the last 3 days (an older open one
+-- stays on the list, uncounted); only the newest 50 open knocks with a photo keep it (the rest keep name and message).
 -- Only members read the rest (the callsign, message and avatar the applicant sent), and only while the knock is open;
 -- nothing here is in a public read. Once it isn't open, the main server's tidy-up clears those (callsign '', message
 -- '', avatar and from_node NULL), and deletes the row once past its windows (30 days after the decline, the approval

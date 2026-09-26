@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "version": 47,
-  "hash": "fffca6599d1919612843df4823884fe2cbe2ac1ceb8e02f63e21b2b3322863c5",
+  "hash": "323140abb30e3c00dba4642592e10e85f1de2306c91cbba52de493c0ab94e778",
   "sections": [
     {
       "id": "about",
@@ -1244,6 +1244,10 @@
             "**Friends:** people you have added as friends.",
             "**Community:** every member of your community."
           ]
+        },
+        {
+          "type": "p",
+          "text": "A member who is suspended sees none of them while the suspension lasts. Nor does anyone who has not joined your community, even someone a member has messaged or sent beans to."
         },
         {
           "type": "p",
@@ -3531,7 +3535,7 @@
         },
         {
           "type": "p",
-          "text": "Polls are not secret. **Your vote is visible to members**: tap **View voters** to see who chose what."
+          "text": "Polls are not secret. **Your vote is visible to members**: tap **View voters** to see who chose what. A member who is suspended sees only how many chose each answer, until the suspension ends."
         },
         {
           "type": "h2",

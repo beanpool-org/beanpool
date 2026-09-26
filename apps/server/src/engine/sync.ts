@@ -2,11 +2,11 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { db, afterTransactionCommit } from '../db/db.js';
+import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainServer } from '../db/db.js';
+import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
-import { getLocalConfig } from '../config/local-config.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { importedArea } from './member-area.js';
@@ -20,30 +20,9 @@ import {
     type Transaction
 } from '@beanpool/engine';
 
-export type NodeRole = 'primary' | 'backup';
-let nodeRole: NodeRole | null = null;
-
-/**
- * local-config.json's `nodeRole` wins over NODE_ROLE in the environment (sealed-keys.md §5.4 step 4). Only a
- * take-over writes it, so a promoted standby needs no .env edit, and a later redeploy with the standby's old .env
- * (NODE_ROLE=backup) cannot demote it. Read once, on first use; setNodeRole replaces it for this process.
- */
-function resolveNodeRole(): NodeRole {
-    try {
-        const configured = getLocalConfig().nodeRole;
-        if (configured === 'primary' || configured === 'backup') return configured;
-    } catch { /* no readable config: the environment decides */ }
-    return process.env.NODE_ROLE === 'backup' ? 'backup' : 'primary';
-}
-
-export function getNodeRole(): NodeRole {
-    return (nodeRole ??= resolveNodeRole());
-}
-
-export function setNodeRole(role: NodeRole): void {
-    nodeRole = role;
-    console.log(`[Topology] NODE_ROLE set to '${role}'`);
-}
+// The node's role lives in config/node-role.ts, a leaf module the database's boot can ask too (db.ts
+// markExistingVisitors); re-exported here, where the rest of the server imports it from.
+export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js';
 
 export function getSyncCursor(peerId: string): string | null {
     const row = db.prepare(`SELECT last_synced_at FROM sync_cursors WHERE peer_id=?`).get(peerId) as { last_synced_at: string } | undefined;
@@ -316,6 +295,9 @@ export async function exportSyncState(
     // The key the `openJoins` rows are hashed with, or they match nothing on a promoted standby (engine/open-join.ts).
     // A node_config row, so here rather than in the table export. Signed with the rest.
     payload.openJoinSalt = readOpenJoinSalt();
+    // Whether this node's visitors' rows are marked (db.ts markExistingVisitors), so a standby, which marks none itself,
+    // knows the marks in its copy are the main server's and a promotion doesn't mark again on less. A node_config row.
+    payload.visitorsMarked = visitorsMarked();
     return signSyncPayload(cb, payload);
 }
 
@@ -502,6 +484,16 @@ function mutedUntil(rm: any): string | null {
     return instantOrNull(rm.moderationMutedUntil);
 }
 
+/**
+ * members.is_visitor, as the main server has it: 1 or 0, so a visitor who joins there is a member here too. Null from a
+ * main server that predates the column, which sends no `isVisitor`: an update then keeps this row's own, and a new row
+ * is a member's (the column's default), as every row was there. Once that server upgrades it marks its visitors
+ * (db.ts markExistingVisitors) and stamps each row, so its next copy carries the mark.
+ */
+function importedVisitor(rm: any): 0 | 1 | null {
+    return typeof rm.isVisitor === 'boolean' ? (rm.isVisitor ? 1 : 0) : null;
+}
+
 function instantOrNull(v: unknown): string | null {
     return typeof v === 'string' && v ? v : null;
 }
@@ -621,11 +613,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     try {
         db.transaction(() => {
             for (const rm of remote.members ?? []) {
-                const existing = db.prepare("SELECT updated_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null } | undefined;
+                const existing = db.prepare("SELECT updated_at, is_visitor FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null } | undefined;
                 if (!existing) {
                     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until,
-                                area_lat, area_lng, area_updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                area_lat, area_lng, area_updated_at, is_visitor)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
@@ -642,14 +634,32 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.archetype || null,
                         rm.updatedAt || rm.joinedAt,
                         mutedUntil(rm),
-                        ...importedArea(rm)
+                        ...importedArea(rm),
+                        importedVisitor(rm) ?? 0
                     );
                     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(rm.publicKey);
                     newMembers++;
                 } else {
                     if (rm.updatedAt && existing.updated_at && existing.updated_at >= rm.updatedAt) {
-                        conflictsSkipped++;
+                        // The same version of the row with another mark: a row an import from before the column copied
+                        // (no mark, the main server's stamp), which the main server never stamps again (4110436371). The
+                        // main server is the only writer of a standby's copy, so its mark is the row's. The touch trigger
+                        // restamps a change of the mark, so the main server's stamp is put back (updated_at fires nothing).
+                        const visitor = importedVisitor(rm);
+                        if (existing.updated_at === rm.updatedAt && visitor !== null && visitor !== existing.is_visitor) {
+                            db.prepare('UPDATE members SET is_visitor = ? WHERE public_key = ?').run(visitor, rm.publicKey);
+                            db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(rm.updatedAt, rm.publicKey);
+                            updatedMembers++;
+                        } else {
+                            conflictsSkipped++;
+                        }
                         continue;
+                    }
+                    // A visitor who joined on the primary: the row takes the join with it (who invited them, the code and
+                    // when), which the update below otherwise leaves as it was. Before the update, which stamps updated_at.
+                    if (existing.is_visitor && importedVisitor(rm) === 0) {
+                        db.prepare("UPDATE members SET invited_by = ?, invite_code = ?, joined_at = ? WHERE public_key = ?")
+                            .run(rm.invitedBy ?? null, rm.inviteCode ?? null, rm.joinedAt, rm.publicKey);
                     }
                     const res = db.prepare(`UPDATE members SET
                         callsign = ?,
@@ -665,6 +675,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         area_lat = ?,
                         area_lng = ?,
                         area_updated_at = ?,
+                        is_visitor = COALESCE(?, is_visitor),
                         updated_at = ?
                         WHERE public_key = ?`).run(
                         rm.callsign,
@@ -678,6 +689,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.archetype || null,
                         mutedUntil(rm),
                         ...importedArea(rm),
+                        importedVisitor(rm),
                         rm.updatedAt || existing.updated_at || new Date().toISOString(),
                         rm.publicKey
                     );
@@ -1361,6 +1373,13 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             if (remote.openJoinSalt !== undefined || remote.openJoins) {
                 writeOpenJoinRecord(remote.openJoinSalt, remote.openJoins);
             }
+
+            // The main server's word that its visitors' rows are marked: its marks are in this copy (each marked row is
+            // stamped, so it travels), and this standby, which marks none itself, takes them as its own (db.ts
+            // markExistingVisitors). Its puller then takes one whole copy, for the rows it copied before it had the
+            // column (db.ts visitorMarksWantWholeCopy). A main server older than that sends nothing, and the pass is
+            // left for a promotion.
+            if (remote.visitorsMarked === true) noteVisitorsMarkedByMainServer();
 
             // The global node's place watches and its mirror of the directory (G5), so a server that takes over has every
             // member's watch and quiet day, and knows which communities the old one had already told them about

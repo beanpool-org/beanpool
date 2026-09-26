@@ -9,8 +9,9 @@ import { recordFunnelEvent } from './funnel.js';
 import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
 import {
     getMember,
-    isNodeMember,
+    mayBringSomeoneIn,
     isInvalidatedKey,
+    isVisitorKey,
     generateShortCode,
     verifyOfflineTicket,
     type Member,
@@ -19,12 +20,14 @@ import {
 } from '@beanpool/engine';
 
 /**
- * Whether a code's maker can still bring someone in: a member of this node (isNodeMember), not just a row. A pruned
- * account keeps its row, and so does the old key of a member being re-keyed (a lost or stolen phone); a code from
- * either would let its holder straight back in as someone new, so neither makes one, and one made before is refused.
+ * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
+ * row. A pruned account keeps its row, and so does the old key of a member being re-keyed (a lost or stolen phone); a
+ * code from either would let its holder straight back in as someone new, so neither makes one, and one made before is
+ * refused. Nor a visitor's row (a key a member messaged or sent Beans to, or a member of another community): it never
+ * joined, and its code would admit anyone, itself included. A code a visitor made before this version is refused too.
  */
 function canInvite(inviterPubkey: string): boolean {
-    return isNodeMember(db, inviterPubkey);
+    return mayBringSomeoneIn(db, inviterPubkey);
 }
 
 const INVITER_GONE = 'The member who made this invite is no longer in this community, so it can’t be used. Ask a member for a fresh one.';
@@ -80,6 +83,7 @@ export function adminGenerateInvite(
 
 const REPLACED_KEY = 'This key was replaced by a new one, so it can’t join with this invite. Use the device or the 12 words that hold the new key.';
 const CLOSED_ACCOUNT = 'This key’s account in this community was closed, so it can’t join again with this invite.';
+const VISITOR_UNSIGNED = 'Joining with this key needs a request signed by it. Join from the app that holds it.';
 
 /**
  * A key whose account here was closed (removed, or deleted by its owner: its row is 'pruned') joins with no invite. It
@@ -94,13 +98,32 @@ function closedAccountRefusal(member: Member): { success: false; error: string }
 }
 
 /**
- * Validates and redeems standard INV- code, registering the member and seeding earned credit.
+ * A visitor's row (a key a member messaged or sent Beans to, or a member of another community) becomes a member's only
+ * on a redeem signed by that same key (`joinerSigned`, routes/community.ts signedByKey). Both apps sign their redeems.
+ * The redeem routes skip the signature middleware and take the key from the body, so without this anyone holding a code
+ * or a ticket could name any visitor's key: rename it (to a member's name, say), put it in the code maker's invite
+ * branch, where pruning that branch would close it for good, and restart its new-member limits (4110268487).
+ *
+ * Nothing is written, and the code or the ticket stays unused. Refused rather than answered "already a member", as
+ * every row was before visitors' rows: that answer would tell the app it joined when the row is still a visitor's (the
+ * membership probe says so), and hand an unsigned caller the visitor's card. A key with no row joins unsigned, as before.
+ */
+function unsignedVisitorRefusal(joinerSigned: boolean): { success: false; error: string } | null {
+    if (joinerSigned) return null;
+    recordFunnelEvent('invite_failed', 'visitor_unsigned');
+    return { success: false, error: VISITOR_UNSIGNED };
+}
+
+/**
+ * Validates and redeems standard INV- code, registering the member and seeding earned credit. `joinerSigned`: the
+ * request carries a fresh signature by `publicKey` itself (unsignedVisitorRefusal).
  */
 export function redeemInvite(
     broadcast: (event: any) => void,
     code: string,
     publicKey: string,
-    callsign: string
+    callsign: string,
+    joinerSigned = false
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
     // Funnel: the top of the join flow. Counted here rather than derived because a
     // rejected code leaves nothing behind to derive from.
@@ -136,15 +159,22 @@ export function redeemInvite(
         return { success: false, error: REPLACED_KEY };
     }
 
-    // Check if identity is ALREADY a member before "already used" check
+    // Check if identity is ALREADY a member before "already used" check. A visitor's row is not: it joins here like
+    // anyone new, and registerMemberInternal makes that row a member's, but only on a redeem its own key signed.
     const existingMember = getMember(db, publicKey);
     if (existingMember) {
         const closed = closedAccountRefusal(existingMember);
         if (closed) return closed;
+    }
+    if (existingMember && !isVisitorKey(db, publicKey)) {
         // Not a failure and not a new join — someone re-entering. Its own event so it
         // neither inflates signups nor drags down the rejection rate.
         recordFunnelEvent('invite_reentry');
         return { success: true, member: existingMember, alreadyMember: true };
+    }
+    if (existingMember) {
+        const unsigned = unsignedVisitorRefusal(joinerSigned);
+        if (unsigned) return unsigned;
     }
 
     // NB: `invite.intended_for` is recorded for the INVITER's records only — it is
@@ -183,13 +213,14 @@ export function redeemInvite(
 }
 
 /**
- * Replay-protected redemption of offline cryptographic tickets.
+ * Replay-protected redemption of offline cryptographic tickets. `joinerSigned` as in redeemInvite.
  */
 export function redeemOfflineTicket(
     broadcast: (event: any) => void,
     ticketB64: string,
     joinerPublicKey: string,
-    callsign: string
+    callsign: string,
+    joinerSigned = false
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
     // Funnel: the offline ticket is the other door into the same flow, so it counts as
     // an attempt too — otherwise a community handing out paper tickets would look like
@@ -210,13 +241,21 @@ export function redeemOfflineTicket(
             return { success: false, error: REPLACED_KEY };
         }
 
-        // Check if identity is ALREADY a member before "already used" check
+        // Check if identity is ALREADY a member before "already used" check. A visitor's row is not, as in redeemInvite.
         const existingMember = getMember(db, joinerPublicKey);
         if (existingMember) {
             const closed = closedAccountRefusal(existingMember);
             if (closed) return closed;
+        }
+        if (existingMember && !isVisitorKey(db, joinerPublicKey)) {
             recordFunnelEvent('invite_reentry');
             return { success: true, member: existingMember, alreadyMember: true };
+        }
+        // A visitor's row, only on a redeem its own key signed (unsignedVisitorRefusal). Before the ticket's code is
+        // written, so a refused ticket stays unused.
+        if (existingMember) {
+            const unsigned = unsignedVisitorRefusal(joinerSigned);
+            if (unsigned) return unsigned;
         }
 
         // As with redeemInvite: `intendedFor` rides along on the ticket for the inviter's

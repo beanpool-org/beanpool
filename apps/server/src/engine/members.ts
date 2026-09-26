@@ -244,6 +244,15 @@ export function registerMemberInternal(
     callsign = callsign.trim();
 
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
+    if (existing?.is_visitor && (inviteCode || invitedBy)) {
+        // A visitor joining for real, through a door (an invite, an offline ticket, the open door): its row becomes a
+        // member's, as a new member's would be, and keeps what was sent to it (messages, Beans). Joined now, so a new
+        // member's limits start now; the name is uniquified against everyone else, as at any join.
+        callsign = uniquifyCallsign(callsign, publicKey);
+        db.prepare("UPDATE members SET is_visitor = 0, invited_by = ?, invite_code = ?, callsign = ?, joined_at = ? WHERE public_key = ?")
+            .run(invitedBy, inviteCode, callsign, new Date().toISOString(), publicKey);
+        return announceJoin(broadcast, publicKey, callsign, invitedBy, 'Visitor joined');
+    }
     if (existing) {
         // Re-registration for a known key. Only touch the callsign if it actually
         // changed, and uniquify it (excluding self) so a re-register never collides.
@@ -271,6 +280,11 @@ export function registerMemberInternal(
     })();
 
     ledger.initializeGenesisAccount(publicKey);
+    return announceJoin(broadcast, publicKey, callsign, invitedBy, 'New member');
+}
+
+/** What every join does once the row is a member's: the member_joined broadcast, the feed's line and the log. */
+function announceJoin(broadcast: (event: any) => void, publicKey: string, callsign: string, invitedBy: string | null, what: string): Member {
     const member = getMember(db, publicKey)!;
     // Every member socket gets this, so it carries the public card, not the row (which holds the invite code the
     // member joined with). The apps only use the event as a doorbell; the server reads member.publicKey.
@@ -280,7 +294,7 @@ export function registerMemberInternal(
     } catch (e) {
         console.warn('[ActivityFeed] Could not record member_joined:', e);
     }
-    console.log(`👤 New member: ${callsign} invited by ${invitedBy ? invitedBy.substring(0, 12) : 'system'}...`);
+    console.log(`👤 ${what}: ${callsign} invited by ${invitedBy ? invitedBy.substring(0, 12) : 'system'}...`);
     return member;
 }
 
@@ -292,7 +306,9 @@ export function registerMember(broadcast: (event: any) => void, publicKey: strin
 }
 
 /**
- * Register visitor identity (for federated protocol).
+ * Register visitor identity: a key a member messages or sends Beans to that has no row here (engine/messaging.ts
+ * createConversation, state-engine transfer), and a member of another community (the federation paths). The row is
+ * marked a visitor's (members.is_visitor).
  */
 export function registerVisitor(publicKey: string, callsign?: string, homeNodeUrl?: string): void {
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
@@ -316,9 +332,11 @@ export function registerVisitor(publicKey: string, callsign?: string, homeNodeUr
         return;
     }
     const generatedCallsign = callsign || `Visitor-${publicKey.substring(0, 8)}`;
+    // A visitor's row (is_visitor = 1, the engine's isVisitorKey): it receives what is sent to it and reads only what a
+    // non-member reads. An existing row, above, is never made one: a member stays a member.
     db.transaction(() => {
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url) 
-                    VALUES (?, ?, ?, ?, ?, ?)`).run(publicKey, generatedCallsign, new Date().toISOString(), null, null, homeNodeUrl || null);
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, is_visitor)
+                    VALUES (?, ?, ?, ?, ?, ?, 1)`).run(publicKey, generatedCallsign, new Date().toISOString(), null, null, homeNodeUrl || null);
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
     })();
     ledger.initializeGenesisAccount(publicKey);

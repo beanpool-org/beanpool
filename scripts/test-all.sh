@@ -356,6 +356,7 @@ run_federation_suites() {
       test-takeover-split-brain
       test-profile-takeover
       test-open-join-failover
+      test-standby-visitor-marks
       test-place-watch-failover
       test-unlock-cancel
       test-cash-also-needed
@@ -394,6 +395,7 @@ run_federation_suites() {
       test-admin-thresholds
       test-manager-backups
       test-push-preferences
+      test-push-token-own-rows
       test-settings
       test-srv20-ledger-reset
       test-harvester
@@ -436,6 +438,7 @@ run_federation_suites() {
       test-moderation-notices-kept
       test-polls
       test-poll-voters-members-only
+      test-suspended-and-visitor-reads
       test-events
       test-enterprise-event-http
       test-event-chat

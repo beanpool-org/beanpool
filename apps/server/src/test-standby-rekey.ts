@@ -34,8 +34,17 @@
  *     under every replaced key: none is left under Bea's first key, nor under Cat's old key and Bea's first.
  * 6c. A re-key's start and its completion stamped in one millisecond reach the standby in two copies: the completion is
  *     taken, with the key that replaced the old one, and the start, again, does not undo it.
+ * 6d. Between two pulls, Dan stops going to an event, he and Fay unfriend each other, a convenor removes him from one group
+ *     and he leaves another (each delete writing its tombstones, under his key), and he is then re-keyed. The standby's
+ *     next pull is a delta, then a whole copy: after each, his RSVPs, friend rows, chat places and group rows are the main
+ *     server's. (The standby applies the tombstones naming a key before it follows that key's re-key, as the main server
+ *     deleted before it re-keyed; the other way round they named a key no row had any more, and the deleted rows came
+ *     back under the new key.)
+ * 6e. Eve's deletes come before her re-key and between it and a second one; the standby's next pull is a whole copy, and
+ *     it holds her rows as the main server does.
  *  7. The main server dies and the standby takes over. Each replaced key is refused by the middleware, and Rex's old key
- *     at every door (knock, open door, invite, ticket); his new key reads his account.
+ *     at every door (knock, open door, invite, ticket); his new key reads his account. A line in the group chat Dan and Eve
+ *     were removed from, and in the event chat they left, goes to neither of them, and neither reads either chat.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-rekey.ts
@@ -251,6 +260,70 @@ async function child(): Promise<void> {
                 db.prepare('DELETE FROM invalidated_keys WHERE public_key = ?').run(oldKey);
             }
         },
+        // A group chat, a second group, an event with its chat, and friends, made as members make them (state-engine.ts).
+        'social-setup': async (a: { owner: string; members: string[]; friend: string }) => {
+            const se = await import('./state-engine.js');
+            const { db } = await import('./db/db.js');
+            // A photo, which posting asks of its author.
+            db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run('data:image/png;base64,iVBORw0KGgo=', a.owner);
+            const kept = se.createGroup({ name: 'Garden', createdBy: a.owner, joinPolicy: 'open' });
+            const left = se.createGroup({ name: 'Choir', createdBy: a.owner, joinPolicy: 'open' });
+            const event = se.createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', a.owner, -28.55, 153.5, [], false, undefined, false,
+                { eventStartAt: new Date(Date.now() + DAY_MS).toISOString(), eventPlaceName: 'The old bowls club', eventPrivateNote: 'Gate code 1234' });
+            if (!event) throw new Error('no event');
+            for (const pk of [...a.members, a.friend]) {
+                se.joinGroup(kept.id, pk);
+                se.joinGroup(left.id, pk);
+                se.rsvpEvent(event.id, pk, 'going');
+            }
+            for (const pk of a.members) {
+                se.addFriend(pk, a.friend);
+                se.addFriend(a.friend, pk);
+            }
+            return { keptGroup: kept.id, leftGroup: left.id, event: event.id };
+        },
+        // Each delete as the member or convenor makes it, each writing its tombstones.
+        'not-going': async (a: { event: string; pk: string }) => {
+            const se = await import('./state-engine.js');
+            return se.rsvpEvent(a.event, a.pk, null).success;
+        },
+        unfriend: async (a: { owner: string; friend: string }) => {
+            const se = await import('./state-engine.js');
+            return se.removeFriend(a.owner, a.friend);
+        },
+        'group-remove': async (a: { group: string; actor: string; target: string }) => {
+            const se = await import('./state-engine.js');
+            return se.removeGroupMember(a.group, a.actor, a.target);
+        },
+        // The rows a delete removes, for each key: friends, RSVPs, chat participants and group memberships.
+        'social-rows': async (a: { keys: string[] }) => {
+            const { db } = await import('./db/db.js');
+            const marks = a.keys.map(() => '?').join(', ');
+            return {
+                friends: db.prepare(`SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey IN (${marks}) OR friend_pubkey IN (${marks})
+                                     ORDER BY owner_pubkey, friend_pubkey`).all(...a.keys, ...a.keys),
+                rsvps: db.prepare(`SELECT post_id, member_pubkey, status FROM event_rsvps WHERE member_pubkey IN (${marks}) ORDER BY post_id, member_pubkey`).all(...a.keys),
+                participants: db.prepare(`SELECT conversation_id, public_key FROM conversation_participants WHERE public_key IN (${marks})
+                                          ORDER BY conversation_id, public_key`).all(...a.keys),
+                groupMembers: db.prepare(`SELECT group_id, member_pubkey, role, status FROM group_members WHERE member_pubkey IN (${marks})
+                                          ORDER BY group_id, member_pubkey`).all(...a.keys),
+            };
+        },
+        // A line in the group's chat and one in the event's, as their author posts them, and who each goes to live; and
+        // whether each key may read either chat.
+        'chat-reach': async (a: { group: string; event: string; author: string; keys: string[] }) => {
+            const { postGroupThreadMessage, canReadGroupThread } = await import('./engine/group-thread.js');
+            const { postEventThreadMessage, canReadEventThread, loadEventForThread } = await import('./engine/event-thread.js');
+            const sent: { threadType?: string; recipients?: string[] }[] = [];
+            const cb = { broadcast: (event: any, recipients?: string[]) => { sent.push({ threadType: event?.threadType, recipients }); }, dispatchPushNotification: () => {} };
+            postGroupThreadMessage(cb as any, a.group, a.author, 'Seedlings on Saturday');
+            postEventThreadMessage(cb as any, a.event, a.author, 'Gloves are in the shed');
+            const event = loadEventForThread(a.event);
+            return {
+                sent,
+                reads: Object.fromEntries(a.keys.map((k) => [k, { group: canReadGroupThread(a.group, k), event: canReadEventThread(event, k) }])),
+            };
+        },
         'make-invite': async (a: { pk: string }) => {
             const { generateInvite } = await import('./state-engine.js');
             return generateInvite(a.pk)?.code ?? null;
@@ -344,6 +417,8 @@ async function main(): Promise<void> {
     const tom = newId('Tom'), tom2 = newId('Tom (new phone)');
     const bea = newId('Bea'), cat = newId('Cat');
     const bea2 = newId('Bea (second phone)'), bea3 = newId('Bea (third phone)'), cat2 = newId('Cat (new phone)');
+    const dan = newId('Dan'), dan2 = newId('Dan (new phone)'), fay = newId('Fay');
+    const eve = newId('Eve'), eve2 = newId('Eve (second phone)'), eve3 = newId('Eve (third phone)');
 
     /** Both servers agree: each key's rows, every balance and their sum. */
     const agree = async (main: NodeProc, standby: NodeProc, who: string, oldId: Id, newId_: Id) => {
@@ -490,6 +565,63 @@ async function main(): Promise<void> {
         assert(tie.again.kept === 1 && tie.twice.kept === 1 && tie.afterAgain?.reason === 'rekeyed' && tie.afterAgain?.rekeyed_to === tie.newKey,
             `the start, again, does not undo it, and the completion again is kept as it is (${JSON.stringify(tie.afterAgain ?? null)})`);
 
+        // ── 6d. A delete, then a re-key, between two pulls: a delta, then a whole copy ──
+        console.log('\n— 6d. Dan stops going, unfriends Fay, is removed from one group and leaves another, and is then re-keyed, between two pulls —');
+        await main.send('members', { members: [['Dan', dan.pk, owner], ['Eve', eve.pk, owner], ['Fay', fay.pk, owner]] });
+        const social = await main.send('social-setup', { owner, members: [dan.pk, eve.pk], friend: fay.pk });
+        const socialSeeded = await standby.send('pull', {});
+        const danBefore = await standby.send('social-rows', { keys: [dan.pk] });
+        require_(socialSeeded.ok && danBefore.rsvps.length === 1 && danBefore.friends.length === 2
+            && danBefore.groupMembers.filter((g: any) => g.status === 'active').length === 2 && danBefore.participants.length === 3,
+            `the standby holds Dan's RSVP, both friend rows, his two groups and the three chats he is in (${JSON.stringify(danBefore)})`);
+        require_(await main.send('not-going', { event: social.event, pk: dan.pk }), 'Dan is no longer going to the working bee');
+        require_(await main.send('unfriend', { owner: dan.pk, friend: fay.pk }) && await main.send('unfriend', { owner: fay.pk, friend: dan.pk }),
+            'Dan and Fay unfriend each other');
+        require_(await main.send('group-remove', { group: social.keptGroup, actor: owner, target: dan.pk }), 'Anna removes Dan from the garden group');
+        require_(await main.send('group-remove', { group: social.leftGroup, actor: dan.pk, target: dan.pk }), 'Dan leaves the choir');
+        require_(await main.send('rekey', { oldPk: dan.pk, newPk: dan2.pk, operator: owner }), 'and Dan is re-keyed');
+        const danKeys = [dan.pk, dan2.pk];
+        const mainDan = await main.send('social-rows', { keys: danKeys });
+        require_(mainDan.friends.length === 0 && mainDan.rsvps.length === 0 && mainDan.participants.length === 0
+            && same(mainDan.groupMembers.map((g: any) => [g.group_id, g.member_pubkey, g.status]), [[social.keptGroup, dan2.pk, 'removed']]),
+            `on the main server Dan has no RSVP, no friend and no chat, and his only group row is the removal, under his new key (${JSON.stringify(mainDan)})`);
+        /** Each table as the main server holds it, on the standby, for these keys. */
+        const socialAgrees = async (who: string, keys: string[], main_: any, when: string) => {
+            const s = await standby.send('social-rows', { keys });
+            assert(same(s.rsvps, main_.rsvps), `${when}, ${who}'s RSVPs on the standby are the main server's (${JSON.stringify(s.rsvps)} / ${JSON.stringify(main_.rsvps)})`);
+            assert(same(s.friends, main_.friends), `${when}, ${who}'s friend rows are (${JSON.stringify(s.friends)} / ${JSON.stringify(main_.friends)})`);
+            assert(same(s.participants, main_.participants),
+                `${when}, the chats ${who} is in are (${JSON.stringify(s.participants)} / ${JSON.stringify(main_.participants)})`);
+            assert(same(s.groupMembers, main_.groupMembers),
+                `${when}, ${who}'s group rows are (${JSON.stringify(s.groupMembers)} / ${JSON.stringify(main_.groupMembers)})`);
+            const [ms, ss] = [await main.send('state', { keys }), await standby.send('state', { keys })];
+            assert(same(ss.keyRows, ms.keyRows), `${when}, every row that names ${who} does (${JSON.stringify(ss.keyRows)} / ${JSON.stringify(ms.keyRows)})`);
+        };
+        const danDelta = await standby.send('pull', {});
+        assert(danDelta.ok === true && danDelta.whole === false, `the standby imports the delta (${JSON.stringify({ ok: danDelta.ok, error: danDelta.error, whole: danDelta.whole })})`);
+        await socialAgrees('Dan', danKeys, mainDan, 'after the delta');
+        const danWhole = await standby.send('pull', { whole: true });
+        assert(danWhole.ok === true && danWhole.whole === true, `the standby then imports a whole copy (${JSON.stringify({ ok: danWhole.ok, error: danWhole.error, whole: danWhole.whole })})`);
+        await socialAgrees('Dan', danKeys, mainDan, 'after the whole copy');
+
+        // ── 6e. Deletes before and between two re-keys, copied whole ──
+        console.log('\n— 6e. Eve stops going and unfriends Fay, is re-keyed, is removed from one group, leaves the other and is unfriended, and is re-keyed again; the standby\'s next pull is a whole copy —');
+        require_(await main.send('not-going', { event: social.event, pk: eve.pk }), 'Eve is no longer going to the working bee');
+        require_(await main.send('unfriend', { owner: eve.pk, friend: fay.pk }), 'Eve unfriends Fay');
+        require_(await main.send('rekey', { oldPk: eve.pk, newPk: eve2.pk, operator: owner }), 'Eve is re-keyed');
+        require_(await main.send('unfriend', { owner: fay.pk, friend: eve2.pk }), 'Fay unfriends Eve, under her new key');
+        require_(await main.send('group-remove', { group: social.keptGroup, actor: owner, target: eve2.pk }), 'Anna removes Eve from the garden group');
+        require_(await main.send('group-remove', { group: social.leftGroup, actor: eve2.pk, target: eve2.pk }), 'Eve leaves the choir');
+        require_(await main.send('rekey', { oldPk: eve2.pk, newPk: eve3.pk, operator: owner }), 'and Eve is re-keyed again');
+        const eveKeys = [eve.pk, eve2.pk, eve3.pk];
+        const mainEve = await main.send('social-rows', { keys: eveKeys });
+        require_(mainEve.friends.length === 0 && mainEve.rsvps.length === 0 && mainEve.participants.length === 0
+            && same(mainEve.groupMembers.map((g: any) => [g.group_id, g.member_pubkey, g.status]), [[social.keptGroup, eve3.pk, 'removed']]),
+            `on the main server Eve has no RSVP, no friend and no chat, and her only group row is the removal, under her last key (${JSON.stringify(mainEve)})`);
+        const eveWhole = await standby.send('pull', { whole: true });
+        assert(eveWhole.ok === true && eveWhole.whole === true, `the standby imports the whole copy (${JSON.stringify({ ok: eveWhole.ok, error: eveWhole.error, whole: eveWhole.whole })})`);
+        await socialAgrees('Eve', eveKeys, mainEve, 'after the whole copy');
+
         // ── 7. The take-over ──
         console.log('\n— 7. the main server dies and the standby takes over —');
         await main.send('reseal');
@@ -524,6 +656,19 @@ async function main(): Promise<void> {
         assert(invite.status === 400 && /replaced by a new one/.test(invite.body?.error ?? ''), `an invite refuses it (${invite.status} ${JSON.stringify(invite.body)})`);
         const ticket = await call(port, null, 'POST', '/api/invite/redeem-offline', { ticketB64: offlineTicket(anna), publicKey: rex.pk, callsign: 'RexAgain' });
         assert(ticket.status === 400 && /replaced by a new one/.test(ticket.body?.error ?? ''), `an offline ticket refuses it (${ticket.status} ${JSON.stringify(ticket.body)})`);
+
+        // What the deletes before a re-key keep from a member who was removed, after a take-over.
+        const gone = [dan, dan2, eve, eve2, eve3];
+        const reach = await standby.send('chat-reach', { group: social.keptGroup, event: social.event, author: anna.pk, keys: [dan2.pk, eve3.pk, fay.pk] });
+        const groupLine = reach.sent.find((s: any) => s.threadType === 'group_thread');
+        const eventLine = reach.sent.find((s: any) => s.threadType === 'event_thread');
+        assert(groupLine?.recipients?.includes(fay.pk) && !gone.some((id) => groupLine.recipients.includes(id.pk)),
+            `a line in the garden group's chat goes to Fay, and to neither Dan nor Eve, whom it removed, under any key (${JSON.stringify(groupLine ?? null)})`);
+        assert(eventLine?.recipients?.includes(fay.pk) && !gone.some((id) => eventLine.recipients.includes(id.pk)),
+            `a line in the working bee's chat goes to Fay, and to neither Dan nor Eve, who are not going (${JSON.stringify(eventLine ?? null)})`);
+        assert(reach.reads[fay.pk]?.group && reach.reads[fay.pk]?.event
+            && [dan2, eve3].every((id) => reach.reads[id.pk]?.group === false && reach.reads[id.pk]?.event === false),
+            `neither Dan nor Eve reads either chat, or the working bee's note; Fay reads both (${JSON.stringify(reach.reads)})`);
     } finally {
         for (const n of nodes) await n.kill();
     }

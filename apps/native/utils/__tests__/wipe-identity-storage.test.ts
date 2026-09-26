@@ -36,6 +36,9 @@ describe('wipeIdentityScopedStorage', () => {
             [`bp_offline_invites_${'ab'.repeat(32)}`]: JSON.stringify([{ code: 'INV-ABC', intendedFor: 'Robin' }]),
             // An unfinished post, kept per community: the next account there would be offered it to finish as its own.
             beanpool_offer_draft: JSON.stringify({ anchorUrl: 'https://test.beanpool.org', postTitle: 'Tomatoes', postPhotos: ['bundled://koala'], postLat: -28.55, postLng: 153.5 }),
+            // Reports this key queued while offline. A node files a report as whoever signs it, so the next account's
+            // retry would file them in its own name.
+            beanpool_pending_abuse_reports: JSON.stringify([{ reporterPubkey: 'ab'.repeat(32), targetPubkey: 'cd'.repeat(32), reason: 'spam', timestamp: 1 }]),
             // A cache about every member, not this one: stays.
             [`bp_tier_${'cd'.repeat(32)}`]: '2',
             some_ui_pref: 'dark',

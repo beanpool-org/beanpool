@@ -6,7 +6,7 @@ import {
     type OwnerWordsCheckResult,
 } from '@beanpool/core';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
-import { CANONICAL_PROFILE_STORE_KEY, KNOCKS_STORE_KEY } from './storage-keys';
+import { CANONICAL_PROFILE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY } from './storage-keys';
 import { Platform } from 'react-native';
 
 const isWeb = Platform.OS === 'web';
@@ -250,6 +250,8 @@ interface WipeableStorage {
  * So does an unfinished post (map.tsx `OFFER_DRAFT_KEY`: its words, photos and map pin). It is kept per
  * community, not per account, so the next account there would be offered it to finish and post as its own
  * (PR #1183 review 4110094960).
+ * And so do the reports this key queued while offline (blocklist.ts). A node files a report as whoever
+ * signs it, whatever reporter the body names, so the next account's retry would file them in its own name.
  *
  * `beanpool_saved_nodes` stays on purpose: it is a list of community addresses, not anything about
  * who the member is.
@@ -263,6 +265,7 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promi
     await storage.removeItem('pending_profile_avatar');
     await storage.removeItem('pending_profile_sync');
     await storage.removeItem('beanpool_offer_draft');
+    await storage.removeItem(PENDING_ABUSE_REPORTS_STORE_KEY);
 
     const allKeys = await storage.getAllKeys();
     const accountKeys = allKeys.filter((k: string) =>

@@ -2,9 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { DeviceEventEmitter } from 'react-native';
 import { reportAbuse } from './db';
+import { PENDING_ABUSE_REPORTS_STORE_KEY } from './storage-keys';
 
 const BLOCKLIST_STORAGE_KEY = 'beanpool_blocked_users';
-const PENDING_REPORTS_KEY = 'beanpool_pending_abuse_reports';
+const PENDING_REPORTS_KEY = PENDING_ABUSE_REPORTS_STORE_KEY;
 export const BLOCKLIST_UPDATED_EVENT = 'beanpool_blocklist_updated';
 
 let cachedBlocklist: string[] | null = null;

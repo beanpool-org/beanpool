@@ -287,10 +287,14 @@ takes over. What such a copy holds opens only with the key and the `sub` togethe
 - **Disconnecting a sign-in deletes its row in `recovery_shares`, not the copies earlier
   recoveries released**, which stay wrapped in `recovery_releases`, nor the ones in snapshots and
   backups. The operator can still open those. The members' guide says so.
-- **A copy deleted after the seal still reaches no standby** (no tombstone for
-  `recovery_shares`), so it stays there, wrapped, and after a take-over it would open again. Its
-  own PR, with `invalidated_keys`. Until then the members' guide (`settings/recovery.md`) and the
-  operator manual's take-over steps say so.
+- **A copy deleted after the seal reaches a standby** (#1197): `deleteAllShares` writes a
+  `recovery_shares` tombstone keyed `<owner>|<generation>`, the standby deletes that member's copies
+  of that generation or older stamped no later than the deletion (a copy re-deposited after it is
+  kept), and every start re-applies the tombstones a standby has recorded
+  (`applyRecordedRecoveryTombstones`). Two limits remain: a standby offline for longer than the
+  tombstone retention (30 days) needs a force-resync, and a member removed by an admin or a vote
+  (`adminPruneUser`) keeps their copies on both servers, so a reinstatement can bring them back
+  (card removed-member-delete).
 - **The operator.** Only a secret the server never sees would lock the operator out: a passkey
   with the PRF extension (design option C). It cannot cover the old Android phones this app is
   for, so it could only ever sit on top, as an opt-in. Marty, 2026-09-26 (D-3 = a): not now;

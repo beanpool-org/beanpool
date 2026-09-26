@@ -108,3 +108,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** `dismissNodeReport` and `removeReportedPulseItem` omitted `credentials: 'same-origin'` from `fetch` options, causing cookie-authenticated moderator sessions to fail with 401 Unauthorized.
 **Learning:** Key-session authenticated endpoints rely on ambient HTTP cookies; omiting `credentials: 'same-origin'` prevents the browser from attaching session cookies.
 **Prevention:** Always include `credentials: 'same-origin'` on same-origin fetch calls for routes supporting cookie or key-session authentication.
+
+## 2026-10-24 - Missing Cookie Credentials Forwarding in Post Deletion Helper
+**Vulnerability:** `deleteNodePost` omitted `credentials: "same-origin"` from `fetch` options, causing cookie-authenticated moderator sessions to fail with 401 Unauthorized when attempting to delete posts.
+**Learning:** Key-session authenticated endpoints rely on ambient HTTP cookies; omitting `credentials: "same-origin"` prevents the browser from attaching session cookies on fetch requests.
+**Prevention:** Always include `credentials: "same-origin"` on fetch calls to admin or moderator endpoints that support cookie authentication.

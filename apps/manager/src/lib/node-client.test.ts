@@ -894,6 +894,7 @@ describe('deleteNodePost', () => {
         expect(init.method).toBe('POST');
         expect(init.headers['X-Admin-Password']).toBe('pwd1');
         expect(init.headers['X-Admin-2FA-Session']).toBe('sess1');
+        expect(init.credentials).toBe('same-origin');
     });
 });
 

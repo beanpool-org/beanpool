@@ -16,7 +16,12 @@
  *      re-deposits (dropOlder + insert), a purge of 200 members' messages and copies, and a standby's force-resync
  *      (every replicated table cleared, as clearReplicatedTables does), with the bytes each writes to the WAL.
  *
- * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/bench-recovery-seal-vacuum.ts [targetMB]
+ * With --standby, instead of 2 and 3: boots it as a STANDBY in a second process, which waits (every copy it holds is in
+ * the form before the seal), then hands it a whole copy of a main server that holds no copy (one that deleted every copy
+ * before the seal): the copies are removed and the VACUUM runs without being recorded. Prints the time of an import's
+ * look with nothing to do, the removal and VACUUM's time, the file sizes and the most disk it took.
+ *
+ * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/bench-recovery-seal-vacuum.ts [targetMB] [--standby]
  */
 
 import crypto from 'node:crypto';
@@ -103,12 +108,31 @@ async function bootChild(): Promise<void> {
         `\nRESULT ${JSON.stringify({ importMs: tImported - t0, initStateEngineMs: t1 - tImported, cleared })}\n`, () => resolve()));
 }
 
-function runBoot(dataDir: string): Promise<{ result: any; peakExtra: number; log: string }> {
+/** The --standby second process: a standby at boot, then a whole copy of a main server that holds no copy. */
+async function standbyChild(): Promise<void> {
+    const { initStateEngine } = await import('./state-engine.js');
+    initStateEngine();
+    const seal = await import('./services/recovery-seal-key.js');
+    const { db } = await import('./db/db.js');
+    const count = () => db.prepare('SELECT COUNT(*) FROM recovery_shares').pluck().get() as number;
+    const clearedNow = () => (db.prepare("SELECT value FROM node_config WHERE key = 'recovery_seal_cleared'").get() as any)?.value ?? null;
+    const rows = count();
+    const tLook = performance.now();
+    seal.clearCopiesDroppedBeforeSeal({ standby: true, wholeCopy: null }); // after a delta: the look, nothing to do
+    const lookMs = performance.now() - tLook;
+    const t0 = performance.now();
+    seal.clearCopiesDroppedBeforeSeal({ standby: true, wholeCopy: [] }); // the whole copy: every copy removed, then the VACUUM
+    const wholeCopyMs = performance.now() - t0;
+    await new Promise<void>(resolve => process.stdout.write(
+        `\nRESULT ${JSON.stringify({ rows, lookMs, wholeCopyMs, left: count(), cleared: clearedNow() })}\n`, () => resolve()));
+}
+
+function runBoot(dataDir: string, role: 'primary' | 'backup' = 'primary', mode = 'boot'): Promise<{ result: any; peakExtra: number; log: string }> {
     const before = freeBytes(dataDir);
     let lowest = before;
     const sampler = setInterval(() => { lowest = Math.min(lowest, freeBytes(dataDir)); }, 25);
     const child = spawn(process.execPath, [...process.execArgv, SCRIPT], {
-        env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, NODE_ROLE: 'primary', BENCH_SEAL_MODE: 'boot' },
+        env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, NODE_ROLE: role, BENCH_SEAL_MODE: mode },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '', err = '';
@@ -180,6 +204,16 @@ async function main(): Promise<void> {
     await fill(dataDir, targetMb);
     console.log(`(built in ${((performance.now() - t0) / 1000).toFixed(1)} s)`);
 
+    if (process.argv.includes('--standby')) {
+        const sb = await runBoot(dataDir, 'backup', 'standby');
+        const r = sb.result;
+        console.log(`\nStandby: ${r.rows} copies in the old form at boot; an import's look with nothing to do ${r.lookMs.toFixed(1)} ms; `
+            + `the whole copy of a main server holding none: removal and VACUUM ${(r.wholeCopyMs / 1000).toFixed(2)} s, ${r.left} copies left, `
+            + `recorded: ${r.cleared === null ? 'no' : r.cleared}; state.db now ${mb(size(dbPath))}; most extra disk taken ${mb(sb.peakExtra)}.`);
+        console.log(sb.log);
+        return;
+    }
+
     const first = await runBoot(dataDir);
     const c = first.result.cleared ? JSON.parse(first.result.cleared) : null;
     console.log(`\nUpgrade boot (key, wrap, VACUUM): initStateEngine ${(first.result.initStateEngineMs / 1000).toFixed(2)} s, `
@@ -197,7 +231,9 @@ async function main(): Promise<void> {
     }
 }
 
-if (MODE === 'boot') {
+if (MODE === 'standby') {
+    standbyChild().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+} else if (MODE === 'boot') {
     bootChild().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
 } else {
     main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

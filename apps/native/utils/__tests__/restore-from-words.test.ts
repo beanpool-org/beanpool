@@ -49,10 +49,17 @@ const INVITE_RECORD = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', an
 /** What stays through any restore: a list of community addresses, and a setting about the phone, not the member. */
 const PHONE_KEPT = { beanpool_saved_nodes: JSON.stringify([{ url: MULLUM, name: 'Mullum' }]), beanpool_light_palette: 'sand' };
 
-/** The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors. */
+/**
+ * The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors, its
+ * profile (photo, bio, contact) with a photo parked for the next sync, and the invite codes it made.
+ */
 function accountStorage(publicKey: string): Record<string, string> {
     return {
         beanpool_guest_nodes: JSON.stringify(['https://byron.beanpool.org']),
+        beanpool_canonical_profile: JSON.stringify({ avatar: 'bundled://koala', bio: 'Grows tomatoes', contactValue: '0400 000 000' }),
+        pending_profile_avatar: 'bundled://koala',
+        pending_profile_sync: 'true',
+        [`bp_offline_invites_${publicKey}`]: JSON.stringify([{ code: 'INV-ABC', intendedFor: 'Robin' }]),
         [KNOCKS_STORE_KEY]: JSON.stringify({
             pubkey: publicKey,
             knocks: [{ url: 'https://near.example', name: 'Near Home', key: 'k1', sentAt: '2026-09-20T00:00:00.000Z' }],

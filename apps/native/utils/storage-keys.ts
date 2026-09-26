@@ -5,3 +5,6 @@
 
 /** The communities this key asked to join (utils/knock.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage). */
 export const KNOCKS_STORE_KEY = 'beanpool_knocks';
+
+/** The member's one profile copy (utils/canonical-profile.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage). */
+export const CANONICAL_PROFILE_STORE_KEY = 'beanpool_canonical_profile';

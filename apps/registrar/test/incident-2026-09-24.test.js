@@ -21,7 +21,7 @@ const toHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16)
 // D1's prepare/bind/first/all/run over node:sqlite (run() reports meta.changes, as D1 does).
 function sqliteD1() {
     const sqlite = new DatabaseSync(':memory:');
-    for (const m of ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql'])
+    for (const m of ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql'])
         sqlite.exec(readFileSync(new URL(`../migrations/${m}`, import.meta.url), 'utf8'));
     const d1 = {
         prepare(sql) {

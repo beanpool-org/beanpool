@@ -5,6 +5,7 @@ import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
 import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
+import { authenticateUser } from '../utils/LocalAuth';
 import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
@@ -1074,6 +1075,10 @@ export default function WelcomeScreen() {
             // Asked again each time: the phone may have stored a key since this door made one (an invite join).
             const key = await joinKeyForThisPhone(globalKey);
             setGlobalKey(key);
+            // The phone's own account (a key this door didn't make): the join carries its recovery copy sealed to this
+            // sign-in, so the phone's lock first, as Account Protection's connect asks it. A check that doesn't pass starts
+            // nothing (PR #1205 review 4112404429).
+            if (!key.createdHere && !(await authenticateUser('Confirm authentication to link a sign-in to your account.'))) return;
             const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity, {
                 // As GitHub recovery does: Android opens GitHub from the button; iOS at once.
                 onGithubPrompt: (prompt) => {
@@ -1539,6 +1544,7 @@ export default function WelcomeScreen() {
                             visible={showSsoSheet}
                             provider={ssoProvider}
                             identity={pendingIdentity}
+                            askPhoneLock={!pendingWordsAreNew}
                             onClose={() => setShowSsoSheet(false)}
                             onEnrolled={(result) => {
                                 setEnrolment(result);

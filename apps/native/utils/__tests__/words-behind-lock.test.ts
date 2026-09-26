@@ -208,6 +208,35 @@ describe('"Replace this phone\'s account?" (welcome.tsx)', () => {
         expect(body).toMatch(/if \(!words \|\| outgoingIdentityRef\.current !== account\) return;/);
         expect(welcome()).toMatch(/useEffect\(\(\) => \{\s*setOutgoingWords\(null\);\s*\}, \[outgoingIdentity\]\);/);
     });
+
+    // As Safety Backup's (PR #1205 review 4112501763): the welcome screen stays mounted, and a `welcome?mode=` link can
+    // take it off this screen and back while the restore still waits, with the outgoing account still set.
+    it('the words go when the screen leaves this step or the welcome screen, so every Show asks the lock again', () => {
+        const s = welcome();
+        const putAway = slice(s, 'const putOutgoingWordsAway = useCallback(() => {', '}, []);');
+        expect(putAway).toContain('outgoingWordsTurnRef.current += 1;');
+        expect(putAway).toContain('setShowOutgoingSeed(false);');
+        expect(putAway).toContain('setOutgoingWords(null);');
+        expect(s).toMatch(/if \(mode !== 'confirmReplace'\) putOutgoingWordsAway\(\);/);
+        expect(s).toMatch(/useFocusEffect\(useCallback\(\(\) => \(\) => \{[^}]*putOutgoingWordsAway\(\);[^}]*\}/);
+
+        const body = show();
+        const turn = body.indexOf('const turn = outgoingWordsTurnRef.current;');
+        const asked = body.indexOf('await readWordsBehindLock(account,');
+        const left = body.indexOf('if (turn !== outgoingWordsTurnRef.current) return;');
+        const shown = body.indexOf('setShowOutgoingSeed(true)');
+        expect(turn).toBeGreaterThan(-1);
+        expect(asked).toBeGreaterThan(turn);
+        expect(left).toBeGreaterThan(asked);
+        expect(shown).toBeGreaterThan(left);
+    });
+
+    it('the welcome screen holds no other stored account\'s words: two reads behind the lock, each put away', () => {
+        const s = welcome();
+        expect(count(s, 'readWordsBehindLock(')).toBe(2);
+        expect(count(s, 'setPendingWords(words)')).toBe(1);
+        expect(count(s, 'setOutgoingWords(words)')).toBe(1);
+    });
 });
 
 describe('every other screen that draws an account\'s words', () => {

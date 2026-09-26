@@ -305,6 +305,40 @@ export default function WelcomeScreen() {
         setOutgoingWords(null);
     }, [outgoingIdentity]);
 
+    /**
+     * A stored account's words, put away when the member leaves the step that shows them or the welcome screen: this
+     * screen stays mounted through the whole wizard, so its state would otherwise stay, and going back to the step
+     * would draw them again, with Copy, for whoever next picked up the phone. The turn moves on, so a check still
+     * answering shows nothing, and the next Show asks the phone's lock again, as Settings does (PR #1205 review
+     * 4112501763).
+     *
+     * Safety Backup's, for a key this join did not make. The member's own new words (a key this join made) stay: they are
+     * read once, with no lock, and nothing would read them again.
+     */
+    const pendingWordsTurnRef = useRef(0);
+    const pendingWordsAreNewRef = useRef(pendingWordsAreNew);
+    pendingWordsAreNewRef.current = pendingWordsAreNew;
+    const putPendingWordsAway = useCallback(() => {
+        pendingWordsTurnRef.current += 1;
+        if (!pendingWordsAreNewRef.current) setPendingWords(null);
+    }, []);
+    /** "Replace this phone's account?"'s: a `welcome?mode=` link can take the screen off that step and back while the restore waits. */
+    const outgoingWordsTurnRef = useRef(0);
+    const putOutgoingWordsAway = useCallback(() => {
+        outgoingWordsTurnRef.current += 1;
+        setShowOutgoingSeed(false);
+        setOutgoingWords(null);
+        setOutgoingSeedCopied(false);
+    }, []);
+    useEffect(() => {
+        if (mode !== 'seedBackup') putPendingWordsAway();
+        if (mode !== 'confirmReplace') putOutgoingWordsAway();
+    }, [mode, putPendingWordsAway, putOutgoingWordsAway]);
+    useFocusEffect(useCallback(() => () => {
+        putPendingWordsAway();
+        putOutgoingWordsAway();
+    }, [putPendingWordsAway, putOutgoingWordsAway]));
+
     // Count step 3 being drawn — once per join, not once per render.
     //
     // The variant is the keeper-count state from the design doc, and in Phase A it is
@@ -1226,11 +1260,14 @@ export default function WelcomeScreen() {
         outgoingLockBusyRef.current = true;
         hapticTick();
         const account = outgoingIdentity;
+        const turn = outgoingWordsTurnRef.current;
         try {
             const outCallsign = account?.callsign?.trim() || 'your current account';
             const words = await readWordsBehindLock(account, `Confirm your security to view ${outCallsign}'s recovery phrase.`);
             // A check that did not pass shows nothing. Nor does one that answers after the screen has moved on.
             if (!words || outgoingIdentityRef.current !== account) return;
+            // Put away while the check was up (the member left the step or the screen): nothing is shown.
+            if (turn !== outgoingWordsTurnRef.current) return;
             setOutgoingWords(words);
             setShowOutgoingSeed(true);
         } finally {
@@ -1274,10 +1311,13 @@ export default function WelcomeScreen() {
         pendingLockBusyRef.current = true;
         hapticTick();
         const account = pendingIdentity;
+        const turn = pendingWordsTurnRef.current;
         try {
             const words = await readWordsBehindLock(account, 'Confirm your security to view your recovery phrase.');
             // A check that did not pass shows nothing. Nor does one that answers after the step has moved on.
             if (!words || pendingIdentityRef.current !== account) return;
+            // Put away while the check was up (the member left the step or the screen): nothing is shown.
+            if (turn !== pendingWordsTurnRef.current) return;
             setPendingWords(words);
         } finally {
             pendingLockBusyRef.current = false;

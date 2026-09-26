@@ -9,6 +9,8 @@
  *   they are the member's own new ones.
  * - A key the phone already had: its words are read only through readWordsBehindLock, when Show passes the lock.
  * - Which is which survives the app being stopped part-way (the wizard's record, `newKey`).
+ * - The phone's own account's words go when the member leaves the step or the screen, so every Show asks the lock again
+ *   (review 4112501763).
  *
  * The screen cannot be rendered here (see vitest.config.ts): its wiring is read from its source.
  */
@@ -130,6 +132,53 @@ describe("welcome.tsx: Safety Backup's words", () => {
     });
 });
 
+/**
+ * PR #1205 review 4112501763. Once the phone's own account's words had passed the lock, they stayed drawn after the member
+ * left the step: the welcome screen stays mounted through the whole wizard, and nothing put them away but a change of
+ * account. How it Works → "← Back to Backup", or in the global flow ← Back → photo → Next, only change the step, so
+ * whoever next picked up the phone got the 12 words and Copy with no lock. Settings puts its words away the same way.
+ */
+describe("welcome.tsx: Safety Backup's words for a key the phone already had go when the member leaves", () => {
+    const putAway = () => slice(welcome(), 'const putPendingWordsAway = useCallback(() => {', '}, []);');
+    const showBehindLock = () => slice(welcome(), 'async function handleShowPendingWords() {', '\n    }\n');
+
+    it('putting them away moves the turn on and takes the words out of state, for a key this join did not make', () => {
+        const body = putAway();
+        expect(body).toContain('pendingWordsTurnRef.current += 1;');
+        expect(body).toContain('if (!pendingWordsAreNewRef.current) setPendingWords(null);');
+        // Read at the moment it runs, not from the render that made the callback.
+        expect(welcome()).toMatch(/const pendingWordsAreNewRef = useRef\(pendingWordsAreNew\);\s*pendingWordsAreNewRef\.current = pendingWordsAreNew;/);
+    });
+
+    it('leaving Safety Backup puts them away: Next to How it Works, the global flow\'s ← Back to the photo, any other step', () => {
+        expect(welcome()).toMatch(/useEffect\(\(\) => \{\s*if \(mode !== 'seedBackup'\) putPendingWordsAway\(\);/);
+    });
+
+    it('leaving the welcome screen puts them away too', () => {
+        expect(welcome()).toMatch(
+            /useFocusEffect\(useCallback\(\(\) => \(\) => \{\s*putPendingWordsAway\(\);\s*putOutgoingWordsAway\(\);\s*\}, \[putPendingWordsAway, putOutgoingWordsAway\]\)\);/,
+        );
+    });
+
+    it('so every Show asks the lock again, and one that answers after the member left shows nothing', () => {
+        const body = showBehindLock();
+        const turn = body.indexOf('const turn = pendingWordsTurnRef.current;');
+        const asked = body.indexOf("await readWordsBehindLock(account, 'Confirm your security to view your recovery phrase.')");
+        const left = body.indexOf('if (turn !== pendingWordsTurnRef.current) return;');
+        const kept = body.indexOf('setPendingWords(words)');
+        expect(turn).toBeGreaterThan(-1);
+        expect(asked).toBeGreaterThan(turn);
+        expect(left).toBeGreaterThan(asked);
+        expect(kept).toBeGreaterThan(left);
+    });
+
+    it("the way back to Safety Backup changes only the step: it draws nothing the lock hasn't just let through", () => {
+        const guideBack = slice(welcome(), "updatePendingOnboarding({ step: 'seedBackup' }).catch(() => {});", '}}');
+        expect(guideBack).toContain("setMode('seedBackup');");
+        expect(guideBack).not.toContain('setPendingWords');
+    });
+});
+
 describe('welcome.tsx: every way into the wizard says whether it made the key', () => {
     it("an invite join: made when the phone had no key, or when the phone's key is one this join made earlier", () => {
         const s = welcome();
@@ -165,3 +214,4 @@ describe('welcome.tsx: every way into the wizard says whether it made the key', 
         expect(count(s, 'setPendingNewKey(')).toBe(3);
     });
 });
+

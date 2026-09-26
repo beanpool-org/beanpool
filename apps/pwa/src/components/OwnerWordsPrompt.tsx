@@ -46,14 +46,14 @@ export function OwnerWordsPrompt({ publicKey, onCheckNow, identity }: {
                 <button
                     type="button"
                     onClick={() => { setShow(false); onCheckNow(); }}
-                    className="flex-grow basis-[120px] min-h-[48px] px-4 py-3 rounded-xl bg-emerald-700 text-white font-bold text-[15px]"
+                    className="flex-grow basis-[120px] min-h-[48px] px-4 py-3 rounded-xl bg-emerald-700 text-white font-bold text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                 >
                     {COPY.checkNow}
                 </button>
                 <button
                     type="button"
                     onClick={() => { setShow(false); rememberLater(publicKey, status); }}
-                    className="flex-grow basis-[120px] min-h-[48px] px-4 py-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-800 dark:text-nature-100 font-semibold text-[15px]"
+                    className="flex-grow basis-[120px] min-h-[48px] px-4 py-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-800 dark:text-nature-100 font-semibold text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
                 >
                     {COPY.later}
                 </button>

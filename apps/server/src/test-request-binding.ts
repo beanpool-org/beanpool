@@ -34,6 +34,8 @@
  *     after the switch, an unconfirmed host is refused.
  * 11. Settings: the address list with its sources and counts, and the old-app count. No key is stored.
  * 12. "Delete my account" signed for A, replayed at B → 421, B's row unchanged; re-signed for b.test it works there.
+ * 13. A nonce is held for as long as its request is fresh: a timestamp from a clock running ahead is fresh past the
+ *     window from its arrival, and the same request is still refused there as a replay.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-request-binding.ts
  */
@@ -108,6 +110,16 @@ async function child(): Promise<void> {
         member: (a: { pk: string }) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(a.pk) as { status: string } | undefined)?.status ?? null,
         transfers: (a: { memo: string }) => (db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE memo = ?').get(a.memo) as { n: number }).n,
         nonceSpent: async (a: { nonce: string }) => (await ms()).requestNonces.isSpent(a.nonce),
+        // The one verifier at chosen moments (a fresh nonce store, so the process's own is untouched): what it answers
+        // for the same request at each, 'ok' or the refusal's status.
+        verifyAt: async (a: { parts: any; at: number[] }) => {
+            const m = await ms();
+            const nonces = new m.NonceStore(m.SIGNATURE_FRESHNESS_MS);
+            return a.at.map((now) => {
+                const v = m.verifyMemberSignature(a.parts, { consumeNonce: true, nonces, now });
+                return v.ok ? 'ok' : v.status;
+            });
+        },
         switchClock: async (a: { at: number | null }) => {
             (await ms()).setSignatureSwitchClockForTests(a.at === null ? null : () => a.at as number);
             return true;
@@ -654,6 +666,32 @@ async function main(): Promise<void> {
             const reSigned = await sendTo(B, 'POST', await bound(mia, 'POST', 'https://b.test/api/member/purge', {},
                 { timestamp: Number(req.headers['X-Timestamp']), nonce: req.nonce }));
             assert(reSigned.status === 200 && (await B.send('member', { pk: mia.pk })) !== 'active', `re-signed for b.test (same nonce) it is accepted at B (${show(reSigned)})`);
+        });
+
+        // ── 13. A nonce is held for as long as its request is fresh ──
+        console.log('\n— 13. a phone clock running ahead: the same request once, never twice —');
+        await section('13', async () => {
+            const W = 5 * 60_000;
+            const partsOf = (r: Awaited<ReturnType<typeof bound>>) => ({
+                pubKeyHex: r.headers['X-Public-Key'], signature: r.headers['X-Signature'], timestamp: r.headers['X-Timestamp'],
+                nonce: r.headers['X-Nonce'], method: 'POST', path: r.path, body: r.body ?? '', signedFor: r.headers[core.SIGNED_FOR_HEADER],
+            });
+            // Signed on a phone 4½ minutes ahead: fresh from its arrival until 9½ minutes after it.
+            const arrived = Date.now();
+            const ahead = arrived + 4.5 * 60_000;
+            const skewed = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount: 1, memo: 'skewed' }, { timestamp: ahead }));
+            const [first, afterArrivalWindow, lastFresh, stale] = await A.send('verifyAt', {
+                parts: skewed, at: [arrived, arrived + W + 1_000, ahead + W, ahead + W + 1],
+            });
+            assert(first === 'ok', `accepted when it arrives (${first})`);
+            assert(afterArrivalWindow === 403, `sent again 5 minutes after it arrived, while it is still fresh → refused as a replay (${afterArrivalWindow})`);
+            assert(lastFresh === 403, `and in the last fresh millisecond (${lastFresh})`);
+            assert(stale === 401, `after that it is stale (${stale})`);
+            // A clock that agrees: the last fresh millisecond is exactly 5 minutes after it.
+            const t = Date.now();
+            const onTime = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount: 1, memo: 'on time' }, { timestamp: t }));
+            const [once, edge] = await A.send('verifyAt', { parts: onTime, at: [t, t + W] });
+            assert(once === 'ok' && edge === 403, `a request on time: accepted once, refused as a replay at the edge of its window (${once}, ${edge})`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

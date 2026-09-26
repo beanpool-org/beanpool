@@ -85,18 +85,28 @@ export const WRONG_COMMUNITY_ERROR = 'This was signed for another community, so 
 /** A signed request is valid for this long around its timestamp (X-1). */
 export const SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
 
-/** Single-use nonces within a freshness window. `consume` is atomic (check-and-set): concurrent duplicates can't both pass. */
+/**
+ * Single-use nonces within a freshness window (`windowMs`, the one its requests are checked with). `consume` is atomic
+ * (check-and-set): concurrent duplicates can't both pass.
+ */
 export class NonceStore {
     private readonly seen = new Map<string, number>();
     constructor(private readonly windowMs: number) {}
 
-    consume(nonce: string, now: number): boolean {
+    /**
+     * Spend `nonce`, or false when it is already spent. It stays spent for as long as a request carrying it is fresh,
+     * which is counted from the request's timestamp (`signedAt`), not from its arrival: a phone whose clock runs ahead
+     * sends a timestamp that is still fresh up to the window after it, and a nonce held only for the window from its
+     * arrival could be replayed once that had passed. Freshness refuses only beyond the window, so the last fresh
+     * millisecond is held too.
+     */
+    consume(nonce: string, now: number, signedAt = now): boolean {
         if (this.seen.size > 10_000) {
             for (const [n, exp] of this.seen) if (exp <= now) this.seen.delete(n);
         }
         const exp = this.seen.get(nonce);
         if (exp !== undefined && exp > now) return false;
-        this.seen.set(nonce, now + this.windowMs);
+        this.seen.set(nonce, (Number.isFinite(signedAt) ? Math.max(now, signedAt) : now) + this.windowMs + 1);
         return true;
     }
 
@@ -214,7 +224,7 @@ export function verifyMemberSignature(parts: SignedRequestParts, opts: VerifyOpt
     const refusal = audience !== null ? audienceRefusal(audience, signer) : unboundRefusal();
     if (refusal) return refusal;
 
-    if (opts.consumeNonce && !(opts.nonces ?? requestNonces).consume(parts.nonce, now)) {
+    if (opts.consumeNonce && !(opts.nonces ?? requestNonces).consume(parts.nonce, now, ts)) {
         return { ok: false, status: 403, error: 'Replay detected: nonce already used' };
     }
     countAcceptedSignature(signer, audience);

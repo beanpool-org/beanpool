@@ -782,18 +782,24 @@ const REPLACED_KEY_REFUSAL = 'This key was replaced by a new one, so this commun
  * Not refused: a key with no member row (a stranger, a knock, a join; each route allows it what it did) and any other
  * status, 'suspended' and 'disabled' included (suspension is a separate rule, left to the routes).
  *
- * No flow needs a closed account's key to sign, so there is no exception:
+ * No other flow needs a closed account's key to sign:
  * - the way back from a removal is a `reinstate_member` vote, which live members propose and cast and the engine
  *   carries out (decisions-engine.ts), and after which this key signs again;
  * - the key can't come back by any door: the join doors and knocks refused it already, and invite redemption (which
  *   this middleware never sees) refuses it itself;
- * - its push tokens and place watches went with the prune or the delete, and a self-delete it asks for again had
- *   nothing left to do ("Account is already pruned").
+ * - its push tokens and place watches went with the prune or the delete.
+ * **The one exception: `POST /api/member/purge` again** (CLOSED_ACCOUNT_PURGE_AGAIN, #1177's 3c, 4109841495). Both apps
+ * wipe the phone only after a 2xx from it (native purgeAccountOnNode, the PWA's SettingsPage), so a retry after a lost
+ * reply, or a member an admin already removed tapping Delete account, must hear what purgeMemberSelf says of a pruned
+ * row, not a refusal that leaves the key and its local data on the phone. It changes nothing: the middleware answers it
+ * itself, no handler runs and no activity is stamped. A replaced key is still refused first (REPLACED_KEY_REFUSAL).
  * The routes this middleware never sees keep their own checks: the admin surface (a session follows node_roles on
  * every request, and a prune deletes the role), device pairing (a relay that knows no member), invite redemption. A
  * flow that ever must take a closed account's key is named here, with its reason.
  */
 const CLOSED_ACCOUNT_REFUSAL = 'This key’s account in this community was closed, so the community no longer accepts it.';
+/** purgeMemberSelf's own answer for a row already 'pruned' (state-engine.ts), given by the middleware to a closed key. */
+const CLOSED_ACCOUNT_PURGE_AGAIN = { ok: true, message: 'Account is already pruned' } as const;
 
 // The administrative rate limiter's buckets (its middleware is in startHttpsServer): each client's requests in the last minute.
 const adminRateLimits = new Map<string, number[]>();
@@ -1241,6 +1247,12 @@ export async function startHttpsServer(port: number): Promise<number> {
             }
             // Nor does a key whose account here was closed, removed or deleted by its owner (CLOSED_ACCOUNT_REFUSAL).
             if (isClosedAccountKey(pubKeyHex)) {
+                // The one exception: asking again to delete it (CLOSED_ACCOUNT_PURGE_AGAIN). Answered here, so no handler
+                // runs and no activity is stamped on the closed row.
+                if (ctx.method === 'POST' && ctx.path.replace(/\/+$/, '').toLowerCase() === '/api/member/purge') {
+                    ctx.body = CLOSED_ACCOUNT_PURGE_AGAIN;
+                    return;
+                }
                 ctx.status = 403;
                 ctx.body = { error: CLOSED_ACCOUNT_REFUSAL, code: 'account_closed' };
                 return;

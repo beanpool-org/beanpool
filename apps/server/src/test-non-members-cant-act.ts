@@ -48,7 +48,10 @@
  *     refused 403 account_closed before any handler runs, nothing changes and nobody is pushed; so are its signed reads,
  *     gated or public; unsigned, a read is answered as before. Invite redemption, outside the middleware, refuses the
  *     closed key itself and uses no code. A key with no member row still knocks, reads its knock, probes its
- *     membership and gets the door's own answer. No flow needs a closed account's key.
+ *     membership and gets the door's own answer. The one exception (4109841495): asking again to delete the account
+ *     (a retry after a lost reply, or a member an admin removed tapping Delete account) hears purgeMemberSelf's own
+ *     "Account is already pruned" with a 200, from the middleware itself, and nothing changes, in any table: both
+ *     apps wipe the phone only after a 2xx. A replaced key is still refused it (section 6).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-non-members-cant-act.ts
  */
@@ -632,7 +635,7 @@ async function main(): Promise<void> {
         };
     };
     /** Every write in `swept`, signed by `key`: the ones not answered as `isRefusal` says, and whether any table changed or anyone was pushed. */
-    const sweepAs = async (key: Id, isRefusal: (r: { status: number; body: any }) => boolean, ownPost?: string, own?: Record<string, unknown>) => {
+    const sweepAs = async (key: Id, isRefusal: (r: { status: number; body: any }, route: string) => boolean, ownPost?: string, own?: Record<string, unknown>) => {
         // Each refusal is charged to the caller's address as an unsigned request would be (gateway-rate-limit.ts
         // gatewaySettle, as for a bad signature). This many from one address would trip it, so each pass starts clear.
         resetGatewayRateLimit();
@@ -642,7 +645,7 @@ async function main(): Promise<void> {
         for (const route of swept) {
             const [method, path] = route.split(' ') as ['POST' | 'PUT' | 'PATCH' | 'DELETE', string];
             const r = await signedFetch(method, materialise(path, ownPost), key, bodyFor(key, own));
-            if (!isRefusal(r)) answered.push(`${route} → ${r.status} ${JSON.stringify(r.body ?? null).slice(0, 90)}`);
+            if (!isRefusal(r, route)) answered.push(`${route} → ${r.status} ${JSON.stringify(r.body ?? null).slice(0, 90)}`);
         }
         await settle();
         return { answered, changed: changedTables(before, snapshot()), pushed: pushes.length - pushed };
@@ -862,12 +865,28 @@ async function main(): Promise<void> {
             }
         }
 
-        // The sweep: every write the middleware sees, signed by each closed key, with bodies that reach its own paused
-        // posts and other people's things, is refused before any handler runs. No flow needs a closed account's key.
+        // The one exception (4109841495): asking again to delete the account is answered as purgeMemberSelf answers a
+        // pruned row, with a 200, so the app wipes the phone; the middleware answers it itself and nothing changes.
+        const PURGE = 'POST /api/member/purge';
+        const isPurgeAgain = (r: { status: number; body: any }) =>
+            r.status === 200 && r.body?.ok === true && r.body?.message === 'Account is already pruned';
+        assert(swept.includes(PURGE), `the sweep includes ${PURGE}`);
         for (const [how, s] of closed) {
-            const { answered, changed, pushed } = await sweepAs(s.m, isClosed, s.pausedEvent.id,
+            resetGatewayRateLimit();
+            const before = snapshot();
+            const again = await signedFetch('POST', '/api/member/purge', s.m, { action: 'purge_account' });
+            assert(isPurgeAgain(again), `${how}: deleting the account again is answered 200 "Account is already pruned" (got ${again.status} ${JSON.stringify(again.body)})`);
+            const changed = changedTables(before, snapshot());
+            assert(changed.length === 0, `${how}: and nothing changed, in any table, activity included${changed.length ? ` (changed: ${changed.join(', ')})` : ''}`);
+        }
+
+        // The sweep: every other write the middleware sees, signed by each closed key, with bodies that reach its own
+        // paused posts and other people's things, is refused before any handler runs.
+        const closedOrPurgeAgain = (r: { status: number; body: any }, route: string) => route === PURGE ? isPurgeAgain(r) : isClosed(r);
+        for (const [how, s] of closed) {
+            const { answered, changed, pushed } = await sweepAs(s.m, closedOrPurgeAgain, s.pausedEvent.id,
                 { id: s.pausedEvent.id, postId: s.pausedOffer.id });
-            assert(answered.length === 0, `${how}: every one of the ${swept.length} writes is refused 403 account_closed, in the middleware's words`
+            assert(answered.length === 0, `${how}: every one of the ${swept.length} writes is refused 403 account_closed, in the middleware's words (deleting again: 200, a no-op)`
                 + `${answered.length ? ` — ${answered.length} were not: ${answered.slice(0, 6).join(' | ')}` : ''}`);
             assert(changed.length === 0 && pushed === 0,
                 `${how}: and nothing changed, in any table, and nobody was pushed${changed.length ? ` (changed: ${changed.join(', ')})` : ''} (${pushed} pushes)`);

@@ -348,8 +348,9 @@ export function connectToAnchor(url?: string): void {
             }
             // WS connect auth (SRV-4): a member-signed socket gets the full feed; an
             // unsigned one gets only public doorbells (and is refused under ENFORCE_WS_AUTH=true).
+            // Signed for the host this socket opens to, so the token is good only there.
             try {
-                const signed = await buildSignedWsParams('/ws');
+                const signed = await buildSignedWsParams(baseWsUrl);
                 if (signed) params.push(signed);
             } catch { /* unsigned fallback */ }
             if (generation !== connectGeneration) return;

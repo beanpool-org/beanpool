@@ -10,7 +10,6 @@
 
 import { WORDLIST } from './bip39-wordlist';
 import { toEd25519Pkcs8 } from '@beanpool/core';
-import { hexToBytes } from '@noble/hashes/utils.js';
 
 /**
  * Generate a new 12-word mnemonic from cryptographically secure random entropy.
@@ -65,8 +64,8 @@ export async function mnemonicToKeypair(words: string[]): Promise<{
     const hash1 = await crypto.subtle.digest('SHA-256', phraseBytes) as ArrayBuffer;
     const seed = new Uint8Array(await crypto.subtle.digest('SHA-256', hash1) as ArrayBuffer);
 
-    // Wrap the seed for WebCrypto. The ASN.1 prefix lives in @beanpool/core so this file,
-    // signWithPrivateKey below, and the native client cannot disagree about it.
+    // Wrap the seed for WebCrypto. The ASN.1 prefix lives in @beanpool/core so this file
+    // and the native client cannot disagree about it.
     const pkcs8 = toEd25519Pkcs8(seed);
 
     // Import as Ed25519 private key
@@ -157,35 +156,4 @@ function base64urlToBytes(b64url: string): Uint8Array {
         bytes[i] = binary.charCodeAt(i);
     }
     return bytes;
-}
-
-export function bytesToBase64(bytes: Uint8Array): string {
-    let binary = '';
-    for (const b of bytes) {
-        binary += String.fromCharCode(b);
-    }
-    return btoa(binary);
-}
-
-/**
- * Sign a string payload using an Ed25519 PKCS8 private key hex.
- * Returns the Base64 representation of the cryptographic signature.
- */
-export async function signWithPrivateKey(privateKeyHex: string, payloadString: string): Promise<string> {
-    // Identities imported from a native device carry the raw 32-byte seed; WebCrypto needs
-    // it PKCS8-wrapped. Accepts either form — see @beanpool/core/ed25519-key.
-    const pkcs8Bytes = toEd25519Pkcs8(hexToBytes(privateKeyHex));
-
-    const privateKey = await crypto.subtle.importKey(
-        'pkcs8',
-        pkcs8Bytes as unknown as BufferSource,
-        { name: 'Ed25519' } as any,
-        false,
-        ['sign']
-    );
-
-    const payloadBytes = new TextEncoder().encode(payloadString);
-    const signatureRaw = await crypto.subtle.sign('Ed25519', privateKey, payloadBytes);
-    
-    return bytesToBase64(new Uint8Array(signatureRaw));
 }

@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { generateInvite, getMyInvites, getInviteTree, type InviteCode } from '../lib/api';
+import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, type InviteCode } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -108,30 +108,11 @@ export function InvitePage({ identity }: Props) {
                 }
             } catch { /* node unreachable — offline fallback below */ }
 
-            const payloadObj = {
-                i: identity.publicKey,
-                t: Date.now(),
-                f: intendedFor.trim() || undefined
-            };
-            const payloadStr = JSON.stringify(payloadObj);
-            
-            // Generate Ed25519 signature
-            // Temporarily importing here to avoid root refactor until verified
-            const { signWithPrivateKey } = await import('../lib/mnemonic');
-            const signature = await signWithPrivateKey(identity.privateKey, payloadStr);
-            
-            // Encode safely for URL insertion
-            const ticketObj = { p: payloadStr, s: signature };
-            // UTF-8 safe base64 encoding
-            const bytes = new TextEncoder().encode(JSON.stringify(ticketObj));
-            let binary = '';
-            for (const b of bytes) binary += String.fromCharCode(b);
-            const ticketB64Standard = btoa(binary);
-            const ticketB64UrlSafe = ticketB64Standard.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-            
-            // Prefix to easily identify offline tickets in UI vs old DB 6-char hashes
-            const code = `BP-${ticketB64UrlSafe}`;
-            
+            // A self-signed ticket for this community only (core's format 2 names its host), with the
+            // `BP-` that tells it apart from an invite code.
+            const forWhom = intendedFor.trim() || undefined;
+            const code = await buildOfflineInviteCode(identity.publicKey, identity.privateKey, forWhom);
+
             setNewCode(code);
             setIntendedFor('');
             setShowQR(true);
@@ -143,7 +124,7 @@ export function InvitePage({ identity }: Props) {
                 createdAt: new Date().toISOString(),
                 usedBy: null,
                 usedAt: null,
-                intendedFor: payloadObj.f
+                intendedFor: forWhom
             };
 
             // Write to local IndexedDB/localStorage persist to survive reload

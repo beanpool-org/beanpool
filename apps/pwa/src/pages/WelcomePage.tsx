@@ -701,6 +701,7 @@ export function WelcomePage({ onComplete }: Props) {
 
             // Redeem invite immediately so user is registered on node right away. Signed with the key it names, which
             // is not this browser's identity yet.
+            let joined = identity;
             try {
                 const { redeemInvite, redeemOfflineTicket } = await import('../lib/api');
                 if (trimmedCode.length > 20 && trimmedCode.startsWith('BP-')) {
@@ -715,26 +716,33 @@ export function WelcomePage({ onComplete }: Props) {
                 // before it looks at the code, so that one means another key used it, and this key is not a member.
                 if (!redeemErr?.message?.includes('already a member')) {
                     const status = redeemErr?.status;
-                    if (status === 400) {
-                        // The redeem routes' refusal, given before any member is written: this send made no member.
-                        // Unless an earlier send with this key is unsettled, it goes from disk. It stays in memory for
-                        // the next try either way.
-                        await settleRefusedInviteSend(identity.publicKey, sentAt)
-                            .catch((e) => console.warn('[Welcome] a refused invite key not let go:', e));
+                    // The redeem routes' refusal. A 400 is not taken on its word as "this send made no member": an older
+                    // node answered a ticket's fault after registration with one (engine/invites.ts, 4112075324). The node
+                    // is asked, signed by this key. The 400 came after its handler finished, so the answer is final for
+                    // this send: a member goes on as a yes does; not a member lets the kept key go (unless an earlier send
+                    // with it is unsettled); no answer keeps it, as a lost answer's is. In memory for the next try either way.
+                    const probe = status === 400 ? await probeMembership(identity) : null;
+                    if (probe?.kind === 'member') {
+                        joined = { ...identity, callsign: probe.callsign || identity.callsign };
+                    } else {
+                        if (probe?.kind === 'not_member') {
+                            await settleRefusedInviteSend(probe.answer, sentAt)
+                                .catch((e) => console.warn('[Welcome] a refused invite key not let go:', e));
+                        }
+                        setError(typeof status === 'number' && status < 500 && redeemErr.message
+                            ? redeemErr.message
+                            : "Can't reach the community right now. Try again in a minute.");
+                        setLoading(false);
+                        return;
                     }
-                    setError(typeof status === 'number' && status < 500 && redeemErr.message
-                        ? redeemErr.message
-                        : "Can't reach the community right now. Try again in a minute.");
-                    setLoading(false);
-                    return;
                 }
             }
             taken = true;
             // The node has this member: now the key is saved, through the guarded write, and its invite-sent record
             // goes in the same transaction.
-            await completeInviteSent(identity, sentJoinGuard());
+            await completeInviteSent(joined, sentJoinGuard());
             setPendingInviteCode(trimmedCode);
-            enterAsInvited(identity);
+            enterAsInvited(joined);
             setLoading(false);
         } catch (err) {
             setLoading(false);

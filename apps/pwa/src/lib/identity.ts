@@ -677,7 +677,8 @@ export const INVITE_SEND_CAN_LAND_MS = 15 * 60 * 1000;
  * too.
  *
  * The record goes only once the node has settled the key: it is saved as this browser's identity (completeInviteSent);
- * the node refused it with no earlier send left that may land (settleRefusedInviteSend); or the node said it is not a
+ * the node refused it and then said it is not a member, with no earlier send left that may land
+ * (settleRefusedInviteSend); or the node said it is not a
  * member once no send with it can land (releaseInviteSent). wipeIdentity, the member's own "delete everything", takes
  * it too. Nothing else writes another key over it (InviteSentHeldError).
  */
@@ -743,15 +744,19 @@ export async function markInviteSent(identity: BeanPoolIdentity, inviteHash: str
 }
 
 /**
- * The node definitely refused the send made at `sentAt` with this key: the redeem route's 400, which it gives before
- * writing any member. If no earlier send with the key is unsettled, the node never took it, and the record goes. If one
- * is, the record stays for that one, on its time. A record sent again since (another tab) is left as it is. Returns
- * what is stored afterwards.
+ * The node refused the send made at `sentAt` with this key (the redeem route's 400), and then said, asked with the key
+ * after that answer came (`notMember`, web-join.ts probeMembership), that it is not a member. A 400 alone is not enough:
+ * an older node answered a ticket's fault AFTER registering the member with one (engine/invites.ts, 4112075324). The
+ * 400 came once the node's handler had finished, so "not a member" after it is final for that send. If no earlier send
+ * with the key is unsettled, the node never took it, and the record goes. If one is, the record stays for that one, on
+ * its time. A record sent again since (another tab), or a probe asked before the send, leaves it as it is. Returns what
+ * is stored afterwards.
  */
-export async function settleRefusedInviteSend(publicKey: string, sentAt: number): Promise<InviteSent | null> {
+export async function settleRefusedInviteSend(notMember: NodeSaidNotMember, sentAt: number): Promise<InviteSent | null> {
     return withStoredSlots<InviteSent | null>(({ inviteSent }) => {
         const stored = asInviteSent(inviteSent);
-        if (!stored || stored.identity.publicKey !== publicKey || stored.sentAt !== sentAt) return { result: stored };
+        if (!stored || stored.identity.publicKey !== notMember.publicKey || stored.sentAt !== sentAt) return { result: stored };
+        if (!(notMember.askedAt >= sentAt)) return { result: stored };
         if (stored.earlierSentAt === undefined) return { inviteSent: 'delete', result: null };
         const next: InviteSent = { ...stored, sentAt: stored.earlierSentAt };
         delete next.earlierSentAt;

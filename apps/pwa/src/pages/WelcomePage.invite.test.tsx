@@ -68,6 +68,8 @@ describe('an invite join saves its key only once the node has taken the invite (
         let n = 0;
         const node = stubNode(LOCAL, {
             '/api/invite/redeem': () => (++n === 1 ? json(400, { error: 'Invalid invite code' }) : json(200, { success: true, member: {} })),
+            // Asked after the 400, signed by the key, before the kept key goes (4112075324).
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
         await submitInvite();
@@ -360,11 +362,16 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
         await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
         expect(await loadIdentity()).toBeNull();
         expect(peekInviteSent()).toBeUndefined();
+        // The 400 alone didn't let the key go: the node was asked once, signed by the key, and said not a member (4112075324).
+        const probes = () => node.calls.filter((c) => c.path.startsWith('/api/community/membership/'));
+        expect(probes()).toHaveLength(1);
+        expect(probes()[0].headers['X-Public-Key']).toBe(node.redeems()[0].body.publicKey);
 
         reopen();
         await screen.findByText(/Join with Invite Code/);
         expect(screen.queryByRole('heading', { name: 'Finish joining' })).toBeNull();
-        expect(node.calls.filter((c) => c.path.startsWith('/api/community/membership/'))).toHaveLength(0);
+        // Nothing kept, so the reload asks the node nothing.
+        expect(probes()).toHaveLength(1);
         expect(await loadIdentity()).toBeNull();
     });
 
@@ -499,6 +506,113 @@ describe('a key sent with an invite survives a reload (deciding pass 4111943146)
         await screen.findByText(/Join with Invite Code/);
         await waitFor(() => expect(peekInviteSent()).toBeUndefined());
         expect(node.probes()).toEqual([key]);
+        expect(await loadIdentity()).toBeNull();
+    });
+});
+
+/** On from the photo step: the 12 words shown are `saved`'s, in order. */
+async function expectWordsOf(saved: BeanPoolIdentity) {
+    fireEvent.click(screen.getByTitle('Green Bean'));
+    fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+    const words = await screen.findByTestId('backup-words');
+    expect(Array.from(words.children).map((c) => c.textContent)).toEqual(saved.mnemonic!.map((w, i) => `${i + 1}. ${w}`));
+}
+
+/*
+ * Confirmation round 1 of the fix, 4112075324: a redeem's 400 lets the kept key go only once the node, asked with that
+ * key, says it is not a member. An older node answered a ticket's fault after registering the member with that 400.
+ */
+describe("a redeem's 400 lets the kept key go only once the node says it is not a member (4112075324)", () => {
+    // An offline ticket as a QR carries it (BP- and the ticket): the form sends it to /api/invite/redeem-offline as it is.
+    const TICKET = `BP-${btoa(JSON.stringify({ p: '{"i":"ab","t":1}', s: 'c2lnbmF0dXJl' }))}`;
+
+    /**
+     * The node as it was before engine/invites.ts narrowed its catch: it writes the member for a ticket, then something
+     * after the write throws, and the catch-all answers 400. `probeDown`: the membership probe gets no answer.
+     */
+    function nodeRegisteringThen400() {
+        const state = { members: new Map<string, string>(), probeDown: false };
+        const node = stubNode(LOCAL, {
+            '/api/invite/redeem-offline': (body) => {
+                state.members.set(body.publicKey, body.callsign);
+                return json(400, { error: 'Malformed or broken offline ticket payload' });
+            },
+            '/api/community/membership/': (_body, call) => {
+                if (state.probeDown) throw new TypeError('Failed to fetch');
+                const key = decodeURIComponent(call.path.split('/').pop()!);
+                return json(200, { isMember: state.members.has(key), callsign: state.members.get(key) ?? null });
+            },
+        });
+        return {
+            ...node,
+            state,
+            redeems: () => node.calls.filter((c) => c.path === '/api/invite/redeem-offline'),
+            probes: () => node.calls.filter((c) => c.path.startsWith('/api/community/membership/')),
+        };
+    }
+
+    async function submitTicket(name = 'Rowan') {
+        await screen.findByText(/Join with Invite Code/);
+        fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: TICKET } });
+        fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: name } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+    }
+
+    it("a ticket's 400 that came after the node wrote the member: the node is asked with the key, says member, and the key is saved with its 12 words", async () => {
+        const node = nodeRegisteringThen400();
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitTicket();
+
+        await screen.findByText(/Choose your look/);
+        const [redeem] = node.redeems();
+        expect(node.redeems()).toHaveLength(1);
+        // Asked once, signed by the key it names.
+        expect(node.probes()).toHaveLength(1);
+        expect(node.probes()[0].headers['X-Public-Key']).toBe(redeem.body.publicKey);
+        const saved = await loadIdentity();
+        expect(saved).toMatchObject({ publicKey: redeem.body.publicKey, callsign: 'Rowan' });
+        expect(saved!.mnemonic).toHaveLength(12);
+        expect(peekInviteSent()).toBeUndefined();
+        expect(screen.queryByText('Malformed or broken offline ticket payload')).toBeNull();
+        await expectWordsOf(saved!);
+    });
+
+    it("a ticket's 400 after the node wrote the member, and no answer to the probe: the key stays on disk, and the reload's probe saves it and shows its 12 words", async () => {
+        const node = nodeRegisteringThen400();
+        node.state.probeDown = true;
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitTicket();
+
+        expect(await screen.findByText('Malformed or broken offline ticket payload')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        const [redeem] = node.redeems();
+        expect(await loadIdentity()).toBeNull();
+        expect(peekInviteSent()?.identity.publicKey).toBe(redeem.body.publicKey);
+
+        // The tab is reloaded (or closed, or discarded), and the node answers now.
+        node.state.probeDown = false;
+        cleanup();
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await screen.findByText(/Choose your look/);
+        const saved = await loadIdentity();
+        expect(saved).toMatchObject({ publicKey: redeem.body.publicKey, callsign: 'Rowan' });
+        expect(saved!.mnemonic).toHaveLength(12);
+        expect(peekInviteSent()).toBeUndefined();
+        expect(node.redeems()).toHaveLength(1);
+        await expectWordsOf(saved!);
+    });
+
+    it('a ticket the node refuses, and the node then says the key is not a member: the kept key goes, as a refused code\'s does', async () => {
+        const node = stubNode(LOCAL, {
+            '/api/invite/redeem-offline': () => json(400, { error: 'This offline ticket has expired (maximum 30 days issuance)' }),
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitTicket();
+
+        expect(await screen.findByText('This offline ticket has expired (maximum 30 days issuance)')).toBeInTheDocument();
+        await waitFor(() => expect(peekInviteSent()).toBeUndefined());
+        expect(node.calls.filter((c) => c.path.startsWith('/api/community/membership/'))).toHaveLength(1);
         expect(await loadIdentity()).toBeNull();
     });
 });

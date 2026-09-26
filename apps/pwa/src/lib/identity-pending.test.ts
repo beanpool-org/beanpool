@@ -471,6 +471,8 @@ describe('a key an invite was sent with: its own slot, kept until the node has s
     const OTHER: BeanPoolIdentity = { ...IDENTITY, publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(96), callsign: 'Bea' };
     const peekSent = () => idb.peek('beanpool-identity', 'keys', 'invite-sent') as Record<string, unknown> | undefined;
     const t0 = 1_800_000_000_000;
+    /** The node's "not a member", asked with the key after every send below went (web-join.ts probeMembership). */
+    const saidNotMember = (publicKey: string) => ({ publicKey, askedAt: t0 + 60_000 });
 
     it('lives in a slot of its own: loadIdentity never reads it, and the pending join is left alone', async () => {
         await savePendingJoin(pending({ identity: OTHER, sentAt: t0 }));
@@ -492,19 +494,29 @@ describe('a key an invite was sent with: its own slot, kept until the node has s
 
     it('a definite refusal of the only send lets it go; with an earlier send unsettled, it stays on that send; a stale refusal changes nothing', async () => {
         await markInviteSent(IDENTITY, 'hash-1', t0);
-        expect(await settleRefusedInviteSend(IDENTITY.publicKey, t0)).toBeNull();
+        expect(await settleRefusedInviteSend(saidNotMember(IDENTITY.publicKey), t0)).toBeNull();
         expect(peekSent()).toBeUndefined();
 
         await markInviteSent(IDENTITY, 'hash-1', t0);
         await markInviteSent(IDENTITY, 'hash-2', t0 + 1000);
         // Another tab sent it again after the refused send went: the refusal is about an older one.
-        expect(await settleRefusedInviteSend(IDENTITY.publicKey, t0)).toMatchObject({ sentAt: t0 + 1000, earlierSentAt: t0 });
-        expect(await settleRefusedInviteSend(OTHER.publicKey, t0 + 1000)).toMatchObject({ sentAt: t0 + 1000 });
+        expect(await settleRefusedInviteSend(saidNotMember(IDENTITY.publicKey), t0)).toMatchObject({ sentAt: t0 + 1000, earlierSentAt: t0 });
+        expect(await settleRefusedInviteSend(saidNotMember(OTHER.publicKey), t0 + 1000)).toMatchObject({ sentAt: t0 + 1000 });
         // The latest refused: kept for the earlier one, whose answer never came.
-        const kept = await settleRefusedInviteSend(IDENTITY.publicKey, t0 + 1000);
+        const kept = await settleRefusedInviteSend(saidNotMember(IDENTITY.publicKey), t0 + 1000);
         expect(kept).toMatchObject({ sentAt: t0 });
         expect(kept).not.toHaveProperty('earlierSentAt');
         expect(peekSent()).toMatchObject({ identity: { publicKey: IDENTITY.publicKey }, sentAt: t0 });
+    });
+
+    it("a refusal lets the key go only with the node's \"not a member\" asked after that send went (4112075324)", async () => {
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        // Asked before the refused send went: it says nothing about that send.
+        expect(await settleRefusedInviteSend({ publicKey: IDENTITY.publicKey, askedAt: t0 - 1 }, t0)).toMatchObject({ sentAt: t0 });
+        expect(await settleRefusedInviteSend({ publicKey: IDENTITY.publicKey, askedAt: Number.NaN }, t0)).toMatchObject({ sentAt: t0 });
+        expect(peekSent()).toMatchObject({ identity: { publicKey: IDENTITY.publicKey }, sentAt: t0 });
+        expect(await settleRefusedInviteSend({ publicKey: IDENTITY.publicKey, askedAt: t0 }, t0)).toBeNull();
+        expect(peekSent()).toBeUndefined();
     });
 
     it('"not a member" lets it go only once no send can land; never for another key, nor when a time cannot be read', async () => {

@@ -80,12 +80,12 @@ const nodeTotal = (): number => {
 
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
-function makeMember(callsign: string, balance: number, homeNodeUrl?: string): string {
+function makeMember(callsign: string, balance: number, homeNodeUrl?: string, isVisitor = false): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url, avatar_url)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?)`)
-        .run(pk, callsign, homeNodeUrl ?? null, TINY_PNG);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url, avatar_url, is_visitor)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?, ?)`)
+        .run(pk, callsign, homeNodeUrl ?? null, TINY_PNG, isVisitor ? 1 : 0);
     // Epoch at NOW, not 0 — epoch 0 is 1970 and the first read would charge ~56 years of demurrage (#138).
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(pk, balance, ledger.getCurrentEpoch());
@@ -302,6 +302,14 @@ async function main() {
     const visiting = await commission(visitorActor, { postId: remotePost.id });
     assert(visiting.status === 403,
         `8c. a visitor cannot act for one of our enterprises (got ${visiting.status}) — keeping a link is a role in THIS community`);
+
+    // A visitor's row made HERE (a member's DM or send makes one: no home node) is refused as a key with no row is.
+    const noRow = await commission(crypto.randomBytes(32).toString('hex'), { postId: remotePost.id });
+    const localVisitor = makeMember('Local Visitor', 50, undefined, true);
+    const localVisiting = await commission(localVisitor, { postId: remotePost.id });
+    assert(noRow.status === 403 && localVisiting.status === noRow.status && localVisiting.body?.error === noRow.body?.error,
+        `8d. a visitor's row made here is refused as a key with no row is (got ${localVisiting.status}: ${localVisiting.body?.error}; `
+        + `no row ${noRow.status}: ${noRow.body?.error})`);
 
     // A LOCAL listing is an ordinary purchase, not a commission. Without this a keeper could open a bridge
     // tab against a trade that never left the node — real beans, imaginary obligation.

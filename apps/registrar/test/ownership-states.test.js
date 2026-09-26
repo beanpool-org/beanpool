@@ -1387,17 +1387,25 @@ test('migration 0002: incident victims go back to their original key, paused; a 
 });
 
 // ── Migration 0005 ────────────────────────────────────────────────────────────────────────────────────────────
-// The global node is global.beanpool.org (earth.beanpool.org redirects to it), routed by records made by hand at
-// Cloudflare, outside the registrar, as our own nodes' names are. The live policy table reserves both; a registrar
-// built from these migrations must too. A claim that got through would re-point the hand-made record: ensure()
-// PATCHes a record it finds at the hostname.
-test('migration 0005: a fresh registrar refuses global and earth to any node key, the way it refuses www', async () => {
+// The global node is global.beanpool.org (earth.beanpool.org redirects to it), and ssh-global.beanpool.org is the
+// global server's only way in (its firewall allows nothing inbound) and a deploy target's host. All three are routed
+// by records made by hand at Cloudflare, outside the registrar, as our own nodes' names (ssh-qld, ssh-vic) are. The
+// live policy table reserves global and earth; a registrar built from these migrations must reserve all three. A claim
+// that got through would re-point the hand-made record (ensure() PATCHes a record it finds at the hostname), and
+// undoing it would delete the record.
+test('migration 0005: a fresh registrar refuses global, earth and ssh-global to any node key, the way it refuses www', async () => {
     const w = await world();
     try {
         const [fresh, holder] = await Promise.all([makeKey(), makeKey()]);
         await liveName(w, 'riverside', holder);   // a key that already holds a name is refused all the same
+        // The global node's records, made by hand: a proxied CNAME to its own tunnel.
+        const hand = {};
+        for (const name of ['global', 'earth', 'ssh-global']) {
+            hand[name] = { id: `hand-${name}`, type: 'CNAME', name: `${name}.beanpool.org`, content: 'global-tunnel.cfargotunnel.com', proxied: true };
+            w.cf.dns.set(hand[name].id, { ...hand[name] });
+        }
         const calls = w.cf.calls.length;
-        for (const name of ['www', 'global', 'earth']) {
+        for (const name of ['www', 'global', 'earth', 'ssh-global']) {
             assert.deepEqual((await w.available(name)).body, { available: false, reason: 'reserved' }, name);
             for (const key of [fresh, holder]) {
                 for (const body of [{ name }, { name: name.toUpperCase() }, { name, mode: 'direct', public_ip: '203.0.113.9' }]) {
@@ -1408,23 +1416,31 @@ test('migration 0005: a fresh registrar refuses global and earth to any node key
             }
             assert.equal(await w.row(name), null, `${name}: no row`);
             assert.deepEqual(w.events(name), [], name);
-            assert.deepEqual(routing(w, name), { dns: null, tunnels: [] }, `${name}: nothing at Cloudflare`);
+            assert.deepEqual(routing(w, name), { dns: hand[name]?.content ?? null, tunnels: [] }, `${name}: nothing made at Cloudflare`);
+            assert.deepEqual(w.cf.recordAt(`${name}.beanpool.org`), hand[name] ?? null, `${name}: the hand-made record untouched`);
         }
         assert.equal(w.cf.calls.length, calls, 'no refused claim reached Cloudflare');
     } finally { w.restore(); }
 });
 
-test('migration 0005 on a database that already reserves the names, as the live one does, changes nothing', async () => {
+test('migration 0005 on a database that reserves global and earth by hand, as the live one does, adds only ssh-global', async () => {
     const w = await world({ migrations: ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql'] });
     try {
         const policy = () => w.sqlite.prepare('SELECT pattern, tier FROM name_policy ORDER BY pattern').all().map((r) => ({ ...r }));
-        // Put there by hand; one since moved to another tier by the admin, which 0005 must not undo.
+        // Put there by hand before 0005 existed; one since moved to another tier by the admin, which 0005 must not undo.
         w.sqlite.exec("INSERT INTO name_policy (pattern, tier) VALUES ('global', 'blocked'), ('earth', 'gated')");
         const before = policy();
         w.sqlite.exec(migration('0005_reserve_global.sql'));
-        assert.deepEqual(policy(), before);
+        const after = policy();
+        assert.deepEqual(after.filter((r) => r.pattern !== 'ssh-global'), before, 'no row it found is changed');
+        assert.deepEqual(after.filter((r) => r.pattern === 'ssh-global'), [{ pattern: 'ssh-global', tier: 'blocked' }], 'the missing row is added');
         w.sqlite.exec(migration('0005_reserve_global.sql'));
-        assert.deepEqual(policy(), before, 'a rerun changes nothing either');
+        assert.deepEqual(policy(), after, 'a rerun changes nothing');
+        // All three there (ssh-global too put in by hand, at another tier): it changes nothing.
+        w.sqlite.exec("UPDATE name_policy SET tier = 'gated' WHERE pattern = 'ssh-global'");
+        const all = policy();
+        w.sqlite.exec(migration('0005_reserve_global.sql'));
+        assert.deepEqual(policy(), all, 'with all three there, nothing changes');
     } finally { w.restore(); }
 });
 

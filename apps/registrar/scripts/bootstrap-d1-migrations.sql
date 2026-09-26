@@ -48,18 +48,19 @@ INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0004_teardown.sql'
 WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name = 'teardown') OR (type = 'index' AND name = 'idx_teardown_name')) = 2;
 
--- 0005: its two policy rows, at any tier (the admin may have moved one since). The live table has them: they were put
--- there by hand before 0005 existed. Looking for rows needs name_policy there: SQLite refuses a statement that names a
--- missing table, whatever its WHERE says, and wrangler runs this file as one batch, so on a database 0001 never
--- reached the whole file would fail. So name_policy is made first where it is missing, exactly as 0001 makes it (the
--- same text, so a later 0001 finds it and changes nothing); on a database 0001 has reached this does nothing. It
--- comes after 0001's clause, which needs all three of 0001's tables, so it is never taken for 0001.
+-- 0005: all three of its policy rows, at any tier (the admin may have moved one since). The live table has global and
+-- earth, put there by hand before 0005 existed, but not ssh-global, so there 0005 is not recorded: the workflow applies
+-- it, and its INSERT OR IGNORE adds only the missing row. Looking for rows needs name_policy there: SQLite refuses a
+-- statement that names a missing table, whatever its WHERE says, and wrangler runs this file as one batch, so on a
+-- database 0001 never reached the whole file would fail. So name_policy is made first where it is missing, exactly as
+-- 0001 makes it (the same text, so a later 0001 finds it and changes nothing); on a database 0001 has reached this does
+-- nothing. It comes after 0001's clause, which needs all three of 0001's tables, so it is never taken for 0001.
 CREATE TABLE IF NOT EXISTS name_policy (
     pattern TEXT PRIMARY KEY,   -- exact name
     tier    TEXT NOT NULL       -- 'blocked' | 'gated'   (anything absent = auto)
 );
 INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0005_reserve_global.sql'
-WHERE (SELECT COUNT(*) FROM name_policy WHERE pattern IN ('global', 'earth')) = 2;
+WHERE (SELECT COUNT(*) FROM name_policy WHERE pattern IN ('global', 'earth', 'ssh-global')) = 3;
 
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

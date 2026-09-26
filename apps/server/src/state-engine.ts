@@ -32,6 +32,7 @@ import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
+import { scrubKnocksOf } from './engine/knocks.js';
 import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -6391,6 +6392,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
         // A pruned account can't sign the request that removes a place watch (G5), and must hear nothing from one.
         dropPlaceWatches(publicKey);
+        // What they wrote when they asked to join (G6) goes with them; the record of the knock stays.
+        scrubKnocksOf(publicKey);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -6511,6 +6514,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // 6. Purge private device tokens, communication links, and recovery metadata
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
         dropPlaceWatches(publicKey);
+        scrubKnocksOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM chat_mutes WHERE member_pubkey = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM thread_read_cursors WHERE member_pubkey = ?").run(publicKey); } catch { }
@@ -7122,7 +7126,7 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
         'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'open_joins', 'place_watches', 'directory_cache', 'tombstones',
+        'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'tombstones',
     ];
     // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
     // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.

@@ -1104,6 +1104,8 @@ async function main(): Promise<void> {
             'POST /api/marketplace/transactions/complete': { transactionId: 'mt-pruned-done', confirmerPublicKey: pruned.pk },
             // An invite, which would bring its holder in as someone new.
             'POST /api/invite/generate': { publicKey: pruned.pk },
+            // Asking to join (G6), past the body checks to the knock itself, where knocks are on: its answer is the signer's own.
+            'POST /api/join/knock': { callsign: 'Sentinel knocker', message: 'Sentinel knock, asking to join' },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1159,7 +1161,9 @@ async function main(): Promise<void> {
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
             'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'POST /api/invite/redeem',
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
-            'POST /api/join', 'POST /api/join/github/poll', 'POST /api/join/github/start', 'POST /api/join/sso-nonce',
+            'POST /api/join', 'POST /api/join/github/poll', 'POST /api/join/github/start', 'POST /api/join/knock',
+            'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
+            'POST /api/join/sso-nonce',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'POST /api/local/admin/2fa/disable', 'POST /api/local/admin/2fa/setup', 'GET /api/local/admin/2fa/status',
             'POST /api/local/admin/2fa/verify', 'POST /api/local/admin/announcements', 'POST /api/local/admin/auth/break-glass-mode',
@@ -1176,7 +1180,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/diagnostics', 'POST /api/local/admin/directory/push', 'GET /api/local/admin/disputes',
             'GET /api/local/admin/disputes/:id', 'POST /api/local/admin/disputes/:id/resolve', 'GET /api/local/admin/gateway',
             'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
-            'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
+            'GET /api/local/admin/knocks', 'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'POST /api/local/admin/members/:pubkey/offboard', 'GET /api/local/admin/members/:pubkey/offboard/preview',
             'POST /api/local/admin/members/:pubkey/rekey/complete', 'POST /api/local/admin/members/:pubkey/rekey/issue-code',
             'GET /api/local/admin/members/:pubkey/rekey/status', 'POST /api/local/admin/members/:pubkey/unmute', 'GET /api/local/admin/members/muted',

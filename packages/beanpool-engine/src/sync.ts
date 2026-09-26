@@ -334,6 +334,29 @@ export interface SyncPlaceWatch {
 }
 
 /**
+ * A request to join this community (G6, apps/server engine/knocks.ts): a stranger's knock, and how a member answered it.
+ * Replicated so a server that takes over still has every open knock, the answer to every closed one (a decline's
+ * 30-day block, an approval's invite, which the standby makes again from this row since invite codes do not travel),
+ * and who answered. `pubkey` is the applicant's key, not a member's. The address hash the knock limiter keeps for a day
+ * is NOT here. Watermarked on `updatedAt`. The main server's tidy-up clears what the applicant sent once no member
+ * will read it again (stamped, so it travels here) and deletes a row past its windows, with a `join_requests` tombstone.
+ */
+export interface SyncJoinRequest {
+    id: string;
+    pubkey: string;
+    callsign: string;
+    message: string;
+    avatar: string | null;
+    fromNode: string | null;
+    status: string;
+    createdAt: string;
+    decidedBy: string | null;
+    inviteCode: string | null;
+    decidedAt: string | null;
+    updatedAt: string;
+}
+
+/**
  * One community in the global node's mirror of the public directory registry (G5, apps/server engine/directory-cache.ts),
  * as its hourly run last wrote it: public data, checked field by field. Replicated so a server that takes over knows
  * which communities the old one had already seen (`firstSeenAt`), and tells no watcher about them again. Never deleted:
@@ -389,6 +412,8 @@ export interface SyncPayload {
     placeWatches?: SyncPlaceWatch[];
     /** Watermarked on `updated_at`, which the mirror stamps only on a row it changed. Empty on a local node. */
     directoryCache?: SyncDirectoryCommunity[];
+    /** Watermarked on `updated_at`, which a knock, a reopened knock, an answer, a scrub and the tidy-up all stamp. Empty on the global node. */
+    joinRequests?: SyncJoinRequest[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     /**
      * `post_id|order_num` for every photo row the exporter left OUT because it could not read the object the
@@ -889,6 +914,27 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
+    // Requests to join (G6): on every node, empty on the global one. Never `ip_hash`, the knock limiter's for a day.
+    let joinRequests: SyncJoinRequest[] = [];
+    try {
+        joinRequests = sel('join_requests', 'updated_at').map((r: any) => ({
+            id: r.id,
+            pubkey: r.pubkey,
+            callsign: r.callsign,
+            message: r.message,
+            avatar: r.avatar ?? null,
+            fromNode: r.from_node ?? null,
+            status: r.status,
+            createdAt: r.created_at,
+            decidedBy: r.decided_by ?? null,
+            inviteCode: r.invite_code ?? null,
+            decidedAt: r.decided_at ?? null,
+            updatedAt: r.updated_at,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
@@ -929,6 +975,7 @@ export function exportSyncState(
         openJoins,
         placeWatches,
         directoryCache,
+        joinRequests,
         tombstones,
     };
 }

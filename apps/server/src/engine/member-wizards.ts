@@ -42,6 +42,7 @@ import { logger } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { movePlaceWatches } from './place-watches.js';
+import { moveKnocks } from './knocks.js';
 
 // ===================== TYPES =====================
 
@@ -375,6 +376,11 @@ export function completeRekey(
         // invalidated key, deleting the account would free nothing and a removal would read as still joined.
         // Stamped, so the move replicates (engine/open-join.ts).
         db.prepare('UPDATE open_joins SET member_pubkey = ?, updated_at = ? WHERE member_pubkey = ?').run(cleanNew, nowIso, cleanOld);
+        // (p2) Requests to join (G6): a knock the member made before they joined, and the knocks they answered. Left on
+        // the invalidated key, the old knock would be back on the members' list and an approval would let that key in
+        // as a second member; deleting the account would miss what they wrote. Stamped, so the move replicates
+        // (engine/knocks.ts).
+        moveKnocks(cleanOld, cleanNew, nowIso);
 
         // (q) treasury_operators (Keeperships)
         db.prepare('UPDATE treasury_operators SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);

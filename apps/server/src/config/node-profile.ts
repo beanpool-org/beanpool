@@ -51,6 +51,7 @@
  * the boot log says why. Both locks only ever keep money on and the door shut, never the reverse.
  */
 import { db } from '../db/db.js';
+import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 
 export type NodeProfile = 'local' | 'global';
 
@@ -67,7 +68,9 @@ export interface ProfileSwitches {
     enterprises: boolean;
     treasuries: boolean;
     crowdfund: boolean;
-    /** This node takes "ask to join" requests from non-members (D4 = a: on for every community, with an opt-out). */
+    /** This node takes "ask to join" requests from non-members, which any member may answer with an invite (G6,
+     *  routes/knocks.ts; D4 = a: on for every community). Off: every /api/join/knock route is 404. The operator's
+     *  one-tap opt-out in Settings (`acceptKnocks`) is this switch's override (`setSwitchOverride`). */
     knocks: boolean;
     /** A post listing read with a point (`lat`, `lng`) and no `sort` comes nearest first; off, it keeps the most
      *  recently updated first. Without a point every profile keeps that order (routes/marketplace.ts). Not the same as
@@ -153,7 +156,6 @@ const NOT_BUILT_YET: Readonly<Partial<ProfileSwitches>> = {
     // G2 built the door with a sign-in (routes/open-join.ts). A door WITHOUT one (D1 b: no provider, a stricter
     // probation) is not built, so an override asking for it is reported at boot and changes nothing.
     ssoRequiredForJoin: true,
-    knocks: false, // G6
 };
 
 /** The switches that hold or move Beans. None of them can be off on a node whose ledger has ever moved. */
@@ -233,6 +235,23 @@ export function readProfileOverrides(): Partial<ProfileSwitches> {
         overrides[name] = v === 'true';
     }
     return overrides;
+}
+
+/**
+ * Sets the operator's override of one switch, from Settings (`acceptKnocks` is the `knocks` switch's). A value equal to
+ * the running profile's default removes the override instead, so the record holds only what the operator changed. An
+ * override rides the profile record: to a standby with every copy, and in the take-over bundle, which is told to
+ * re-seal here.
+ */
+export function setSwitchOverride(name: ProfileSwitch, on: boolean): void {
+    if (!SWITCH_NAMES.includes(name)) throw new Error(`${name} is not a profile switch`);
+    if (DEFAULTS[getNodeProfile()][name] === on) {
+        db.prepare('DELETE FROM node_config WHERE key = ?').run(OVERRIDE_PREFIX + name);
+    } else {
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
+            .run(OVERRIDE_PREFIX + name, String(on));
+    }
+    noteTakeoverInputsChanged(`profile switch ${name} set ${on ? 'on' : 'off'}`);
 }
 
 function overrideRows(): { key: string; value: string }[] {
@@ -383,6 +402,7 @@ const FEATURE_OFF_MESSAGES: Partial<Record<ProfileSwitch, string>> = {
     treasuries: 'Treasuries are switched off on this node.',
     crowdfund: 'Crowdfunding is switched off on this node.',
     directoryMirror: 'This node does not keep the communities directory. Find communities near you on the global community.',
+    knocks: 'This community isn’t taking requests to join. Ask one of its members for an invite.',
 };
 
 export function featureOffMessage(feature: ProfileSwitch): string {

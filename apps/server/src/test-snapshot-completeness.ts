@@ -46,6 +46,8 @@
  *      replication stamp), so a restored global node still tells them and keeps their quiet day, and `directory_cache`
  *      with each community's first sighting, so a restored node never tells a watcher twice about a community it had
  *      already seen.
+ *  16. And the requests to join (G6): an open knock with what the applicant wrote, and a declined one with who declined
+ *      it and when, so a restored community still has every request, and a decline still blocks for its 30 days.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -280,6 +282,14 @@ async function main(): Promise<void> {
     const seenAtT = new Date(Date.now() - 300_000).toISOString();
     db.prepare(`INSERT INTO directory_cache (community_key, listed, name, node_url, lat, lng, radius_km, member_count, first_seen_at, updated_at)
                 VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`).run('peer-at-t', 'Snapshot Commons', 'https://snapshot.beanpool.org', -28.55, 153.5, 25, 40, seenAtT, seenAtT);
+    // Requests to join (G6), as engine/knocks.ts writes them: one open, one declined by a member.
+    const knockedAtT = new Date(Date.now() - 360_000).toISOString();
+    const declinedAtT = new Date(Date.now() - 350_000).toISOString();
+    const applicant = 'ef'.repeat(32);
+    db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, from_node, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`)
+        .run('knock-open-at-t', applicant, 'Newcomer', 'I grow tomatoes two streets away.', 'global.beanpool.org', knockedAtT, knockedAtT);
+    db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, status, created_at, decided_by, decided_at, updated_at) VALUES (?, ?, ?, ?, 'declined', ?, ?, ?, ?)`)
+        .run('knock-declined-at-t', 'fe'.repeat(32), 'Stranger', 'Let me in.', knockedAtT, author, declinedAtT, declinedAtT);
 
     /** What every referenced object held at T. The whole suite is about reproducing this map. */
     const atT = new Map<string, Buffer>([
@@ -374,6 +384,12 @@ async function main(): Promise<void> {
             const seen = archived.prepare('SELECT listed, name, first_seen_at FROM directory_cache WHERE community_key = ?').get('peer-at-t') as any;
             assert(seen?.listed === 1 && seen?.name === 'Snapshot Commons' && seen?.first_seen_at === seenAtT,
                 'and the directory cache with each community\'s first sighting, so a restored node never tells a watcher twice');
+            const open = archived.prepare('SELECT pubkey, callsign, message, from_node, status, created_at FROM join_requests WHERE id = ?').get('knock-open-at-t') as any;
+            assert(open?.pubkey === applicant && open?.message === 'I grow tomatoes two streets away.' && open?.status === 'pending' && open?.created_at === knockedAtT,
+                'and an open request to join with what the applicant wrote, so a restored community can still answer it');
+            const declined = archived.prepare('SELECT status, decided_by, decided_at, updated_at FROM join_requests WHERE id = ?').get('knock-declined-at-t') as any;
+            assert(declined?.status === 'declined' && declined?.decided_by === author && declined?.decided_at === declinedAtT && declined?.updated_at === declinedAtT,
+                'and a declined one with who declined it and when, so the decline still blocks for its 30 days');
         } finally {
             archived.close();
         }

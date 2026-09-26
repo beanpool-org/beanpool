@@ -45,6 +45,7 @@ import { movePlaceWatches } from './place-watches.js';
 import { moveRecoverySharesToNewKey } from './recovery-shares.js';
 import { moveKnocks } from './knocks.js';
 import { moveKeptNotices } from './kept-notices.js';
+import { moveMemberKeyRows } from './key-move.js';
 
 // ===================== TYPES =====================
 
@@ -299,97 +300,17 @@ export function completeRekey(
                 rekeyed_to = excluded.rekeyed_to
         `).run(cleanOld, nowIso, cleanNew);
 
-        // 2. Enumerate and transfer ALL 32 consumers of members.public_key:
-        // (a) members row itself - update primary key and restore active status, unless the member is
-        // suspended ('disabled'): a new key does not lift a suspension
-        db.prepare("UPDATE members SET public_key = ?, status = CASE WHEN status = 'disabled' THEN 'disabled' ELSE 'active' END, updated_at = ? WHERE public_key = ?").run(cleanNew, nowIso, cleanOld);
+        // 2. Enumerate and transfer ALL 32 consumers of members.public_key (engine/key-move.ts, which a standby's copy
+        // follows with too), each row stamped so the standby's next copy carries the move.
+        moveMemberKeyRows(cleanOld, cleanNew, nowIso, { keepStamps: false });
 
-        // (b) members foreign keys (referrals & vouches)
-        db.prepare('UPDATE members SET invited_by = ? WHERE invited_by = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE members SET elder_vouched_by = ? WHERE elder_vouched_by = ?').run(cleanNew, cleanOld);
-
-        // (c) accounts (ledger balance & epochs)
-        db.prepare('UPDATE accounts SET public_key = ? WHERE public_key = ?').run(cleanNew, cleanOld);
-
-        // (d) transactions - preserve immutable cryptographic authorship
-        db.prepare('UPDATE transactions SET from_pubkey = ? WHERE from_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE transactions SET to_pubkey = ? WHERE to_pubkey = ?').run(cleanNew, cleanOld);
-        // Note: auth_signer is left untouched because auth_signature was produced by cleanOld's private key
-
-        // (e) marketplace_transactions
-        db.prepare('UPDATE marketplace_transactions SET buyer_pubkey = ? WHERE buyer_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE marketplace_transactions SET seller_pubkey = ? WHERE seller_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE marketplace_transactions SET dispute_resolved_by = ? WHERE dispute_resolved_by = ?').run(cleanNew, cleanOld);
-
-        // (f) posts
-        db.prepare('UPDATE posts SET author_pubkey = ? WHERE author_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE posts SET accepted_by = ? WHERE accepted_by = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE posts SET created_by = ? WHERE created_by = ?').run(cleanNew, cleanOld);
-
-        // (g) poll_votes
-        db.prepare('UPDATE poll_votes SET voter_pubkey = ? WHERE voter_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE event_rsvps SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (h) conversations & participants
-        db.prepare('UPDATE conversations SET created_by = ? WHERE created_by = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE conversation_participants SET public_key = ? WHERE public_key = ?').run(cleanNew, cleanOld);
-
-        // (i) messages
-        db.prepare('UPDATE messages SET author_pubkey = ? WHERE author_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (j) friends & ratings
-        db.prepare('UPDATE friends SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE friends SET friend_pubkey = ? WHERE friend_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE ratings SET target_pubkey = ? WHERE target_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE ratings SET rater_pubkey = ? WHERE rater_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (k) abuse_reports
-        db.prepare('UPDATE abuse_reports SET reporter_pubkey = ? WHERE reporter_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE abuse_reports SET target_pubkey = ? WHERE target_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (l) projects / enterprises
-        db.prepare('UPDATE projects SET creator_pubkey = ? WHERE creator_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE projects SET enterprise_pubkey = ? WHERE enterprise_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (m) invite_codes
-        db.prepare('UPDATE invite_codes SET created_by = ? WHERE created_by = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE invite_codes SET used_by = ? WHERE used_by = ?').run(cleanNew, cleanOld);
-
-        // (n) push_tokens (Purge old device tokens as device was lost)
-        db.prepare('DELETE FROM push_tokens WHERE public_key = ?').run(cleanOld);
+        // What the main server moves by rules of its own, each stamped so the move replicates.
         // (n2) place watches (G5): the places the member watches are theirs, whatever device holds the key.
         movePlaceWatches(cleanOld, cleanNew);
-
-        // (o) member_preferences
-        db.prepare('UPDATE member_preferences SET public_key = ? WHERE public_key = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE chat_mutes SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE OR IGNORE thread_read_cursors SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('DELETE FROM thread_read_cursors WHERE member_pubkey = ?').run(cleanOld);
-
-        // (o2) Commons groups: membership (and so the group's chat), the lead convenor, and convenor votes.
-        // groups.lead_pubkey and groups.created_by both decide authorisation (the lead is the stored pointer
-        // while it names an active convenor, and the creator is the backfill branch behind it). Leave either on
-        // the invalidated key and a lead who recovers on a new key silently stops being the lead: the next
-        // reconcile writes somebody else in for good, and the hand-over has been reversed by nobody's decision.
-        db.prepare('UPDATE groups SET lead_pubkey = ? WHERE lead_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE groups SET created_by = ? WHERE created_by = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE group_members SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE group_members SET invited_by = ? WHERE invited_by = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE group_convenor_proposals SET convenor_pubkey = ? WHERE convenor_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE group_convenor_proposals SET candidate_pubkey = ? WHERE candidate_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE group_convenor_proposals SET proposer_pubkey = ? WHERE proposer_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE group_convenor_votes SET voter_pubkey = ? WHERE voter_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (p) recovery shares / collections / releases
+        // (p) recovery shares
         // The owner is what a wrapped copy is bound to, so the move opens and re-wraps each copy the member owns. Without
         // the recovery-seal key it throws and this whole re-key rolls back (engine/recovery-shares.ts).
         moveRecoverySharesToNewKey(cleanOld, cleanNew);
-        db.prepare('UPDATE recovery_collections SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE recovery_releases SET released_by = ? WHERE released_by = ?').run(cleanNew, cleanOld);
-        // The sign-in account the member joined with through the open door (engine/open-join.ts). Left on the
-        // invalidated key, deleting the account would free nothing and a removal would read as still joined.
-        // Stamped, so the move replicates (engine/open-join.ts).
-        db.prepare('UPDATE open_joins SET member_pubkey = ?, updated_at = ? WHERE member_pubkey = ?').run(cleanNew, nowIso, cleanOld);
         // (p2) Requests to join (G6): a knock the member made before they joined, and the knocks they answered. Left on
         // the invalidated key, the old knock would be back on the members' list and an approval would let that key in
         // as a second member; deleting the account would miss what they wrote. Stamped, so the move replicates
@@ -398,56 +319,6 @@ export function completeRekey(
         // (p3) The moderation notices kept for them (engine/kept-notices.ts): what they have not seen yet is theirs on the
         // new key. Stamped, so the move replicates.
         moveKeptNotices(cleanOld, cleanNew);
-
-        // (q) treasury_operators (Keeperships)
-        db.prepare('UPDATE treasury_operators SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE treasury_operators SET treasury_pubkey = ? WHERE treasury_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE treasury_operators SET granted_by = ? WHERE granted_by = ?').run(cleanNew, cleanOld);
-
-        // (r) node_roles (Governance: Owner, Admin, Moderator)
-        db.prepare('UPDATE node_roles SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE node_roles SET granted_by = ? WHERE granted_by = ?').run(cleanNew, cleanOld);
-        // A role held aside while the member is suspended moves with the key, or lifting the suspension
-        // would restore it to a key nobody holds.
-        db.prepare('UPDATE suspended_node_roles SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE suspended_node_roles SET granted_by = ? WHERE granted_by = ?').run(cleanNew, cleanOld);
-
-        // (s) deferred_wage_claims
-        db.prepare('UPDATE deferred_wage_claims SET keeper_pubkey = ? WHERE keeper_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE deferred_wage_claims SET enterprise_pubkey = ? WHERE enterprise_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (t) settlements
-        db.prepare('UPDATE settlements SET buyer_pubkey = ? WHERE buyer_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE settlements SET seller_pubkey = ? WHERE seller_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (u) federation_links
-        // KNOWN LIMITATION (federation key propagation):
-        // Remote peer nodes retain the member's former public key in their cached member tables
-        // and federation_links until peer-to-peer key rotation gossip is implemented. Consequently,
-        // cross-village trust validation and settlements will fail verification against the new key.
-        // Trades with other villages will need re-linking on peer nodes.
-        db.prepare('UPDATE federation_links SET treasury_pubkey = ? WHERE treasury_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (v) activity_feed
-        db.prepare('UPDATE activity_feed SET actor_pubkey = ? WHERE actor_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE activity_feed SET target_pubkey = ? WHERE target_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (w) pricing_reports
-        db.prepare('UPDATE pricing_reports SET reporter_pubkey = ? WHERE reporter_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (x) creator_channels & pulse_items
-        db.prepare('UPDATE creator_channels SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE pulse_items SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (y) decisions & votes - update subject for member proposals and pool hardship grants
-        db.prepare('UPDATE decisions SET author_pubkey = ? WHERE author_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE decisions SET admin_halted_by = ? WHERE admin_halted_by = ?').run(cleanNew, cleanOld);
-        db.prepare("UPDATE decisions SET subject = ? WHERE (touches = 'member' OR touches = 'pool') AND subject = ?").run(cleanNew, cleanOld);
-        db.prepare('UPDATE decision_votes SET voter_pubkey = ? WHERE voter_pubkey = ?').run(cleanNew, cleanOld);
-
-        // (z) enterprise_pledges
-        db.prepare('UPDATE enterprise_pledges SET keeper = ? WHERE keeper = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE enterprise_pledges SET enterprise = ? WHERE enterprise = ?').run(cleanNew, cleanOld);
 
         // 3. Mark rekey request completed
         db.prepare("UPDATE rekey_requests SET status = 'completed', new_pubkey = ?, completed_at = ? WHERE id = ?").run(cleanNew, nowIso, req.id);

@@ -16,6 +16,10 @@ import { mergeReplicatedKnocks } from './knocks.js';
 import { mergeReplicatedDirectory } from './directory-cache.js';
 import { mergeReplicatedNotices } from './kept-notices.js';
 import {
+    mergeReplicatedInvalidatedKeys, followReplicatedRekeys, dropMovedRecoveryCopies, noteReplacedKeysFromMainServer,
+    type ReplicatedRekey,
+} from './key-move.js';
+import {
     exportSyncState as exportSyncStateEngine,
     type SyncPayload,
     type Transaction
@@ -589,7 +593,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'openJoins', 'placeWatches', 'directoryCache', 'joinRequests', 'moderationNotices', 'invalidatedKeys', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -620,6 +624,16 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
     try {
         db.transaction(() => {
+            // The keys the main server replaced (engine/key-move.ts), first: a re-key there is followed here before the copy's
+            // rows go in, so the member's row under the new key updates the moved row instead of meeting the old key's row
+            // on the callsign index, and every row that named the old key names the new one, as there. A main server older
+            // than this sends none, and this standby keeps the keys it has.
+            let followedRekeys: ReplicatedRekey[] = [];
+            if (Array.isArray(remote.invalidatedKeys)) {
+                followedRekeys = followReplicatedRekeys(mergeReplicatedInvalidatedKeys(remote.invalidatedKeys).rekeys);
+                noteReplacedKeysFromMainServer();
+            }
+
             for (const rm of remote.members ?? []) {
                 const existing = db.prepare("SELECT updated_at, is_visitor FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null } | undefined;
                 if (!existing) {
@@ -1240,6 +1254,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     if (res.changes > 0) recoverySharesImported++;
                 }
             }
+            // A followed re-key's recovery copies: the ones the main server moved to the new key go from the old one.
+            if (followedRekeys.length > 0) dropMovedRecoveryCopies(followedRekeys);
 
             if (remote.pollVotes) {
                 const importVote = db.prepare(`INSERT INTO poll_votes

@@ -945,9 +945,36 @@ const SCENARIOS = [
                 .filter((s) => s.getClientRects().length > 1).map((s) => s.textContent));
             if (broken.length) throw new Failure(`12 words broken across lines: ${broken.length}`);
             await shot(page, view, 'taken-words');
+            // The same button hides them again (review 4108355858), and keeps focus.
+            await page.getByRole('button', { name: "Hide Bea's 12 words" }).click();
+            if (await page.getByTestId('join-taken-words').count()) throw new Failure('Hide left the 12 words on the screen');
+            const focused = await page.evaluate(() => document.activeElement?.textContent ?? '');
+            if (focused !== "Show Bea's 12 words") throw new Failure(`after Hide, focus is on "${focused}"`);
             if ((await storedIdentityKey(page)) !== OTHER_TAB_ACCOUNT.publicKey) throw new Failure("this browser's account was replaced");
             const kept = await pendingJoin(page);
             if (kept?.identity.publicKey !== bea || typeof kept.sentAt !== 'number') throw new Failure('the key the node took was not kept, marked sent');
+        },
+        join: async (body, key, seen) => {
+            await seen.beforeJoinAnswer?.();
+            return { status: 200, body: { success: true, member: { publicKey: key, callsign: body.callsign } } };
+        },
+    },
+    {
+        name: "a yes this browser can't save (reviews 4108355843, 4108355867): the failed screen, with its heading and Reload",
+        async run(page, origin, view, seen) {
+            await toSignIn(page, origin, view, 'Alice');
+            // Every write in the page fails from here on, as a full disk's does, the way a put that throws reaches the store.
+            seen.beforeJoinAnswer = () => page.evaluate(() => {
+                IDBObjectStore.prototype.put = function () { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); };
+            });
+            await page.getByTestId('join-provider-google').click();
+            await screenIs(page, 'failed', "the node said yes and the browser couldn't save");
+            await page.getByRole('heading', { name: 'Not finished yet' }).waitFor();
+            const notice = await page.getByTestId('join-notice').innerText();
+            if (!/couldn't save your account/.test(notice)) throw new Failure(`the failed screen says "${notice}"`);
+            await page.getByRole('button', { name: 'Reload page' }).waitFor();
+            await noSideScroll(page, 'failed');
+            await shot(page, view, 'failed');
         },
         join: async (body, key, seen) => {
             await seen.beforeJoinAnswer?.();

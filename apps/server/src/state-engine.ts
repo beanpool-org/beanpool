@@ -7212,9 +7212,19 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = []): voi
 
 // ===================== PUSH NOTIFICATIONS =====================
 
+/**
+ * A device token belongs to one account at a time on this node: a phone holds one identity. The key registering it
+ * takes it over, and every other key's row for it goes in the same transaction. Without that, the account that was
+ * on the phone before (Sign Out, "Replace this phone's account") kept its row, and the phone kept getting its chat,
+ * escrow and recovery alerts. The phone unregisters the old key itself when it can (utils/account-leaves-phone.ts);
+ * this covers a phone that was offline when the account left it. The key is the request's signer (routes/community.ts).
+ */
 export function registerPushToken(publicKey: string, token: string, platform: string = 'ios'): boolean {
     try {
-        db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, ?)`).run(publicKey, token, platform);
+        db.transaction(() => {
+            db.prepare(`DELETE FROM push_tokens WHERE token = ? AND public_key != ?`).run(token, publicKey);
+            db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, ?)`).run(publicKey, token, platform);
+        })();
         console.log(`[Push] Registered token for ${publicKey.slice(0, 8)}: ${token.slice(0, 20)}...`);
         return true;
     } catch (e) {

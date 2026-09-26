@@ -393,6 +393,7 @@ run_federation_suites() {
       test-admin-thresholds
       test-manager-backups
       test-push-preferences
+      test-push-token-one-account
       test-settings
       test-srv20-ledger-reset
       test-harvester

@@ -1363,7 +1363,7 @@ router.get('/api/ledger/export', async (ctx) => {
 
 router.post('/api/push-tokens', async (ctx) => {
     const { publicKey, token, platform } = (ctx as any).requestBody || {};
-    if (!publicKey || !token) {
+    if (!publicKey || !token || typeof token !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey or token' };
         return;
@@ -1374,6 +1374,7 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // The signer takes the device token over: any other key's row for it goes (one account per phone).
     const success = registerPushToken(activeKey, token, platform || 'ios');
     ctx.body = { success };
 });

@@ -67,7 +67,8 @@ async function child(): Promise<void> {
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
-    const ms = await import('./engine/member-signature.js');
+    // Loaded when a command needs it, so the servers boot on a tree without it (the fail-first run on origin/main).
+    const ms = () => import('./engine/member-signature.js');
     const { createPairing } = await import('./settings-signin-pairing.js');
     const { setPlaceWatch } = await import('./engine/place-watches.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
@@ -106,9 +107,9 @@ async function child(): Promise<void> {
         balance: (a: { pk: string }) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(a.pk) as { balance: number } | undefined)?.balance ?? null,
         member: (a: { pk: string }) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(a.pk) as { status: string } | undefined)?.status ?? null,
         transfers: (a: { memo: string }) => (db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE memo = ?').get(a.memo) as { n: number }).n,
-        nonceSpent: (a: { nonce: string }) => ms.requestNonces.isSpent(a.nonce),
-        switchClock: (a: { at: number | null }) => {
-            ms.setSignatureSwitchClockForTests(a.at === null ? null : () => a.at as number);
+        nonceSpent: async (a: { nonce: string }) => (await ms()).requestNonces.isSpent(a.nonce),
+        switchClock: async (a: { at: number | null }) => {
+            (await ms()).setSignatureSwitchClockForTests(a.at === null ? null : () => a.at as number);
             return true;
         },
         announce: (a: { title: string }) => {
@@ -212,6 +213,15 @@ function assert(cond: unknown, msg: string): void {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** One numbered section: an error in it fails it and the next one still runs. */
+async function section(n: string, body: () => Promise<void>): Promise<void> {
+    try {
+        await body();
+    } catch (e: any) {
+        assert(false, `section ${n} ran to the end (${e?.message || e})`);
+    }
+}
+
 interface Reply { status: number; body: any; text: string }
 
 /** A request to a node over HTTPS at localhost, with whatever headers (a spoofed Host included). */
@@ -304,7 +314,7 @@ async function main(): Promise<void> {
 
         // ── 1. Old apps keep working until the switch ──
         console.log('\n— 1. an app from before binding keeps working until the switch —');
-        {
+        await section('1', async () => {
             const before = await A.send('balance', { pk: xan.pk });
             const r = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'old app send' }));
             assert(r.status === 200 && (await A.send('balance', { pk: xan.pk })) === before + 1, `an old-format Beans send is accepted at A (${show(r)})`);
@@ -317,11 +327,11 @@ async function main(): Promise<void> {
             assert(sock.kind === 'open' && sock.events.some((e) => e.type === 'system_announcement' && e.title === 'OLD-APP-FEED'),
                 'and it gets the member feed, as before');
             if (sock.kind === 'open') sock.ws.terminate();
-        }
+        });
 
         // ── 2. Replay refused: a Beans transfer ──
         console.log('\n— 2. a Beans send signed for A, replayed at B —');
-        {
+        await section('2', async () => {
             const memo = `bound send ${crypto.randomBytes(3).toString('hex')}`;
             const req = await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 3, memo });
             const aBefore = await A.send('balance', { pk: xan.pk });
@@ -341,22 +351,22 @@ async function main(): Promise<void> {
                 `the same body re-signed for b.test, with the same nonce and timestamp, is accepted at B, once (${show(reSigned)})`);
             const replayAtB = await sendTo(B, 'POST', again);
             assert(replayAtB.status === 403 && (await B.send('transfers', { memo })) === 1, `and replayed there it is refused as a replay (${show(replayAtB)})`);
-        }
+        });
 
         // ── 3. A gated read ──
         console.log('\n— 3. a private read signed for A, replayed at B —');
-        {
+        await section('3', async () => {
             const req = await bound(mia, 'GET', `https://a.test/api/messages/conversations/${mia.pk}`);
             const atA = await sendTo(A, 'GET', { ...req, path: `/api/messages/conversations/${mia.pk}` });
             assert(atA.status === 200, `accepted at A (${show(atA)})`);
             const atB = await sendTo(B, 'GET', { ...req, path: `/api/messages/conversations/${mia.pk}` });
             assert(atB.status === 421 && atB.body?.code === 'wrong_community' && Object.keys(atB.body).sort().join(',') === 'code,error',
                 `at B → 421, and the answer holds nothing of the read (${show(atB)})`);
-        }
+        });
 
         // ── 4. /ws ──
         console.log('\n— 4. a /ws connect token signed for A, used at B —');
-        {
+        await section('4', async () => {
             const forB = await socket(B, await core.buildBoundWsParams({ wsUrl: 'wss://b.test/ws', publicKeyHex: mia.pk, sign: mia.sign }));
             const forA = await socket(B, await core.buildBoundWsParams({ wsUrl: 'wss://a.test/ws', publicKeyHex: mia.pk, sign: mia.sign }));
             assert(forB.kind === 'open' && forA.kind === 'open', `at B (default mode) both open (${sockShow(forB)}, ${sockShow(forA)})`);
@@ -373,11 +383,11 @@ async function main(): Promise<void> {
             if (strictForC.kind === 'open') strictForC.ws.terminate();
             const damaged = await socket(B, (await core.buildBoundWsParams({ wsUrl: 'wss://b.test/ws', publicKeyHex: mia.pk, sign: mia.sign })).replace(/&v=2$/, ''));
             assert(damaged.kind === 'status' && damaged.status === 401, `a token with for= but no v=2 is a damaged token → 401 (${sockShow(damaged)})`);
-        }
+        });
 
         // ── 5. Two names; the Host header changes nothing ──
         console.log('\n— 5. a community with two names —');
-        {
+        await section('5', async () => {
             for (const host of ['b.test', 'b2.test']) {
                 const r = await sendTo(B, 'GET', await bound(mia, 'GET', `https://${host}/api/community/me`));
                 assert(r.status === 200 && r.body?.publicKey === mia.pk, `B accepts a read signed for ${host} (${show(r)})`);
@@ -393,22 +403,22 @@ async function main(): Promise<void> {
             const info = await call(B, 'GET', '/api/community/info');
             assert(info.status === 200 && info.body?.requestSigning === 2 && JSON.stringify(info.body?.addresses) === JSON.stringify(['b.test', 'b2.test']),
                 `/api/community/info says requestSigning 2 and lists b.test and b2.test (${JSON.stringify({ r: info.body?.requestSigning, a: info.body?.addresses })})`);
-        }
+        });
 
         // ── 6. The directory call to the global node ──
         console.log('\n— 6. the global node —');
-        {
+        await section('6', async () => {
             assert((await G.send('watch', { pk: mia.pk })) === true, 'setup: Mia watches a place on the global node');
             const home = await sendTo(G, 'GET', await bound(mia, 'GET', 'https://global.test/api/global/home'));
             assert(home.status === 200 && Array.isArray(home.body?.watches) && home.body.watches.length === 1,
                 `a signed /api/global/home for global.test shows Mia's watch (${show(home)})`);
             const elsewhere = await sendTo(G, 'GET', await bound(mia, 'GET', 'https://b.test/api/global/home'));
             assert(elsewhere.status === 421 && !('watches' in (elsewhere.body || {})), `the same read signed for b.test → 421, no watches (${show(elsewhere)})`);
-        }
+        });
 
         // ── 7. The switch ──
         console.log('\n— 7. the switch —');
-        {
+        await section('7', async () => {
             await A.send('switchClock', { at: SWITCH - 1 });
             const lastDay = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'last day' }));
             assert(lastDay.status === 200, `the last moment before ${new Date(SWITCH).toISOString().slice(0, 10)}: old format accepted (${show(lastDay)})`);
@@ -435,11 +445,11 @@ async function main(): Promise<void> {
             assert(cBound.status === 200, `and format 2 for c.test is accepted (${show(cBound)})`);
             const strictOldSock = await socket(C, oldWsQuery(mia));
             assert(strictOldSock.kind === 'status' && strictOldSock.status === 401, `an old-format /ws token at C (strict, switch passed) → 401 (${sockShow(strictOldSock)})`);
-        }
+        });
 
         // ── 8. The Manage button ──
         console.log('\n— 8. the Settings sign-in (the app\'s Manage button) —');
-        {
+        await section('8', async () => {
             // A hostile node's "challenge": the complete text of a request for another community. Every app before this
             // signs whatever challenge text the node sends (native node-admin.ts), as plain UTF-8.
             const ts = String(Date.now());
@@ -482,11 +492,11 @@ async function main(): Promise<void> {
             const v2After = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: await core.signAdminSignin('https://b.test', ch.challengeId, owner.sign), signedFor: 'b.test' });
             assert(v2After.status === 200 && v2After.body?.handshakeToken, `the format-2 sign-in for b.test works after the switch (${show(v2After)})`);
             await B.send('switchClock', { at: null });
-        }
+        });
 
         // ── 9. Pairing and offline tickets ──
         console.log('\n— 9. phone pairing and offline tickets —');
-        {
+        await section('9', async () => {
             await B.send('resetLimits');
             const approve = (p: { pairingId: string }, body: Record<string, unknown>) =>
                 call(B, 'POST', `/api/local/admin/auth/pairing/${p.pairingId}/approve`, {}, JSON.stringify({ memberPubkey: owner.pk, ...body }));
@@ -538,11 +548,11 @@ async function main(): Promise<void> {
             const lateCheck = await check(B, late);
             assert(lateCheck.body?.valid === false && lateCheck.body?.reason === 'app_too_old', `the pre-flight says so too (${show(lateCheck)})`);
             await B.send('switchClock', { at: null });
-        }
+        });
 
         // ── 10. The self-hoster with no address configured ──
         console.log('\n— 10. a node that knows none of its names —');
-        {
+        await section('10', async () => {
             const infoBefore = await call(U, 'GET', '/api/community/info');
             assert(infoBefore.body?.requestSigning === 2 && Array.isArray(infoBefore.body?.addresses) && infoBefore.body.addresses.length === 0,
                 `it lists no address (${JSON.stringify(infoBefore.body?.addresses)})`);
@@ -576,11 +586,11 @@ async function main(): Promise<void> {
             assert(bad.status === 400, `something that is not an address is refused (${show(bad)})`);
             const removed = await call(U, 'POST', '/api/local/admin/app-addresses/remove', adminPw, JSON.stringify({ address: 'community.example.org' }));
             assert(removed.status === 200 && removed.body?.addresses?.length === 0, `and it can be removed again (${show(removed)})`);
-        }
+        });
 
         // ── 11. Settings on B: the list and the counts ──
         console.log('\n— 11. Settings: the address list and the old-app count —');
-        {
+        await section('11', async () => {
             const r = await call(B, 'GET', '/api/local/admin/app-addresses', adminPw);
             const b = r.body || {};
             const by = (a: string) => b.addresses?.find((x: any) => x.address === a);
@@ -595,11 +605,11 @@ async function main(): Promise<void> {
                 `the counts table holds counts and addresses, no key (${rows.length} rows)`);
             const moderatorless = await call(B, 'GET', '/api/local/admin/app-addresses');
             assert(moderatorless.status === 401, `and the list needs admin auth (${show(moderatorless)})`);
-        }
+        });
 
         // ── 12. "Delete my account", replayed ──
         console.log('\n— 12. "delete my account" signed for A, replayed at B —');
-        {
+        await section('12', async () => {
             const req = await bound(mia, 'POST', 'https://a.test/api/member/purge', {});
             const atA = await sendTo(A, 'POST', req);
             assert(atA.status === 200 && (await A.send('member', { pk: mia.pk })) !== 'active', `accepted at A: Mia's account there is closed (${show(atA)})`);
@@ -611,7 +621,7 @@ async function main(): Promise<void> {
             const reSigned = await sendTo(B, 'POST', await bound(mia, 'POST', 'https://b.test/api/member/purge', {},
                 { timestamp: Number(req.headers['X-Timestamp']), nonce: req.nonce }));
             assert(reSigned.status === 200 && (await B.send('member', { pk: mia.pk })) !== 'active', `re-signed for b.test (same nonce) it is accepted at B (${show(reSigned)})`);
-        }
+        });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);
         for (const n of started) console.error(`--- ${n.name} output (tail) ---\n${n.output().slice(-2500)}`);

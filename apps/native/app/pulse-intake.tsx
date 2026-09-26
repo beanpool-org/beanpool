@@ -33,7 +33,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import {
@@ -63,12 +65,14 @@ interface Channel {
     syndicateToNode: boolean;
 }
 
-export function safeDecodeURIComponent(value: string | undefined): string {
+export function safeDecodeURIComponent(value: string | string[] | undefined): string {
     if (!value) return '';
+    const str = Array.isArray(value) ? value[0] : value;
+    if (!str) return '';
     try {
-        return decodeURIComponent(value);
+        return decodeURIComponent(str);
     } catch {
-        return value;
+        return str;
     }
 }
 
@@ -76,7 +80,8 @@ export default function PulseIntakeScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
-    const params = useLocalSearchParams<{ url?: string; channelId?: string }>();
+    const params = useLocalSearchParams<{ url?: string | string[]; channelId?: string | string[] }>();
+    const initialChannelId = Array.isArray(params.channelId) ? params.channelId[0] : params.channelId;
 
     const [channels, setChannels] = useState<Channel[]>([]);
     const [loadingChannels, setLoadingChannels] = useState(true);
@@ -84,7 +89,7 @@ export default function PulseIntakeScreen() {
 
     // Form inputs
     const [urlInput, setUrlInput] = useState<string>(safeDecodeURIComponent(params.url));
-    const [selectedChannelId, setSelectedChannelId] = useState<string | null>(params.channelId || null);
+    const [selectedChannelId, setSelectedChannelId] = useState<string | null>(initialChannelId || null);
     const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
 
     // Live preview resolution state
@@ -125,8 +130,8 @@ export default function PulseIntakeScreen() {
             setChannelError(null);
 
             // Auto-select initial channel if provided or if only 1 exists
-            if (params.channelId && list.some(c => c.id === params.channelId)) {
-                setSelectedChannelId(params.channelId);
+            if (initialChannelId && list.some(c => c.id === initialChannelId)) {
+                setSelectedChannelId(initialChannelId);
             } else if (list.length === 1) {
                 setSelectedChannelId(list[0].id);
                 setSelectedCategory(list[0].category);

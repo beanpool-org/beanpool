@@ -192,6 +192,31 @@ describe('screens 0 to 3: from the lobby to leaving for the provider', () => {
         expect(await loadPendingJoin()).toBeNull();
     });
 
+    it("a browser that can't hold a key is told so on the restore screen too, and offered no way back that would fail (review 4109643191)", async () => {
+        const subtle = globalThis.crypto.subtle;
+        const real = subtle.generateKey.bind(subtle);
+        const spy = vi.spyOn(subtle, 'generateKey').mockImplementation(((alg: AlgorithmIdentifier, ...rest: unknown[]) =>
+            (alg as { name?: string })?.name === 'Ed25519'
+                ? Promise.reject(new DOMException('Unrecognized name.', 'NotSupportedError'))
+                : (real as (...a: unknown[]) => Promise<CryptoKey>)(alg, ...rest)) as typeof subtle.generateKey);
+        try {
+            const { calls } = stubNode({});
+            const { onRestore } = renderJoin();
+            await screen.findByTestId('join-too-old');
+            fireEvent.click(screen.getByRole('button', { name: 'Already have BeanPool?' }));
+            expect((await screen.findByTestId('restore-too-old')).textContent).toMatch(/too old to hold a BeanPool account/);
+            for (const name of ['Use my sign-in', 'Link with my phone', 'Use my 12 words']) {
+                expect(screen.queryByRole('button', { name })).toBeNull();
+            }
+            fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+            await screen.findByTestId('join-too-old');
+            expect(onRestore).not.toHaveBeenCalled();
+            expect(calls).toHaveLength(0);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
     it('going back past the name drops the key made for it', async () => {
         await seedPending({ provider: null, nonce: null });
         stubNode({ '/api/join/sso-nonce': () => nonceAnswer() });

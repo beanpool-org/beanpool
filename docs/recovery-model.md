@@ -131,13 +131,27 @@ For GitHub that `sub` is public, so a GitHub-sealed copy is open to anyone holdi
 dynamic community domain, so the providers' redirect and Services ID rules are met once, in their
 consoles. Local communities' web apps stay 12-words only. A seal that fails, or a copy the node
 cannot store, never blocks the join; the member then has the 12 words, and Settings says the
-sign-in is not connected. Restoring with the sign-in in a browser is G11-d.
+sign-in is not connected.
+
+**Restoring with that sign-in in a browser (G11-d).** A cleared or new browser on the global
+community gets the account back with the sign-in it joined with, through the same recovery
+routes the phone uses (`routes/recovery-collect.ts`, unchanged): the public callsign lookup names
+the account and its public key, a throwaway key made for the restore opens the session and signs
+every call in it, Google/Apple/Facebook leave the page and return to the join's own return page
+(`/app/auth/<provider>`, Apple via the node's 303), GitHub is the node's device flow, and core's
+`openSeedFromSso` opens the released copy in the page (`apps/pwa/src/lib/web-restore.ts`). The
+restored key must equal the public key the lookup named, or nothing is saved: a check the phone's
+restore does not make. The 12 words are kept only when the web app's own derivation of them makes
+that key. The account is then saved as a 12-words restore is: the node asked whether it is a
+member, a join this browser sent settled first, and the identity store's guarded write, which
+never replaces another account. The web opens only the single-blob copy; an older two-part one is
+said plainly, with the words and the phone as the ways back.
 
 ---
 
 ## Recovery flows
 
-### SSO (Native only)
+### SSO (Native, and the global community's web app)
 
 ```
 1  enter callsign

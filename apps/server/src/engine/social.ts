@@ -8,6 +8,7 @@ import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import {
     getMember,
+    isNodeMember,
     getFriends,
     type Rating,
     type FriendEntry
@@ -29,7 +30,8 @@ export function addRating(
     transactionId: string
 ): Rating | null {
     assertMemberActive(raterPubkey);
-    if (!getMember(db, raterPubkey) || !getMember(db, targetPubkey) || raterPubkey === targetPubkey || stars < 1 || stars > 5) return null;
+    // A member of this node, not just a row: a pruned account, or a re-keyed phone's old key, rates nobody.
+    if (!isNodeMember(db, raterPubkey) || !getMember(db, targetPubkey) || raterPubkey === targetPubkey || stars < 1 || stars > 5) return null;
 
     const tx = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='completed'").get(transactionId) as any;
     if (!tx || (tx.buyer_pubkey !== raterPubkey && tx.seller_pubkey !== raterPubkey) || (tx.buyer_pubkey !== targetPubkey && tx.seller_pubkey !== targetPubkey)) return null;

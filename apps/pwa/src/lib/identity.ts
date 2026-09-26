@@ -13,6 +13,8 @@ const STORE_NAME = 'keys';
 const KEY_ID = 'sovereign-identity';
 /** A join through the open door that has not finished yet (savePendingJoin). Never read by loadIdentity. */
 const PENDING_JOIN_ID = 'pending-join';
+/** A restore with a sign-in that has left the page for the provider (savePendingRestore). Never read by loadIdentity. */
+const PENDING_RESTORE_ID = 'pending-restore';
 
 export interface BeanPoolIdentity {
     publicKey: string;    // Hex-encoded Ed25519 public key
@@ -39,22 +41,25 @@ function openDb(): Promise<IDBDatabase> {
     });
 }
 
-/** What the two slots hold, read inside the transaction that may write them. */
+/** What the three slots hold, read inside the transaction that may write them. */
 interface StoredSlots {
     identity: BeanPoolIdentity | undefined;
     pending: PendingJoin | undefined;
+    /** Whatever is in the restore slot, unread: pendingRestoreAsStored decides whether it is one. */
+    restore: unknown;
 }
 
 /** What to write back: a slot left out is left as it is. */
 interface SlotWrites<T> {
     identity?: BeanPoolIdentity;
     pending?: PendingJoin | 'delete';
+    restore?: PendingRestore | 'delete';
     result: T;
 }
 
 /**
- * Read both slots and decide what to write, in one readwrite transaction: `decide` sees what is stored at that moment,
- * never a tab's copy, and nothing else can write between its reading and its writing. Every write to either slot but
+ * Read the slots and decide what to write, in one readwrite transaction: `decide` sees what is stored at that moment,
+ * never a tab's copy, and nothing else can write between its reading and its writing. Every write to any slot but
  * wipeIdentity's goes through here.
  */
 async function withStoredSlots<T>(decide: (stored: StoredSlots) => SlotWrites<T>): Promise<T> {
@@ -63,17 +68,21 @@ async function withStoredSlots<T>(decide: (stored: StoredSlots) => SlotWrites<T>
     await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        // Both asked at once: requests answer in order, so the second answer comes with the first already in.
+        // All asked at once: requests answer in order, so the last answer comes with the others already in.
         const identityReq = store.get(KEY_ID);
         const pendingReq = store.get(PENDING_JOIN_ID);
-        pendingReq.onsuccess = () => {
+        const restoreReq = store.get(PENDING_RESTORE_ID);
+        restoreReq.onsuccess = () => {
             const decision = decide({
                 identity: (identityReq.result ?? undefined) as BeanPoolIdentity | undefined,
                 pending: (pendingReq.result ?? undefined) as PendingJoin | undefined,
+                restore: restoreReq.result ?? undefined,
             });
             if (decision.identity) store.put(decision.identity, KEY_ID);
             if (decision.pending === 'delete') store.delete(PENDING_JOIN_ID);
             else if (decision.pending) store.put(decision.pending, PENDING_JOIN_ID);
+            if (decision.restore === 'delete') store.delete(PENDING_RESTORE_ID);
+            else if (decision.restore) store.put(decision.restore, PENDING_RESTORE_ID);
             result = decision.result;
         };
         tx.oncomplete = () => resolve();
@@ -498,6 +507,91 @@ export async function completePendingJoin(identity: BeanPoolIdentity): Promise<v
     if (out) throw new IdentityHeldError(out.held);
 }
 
+// ===================== THE PENDING RESTORE (design G11 §4.4, G11-d) =====================
+
+/** How long a pending restore lives: the node's sign-in nonce life, as a pending join's. */
+export const PENDING_RESTORE_TTL_MS = NODE_NONCE_LIFE_MS;
+
+/**
+ * A restore with a sign-in (lib/web-restore.ts) that has left the page for the provider: what the page needs when the
+ * browser comes back. The node's recovery session for the account (`collectionId`) is bound to a throwaway key made for
+ * this restore (`ephemeral`), which signs every call in it and was given the sign-in's `nonce`. `account` is the member
+ * the node's lookup named: the account that comes back must have that key, or nothing is saved.
+ *
+ * Why its own key in the store, and not the pending join's slot with `kind: 'restore'` as design §4.4 has it: that slot
+ * is the only copy of a sent join's key, which nothing may replace ("A sent key's fate" above), so a restore sharing it
+ * could not start while such a join was out, and would push out an unsent one. So it sits beside it: read and written in
+ * the same transactions (withStoredSlots), wiped with the rest (wipeIdentity), dropped on sight once old.
+ *
+ * It never holds an account's key. `ephemeral` is not one and is never saved as one; nothing here writes the identity
+ * slot, and loadIdentity never reads this one. The account that comes back is saved only through importIdentity's
+ * guarded write (one browser, one account), after its key has been compared with `account.publicKey`.
+ */
+export interface PendingRestore {
+    kind: 'restore';
+    /** The throwaway key the node's recovery session is bound to. Not an account. */
+    ephemeral: { publicKey: string; privateKey: string };
+    /** The account being brought back, as the node's lookup named it. */
+    account: { publicKey: string; callsign: string };
+    collectionId: string;
+    provider: JoinProvider;
+    /** The node's sign-in nonce for `ephemeral`. It is the provider's `state` as well. */
+    nonce: string;
+    startedAt: number;
+    expiresAt: number;
+}
+
+/** A pending restore, whole: anything else in its slot is dropped rather than read. */
+function asPendingRestore(value: unknown): PendingRestore | null {
+    const r = value as Partial<PendingRestore> | null | undefined;
+    if (!r || typeof r !== 'object' || r.kind !== 'restore') return null;
+    if (typeof r.ephemeral?.privateKey !== 'string' || !r.ephemeral.privateKey || typeof r.ephemeral.publicKey !== 'string') return null;
+    if (typeof r.account?.publicKey !== 'string' || !r.account.publicKey || typeof r.account.callsign !== 'string') return null;
+    if (typeof r.collectionId !== 'string' || !r.collectionId || typeof r.nonce !== 'string' || !r.nonce || typeof r.provider !== 'string') return null;
+    if (typeof r.expiresAt !== 'number' || typeof r.startedAt !== 'number') return null;
+    return r as PendingRestore;
+}
+
+/** The pending restore as stored, if it is one and still in date; otherwise it is to be dropped. */
+function pendingRestoreAsStored(stored: unknown, now: number): { restore: PendingRestore | null; drop: boolean } {
+    if (stored === undefined) return { restore: null, drop: false };
+    const r = asPendingRestore(stored);
+    if (!r || !(r.expiresAt > now)) return { restore: null, drop: true };
+    return { restore: r, drop: false };
+}
+
+/** Keep `restore` as the one pending restore, in place of any other. Touches nothing else. */
+export async function savePendingRestore(restore: PendingRestore): Promise<void> {
+    await withStoredSlots<void>(() => ({ restore, result: undefined }));
+}
+
+/** The pending restore, or null. One past its `expiresAt`, or not whole, is dropped on sight and never returned. */
+export async function loadPendingRestore(now: number = Date.now()): Promise<PendingRestore | null> {
+    return withStoredSlots(({ restore }) => {
+        const r = pendingRestoreAsStored(restore, now);
+        return { restore: r.drop ? 'delete' : undefined, result: r.restore };
+    });
+}
+
+/**
+ * The pending restore this sign-in came back for (its nonce is the return's `state`), taken out of the store in the
+ * same transaction, so one return is acted on once. Null, with a pending restore for another nonce left as it is, when
+ * none matches.
+ */
+export async function takePendingRestore(nonce: string, now: number = Date.now()): Promise<PendingRestore | null> {
+    return withStoredSlots(({ restore }) => {
+        const r = pendingRestoreAsStored(restore, now);
+        if (r.drop) return { restore: 'delete', result: null };
+        if (!r.restore || !nonce || r.restore.nonce !== nonce) return { result: null };
+        return { restore: 'delete', result: r.restore };
+    });
+}
+
+/** Drop the pending restore (the member went back, or chose another way). */
+export async function clearPendingRestore(): Promise<void> {
+    await withStoredSlots<void>(({ restore }) => ({ restore: restore === undefined ? undefined : 'delete', result: undefined }));
+}
+
 /**
  * Import a pre-existing identity (from another device) and store it in IndexedDB. Refused, with nothing changed, when
  * this browser holds another account (IdentityHeldError).
@@ -510,7 +604,8 @@ export async function importIdentity(identity: BeanPoolIdentity): Promise<void> 
  * Permanently delete the identity (private key included) from IndexedDB.
  * Used by the "Wipe Identity" flow so the key cannot linger in the secure store
  * after the user asks for it to be destroyed. A pending join goes with it, sent or not: it holds a key and 12 words
- * too, and this is the member's own "delete everything on this device" (the one way past releaseSentPendingJoin).
+ * too, and this is the member's own "delete everything on this device" (the one way past releaseSentPendingJoin). A
+ * pending restore goes too.
  */
 export async function wipeIdentity(): Promise<void> {
     const db = await openDb();
@@ -519,6 +614,7 @@ export async function wipeIdentity(): Promise<void> {
         const store = tx.objectStore(STORE_NAME);
         store.delete(KEY_ID);
         store.delete(PENDING_JOIN_ID);
+        store.delete(PENDING_RESTORE_ID);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));

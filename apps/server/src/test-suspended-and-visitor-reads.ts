@@ -30,6 +30,9 @@
  *     door each make its row a member's (not "already a member"), use the code, keep its DMs and Beans, and it reads as
  *     a member. It may knock. registerVisitor never makes a member's row a visitor's.
  *  5. Invites refuse a key a re-key replaced: an invite code and an offline ticket, and neither is used.
+ *  6. Replication: the export carries the mark (never the member directory); a standby takes it on a row it never had
+ *     and on an older copy, takes a visitor's join (who invited them, the code), and keeps its own mark when a main
+ *     server from before the column sends none.
  *
  * Runs twice: here with every ENFORCE_* variable REMOVED (the fresh-download default: read auth on, the member-only
  * /ws feed), then in a child process with ENFORCE_READ_AUTH=false, where the gate doesn't run and each route's own
@@ -507,6 +510,54 @@ async function main() {
         const ticket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(gen), publicKey: rex.pubKeyHex, callsign: 'RexAgain' });
         const usedByRex = db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE used_by = ?').get(rex.pubKeyHex) as any;
         assert(ticket.status === 400 && /replaced/i.test(ticket.body?.error ?? '') && usedByRex.n === 0, `an offline ticket refuses it, unused (${ticket.status} ${ticket.text.slice(0, 100)})`);
+    }
+
+    // ── 6. Replication: a standby knows who is a visitor ───────────────────────────────────────────────────────────
+    if (!READ_AUTH_OFF) {
+        console.log('\n── 6. replication: a standby holds the visitor mark, and a visitor who joined ──');
+        const { startP2P } = await import('./p2p.js');
+        const { addConnector } = await import('./connector-manager.js');
+        const zed = keypair('ZedVisitor');
+        const yan = keypair('YanVisitor');
+        se.transfer('genesis', zed.pubKeyHex, 1, 'hello', 'direct', true);
+        se.transfer('genesis', yan.pubKeyHex, 1, 'hello', 'direct', true);
+        const p2p = await startP2P(4296, 4297);
+        const nodeId = p2p.peerId.toString();
+        addConnector(`/ip4/127.0.0.1/tcp/4297/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+        const payload: any = await se.exportSyncState(nodeId);
+        const exported = (pk: string) => (payload.members ?? []).find((m: any) => m.publicKey === pk);
+        assert(exported(zed.pubKeyHex)?.isVisitor === true && exported(dee.pubKeyHex)?.isVisitor === false && exported(gen.pubKeyHex)?.isVisitor === false,
+            'the export carries isVisitor: true for a visitor, false for a member and for a visitor who joined');
+        assert(!('isVisitor' in (await get('/api/members', gen)).body?.[0]), 'the member directory never carries it');
+        // A standby that never had Zed (the insert path), holds Yan as a member (an older copy: the update path), and
+        // holds Dee as the visitor she was before she joined.
+        const OLD = '2000-01-01T00:00:00.000Z';
+        db.prepare('DELETE FROM members WHERE public_key = ?').run(zed.pubKeyHex);
+        db.prepare('DELETE FROM accounts WHERE public_key = ?').run(zed.pubKeyHex);
+        db.prepare('UPDATE members SET is_visitor = 0, updated_at = ? WHERE public_key = ?').run(OLD, yan.pubKeyHex);
+        db.prepare('UPDATE members SET is_visitor = 1, invited_by = NULL, invite_code = NULL, updated_at = ? WHERE public_key = ?').run(OLD, dee.pubKeyHex);
+        se.setNodeRole('backup');
+        await se.importRemoteState(payload);
+        se.setNodeRole('primary');
+        assert(visitorFlag(zed.pubKeyHex) === 1, `a visitor the standby never had arrives as a visitor (is_visitor ${visitorFlag(zed.pubKeyHex)})`);
+        assert(visitorFlag(yan.pubKeyHex) === 1, `an older copy takes the mark (is_visitor ${visitorFlag(yan.pubKeyHex)})`);
+        const deeBack = row(dee.pubKeyHex);
+        assert(deeBack.is_visitor === 0 && deeBack.invited_by === gen.pubKeyHex && !!deeBack.invite_code,
+            `a visitor who joined on the main server is a member on the standby, with who invited her and the code (is_visitor ${deeBack.is_visitor}, invited_by ${String(deeBack.invited_by).slice(0, 8)})`);
+        // A main server from before the column sends no isVisitor: the standby keeps its own mark.
+        db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(OLD, yan.pubKeyHex);
+        const { signature: _sig, publicKey: _pub, ...unsigned } = payload;
+        void _sig; void _pub;
+        const legacy = await se.signSyncPayload({ ...unsigned, members: (payload.members ?? []).filter((m: any) => m.publicKey === yan.pubKeyHex).map((m: any) => {
+            const { isVisitor: _dropped, ...rest } = m;
+            void _dropped;
+            return rest;
+        }) });
+        se.setNodeRole('backup');
+        await se.importRemoteState(legacy);
+        se.setNodeRole('primary');
+        assert(visitorFlag(yan.pubKeyHex) === 1, `a copy from a main server that predates the column leaves the mark as it is (is_visitor ${visitorFlag(yan.pubKeyHex)})`);
+        await p2p.stop();
     }
 
     for (const s of Object.values(sockets)) s.ws.close();

@@ -246,9 +246,10 @@ export function verifyMemberSignature(parts: SignedRequestParts, opts: VerifyOpt
 
 /**
  * A member-made signature over one of the fixed statements (Settings sign-in, pairing, re-enrolment), in either form:
- * the format-2 text naming one of this community's hosts, or the old text until the switch. The format-2 text is
- * tried against `host` when the caller got one (a `signedFor` field), otherwise against each of this community's
- * names. `oldTexts` are the statement's old forms, tried only while the old format is accepted.
+ * the format-2 text naming one of this community's hosts, or the old text until the switch. A format-2 statement MUST
+ * carry the host it names (the body's `signedFor`): only that host's text is checked, and it must be one of this
+ * community's. With no `signedFor` the signature is read as the old form, so a format-2 signature sent without it is
+ * refused (403). `oldTexts` are the statement's old forms, tried only while the old format is accepted.
  */
 export function verifyStatementSignature(params: {
     signature: string;

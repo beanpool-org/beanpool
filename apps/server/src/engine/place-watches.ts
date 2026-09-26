@@ -28,10 +28,11 @@
  * does, once. After PLACE_WATCH_NOTICE_KEEP_MS it is dropped rather than told late: the community has been on the card
  * that long.
  *
- * A run compares the week's sightings only with the watches of members a push reaches now, and only near each watch
- * (owedFrom, SightingIndex); every other watch only with that run's new communities, so a socket alone is told only of
- * those. The registry is open, so the week can be full of rows placed where they reach nobody: they cost a run nothing
- * per watch unless they are near it.
+ * The registry is open, so the week can be full of rows placed where they reach nobody (#1202 review 4112143174). A
+ * run compares each watch only with the sightings near it (owedFrom, SightingIndex): the whole week's for a member a
+ * push reaches now, once, when it first does (tellOwed), and otherwise only that run's new communities, so a socket
+ * alone is told only of those. A row costs a watch near it a comparison at the run that first sees it, and once more
+ * when that watch's member can first be pushed to, not one at every run.
  *
  * ## A standby holds every watch (mergeReplicatedWatches)
  *
@@ -350,16 +351,12 @@ export type NoticeWatch = Pick<WatchRecord, 'pubkey' | 'lat' | 'lng' | 'radius_k
 
 /**
  * What each member is owed at `nowMs` (see the header), by member: each community once, at its nearest to one of their
- * watches. `week` is every sighting still owed (firstSightings); `fresh` the keys of this run's new communities.
- *
- * Only a member a push reaches now (`pushable`) is compared with the whole week: anyone else has no phone to be told
- * on, so what an earlier run owed them waits, within the week, for one to register its token (notifyOwedPlaceWatcher
- * and the next run then find it). They are compared with this run's new communities only, as before notices waited,
- * and are told of those on an open socket. So however many rows fill the week, a run compares them only with the
- * watches of members who can hear, and only near those watches (SightingIndex).
+ * watches. `week` is every sighting still owed (firstSightings), and only the members in `weekFor` are compared with
+ * all of it (tellOwed says who); everyone else only with `fresh`, the keys of this run's new communities. Either way,
+ * only with the sightings near each watch (SightingIndex).
  */
 export function owedFrom(watches: readonly NoticeWatch[], week: readonly Sighting[], fresh: ReadonlySet<string>,
-    pushable: ReadonlySet<string>, nowMs: number): Map<string, Owed> {
+    weekFor: ReadonlySet<string>, nowMs: number): Map<string, Owed> {
     const byMember = new Map<string, Owed>();
     const everyone = new SightingIndex(week);
     const thisRun = new SightingIndex(week.filter(s => fresh.has(s.c.key)));
@@ -374,7 +371,7 @@ export function owedFrom(watches: readonly NoticeWatch[], week: readonly Sightin
         if (last !== undefined && nowMs - last < PLACE_WATCH_NOTICE_GAP_MS) continue;
         const setMs = Date.parse(w.created_at);
         if (!Number.isFinite(setMs)) continue;
-        (pushable.has(w.pubkey) ? everyone : thisRun).near(w.lat, w.lng, w.radius_km, ({ c, seenMs, extraKm }) => {
+        (weekFor.has(w.pubkey) ? everyone : thisRun).near(w.lat, w.lng, w.radius_km, ({ c, seenMs, extraKm }) => {
             // Set after the community was first seen: it was already there to find.
             if (seenMs <= setMs) return;
             // First seen before they last heard (told then) or in the quiet day after it (not pushed, on the card).
@@ -391,51 +388,80 @@ export function owedFrom(watches: readonly NoticeWatch[], week: readonly Sightin
 }
 
 /** What each member is owed at `now` (owedFrom), from the database. Only `pubkey`'s, when given. */
-function owedNotices(cb: PlaceWatchNoticeCallbacks, now: string, fresh: ReadonlySet<string>, pubkey?: string): Map<string, Owed> {
+function owedNotices(now: string, fresh: ReadonlySet<string>, weekFor: ReadonlySet<string>, pubkey?: string): Map<string, Owed> {
     const nowMs = Date.parse(now);
     const week = firstSightings(new Date(nowMs - PLACE_WATCH_NOTICE_KEEP_MS).toISOString(), now, PLACE_WATCH_FLOOD).map(toSighting);
-    if (week.length === 0) return new Map();
+    // Nothing new this run and nobody to compare with the week: most hours.
+    if (weekFor.size === 0 && !week.some(s => fresh.has(s.c.key))) return new Map();
     const columns = 'pubkey, lat, lng, radius_km, created_at, last_notified_at';
     const watches = (pubkey === undefined
         ? db.prepare(`SELECT ${columns} FROM place_watches`).all()
         : db.prepare(`SELECT ${columns} FROM place_watches WHERE pubkey = ?`).all(pubkey)) as NoticeWatch[];
     if (watches.length === 0) return new Map();
-    return owedFrom(watches, week, fresh, cb.pushable(pubkey), nowMs);
+    return owedFrom(watches, week, fresh, weekFor, nowMs);
 }
+
+/**
+ * The members whose whole week a run has compared since this server started, each while a push reached them: every
+ * run since told them each new community at the run that first saw it, so a run compares only its own with their
+ * watches (tellOwed). Forgotten when a push no longer reaches them, or a notice they are owed did not reach them, so
+ * that a run compares their week again. A restart (a take-over is one) starts it empty.
+ */
+const weekCompared = new Set<string>();
 
 /**
  * Tells each member what they are owed at `now` (owedNotices; only `pubkey`, when given), in one notice: one push
  * (marketplace category, so their Marketplace notification setting applies) and one `system_announcement` to their own
  * sockets. Stamped only when it reached them (see the header). Returns how many members it reached.
+ *
+ * A member is compared with the whole week only once a push reaches them: anyone else has no phone to be told on, so
+ * what an earlier run owed them waits, within the week, for one to register its token. They are compared with this
+ * run's new communities only, as before notices waited, and told of those on an open socket. And a run compares the
+ * week only for those it hasn't yet (weekCompared); their phone registering always does, for them alone. So however
+ * many rows fill the week, a run compares them with the watches of those members only, and only near those watches.
  */
 function tellOwed(cb: PlaceWatchNoticeCallbacks, now: string, fresh: ReadonlySet<string>, pubkey?: string): number {
+    const pushable = cb.pushable(pubkey);
+    const weekFor = pubkey === undefined ? new Set([...pushable].filter(m => !weekCompared.has(m))) : pushable;
+    const owed = owedNotices(now, fresh, weekFor, pubkey);
     // Stamped, so the quiet day travels to a standby with the watch, and nothing in this notice is owed again.
     const heard = db.prepare('UPDATE place_watches SET last_notified_at = ?, updated_at = ? WHERE pubkey = ?');
-    let told = 0;
-    for (const [member, found] of owedNotices(cb, now, fresh, pubkey)) {
+    const reached = new Set<string>();
+    const unreached: string[] = [];
+    for (const [member, found] of owed) {
         if (!cb.isMember(member)) continue;
         const near = [...found.values()].sort((a, b) => a.km - b.km || (a.c.key < b.c.key ? -1 : 1));
         const km = Math.max(1, Math.round(near[0].km));
         const title = near.length === 1 ? COMMUNITY_NEAR_TITLE : COMMUNITIES_NEAR_TITLE;
         const body = near.length === 1 ? communityNearBody(km) : communitiesNearBody(near.length, km);
         const data = { kind: 'community_near_you', communities: near.slice(0, KEYS_IN_NOTICE).map(n => n.c.key) };
-        let reached = false;
+        let sent = false;
         try {
-            reached = cb.broadcast({ type: 'system_announcement', title, body, severity: 'info', ...data }, [member]) > 0;
+            sent = cb.broadcast({ type: 'system_announcement', title, body, severity: 'info', ...data }, [member]) > 0;
         } catch (e: any) {
             console.warn('[Place watches] Live notice failed:', e?.message || e);
         }
         try {
-            reached = cb.dispatchPushNotification([member], 'SYSTEM', title, body, data, 'marketplace') > 0 || reached;
+            sent = cb.dispatchPushNotification([member], 'SYSTEM', title, body, data, 'marketplace') > 0 || sent;
         } catch (e: any) {
             console.warn('[Place watches] Push failed:', e?.message || e);
         }
         // No phone of theirs registered here and no socket of theirs open: nothing is spent, and it is still owed.
-        if (!reached) continue;
+        if (!sent) {
+            unreached.push(member);
+            continue;
+        }
         heard.run(now, new Date().toISOString(), member);
-        told++;
+        reached.add(member);
     }
-    return told;
+    if (pubkey === undefined) {
+        for (const m of weekCompared) if (!pushable.has(m)) weekCompared.delete(m);
+    } else if (!pushable.has(pubkey)) {
+        weekCompared.delete(pubkey);
+    }
+    for (const m of weekFor) weekCompared.add(m);
+    for (const m of unreached) weekCompared.delete(m);
+    return reached.size;
 }
 
 /**

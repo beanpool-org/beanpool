@@ -20,7 +20,10 @@
  *      community that leaves is scrubbed to its key; a pruned member's watches go with them
  *  6b. a notice counts only when it reached the member: with no phone registered and no socket open, nothing is sent or
  *      stamped; an open socket (the web app, no push token) counts; a phone registering its token over the signed route
- *      is told at once, and never again; a notice is owed for a week after the first sighting, then dropped
+ *      is told at once, and never again; a notice is owed for a week after the first sighting, then dropped; with no
+ *      phone registered, a later run doesn't compare what an earlier one owed, even with a socket open: the phone does
+ *  6c. a watch is compared with every sighting that reaches it and few others (the poles and the antimeridian too), so
+ *      4,200 rows far from it cost it nothing; the week only for a member a push reaches, this run's for anyone else
  *   7. GET /api/global/home in one request: the nearest communities, the nearby post count, the caller's own watches,
  *      the knock seam (null); unsigned gets no watches; with no point, the member's own area
  *   8. the publisher honours publishToDirectory: nothing is sent on the global profile (and its timer is not set), an
@@ -225,6 +228,7 @@ const VALPO = { node_id: 'peer-valpo', community_name: 'Valparaíso Trueque', se
 const MONTE = { node_id: 'peer-monte', community_name: 'Montevideo Canje', service_radius: { lat: -34.90, lng: -56.16, radiusKm: 10 } };
 const LIMA = { node_id: 'peer-lima', community_name: 'Lima Intercambio', service_radius: { lat: -12.05, lng: -77.04, radiusKm: 10 } };
 const CALLAO = { node_id: 'peer-callao', community_name: 'Callao Intercambio', service_radius: { lat: -12.06, lng: -77.12, radiusKm: 10 } };
+const QUITO = { node_id: 'peer-quito', community_name: 'Quito Trueque', service_radius: { lat: -0.18, lng: -78.47, radiusKm: 10 } };
 
 async function main(): Promise<void> {
     console.log('\n=== The communities directory on the global node (G5) ===\n');
@@ -596,6 +600,104 @@ async function main(): Promise<void> {
     const rG = await runMirror();
     sPia.ws.close();
     assert(rG.ok === true && rG.removed === 4 && rG.notified === 0, `the four leave the registry (${JSON.stringify(rG)})`);
+
+    // A member no push can reach is compared with each run's new communities only (engine/place-watches.ts owedFrom): what
+    // an earlier run owed them waits for their phone. Sol uses the web app, and wasn't on it when Quito started.
+    const sol = member('Sol');
+    const setS = await call('POST', sol, '/api/global/watches', { lat: -0.18, lng: -78.5 });
+    pushed.length = 0;
+    serve([...before6b, QUITO]);
+    const rH = await runMirror();
+    await settle();
+    assert(setS.status === 200 && rH.added === 1 && rH.notified === 0 && heardAt(sol) === null,
+        `Quito is new, and Sol, with no phone registered and no socket open, can't be told (${JSON.stringify(rH)})`);
+    const sSol = await socket(sol);
+    const rI = await runMirror();
+    await settle();
+    assert(rI.notified === 0 && announcements(sSol).length === 0 && heardAt(sol) === null,
+        `with the web app open at the next run she still isn't told: with no phone, a run compares only its own new communities (${JSON.stringify(rI)})`);
+    const solToken = await call('POST', sol, '/api/push-tokens', { publicKey: sol.pk, token: pushToken(sol), platform: 'android' });
+    await settle();
+    assert(solToken.status === 200 && pushesTo(sol).length === 1 && same(pushesTo(sol)[0]?.data?.communities, ['peer-quito'])
+        && announcements(sSol).length === 1 && typeof heardAt(sol) === 'string',
+        `her phone registering tells her about Quito at once, on the phone and the open web app (${JSON.stringify(pushesTo(sol).map(m => m.data))})`);
+    sSol.ws.close();
+    pushed.length = 0;
+    serve(before6b);
+    const rJ = await runMirror();
+    assert(rJ.ok === true && rJ.removed === 1 && rJ.notified === 0 && pushed.length === 0, `Quito leaves the registry, and nobody hears more (${JSON.stringify(rJ)})`);
+
+    // ── 6c. which sightings a run compares with a watch ─────────────────────────────────────────────────────────
+    console.log('\n── 6c. a watch is compared only with the sightings near it, and the week only for members a push reaches ──');
+    const pw = await import('./engine/place-watches.js');
+    const { haversineKm } = await import('@beanpool/engine');
+    // Seeded, so a failure is the same failure again.
+    let seed = 20260927;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+    const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)];
+    const between = (lo: number, hi: number) => lo + rand() * (hi - lo);
+    const seenAt = new Date(Date.now() - 3_600_000).toISOString();
+    // Spread over the Earth, crowded at the poles (±90 itself included) and on both sides of the antimeridian (±180).
+    const spot = (): { lat: number; lng: number } => {
+        switch (Math.floor(rand() * 4)) {
+            case 0: return { lat: between(-90, 90), lng: between(-180, 180) };
+            case 1: return { lat: pick([90, -90, between(85, 90), between(-90, -85)]), lng: pick([between(-180, 180), 0, 180, -180]) };
+            case 2: return { lat: between(-70, 70), lng: pick([between(175, 180), between(-180, -175), 180, -180]) };
+            default: return { lat: between(-5, 5), lng: between(-5, 5) };
+        }
+    };
+    const sightings = Array.from({ length: 3000 }, (_, i) => pw.toSighting({ key: `s${i}`, ...spot(),
+        radiusKm: pick([null, 0.001, 5, 50, 100, 150, 20_037]), firstSeenAt: seenAt }));
+    const index = new pw.SightingIndex(sightings);
+    let pairs = 0, missed = 0, visits = 0, twice = 0;
+    for (let i = 0; i < 1500; i++) {
+        const w = { ...spot(), radiusKm: pick([10, 50, 120, 200]) };
+        const seen = new Set<string>();
+        index.near(w.lat, w.lng, w.radiusKm, (s) => {
+            visits++;
+            if (seen.has(s.c.key)) twice++;
+            seen.add(s.c.key);
+        });
+        for (const s of sightings) {
+            if (haversineKm(w.lat, w.lng, s.c.lat, s.c.lng) > w.radiusKm + s.extraKm) continue;
+            pairs++;
+            if (!seen.has(s.c.key)) missed++;
+        }
+    }
+    assert(pairs > 10_000 && missed === 0 && twice === 0,
+        `every sighting that reaches a watch is compared with it, at the poles and across the antimeridian too, and once (${pairs} reaching pairs, ${missed} missed, ${twice} twice)`);
+    assert(visits < 1500 * 3000 / 5, `and far fewer than every pair are looked at (${visits} of ${1500 * 3000})`);
+    const edge = (w: { lat: number; lng: number; r: number }, c: { lat: number; lng: number; radiusKm: number | null }) => {
+        const s = pw.toSighting({ key: 'edge', ...c, firstSeenAt: seenAt });
+        let found = false;
+        new pw.SightingIndex([s]).near(w.lat, w.lng, w.r, () => { found = true; });
+        return { found, km: haversineKm(w.lat, w.lng, c.lat, c.lng) };
+    };
+    for (const [why, w, c] of [
+        ['across the antimeridian', { lat: 10, lng: 179.9, r: 20 }, { lat: 10, lng: -179.95, radiusKm: null }],
+        ['over the north pole', { lat: 89.95, lng: 0, r: 20 }, { lat: 89.95, lng: 180, radiusKm: null }],
+        ['from the south pole itself', { lat: -90, lng: 0, r: 20 }, { lat: -89.9, lng: 123, radiusKm: null }],
+        ['at the widest reach, east of a watch in the far north', { lat: 70, lng: 10, r: 200 }, { lat: 70, lng: 17.88, radiusKm: 100 }],
+    ] as const) {
+        const e = edge(w, c);
+        assert(e.found && e.km <= w.r + (c.radiusKm ?? 0), `a sighting ${why}, ${e.km.toFixed(1)} km from a ${w.r} km watch, is compared`);
+    }
+    const attack = new pw.SightingIndex(Array.from({ length: 4200 }, (_, i) =>
+        pw.toSighting({ key: `far${i}`, lat: 89.9, lng: 0, radiusKm: 5, firstSeenAt: seenAt })));
+    let farVisits = 0;
+    for (const w of [{ lat: -28.6, lng: 153.6 }, { lat: 0, lng: 0 }, { lat: 52.5, lng: 13.4 }, { lat: 86, lng: 0 }]) {
+        attack.near(w.lat, w.lng, 200, () => { farVisits++; });
+    }
+    assert(farVisits === 0, `4,200 rows at 89.9, 0 cost a watch far from them nothing: not one is looked at (${farVisits})`);
+
+    // The week for a member a push reaches (tellOwed's weekFor), this run's new communities for anyone else.
+    const nowMs = Date.now();
+    const lastWeek = pw.toSighting({ key: 'old', lat: 10, lng: 10, radiusKm: 5, firstSeenAt: new Date(nowMs - 3 * 86_400_000).toISOString() });
+    const thisRun = pw.toSighting({ key: 'new', lat: 10.1, lng: 10, radiusKm: 5, firstSeenAt: new Date(nowMs).toISOString() });
+    const watchAt = (pubkey: string) => ({ pubkey, lat: 10, lng: 10, radius_km: 50, created_at: new Date(nowMs - 10 * 86_400_000).toISOString(), last_notified_at: null });
+    const owed = pw.owedFrom([watchAt('phone'), watchAt('web')], [lastWeek, thisRun], new Set(['new']), new Set(['phone']), nowMs);
+    assert(same([...(owed.get('phone')?.keys() ?? [])].sort(), ['new', 'old']) && same([...(owed.get('web')?.keys() ?? [])], ['new']),
+        `a member compared with the week is owed both; anyone else only this run's (${JSON.stringify([...owed].map(([m, f]) => [m, [...f.keys()]]))})`);
 
     // ── 7. GET /api/global/home ─────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 7. the landing card, one request ──');

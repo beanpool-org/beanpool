@@ -139,6 +139,42 @@ export function parseRecoveryTombstoneKey(rowKey: string): { ownerPubkey: string
     return { ownerPubkey: rowKey.slice(0, cut), generation };
 }
 
+/**
+ * What a recovery tombstone names, deleted here: the member's copies of its generation or an older one, stamped no later
+ * than the deletion. A copy the main server holds now is newer on both counts, so it stays: its generation is newer (the
+ * main server never numbers one back after a deletion), and it is stamped after the deletion (a main server rolled back
+ * to code from before this numbers from 1 again). Each row is judged by itself: a later copy must not keep the older
+ * ones. The connection deletes securely (db.ts). Returns how many it deleted.
+ */
+export function deleteTombstonedCopies(rowKey: string, deletedAt: string): number {
+    const t = parseRecoveryTombstoneKey(rowKey);
+    if (!t) return 0;
+    return db.prepare(`DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation <= ?
+                       AND (updated_at IS NULL OR updated_at <= ?)`).run(t.ownerPubkey, t.generation, deletedAt).changes;
+}
+
+/**
+ * At boot: every recovery tombstone this database holds, applied again. A standby running code from before them recorded
+ * each one its main server sent (as it records every tombstone) without applying it, and no pull sends it again: a delta
+ * carries only newer ones, and a large database takes no routine whole copy. A standby that took over on that code holds
+ * them too. Applying one again deletes nothing more. Never throws: the boot goes on, and the next one tries again.
+ */
+export function applyRecordedRecoveryTombstones(): void {
+    try {
+        const recorded = db.prepare("SELECT row_key, deleted_at FROM tombstones WHERE table_name = 'recovery_shares'").all() as
+            { row_key: string; deleted_at: string }[];
+        let removed = 0;
+        db.transaction(() => { for (const t of recorded) removed += deleteTombstonedCopies(t.row_key, t.deleted_at); })();
+        if (removed > 0) {
+            console.log(`🔐 Recovery copies: removed ${removed} sign-in recovery cop${removed === 1 ? 'y' : 'ies'} whose deletion was `
+                + 'recorded here but not applied (by a version from before recovery tombstones).');
+        }
+    } catch (e) {
+        console.warn(`⚠️ Recovery copies: applying the recorded deletions of sign-in recovery copies failed: ${(e as Error)?.message || e}. `
+            + 'The next start tries again.');
+    }
+}
+
 /** The newest generation of this member's copies a tombstone here says were deleted, or 0. */
 function deletedGeneration(ownerPubkey: string): number {
     const keys = db.prepare(`SELECT row_key FROM tombstones WHERE table_name = 'recovery_shares' AND substr(row_key, 1, ?) = ?`)

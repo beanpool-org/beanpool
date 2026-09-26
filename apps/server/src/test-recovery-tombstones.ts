@@ -23,6 +23,9 @@
  *     standby, which holds the older generation, has none of his copies after either pull.
  *  6. Between two pulls, Fay disconnects and is then re-keyed: the standby ends as the main server, no copy under either key.
  *  7. Between two pulls, Gus is re-keyed and then disconnects: the same.
+ * 7b. Ivy disconnects, and the standby records the tombstone without applying it, as a version from before this does. At
+ *     its next start, before any pull, it applies it: a delta would not send it again, and a large database takes no
+ *     routine whole copy.
  *  8. The main server dies and the standby takes over. A sign-in each of those members removed answers as for Zed, who never
  *     had a copy (the collect routes, /api/recovery/collect/sso among them); Hal's and Dee's sign-ins still bring theirs
  *     back. Ada connects hers again on the new main server: it numbers her copy after the one she deleted.
@@ -130,6 +133,12 @@ async function child(): Promise<void> {
                 print: crypto.createHash('sha256').update(String(r.encrypted_share)).digest('hex').slice(0, 16), stamp: r.updated_at,
             }));
         },
+        // What a standby from before this version does with a recovery tombstone in a copy: records it, deletes nothing.
+        'record-only': async (a: { rowKey: string; deletedAt: string }) => {
+            const { db } = await import('./db/db.js');
+            db.prepare("INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('recovery_shares', ?, ?)").run(a.rowKey, a.deletedAt);
+            return true;
+        },
         'recovery-tombstones': async () => {
             const { db } = await import('./db/db.js');
             return db.prepare("SELECT row_key, deleted_at FROM tombstones WHERE table_name = 'recovery_shares' ORDER BY row_key").all();
@@ -205,11 +214,11 @@ async function main(): Promise<void> {
     const pw = (p: string) => ({ 'X-Admin-Password': p });
 
     const anna = member('Anna');
-    const [ada, ben, cal, ava, bo, cy, dee, eli, fay, gus, hal] =
-        ['Ada', 'Ben', 'Cal', 'Ava', 'Bo', 'Cy', 'Dee', 'Eli', 'Fay', 'Gus', 'Hal'].map(member);
+    const [ada, ben, cal, ava, bo, cy, dee, eli, fay, gus, hal, ivy] =
+        ['Ada', 'Ben', 'Cal', 'Ava', 'Bo', 'Cy', 'Dee', 'Eli', 'Fay', 'Gus', 'Hal', 'Ivy'].map(member);
     const fay2 = member('Fay (new phone)'), gus2 = member('Gus (new phone)');
     const zed = member('Zed');
-    const names = new Map([anna, ada, ben, cal, ava, bo, cy, dee, eli, fay, gus, hal, fay2, gus2, zed].map((m) => [m.pk, m.name]));
+    const names = new Map([anna, ada, ben, cal, ava, bo, cy, dee, eli, fay, gus, hal, ivy, fay2, gus2, zed].map((m) => [m.pk, m.name]));
     const named = (rows: any[]) => rows.map((r) => `${names.get(r.owner) ?? r.owner.slice(0, 8)}:${r.type}/${r.ref}#${r.generation}`);
 
     let main: NodeProc;
@@ -249,7 +258,7 @@ async function main(): Promise<void> {
         nodes.push(main);
         const { owner, code } = await main.send('setup-primary', { ownerSeedHex: anna.seedHex, replicationToken });
         require_(owner === anna.pk, 'Anna owns the main server');
-        for (const m of [ada, ben, cal, ava, bo, cy, dee, eli, fay, gus, hal]) await deposit(main, m, true);
+        for (const m of [ada, ben, cal, ava, bo, cy, dee, eli, fay, gus, hal, ivy]) await deposit(main, m, true);
         await main.send('add-member', { pk: zed.pk, callsign: 'Zed' });
 
         await main.send('reseal');
@@ -262,7 +271,7 @@ async function main(): Promise<void> {
         require_(seeded.ok, `the standby copies the main server (${JSON.stringify(seeded)})`);
         require_(await standby.send('envelope') === 'stored', 'and holds its take-over keys');
         const first = await agree('after its first copy', []);
-        require_(first.s.length === 11, `the standby holds the 11 members' copies (${first.s.length})`);
+        require_(first.s.length === 12, `the standby holds the 12 members' copies (${first.s.length})`);
 
         // ── 2. Each delete path, then a delta and a whole copy ──
         console.log('\n— 2. Ada disconnects her last sign-in, Ben removes every keeper, Cal deletes his account; a delta, then a whole copy —');
@@ -335,6 +344,27 @@ async function main(): Promise<void> {
         await pull(true, 'then');
         await agree('after the whole copy', [gus, gus2]);
 
+        // ── 7b. A tombstone recorded by an older version, applied at the next start ──
+        console.log('\n— 7b. Ivy disconnects; the standby records the tombstone without applying it, as an older version does, and restarts —');
+        require_((await disconnect(ivy)).status === 200, 'Ivy disconnects her last sign-in');
+        const ivyTomb = (await main.send('recovery-tombstones')).find((t: any) => t.row_key.startsWith(`${ivy.pk}|`));
+        require_(!!ivyTomb, 'the main server writes her tombstone');
+        await standby.send('record-only', { rowKey: ivyTomb.row_key, deletedAt: ivyTomb.deleted_at });
+        const ivyBefore = (await standby.send('copies')).filter((r: any) => r.owner === ivy.pk).length;
+        require_(ivyBefore === 1, `the standby has recorded it, and still holds her copy (${ivyBefore})`);
+        await standby.kill('SIGTERM');
+        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        nodes.push(standby);
+        require_(standby.ready.role === 'backup', 'it starts again as the standby');
+        const ivyAfter = (await standby.send('copies')).filter((r: any) => r.owner === ivy.pk).length;
+        assert(ivyAfter === 0, `at its start, before any pull, it has applied the tombstone: her copy is gone (${ivyAfter})`);
+        assert(/removed 1 sign-in recovery copy whose deletion was recorded here but not applied/.test(standby.output()),
+            `and its log says so (${(standby.output().match(/Recovery copies: [^\n]*/g) ?? []).join(' | ') || 'no line'})`);
+        // The kind the puller chooses: its first pull after a start is a whole copy.
+        const next = await standby.send('pull', {});
+        require_(next.ok === true, `the standby pulls again (${JSON.stringify({ ok: next.ok, error: next.error, whole: next.whole })})`);
+        await agree('after that pull', [ivy]);
+
         // ── 8. The take-over ──
         console.log('\n— 8. the main server dies and the standby takes over —');
         await main.send('reseal');
@@ -359,7 +389,8 @@ async function main(): Promise<void> {
         });
         const none = answer(await standby.send('recovery-recover', { callsign: 'Zed' }));
         require_(none.opened !== 200 && !none.seed, `Zed, who never had a copy, gets none (${JSON.stringify(none)})`);
-        for (const [m, callsign] of [[ada, 'Ada'], [ben, 'Ben'], [ava, 'Ava'], [bo, 'Bo'], [eli, 'Eli'], [fay, 'Fay'], [gus, 'Gus'], [cal, 'Cal'], [cy, 'Cy'], [cal, 'Deleted Member']] as [Member, string][]) {
+        for (const [m, callsign] of [[ada, 'Ada'], [ben, 'Ben'], [ava, 'Ava'], [bo, 'Bo'], [eli, 'Eli'], [fay, 'Fay'], [gus, 'Gus'], [ivy, 'Ivy'],
+            [cal, 'Cal'], [cy, 'Cy'], [cal, 'Deleted Member']] as [Member, string][]) {
             const r = answer(await standby.send('recovery-recover', { callsign }));
             assert(same(r, none), `${m.name}'s removed sign-in (asked for as "${callsign}") answers as for no copy (${JSON.stringify(r)})`);
         }

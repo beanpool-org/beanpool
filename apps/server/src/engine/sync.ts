@@ -10,7 +10,7 @@ import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type Pho
 import { readProfileRecord } from '../config/node-profile.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { recoverySealEpoch } from '../services/recovery-seal-key.js';
-import { parseRecoveryTombstoneKey } from './recovery-shares.js';
+import { deleteTombstonedCopies } from './recovery-shares.js';
 import { importedArea } from './member-area.js';
 import { mergeReplicatedWatches } from './place-watches.js';
 import { mergeReplicatedKnocks } from './knocks.js';
@@ -400,18 +400,11 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
             const r = db.prepare(`DELETE FROM moderation_notices WHERE id=?`).run(rowKey);
             return r.changes > 0;
         }
-        // A member's recovery copies the main server deleted: every one of this generation or an older one
-        // (engine/recovery-shares.ts deleteAllShares). A copy it holds now is newer on both counts, so it stays: its
-        // generation is newer (the main server never numbers one back after a deletion), and it is stamped after the
-        // deletion (a main server rolled back to code from before this numbers from 1 again). No lookup below: a later
-        // copy must not keep the older ones, so each row is judged by itself. The connection deletes securely (db.ts).
-        case 'recovery_shares': {
-            const t = parseRecoveryTombstoneKey(rowKey);
-            if (!t) return false;
-            const r = db.prepare(`DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation <= ?
-                                  AND (updated_at IS NULL OR updated_at <= ?)`).run(t.ownerPubkey, t.generation, deletedAt);
-            return r.changes > 0;
-        }
+        // A member's recovery copies the main server deleted (engine/recovery-shares.ts deleteAllShares): of this
+        // generation or an older one, and stamped no later than the deletion, so a copy it holds now stays. No lookup
+        // below: a later copy must not keep the older ones, so each row is judged by itself.
+        case 'recovery_shares':
+            return deleteTombstonedCopies(rowKey, deletedAt) > 0;
         default:
             console.warn(`[Sync] Ignoring tombstone for unknown table: ${tableName}`);
             return false;

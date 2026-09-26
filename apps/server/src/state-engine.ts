@@ -35,7 +35,7 @@ import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyR
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
-import { deleteAllShares } from './engine/recovery-shares.js';
+import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { forgetListedCommunities } from './engine/directory-cache.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -561,6 +561,9 @@ export function initStateEngine(): void {
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
     // Never throws.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // Recovery copies whose deletion this database recorded without applying it (a standby on a version from before
+    // recovery tombstones), deleted now (engine/recovery-shares.ts). Never throws.
+    applyRecordedRecoveryTombstones();
     // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
     setMoneyGuardHook(() => assertBeansOn());
     seedPulseCurated();

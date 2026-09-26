@@ -109,6 +109,16 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         return wsInstance;
     }
 
+    it('signs the connect over the URL the socket opens, so it is bound to this community (request binding)', async () => {
+        const { loadIdentity } = await import('../identity');
+        const { buildSignedWsParams } = await import('../crypto');
+        vi.mocked(loadIdentity).mockResolvedValueOnce({ publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any);
+        vi.mocked(buildSignedWsParams).mockResolvedValueOnce('pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
+        const socket = await startAndConnect();
+        expect(buildSignedWsParams).toHaveBeenCalledWith('wss://testnode.beanpool.org/ws', 'aa', ME);
+        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
+    });
+
     it('sends opt-in ping with { type: "ping", wantPong: true } on open and interval', async () => {
         const socket = await startAndConnect();
         expect(socket).not.toBeNull();

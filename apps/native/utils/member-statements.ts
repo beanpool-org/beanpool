@@ -105,9 +105,9 @@ export async function makeOfflineTicket(
     if (await requestSigningFormatFor(nodeUrl) === 2) {
         return `BP-${await buildInviteTicket(nodeUrl, inviter, sign, { timestamp, intendedFor: opts.intendedFor || null })}`;
     }
-    const payload = utf8Bytes(JSON.stringify({ i: inviter, t: timestamp, f: opts.intendedFor || undefined }));
-    const s = toBase64(await sign(payload));
-    return `BP-${toBase64(utf8Bytes(JSON.stringify({ p: toBase64(payload), s })))}`;
+    const payload = JSON.stringify({ i: inviter, t: timestamp, f: opts.intendedFor || undefined });
+    const s = await oldFormSignature(payload, sign);
+    return `BP-${toBase64(utf8Bytes(JSON.stringify({ p: toBase64(utf8Bytes(payload)), s })))}`;
 }
 
 /** The old forms are plain UTF-8, which never starts with the 0xFF every format-2 signature does. */

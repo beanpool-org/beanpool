@@ -320,19 +320,37 @@ export function followReplicatedRekeys(rekeys: ReplicatedRekey[]): ReplicatedRek
  * keeper ref that named the old key naming the new one. One the main server left under the old key (locked with another
  * key, which it could not open) has no counterpart, and stays here as it stays there. After the copy's recovery rows,
  * inside the import's transaction; the connection deletes securely (db.ts).
+ *
+ * The counterpart is looked for under every key that came after: the copy brings each row as the main server holds it
+ * now, after all the re-keys between two pulls. One member re-keyed twice (K1 → K2 → K3) has theirs under K3 alone; a
+ * keeper and the owner of the copy they keep, both re-keyed, have it under both new keys.
  */
 export function dropMovedRecoveryCopies(followed: ReplicatedRekey[]): number {
-    const drop = db.prepare(`DELETE FROM recovery_shares WHERE id IN (
-        SELECT o.id FROM recovery_shares o
-        WHERE (o.owner_pubkey = @old OR (o.holder_type = 'member' AND o.holder_ref = @old))
-          AND EXISTS (SELECT 1 FROM recovery_shares n
-                      WHERE n.owner_pubkey = CASE WHEN o.owner_pubkey = @old THEN @new ELSE o.owner_pubkey END
-                        AND n.holder_type = o.holder_type
-                        AND n.holder_ref = CASE WHEN o.holder_type = 'member' AND o.holder_ref = @old THEN @new ELSE o.holder_ref END
-                        AND n.generation = o.generation
-                        AND n.id != o.id))`);
+    const next = new Map(followed.map((r) => [r.oldKey, r.newKey]));
+    /** A key and each key that replaced it in turn, as this standby followed them. */
+    const keysOf = (key: string): string[] => {
+        const keys = [key];
+        for (let k = next.get(key); k !== undefined && !keys.includes(k); k = next.get(k)) keys.push(k);
+        return keys;
+    };
+    const named = db.prepare(`SELECT id, owner_pubkey, holder_type, holder_ref, generation FROM recovery_shares
+                              WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)`);
+    const counterpart = db.prepare(`SELECT 1 FROM recovery_shares
+                                    WHERE owner_pubkey = ? AND generation = ? AND holder_type = ? AND holder_ref = ? AND id != ?`);
+    const drop = db.prepare('DELETE FROM recovery_shares WHERE id = ?');
     let dropped = 0;
-    for (const r of followed) dropped += drop.run({ old: r.oldKey, new: r.newKey }).changes;
+    for (const oldKey of next.keys()) {
+        const rows = named.all(oldKey, oldKey) as { id: number; owner_pubkey: string; holder_type: string; holder_ref: string; generation: number }[];
+        for (const o of rows) {
+            const owners = keysOf(o.owner_pubkey);
+            const holders = o.holder_type === 'member' ? keysOf(o.holder_ref) : [o.holder_ref];
+            // One row at a time, against what is here now: of two rows that could each pass for the other's
+            // counterpart (a chain that loops back, which no main server writes), the second finds the first gone.
+            const moved = owners.some((owner) => holders.some((holder) => (owner !== o.owner_pubkey || holder !== o.holder_ref)
+                && counterpart.get(owner, o.generation, o.holder_type, holder, o.id)));
+            if (moved) dropped += drop.run(o.id).changes;
+        }
+    }
     return dropped;
 }
 

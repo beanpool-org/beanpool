@@ -29,6 +29,9 @@
  *     with no force-resync.
  *  6. A standby from before this version holds none of the keys its main server replaced before it upgraded, and no delta
  *     brings them: it asks for one whole copy, once, and has them.
+ * 6b. Between two pulls, Bea is re-keyed twice and Cat once. Bea keeps a recovery copy of Cat's. The copy brings the main
+ *     server's recovery copies under the last keys only (it moved the same rows each time), and the standby's own go from
+ *     under every replaced key: none is left under Bea's first key, nor under Cat's old key and Bea's first.
  *  7. The main server dies and the standby takes over. Each replaced key is refused by the middleware, and Rex's old key
  *     at every door (knock, open door, invite, ticket); his new key reads his account.
  *
@@ -317,6 +320,7 @@ async function main(): Promise<void> {
     const sue = newId('Sue'), sue2 = newId('Sue (new phone)');
     const tom = newId('Tom'), tom2 = newId('Tom (new phone)');
     const bea = newId('Bea'), cat = newId('Cat');
+    const bea2 = newId('Bea (second phone)'), bea3 = newId('Bea (third phone)'), cat2 = newId('Cat (new phone)');
 
     /** Both servers agree: each key's rows, every balance and their sum. */
     const agree = async (main: NodeProc, standby: NodeProc, who: string, oldId: Id, newId_: Id) => {
@@ -425,6 +429,35 @@ async function main(): Promise<void> {
             `it holds every key the main server replaced (${afterSecond.invalidated.length} of ${mainKeys.length})`);
         const third = await standby.send('pull', {});
         assert(third.ok && !third.whole, 'the whole copy was asked for once: the next pull is a delta');
+
+        // ── 6b. Re-keys in a row between two pulls ──
+        console.log('\n— 6b. Bea is re-keyed twice, and Cat, whose recovery copy she keeps, once, between two of the standby\'s pulls —');
+        await main.send('seed-rows', { pk: bea.pk, peer: cat.pk, tag: 'bea' });
+        const beaSeeded = await standby.send('pull', {});
+        const beforeHops = await standby.send('state', { keys: [bea.pk, cat.pk] });
+        require_(beaSeeded.ok && beforeHops.keyRows[bea.pk]['recovery_shares.owner_pubkey'] === 2 && beforeHops.keyRows[bea.pk]['recovery_shares.holder_ref'] === 1
+            && beforeHops.keyRows[cat.pk]['recovery_shares.owner_pubkey'] === 2,
+            `the standby holds Bea's two recovery copies, the copy of Cat's she keeps, and Cat's two (${JSON.stringify(beforeHops.keyRows[bea.pk])})`);
+        require_(await main.send('rekey', { oldPk: bea.pk, newPk: bea2.pk, operator: owner }), 'Bea is re-keyed');
+        require_(await main.send('rekey', { oldPk: bea2.pk, newPk: bea3.pk, operator: owner }), 'and re-keyed again');
+        require_(await main.send('rekey', { oldPk: cat.pk, newPk: cat2.pk, operator: owner }), 'and Cat is re-keyed');
+        const hops = await standby.send('pull', {});
+        assert(hops.ok === true && hops.whole === false, `the standby imports the delta that carries all three (${JSON.stringify({ ok: hops.ok, error: hops.error, whole: hops.whole })})`);
+        const hopKeys = [bea.pk, bea2.pk, bea3.pk, cat.pk, cat2.pk];
+        const mh = await main.send('state', { keys: hopKeys });
+        const sh = await standby.send('state', { keys: hopKeys });
+        assert(sh.members[bea3.pk]?.callsign === 'Bea' && sh.members[cat2.pk]?.callsign === 'Cat'
+            && [bea.pk, bea2.pk, cat.pk].every((k) => sh.members[k] === null),
+            `on the standby, Bea is her third key and Cat his new one, and no member row is left under a replaced key (${JSON.stringify(sh.members)})`);
+        assert(same(sh.invalidated, mh.invalidated), 'it holds every replaced key as the main server does, each with the key that replaced it');
+        assert(same(sh.keyRows, mh.keyRows),
+            `every row names the key the main server has it under (${JSON.stringify(sh.keyRows[bea.pk])} / ${JSON.stringify(mh.keyRows[bea.pk])})`);
+        assert([bea.pk, bea2.pk, cat.pk].every((k) => Object.values(sh.keyRows[k] as Record<string, number>).every((n) => n === 0)),
+            `none names a replaced key: no recovery copy is left under one (${JSON.stringify(sh.keyRows[bea.pk])}, ${JSON.stringify(sh.keyRows[cat.pk])})`);
+        assert(sh.keyRows[bea3.pk]['recovery_shares.owner_pubkey'] === 2 && sh.keyRows[bea3.pk]['recovery_shares.holder_ref'] === 1
+            && sh.keyRows[cat2.pk]['recovery_shares.owner_pubkey'] === 2,
+            `Bea's two copies and the copy of Cat's she keeps are under her last key, and Cat's two under his new one, once each (${JSON.stringify(sh.keyRows[bea3.pk])})`);
+        assert(same(heldBy(sh.accounts, mh.accounts), mh.accounts) && sh.sum === mh.sum, `every balance is the main server's (sum ${sh.sum} / ${mh.sum})`);
 
         // ── 7. The take-over ──
         console.log('\n— 7. the main server dies and the standby takes over —');

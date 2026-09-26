@@ -116,6 +116,8 @@ export function isLocalNetworkHost(host: string): boolean {
  * host on a node that knows none of its names, `foreign` otherwise.
  */
 export function audienceStanding(host: string): AudienceStanding {
+    // Only a host in the one form apps sign (audienceOf: lower case, no port, no trailing dot) can be anyone's name.
+    if (normalizeAddress(host) !== host) return 'foreign';
     if (LOOPBACK.includes(host)) return 'own';
     const configured = configuredAddresses();
     if (configured.some((a) => a.address === host)) return 'own';

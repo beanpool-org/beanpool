@@ -566,9 +566,21 @@ async function main(): Promise<void> {
             const lanLate = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://192.168.1.20:8443/api/community/me'));
             assert(lanLate.status === 200, `while its LAN address still works (${show(lanLate)})`);
             await U.send('switchClock', { at: null });
+            const stranger = id('Stranger');
+            const strangerRead = await sendTo(U, 'GET', await bound(stranger, 'GET', 'https://spam.example/api/community/info'));
+            assert(strangerRead.status === 200, `a key with no row here signing for spam.example is answered as before (${show(strangerRead)})`);
+            {
+                const ts = String(Date.now());
+                const nonce = crypto.randomBytes(16).toString('hex');
+                const text = core.signedRequestText({ host: 'Community.Example.org', method: 'GET', path: '/api/community/me', timestamp: ts, nonce, body: '' });
+                const sig = Buffer.from(ed25519.sign(core.signedRequestBytes(text), mia.seed)).toString('base64');
+                const odd = await call(U, 'GET', '/api/community/me', { 'X-Public-Key': mia.pk, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce, 'X-Signed-For': 'Community.Example.org' });
+                assert(odd.status === 421, `a host not in the form apps sign (capitals) is nobody's name, even here → 421 (${show(odd)})`);
+            }
             const listed = await call(U, 'GET', '/api/local/admin/app-addresses', adminPw);
             assert(listed.status === 200 && listed.body?.addresses?.length === 0 && listed.body?.unconfirmed?.some((u: any) => u.address === 'community.example.org' && u.today >= 1),
                 `Settings offers community.example.org to confirm (${show(listed)})`);
+            assert(!listed.body?.unconfirmed?.some((u: any) => u.address === 'spam.example'), "but not spam.example: only members' apps put an address on that list");
             const noAuth = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', {}, JSON.stringify({ address: 'community.example.org' }));
             assert(noAuth.status === 401 || noAuth.status === 403, `confirming needs an owner or admin (${show(noAuth)})`);
             const confirmed = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', adminPw, JSON.stringify({ address: 'https://Community.Example.org/settings' }));

@@ -32,6 +32,8 @@ Once you add one, choose **Who can see this?**:
 - **Friends:** people you have added as friends.
 - **Community:** every member of your community.
 
+A member who is suspended sees none of them while the suspension lasts. Nor does anyone who has not joined your community, even someone a member has messaged or sent beans to.
+
 Today the web app can show your contact details on your posts. The phone app does not show other members' contact details yet.
 
 ## What others see

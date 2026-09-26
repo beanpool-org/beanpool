@@ -66,3 +66,5 @@ Only an owner can suspend an owner, or remove an owner or an admin. Nobody can r
 - A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.
 - The trust score shown on a member's page is not calculated yet. Do not act on it.
 - Suspended members can still make invites from their app.
+- While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.
+- Someone a member messages or sends beans to who has not joined is a visitor. They get those messages and beans, and see only what someone who has not joined sees. If they join with an invite, they become a member and keep both.

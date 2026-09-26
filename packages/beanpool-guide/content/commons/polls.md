@@ -28,7 +28,7 @@ Polls are in the Market. Tap **Polls** in the top row to see only polls.
 - Tap an answer to choose it. Tap another to change your mind, until the poll closes.
 - The card shows how many chose each answer.
 
-Polls are not secret. **Your vote is visible to members**: tap **View voters** to see who chose what.
+Polls are not secret. **Your vote is visible to members**: tap **View voters** to see who chose what. A member who is suspended sees only how many chose each answer, until the suspension ends.
 
 ## Closing a poll early
 

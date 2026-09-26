@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 38,
-  "hash": "1e900debe20a61d0198c3ad26c63997c2b82e4e233d06be944858902ee3b45c4",
+  "version": 39,
+  "hash": "f34b5ffde59d4fc95e0c7e24388de8d87d720bde740207a46b25820a852e76ef",
   "sections": [
     {
       "id": "setup",
@@ -997,7 +997,9 @@
           "items": [
             "A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.",
             "The trust score shown on a member's page is not calculated yet. Do not act on it.",
-            "Suspended members can still make invites from their app."
+            "Suspended members can still make invites from their app.",
+            "While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.",
+            "Someone a member messages or sends beans to who has not joined is a visitor. They get those messages and beans, and see only what someone who has not joined sees. If they join with an invite, they become a member and keep both."
           ]
         }
       ]

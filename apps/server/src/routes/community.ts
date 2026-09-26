@@ -1374,7 +1374,6 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    // The signer takes the device token over: any other key's row for it goes (one account per phone).
     const success = registerPushToken(activeKey, token, platform || 'ios');
     ctx.body = { success };
 });

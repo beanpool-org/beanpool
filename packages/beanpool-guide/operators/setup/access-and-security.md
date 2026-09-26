@@ -13,6 +13,8 @@ Type the current password and a new one. The new one needs at least 8 characters
 
 Change it whenever someone who knew it steps down. Everyone who has it is an owner.
 
+If the server made up the first password (ADMIN_PASSWORD was empty), changing it deletes data/first-admin-password.txt at once. The log says so.
+
 ## Two-factor sign-in
 
 Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. It is off until you switch it on.
@@ -41,6 +43,6 @@ If you do hold one, keep it offline, like a spare key. Anyone who has it can do 
 
 ## Factory reset
 
-Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and prints it in the log.
+Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. It also deletes data/first-admin-password.txt if it is still there, since the password in it no longer works. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and puts it in a new data/first-admin-password.txt, as on the first start. It never prints it in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt
 
 To start a community again from nothing, stop the server and move the whole data folder away. Keep that copy until you are sure.

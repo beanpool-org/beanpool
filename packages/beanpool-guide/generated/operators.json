@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 47,
-  "hash": "1b7eab2eef0620b8c9744a877b81188690de3af411edafea57449a31c71bdafb",
+  "version": 48,
+  "hash": "4dce1d6b97400d1a849f1152e85d0c23a21288b7fc4dd3742d1c27e8f5fb008a",
   "sections": [
     {
       "id": "setup",
@@ -100,7 +100,11 @@
         },
         {
           "type": "p",
-          "text": "If you leave ADMIN_PASSWORD empty, the server makes up a 20-character password. It prints it once, in a box in the log. Read it with: docker compose logs beanpool-node"
+          "text": "If you leave ADMIN_PASSWORD empty, the server makes up a 20-character password. It never prints it in the log, because the log is kept for as long as the server runs and gets copied into support requests. It puts the password in a file, data/first-admin-password.txt, that only the server can read, and the log says where it is. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt"
+        },
+        {
+          "type": "p",
+          "text": "Sign in with it, then change the password in Access & Security. The file is deleted the moment you do, and the log says so. Until then, every start of the server reminds you in the log that the file is still there, without printing the password. If the server cannot write the file, it does not start, and the log says why."
         },
         {
           "type": "p",
@@ -115,7 +119,8 @@
           "items": [
             "**data/genesis.json** and **data/community.key**: your community's own key. This key is not a person and is not the owner. Once you make a recovery code, a backup from Settings carries both, locked. Until then only a copy of the data folder does: see Backups and replicas.",
             "**data/state.db**: the database, with every member, post, deal and vote.",
-            "**data/local-config.json**: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one."
+            "**data/local-config.json**: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one.",
+            "**data/first-admin-password.txt**: only when ADMIN_PASSWORD was empty. The password the server made up, in plain text, until you change it. A backup from Settings never carries it, but a copy of the whole data folder does: change the password before you copy the folder anywhere."
           ]
         },
         {
@@ -219,6 +224,10 @@
           "text": "Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app."
         },
         {
+          "type": "p",
+          "text": "The first password is the ADMIN_PASSWORD you put in .env. If you left it empty, the server made one up and put it in a file, not in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Change it after you sign in; that deletes the file. See First-time setup."
+        },
+        {
           "type": "ul",
           "items": [
             "The password counts as an **owner**. Whoever has it can do everything an owner can.",
@@ -307,7 +316,7 @@
           "type": "ul",
           "items": [
             "Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once. The Manage button is not slowed down by wrong passwords. A phone approving a computer's sign-in is counted with the passwords, though: it shares the limit of 15 sign-in attempts a minute from one internet address, so from the same wifi it may have to wait a minute too. See Rate limits.",
-            "Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer, but nobody can change the password without knowing the old one. The fix is on the server itself, and it loses everything in data/local-config.json. Besides the password, that file holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby it also holds the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. Knowing that, stop the server, delete data/local-config.json and start it again with a new ADMIN_PASSWORD, then set those things again. Members, posts and beans are not touched: they are in data/state.db."
+            "Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer, but nobody can change the password without knowing the old one. The fix is on the server itself, and it loses everything in data/local-config.json. Besides the password, that file holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby it also holds the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. Knowing that, stop the server, delete data/local-config.json and start it again with a new ADMIN_PASSWORD (or with it empty, and read the one it makes up from data/first-admin-password.txt), then set those things again. Members, posts and beans are not touched: they are in data/state.db."
           ]
         }
       ]
@@ -611,6 +620,10 @@
           "text": "Change it whenever someone who knew it steps down. Everyone who has it is an owner."
         },
         {
+          "type": "p",
+          "text": "If the server made up the first password (ADMIN_PASSWORD was empty), changing it deletes data/first-admin-password.txt at once. The log says so."
+        },
+        {
           "type": "h2",
           "text": "Two-factor sign-in"
         },
@@ -662,7 +675,7 @@
         },
         {
           "type": "p",
-          "text": "Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and prints it in the log."
+          "text": "Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. It also deletes data/first-admin-password.txt if it is still there, since the password in it no longer works. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and puts it in a new data/first-admin-password.txt, as on the first start. It never prints it in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt"
         },
         {
           "type": "p",

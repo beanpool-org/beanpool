@@ -11,7 +11,9 @@ Your server keeps everything in one folder, **data**, next to docker-compose.yml
 
 Put an admin password in the .env file as **ADMIN_PASSWORD** before you start the server for the first time. It needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. If the password is weaker than that, the server will not start. It restarts over and over until you fix it.
 
-If you leave ADMIN_PASSWORD empty, the server makes up a 20-character password. It prints it once, in a box in the log. Read it with: docker compose logs beanpool-node
+If you leave ADMIN_PASSWORD empty, the server makes up a 20-character password. It never prints it in the log, because the log is kept for as long as the server runs and gets copied into support requests. It puts the password in a file, data/first-admin-password.txt, that only the server can read, and the log says where it is. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt
+
+Sign in with it, then change the password in Access & Security. The file is deleted the moment you do, and the log says so. Until then, every start of the server reminds you in the log that the file is still there, without printing the password. If the server cannot write the file, it does not start, and the log says why.
 
 The server reads ADMIN_PASSWORD only on its first start. After that it keeps a scrambled copy in data/local-config.json and ignores the variable. To change the password later, use Settings.
 
@@ -20,6 +22,7 @@ The server reads ADMIN_PASSWORD only on its first start. After that it keeps a s
 - **data/genesis.json** and **data/community.key**: your community's own key. This key is not a person and is not the owner. Once you make a recovery code, a backup from Settings carries both, locked. Until then only a copy of the data folder does: see Backups and replicas.
 - **data/state.db**: the database, with every member, post, deal and vote.
 - **data/local-config.json**: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one.
+- **data/first-admin-password.txt**: only when ADMIN_PASSWORD was empty. The password the server made up, in plain text, until you change it. A backup from Settings never carries it, but a copy of the whole data folder does: change the password before you copy the folder anywhere.
 
 ## Open Settings
 

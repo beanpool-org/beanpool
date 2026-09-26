@@ -96,3 +96,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `pair-device.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `pair-device.tsx` so unhandled screen errors are safely caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-09-27 - [Export ErrorBoundary and refine search parameters in pulse-intake.tsx]
+**Issue:** `pulse-intake.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling and typed search params strictly as `{ url?: string; channelId?: string }`.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` and updated search parameter types and `safeDecodeURIComponent` to allow optional `string | string[]` query parameters.
+**Pattern:** Ensure Expo Router screen route components re-export `ErrorBoundary` and type `useLocalSearchParams` properties to handle potential `string | string[]` union parameter types.

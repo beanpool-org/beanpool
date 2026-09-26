@@ -236,9 +236,10 @@ const NEW_KEY = /^[0-9a-f]{64}$/;
 /**
  * The main server's replaced keys as a copy carries them (SyncPayload.invalidatedKeys), merged into this standby's
  * `invalidated_keys` inside the import's transaction (engine/sync.ts), before anything else in the copy. The newer
- * `invalidated_at` wins (a re-key's completion over its start), and the main server's row is taken as it is. Keys are
- * written in lower case, as both writers on the main server write them. A row that is malformed is left out and
- * counted: it never fails the copy it came in.
+ * `invalidated_at` wins (a re-key's completion over its start, and on a tie too: both steps in one millisecond stamp
+ * alike, and a start kept over its completion would leave no key that replaced the old one), and the main server's row is
+ * taken as it is. Keys are written in lower case, as both writers on the main server write them. A row that is malformed
+ * is left out and counted: it never fails the copy it came in.
  *
  * Returns the completed re-keys the copy carries (reason 'rekeyed', with the key that replaced it), oldest first, for
  * {@link followReplicatedRekeys}: each of them, not only the ones written now, since following is decided by what this
@@ -247,7 +248,7 @@ const NEW_KEY = /^[0-9a-f]{64}$/;
 export function mergeReplicatedInvalidatedKeys(rows: unknown): ReplacedKeyMerge {
     const merge: ReplacedKeyMerge = { written: 0, kept: 0, invalid: 0, rekeys: [] };
     if (!Array.isArray(rows) || rows.length === 0) return merge;
-    const current = db.prepare('SELECT invalidated_at FROM invalidated_keys WHERE public_key = ?');
+    const current = db.prepare('SELECT invalidated_at, reason FROM invalidated_keys WHERE public_key = ?');
     const upsert = db.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to) VALUES (?, ?, ?, ?)
                                ON CONFLICT(public_key) DO UPDATE SET
                                    reason = excluded.reason, invalidated_at = excluded.invalidated_at, rekeyed_to = excluded.rekeyed_to`);
@@ -262,8 +263,12 @@ export function mergeReplicatedInvalidatedKeys(rows: unknown): ReplacedKeyMerge 
             continue;
         }
         if (r.reason === 'rekeyed' && typeof rekeyedTo === 'string') merge.rekeys.push({ oldKey: key, newKey: rekeyedTo, at: r.invalidatedAt });
-        const here = current.get(key) as { invalidated_at: string } | undefined;
-        if (here && here.invalidated_at >= r.invalidatedAt) { merge.kept++; continue; }
+        const here = current.get(key) as { invalidated_at: string; reason: string } | undefined;
+        if (here && (here.invalidated_at > r.invalidatedAt
+            || (here.invalidated_at === r.invalidatedAt && (here.reason === 'rekeyed' || r.reason !== 'rekeyed')))) {
+            merge.kept++;
+            continue;
+        }
         upsert.run(key, r.reason, r.invalidatedAt, rekeyedTo);
         merge.written++;
     }

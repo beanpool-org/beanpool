@@ -32,6 +32,8 @@
  * 6b. Between two pulls, Bea is re-keyed twice and Cat once. Bea keeps a recovery copy of Cat's. The copy brings the main
  *     server's recovery copies under the last keys only (it moved the same rows each time), and the standby's own go from
  *     under every replaced key: none is left under Bea's first key, nor under Cat's old key and Bea's first.
+ * 6c. A re-key's start and its completion stamped in one millisecond reach the standby in two copies: the completion is
+ *     taken, with the key that replaced the old one, and the start, again, does not undo it.
  *  7. The main server dies and the standby takes over. Each replaced key is refused by the middleware, and Rex's old key
  *     at every door (knock, open door, invite, ticket); his new key reads his account.
  *
@@ -227,6 +229,27 @@ async function child(): Promise<void> {
             db.prepare('DELETE FROM invalidated_keys').run();
             db.prepare("DELETE FROM node_config WHERE key = 'replicated_invalidated_keys_v1'").run();
             return true;
+        },
+        // The replaced keys of two copies, merged as an import merges them: a re-key's start, then its completion stamped
+        // in the same millisecond, then the start again. The rows are this command's own and go when it is done.
+        'merge-same-stamp': async () => {
+            const { db } = await import('./db/db.js');
+            const { mergeReplicatedInvalidatedKeys } = await import('./engine/key-move.js');
+            const oldKey = crypto.randomBytes(32).toString('hex'), newKey = crypto.randomBytes(32).toString('hex');
+            const at = new Date().toISOString();
+            const started = { publicKey: oldKey, reason: 'rekey_pending', invalidatedAt: at, rekeyedTo: null };
+            const completed = { publicKey: oldKey, reason: 'rekeyed', invalidatedAt: at, rekeyedTo: newKey };
+            const row = () => db.prepare('SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ?').get(oldKey) as { reason: string; rekeyed_to: string | null } | undefined;
+            try {
+                mergeReplicatedInvalidatedKeys([started]);
+                const first = mergeReplicatedInvalidatedKeys([completed]);
+                const afterCompleted = row();
+                const again = mergeReplicatedInvalidatedKeys([started]);
+                const twice = mergeReplicatedInvalidatedKeys([completed]);
+                return { newKey, first, afterCompleted, again, twice, afterAgain: row() };
+            } finally {
+                db.prepare('DELETE FROM invalidated_keys WHERE public_key = ?').run(oldKey);
+            }
         },
         'make-invite': async (a: { pk: string }) => {
             const { generateInvite } = await import('./state-engine.js');
@@ -458,6 +481,14 @@ async function main(): Promise<void> {
             && sh.keyRows[cat2.pk]['recovery_shares.owner_pubkey'] === 2,
             `Bea's two copies and the copy of Cat's she keeps are under her last key, and Cat's two under his new one, once each (${JSON.stringify(sh.keyRows[bea3.pk])})`);
         assert(same(heldBy(sh.accounts, mh.accounts), mh.accounts) && sh.sum === mh.sum, `every balance is the main server's (sum ${sh.sum} / ${mh.sum})`);
+
+        // ── 6c. A re-key's two steps in one millisecond ──
+        console.log('\n— 6c. a re-key started and completed in the same millisecond, in two copies —');
+        const tie = await standby.send('merge-same-stamp');
+        assert(tie.first.written === 1 && tie.afterCompleted?.reason === 'rekeyed' && tie.afterCompleted?.rekeyed_to === tie.newKey,
+            `the completion is taken, with the key that replaced the old one (${JSON.stringify(tie.afterCompleted ?? null)}, ${JSON.stringify(tie.first)})`);
+        assert(tie.again.kept === 1 && tie.twice.kept === 1 && tie.afterAgain?.reason === 'rekeyed' && tie.afterAgain?.rekeyed_to === tie.newKey,
+            `the start, again, does not undo it, and the completion again is kept as it is (${JSON.stringify(tie.afterAgain ?? null)})`);
 
         // ── 7. The take-over ──
         console.log('\n— 7. the main server dies and the standby takes over —');

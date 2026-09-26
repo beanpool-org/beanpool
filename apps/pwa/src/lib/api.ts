@@ -401,10 +401,11 @@ export async function generateInvite(publicKey: string, intendedFor?: string): P
 export interface InviteCheck { valid: boolean; reason?: string; inviterCallsign?: string | null; communityName?: string | null }
 // Read-only pre-flight (never consumes). Returns null when unknown (older node,
 // network error) — callers fail open and let redeem give the definitive answer.
+// An offline ticket goes with its `BP-`: the node reads a code as a ticket only by
+// it (engine/members.ts checkInvite). The redeem is the one that sends it without.
 export async function checkInvite(code: string): Promise<InviteCheck | null> {
     try {
-        const payload = code.startsWith('BP-') && code.length > 20 ? code.slice(3) : code;
-        const data: any = await request('GET', `/api/invite/check?code=${encodeURIComponent(payload)}`);
+        const data: any = await request('GET', `/api/invite/check?code=${encodeURIComponent(code)}`);
         return typeof data?.valid === 'boolean' ? (data as InviteCheck) : null;
     } catch {
         return null;

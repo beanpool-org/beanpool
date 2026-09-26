@@ -399,6 +399,7 @@ run_federation_suites() {
       test-registrar-contract
       test-invite-trampoline
       test-ticket-redeem-fault
+      test-offline-ticket-check
       test-request-body
       test-admin-thresholds
       test-manager-backups

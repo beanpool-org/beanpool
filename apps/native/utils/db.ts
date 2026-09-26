@@ -4079,14 +4079,14 @@ export interface InviteCheck {
 // before the user has done the name/photo/seed ceremony. Returns null when the
 // answer is unknown (node unreachable, or an older node without the endpoint) —
 // callers must fail OPEN and let redeemInvite give the definitive answer later.
+// An offline ticket goes with its `BP-`: the node reads a code as a ticket only by
+// it (engine/members.ts checkInvite). The redeem is the one that sends it without.
 export async function checkInvite(code: string, nodeUrl: string): Promise<InviteCheck | null> {
     try {
-        const isOfflineTicket = code.startsWith('BP-') && code.length > 20;
-        const payload = isOfflineTicket ? code.slice(3) : code;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000);
         try {
-            const res = await fetch(`${nodeUrl}/api/invite/check?code=${encodeURIComponent(payload)}`, {
+            const res = await fetch(`${nodeUrl}/api/invite/check?code=${encodeURIComponent(code)}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: controller.signal,

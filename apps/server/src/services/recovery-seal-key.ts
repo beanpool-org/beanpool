@@ -348,7 +348,8 @@ export function installRecoverySealAtBoot(opts: { standby: boolean }): void {
     installedAs = as;
     try {
         if (opts.standby) {
-            console.log(`🔐 Recovery seal: a standby holds no key of its own (data/${RECOVERY_SEAL_KEY_FILE} comes with a take-over).`);
+            console.log(`🔐 Recovery seal: a standby holds no key of its own, and a take-over does not bring data/${RECOVERY_SEAL_KEY_FILE} yet: `
+                + 'once promoted, this server makes its own and cannot open the sign-in recovery copies it inherited (members\' 12 words still work).');
             return;
         }
         if (ensureRecoverySealKey().created) console.log(`🔐 Recovery seal: made data/${RECOVERY_SEAL_KEY_FILE}.`);

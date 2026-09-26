@@ -543,8 +543,8 @@ export function initStateEngine(): void {
     installAvatarKeysAtBoot();
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
-    // serves, and before the take-over envelope is sealed, so the first envelope after the upgrade already has the file.
-    // Never throws.
+    // serves. The take-over envelope does not carry the key yet (S2): a standby promoted today makes a key of its own and
+    // cannot open the copies it inherited. Never throws.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
     // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
     setMoneyGuardHook(() => assertBeansOn());

@@ -358,6 +358,7 @@ run_federation_suites() {
       test-open-join-failover
       test-standby-visitor-marks
       test-place-watch-failover
+      test-standby-rekey
       test-unlock-cancel
       test-cash-also-needed
       test-posts-ignore-archetypes

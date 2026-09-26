@@ -12,9 +12,8 @@
  *     directory cache with each community's first sighting.
  *  3. On the main server: Wanda removes a watch, Pru is pruned, Del deletes her account, Wes widens his radius, Vic sets
  *     a watch, and Wes's last notice is two days old. A delta copy brings the standby to exactly the main server's
- *     watches, the removed ones gone (a tombstone each). Then Rex is re-keyed: the copy carries his watch under the new
- *     key. (A delta import after a re-key fails on the members' callsign index before it reaches the watches, so the
- *     move is checked through the force-resync in step 4.)
+ *     watches, the removed ones gone (a tombstone each). Then Rex is re-keyed: the delta copy carries his watch under
+ *     the new key, and the standby, which follows the re-key (engine/key-move.ts), takes it there.
  *  4. A force-resync clears a watch and a cached community the main server doesn't have, and Rex's watch is his new
  *     key's on the standby.
  *  5. The main server dies and the standby takes over. It has every watch, and Wes and Rex list theirs over HTTPS.
@@ -339,10 +338,9 @@ async function main(): Promise<void> {
             'Wes\'s wider radius and his older last notice reached the standby');
         assert(!!byId(copied2, wVic.id), 'Vic\'s new watch reached the standby');
 
-        // A re-key. Checked in the export and through the force-resync below, not a delta: importing the re-keyed
-        // member row into a standby that still holds the old key's row fails on the members' callsign index, whatever
-        // the watches do (engine/sync.ts's member import; not this suite's subject).
-        console.log('\n— 3b. Rex is re-keyed: the move is in the copy —');
+        // A re-key, copied as a delta: the standby follows it (engine/key-move.ts), so the re-keyed member row no longer
+        // meets the old key's on the members' callsign index, and his watch lands under the new key.
+        console.log('\n— 3b. Rex is re-keyed: the move is in the copy, and the standby takes it as a delta —');
         const sinceRekey = await main.send('now');
         assert(await main.send('rekey', { oldPk: rex.pk, newPk: rex2.pk, operator: owner }), 'Rex is re-keyed to a new key');
         const mainWatches3 = await main.send('watches');
@@ -350,6 +348,11 @@ async function main(): Promise<void> {
         const rekeyDelta = await main.send('export-delta', { since: sinceRekey });
         const movedOut = (rekeyDelta.placeWatches ?? []).find((w: any) => w.id === wRex.id);
         assert(movedOut?.pubkey === rex2.pk, `the copy after the re-key carries his watch under the new key (${JSON.stringify(movedOut ?? null)})`);
+        const rekeyImported = await standby.send('import', { payload: rekeyDelta }).then((r: any) => r, (e: Error) => ({ error: e.message }));
+        assert(rekeyImported && typeof rekeyImported.newMembers === 'number', `the standby imports that delta (${JSON.stringify(rekeyImported)})`);
+        const copiedRekey = await standby.send('watches');
+        assert(same(copiedRekey, mainWatches3) && byId(copiedRekey, wRex.id)?.pubkey === rex2.pk && !copiedRekey.some((w: any) => w.pubkey === rex.pk),
+            'on the standby, Rex\'s watch is his new key\'s, the same watch, and every watch is the main server\'s');
 
         // ── 4. A force-resync clears what the main server doesn't have ──
         console.log('\n— 4. a force-resync clears a watch and a cached community the main server doesn\'t have —');

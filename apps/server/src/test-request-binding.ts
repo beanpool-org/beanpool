@@ -503,6 +503,11 @@ async function main(): Promise<void> {
             const v2After = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: await core.signAdminSignin('https://b.test', ch.challengeId, owner.sign), signedFor: 'b.test' });
             assert(v2After.status === 200 && v2After.body?.handshakeToken, `the format-2 sign-in for b.test works after the switch (${show(v2After)})`);
             await B.send('switchClock', { at: null });
+
+            // A route that reads the signed timestamp back from the stored text (the owner's "12 words checked").
+            const at = Date.now() - 1000;
+            const words = await sendTo(B, 'POST', await bound(owner, 'POST', `https://b.test${core.OWNER_WORDS_CHECK_PATH}`, { attestation: 'owner-12-words-checked' }, { timestamp: at }));
+            assert(words.status === 200 && words.body?.wordsCheckedAt === at, `an owner's format-2 "12 words checked" records the signed time (${show(words)})`);
         });
 
         // ── 9. Pairing and offline tickets ──

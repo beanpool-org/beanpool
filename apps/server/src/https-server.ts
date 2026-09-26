@@ -1316,8 +1316,8 @@ export async function startHttpsServer(port: number): Promise<number> {
             // transaction can persist it on the row (auth_signer/signature/payload),
             // making the transaction's authorship re-verifiable by any importing node.
             // `payload` is the text signed; in format 2 the signed bytes are 0xFF then that text (engine/sync.ts
-            // verifyTransactionAuthorship puts it back). `signedAt` is its timestamp, in either format.
-            ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage, signedAt: Number(timestampHeader) };
+            // verifyTransactionAuthorship puts it back); @beanpool/core parseSignedText reads either format.
+            ctx.state.authSig = { signer: signerKey, signature: signatureBase64, payload: signedMessage };
 
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
             // keypair — an attacker can mint one. For gated reads, require the

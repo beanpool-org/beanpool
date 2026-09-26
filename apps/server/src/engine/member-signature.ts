@@ -161,12 +161,19 @@ export interface VerifyOptions {
     now?: number;
 }
 
-function ed25519Verify(bytes: Uint8Array, signature: string, pubKeyHex: string): boolean {
+/**
+ * `spelling`: how the signature is written. A request's and a `/ws` token's are base64 only, as origin/main read them:
+ * the middleware stores X-Signature as sent (a transfer's `auth_signature`) and a backup reads it as base64
+ * (engine/sync.ts verifyTransactionAuthorship), so a hex one would be a send no backup can check (4113046881). The
+ * statements (sign-in, pairing, re-enrolment) take hex as well, as they did (admin-key-auth.ts verifyEd25519Signature).
+ */
+function ed25519Verify(bytes: Uint8Array, signature: string, pubKeyHex: string, spelling: 'base64' | 'base64-or-hex'): boolean {
     try {
         const spki = Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(pubKeyHex, 'hex')]);
         const key = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
         const clean = String(signature ?? '').trim();
-        const sig = Buffer.from(clean, /^[0-9a-fA-F]{128}$/.test(clean) ? 'hex' : 'base64');
+        const hex = spelling === 'base64-or-hex' && /^[0-9a-fA-F]{128}$/.test(clean);
+        const sig = Buffer.from(clean, hex ? 'hex' : 'base64');
         return crypto.verify(undefined, Buffer.from(bytes), key, sig);
     } catch {
         return false;
@@ -216,7 +223,7 @@ export function verifyMemberSignature(parts: SignedRequestParts, opts: VerifyOpt
     const fields = { method: parts.method, path: parts.path, timestamp: parts.timestamp, nonce: parts.nonce, body: parts.body };
     const bound = parts.signedFor !== null;
     const text = bound ? signedRequestText({ host: parts.signedFor as string, ...fields }) : unboundRequestText(fields);
-    if (!ed25519Verify(bytesOfSignedText(text), parts.signature, signer)) {
+    if (!ed25519Verify(bytesOfSignedText(text), parts.signature, signer, 'base64')) {
         return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
     }
 
@@ -250,7 +257,7 @@ export function verifyStatementSignature(params: {
     if (!signer) return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
     if (params.signedFor !== undefined && params.signedFor !== null) {
         const host = String(params.signedFor);
-        if (!host || !ed25519Verify(signedRequestBytes(params.boundText(host)), signature, signer)) {
+        if (!host || !ed25519Verify(signedRequestBytes(params.boundText(host)), signature, signer, 'base64-or-hex')) {
             return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
         }
         const refused = audienceRefusal(host, signer);
@@ -259,7 +266,7 @@ export function verifyStatementSignature(params: {
         return { ok: true, format: 2, audience: host };
     }
     for (const old of params.oldTexts) {
-        if (ed25519Verify(Buffer.from(old, 'utf-8'), signature, signer)) {
+        if (ed25519Verify(Buffer.from(old, 'utf-8'), signature, signer, 'base64-or-hex')) {
             const refused = unboundRefusal();
             if (refused) return refused;
             countAcceptedSignature(signer, null);

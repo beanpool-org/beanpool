@@ -18,8 +18,10 @@
  *  1. Old apps keep working until the switch: an old-format send, read and socket, and they are counted.
  *  2. Replay refused: a Beans transfer signed for A and sent to B → 421 wrong_community, B's balances unchanged, the
  *     nonce unspent at B (the same request re-signed for b.test, same nonce and timestamp, succeeds there, once).
- *  3. A gated read signed for A → 421 at B, with nothing of the read in the answer.
- *  4. /ws: a token signed for A gets no member feed at B (doorbells only by default; 401 at C, strict).
+ *  3. A gated read signed for A → 421 at B, with nothing of the read in the answer. A request whose signature is
+ *     written in hex is refused (403), in either format, as on origin/main.
+ *  4. /ws: a token signed for A gets no member feed at B (doorbells only by default; 401 at C, strict); a token whose
+ *     signature is written in hex → 401 at C.
  *  5. Two names: B accepts b.test and b2.test and refuses c.test; a spoofed Host or X-Forwarded-Host changes nothing;
  *     /api/community/info says requestSigning 2 and lists both names.
  *  6. The directory: on the global node, a signed /api/global/home read for global.test shows the member's watches;
@@ -294,6 +296,8 @@ async function main(): Promise<void> {
         const headers = await core.buildBoundRequestHeaders({ method, url: forUrl, body: bodyString, publicKeyHex: who.pk, sign: who.sign, ...opts });
         return { headers, body: body === undefined ? undefined : bodyString, path: core.signedPathOf(forUrl), nonce: headers['X-Nonce'] };
     }
+    /** A base64 signature written in hex instead (the same 64 bytes). */
+    const hexOf = (b64: string) => Buffer.from(b64, 'base64').toString('hex');
     /** An old-format request, as every app before binding makes it. */
     function unbound(who: Id, method: string, reqPath: string, body?: unknown) {
         const bodyString = body === undefined ? '' : JSON.stringify(body);
@@ -397,6 +401,17 @@ async function main(): Promise<void> {
             const atB = await sendTo(B, 'GET', { ...req, path: `/api/messages/conversations/${mia.pk}` });
             assert(atB.status === 421 && atB.body?.code === 'wrong_community' && Object.keys(atB.body).sort().join(',') === 'code,error',
                 `at B → 421, and the answer holds nothing of the read (${show(atB)})`);
+            // A signature written in hex: refused, as on origin/main, where requests and sockets were read as base64
+            // only. The middleware stores X-Signature as sent, and a backup reads a transfer's as base64 (engine/sync.ts),
+            // so a hex one would be a send no backup can check (test-request-binding-ledger).
+            const hexRead = await bound(mia, 'GET', `https://a.test/api/messages/conversations/${mia.pk}`);
+            const hexAtA = await sendTo(A, 'GET', { ...hexRead, headers: { ...hexRead.headers, 'X-Signature': hexOf(hexRead.headers['X-Signature']) } });
+            assert(hexAtA.status === 403, `the same read signed for a.test, its signature written in hex → 403 at A, as on main (${show(hexAtA)})`);
+            const oldHex = unbound(mia, 'GET', `/api/messages/conversations/${mia.pk}`);
+            const oldHexAtA = await sendTo(A, 'GET', { ...oldHex, headers: { ...oldHex.headers, 'X-Signature': hexOf(oldHex.headers['X-Signature']) } });
+            assert(oldHexAtA.status === 403, `an old-format one written in hex → 403 too (${show(oldHexAtA)})`);
+            const asSigned = await sendTo(A, 'GET', hexRead);
+            assert(asSigned.status === 200, `and the first, sent as signed (base64), is accepted: its nonce was left unspent (${show(asSigned)})`);
         });
 
         // ── 4. /ws ──
@@ -416,6 +431,11 @@ async function main(): Promise<void> {
             const strictForC = await socket(C, await core.buildBoundWsParams({ wsUrl: 'wss://c.test/ws', publicKeyHex: mia.pk, sign: mia.sign }));
             assert(strictForC.kind === 'open', `and one signed for c.test opens (${sockShow(strictForC)})`);
             if (strictForC.kind === 'open') strictForC.ws.terminate();
+            const hexToken = new URLSearchParams(await core.buildBoundWsParams({ wsUrl: 'wss://c.test/ws', publicKeyHex: mia.pk, sign: mia.sign }));
+            hexToken.set('sig', hexOf(hexToken.get('sig') as string));
+            const strictHex = await socket(C, hexToken.toString());
+            assert(strictHex.kind === 'status' && strictHex.status === 401, `one signed for c.test with its signature written in hex → 401 at C, as on main (${sockShow(strictHex)})`);
+            if (strictHex.kind === 'open') strictHex.ws.terminate();
             const damaged = await socket(B, (await core.buildBoundWsParams({ wsUrl: 'wss://b.test/ws', publicKeyHex: mia.pk, sign: mia.sign })).replace(/&v=2$/, ''));
             assert(damaged.kind === 'status' && damaged.status === 401, `a token with for= but no v=2 is a damaged token → 401 (${sockShow(damaged)})`);
         });

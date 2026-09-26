@@ -11,7 +11,9 @@
  * Over real HTTPS through the real middleware on this node (as the main server), then as its own backup:
  *   1. a format-2 send and an old-format send are both accepted, and the format-2 row stores its text (host included);
  *   2. both rows, removed and imported back from a signed snapshot with ENFORCE_LEDGER_AUTH=true, pass;
- *   3. a row whose amount was changed after signing is skipped, so the check did run.
+ *   3. a row whose amount was changed after signing is skipped, so the check did run;
+ *   4. a send whose signature is written in hex is refused, as on origin/main (the row would store the hex, which this
+ *      check reads as base64, so the backup would skip a real send), and the backup imports every send accepted.
  *
  * The switch is this node's own (the constant, or ACCEPT_UNBOUND_SIGNATURES_UNTIL when it is set for the run), and the
  * old-format send is made with the switch clock pinned just before it, so the suite holds for any date.
@@ -97,6 +99,13 @@ async function main(): Promise<void> {
         setSignatureSwitchClockForTests(null);
         const v2Id = v2.body.transaction.id as string;
         const v1Id = v1.body.transaction.id as string;
+        const hexBody = JSON.stringify({ from: mia.pk, to: xan.pk, amount: 1, memo: 'hex-spelled send' });
+        const hexHeaders = await core.buildBoundRequestHeaders({ method: 'POST', url: 'https://ledger.test/api/ledger/transfer', body: hexBody, publicKeyHex: mia.pk, sign: mia.sign });
+        const hex = await post({ ...hexHeaders, 'X-Signature': Buffer.from(hexHeaders['X-Signature'], 'base64').toString('hex') }, hexBody);
+        const hexRows = (db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE memo = 'hex-spelled send'").get() as { n: number }).n;
+        assert(hex.status === 403 && hexRows === 0, `a send whose signature is written in hex is refused, as on main, and writes no row (${hex.status}, ${hexRows} rows)`);
+        /** Every send the main server accepted: its backup must import each one. */
+        const accepted = [v2Id, v1Id, ...(hex.body?.transaction?.id ? [hex.body.transaction.id as string] : [])];
         const row = db.prepare('SELECT auth_signer, auth_signature, auth_payload FROM transactions WHERE id = ?').get(v2Id) as any;
         assert(row?.auth_signer === mia.pk && String(row?.auth_payload).startsWith('beanpool-request/2\nledger.test\nPOST\n/api/ledger/transfer\n')
             && String(row.auth_payload).endsWith(`\n${v2Body}`),
@@ -108,7 +117,7 @@ async function main(): Promise<void> {
         const v2Tx = (basePayload.transactions as any[]).find((t) => t.id === v2Id);
         const tampered = { ...v2Tx, id: crypto.randomUUID(), amount: 40 };
         const payload = await se.signSyncPayload({ ...basePayload, transactions: [...basePayload.transactions, tampered] });
-        db.prepare('DELETE FROM transactions WHERE id IN (?, ?)').run(v2Id, v1Id);
+        for (const txId of accepted) db.prepare('DELETE FROM transactions WHERE id = ?').run(txId);
         se.setNodeRole('backup');
         const trustedAddr = `/ip4/127.0.0.1/tcp/4999/p2p/${nodeId}`;
         addConnector(trustedAddr, 'mirror', 'self-test-peer');
@@ -117,6 +126,7 @@ async function main(): Promise<void> {
             const back = (txId: string) => !!db.prepare('SELECT 1 FROM transactions WHERE id = ?').get(txId);
             assert(back(v2Id), 'the format-2 send is imported: its authorship verifies (0xFF put back, body after line 6)');
             assert(back(v1Id), 'the old-format send is imported too');
+            assert(accepted.every(back), `the backup imports every send the main server accepted (${accepted.filter(back).length} of ${accepted.length})`);
             assert(!back(tampered.id), 'a format-2 row whose amount was changed after signing is skipped: the check ran');
             assert(result?.newTransactions === 2 && Number(result?.conflictsSkipped) >= 1,
                 `the import wrote exactly the two real sends and counted the changed one as skipped (${JSON.stringify({ n: result?.newTransactions, s: result?.conflictsSkipped })})`);

@@ -38,7 +38,9 @@ export function SignInRecoveryLine({ enrolled }: Props) {
                         : 'Your 12 words are the way back to this account. Keep them safe.'}
                 </div>
                 {names && (
-                    <div data-testid="signin-recovery-openers" className="mt-1.5 text-xs font-normal text-nature-500 dark:text-nature-400">
+                    // nature-600, not the 500 above: 500 on white is 3.3:1, too faint for a sentence this long (measured
+                    // by e2e/signin-recovery-check.mjs; 600 is 4.9:1, and dark's 400 on nature-900 is 4.6:1).
+                    <div data-testid="signin-recovery-openers" className="mt-1.5 text-xs font-normal text-nature-600 dark:text-nature-400">
                         {SIGN_IN_COPY_OPENERS}
                     </div>
                 )}

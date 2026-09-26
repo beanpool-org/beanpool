@@ -13,6 +13,9 @@
  *   2. both rows, removed and imported back from a signed snapshot with ENFORCE_LEDGER_AUTH=true, pass;
  *   3. a row whose amount was changed after signing is skipped, so the check did run.
  *
+ * The switch is this node's own (the constant, or ACCEPT_UNBOUND_SIGNATURES_UNTIL when it is set for the run), and the
+ * old-format send is made with the switch clock pinned just before it, so the suite holds for any date.
+ *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-request-binding-ledger.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -20,7 +23,6 @@ process.env.ENFORCE_LEDGER_AUTH = 'true';
 process.env.CF_RECORD_NAME = 'ledger.test';
 delete process.env.CF_API_TOKEN;
 delete process.env.CF_ZONE_ID;
-delete process.env.ACCEPT_UNBOUND_SIGNATURES_UNTIL;
 
 import crypto from 'node:crypto';
 
@@ -41,6 +43,7 @@ async function main(): Promise<void> {
     const { startP2P } = await import('./p2p.js');
     const { addConnector, removeConnector } = await import('./connector-manager.js');
     const { db } = await import('./db/db.js');
+    const { setSignatureSwitchClockForTests, unboundSignaturesCutoff } = await import('./engine/member-signature.js');
 
     console.log('A format-2 Beans send stays re-verifiable on a backup (ENFORCE_LEDGER_AUTH=true)\n');
     initAdminPassword();
@@ -79,6 +82,9 @@ async function main(): Promise<void> {
         const v2Body = JSON.stringify({ from: mia.pk, to: xan.pk, amount: 4, memo: 'format 2 send' });
         const v2 = await post(await core.buildBoundRequestHeaders({ method: 'POST', url: 'https://ledger.test/api/ledger/transfer', body: v2Body, publicKeyHex: mia.pk, sign: mia.sign }), v2Body);
         assert(v2.status === 200 && v2.body?.transaction?.id, `a format-2 send is accepted (${v2.status} ${JSON.stringify(v2.body).slice(0, 120)})`);
+        const cutoff = unboundSignaturesCutoff();
+        if (typeof cutoff !== 'number') throw new Error('this node refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
+        setSignatureSwitchClockForTests(() => cutoff - 1);
         const v1Body = JSON.stringify({ from: mia.pk, to: xan.pk, amount: 2, memo: 'old format send' });
         const ts = String(Date.now());
         const nonce = crypto.randomBytes(16).toString('hex');
@@ -87,7 +93,8 @@ async function main(): Promise<void> {
             'X-Public-Key': mia.pk, 'X-Timestamp': ts, 'X-Nonce': nonce,
             'X-Signature': Buffer.from(ed25519.sign(core.utf8Bytes(v1Text), mia.seed)).toString('base64'),
         }, v1Body);
-        assert(v1.status === 200 && v1.body?.transaction?.id, `an old-format send is accepted (${v1.status})`);
+        assert(v1.status === 200 && v1.body?.transaction?.id, `an old-format send is accepted before the switch (${v1.status})`);
+        setSignatureSwitchClockForTests(null);
         const v2Id = v2.body.transaction.id as string;
         const v1Id = v1.body.transaction.id as string;
         const row = db.prepare('SELECT auth_signer, auth_signature, auth_payload FROM transactions WHERE id = ?').get(v2Id) as any;

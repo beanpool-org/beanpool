@@ -39,6 +39,10 @@
  * 14. Settings' Remove takes off an owner-confirmed address stored in another spelling (as a take-over envelope may
  *     carry it), and a request signed for it is refused from then on.
  *
+ * The switch date is the nodes' own (unboundSignaturesCutoff: the constant, or ACCEPT_UNBOUND_SIGNATURES_UNTIL when it
+ * is set for the run), and A, B, G and U run with the switch clock pinned just before it, except in the steps that move
+ * it past. So the suite holds for any date, before and after it passes.
+ *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-request-binding.ts
  */
 
@@ -53,7 +57,8 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Request-Binding-Pw-4471!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
-const SWITCH = Date.parse('2026-12-15T00:00:00Z');
+/** The switch (ms), read from the nodes once they are up. */
+let SWITCH = 0;
 
 // ── The node processes ─────────────────────────────────────────────────────────────────────
 
@@ -122,6 +127,7 @@ async function child(): Promise<void> {
                 return v.ok ? 'ok' : v.status;
             });
         },
+        switchCutoff: async () => (await ms()).unboundSignaturesCutoff(),
         switchClock: async (a: { at: number | null }) => {
             (await ms()).setSignatureSwitchClockForTests(a.at === null ? null : () => a.at as number);
             return true;
@@ -187,7 +193,8 @@ function startNode(name: string, env: Record<string, string | undefined>): Promi
     const dataDir = path.join(process.env.BEANPOOL_DATA_DIR!, name);
     fs.mkdirSync(dataDir, { recursive: true });
     const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir, ADMIN_PASSWORD: PW };
-    for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ACCEPT_UNBOUND_SIGNATURES_UNTIL', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE']) delete childEnv[k];
+    // ACCEPT_UNBOUND_SIGNATURES_UNTIL is kept: a date set for the run is every node's switch (C sets its own).
+    for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE']) delete childEnv[k];
     Object.assign(childEnv, env);
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--child'], { env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
     let out = '';
@@ -318,6 +325,8 @@ async function main(): Promise<void> {
     });
     const sockShow = (s: Sock) => s.kind === 'open' ? '101' : s.kind === 'status' ? String(s.status) : s.error;
     const adminPw = { 'X-Admin-Password': PW };
+    /** A node's switch clock just before the switch: every step that is not about "after the switch" runs there. */
+    const beforeSwitch = (n: Node) => n.send('switchClock', { at: SWITCH - 1 });
 
     try {
         console.log('Request binding: a member\'s signature counts only at the community it was signed for\n');
@@ -332,6 +341,11 @@ async function main(): Promise<void> {
             await n.send('seed', { owner: { pk: owner.pk, callsign: owner.callsign }, members: [mia, xan].map((m) => ({ pk: m.pk, callsign: m.callsign })), beans: true, trader: mia.pk, partner: xan.pk });
         }
         await G.send('seed', { owner: { pk: owner.pk, callsign: owner.callsign }, members: [{ pk: mia.pk, callsign: mia.callsign }], beans: false });
+        const cutoff = await A.send('switchCutoff');
+        if (typeof cutoff !== 'number') throw new Error('A refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
+        SWITCH = cutoff;
+        console.log(`the switch: ${new Date(SWITCH).toISOString()}; the nodes' clocks are pinned just before it`);
+        for (const n of [A, B, G, U]) await beforeSwitch(n);
 
         // ── 1. Old apps keep working until the switch ──
         console.log('\n— 1. an app from before binding keeps working until the switch —');
@@ -440,7 +454,7 @@ async function main(): Promise<void> {
         // ── 7. The switch ──
         console.log('\n— 7. the switch —');
         await section('7', async () => {
-            await A.send('switchClock', { at: SWITCH - 1 });
+            await beforeSwitch(A);
             const lastDay = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'last day' }));
             assert(lastDay.status === 200, `the last moment before ${new Date(SWITCH).toISOString().slice(0, 10)}: old format accepted (${show(lastDay)})`);
             await A.send('switchClock', { at: SWITCH });
@@ -469,7 +483,7 @@ async function main(): Promise<void> {
             await sleep(300);
             assert(oldSock.kind === 'open' && !oldSock.events.some((e) => e.type === 'system_announcement'), 'but it is treated as unsigned: no member feed');
             if (oldSock.kind === 'open') oldSock.ws.terminate();
-            await A.send('switchClock', { at: null });
+            await beforeSwitch(A);
 
             const never = await sendTo(C, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'never' }));
             assert(never.status === 426 && never.body?.code === 'app_too_old', `with ACCEPT_UNBOUND_SIGNATURES_UNTIL=never (C) the old format is refused now (${show(never)})`);
@@ -495,7 +509,7 @@ async function main(): Promise<void> {
             await B.send('switchClock', { at: SWITCH + 1000 });
             const atB = await sendTo(B, 'POST', forged);
             assert(atB.status === 426 && (await B.send('member', { pk: mia.pk })) === 'active', `and at B once its clock passes the switch (${show(atB)})`);
-            await B.send('switchClock', { at: null });
+            await beforeSwitch(B);
 
             const challenge = async () => (await call(B, 'POST', '/api/local/admin/auth/challenge', {}, '{}')).body;
             const verify = (body: Record<string, unknown>) => call(B, 'POST', '/api/local/admin/auth/verify-challenge', {}, JSON.stringify(body));
@@ -523,7 +537,7 @@ async function main(): Promise<void> {
             assert(bareId.status === 426, `so is the bare-id form (${show(bareId)})`);
             const v2After = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: await core.signAdminSignin('https://b.test', ch.challengeId, owner.sign), signedFor: 'b.test' });
             assert(v2After.status === 200 && v2After.body?.handshakeToken, `the format-2 sign-in for b.test works after the switch (${show(v2After)})`);
-            await B.send('switchClock', { at: null });
+            await beforeSwitch(B);
 
             // A route that reads the signed timestamp back from the stored text (the owner's "12 words checked").
             const at = Date.now() - 1000;
@@ -550,7 +564,7 @@ async function main(): Promise<void> {
             await B.send('switchClock', { at: SWITCH });
             const v1After = await approve(p, { signature: v1Sig });
             assert(v1After.status === 426, `the old v1 approval after the switch → 426 (${show(v1After)})`);
-            await B.send('switchClock', { at: null });
+            await beforeSwitch(B);
             const v1Before = await approve(p, { signature: v1Sig });
             assert(v1Before.status === 200, `and before it, accepted as before (${show(v1Before)})`);
 
@@ -589,7 +603,7 @@ async function main(): Promise<void> {
                 `after it, refused, and the joiner is told to ask for a new one (${show(oldAfter)})`);
             const lateCheck = await check(B, late);
             assert(lateCheck.body?.valid === false && lateCheck.body?.reason === 'app_too_old', `the pre-flight says so too (${show(lateCheck)})`);
-            await B.send('switchClock', { at: null });
+            await beforeSwitch(B);
         });
 
         // ── 10. The self-hoster with no address configured ──
@@ -607,7 +621,7 @@ async function main(): Promise<void> {
             assert(late.status === 421, `after the switch an unconfirmed host is refused (${show(late)})`);
             const lanLate = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://192.168.1.20:8443/api/community/me'));
             assert(lanLate.status === 200, `while its LAN address still works (${show(lanLate)})`);
-            await U.send('switchClock', { at: null });
+            await beforeSwitch(U);
             const stranger = id('Stranger');
             const strangerRead = await sendTo(U, 'GET', await bound(stranger, 'GET', 'https://spam.example/api/community/info'));
             assert(strangerRead.status === 200, `a key with no row here signing for spam.example is answered as before (${show(strangerRead)})`);
@@ -651,7 +665,7 @@ async function main(): Promise<void> {
             assert(r.status === 200 && by('b.test')?.source === 'public-address' && by('b2.test')?.source === 'env',
                 `B lists b.test (its public address) and b2.test (BEANPOOL_ADDRESSES) (${JSON.stringify(b.addresses)})`);
             assert(by('b.test')?.today >= 1 && by('b2.test')?.today >= 1, 'each with how many people\'s apps used it today');
-            assert(b.oldApps?.today >= 1 && b.unboundSignaturesUntil === '2026-12-15' && b.unboundSignaturesAccepted === true,
+            assert(b.oldApps?.today >= 1 && b.unboundSignaturesUntil === new Date(SWITCH).toISOString().slice(0, 10) && b.unboundSignaturesAccepted === true,
                 `and how many signed with an old app, and the switch date (${JSON.stringify({ o: b.oldApps, u: b.unboundSignaturesUntil })})`);
             const rows: any[] = await B.send('countsTable');
             const keys = [owner, mia, xan].map((m) => m.pk);

@@ -36,6 +36,8 @@
  * 12. "Delete my account" signed for A, replayed at B → 421, B's row unchanged; re-signed for b.test it works there.
  * 13. A nonce is held for as long as its request is fresh: a timestamp from a clock running ahead is fresh past the
  *     window from its arrival, and the same request is still refused there as a replay.
+ * 14. Settings' Remove takes off an owner-confirmed address stored in another spelling (as a take-over envelope may
+ *     carry it), and a request signed for it is refused from then on.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-request-binding.ts
  */
@@ -141,6 +143,13 @@ async function child(): Promise<void> {
         },
         // What the database holds that could be a key: the counts table has none.
         countsTable: () => db.prepare('SELECT day, kind, address, people FROM signature_audiences ORDER BY kind, address').all(),
+        // node_config.ownerAddresses exactly as given, not as Settings writes it (as a take-over envelope stores it).
+        storeOwnerAddresses: async (a: { list: string[] }) => {
+            se.updateNodeConfig({ ownerAddresses: a.list } as any);
+            (await import('./engine/own-addresses.js')).forgetOwnAddresses();
+            return true;
+        },
+        storedOwnerAddresses: () => (se.getNodeConfig() as any).ownerAddresses ?? null,
     };
 
     const rl = readline.createInterface({ input: process.stdin });
@@ -692,6 +701,23 @@ async function main(): Promise<void> {
             const onTime = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount: 1, memo: 'on time' }, { timestamp: t }));
             const [once, edge] = await A.send('verifyAt', { parts: onTime, at: [t, t + W] });
             assert(once === 'ok' && edge === 403, `a request on time: accepted once, refused as a replay at the edge of its window (${once}, ${edge})`);
+        });
+
+        // ── 14. Settings removes a confirmed address however it was stored ──
+        console.log('\n— 14. an owner-confirmed address stored in another spelling can be removed —');
+        await section('14', async () => {
+            await A.send('storeOwnerAddresses', { list: ['https://Mixed.Example.org/', 'kept.example.org'] });
+            const listed = await call(A, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const mixed = listed.body?.addresses?.find((a: any) => a.address === 'mixed.example.org');
+            assert(mixed?.source === 'owner', `Settings lists it as mixed.example.org, confirmed in Settings (${show(listed)})`);
+            const own = await sendTo(A, 'GET', await bound(xan, 'GET', 'https://mixed.example.org/api/community/me'));
+            assert(own.status === 200, `A accepts a request signed for it (${show(own)})`);
+            const removed = await call(A, 'POST', '/api/local/admin/app-addresses/remove', adminPw, JSON.stringify({ address: 'mixed.example.org' }));
+            assert(removed.status === 200 && !removed.body?.addresses?.some((a: any) => a.address === 'mixed.example.org'),
+                `the Remove button's request takes it off the list (${show(removed)})`);
+            assert(JSON.stringify(await A.send('storedOwnerAddresses')) === JSON.stringify(['kept.example.org']), 'and off what is stored; the other stays');
+            const gone = await sendTo(A, 'GET', await bound(xan, 'GET', 'https://mixed.example.org/api/community/me'));
+            assert(gone.status === 421, `a request signed for it is now refused at A (${show(gone)})`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

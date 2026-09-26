@@ -17,7 +17,7 @@
  */
 
 import Router from '@koa/router';
-import { getNodeConfig, updateNodeConfig } from '../state-engine.js';
+import { updateNodeConfig } from '../state-engine.js';
 import {
     configuredAddresses, forgetOwnAddresses, normalizeAddress, ownerConfirmedAddresses,
 } from '../engine/own-addresses.js';
@@ -88,8 +88,9 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
     router.post('/api/local/admin/app-addresses/remove', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         const address = normalizeAddress(bodyOf(ctx).address);
-        const stored: unknown = (getNodeConfig() as any).ownerAddresses;
-        const current = Array.isArray(stored) ? stored.filter((a): a is string => typeof a === 'string') : [];
+        // The list as this node reads it (and Settings shows it), not as stored: a take-over envelope stores the
+        // primary's list as it came, and an address accepted as this community's must be one Settings can remove.
+        const current = ownerConfirmedAddresses();
         if (!address || !current.includes(address)) {
             ctx.status = 404;
             ctx.body = { error: 'That address is not one confirmed in Settings. Addresses from the registrar or the server’s own settings are changed there.' };

@@ -149,9 +149,9 @@ export interface PostFilter {
      */
     includeHidden?: boolean;
     /**
-     * Who voted for what in each poll (`pollVotes`), for a reader who is a member of this node (isNodeMember) only:
-     * the open ballot is open to members. Without it a poll carries its counts (`totalVotes`, each option's `votes`
-     * and `percentage`) and no voters, so a read nobody vouched for can never leak them.
+     * Who voted for what in each poll (`pollVotes`), for a reader who reads as a member of this node (readsAsMember)
+     * only: the open ballot is open to members. Without it a poll carries its counts (`totalVotes`, each option's
+     * `votes` and `percentage`) and no voters, so a read nobody vouched for can never leak them.
      */
     includeVoters?: boolean;
     /**

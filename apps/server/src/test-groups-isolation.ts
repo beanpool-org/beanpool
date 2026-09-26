@@ -273,9 +273,10 @@ async function runTests() {
         const receivedCarol: any[] = [];
         const receivedAnon: any[] = [];
 
-        const wsBob: any = { _memberPubkey: bob.pubKeyHex, send: (m: string) => receivedBob.push(JSON.parse(m)) };
-        const wsCarol: any = { _memberPubkey: carol.pubKeyHex, send: (m: string) => receivedCarol.push(JSON.parse(m)) };
-        const wsAnon: any = { _memberPubkey: null, send: (m: string) => receivedAnon.push(JSON.parse(m)) };
+        // Tagged as the /ws upgrade tags a member's socket (its key, and the member feed) and a stranger's (neither).
+        const wsBob: any = { _memberPubkey: bob.pubKeyHex, _memberFeed: true, send: (m: string) => receivedBob.push(JSON.parse(m)) };
+        const wsCarol: any = { _memberPubkey: carol.pubKeyHex, _memberFeed: true, send: (m: string) => receivedCarol.push(JSON.parse(m)) };
+        const wsAnon: any = { _memberPubkey: null, _memberFeed: false, send: (m: string) => receivedAnon.push(JSON.parse(m)) };
 
         addWsClient(wsBob);
         addWsClient(wsCarol);
@@ -331,8 +332,8 @@ async function runTests() {
         // 4. Broadcast group_member_invited scoped to convenor and invitee only
         const receivedAlice: any[] = [];
         const receivedDave: any[] = [];
-        const wsAlice: any = { _memberPubkey: alice.pubKeyHex, send: (m: string) => receivedAlice.push(JSON.parse(m)) };
-        const wsDave: any = { _memberPubkey: dave.pubKeyHex, send: (m: string) => receivedDave.push(JSON.parse(m)) };
+        const wsAlice: any = { _memberPubkey: alice.pubKeyHex, _memberFeed: true, send: (m: string) => receivedAlice.push(JSON.parse(m)) };
+        const wsDave: any = { _memberPubkey: dave.pubKeyHex, _memberFeed: true, send: (m: string) => receivedDave.push(JSON.parse(m)) };
         addWsClient(wsAlice);
         addWsClient(wsDave);
 

@@ -45,7 +45,7 @@
  * applicant's status and the members' list still read on a standby, from its copy.
  */
 import Router from '@koa/router';
-import { isNodeMember, assertMemberActive, getNodeRole } from '../state-engine.js';
+import { mayBringSomeoneIn, readsAsMember, assertMemberActive, getNodeRole } from '../state-engine.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { getConfiguredSwitches, getProfileSwitches } from '../config/node-profile.js';
 import { isAcceptableAvatarValue } from '../engine/avatar.js';
@@ -85,7 +85,8 @@ function signer(ctx: any, unsignedMessage: string): string | null {
 function answeringMember(ctx: any): string | null {
     const key = signer(ctx, 'A signed request is required.');
     if (!key) return null;
-    if (!isNodeMember(key)) {
+    // Answering brings someone in (or shuts them out): not a visitor's row, which gets a non-member's answer.
+    if (!mayBringSomeoneIn(key)) {
         answer(ctx, 403, 'Only a member of this community can see or answer requests to join.', 'not_member');
         return null;
     }
@@ -250,6 +251,12 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'no-store');
         const member = answeringMember(ctx);
         if (!member) return;
+        // Who is asking to join, with what they wrote and their photo: a read only members may make (readsAsMember),
+        // whatever ENFORCE_READ_AUTH says. answeringMember has already refused a suspended or disabled member and a
+        // visitor's row; the read test is asked here too, by name, so this read can't drift from the others.
+        if (!readsAsMember(member)) {
+            return answer(ctx, 403, 'Only a member of this community can see or answer requests to join.', 'not_member');
+        }
         const limit = wholeQuery(ctx.query.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
         const offset = wholeQuery(ctx.query.offset, 0, 1_000_000);
         if (limit === null || limit < 1) return answer(ctx, 400, `limit must be a whole number from 1 to ${MAX_LIST_LIMIT}.`, 'bad_request');

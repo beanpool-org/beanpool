@@ -49,6 +49,7 @@ import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
 import {
     registerMember, getMembers, getAllMembers, isNodeMember, isInvalidatedKey, isClosedAccountKey,
+    readsAsMember, passesReadGate, isVisitorKey, socketStanding,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
     acceptPost, completePostTransaction, cancelPostTransaction,
@@ -190,6 +191,9 @@ const ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 //   - ENFORCE_WS_AUTH=false: the old open feed — every socket gets every community-wide event.
 //     An escape hatch, not a recommendation.
 // Safe by default, so a freshly downloaded node never streams member activity to strangers.
+// A member-signed socket of a suspended or disabled member, while that lasts, or of a visitor's row
+// is accepted in every mode and gets what is sent to it (its own messages, trades and Beans) but
+// not the member feed: as over HTTP, it sees what a non-member sees (readsAsMember).
 export type WsAuthMode = 'members' | 'strict' | 'open';
 const WS_AUTH_MODE: WsAuthMode =
     process.env.ENFORCE_WS_AUTH === 'true' ? 'strict'
@@ -199,7 +203,8 @@ const WS_AUTH_MODE: WsAuthMode =
 type WsConnectResult =
     | { kind: 'unsigned' }
     | { kind: 'invalid' }
-    | { kind: 'member'; pubkey: string }
+    /** `feed`: the key reads as a member (readsAsMember), so the socket gets the member feed too. */
+    | { kind: 'member'; pubkey: string; feed: boolean }
     | { kind: 'non_member'; pubkey: string };
 
 /**
@@ -233,13 +238,15 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
         // checks out, so a forged token cannot burn (or fill the cache with) nonces it does not own.
         if (!consumeNonce(nonce, now)) return { kind: 'invalid' };
 
-        // A valid signature only proves key possession — only a member (isNodeMember, the test every
-        // member-only read applies) gets the member feed, so an anonymous keypair can't subscribe to it.
-        // A pruned account, and the old key of a member being re-keyed, keep their row and can still
-        // sign, but neither is a member: its socket gets what a stranger's gets, as an open one does once
-        // that happens (state-engine deliverBroadcast).
-        return isNodeMember(pubKeyHex)
-            ? { kind: 'member', pubkey: pubKeyHex }
+        // A valid signature only proves key possession — only a member (isNodeMember) gets a member
+        // socket, so an anonymous keypair can't subscribe to anything. A pruned account, and the old key
+        // of a member being re-keyed, keep their row and can still sign, but neither is a member: its
+        // socket gets what a stranger's gets, as an open one does once that happens (state-engine
+        // deliverBroadcast). Of the members, only one who reads as a member (readsAsMember, the test
+        // every member-only read applies) gets the member feed (`feed`).
+        const standing = socketStanding(pubKeyHex);
+        return standing.act
+            ? { kind: 'member', pubkey: pubKeyHex, feed: standing.feed }
             : { kind: 'non_member', pubkey: pubKeyHex.toLowerCase() };
     } catch {
         return { kind: 'invalid' };
@@ -249,7 +256,8 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
 // Reads that stay public even under enforcement. Deny-by-default: anything NOT
 // listed here is gated, so a newly-added sensitive endpoint fails safe.
 // Deliberately NOT here: /api/activity/feed. It names both members of every completed trade, the
-// listing and the Beans, plus each member who joins, so it is readable by members only (2026-09-18).
+// listing and the Beans, plus each member who joins, so it is readable by members only (2026-09-18),
+// and only by one who reads as a member (MEMBER_READS_ONLY_EXACT, 2026-09-26).
 //   - discovery / federation: a peer or prospective member must read these
 //     before it has (or to decide whether to join with) an identity.
 //   - onboarding / recovery: a not-yet-joined or recovering user has no member
@@ -360,6 +368,53 @@ function isPublicRead(path: string): boolean {
     // A Beans read that is switched off names nobody: it answers 404 feature_off to everyone (profileFeatureGate), a
     // visitor as a member, as it did before this switch existed.
     return !switches.guestListingsOnly || featureOffFor(path, switches) !== null;
+}
+
+/** The path the router answers: one trailing slash is the path itself (@koa/router's default, strict: false). */
+function routedPath(path: string): string {
+    return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+}
+
+// Gated reads that are nothing but what only members may read, so the gate asks readsAsMember of the signer rather than
+// passesReadGate: a suspended or disabled member, who gets past the gate to their own account, is refused these as a
+// non-member is. The activity feed names both members of every completed trade, the listing and the Beans, and each
+// member who joins, and serves the same body to every reader it lets in.
+const MEMBER_READS_ONLY_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/activity/feed',
+]);
+
+/**
+ * What a visitor's row (isVisitorKey) may read past the gate: only what is its own and was sent to it, its messages and
+ * its Beans (Marty, 2026-09-26: "they receive messages and Beans but see only what a non-member sees"). Each is held to
+ * the signer here, as the route holds it under read auth: its own conversation list, a direct conversation it is in, its
+ * own balance and its own transactions. Every other gated read it is refused, as a non-member is. Compared as the path
+ * spells it, so a spelling the route would decode to something else is refused, never let through.
+ */
+function visitorsOwnRead(path: string, query: Record<string, unknown>, signer: string): boolean {
+    const routed = routedPath(path);
+    const conversations = /^\/api\/messages\/conversations\/([^/]+)$/.exec(routed);
+    if (conversations) return conversations[1] === signer;
+    const conversation = /^\/api\/messages\/([^/]+)$/.exec(routed);
+    if (conversation) {
+        const conv = getConversation(conversation[1]);
+        return !!conv && conv.type === 'dm' && conv.participants.includes(signer);
+    }
+    const balance = /^\/api\/ledger\/balance\/([^/]+)$/.exec(routed);
+    if (balance) return balance[1] === signer;
+    if (routed === '/api/ledger/transactions') return query.publicKey === signer;
+    return false;
+}
+
+/**
+ * Whether a verified signer may make this gated read (ENFORCE_READ_AUTH). A member who passes the gate (passesReadGate:
+ * suspended and disabled members included, for their own account and what suspension leaves them) makes any gated read
+ * but the members-only ones, which need readsAsMember. A visitor makes only its own (visitorsOwnRead). Nobody else makes
+ * one: a key with no row, a pruned account's and a replaced key's (refused before this, for every request).
+ */
+function gatedReadAllowed(path: string, query: Record<string, unknown>, signer: string): boolean {
+    if (MEMBER_READS_ONLY_EXACT.has(routedPath(path))) return readsAsMember(signer);
+    if (passesReadGate(signer)) return true;
+    return isNodeMember(signer) && isVisitorKey(signer) && visitorsOwnRead(path, query, signer);
 }
 
 // A2-22: clamp client-supplied pagination. An unclamped `?limit=` (e.g. limit=-1,
@@ -658,8 +713,10 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 // sensitive events to the parties. A socket without one gets only the public
                 // doorbell, unless the operator chose the open feed. A valid signature from a
                 // key that is not a member yet (someone mid-join) is remembered, so the socket
-                // is promoted when that key's member_joined goes out.
+                // is promoted when that key's member_joined goes out, if the key is a member by
+                // then. `_memberFeed`: the member feed, for a key that reads as a member.
                 ws._memberPubkey = connect.kind === 'member' ? connect.pubkey : null;
+                ws._memberFeed = connect.kind === 'member' && connect.feed;
                 ws._pendingMemberPubkey = connect.kind === 'non_member' ? connect.pubkey : null;
                 ws._openFeed = WS_AUTH_MODE === 'open';
 
@@ -1268,14 +1325,16 @@ export async function startHttpsServer(port: number): Promise<number> {
 
             // SRV-2/SRV-4: a valid signature only proves possession of *some*
             // keypair — an attacker can mint one. For gated reads, require the
-            // signer to be a member of this node (isNodeMember) so the directory,
-            // balances, ledger and social graph aren't readable by an anonymous key.
+            // signer to be a member of this node (gatedReadAllowed: passesReadGate,
+            // and readsAsMember for the members-only reads) so the directory,
+            // balances, ledger and social graph aren't readable by an anonymous key,
+            // and a visitor's row reads only its own messages and Beans.
             // (The old key of a member being re-keyed, a lost or stolen phone, and a
             // closed account's key were refused above, for every request, so a
             // pruned account no longer reads as a member would on a node without the
             // visitors' view. Writes otherwise keep their own per-route authorization;
             // membership isn't required there — e.g. first-time registration.)
-            if (isGatedRead && !isNodeMember(pubKeyHex)) {
+            if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, pubKeyHex)) {
                 ctx.status = 403;
                 ctx.body = { error: 'Read access requires a member identity' };
                 return;

@@ -8,6 +8,7 @@ import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { isSelfAvatarUrl } from '@beanpool/core';
 import { registerGeoFunctions } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
+import { getNodeRole } from '../config/node-role.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -147,6 +148,124 @@ export function writeTombstone(tableName: string, rowKey: string): void {
         `INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at)
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
     ).run(tableName, rowKey);
+}
+
+/**
+ * A person's row with no record of joining (members.is_visitor, markExistingVisitors). Every way in writes one: an
+ * invite and an offline ticket write the inviter's key into `invited_by` and the code into `invite_code` (and use the
+ * code, `invite_codes.used_by`), the open door `open:<provider>` and an `open_joins` row, the genesis member `genesis`,
+ * and each joiner has a `member_joined` line in the activity feed. The only row written with none of these is
+ * registerVisitor's, and it has been so since the first public release. Not an enterprise's row (`is_treasury`), which
+ * no key holds, nor the SYSTEM account.
+ */
+const NO_RECORD_OF_JOINING = `
+    COALESCE(m.is_treasury, 0) = 0
+    AND m.public_key NOT IN ('SYSTEM', 'genesis')
+    AND COALESCE(m.invited_by, '') = ''
+    AND COALESCE(m.invite_code, '') = ''
+    AND NOT EXISTS (SELECT 1 FROM invite_codes i WHERE i.used_by = m.public_key)
+    AND NOT EXISTS (SELECT 1 FROM open_joins o WHERE o.member_pubkey = m.public_key)
+    AND NOT EXISTS (SELECT 1 FROM node_roles r WHERE r.member_pubkey = m.public_key)
+    AND NOT EXISTS (SELECT 1 FROM activity_feed a WHERE a.event_type = 'member_joined' AND a.actor_pubkey = m.public_key)`;
+
+/**
+ * Signs that the person behind a row with no record of joining uses this node as their community, which a visitor
+ * never needs: a profile set up here (a photo, a bio, contact details, or any profile edit) or an invite made. A
+ * visitor who took an invite before this version was answered "already a member", kept its visitor row, and then set
+ * up its profile in the join wizard; these keep that person a member.
+ */
+const USED_AS_A_MEMBER = `
+    COALESCE(m.avatar_url, '') != '' OR COALESCE(m.bio, '') != '' OR COALESCE(m.contact_value, '') != ''
+    OR m.profile_updated_at IS NOT NULL
+    OR EXISTS (SELECT 1 FROM invite_codes c WHERE c.created_by = m.public_key)`;
+
+/** node_config: this node's visitors' rows are marked, by its own pass or by its main server's (markExistingVisitors). */
+const VISITORS_MARKED = 'migration_mark_visitors_v1';
+
+/** Whether this node's visitors' rows are marked (VISITORS_MARKED): the sync export tells a standby so. */
+export function visitorsMarked(): boolean {
+    return !!db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(VISITORS_MARKED);
+}
+
+/**
+ * VISITORS_MARKED's value on a standby that has its main server's word but not yet a whole copy since (4110436371): the
+ * rows it copied before it had the column carry no mark, the main server never stamps them again, and only a whole copy
+ * brings them (engine/sync.ts's member import takes the mark at the same stamp). Its puller asks for one; then 'copied'.
+ */
+const MARKS_BEFORE_WHOLE_COPY = 'copied, whole copy to come';
+
+/**
+ * A standby's import, when its main server's copy says its visitors are marked: the marks are the main server's, so this
+ * node never runs the pass itself, not even once promoted, where it would judge on less than its main server did.
+ */
+export function noteVisitorsMarkedByMainServer(): void {
+    db.prepare('INSERT OR IGNORE INTO node_config (key, value) VALUES (?, ?)').run(VISITORS_MARKED, MARKS_BEFORE_WHOLE_COPY);
+}
+
+/** A standby's puller, before a pull: whether it still wants a whole copy of its main server's marks (above). */
+export function visitorMarksWantWholeCopy(): boolean {
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(VISITORS_MARKED) as { value: string } | undefined;
+    return row?.value === MARKS_BEFORE_WHOLE_COPY;
+}
+
+/** A standby's puller, after importing a whole copy from a main server whose visitors are marked: every row has its mark. */
+export function noteWholeCopyOfVisitorMarks(): void {
+    db.prepare("UPDATE node_config SET value = 'copied' WHERE key = ? AND value = ?").run(VISITORS_MARKED, MARKS_BEFORE_WHOLE_COPY);
+}
+
+/**
+ * Marks the visitors' rows a node already holds, once: the first boot with members.is_visitor (node_config
+ * `migration_mark_visitors_v1`, written in the same transaction, so a crash leaves it to run again). A row is marked
+ * when it has no record of joining (NO_RECORD_OF_JOINING) and no sign of being used as a member (USED_AS_A_MEMBER).
+ *
+ * The safe side is that no member is ever made a visitor by mistake, so anything ambiguous stays a member: a row with no
+ * record of joining that shows a sign of use is kept, and counted in the log as such. A member wrongly marked would
+ * still hold their account, Beans and history, and joining with an invite makes the same row a member's again. Each
+ * marked row's updated_at is stamped, so delta sync takes the mark to a standby.
+ *
+ * Never on a standby (NODE_ROLE=backup, 4110268549): its copy lacks some of what the rule reads (profile_updated_at isn't
+ * imported; invite_codes, node_roles and the activity feed don't replicate), and its stamp would outlive its main
+ * server's answer. It writes no marker either: its main server's marks reach it by delta sync, with the main's word
+ * that they are made (noteVisitorsMarkedByMainServer), then one whole copy for the rows it copied before it had the
+ * column (visitorMarksWantWholeCopy); promoted before that whole copy, it logs so at boot. A standby promoted without
+ * that word (its main server predates the column, so nobody ever marked) runs the pass at its first boot as the main
+ * server, or when a take-over finishes at boot (services/takeover.ts), on what it holds: the members' own columns
+ * (inviter, code, photo, bio, contact), the open door's record and, after a take-over, the node roles it brings; not
+ * profile edits, invites made or used, or the activity feed.
+ */
+export function markExistingVisitors(): void {
+    try {
+        if (visitorsMarked()) {
+            if (getNodeRole() === 'primary' && visitorMarksWantWholeCopy()) {
+                console.warn("[DB] ⚠️ Visitors' rows: this server was promoted from a standby before it took the whole copy of its main server "
+                    + 'that brings every visitor\'s mark. A visitor whose row it copied before this version may read as a member here.');
+            }
+            return;
+        }
+        if (getNodeRole() === 'backup') {
+            console.log("[DB] Visitors' rows: a standby marks none itself; its main server's marks arrive with its copies");
+            return;
+        }
+        db.transaction(() => {
+            const marked = db.prepare(`
+                SELECT m.public_key FROM members m WHERE m.is_visitor = 0 AND ${NO_RECORD_OF_JOINING} AND NOT (${USED_AS_A_MEMBER})
+            `).all() as { public_key: string }[];
+            const kept = (db.prepare(`
+                SELECT COUNT(*) AS n FROM members m WHERE m.is_visitor = 0 AND ${NO_RECORD_OF_JOINING} AND (${USED_AS_A_MEMBER})
+            `).get() as { n: number }).n;
+            const mark = db.prepare(`UPDATE members SET is_visitor = 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`);
+            for (const r of marked) mark.run(r.public_key);
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(VISITORS_MARKED);
+            if (marked.length > 0 || kept > 0) {
+                console.log(`[DB] Visitors' rows marked: ${marked.length}${marked.length > 0 ? ` (${marked.slice(0, 20).map(r => r.public_key.slice(0, 12)).join(', ')}${marked.length > 20 ? ', …' : ''})` : ''}; `
+                    + `kept as members, with no record of joining but used as a member here: ${kept}`);
+            }
+        })();
+    } catch (e) {
+        // Nobody is marked and the marker isn't written, so the next boot tries again; until then visitors read as
+        // members, as they did before this version.
+        console.error('[DB] ❌ Could not mark visitors\' rows:', e);
+    }
 }
 
 // Function to initialize schema
@@ -486,6 +605,10 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN area_lat REAL CHECK (area_lat IS NULL OR (area_lat >= -90 AND area_lat <= 90))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN area_lng REAL CHECK (area_lng IS NULL OR (area_lng >= -180 AND area_lng <= 180))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN area_updated_at TEXT`).run(); } catch { }
+    // A visitor's row (engine isVisitorKey). Before the schema.sql exec, whose members_touch_updated_at (dropped below, so
+    // the exec recreates it) lists it. 0 on every existing row; the node marks its visitors once, after the exec
+    // (markExistingVisitors), when every table that rule reads exists.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN is_visitor INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     // Per-person reminders for one event (docs/events-on-the-map.md §2.1). Here with the other event
     // columns and BEFORE the schema.sql exec, for the same reason they are: schema.sql indexes
     // event_rsvps, and a CREATE INDEX that runs against a table the exec has already refused to re-shape
@@ -712,6 +835,8 @@ export function initSchema() {
             db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_legacy_credit_floor_v1', '1')").run();
         }
     } catch { }
+
+    markExistingVisitors();
 
     // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded
     // activity, falling back to joined_at when last_active_at is NULL. Activity used to be recorded only

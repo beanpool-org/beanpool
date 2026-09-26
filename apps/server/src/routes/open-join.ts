@@ -66,7 +66,7 @@
 
 import Router from '@koa/router';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { broadcast, getMember } from '../state-engine.js';
+import { alreadyJoined, broadcast } from '../state-engine.js';
 import { clientLimiterKey } from '../client-ip.js';
 import {
     issueNonce,
@@ -197,7 +197,8 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
         const actor = canonicalKey(signer);
         if (!actor) { badKey(ctx); return null; }
         if (!limit(ctx)) return null;
-        if (getMember(actor)) {
+        // A visitor's row hasn't joined: it may join here, and the join makes that row a member's.
+        if (alreadyJoined(actor)) {
             ctx.status = 409;
             ctx.body = { error: 'This key is already a member of this community.', code: 'already_member' };
             return null;
@@ -299,7 +300,7 @@ export function createOpenJoinRoutes(deps: RouteDeps): Router {
 
         // Refused before the sign-in is checked, so these never spend the nonce. registerOpenJoin checks all of them
         // again with its writes, and those are the checks that decide.
-        if (getMember(actor)) return refuse(ctx, 'already_member', provider);
+        if (alreadyJoined(actor)) return refuse(ctx, 'already_member', provider);
         if (openJoinKeyInvalidated(actor)) return refuse(ctx, 'key_invalidated', provider);
         forgetOldJoinAddresses();
         const ipHash = openJoinAddressHash(clientLimiterKey(ctx));

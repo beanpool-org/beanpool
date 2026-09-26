@@ -46,6 +46,7 @@
 
 import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedTables, getStateHash, getSyncCursor, setSyncCursor, type ImportResult, type SyncPayload, type ReplicaConsistency } from '../state-engine.js';
 import { logger } from '../logger.js';
+import { noteWholeCopyOfVisitorMarks, visitorMarksWantWholeCopy } from '../db/db.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
@@ -261,6 +262,8 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         // kept as this database's record, so a take-over or a hand promotion from here meets the main server's
         // profile, not this standby's (config/node-profile.ts). A primary too old to send it leaves the record alone.
         if (payload.nodeProfile) noteMainServerProfile(payload.nodeProfile);
+        // A whole copy from a main server whose visitors are marked: every row here has its mark now (db.ts).
+        if (!isDelta && payload.visitorsMarked === true) noteWholeCopyOfVisitorMarks();
 
         if (payload.generatedAt) {
             const genMs = Date.parse(payload.generatedAt);
@@ -362,6 +365,8 @@ function getReconcileMs(): number {
     return Number(process.env.BACKUP_RECONCILE_EVERY_MS) || DEFAULT_RECONCILE_EVERY_MS;
 }
 
+let visitorMarksAsked = false;
+
 function nextMode(): PullMode {
     if (!lastImportedCursor) return 'full'; // seed
     // A drift-triggered reconcile ALWAYS wins, even for a large DB — correctness beats
@@ -375,6 +380,15 @@ function nextMode(): PullMode {
     // copies here it deleted before the seal (services/recovery-seal-key.ts). A whole one, never a 304 "unchanged".
     if (takeRecoverySealFullPull()) {
         lastImportedGeneratedAt = null;
+        return 'full';
+    }
+    // Once a process, a whole copy for a standby that has its main server's word that its visitors are marked but no whole
+    // copy since: the rows it copied before it had the column carry no mark, and no delta brings them (db.ts
+    // visitorMarksWantWholeCopy). One that fails isn't tried on every tick: the next routine one, or the next boot, brings it.
+    if (!visitorMarksAsked && visitorMarksWantWholeCopy()) {
+        visitorMarksAsked = true;
+        lastImportedGeneratedAt = null; // a whole one, never a 304 "unchanged"
+        logger.info('P2P', "[Backup] Visitors' rows: taking one whole copy of the main server, so the rows copied before this version get its marks");
         return 'full';
     }
     const reconcileMs = getReconcileMs();
@@ -619,6 +633,11 @@ export async function pullTakeoverEnvelopeNow(): ReturnType<typeof pullTakeoverE
     return pullTakeoverEnvelope({ primaryUrl, replicationToken: token });
 }
 
+/** One pull, of the kind the loop makes next (nextMode): the loop's own step, which a test drives too. Never throws. */
+export function pullNow(): Promise<{ ok: boolean; error?: string }> {
+    return pullOnce(nextMode());
+}
+
 /**
  * Start the backup pull loop if this node is configured as a backup. No-op
  * (with a clear log) on a primary or when required config is missing, so the
@@ -651,7 +670,7 @@ export function initBackupPuller(): void {
         if (lastMigrateAttemptAt === 0 || (migrateRetryable && Date.now() - lastMigrateAttemptAt >= MIGRATE_RETRY_MS)) {
             await migrateStandbyPassword().catch(() => {});
         }
-        await pullOnce(nextMode()).catch(() => {});
+        await pullNow().catch(() => {});
         // The main server's locked take-over keys (sealed-keys.md §4): a 304 on most ticks.
         await pullTakeoverEnvelopeNow().catch(() => {});
         if (stopped) return;

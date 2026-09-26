@@ -340,20 +340,34 @@ export default function SettingsScreen() {
     const [copiedWords, setCopiedWords] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
 
+    /**
+     * Account Protection's words, put away: Hide, a second tap, or the member leaving the section or the tab (the tab
+     * stays mounted, so its state would otherwise stay). The turn moves on, so a check still answering shows nothing, and
+     * the next Show asks the phone's lock again (PR #1205 review 4112404314).
+     */
+    const protectionWordsTurnRef = React.useRef(0);
+    const putProtectionWordsAway = React.useCallback(() => {
+        protectionWordsTurnRef.current += 1;
+        setRevealWords(false);
+        setMnemonicWords(null);
+    }, []);
+
     const handleRevealWords = async () => {
         if (revealWords) {
-            setRevealWords(false);
-            setMnemonicWords(null);
+            putProtectionWordsAway();
             return;
         }
         if (!hasMnemonic(identity)) {
             Alert.alert("No recovery words found", "Your account key was generated without local passphrase words.");
             return;
         }
+        const turn = protectionWordsTurnRef.current;
         setRevealLoading(true);
         try {
             // The phone's lock first, as View Recovery Phrase asks it: a check that does not pass shows nothing.
             const words = await readWordsBehindLock(identity, 'Confirm your security to view your recovery phrase.');
+            // Put away while the check was up (the member left): nothing is shown.
+            if (turn !== protectionWordsTurnRef.current) return;
             if (words && Array.isArray(words)) {
                 setMnemonicWords(words.join(' '));
                 setRevealWords(true);
@@ -817,6 +831,37 @@ export default function SettingsScreen() {
     // read once the user has typed CONFIRM and passed the biometric check, which is also
     // exactly where the vault read belongs once there is a vault to read from.
     const [seedWords, setSeedWords] = useState<string[] | null>(null);
+
+    /** View Recovery Phrase's words, put away when the member leaves its section or the tab, as Account Protection's are. */
+    const seedWordsTurnRef = React.useRef(0);
+    const putSeedWordsAway = React.useCallback(() => {
+        seedWordsTurnRef.current += 1;
+        setSeedVisible(false);
+        setSeedWords(null);
+    }, []);
+
+    // Both reveals' words go when the member leaves their section (Back, another section) or the Settings tab, so each
+    // Show asks the phone's lock again.
+    useEffect(() => {
+        if (mode !== 'protection') putProtectionWordsAway();
+        if (mode !== 'seed') putSeedWordsAway();
+    }, [mode, putProtectionWordsAway, putSeedWordsAway]);
+    useFocusEffect(
+        React.useCallback(() => () => {
+            putProtectionWordsAway();
+            putSeedWordsAway();
+        }, [putProtectionWordsAway, putSeedWordsAway])
+    );
+
+    const handleShowSeedWords = async () => {
+        const turn = seedWordsTurnRef.current;
+        const words = await readWordsBehindLock(identity, 'Confirm your security to view your recovery phrase.');
+        // A check that did not pass shows nothing. Nor does one that answers after the member left.
+        if (!words || turn !== seedWordsTurnRef.current) return;
+        setSeedWords(words);
+        setSeedVisible(true);
+        await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
+    };
 
     // View Recovery Phrase, from the menu and from Account Protection on a phone without words. The seed screen
     // shows the words, or on a phone with no copy opens "Add your 12 words" under one plain line (Marty, 2026-09-25).
@@ -1938,7 +1983,7 @@ export default function SettingsScreen() {
                                             </Pressable>
                                             <Pressable
                                                 style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}
-                                                onPress={() => { setRevealWords(false); setMnemonicWords(null); }}
+                                                onPress={putProtectionWordsAway}
                                                 accessibilityRole="button"
                                                 accessibilityLabel="Hide 12 recovery words"
                                             >
@@ -2501,13 +2546,7 @@ export default function SettingsScreen() {
                                     />
                                     <Pressable
                                         style={[styles.primaryBtn, seedConfirm !== 'CONFIRM' && { opacity: 0.5 }]}
-                                        onPress={async () => {
-                                            const words = await readWordsBehindLock(identity, 'Confirm your security to view your recovery phrase.');
-                                            if (!words) return;
-                                            setSeedWords(words);
-                                            setSeedVisible(true);
-                                            await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
-                                        }}
+                                        onPress={handleShowSeedWords}
                                         disabled={seedConfirm !== 'CONFIRM'}
                                         accessibilityRole="button"
                                     >

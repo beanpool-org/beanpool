@@ -28,6 +28,7 @@ import { useTheme, useStyles } from './ThemeContext';
 import { palette } from '../constants/colors';
 import { encryptPairingPayload } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
+import { authenticateUser } from '../utils/LocalAuth';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -47,6 +48,9 @@ export default function PairDeviceScreen() {
     const [transferSuccess, setTransferSuccess] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const isScanningLocked = useRef(false);
+    const scannedDataRef = useRef(scannedData);
+    scannedDataRef.current = scannedData;
+    const lockBusyRef = useRef(false);
     const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
@@ -318,14 +322,23 @@ export default function PairDeviceScreen() {
     }
 
     async function handleConfirmLink() {
-        if (!scannedData || !identity) return;
+        if (!scannedData || !identity || isTransferring || lockBusyRef.current) return;
+        const scanned = scannedData;
+
+        // The whole account goes to the computer, key and 12 words: the phone's lock first, the check Settings asks before
+        // Sign Out and the words. A check that doesn't pass reads and sends nothing, and the sheet stays as it was.
+        lockBusyRef.current = true;
+        const passed = await authenticateUser('Confirm authentication to send your account to this computer.');
+        lockBusyRef.current = false;
+        // Not passed, or the sheet was closed (or another code scanned) while it asked: nothing is sent.
+        if (!passed || scannedDataRef.current !== scanned) return;
 
         setIsTransferring(true);
         setErrorMessage(null);
 
         try {
             // Determine and sanitize target node URL
-            let targetNode = scannedData.nodeUrl;
+            let targetNode = scanned.nodeUrl;
             if (!targetNode) {
                 const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
                 targetNode = anchor || '';
@@ -354,8 +367,8 @@ export default function PairDeviceScreen() {
 
             const encrypted = encryptPairingPayload(
                 payloadToEncrypt,
-                scannedData.desktopPubHex,
-                scannedData.sessionId
+                scanned.desktopPubHex,
+                scanned.sessionId
             );
 
             // POST to target node relay
@@ -365,7 +378,7 @@ export default function PairDeviceScreen() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    sessionId: scannedData.sessionId,
+                    sessionId: scanned.sessionId,
                     mobilePubHex: encrypted.mobilePubHex,
                     nonceHex: encrypted.nonceHex,
                     ciphertextHex: encrypted.ciphertextHex,

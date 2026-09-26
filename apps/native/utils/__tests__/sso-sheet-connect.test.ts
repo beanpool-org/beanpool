@@ -163,6 +163,8 @@ async function connect(opts: { signal: AbortSignal; onSignedIn?: () => void | Pr
         provider: 'github',
         url: NODE,
         identity: MEMBER,
+        // The phone's lock is sign-in-link-behind-lock.test.ts's: these are about the sign-in and the deposit after it.
+        phoneLock: null,
         onGithubPrompt: (p) => prompts.push(p),
         onSignedIn: opts.onSignedIn ?? (() => {}),
         signal: opts.signal,

@@ -292,6 +292,8 @@ function protectWithFacebook() {
         provider: 'facebook',
         url: NODE,
         identity: MEMBER,
+        // The phone's lock is sign-in-link-behind-lock.test.ts's: this is about the Facebook token.
+        phoneLock: null,
         onGithubPrompt: () => {},
         onSignedIn: () => {},
         signal: new AbortController().signal,

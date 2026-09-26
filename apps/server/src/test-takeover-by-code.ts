@@ -29,6 +29,17 @@
  *     a forged newest envelope (not signed by the pinned main server) is skipped for the real one.
  *  9. The public-address agent keeps the last tunnel token when the registrar leaves it out.
  *
+ * Recovery seal S2 (the key that opens members' sign-in recovery copies travels inside the take-over keys):
+ *  1. @Dee deposits a sign-in copy on the main server over HTTPS; it is stored wrapped, and the standby's copy of the
+ *     row is the main server's wrapped bytes, never the client's.
+ *  4. The preview says the keys carry the key. 6. The promoted server holds the main server's key byte for byte (0600),
+ *     and a device with nothing but @Dee's sign-in recovers their seed and 12 words from it over HTTPS.
+ * 10. A standby that already held a DIFFERENT key (it was once a main server, and locked @Zed's copy with it): the
+ *     community's key takes its place, its own is kept beside it (never lost) and in the undo copy byte for byte, and
+ *     its boot locks @Zed's copy again with the live key, so both members recover from it.
+ * 11. Keys locked before they carried the key (a bundle with no recovery-seal.key): the preview says what will be
+ *     missing, the take-over goes on and logs the missing-key line, and @Dee's copy does not open there.
+ *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-takeover-by-code.ts
  */
@@ -37,7 +48,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { spawnNode, post, copyDir, runNodeChild, inspectNode, type NodeProc } from './takeover-test-harness.js';
+import { spawnNode, post, copyDir, runNodeChild, inspectNode, recoverySealCommands, type NodeProc } from './takeover-test-harness.js';
+import { fixtureWords, GOOGLE_SUB } from './recovery-seal-test-http.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Main-Server-Pw-907!';
@@ -49,6 +61,7 @@ const TUNNEL_TOKEN = 'eyJ0dW5uZWwiOiJ0ZXN0dG93biJ9.' + crypto.randomBytes(12).to
 
 async function child(): Promise<void> {
     await runNodeChild({
+        ...recoverySealCommands,
         'setup-primary': async (a: { ownerSeedHex: string; benSeedHex: string; replicationToken: string; tunnelToken: string }) => {
             const { ed25519 } = await import('@noble/curves/ed25519.js');
             const se = await import('./state-engine.js');
@@ -145,7 +158,15 @@ const AUDIT_BANNER = 'FAILOVER PROMOTION — running ledger conservation sanity 
 async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
-    const dirs = { main: path.join(root, 'main'), standby: path.join(root, 'standby'), third: path.join(root, 'third'), probe: path.join(root, 'probe') };
+    const dirs = {
+        main: path.join(root, 'main'), standby: path.join(root, 'standby'), third: path.join(root, 'third'), probe: path.join(root, 'probe'),
+        probeKeyed: path.join(root, 'probe-keyed'), probeOld: path.join(root, 'probe-old'),
+    };
+    const SEAL_KEY = 'recovery-seal.key';
+    const mode = (p: string) => fs.statSync(p).mode & 0o777;
+    const wrappedAlg = (kdf: string | null) => { try { return JSON.parse(kdf ?? '').alg; } catch { return null; } };
+    const dee = fixtureWords(1);
+    const zed = fixtureWords(2);
     const nodes: NodeProc[] = [];
     const standbyOutputs: string[] = [];
     const core = await import('@beanpool/core');
@@ -166,6 +187,13 @@ async function main(): Promise<void> {
         assert(main.ready.role === 'primary' && /^12D3/.test(mainPeerId), `the main server is up (${mainPeerId})`);
         assert(/^BPRC-1 /.test(setup.code) && setup.envelopeId, 'it has recovery code #1 and a take-over envelope');
         assert(setup.transferred, `(some beans moved on the main server, so the audit has a ledger to check) ${setup.transferError ?? ''}`);
+        const deposited = await main.send('recovery-deposit', { seedHex: dee.seedHex, words: dee.words, callsign: 'Dee', addMember: true });
+        assert(deposited.status === 200 && deposited.body?.threshold === 1,
+            `S2: @Dee deposits a sign-in recovery copy on the main server over HTTPS, through the signature middleware (${deposited.status} ${JSON.stringify(deposited.body)})`);
+        const mainDee = (await main.send('recovery-rows')).rows.find((r: any) => r.owner_pubkey === deposited.pk);
+        assert(wrappedAlg(mainDee?.kdf_params) === 'node-wrap-xc20p-v1' && mainDee.encrypted_share !== deposited.sealed.encryptedShare,
+            'S2: …and the main server stores it wrapped with its recovery-seal key');
+        const mainSealKey = fs.readFileSync(path.join(dirs.main, SEAL_KEY));
 
         // The standby is set up as setup-backup.mjs does: the main server's genesis, its PeerId pinned as mirror.
         for (const d of [dirs.standby, dirs.third]) {
@@ -180,6 +208,17 @@ async function main(): Promise<void> {
         const pull1 = await standby.send('pull');
         assert(pull1.resync.ok && pull1.members >= 3, `the standby copied the database (${JSON.stringify(pull1.resync)}, ${pull1.members} members)`);
         assert(pull1.envelope === 'stored' && pull1.held.length === 1 && pull1.held[0] === setup.envelopeId, 'and holds the main server\'s take-over envelope');
+        {
+            const onMain = (await main.send('recovery-rows')).rows.filter((r: any) => r.owner_pubkey === deposited.pk);
+            const onStandby = (await standby.send('recovery-rows')).rows.filter((r: any) => r.owner_pubkey === deposited.pk);
+            const same = (a: any, b: any) => a && b && a.encrypted_share === b.encrypted_share && a.share_iv === b.share_iv
+                && a.share_tag === b.share_tag && a.kdf_params === b.kdf_params;
+            assert(onStandby.length === 1 && same(onStandby[0], onMain[0]),
+                "S2: the standby's copy of @Dee's row is the main server's wrapped bytes, byte for byte");
+            assert(onStandby[0].encrypted_share !== deposited.sealed.encryptedShare && onStandby[0].kdf_params !== deposited.sealed.kdfParams,
+                "S2: …never the client's");
+            assert(!fs.existsSync(path.join(dirs.standby, SEAL_KEY)), 'S2: the standby holds no recovery-seal key of its own');
+        }
 
         const dropped = await main.send('drop-tunnel');
         const pull2 = await standby.send('pull');
@@ -189,6 +228,8 @@ async function main(): Promise<void> {
         // A copy of the standby as it is now, for the refusal probes (section 8).
         await standby.send('checkpoint');
         copyDir(dirs.standby, dirs.probe);
+        copyDir(dirs.standby, dirs.probeKeyed);
+        copyDir(dirs.standby, dirs.probeOld);
 
         // ── 2. The main server dies ──
         console.log('\n— 2. the main server is killed —');
@@ -229,6 +270,8 @@ async function main(): Promise<void> {
         assert(pv.publicAddress === 'testtown.beanpool.org', 'the web address testtown.beanpool.org');
         assert(pv.tunnel.source === 'older-envelope' && pv.tunnel.sealedAt, `the newest envelope had no tunnel token; it came from the older copy (${pv.tunnel.message})`);
         assert(pv.mainServer.answers === false && pv.mainServer.warning === null, 'the main server does not answer, and the preview says so (no warning)');
+        assert(pv.recoverySealKey === true && !pv.missing.some((m: string) => /sign-in recovery copies/.test(m)),
+            `S2: the preview says the keys carry the key that opens members' sign-in recovery copies (${pv.recoverySealKey})`);
         assert(pv.missing.some((m: string) => /invites/.test(m)) && pv.missing.some((m: string) => /Decisions/.test(m)) && pv.missing.some((m: string) => /notification/.test(m)),
             'the preview lists what will be missing (Decisions and votes, pledges, invites, notification settings, …)');
         assert(!JSON.stringify(opened.body).includes(TUNNEL_TOKEN) && !/adminHash|totpSecret|libp2p_key/.test(JSON.stringify(opened.body)),
@@ -301,6 +344,22 @@ async function main(): Promise<void> {
         standbyOutputs.push(standby.output());
         const audits = count(standbyOutputs.join('\n'), AUDIT_BANNER);
         assert(audits === 1, `the conservation audit ran exactly once across both starts (${audits})`);
+
+        // S2: the key that opens members' sign-in recovery copies came with the keys, and opens them here.
+        const promotedKey = path.join(dirs.standby, SEAL_KEY);
+        assert(fs.existsSync(promotedKey) && fs.readFileSync(promotedKey).equals(mainSealKey) && mode(promotedKey) === 0o600,
+            "S2: the promoted server holds the main server's recovery-seal key, byte for byte, 0600");
+        assert(!fs.readdirSync(dirs.standby).some((n) => n.startsWith('recovery-seal-retired-')) && !fs.existsSync(path.join(dirs.standby, after.preTakeoverDirs[0], SEAL_KEY)),
+            'S2: this standby held no key of its own, so none was kept aside and the undo copy holds none');
+        const idFiles = prog.body.steps.find((st: any) => st.step === 'identity-files');
+        assert(/the key that opens members' sign-in recovery copies/.test(idFiles?.detail ?? ''), `S2: the identity-files step says so (${idFiles?.detail})`);
+        assert(!/cannot be opened here|No recovery-seal key/.test(standbyOutputs.join('\n') + standby.output()),
+            'S2: no copy it cannot open, and no missing-key line, in its logs');
+        const deeBack = await standby.send('recovery-recover', { callsign: 'Dee' });
+        assert(deeBack.released.status === 200 && deeBack.released.body?.enough === true && deeBack.fragments.status === 200,
+            `S2: the promoted server releases @Dee's wrapped copy to a device with only their sign-in, over HTTPS (${deeBack.released.status} ${JSON.stringify(deeBack.released.body)})`);
+        assert(deeBack.seedHex === dee.seedHex && JSON.stringify(deeBack.words) === JSON.stringify(dee.words),
+            `S2: …which opens to their seed and their 12 words (${deeBack.error ?? 'opened'})`);
 
         // Another start: nothing runs again.
         await standby.kill('SIGTERM');
@@ -375,6 +434,107 @@ async function main(): Promise<void> {
             const probeState = await probe.send('inspect', {});
             assert(probeState.role === 'backup' && probeState.peerId !== mainPeerId, 'and the standby is still a standby with its own PeerId');
             await probe.kill();
+        }
+
+        // ── 10. A standby that already held a recovery-seal key of its own ──
+        console.log('\n— 10. S2: a standby that already held a different recovery-seal key —');
+        {
+            const ownKey = crypto.randomBytes(32);
+            let keyed = await spawnNode(SCRIPT, dirs.probeKeyed, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            nodes.push(keyed);
+            const planted = await keyed.send('plant-own-key-copy', { keyB64: ownKey.toString('base64'), seedHex: zed.seedHex, words: zed.words, callsign: 'Zed', sub: GOOGLE_SUB });
+            assert(wrappedAlg(planted.row?.kdf_params) === 'node-wrap-xc20p-v1',
+                "(setup) it was once a main server: it holds its own key, and @Zed's copy locked with it");
+            const kOpen = await post(keyed.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+            assert(kOpen.status === 200 && kOpen.body.preview.recoverySealKey === true, `the code opens the keys, which carry the community's key (${kOpen.status})`);
+            const kConfirm = await post(keyed.base, '/api/local/admin/takeover/confirm', { sessionId: kOpen.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+            assert(kConfirm.status === 200, `confirmed (${kConfirm.status} ${JSON.stringify(kConfirm.body).slice(0, 160)})`);
+            await keyed.exited;
+            const firstRun = keyed.output();
+            keyed = await spawnNode(SCRIPT, dirs.probeKeyed, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            nodes.push(keyed);
+            assert(keyed.ready.role === 'primary' && keyed.ready.peerId === mainPeerId, 'it is the main server now, with the community\'s PeerId');
+            const liveKey = path.join(dirs.probeKeyed, SEAL_KEY);
+            assert(fs.readFileSync(liveKey).equals(mainSealKey) && mode(liveKey) === 0o600,
+                "the community's key is data/recovery-seal.key now, byte for byte, 0600");
+            const retired = fs.readdirSync(dirs.probeKeyed).filter((n) => /^recovery-seal-retired-[0-9a-f]{16}\.key$/.test(n));
+            assert(retired.length === 1 && fs.readFileSync(path.join(dirs.probeKeyed, retired[0])).equals(ownKey) && mode(path.join(dirs.probeKeyed, retired[0])) === 0o600,
+                `its own key is never lost: kept beside it byte for byte, 0600 (${retired.join(', ')})`);
+            const undo = fs.readdirSync(dirs.probeKeyed).filter((n) => n.startsWith('pre-takeover-'));
+            assert(undo.length === 1 && fs.readFileSync(path.join(dirs.probeKeyed, undo[0], SEAL_KEY)).equals(ownKey),
+                'and the undo copy holds its own key byte for byte, so undoing the take-over puts back exactly the key it had');
+            const journal = JSON.parse(fs.readFileSync(path.join(dirs.probeKeyed, 'takeover-journal.json'), 'utf-8'));
+            assert(journal.steps['identity-files']?.detail?.includes(`this server's own is kept as data/${retired[0]}`),
+                `the identity-files step says where its own key is kept (${journal.steps['identity-files']?.detail})`);
+            assert(/already had a recovery-seal key of its own; it is kept as data\/recovery-seal-retired-/.test(firstRun), '…and the take-over log says so');
+            assert(/locked 1 recovery copy and 0 released copies again with data\/recovery-seal\.key/.test(keyed.output()),
+                `at its first start as the main server it locks @Zed's copy again with the live key (${(keyed.output().match(/Recovery seal: [^\n]*/g) ?? []).join(' | ')})`);
+            const kRows = await keyed.send('recovery-rows');
+            assert(kRows.liveOnly?.wrapped === 2 && kRows.liveOnly?.unopenable === 0,
+                `every copy it holds now opens with the live key alone, no retired key needed (${JSON.stringify(kRows.liveOnly)})`);
+            const zedBack = await keyed.send('recovery-recover', { callsign: 'Zed' });
+            assert(zedBack.seedHex === zed.seedHex && JSON.stringify(zedBack.words) === JSON.stringify(zed.words),
+                `@Zed, whose copy its own key locked, recovers their seed and 12 words from it over HTTPS (${zedBack.released.status} ${zedBack.error ?? 'opened'})`);
+            const deeHere = await keyed.send('recovery-recover', { callsign: 'Dee' });
+            assert(deeHere.seedHex === dee.seedHex, `and so does @Dee, whose copy the community's key locked (${deeHere.released.status} ${deeHere.error ?? 'opened'})`);
+            await keyed.kill('SIGTERM');
+            keyed = await spawnNode(SCRIPT, dirs.probeKeyed, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            nodes.push(keyed);
+            assert(!/again with data\/recovery-seal\.key/.test(keyed.output()) && fs.readFileSync(path.join(dirs.probeKeyed, retired[0])).equals(ownKey),
+                'a later start has nothing to lock again, and the kept key is still there');
+            await keyed.kill();
+        }
+
+        // ── 11. Keys locked before they carried the recovery-seal key ──
+        console.log('\n— 11. S2: keys locked before they carried the recovery-seal key —');
+        {
+            const keyBytes = fs.readFileSync(path.join(dirs.main, 'libp2p_key'));
+            const mainSeed = new Uint8Array(privateKeyFromProtobuf(keyBytes).raw.subarray(0, 32));
+            const record = JSON.parse(fs.readFileSync(path.join(dirs.main, 'local-config.json'), 'utf-8')).recoveryCode;
+            // The bundle as the code before this change built it: no recovery-seal.key entry at all.
+            const oldBundle = {
+                v: 1,
+                files: {
+                    libp2p_key: keyBytes.toString('base64'),
+                    'community.key': fs.readFileSync(path.join(dirs.main, 'community.key')).toString('base64'),
+                    'genesis.json': fs.readFileSync(path.join(dirs.main, 'genesis.json')).toString('base64'),
+                    'connectors.json': null,
+                },
+                localConfig: { adminHash: 'x', salt: 'y', totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false },
+                nodeRoles: [], publicAddress: null, recoveryCode: record,
+            };
+            const oldEnvelope = await core.sealEnvelope(new TextEncoder().encode(JSON.stringify(oldBundle)), {
+                kind: 'takeover', communityId, nodePeerId: mainPeerId, recipients: { owners: [], codes: [record] },
+                signingKey: mainSeed, createdAt: new Date().toISOString(),
+            });
+            const oldId = core.readSealedHeader(oldEnvelope).envelopeId;
+            fs.writeFileSync(path.join(dirs.probeOld, 'held-takeover-envelopes', `${String(Date.now() + 2_000_000).padStart(13, '0')}-${oldId}.bpseal`), oldEnvelope, { mode: 0o600 });
+            let old = await spawnNode(SCRIPT, dirs.probeOld, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            nodes.push(old);
+            const oOpen = await post(old.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+            assert(oOpen.status === 200 && oOpen.body.preview.envelope.envelopeId === oldId && oOpen.body.preview.recoverySealKey === false,
+                `the preview says these keys do not carry the recovery-seal key (${oOpen.status} ${oOpen.body.preview?.recoverySealKey})`);
+            assert(oOpen.body.preview.missing.some((m: string) => /^members' sign-in recovery copies: these keys were locked before they carried the key/.test(m)),
+                'and lists members\' sign-in recovery copies in what will be missing');
+            const oConfirm = await post(old.base, '/api/local/admin/takeover/confirm', { sessionId: oOpen.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+            assert(oConfirm.status === 200, `the take-over goes on: nothing blocks it (${oConfirm.status})`);
+            await old.exited;
+            const firstRun = old.output();
+            const NO_KEY_LINE = "No recovery-seal key in this envelope: members' sign-in copies will not open on this server until they reconnect. Their 12 words still work.";
+            assert(firstRun.includes(`[Takeover] ${NO_KEY_LINE}`), 'the take-over logs the missing-key line');
+            const oJournal = JSON.parse(fs.readFileSync(path.join(dirs.probeOld, 'takeover-journal.json'), 'utf-8'));
+            assert(oJournal.steps['identity-files']?.detail?.includes(NO_KEY_LINE), 'and the identity-files step records it');
+            old = await spawnNode(SCRIPT, dirs.probeOld, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            nodes.push(old);
+            assert(old.ready.role === 'primary' && old.ready.peerId === mainPeerId, 'it is the main server, with the community\'s PeerId');
+            const madeKey = path.join(dirs.probeOld, SEAL_KEY);
+            assert(fs.existsSync(madeKey) && !fs.readFileSync(madeKey).equals(mainSealKey), 'it made a recovery-seal key of its own at its first start as the main server');
+            assert(/1 of them were locked with another recovery-seal key and cannot be opened here/.test(old.output()),
+                'its boot names the copy it cannot open');
+            const deeNot = await old.send('recovery-recover', { callsign: 'Dee' });
+            assert(deeNot.seedHex === null && deeNot.released.body?.enough !== true,
+                `@Dee's copy does not open there: they connect their sign-in again (${deeNot.released.status} ${JSON.stringify(deeNot.released.body)})`);
+            await old.kill();
         }
 
         // ── 9. The source of the lost token ──

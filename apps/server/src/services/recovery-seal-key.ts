@@ -954,15 +954,17 @@ function countWrapped(): { wrapped: number; unopenable: number } {
  * this data folder do not open (all of them when there is no key file). For a restore, which asks it of the database it
  * just put in place, so the operator hears at the restore, not at a member's recovery, what will not open.
  */
-export function countUnopenable(rows: Pick<ShareRow, 'owner_pubkey' | 'holder_type' | 'encrypted_share' | 'share_iv' | 'share_tag' | 'kdf_params'>[]):
-    { wrapped: number; unopenable: number } {
+export function countUnopenable(
+    rows: Pick<ShareRow, 'owner_pubkey' | 'holder_type' | 'encrypted_share' | 'share_iv' | 'share_tag' | 'kdf_params'>[],
+    opts: { retired?: boolean } = {},
+): { wrapped: number; unopenable: number } {
     let wrapped = 0, unopenable = 0;
     for (const r of rows) {
         if (!isNodeWrapped(r.kdf_params)) continue;
         wrapped++;
         try {
-            openRecoveryFields({ encryptedShare: r.encrypted_share, shareIv: r.share_iv, shareTag: r.share_tag, kdfParams: r.kdf_params },
-                shareRowAad(r.owner_pubkey, r.holder_type));
+            openRecoveryFieldsUnder({ encryptedShare: r.encrypted_share, shareIv: r.share_iv, shareTag: r.share_tag, kdfParams: r.kdf_params },
+                shareRowAad(r.owner_pubkey, r.holder_type), opts.retired !== false);
         } catch { unopenable++; }
     }
     return { wrapped, unopenable };

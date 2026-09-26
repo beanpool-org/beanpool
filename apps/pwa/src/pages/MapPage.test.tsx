@@ -1089,3 +1089,87 @@ describe('MapPage: a listing pushed over the live feed', () => {
         expect(vi.mocked(api.getMarketplacePosts).mock.calls.length).toBe(calls);
     });
 });
+
+describe("MapPage: the node's refusal in the post form (G11-e, design G11 §6)", () => {
+    const LIMIT = 'While your account is new you can make 3 posts in any 24 hours. You can post again in about 5 hours. New accounts have these limits for their first 3 days, and until 3 of their posts have stayed up.';
+    const MUTED = "Three of your posts were removed by the community's moderators in the last 30 days, so you can't post or send messages here until a moderator lifts this. You can still read, edit your profile and leave.";
+    /** What `request` throws for a refusal: the node's `error` as the message, with its status and code. */
+    const refusal = (status: number, code: string, message: string) => Object.assign(new Error(message), { status, code });
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        window.alert = vi.fn();
+    });
+
+    async function submitPoll(): Promise<HTMLElement> {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Poll' })); });
+        fireEvent.change(within(panel).getByPlaceholderText('What should our community decide?'), { target: { value: 'Bigger compost bays?' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 1'), { target: { value: 'Yes' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 2'), { target: { value: 'No' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Create Poll' })); });
+        return panel;
+    }
+
+    it("429 probation_limit: the node's words in the form, word for word, and the new-account card under them", async () => {
+        vi.spyOn(api, 'createMarketplacePost').mockRejectedValue(refusal(429, 'probation_limit', LIMIT));
+        const me = vi.spyOn(api, 'getCommunityMe').mockResolvedValue({
+            publicKey: mockIdentity.publicKey,
+            probation: {
+                onProbation: true, exemptBecause: null, ageEndsAt: new Date(Date.now() + 50 * 3600_000).toISOString(),
+                keptPosts: 0, keptPostsNeeded: 3, endsWhen: { hours: 72, keptPosts: 3 },
+                limits: {
+                    posts: { limit: 3, used: 3, remaining: 0, resetsAt: new Date(Date.now() + 5 * 3600_000).toISOString() },
+                    photos: { limit: 5, used: 0, remaining: 5, resetsAt: null },
+                    new_dm_recipients: { limit: 10, used: 0, remaining: 10, resetsAt: null },
+                },
+            },
+            mute: { muted: false, until: null },
+        });
+        const panel = await submitPoll();
+        const said = await within(panel).findByTestId('post-refusal');
+        expect(said.textContent).toBe(LIMIT);
+        expect(said).toHaveAttribute('role', 'alert');
+        expect(window.alert).not.toHaveBeenCalled();
+        const card = await within(panel).findByTestId('new-account-card');
+        expect(me).toHaveBeenCalled();
+        expect(within(card).getByTestId('new-account-limit-posts')).toHaveTextContent('0 of 3 left');
+        // Still in the form: what they typed is kept for later.
+        expect(within(panel).getByPlaceholderText('What should our community decide?')).toHaveValue('Bigger compost bays?');
+    });
+
+    it("403 moderation_muted: the node's words in the form, and no limits card (it isn't a limit)", async () => {
+        vi.spyOn(api, 'createMarketplacePost').mockRejectedValue(refusal(403, 'moderation_muted', MUTED));
+        const me = vi.spyOn(api, 'getCommunityMe');
+        const panel = await submitPoll();
+        const said = await within(panel).findByTestId('post-refusal');
+        expect(said.textContent).toBe(MUTED);
+        expect(within(panel).queryByTestId('new-account-card')).toBeNull();
+        expect(me).not.toHaveBeenCalled();
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
+    it('any other failure is left as it was (an alert with its message), and closing the form drops a refusal', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockRejectedValueOnce(new Error('Network down'));
+        const panel = await submitPoll();
+        expect(window.alert).toHaveBeenCalledWith('Network down');
+        expect(within(panel).queryByTestId('post-refusal')).toBeNull();
+
+        create.mockRejectedValueOnce(refusal(403, 'moderation_muted', MUTED));
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Create Poll' })); });
+        expect(await within(panel).findByTestId('post-refusal')).toHaveTextContent(MUTED);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Close new post' })); });
+        expect(document.querySelector('[data-testid="post-refusal"]')).toBeNull();
+    });
+});

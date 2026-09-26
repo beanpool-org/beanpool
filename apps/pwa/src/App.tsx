@@ -33,6 +33,7 @@ import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
 import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
+import { NewAccountCard } from './components/NewAccountCard';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
 
@@ -175,6 +176,16 @@ export function App() {
     // null as a member, as before.
     const [isGuest, setIsGuest] = useState<boolean | null>(null);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
+    // "Your account is new" (G11-e): put away in this browser for this account; Settings keeps showing it.
+    const [newAccountCardClosed, setNewAccountCardClosed] = useState(false);
+    useEffect(() => {
+        try { setNewAccountCardClosed(!!identity?.publicKey && localStorage.getItem(`beanpool_new_account_card_closed_${identity.publicKey}`) === '1'); }
+        catch { setNewAccountCardClosed(false); }
+    }, [identity?.publicKey]);
+    const closeNewAccountCard = useCallback(() => {
+        setNewAccountCardClosed(true);
+        try { if (identity?.publicKey) localStorage.setItem(`beanpool_new_account_card_closed_${identity.publicKey}`, '1'); } catch { /* private window */ }
+    }, [identity?.publicKey]);
     const [showCommunityStatus, setShowCommunityStatus] = useState(false);
     const [communityHealth, setCommunityHealth] = useState<NodeHealthState | null>(null);
     // The node's own version, once health has answered; the baked-in bundle version until then.
@@ -763,6 +774,10 @@ export function App() {
                                         identity={identity}
                                         onCheckNow={() => { setSettingsInitialMode('menu'); setOwnerWordsOpen(true); setShowSettings(true); }}
                                     />
+                                    {/* A member only: a guest has no standing here to read. */}
+                                    {isGuest === false && !newAccountCardClosed && (
+                                        <NewAccountCard onClose={closeNewAccountCard} />
+                                    )}
                                 </div>
                             )}
                             {activeTab === 'map' && (

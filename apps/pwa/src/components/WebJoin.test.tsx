@@ -297,6 +297,8 @@ describe('screen 4: the return, and each door answer → its screen', () => {
         const before = Date.now();
         renderJoin({ authReturn: googleReturn() });
         expect(await screen.findByTestId('join-notice')).toHaveTextContent(text);
+        // The limit is per network (design G11 §6): a class or a meetup joining together is told it may not be them.
+        expect(screen.getByTestId('join-notice')).toHaveTextContent('Everyone joining from the same network counts together: at a campus, an office or a meetup it may be other people joining, not you.');
         const kept = (await loadPendingJoin())!;
         expect(kept.identity.publicKey).toBe(identity.publicKey);
         expect(kept.expiresAt).toBeGreaterThanOrEqual(before + 59 * 60 * 1000);

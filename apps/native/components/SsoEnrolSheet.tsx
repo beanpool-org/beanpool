@@ -8,6 +8,7 @@ import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import type { SsoProvider, GithubDevicePrompt } from '../utils/sso-signin';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { connectAndDeposit } from '../utils/sso-sheet-connect';
+import { authenticateUser } from '../utils/LocalAuth';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
 import { useIdentity } from '../app/IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
@@ -19,6 +20,7 @@ export function SsoEnrolSheet({
     onEnrolled,
     provider = Platform.OS === 'ios' ? 'apple' : 'google',
     identity: passedIdentity,
+    askPhoneLock = true,
 }: {
     visible: boolean;
     onClose: () => void;
@@ -27,6 +29,11 @@ export function SsoEnrolSheet({
     provider?: SsoProvider;
     /** Identity to use for enrolment. Defaults to useIdentity().identity if omitted. */
     identity?: BeanPoolIdentity | null;
+    /**
+     * Ask the phone's lock before the sign-in starts (Settings' check): linking a sign-in seals the account's key and 12
+     * words to it. False only for a key the join wizard has just made, the member's own new account (welcome.tsx).
+     */
+    askPhoneLock?: boolean;
 }): React.JSX.Element | null {
     const PROVIDER_NAME = provider === 'apple' ? 'Apple'
         : provider === 'google' ? 'Google'
@@ -103,6 +110,7 @@ export function SsoEnrolSheet({
                 provider,
                 url,
                 identity,
+                phoneLock: askPhoneLock ? () => authenticateUser('Confirm authentication to link a sign-in to your account.') : null,
                 onGithubPrompt: (prompt) => {
                     setDevicePrompt(prompt);
                     // Copied before the member has done anything. The whole friction was having to

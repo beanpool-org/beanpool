@@ -52,6 +52,8 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { getFunnel } from './engine/funnel.js';
 import { OPEN_JOIN_LIMITS, startForgettingJoinAddresses, forgetOldJoinAddresses, openJoinHash, registerOpenJoin } from './engine/open-join.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
+import { openShareRow } from './engine/recovery-shares.js';
+import { isNodeWrapped } from './services/recovery-seal-key.js';
 import { sealSeedToSso, sealShareToSso, openShareFromSso } from '@beanpool/core';
 
 const PORT = 8729;
@@ -371,11 +373,15 @@ async function main(): Promise<void> {
     assert(both.body?.recovery?.enrolled === true && both.body.recovery.provider === 'apple' && both.body.recovery.threshold === 1
         && JSON.stringify(both.body.recovery.enrolledSso) === '["apple"]',
         `the answer reports the keeper as /api/recovery/shares/sso would (got ${JSON.stringify(both.body?.recovery)})`);
-    const share = db.prepare("SELECT * FROM recovery_shares WHERE owner_pubkey = ? AND holder_type = 'sso'").get(eve.pk) as any;
-    assert(!!share && share.holder_ref === 'apple' && share.sso_lookup_hash === await ssoLookupHash('apple', EVE_SUB, share.sso_lookup_salt),
+    const row = db.prepare("SELECT * FROM recovery_shares WHERE owner_pubkey = ? AND holder_type = 'sso'").get(eve.pk) as any;
+    assert(!!row && row.holder_ref === 'apple' && row.sso_lookup_hash === await ssoLookupHash('apple', EVE_SUB, row.sso_lookup_salt),
         'the keeper is filed under the node\'s own lookup hash of the VERIFIED sub');
+    // The row holds the copy under the node's recovery seal (services/recovery-seal-key.ts); the node's reader takes
+    // that lock off, and what is under it is the app's copy exactly as the member's app sealed it.
+    assert(isNodeWrapped(row.kdf_params), `the stored copy is locked with the node's recovery seal (got ${row.kdf_params})`);
+    const share = openShareRow(row);
     const reopened = await openShareFromSso(
-        { encryptedShare: share.encrypted_share, shareIv: share.share_iv, shareTag: share.share_tag, kdfParams: share.kdf_params },
+        { encryptedShare: share.encryptedShare, shareIv: share.shareIv, shareTag: share.shareTag, kdfParams: share.kdfParams ?? '' },
         'apple', EVE_SUB,
     );
     assert(Buffer.from(reopened).equals(Buffer.from(eve.seed)), 'and the stored blob opens with that sub to the member\'s own seed');

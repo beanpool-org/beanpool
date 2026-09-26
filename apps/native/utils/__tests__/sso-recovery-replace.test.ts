@@ -52,7 +52,7 @@ import { signInWithGoogle } from '../sso-signin';
 import { recoverAccountWithSso } from '../sso-recovery';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { ReplaceNotSaved } from '../restore-account';
-import { KNOCKS_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { decodeBase64, encodeUtf8, hexToBytes, mnemonicToKeypair, verifyData } from '../crypto';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
 import { removeCommunityCaches } from '../community-cache';
@@ -63,6 +63,7 @@ const SEED = sha256(sha256(utf8ToBytes(WORDS.join(' '))));
 const SUB = '110169484474386276334';
 const NODE = 'https://test.beanpool.org';
 const MULLUM = 'https://mullum.beanpool.org';
+const BELLINGEN = 'https://bellingen.beanpool.org';
 const ANCHOR = 'beanpool_anchor_url';
 /** An invite join that has just redeemed the phone's key at Mullum: its words not shown yet. */
 const INVITE_RECORD = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: MULLUM, callsign: 'Kim', redeemed: true };
@@ -72,8 +73,8 @@ const PHONE_KEPT = { beanpool_light_palette: 'sand' };
 /**
  * The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors, its
  * profile (photo, bio, contact) with a photo parked for the next sync, the invite codes it made, an unfinished post,
- * the reports it has yet to send, and the communities it saved (the switcher's list, which Sign Out removed and
- * Replace kept until #1183's review 5324593567).
+ * the reports it has yet to send, the communities it saved (the switcher's list, which Sign Out removed and
+ * Replace kept until #1183's review 5324593567), and where the phone sent its push token for it.
  */
 function accountStorage(publicKey: string): Record<string, string> {
     return {
@@ -93,6 +94,9 @@ function accountStorage(publicKey: string): Record<string, string> {
         }),
         'pillar_sync_beanpool_https___mullum_beanpool_org.db_last-sync': '2026-09-25T00:00:00.000Z',
         'pillar:outbox': '[]',
+        // Where the phone sent its push token for this account: Mullum, and Bellingen, which it later dropped from the
+        // switcher. Never Byron, where it was only a guest (push-registrations.ts).
+        [PUSH_REGISTERED_AT_STORE_KEY]: JSON.stringify([MULLUM, BELLINGEN]),
     };
 }
 
@@ -308,7 +312,7 @@ describe('a sign-in restore with nothing to replace', () => {
 describe('a sign-in Replace takes the old account\'s push alerts and communities (#1183 review 5324593567)', () => {
     const PHONE_TOKEN = 'ExponentPushToken[kims-phone]';
 
-    it('Kim\'s push token is unregistered on each of Kim\'s communities, signed by Kim\'s key before the restored key is written; Kim\'s saved communities and cached copies go', async () => {
+    it('Kim\'s push token is unregistered where the phone registered it, signed by Kim\'s key before the restored key is written; Kim\'s saved communities and cached copies go', async () => {
         mockSignInAndNode(await sealSeedToSso(SEED, 'google', SUB, { words: WORDS }));
         await phoneWithInviteJoin();
         mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
@@ -320,7 +324,9 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
 
         await restore(async () => true);
 
-        expect(sent.map((s) => s.url).sort()).toEqual(['https://byron.beanpool.org/api/push-tokens', `${MULLUM}/api/push-tokens`]);
+        // Mullum and Bellingen had the token. Never Byron, which never had it.
+        expect(sent.map((s) => s.url).sort()).toEqual([`${BELLINGEN}/api/push-tokens`, `${MULLUM}/api/push-tokens`]);
+        expect(sent.some((s) => s.url.startsWith('https://byron.beanpool.org'))).toBe(false);
         for (const { init, keyOnPhone } of sent) {
             const h = init?.headers as Record<string, string>;
             const body = String(init?.body);

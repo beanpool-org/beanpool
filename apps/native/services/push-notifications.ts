@@ -1,11 +1,11 @@
 import * as Device from 'expo-device';
 import { Platform, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import type { NotificationResponse } from 'expo-notifications';
-import { signedRequest } from '../utils/db';
+import { loadIdentity } from '../utils/identity';
+import { registerPushTokenWithCommunity } from '../utils/push-registrations';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -71,15 +71,17 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
         // Store locally
         await SecureStore.setItemAsync(PUSH_TOKEN_STORE_KEY, token);
 
-        // Register with the BeanPool server
-        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (anchorUrl) {
+        // Register with the community the phone is set to, which the phone records first: as the account leaves the
+        // phone, only the communities it sent the token to are asked to drop it (utils/push-registrations.ts).
+        const account = await loadIdentity();
+        if (account?.publicKey === publicKey) {
             try {
-                await signedRequest('/api/push-tokens', { publicKey, token, platform: Platform.OS });
-                console.log('[Push] Token registered with server');
+                if (await registerPushTokenWithCommunity(account, token, Platform.OS)) console.log('[Push] Token registered with server');
             } catch (e: any) {
                 console.warn('[Push] Failed to register token with server:', e?.message || e);
             }
+        } else {
+            console.log('[Push] The account changed before its token was registered');
         }
 
         // Set up Android notification channel
@@ -133,8 +135,8 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
     }
 }
 
-// Unregistering is the leaving account's (utils/account-leaves-phone.ts `unregisterPushToken`): on each of its
-// communities, signed by its own key, before Sign Out, a replace or a delete takes the key off the phone.
+// Unregistering is the leaving account's (utils/account-leaves-phone.ts `unregisterPushToken`): on each community the
+// phone sent the token to, signed by its own key, before Sign Out, a replace or a delete takes the key off the phone.
 
 /**
  * Sets up notification response listener for deep linking.

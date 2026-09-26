@@ -2,14 +2,16 @@
  * What goes with an account when it leaves this phone, beyond its key and its app storage (identity.ts
  * `wipeIdentityScopedStorage`): its push alerts, and the communities it saved with their cached copies.
  *
- * - Push alerts. The phone registered its push token with the account's community (services/push-notifications.ts), and
- *   the node sends that token the account's chat, escrow and recovery alerts, whose text can carry names and message
- *   previews. Left registered, the phone goes on getting them after Sign Out and after "Replace this phone's account".
- *   So the token is unregistered on each community this phone may have registered it with (the community it is set to,
- *   the ones it saved, the ones it visited as a guest), signed by the account's own key while the phone still holds it.
- *   Best effort, with a short timeout: a node that can't be reached never holds up or fails the member's Sign Out or
- *   Replace. For that case the node itself drops the old account's row when the next account registers the same token
- *   (server state-engine.ts `registerPushToken`).
+ * - Push alerts. The phone registered its push token for the account with the community it was set to, and recorded
+ *   each one (push-registrations.ts). The node sends that token the account's chat, escrow and recovery alerts, whose
+ *   text can carry names and message previews. Left registered, the phone goes on getting them after Sign Out and after
+ *   "Replace this phone's account". So each community on the record is asked to drop the token, signed by the account's
+ *   own key while the phone still holds it, and no other: a community this phone never sent the token to is never sent
+ *   it. Best effort, with a short timeout: a node that can't be reached never holds up or fails the member's Sign Out or
+ *   Replace, and keeps the old account's row until that key is used there again or the account is closed or re-keyed
+ *   there. The node never drops a key's row because another key registered the same token: any community that holds
+ *   the token could then silence a member's recovery alerts (server state-engine.ts `registerPushToken`, #1184 review
+ *   4110460184).
  * - Communities. The list the community switcher shows (`beanpool_saved_nodes`) and each one's cached copy
  *   (community-cache.ts).
  *
@@ -19,13 +21,14 @@
  * before, so the member can pick theirs to recover on (welcome.tsx). Restoring the same account, or onto an empty
  * phone, takes nothing (#1183's rule).
  *
- * Every caller runs this BEFORE the key, the community address or the guest markers are wiped: the unregister needs all
- * three.
+ * Every caller runs this BEFORE the key, the push record, the community address or the guest markers are wiped: the
+ * unregister needs the key and the record, and the cached copies need the addresses.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
+import { communityAddress, forgetPushRegistrations, pushRegisteredCommunities } from './push-registrations';
 import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
 
 /** How long the whole unregister may take. The requests go out together, so this is also each one's limit. */
@@ -54,9 +57,9 @@ function parseList(raw: string | null): unknown[] {
 }
 
 /**
- * Every community this phone may have registered the account's push token with, or keeps a copy of: the one it is set
- * to, the ones it saved, the ones it visited as a guest. Each address once. Reads only: nodes.ts `getSavedNodes` would
- * write the anchor back into the saved list.
+ * Every community this phone keeps a copy of: the one it is set to, the ones it saved, the ones it visited as a guest.
+ * Each address once. Reads only: nodes.ts `getSavedNodes` would write the anchor back into the saved list. Not where the
+ * push token goes: that is the record push-registrations.ts keeps.
  */
 export async function communitiesOnThisPhone(storage: Storage = AsyncStorage): Promise<string[]> {
     const read = async (key: string) => {
@@ -70,8 +73,8 @@ export async function communitiesOnThisPhone(storage: Storage = AsyncStorage): P
         .map((n) => (n && typeof n === 'object' ? (n as { url?: unknown }).url : undefined));
     const guests = parseList(await read(GUEST_NODES_STORE_KEY));
     const urls = [await read(ANCHOR_STORE_KEY), ...saved, ...guests]
-        .filter((u): u is string => typeof u === 'string' && /^https?:\/\/\S+$/i.test(u.trim()))
-        .map((u) => u.trim().replace(/\/+$/, ''));
+        .map(communityAddress)
+        .filter((u): u is string => u !== null);
     return [...new Set(urls)];
 }
 
@@ -129,10 +132,14 @@ export async function unregisterPushToken(
     }
 }
 
-/** Stop the push alerts of the account leaving this phone (see the file comment). Never throws. */
+/**
+ * Stop the push alerts of the account leaving this phone, on the communities the phone sent its token to (see the file
+ * comment), then forget that record: the next account starts its own. Never throws.
+ */
 export async function stopPushAlerts(account: LeavingAccount | null, storage: Storage = AsyncStorage): Promise<void> {
     if (!account) return;
-    await unregisterPushToken(account, await communitiesOnThisPhone(storage));
+    await unregisterPushToken(account, await pushRegisteredCommunities(storage));
+    await forgetPushRegistrations(storage);
 }
 
 /**
@@ -155,9 +162,8 @@ export async function forgetCommunities(communities: readonly string[], storage:
  * communities go. The caller then wipes the key and the rest of the account's app storage.
  */
 export async function releaseAccountFromPhone(account: LeavingAccount | null, storage: Storage = AsyncStorage): Promise<void> {
-    const communities = await communitiesOnThisPhone(storage);
-    if (account) await unregisterPushToken(account, communities);
-    await forgetCommunities(communities, storage);
+    await stopPushAlerts(account, storage);
+    await forgetCommunities(await communitiesOnThisPhone(storage), storage);
 }
 
 /**

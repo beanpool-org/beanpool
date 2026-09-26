@@ -38,7 +38,7 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { restoreFromWords, ReplaceNotSaved } from '../restore-account';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
-import { KNOCKS_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { decodeBase64, encodeUtf8, hexToBytes, mnemonicToKeypair, verifyData } from '../crypto';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
 import { removeCommunityCaches } from '../community-cache';
@@ -47,6 +47,7 @@ import { removeCommunityCaches } from '../community-cache';
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
 const NODE = 'https://test.beanpool.org';
 const MULLUM = 'https://mullum.beanpool.org';
+const BELLINGEN = 'https://bellingen.beanpool.org';
 const ANCHOR = 'beanpool_anchor_url';
 const INVITE_RECORD = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: MULLUM, callsign: 'Kim', redeemed: true };
 /** What stays through any restore: a setting about the phone, not the member. */
@@ -55,8 +56,8 @@ const PHONE_KEPT = { beanpool_light_palette: 'sand' };
 /**
  * The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors, its
  * profile (photo, bio, contact) with a photo parked for the next sync, the invite codes it made, an unfinished post,
- * the reports it has yet to send, and the communities it saved (the switcher's list, which Sign Out removed and
- * Replace kept until #1183's review 5324593567).
+ * the reports it has yet to send, the communities it saved (the switcher's list, which Sign Out removed and
+ * Replace kept until #1183's review 5324593567), and where the phone sent its push token for it.
  */
 function accountStorage(publicKey: string): Record<string, string> {
     return {
@@ -76,6 +77,9 @@ function accountStorage(publicKey: string): Record<string, string> {
         }),
         'pillar_sync_beanpool_https___mullum_beanpool_org.db_last-sync': '2026-09-25T00:00:00.000Z',
         'pillar:outbox': '[]',
+        // Where the phone sent its push token for this account: Mullum, and Bellingen, which it later dropped from the
+        // switcher. Never Byron, where it was only a guest (push-registrations.ts).
+        [PUSH_REGISTERED_AT_STORE_KEY]: JSON.stringify([MULLUM, BELLINGEN]),
     };
 }
 
@@ -309,15 +313,16 @@ async function unregisters(req: Sent, publicKey: string): Promise<boolean> {
 }
 
 describe('a 12-word Replace takes the old account\'s push alerts and communities', () => {
-    it('Kim\'s push token is unregistered on each of Kim\'s communities, signed by Kim\'s key before the restored key is written', async () => {
+    it('Kim\'s push token is unregistered where the phone registered it, signed by Kim\'s key before the restored key is written', async () => {
         await phoneWithInviteJoin();
         mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
         const sent = nodes();
 
         await restoreFromWords(WORDS, NODE, { confirmReplace: async () => true, nameOnNode: async () => 'Marty' });
 
-        // Mullum (set and saved: asked once) and Byron (visited as a guest). Never the restored account's key.
-        expect(sent.map((s) => s.url).sort()).toEqual([`${BYRON}/api/push-tokens`, `${MULLUM}/api/push-tokens`]);
+        // Mullum and Bellingen had the token. Never Byron, which never had it, and never the restored account's key.
+        expect(sent.map((s) => s.url).sort()).toEqual([`${BELLINGEN}/api/push-tokens`, `${MULLUM}/api/push-tokens`]);
+        expect(sent.some((s) => s.url.startsWith(BYRON))).toBe(false);
         for (const req of sent) {
             expect(await unregisters(req, phone.publicKey)).toBe(true);
             expect(req.keyOnPhone).toBe(phone.publicKey);

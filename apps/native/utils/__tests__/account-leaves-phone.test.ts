@@ -4,9 +4,11 @@
  *
  * The phone registered its push token with the account's communities. Nothing unregistered it: Sign Out and the
  * node-mismatch delete took the key off the phone and the node went on sending the old account's chat, escrow and
- * recovery alerts to it (#1183 review 5324593567). Now each community the phone knows is asked to drop the token,
- * signed by the old key while the phone still holds it, best effort: a node that can't be reached never holds up or
- * fails the flow. Replace is covered where the restores are (restore-from-words, sso-recovery-replace).
+ * recovery alerts to it (#1183 review 5324593567). Now each community the phone sent the token to (the record
+ * push-registrations.ts keeps) is asked to drop it, signed by the old key while the phone still holds it, best effort:
+ * a node that can't be reached never holds up or fails the flow. A community the phone never sent the token to is never
+ * sent it (#1184 review 4110460184). Replace is covered where the restores are (restore-from-words,
+ * sso-recovery-replace); the registration that writes the record, in push-registrations.test.ts.
  *
  * Nothing here contacts a node: fetch is a stub that records what would have been sent.
  */
@@ -50,7 +52,7 @@ import { clearDB, closeDB } from '../db';
 import { resetSyncFingerprints } from '../../services/pillar-sync';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { decodeBase64, encodeUtf8, hexToBytes, verifyData } from '../crypto';
-import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
 const BELLINGEN = 'https://bellingen.beanpool.org';
@@ -133,7 +135,10 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-/** Kim's phone: set to Mullum, Mullum and Bellingen saved, Byron visited as a guest, and a push token. */
+/**
+ * Kim's phone: set to Mullum, Mullum and Bellingen saved, Byron visited as a guest, and a push token the phone
+ * registered with Mullum and with Byron (the app was opened while set to each). Bellingen never had the token.
+ */
 async function kimsPhone() {
     await importIdentity(kim);
     mem.async.set(ANCHOR, MULLUM);
@@ -141,6 +146,7 @@ async function kimsPhone() {
     mem.async.set(GUESTS, JSON.stringify([BYRON]));
     mem.async.set('beanpool_light_palette', 'sand');
     mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+    mem.async.set(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify([MULLUM, BYRON]));
 }
 
 function callOrder(fn: unknown, index = 0): number {
@@ -153,14 +159,15 @@ function identityRemovedAt(): number {
 }
 
 describe('Sign Out (Device Only)', () => {
-    it('unregisters the phone\'s push token on each of Kim\'s communities, signed by Kim\'s key while the phone still holds it', async () => {
+    it('unregisters the phone\'s push token where the phone registered it, signed by Kim\'s key while the phone still holds it; a community that never had the token is never sent it', async () => {
         await kimsPhone();
         const sent = nodes();
 
         await signOutOfThisPhone(kim);
 
-        // Mullum is both the community the phone is set to and a saved one: asked once.
-        expect(sent.map((s) => s.url).sort()).toEqual(pushTokensAt(MULLUM, BELLINGEN, BYRON));
+        // Mullum and Byron had the token. Bellingen is saved, but the phone never sent it the token: it isn't sent it now.
+        expect(sent.map((s) => s.url).sort()).toEqual(pushTokensAt(MULLUM, BYRON));
+        expect(sent.some((s) => s.url.startsWith(BELLINGEN))).toBe(false);
         for (const req of sent) {
             expect(await unregisters(req, kim)).toBe(true);
             expect(req.keyOnPhone).toBe(kim.publicKey);
@@ -168,6 +175,8 @@ describe('Sign Out (Device Only)', () => {
         const lastRequest = Math.max(...vi.mocked(fetch).mock.invocationCallOrder);
         expect(identityRemovedAt()).toBeGreaterThan(lastRequest);
         expect(mem.secure.has(PUSH_TOKEN_STORE_KEY)).toBe(false);
+        // The record goes with the account: the next account starts its own.
+        expect(mem.async.has(PUSH_REGISTERED_AT_STORE_KEY)).toBe(false);
     });
 
     it('then the key, the saved communities and each one\'s cached copy go; the phone\'s own settings stay', async () => {
@@ -188,6 +197,7 @@ describe('Sign Out (Device Only)', () => {
 
     it('a community that can\'t be reached, refuses, or never answers neither holds up nor fails Sign Out', async () => {
         await kimsPhone();
+        mem.async.set(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify([MULLUM, BELLINGEN, BYRON]));
         const sent = nodes((url) => (url.startsWith(MULLUM) ? 'down' : url.startsWith(BELLINGEN) ? 'silent' : 'refused'));
         const started = Date.now();
 
@@ -211,16 +221,28 @@ describe('Sign Out (Device Only)', () => {
         expect(await loadIdentity()).toBeNull();
         expect(mem.async.has(SAVED_NODES_STORE_KEY)).toBe(false);
     });
+
+    it('a token the phone never sent to any community (no record) is sent to none of Kim\'s communities', async () => {
+        await kimsPhone();
+        mem.async.delete(PUSH_REGISTERED_AT_STORE_KEY);
+
+        await signOutOfThisPhone(kim);
+
+        expect(fetch).not.toHaveBeenCalled();
+        expect(await loadIdentity()).toBeNull();
+        expect(mem.secure.has(PUSH_TOKEN_STORE_KEY)).toBe(false);
+    });
 });
 
 describe('Delete this account from this phone (a community that doesn\'t recognise it)', () => {
-    it('unregisters with Kim\'s key on each community before the key goes; the saved communities stay to recover on', async () => {
+    it('unregisters with Kim\'s key where the phone registered the token, before the key goes; the saved communities stay to recover on', async () => {
         await kimsPhone();
         const sent = nodes();
 
         await deleteAccountFromThisPhone(kim);
 
-        expect(sent.map((s) => s.url).sort()).toEqual(pushTokensAt(MULLUM, BELLINGEN, BYRON));
+        // Never Bellingen: saved, but it never had the token.
+        expect(sent.map((s) => s.url).sort()).toEqual(pushTokensAt(MULLUM, BYRON));
         for (const req of sent) {
             expect(await unregisters(req, kim)).toBe(true);
             expect(req.keyOnPhone).toBe(kim.publicKey);
@@ -229,6 +251,7 @@ describe('Delete this account from this phone (a community that doesn\'t recogni
         expect(await loadIdentity()).toBeNull();
         expect(JSON.parse(mem.async.get(SAVED_NODES_STORE_KEY) ?? '[]').map((n: { url: string }) => n.url)).toEqual([MULLUM, BELLINGEN]);
         expect(removeCommunityCaches).not.toHaveBeenCalled();
+        expect(mem.async.has(PUSH_REGISTERED_AT_STORE_KEY)).toBe(false);
     });
 
     it('a community that can\'t be reached doesn\'t stop the delete', async () => {

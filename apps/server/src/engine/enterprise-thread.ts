@@ -136,6 +136,7 @@ export function getEnterpriseThreadMessages(
  * The author-side block every node-readable thread applies: an invalidated device key, a disabled,
  * suspended, pruned or closed account, or a credit-frozen member cannot post. Shared with the event chat
  * (engine/event-thread.ts) so both threads refuse in exactly the same words, which the routes map to 403.
+ * A visitor's row (members.is_visitor) posts in none, refused in the words a key with no row is.
  */
 export function assertThreadMemberCanPost(authorPubkey: string): void {
     if (isSyntheticAccount(authorPubkey) || authorPubkey.toLowerCase() === 'system') return;
@@ -149,8 +150,8 @@ export function assertThreadMemberCanPost(authorPubkey: string): void {
     } catch (e: any) {
         if (e?.message?.includes('Device key has been invalidated')) throw e;
     }
-    const member = db.prepare("SELECT status, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(cleanKey) as any;
-    if (!member) throw new Error('Member not found');
+    const member = db.prepare("SELECT status, COALESCE(credit_frozen, 0) as credit_frozen, is_visitor FROM members WHERE public_key = ?").get(cleanKey) as any;
+    if (!member || member.is_visitor) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');
     if (member.status === 'suspended') throw new Error('Account is suspended');
     if (member.status === 'pruned') throw new Error('Account has been pruned');

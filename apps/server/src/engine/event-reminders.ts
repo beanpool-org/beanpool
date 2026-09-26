@@ -149,11 +149,14 @@ export function setEventReminderOffsets(
     offsets: number[] | null,
 ): { offsets: number[] | null } {
     const stored = offsets === null ? null : JSON.stringify(offsets);
+    // A visitor's row has no RSVP here, as a key with no row has none, whatever row it holds from before visitors were
+    // refused one.
     const res = db.prepare(
         `UPDATE event_rsvps
             SET reminder_offsets = ?,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-          WHERE post_id = ? AND member_pubkey = ?`
+          WHERE post_id = ? AND member_pubkey = ?
+            AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = event_rsvps.member_pubkey AND m.is_visitor = 1)`
     ).run(stored, postId, memberPubkey);
     if (res.changes === 0) throw new Error(NO_RSVP_MESSAGE);
     return { offsets };

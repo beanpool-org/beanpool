@@ -32,7 +32,9 @@ import {
     getMembersVersion,
     lastActiveForViewer,
     contactVisibleTo, contactViewer, isNodeMember, readsAsMember, passesReadGate, isVisitorKey, publicMemberCard,
+    isLiveVisitor, getActingMember,
 } from '../state-engine.js';
+import { NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
 import {
@@ -747,9 +749,10 @@ router.post('/api/community/me/area', async (ctx) => {
     const { lat, lng } = (ctx as any).requestBody || {};
     const clear = lat === null && lng === null;
     // A pruned account is no longer in the community (its area was cleared with it), so it can't set a new one; clearing
-    // is never refused here to anyone with a row. (Over HTTP a pruned account doesn't get this far: the signature
-    // middleware refuses everything it signs, https-server.ts CLOSED_ACCOUNT_REFUSAL.)
-    const member = getMember(actor);
+    // is never refused here to anyone with a member's row. (Over HTTP a pruned account doesn't get this far: the
+    // signature middleware refuses everything it signs, https-server.ts CLOSED_ACCOUNT_REFUSAL.) A visitor's row is
+    // refused as a key with no row is (getActingMember): it has no place on the People list to set.
+    const member = getActingMember(actor);
     if (!member || (member.status === 'pruned' && !clear)) {
         ctx.status = 403;
         ctx.body = { error: 'Only a member of this community can set an area here' };
@@ -1349,11 +1352,23 @@ router.post('/api/ledger/transfer', async (ctx) => {
     // Peer member→member transfers are fee-exempt — the recipient receives the
     // full amount. (The 1.5% transaction fee still applies to marketplace trade
     // settlements, which are funded via the internal method='escrow' transfers.)
-    const txn = transfer(from, to, parsedAmount, memo || '', undefined, true, (ctx.state as any).authSig);
+    let txn: ReturnType<typeof transfer>;
+    try {
+        txn = transfer(from, to, parsedAmount, memo || '', undefined, true, (ctx.state as any).authSig);
+    } catch (e: any) {
+        // A visitor's row sends Beans only to a key that has a row here (transfer()): refused as the act test refuses.
+        if (e?.code !== NOT_A_MEMBER_CODE) throw e;
+        ctx.status = 403;
+        ctx.body = { error: e.message, code: e.code };
+        return;
+    }
     if (!txn) {
         ctx.status = 400;
-        // Direct sends are positive-balance-only and require a first completed trade.
-        ctx.body = { error: 'Send failed — you can only send beans you currently hold, and only after your first completed trade.' };
+        // Direct sends are positive-balance-only and require a first completed trade, which a visitor makes only once it
+        // has joined.
+        ctx.body = { error: isLiveVisitor(from)
+            ? 'Send failed — you can only send beans you currently hold, and only after your first completed trade. You can trade once you join this community.'
+            : 'Send failed — you can only send beans you currently hold, and only after your first completed trade.' };
         return;
     }
     ctx.body = { success: true, transaction: txn };

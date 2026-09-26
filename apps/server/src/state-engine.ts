@@ -156,11 +156,13 @@ import {
     seedGenesisMember,
     registerMember as registerMemberEngine,
     registerVisitor,
+    writeVisitorRow,
     updateProfile as updateProfileEngine,
     isCallsignAvailable,
     findRecoveryCandidates,
     setMemberActivityHook,
     NOT_A_MEMBER_ERROR,
+    NOT_A_MEMBER_CODE,
     assertNodeMember,
 } from './engine/members.js';
 import {
@@ -185,6 +187,7 @@ import {
     readsAsMember as readsAsMemberEngine,
     passesReadGate as passesReadGateEngine,
     isVisitorKey as isVisitorKeyEngine,
+    isLiveVisitor as isLiveVisitorEngine,
     mayBringSomeoneIn as mayBringSomeoneInEngine,
     alreadyJoined as alreadyJoinedEngine,
     isInvalidatedKey as isInvalidatedKeyEngine,
@@ -1040,9 +1043,13 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 // get only PUBLIC_WS_EVENTS, as a bare doorbell, unless the operator chose the open
 // feed (ENFORCE_WS_AUTH=false), where they get every event without recipients.
 //
-// Two things a socket's verified key decides, as for an HTTP read:
-//   - `_memberPubkey`, a key that passes the act test (isNodeMember): what is sent TO it as a party (`recipients`),
-//     its own messages, trades and Beans. A suspended or disabled member's and a visitor's socket keep this.
+// Three things a socket's verified key decides, as for an HTTP read:
+//   - `_memberPubkey`, a key that passes the act test (isNodeMember), or a visitor's (isLiveVisitor): what is sent TO
+//     it as a party (`recipients`), its own messages, trades and Beans. A suspended or disabled member's socket keeps
+//     this.
+//   - `_visitor`, a visitor's key: of what is sent to it as a party, only what isLiveVisitor lets it read over HTTP,
+//     its direct conversations and its Beans (visitorMayReceive). A group's chat, an event's chat or note, a trade: none
+//     of them, even where a row from before this rule still names it.
 //   - `_memberFeed`, a key that reads as a member (readsAsMember): the member feed, everything else a member socket
 //     gets (community events, poll voters, the doorbells of other people's private events). A suspended or disabled
 //     member's socket, while that lasts, and a visitor's get only what a stranger's gets here.
@@ -1065,13 +1072,39 @@ export function broadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     deliverBroadcast(event, recipients, opts);
 }
 
-/** What a /ws socket's verified key gets: what is sent to it as a party (`act`), and the member feed (`feed`). */
-export interface SocketStanding { act: boolean; feed: boolean }
+/**
+ * What a /ws socket's verified key gets: what is sent to it as a party (`act`), only its own direct conversations and
+ * Beans of that (`visitor`), and the member feed (`feed`).
+ */
+export interface SocketStanding { act: boolean; visitor: boolean; feed: boolean }
 
-/** A socket key's standing: act is isNodeMember, feed is readsAsMember (which needs act). Pass the verified key. */
+/**
+ * A socket key's standing: act is isNodeMember or isLiveVisitor, visitor is isLiveVisitor, feed is readsAsMember (which
+ * needs isNodeMember). Pass the verified key.
+ */
 export function socketStanding(pubkey: string): SocketStanding {
-    const act = isNodeMember(pubkey);
-    return { act, feed: act && readsAsMember(pubkey) };
+    const member = isNodeMember(pubkey);
+    const visitor = !member && isLiveVisitor(pubkey);
+    return { act: member || visitor, visitor, feed: member && readsAsMember(pubkey) };
+}
+
+/** Event types carrying a direct conversation's id (`conversationId`, or `conversation.id`), and a transfer's. */
+const VISITOR_CHAT_EVENTS: ReadonlySet<string> = new Set(['new_message', 'message_edited', 'message_reaction', 'conversation_created']);
+
+/**
+ * Whether an event sent to a visitor's socket as a party is one it may have: a line, an edit, a reaction or the
+ * opening of a direct conversation (a DM) it is in, or a transfer of its Beans. Anything else addressed to it is not
+ * delivered: a group's chat, an event's chat, a post's update, a trade. Its HTTP reads are held to the same
+ * (https-server.ts visitorsOwnRead).
+ */
+function visitorMayReceive(event: any): boolean {
+    const type = event?.type;
+    if (type === 'transaction') return true;
+    if (!VISITOR_CHAT_EVENTS.has(type)) return false;
+    const conversationId = typeof event.conversationId === 'string' ? event.conversationId : event.conversation?.id;
+    if (typeof conversationId !== 'string') return false;
+    const conv = db.prepare('SELECT type FROM conversations WHERE id = ?').get(conversationId) as { type: string } | undefined;
+    return conv?.type === 'dm';
 }
 
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): void {
@@ -1132,6 +1165,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     let withoutVoters: string | null = null;
     // The joined key's standing, asked once, and only if some socket holds that key.
     let joined: SocketStanding | undefined;
+    // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
+    let forVisitor: boolean | undefined;
     for (const ws of wsClients) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
@@ -1141,6 +1176,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
                 ws._memberPubkey = event.member.publicKey;
+                ws._visitor = joined.visitor;
                 ws._memberFeed = joined.feed;
                 ws._pendingMemberPubkey = null;
             }
@@ -1150,6 +1186,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             if (!opts?.othersGetDoorbell) continue;
             if (!ws._memberFeed && !ws._openFeed && !PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
+        } else if (recipients && ws._visitor) {
+            if (!(forVisitor ??= visitorMayReceive(event))) continue;
         } else if (!recipients && !ws._memberFeed && !ws._openFeed) {
             if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
@@ -1171,8 +1209,9 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         let standing: SocketStanding | undefined;
         for (const ws of wsClients) {
             if (typeof ws._memberPubkey !== 'string' || ws._memberPubkey.toLowerCase() !== key) continue;
-            standing ??= event.type === 'user_pruned' ? { act: false, feed: false } : socketStanding(ws._memberPubkey);
+            standing ??= event.type === 'user_pruned' ? { act: false, visitor: false, feed: false } : socketStanding(ws._memberPubkey);
             if (!standing.act) ws._memberPubkey = null;
+            ws._visitor = standing.visitor;
             ws._memberFeed = standing.feed;
         }
     }
@@ -1281,11 +1320,31 @@ export function contactViewer(viewerPubkey: string | null | undefined): ContactV
 }
 
 /**
- * The act test: a member of this node, a row that exists and isn't pruned, for a key not invalidated by a re-key
- * (the engine's isNodeMember). Suspended and disabled members and visitors' rows pass. Pass the verified signer.
+ * The act test: a member of this node, a row that exists, isn't a visitor's and isn't pruned, for a key not invalidated
+ * by a re-key (the engine's isNodeMember). Suspended and disabled members pass; a visitor's row doesn't (isLiveVisitor
+ * says what it may still do). Pass the verified signer.
  */
 export function isNodeMember(pubkey: string | null | undefined): boolean {
     return isNodeMemberEngine(db, pubkey);
+}
+
+/**
+ * A visitor's row that still receives what is sent to it (the engine's isLiveVisitor): it replies in its own direct
+ * conversations, sends Beans it holds and reads its own messages and Beans, and nothing else a key with no row can't
+ * do. Pass the verified signer.
+ */
+export function isLiveVisitor(pubkey: string | null | undefined): boolean {
+    return isLiveVisitorEngine(db, pubkey);
+}
+
+/**
+ * The member row `publicKey` acts with here: its row, unless that row is a visitor's (isVisitorKey), which acts as a key
+ * with no row does. For a write whose "is there a member" test refuses a key with no row, so that a visitor is refused
+ * it in the same words. Pass the verified signer.
+ */
+export function getActingMember(publicKey: string): Member | undefined {
+    const member = getMember(publicKey);
+    return member && !isVisitorKey(publicKey) ? member : undefined;
 }
 
 /**
@@ -1296,14 +1355,14 @@ export function readsAsMember(pubkey: string | null | undefined): boolean {
     return readsAsMemberEngine(db, pubkey);
 }
 
-/** Passes the gated-read gate: isNodeMember, and not a visitor's row (the engine's passesReadGate). Pass the verified signer. */
+/** Passes the gated-read gate: isNodeMember (the engine's passesReadGate). Pass the verified signer. */
 export function passesReadGate(pubkey: string | null | undefined): boolean {
     return passesReadGateEngine(db, pubkey);
 }
 
 /**
- * May bring someone in (an invite, an offline ticket, an answer to a knock): isNodeMember, and not a visitor's row (the
- * engine's mayBringSomeoneIn). Pass the verified signer.
+ * May bring someone in (an invite, an offline ticket, an answer to a knock): isNodeMember (the engine's
+ * mayBringSomeoneIn). Pass the verified signer.
  */
 export function mayBringSomeoneIn(pubkey: string | null | undefined): boolean {
     return mayBringSomeoneInEngine(db, pubkey);
@@ -1741,7 +1800,14 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     if (to.startsWith('bridge_')) ensureBridgeAccount(peerFromBridgeAccountId(to)!);
 
     if (!isSyntheticAccount(from) && !getMember(from)) registerVisitor(from);
-    if (!isSyntheticAccount(to) && !getMember(to)) registerVisitor(to);
+    // A recipient with no row here gets a visitor's row, but only once the Beans have moved: in the transaction below,
+    // so a send any rule refuses (the send gate, the sender's floor) leaves no row behind.
+    const newRecipient = !isSyntheticAccount(to) && !getMember(to);
+    // A visitor's row (isLiveVisitor) makes no row for anyone else: it sends Beans only to a key that has a row here.
+    // Thrown, as assertNodeMember's refusal, so an enclosing transaction rolls back; the send route answers it.
+    if (newRecipient && isLiveVisitor(from)) {
+        throw Object.assign(new Error(NOT_A_MEMBER_ERROR), { status: 403, statusCode: 403, code: NOT_A_MEMBER_CODE });
+    }
 
     // Send gate (Trust Model v2): direct peer-to-peer sends ("gift a friend") require the sender
     // to have EARNED trust — i.e. completed at least one real (marketplace) trade. Stops a fresh /
@@ -1811,6 +1877,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     const txn = conservingTransaction<Transaction | null>(() => {
         const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
         if (!success) return null;
+        // The rows only: ledger.transfer has just made the in-memory account it credited, and persistAccount below
+        // writes its balance over the row's 0.
+        if (newRecipient) writeVisitorRow(to);
 
         if (!isSyntheticAccount(from) && from !== 'genesis') {
             recordActivity(from);
@@ -2462,10 +2531,11 @@ export function canOperate(publicKey: string): boolean {
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
     if (!canOperate(publicKey)) return false;
+    // A visitor's row keeps no enterprise, whatever keeper row it holds from before visitors were refused one.
     const row = db.prepare(`
         SELECT 1 FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active'
+        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0
     `).get(publicKey, treasuryPubkey);
     return !!row;
 }
@@ -2532,7 +2602,7 @@ export function keeperOf(publicKey: string): string[] {
     return (db.prepare(`
         SELECT o.treasury_pubkey FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.member_pubkey = ? AND m.status = 'active'
+        WHERE o.member_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0
     `).all(publicKey) as any[]).map(r => r.treasury_pubkey);
 }
 
@@ -3010,8 +3080,9 @@ export function requestToJoinEnterprise(
         throw new Error('This enterprise has been closed');
     }
 
-    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
-    if (!km || km.status !== 'active') {
+    // A visitor's row is refused as a key with no row is.
+    const km = db.prepare("SELECT status, credit_frozen, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!km || km.is_visitor || km.status !== 'active') {
         throw new Error('Your account is not active, so you cannot join as a keeper');
     }
     if (km.credit_frozen === 1) {
@@ -4022,7 +4093,8 @@ export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; fai
  */
 export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
     if (voucherPubkey === targetPubkey) throw new Error('You cannot vouch for yourself');
-    if (!getMember(voucherPubkey)) throw new Error('Voucher not found');
+    // A visitor's row is no voucher, as a key with no row is none (getActingMember).
+    if (!getActingMember(voucherPubkey)) throw new Error('Voucher not found');
     // can_vouch outlasts a prune, and a pending re-key leaves it on the old key: neither hands out a credit floor.
     assertNodeMember(voucherPubkey);
     if (!getMember(targetPubkey)) throw new Error('Member not found');
@@ -6530,7 +6602,9 @@ export function adminPruneUser(publicKey: string, actor: string) {
  * 6. Writes tombstones for delta-sync replication.
  */
 export function purgeMemberSelf(publicKey: string): { ok: boolean; message: string } {
-    const member = getMember(publicKey);
+    // A visitor's row has no account here to delete, as a key with no row has none (getActingMember): a member who
+    // wrote to it or paid it keeps that conversation and those Beans.
+    const member = getActingMember(publicKey);
     if (!member) {
         throw new Error('Member not found');
     }
@@ -7435,7 +7509,7 @@ export function assertNotOnHoliday(publicKey: string): void {
  * set when blocked so the client can name the count.
  */
 export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true; openTrades: number } {
-    if (!getMember(publicKey)) throw new Error('Member not found');
+    if (!getActingMember(publicKey)) throw new Error('Member not found');
     const open = countOpenTrades(publicKey);
     if (enabled && open > 0) {
         const err: any = new Error(`You have ${open} active trade${open === 1 ? '' : 's'} in progress. Complete or cancel ${open === 1 ? 'it' : 'them'} before switching on holiday mode.`);

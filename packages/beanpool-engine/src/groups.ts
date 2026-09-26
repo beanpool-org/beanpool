@@ -114,8 +114,9 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
         throw new Error(`Invalid join policy: ${joinPolicy}`);
     }
 
-    const member = db.prepare("SELECT public_key, status FROM members WHERE public_key = ?").get(params.createdBy) as any;
-    if (!member || member.status === 'pruned') {
+    // A visitor's row (members.is_visitor) starts no group, as a key with no row starts none.
+    const member = db.prepare("SELECT public_key, status, is_visitor FROM members WHERE public_key = ?").get(params.createdBy) as any;
+    if (!member || member.is_visitor || member.status === 'pruned') {
         throw new Error('Creator member not found or pruned');
     }
 
@@ -539,8 +540,9 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
     const group = db.prepare("SELECT id, join_policy FROM groups WHERE id = ?").get(groupId) as any;
     if (!group) throw new Error('Group not found');
 
-    const member = db.prepare("SELECT public_key, status FROM members WHERE public_key = ?").get(memberPubkey) as any;
-    if (!member || member.status === 'pruned') throw new Error('Member not found or pruned');
+    // A visitor's row (members.is_visitor) joins no group, as a key with no row joins none: a group's chat would reach it.
+    const member = db.prepare("SELECT public_key, status, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!member || member.is_visitor || member.status === 'pruned') throw new Error('Member not found or pruned');
 
     const existing = db.prepare("SELECT * FROM group_members WHERE group_id = ? AND member_pubkey = ?").get(groupId, memberPubkey) as any;
 

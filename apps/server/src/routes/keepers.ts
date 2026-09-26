@@ -39,7 +39,7 @@
 import Router from '@koa/router';
 import { TWO_LAYER_THRESHOLD, isSingleBlobSso } from '@beanpool/core';
 
-import { getMember } from '../state-engine.js';
+import { getActingMember } from '../state-engine.js';
 import {
     putShareGeneration,
     listKeeperTypes,
@@ -223,7 +223,8 @@ const CANNOT_HOLD_FRAGMENTS = new Set(['migrated', 'pruned']);
 function activeSigner(ctx: any): string | null {
     const actor = ctx.state?.actor as string | undefined;
     if (!actor) return null;
-    const member = getMember(actor);
+    // A visitor's row holds no account here to recover, as a key with no row holds none (getActingMember).
+    const member = getActingMember(actor);
     if (!member || CANNOT_HOLD_FRAGMENTS.has(String(member.status))) return null;
     return actor;
 }

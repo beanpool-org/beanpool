@@ -19,7 +19,7 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
-import { getMember, getConversation, type Conversation, type Message } from '@beanpool/engine';
+import { getMember, getConversation, isVisitorKey, type Conversation, type Message } from '@beanpool/engine';
 import type { GroupRole, GroupMemberStatus } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
@@ -91,9 +91,13 @@ export function loadGroupForThread(groupId: string): GroupRow {
     return row;
 }
 
-/** The viewer's role while they are an ACTIVE member, else null. Never read from the participants mirror. */
+/**
+ * The viewer's role while they are an ACTIVE member, else null. Never read from the participants mirror. A visitor's row
+ * (isVisitorKey) has none, whatever group row it holds from before visitors were refused a group: it reads and writes a
+ * group's chat as a key with no row does.
+ */
 export function groupChatRole(groupId: string, pubkey: string | undefined): GroupRole | null {
-    if (!groupId || !pubkey) return null;
+    if (!groupId || !pubkey || isVisitorKey(db, pubkey)) return null;
     const row = db.prepare("SELECT role FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'")
         .get(groupId, pubkey) as { role: GroupRole } | undefined;
     return row?.role ?? null;

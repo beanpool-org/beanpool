@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import {
     getMember,
     getPosts,
+    isVisitorKey,
     hasListedOffer,
     getMarketplaceTransaction,
     CONTRIBUTION_REQUIRED_ERROR,
@@ -91,7 +92,20 @@ function tradeRecipients(cb: EscrowCallbacks, tx: { buyerPublicKey: string; sell
 
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
 
+/**
+ * The one who acts on a trade has a member's row here, open. A visitor's row (members.is_visitor) is refused in the same
+ * words as a key with no row: it trades with nobody.
+ */
 function assertMemberActive(publicKey: string): void {
+    assertAccountOpen(publicKey);
+    if (!isSyntheticAccount(publicKey) && isVisitorKey(db, publicKey)) throw new Error('Member not found');
+}
+
+/**
+ * A listing's author has a row here, open. A visitor's row may be one (a listing pulled from a peer, whose own guard,
+ * assertTradableHere, then says why it can't be traded here).
+ */
+function assertAccountOpen(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new Error('Member not found');
@@ -172,7 +186,7 @@ export function requestPost(
         throw new Error('Post not found');
     }
     if (post.status !== 'active') throw new Error('Post is not active');
-    assertMemberActive(post.author_pubkey);
+    assertAccountOpen(post.author_pubkey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.author_pubkey) as any;
     if (authorMember?.is_treasury) {
         if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot request posts while paused');
@@ -544,7 +558,7 @@ export function acceptPost(
         || hiddenFromCaller(post.hiddenByReportsAt, post.authorPublicKey, buyerPublicKey)) {
         throw new Error('Post not found or not active');
     }
-    assertMemberActive(post.authorPublicKey);
+    assertAccountOpen(post.authorPublicKey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.authorPublicKey) as any;
     if (authorMember?.is_treasury) {
         if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot transact while paused');

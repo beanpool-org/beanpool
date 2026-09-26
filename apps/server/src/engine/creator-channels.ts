@@ -712,7 +712,8 @@ export function addChannel(input: {
     if (!CHANNEL_PLATFORMS.includes(platform)) throw new ChannelError('BAD_PLATFORM', 'Unknown platform.');
     if (!CHANNEL_CATEGORIES.includes(category)) throw new ChannelError('BAD_CATEGORY', 'Unknown category.');
 
-    const member = db.prepare(`SELECT public_key FROM members WHERE public_key = ?`).get(input.ownerPubkey);
+    // A visitor's row lists no channel, as a key with no row lists none.
+    const member = db.prepare(`SELECT public_key FROM members WHERE public_key = ? AND is_visitor = 0`).get(input.ownerPubkey);
     if (!member) throw new ChannelError('NO_MEMBER', 'Member not found.');
 
     const existing = listChannels(input.ownerPubkey);

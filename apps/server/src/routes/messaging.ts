@@ -11,7 +11,7 @@ import {
     markConversationRead, getListedUnreadCounts,
     getMember,
 } from '../state-engine.js';
-import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage } from '../engine/messaging.js';
+import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage, assertMayOpenConversation } from '../engine/messaging.js';
 import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
@@ -75,7 +75,7 @@ const MAX_PARTICIPANT_KEY_LENGTH = 128;
 function respondToMessagingError(ctx: any, e: unknown, what: string): void {
     if (e instanceof MessagingError) {
         ctx.status = e.status;
-        ctx.body = { error: e.message };
+        ctx.body = e.code ? { error: e.message, code: e.code } : { error: e.message };
         return;
     }
     console.error(`[Messaging] ${what} failed unexpectedly:`, (e as any)?.message || e);
@@ -140,6 +140,8 @@ router.post('/api/messages/conversation', async (ctx) => {
         // 10 new people a day (429). Starting one is a line in the other person's inbox, even before a message.
         assertNotMuted(createdBy);
         for (const other of uniqueParticipants) if (other !== createdBy) assertMayMessage(createdBy, other);
+        // A visitor's row opens no new conversation, and so makes no row for anyone (assertMayOpenConversation).
+        assertMayOpenConversation(createdBy, uniqueParticipants);
         const conv = createConversation('dm', uniqueParticipants, createdBy, name);
         if (!conv) {
             ctx.status = 400;

@@ -1554,9 +1554,10 @@ export function isOperatorSwitchedOff(memberPubkey: string): boolean {
 export const INACTIVE_MEMBER_CREATE_ERROR = 'Only active community members can create an enterprise or a project';
 
 /** Is this member's account active? Missing rows and every other status (disabled, suspended, pruned) are not. */
+/** An active member's row: not a visitor's (members.is_visitor), which starts nothing, as a key with no row starts nothing. */
 export function isMemberActive(memberPubkey: string): boolean {
-    const row = db.prepare('SELECT status FROM members WHERE public_key = ?').get(memberPubkey) as any;
-    return !!row && (row.status || 'active') === 'active';
+    const row = db.prepare('SELECT status, is_visitor FROM members WHERE public_key = ?').get(memberPubkey) as any;
+    return !!row && !row.is_visitor && (row.status || 'active') === 'active';
 }
 
 export const OPERATOR_SWITCHED_OFF_CREATE_ERROR =

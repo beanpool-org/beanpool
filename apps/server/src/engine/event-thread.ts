@@ -17,6 +17,7 @@ import {
     getMember,
     getConversation,
     isEventHost,
+    isVisitorKey,
     EVENT_READABLE_AFTER_END_MS,
     type Conversation,
     type EventRsvpStatus,
@@ -145,9 +146,12 @@ export function chatHiddenFrom(conv: { id: string; type: string }, pubkey: strin
     try { return eventHiddenFrom(loadEventForThread(conv.id), pubkey); } catch { return false; }
 }
 
-/** Host or Going — checked on every read and every post, never trusted from the participants mirror. */
+/**
+ * Host or Going — checked on every read and every post, never trusted from the participants mirror. Never a visitor's
+ * row (isVisitorKey), whatever RSVP it holds from before visitors were refused one: the chat carries the private note.
+ */
 export function canReadEventThread(row: EventRow, pubkey: string | undefined): boolean {
-    if (!pubkey) return false;
+    if (!pubkey || isVisitorKey(db, pubkey)) return false;
     if (eventHiddenFrom(row, pubkey)) return false;
     if (isEventHost(db, row, pubkey)) return true;
     return eventRsvpStatusOf(row.id, pubkey) === 'going';

@@ -49,7 +49,7 @@ import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
 import {
     registerMember, getMembers, getAllMembers, isNodeMember, isInvalidatedKey, isClosedAccountKey,
-    readsAsMember, passesReadGate, isVisitorKey, socketStanding,
+    readsAsMember, passesReadGate, isLiveVisitor, socketStanding,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
     acceptPost, completePostTransaction, cancelPostTransaction,
@@ -191,9 +191,11 @@ const ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 //   - ENFORCE_WS_AUTH=false: the old open feed — every socket gets every community-wide event.
 //     An escape hatch, not a recommendation.
 // Safe by default, so a freshly downloaded node never streams member activity to strangers.
-// A member-signed socket of a suspended or disabled member, while that lasts, or of a visitor's row
-// is accepted in every mode and gets what is sent to it (its own messages, trades and Beans) but
-// not the member feed: as over HTTP, it sees what a non-member sees (readsAsMember).
+// A member-signed socket of a suspended or disabled member, while that lasts, is accepted in every
+// mode and gets what is sent to it (its own messages, trades and Beans) but not the member feed: as
+// over HTTP, it sees what a non-member sees (readsAsMember). So is a visitor's row's (isLiveVisitor),
+// which of what is sent to it gets only its direct conversations and its Beans (state-engine
+// visitorMayReceive), as it reads only those over HTTP.
 export type WsAuthMode = 'members' | 'strict' | 'open';
 const WS_AUTH_MODE: WsAuthMode =
     process.env.ENFORCE_WS_AUTH === 'true' ? 'strict'
@@ -203,8 +205,11 @@ const WS_AUTH_MODE: WsAuthMode =
 type WsConnectResult =
     | { kind: 'unsigned' }
     | { kind: 'invalid' }
-    /** `feed`: the key reads as a member (readsAsMember), so the socket gets the member feed too. */
-    | { kind: 'member'; pubkey: string; feed: boolean }
+    /**
+     * `feed`: the key reads as a member (readsAsMember), so the socket gets the member feed too. `visitor`: a visitor's
+     * row (isLiveVisitor), which gets of what is sent to it only its direct conversations and Beans.
+     */
+    | { kind: 'member'; pubkey: string; visitor: boolean; feed: boolean }
     | { kind: 'non_member'; pubkey: string };
 
 /**
@@ -238,15 +243,16 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
         // checks out, so a forged token cannot burn (or fill the cache with) nonces it does not own.
         if (!consumeNonce(nonce, now)) return { kind: 'invalid' };
 
-        // A valid signature only proves key possession — only a member (isNodeMember) gets a member
-        // socket, so an anonymous keypair can't subscribe to anything. A pruned account, and the old key
-        // of a member being re-keyed, keep their row and can still sign, but neither is a member: its
-        // socket gets what a stranger's gets, as an open one does once that happens (state-engine
-        // deliverBroadcast). Of the members, only one who reads as a member (readsAsMember, the test
-        // every member-only read applies) gets the member feed (`feed`).
+        // A valid signature only proves key possession — only a member (isNodeMember), or a visitor's row
+        // for its own direct conversations and Beans (`visitor`), gets a member socket, so an anonymous
+        // keypair can't subscribe to anything. A pruned account, and the old key of a member being
+        // re-keyed, keep their row and can still sign, but neither is a member: its socket gets what a
+        // stranger's gets, as an open one does once that happens (state-engine deliverBroadcast). Of the
+        // members, only one who reads as a member (readsAsMember, the test every member-only read
+        // applies) gets the member feed (`feed`).
         const standing = socketStanding(pubKeyHex);
         return standing.act
-            ? { kind: 'member', pubkey: pubKeyHex, feed: standing.feed }
+            ? { kind: 'member', pubkey: pubKeyHex, visitor: standing.visitor, feed: standing.feed }
             : { kind: 'non_member', pubkey: pubKeyHex.toLowerCase() };
     } catch {
         return { kind: 'invalid' };
@@ -384,7 +390,7 @@ const MEMBER_READS_ONLY_EXACT: ReadonlySet<string> = new Set<string>([
 ]);
 
 /**
- * What a visitor's row (isVisitorKey) may read past the gate: only what is its own and was sent to it, its messages and
+ * What a visitor's row (isLiveVisitor) may read past the gate: only what is its own and was sent to it, its messages and
  * its Beans (Marty, 2026-09-26: "they receive messages and Beans but see only what a non-member sees"). Each is held to
  * the signer here, as the route holds it under read auth: its own conversation list, a direct conversation it is in, its
  * own balance and its own transactions. Every other gated read it is refused, as a non-member is. Compared as the path
@@ -414,7 +420,7 @@ function visitorsOwnRead(path: string, query: Record<string, unknown>, signer: s
 function gatedReadAllowed(path: string, query: Record<string, unknown>, signer: string): boolean {
     if (MEMBER_READS_ONLY_EXACT.has(routedPath(path))) return readsAsMember(signer);
     if (passesReadGate(signer)) return true;
-    return isNodeMember(signer) && isVisitorKey(signer) && visitorsOwnRead(path, query, signer);
+    return isLiveVisitor(signer) && visitorsOwnRead(path, query, signer);
 }
 
 // A2-22: clamp client-supplied pagination. An unclamped `?limit=` (e.g. limit=-1,
@@ -716,6 +722,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 // is promoted when that key's member_joined goes out, if the key is a member by
                 // then. `_memberFeed`: the member feed, for a key that reads as a member.
                 ws._memberPubkey = connect.kind === 'member' ? connect.pubkey : null;
+                ws._visitor = connect.kind === 'member' && connect.visitor;
                 ws._memberFeed = connect.kind === 'member' && connect.feed;
                 ws._pendingMemberPubkey = connect.kind === 'non_member' ? connect.pubkey : null;
                 ws._openFeed = WS_AUTH_MODE === 'open';

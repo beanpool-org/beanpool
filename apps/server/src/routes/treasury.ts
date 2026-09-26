@@ -25,7 +25,7 @@ import {
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
     getKeeperChanges, proposeKeeperRemoval, objectToKeeperChange, stepDownAsKeeper,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
-    isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly,
+    isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly, getActingMember,
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
@@ -498,7 +498,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const memberStatus = statusOf(actor);
+        // A visitor's row starts nothing, as a key with no row starts nothing (getActingMember).
+        const memberStatus = getActingMember(actor) ? statusOf(actor) : undefined;
         if (memberStatus !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'Only active community members can create an enterprise' };
@@ -1568,7 +1569,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
-        const actorStatus = statusOf(actor);
+        // A visitor's row posts in no thread, as a key with no row posts in none (getActingMember).
+        const actorStatus = getActingMember(actor) ? statusOf(actor) : undefined;
         if (!actorStatus || blocked(actorStatus)) {
             ctx.status = 403;
             ctx.body = { error: 'Your account is not active, so you cannot post in this thread.' };

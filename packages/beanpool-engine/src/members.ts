@@ -330,14 +330,34 @@ export function isInvalidatedKey(db: Db, pubkey: string | null | undefined): boo
 /**
  * Whether `pubkey`'s row here is a visitor's (members.is_visitor), not a member's: a key a member sent a message or
  * Beans to that has no account here, or a member of another community (the server's registerVisitor, the only writer).
- * Nobody invited it and it came in through no door. It receives what is sent to it and reads only what a non-member
- * reads (readsAsMember, passesReadGate). Joining for real (an invite, an offline ticket, the open door) makes the same
- * row a member's.
+ * Nobody invited it and it came in through no door, so it is no member here (isNodeMember) and reads only what a
+ * non-member reads (readsAsMember). What it may still do is isLiveVisitor's. Joining for real (its own signed redeem of
+ * an invite or an offline ticket, the open door, a knock) makes the same row a member's.
  */
 export function isVisitorKey(db: Db, pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
     const row = db.prepare("SELECT is_visitor FROM members WHERE public_key = ?").get(pubkey) as { is_visitor: number | null } | undefined;
     return !!row?.is_visitor;
+}
+
+/**
+ * THE VISITOR TEST: whether `pubkey` holds a visitor's row here that still receives what is sent to it: a visitor's row
+ * (isVisitorKey), not closed ('pruned'), for a key no re-key has invalidated. Such a key does what a key with no row
+ * does, and three things more (the director's rule, 2026-09-26, on Marty's "they receive messages and Beans but see
+ * only what a non-member sees"):
+ *  - in a direct conversation it is already a participant of, it sends and replies, marks it read and mutes it (the
+ *    server's messaging engine and routes); it opens no new conversation;
+ *  - it sends Beans it holds to a key that has a row here (the server's transfer(), under every rule a member's send
+ *    keeps);
+ *  - it reads its own messages and Beans (https-server.ts visitorsOwnRead), and its /ws socket gets what is sent to it
+ *    in those (socketStanding).
+ * Everything else a member may do it is refused, as a key with no row is. Pass the verified signer.
+ */
+export function isLiveVisitor(db: Db, pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    const row = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
+        { status: string | null; is_visitor: number | null } | undefined;
+    return !!row && !!row.is_visitor && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
 }
 
 /**
@@ -353,22 +373,25 @@ export function alreadyJoined(db: Db, pubkey: string | null | undefined): boolea
 }
 
 /**
- * THE ACT TEST: whether `pubkey` may act as a member of this node. A member row that exists and isn't pruned, for a key
- * this node hasn't invalidated. A pruned or self-deleted account keeps its row and can still sign, but it is no longer in
- * the community. Nor is the old key of a member being re-keyed: its row stays, set to 'suspended', and the key can still
- * sign until the new phone binds a new one, however long that takes (an expired code leaves both as they are).
+ * THE ACT TEST: whether `pubkey` may act as a member of this node. A member row that exists, isn't a visitor's and isn't
+ * pruned, for a key this node hasn't invalidated. A pruned or self-deleted account keeps its row and can still sign, but
+ * it is no longer in the community. Nor is the old key of a member being re-keyed: its row stays, set to 'suspended', and
+ * the key can still sign until the new phone binds a new one, however long that takes (an expired code leaves both as
+ * they are). Nor is a visitor's row (isVisitorKey): it never joined, so it acts as a key with no row does, apart from
+ * what isLiveVisitor lists.
  *
- * Every other status counts, 'suspended' and 'disabled' included, and so does a visitor's row: what a suspended member
- * may still do is suspension's own rule (assertMemberActive, and each route's), and a visitor keeps what it could do.
- * The re-key is caught by its invalidated key, not by 'suspended', because a report suspension writes the same status.
+ * Every other status counts, 'suspended' and 'disabled' included: what a suspended member may still do is suspension's
+ * own rule (assertMemberActive, and each route's). The re-key is caught by its invalidated key, not by 'suspended',
+ * because a report suspension writes the same status.
  *
  * NOT the test for what only members may read: that is readsAsMember, which is stricter. Pass the verified signer (the
  * route's ctx.state.actor), never a key from the request.
  */
 export function isNodeMember(db: Db, pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
-    const row = db.prepare("SELECT status FROM members WHERE public_key = ?").get(pubkey) as { status: string | null } | undefined;
-    return !!row && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
+    const row = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
+        { status: string | null; is_visitor: number | null } | undefined;
+    return !!row && !row.is_visitor && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
 }
 
 /** A member keeps their row and account under these, but reads nothing as a member while they last (readsAsMember). */
@@ -381,14 +404,13 @@ const READS_AS_NON_MEMBER_WHILE: ReadonlySet<string> = new Set(['suspended', 'di
  * on a node that shows visitors the listings and not the people (the server's viewerTier). One test, so they cannot
  * drift apart.
  *
- * A member of this node (isNodeMember: a row, not pruned, a key no re-key has invalidated) who is also:
- *  - not 'suspended' or 'disabled' (by an admin, a report or a community vote): while suspended, a member sees what a
- *    non-member sees, and reads as a member again the moment the suspension ends (Marty, 2026-09-26);
- *  - not a visitor (isVisitorKey): a visitor receives messages and Beans and sees only what a non-member sees (Marty,
- *    2026-09-26).
+ * A member of this node (isNodeMember: a row that isn't a visitor's, not pruned, a key no re-key has invalidated) who is
+ * not 'suspended' or 'disabled' (by an admin, a report or a community vote): while suspended, a member sees what a
+ * non-member sees, and reads as a member again the moment the suspension ends (Marty, 2026-09-26). A visitor receives
+ * messages and Beans and sees only what a non-member sees (Marty, 2026-09-26).
  *
- * Reads only: what a suspended member or a visitor may DO is isNodeMember's and suspension's. Pass the verified signer
- * (the route's ctx.state.actor), never a key from the request.
+ * Reads only: what a suspended member may DO is isNodeMember's and suspension's, and a visitor's is isLiveVisitor's.
+ * Pass the verified signer (the route's ctx.state.actor), never a key from the request.
  */
 export function readsAsMember(db: Db, pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
@@ -399,34 +421,27 @@ export function readsAsMember(db: Db, pubkey: string | null | undefined): boolea
 }
 
 /**
- * Whether `pubkey` passes the gated-read gate (ENFORCE_READ_AUTH): a member of this node (isNodeMember) whose row isn't
- * a visitor's. Looser than readsAsMember on one point only: a suspended or disabled member passes, because what they may
- * still do (close their own trades, answer their messages, run their own group's and event's chat) needs their own
- * account's reads. What only members may read is held back from them inside the gate, by readsAsMember on each such
- * read. A visitor gets past the gate only to its own messages and Beans (https-server.ts `visitorsOwnRead`). Pass the
- * verified signer.
+ * Whether `pubkey` passes the gated-read gate (ENFORCE_READ_AUTH): the act test (isNodeMember), which a visitor's row
+ * fails. Looser than readsAsMember on one point only: a suspended or disabled member passes, because what they may still
+ * do (close their own trades, answer their messages, run their own group's and event's chat) needs their own account's
+ * reads. What only members may read is held back from them inside the gate, by readsAsMember on each such read. A
+ * visitor gets past the gate only to its own messages and Beans (https-server.ts `visitorsOwnRead`). Pass the verified
+ * signer.
  */
 export function passesReadGate(db: Db, pubkey: string | null | undefined): boolean {
-    if (!pubkey) return false;
-    const row = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
-        { status: string | null; is_visitor: number | null } | undefined;
-    // isNodeMember's test, and not a visitor's row, in one lookup.
-    return !!row && !row.is_visitor && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
+    return isNodeMember(db, pubkey);
 }
 
 /**
  * THE INVITE TEST: whether `pubkey` may bring someone into this node: make an invite (apps/server engine/invites.ts
  * canInvite), sign an offline ticket that admits someone (verifyOfflineTicket), or answer a request to join (the knock
- * routes). The act test (isNodeMember), and not a visitor's row: a visitor never joined, and an invite, a ticket or a
- * knock's invite of its own would admit anyone, itself included, which undoes everything a visitor's row is held back
- * from. Suspended and disabled members pass, as they did (#1177): what suspension stops is each route's own rule
- * (answering a knock asks assertMemberActive too). One lookup. Pass the verified signer.
+ * routes). The act test (isNodeMember), which a visitor's row fails: a visitor never joined, and an invite, a ticket or a
+ * knock's invite of its own would admit anyone, itself included. Suspended and disabled members pass, as they did
+ * (#1177): what suspension stops is each route's own rule (answering a knock asks assertMemberActive too). Pass the
+ * verified signer.
  */
 export function mayBringSomeoneIn(db: Db, pubkey: string | null | undefined): boolean {
-    if (!pubkey) return false;
-    const row = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
-        { status: string | null; is_visitor: number | null } | undefined;
-    return !!row && !row.is_visitor && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
+    return isNodeMember(db, pubkey);
 }
 
 /** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade.ts). */

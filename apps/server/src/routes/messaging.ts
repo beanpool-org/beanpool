@@ -11,7 +11,7 @@ import {
     markConversationRead, getListedUnreadCounts,
     getMember,
 } from '../state-engine.js';
-import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage, assertMayOpenConversation } from '../engine/messaging.js';
+import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
@@ -268,8 +268,9 @@ router.post('/api/messages/edit', async (ctx) => {
     }
     // The answer is the message with its reactions, each naming who reacted (as are delete's and react's). The chat
     // tests read participants and group rows, which a pruned account keeps: on a node that shows guests the listings
-    // and not the people, for members of this node only.
-    if (!membersOnlyHere(ctx)) return;
+    // and not the people, for members of this node only, and a visitor's row in a DM it is in (isVisitorsDirectLine),
+    // where it reads the same message and reactions already.
+    if (!isVisitorsDirectLine(messageId, actor) && !membersOnlyHere(ctx)) return;
     if (!messageId || !ciphertext || !nonce) {
         ctx.status = 400;
         ctx.body = { error: 'messageId, ciphertext, and nonce are required' };
@@ -305,7 +306,7 @@ router.post('/api/messages/delete', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (!membersOnlyHere(ctx)) return; // the message and who reacted to it, as edit's answer
+    if (!isVisitorsDirectLine(messageId, actor) && !membersOnlyHere(ctx)) return; // the message and who reacted to it, as edit's answer
     if (!messageId || typeof messageId !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'messageId is required' };
@@ -502,7 +503,7 @@ router.post('/api/messages/react', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (!membersOnlyHere(ctx)) return; // who reacted, by key, as edit's answer
+    if (!isVisitorsDirectLine(messageId, actor) && !membersOnlyHere(ctx)) return; // who reacted, by key, as edit's answer
     if (!messageId || !emoji || typeof emoji !== 'string' || !emoji.trim() || emoji.length > 32) {
         ctx.status = 400;
         ctx.body = { error: 'messageId, authorPubkey, and a valid emoji (<=32 chars) are required' };

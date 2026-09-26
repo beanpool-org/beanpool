@@ -1,12 +1,13 @@
 /**
- * A visitor's row can't act as a member: it replies in its own direct conversations, sends Beans it holds and reads its
- * own account, and nothing else a key with no row can't do (the director's rule, 2026-09-26, on Marty's answer on card
+ * A visitor's row can't act as a member: it replies in its own direct conversations and changes its own lines there,
+ * sends Beans it holds (once past the send gate) and reads its own account, and nothing else a key with no row can't do (the director's rule, 2026-09-26, on Marty's answer on card
  * visitor-rows: "they receive messages and Beans but see only what a non-member sees"). #1182's deciding pass, item 4,
  * measured what a visitor's row could still write.
  *
  * The visitor (Vera) is made by a member's DM and holds Beans, as every visitor is. So that nothing but the rule can
  * refuse her, she also holds what a visitor's row could get before this rule (her row briefly unmarked to make it): a
- * name and a photo, an offer, a completed trade, a seat in a group and a Going RSVP to an event with a private note.
+ * name and a photo, an offer, a completed trade, a seat in a group and a Going RSVP to an event with a private note, and a
+ * line of her own in each one's chat.
  * Every request goes over HTTP through the real signature middleware, or over /ws.
  *
  *  1. The table: each write a member may make that a key with no row can't (#1182 item 4 rows 4-12: vouching, rating,
@@ -17,22 +18,23 @@
  *     makes each one (so the body reaches the rule); the visitor and a key with no row are then refused it with the
  *     same status, code and words, and the visitor's attempt changes nothing, in any table (its activity stamp aside).
  *  2. The sweep: every registered write the middleware sees, signed by the visitor and by a key with no row with the
- *     same body, is answered the same, but for what the visitor may do (a line in its DM, marking it read, Beans) and
- *     the changes to its own DM's lines (edit, delete, a reaction), which a key with no row can never be asked for. Then
- *     every enterprise write again on a crowdfund, an enterprise with a goal, which takes another path through some of
- *     them (a pledge goes to the crowdfund).
- *  3. What a visitor keeps: it replies in its DM (the app may ask for the DM again first), marks it read and mutes it;
- *     it sends Beans it holds to a member, under the send gate as anyone is, and a visitor that never traded is told in
- *     plain words why not; it reads its own messages and Beans. It edits, deletes and reacts to nothing (403
- *     not_a_member, in plain words), opens no DM with a member it has none with, and can't open a DM with, or pay, a key
- *     that has no row here: refused, and no row is made.
+ *     same body, is answered the same, but for what the visitor may do (a line in its DM, marking it read, muting it,
+ *     changing its lines there, Beans). Then every enterprise write again on a crowdfund, an enterprise with a goal,
+ *     which takes another path through some of them (a pledge goes to the crowdfund).
+ *  3. What a visitor keeps: it replies in its DM (the app may ask for the DM again first), marks it read and mutes it,
+ *     edits and deletes its own lines there and reacts there (the director, 2026-09-26); it sends Beans it holds to a
+ *     member, under the send gate as anyone is, and a visitor that never traded is told in plain words that it receives
+ *     Beans and passes them on once it joins; it reads its own messages and Beans. Its own lines in a group's chat or an
+ *     event's chat from before this rule it changes as a key with no row would (it can't), it opens no DM with a member
+ *     it has none with, and can't open a DM with, or pay, a key that has no row here: refused, and no row is made.
  *  4. A refused transfer makes no row: a member's send the send gate refuses, or over what they hold, to a fresh key
  *     leaves that key without one; a send that goes through makes the recipient's visitor's row, holding the Beans.
  *  5. /ws: the visitor's socket gets its DM and its Beans, and neither the group's chat, nor the event's chat, nor the
  *     event's note (a member's socket gets all three); its RSVP is refused and hands back no note.
  *  6. After its own signed redeem of an invite the visitor is a member and does all of it.
  *  7. The global profile: three visitors' rows a week old are refused a report as a key with no row is, and hide
- *     nothing (three members of a week hide it); a place watch is refused as a key with no row is.
+ *     nothing (three members of a week hide it); a place watch is refused as a key with no row is. A visitor changes its
+ *     own lines in its own DM there too, and a line of any other DM is answered 403 members_only, as for a key with no row.
  *  8. Federation: a member of another community, relayed by a peer (federation-protocol.ts relay_message's own calls),
  *     still opens a DM with a member here and writes in it, as a visitor's row.
  *  9. A Settings sign-in by phone: a visitor's signed "No" is refused as a key with no row's is, and ends nothing.
@@ -52,6 +54,7 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, transfer, createPost, acceptPost, completePostTransaction, createGroup, joinGroup, rsvpEvent,
     seedGenesisMember, createConversation, sendMessage, registerVisitor, getBalance, createTreasury,
+    postGroupThreadMessage, postEventThreadMessage,
 } from './state-engine.js';
 import { createPairing, declinePairing, describePairing, pairingMessage } from './settings-signin-pairing.js';
 import { createCrowdfundProject } from './db/db.js';
@@ -223,6 +226,8 @@ async function main(): Promise<void> {
     // What a visitor's row could get before this rule, so that nothing but the rule refuses her below.
     let veraOffer = '';
     let veraTrade = '';
+    let veraGroupLine = '';
+    let veraEventLine = '';
     asBeforeThisRule(vera, () => {
         db.prepare("UPDATE members SET callsign = 'Vera', avatar_url = ? WHERE public_key = ?").run(AVATAR, vera.pk);
         veraOffer = offer(vera, 'Vera honey').id;
@@ -231,10 +236,13 @@ async function main(): Promise<void> {
         veraTrade = t.id;
         joinGroup(group.id, vera.pk);
         rsvpEvent(event.id, vera.pk, 'going');
+        veraGroupLine = postGroupThreadMessage(group.id, vera.pk, 'Vera was here').id;
+        veraEventLine = postEventThreadMessage(event.id, vera.pk, 'Vera is coming').id;
     });
     assert(isVisitorRow(vera.pk) && !!db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(group.id, vera.pk)
         && (db.prepare('SELECT status FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(event.id, vera.pk) as any)?.status === 'going',
         'setup: and from before this rule, a name and a photo, an offer, a completed trade, a group seat and a Going RSVP');
+    assert(!!veraGroupLine && !!veraEventLine, "setup: and a line of her own in the group's chat and in the event's chat");
     const nobody = keypair('NobodyVA');
 
     // ── 1. The table ────────────────────────────────────────────────────────────────────────────
@@ -327,10 +335,11 @@ async function main(): Promise<void> {
         const writes = [...new Set<string>(app.middleware.filter((m: any) => m.router).flatMap((m: any) => m.router.stack)
             .flatMap((l: any) => (l.methods as string[]).filter(m => m !== 'HEAD' && m !== 'GET').map(m => `${m} ${l.path}`)))].sort();
         const swept = writes.filter(r => !outside(r.split(' ')[1]));
-        // What a visitor may do: a line in its DM, marking it read, muting it, Beans (sections 3 and 4). And what a key with no row can
-        // never be asked, a change to one of its own DM's lines: the act test's refusal, 403 not_a_member (section 3).
-        const MAY = new Set(['POST /api/messages/send', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/ledger/transfer']);
-        const OWN_DM_LINE = new Set(['POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react']);
+        // What a visitor may do: a line in its DM, marking it read, muting it, editing and deleting its own lines there and reacting
+        // there (the body names Alice's line in its DM), Beans (sections 3 and 4). Section 3 checks each, and that a line outside its
+        // DM is answered as for a key with no row.
+        const MAY = new Set(['POST /api/messages/send', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/ledger/transfer',
+            'POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react']);
         const materialise = (p: string, treasury = enterpriseKey) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
             if (name === 'id') return p.startsWith('/api/groups/') ? group.id : p.startsWith('/api/marketplace/') ? event.id
                 : p.startsWith('/api/crowdfund/') ? project : p.startsWith('/api/commons/decisions/') ? decision.id : 'sweep';
@@ -351,21 +360,15 @@ async function main(): Promise<void> {
             token: 'ExponentPushToken[swept]', preferences: { chat: true },
         });
         const differ: string[] = [];
-        const ownLine: string[] = [];
         for (const route of swept) {
             const [method, path] = route.split(' ');
             if (MAY.has(route)) continue;
             const n = await call(method, nobody, materialise(path), bodyFor(nobody));
             const v = await call(method, vera, materialise(path), bodyFor(vera));
-            if (OWN_DM_LINE.has(route)) {
-                if (!(v.status === 403 && v.body?.code === 'not_a_member' && v.body?.error === NOT_A_MEMBER)) ownLine.push(`${route} → ${show(v)}`);
-            } else if (!same(v, n)) {
-                differ.push(`${route}\n      visitor ${show(v)}\n      no row  ${show(n)}`);
-            }
+            if (!same(v, n)) differ.push(`${route}\n      visitor ${show(v)}\n      no row  ${show(n)}`);
         }
         assert(swept.length > 150, `the sweep takes every registered write the middleware sees: ${swept.length}`);
         assert(differ.length === 0, `every one is answered to the visitor as to a key with no row${differ.length ? `; ${differ.length} were not:\n    ${differ.join('\n    ')}` : ''}`);
-        assert(ownLine.length === 0, `a change to a line of its own DM is refused 403 not_a_member, in plain words${ownLine.length ? `: ${ownLine.join(' | ')}` : ''}`);
         // Again for every enterprise route, on the crowdfund: an enterprise with a goal takes another path through some of them
         // (a pledge goes to the crowdfund), and the enterprise above has none.
         const onCrowdfund = swept.filter(r => r.includes(':treasury'));
@@ -383,7 +386,7 @@ async function main(): Promise<void> {
     }
 
     // ── 3. What a visitor keeps ─────────────────────────────────────────────────────────────────
-    console.log('\n── 3. It replies in its DM, sends Beans it holds, reads its own account; it opens nothing and pays no key with no row');
+    console.log('\n── 3. It replies in its DM and changes its own lines there, sends Beans it holds, reads its own account; it opens nothing and pays no key with no row');
     {
         const again = await call('POST', vera, '/api/messages/conversation', { type: 'dm', participants: [vera.pk, alice.pk], createdBy: vera.pk });
         assert(again.status === 200 && again.body?.conversation?.id === veraDm.id, `the app may ask for its DM again before it writes: the same one (${show(again)})`);
@@ -392,18 +395,40 @@ async function main(): Promise<void> {
         const read = await call('POST', vera, '/api/messages/mark-read', { conversationId: veraDm.id });
         const mute = await call('POST', vera, '/api/messages/mute', { conversationId: veraDm.id, duration: '8h' });
         assert(read.status === 200 && mute.status === 200, `marks it read and mutes it (${read.status} ${mute.status})`);
+        // In its DM it edits and deletes its own lines and reacts, as anyone in a DM does (the director, 2026-09-26: messaging is
+        // what Marty's answer gives a visitor, and a visitor that can't take its own words back is worse off for privacy).
         const ownLine = reply.body?.message?.id;
-        for (const [what, path, body] of [
-            ['edit its own line', '/api/messages/edit', { messageId: ownLine, ciphertext: 'ZWRpdGVk', nonce: 'bjM=' }],
-            ['delete its own line', '/api/messages/delete', { messageId: ownLine }],
-            ["react to Alice's line", '/api/messages/react', { messageId: aliceLine.id, authorPubkey: vera.pk, emoji: '👍' }],
-        ] as const) {
-            const r = await call('POST', vera, path, body);
-            assert(r.status === 403 && r.body?.code === 'not_a_member' && r.body?.error === NOT_A_MEMBER, `it can't ${what}: 403 not_a_member, in plain words (${show(r)})`);
+        const edit = await call('POST', vera, '/api/messages/edit', { messageId: ownLine, ciphertext: 'ZWRpdGVk', nonce: 'bjM=' });
+        const edited = db.prepare('SELECT ciphertext, edited_at FROM messages WHERE id = ?').get(ownLine) as any;
+        assert(edit.status === 200 && edited?.ciphertext === 'ZWRpdGVk' && !!edited.edited_at, `it edits its own line in its DM (${show(edit)})`);
+        const react = await call('POST', vera, '/api/messages/react', { messageId: aliceLine.id, authorPubkey: vera.pk, emoji: '👍' });
+        const aliceMeta = String((db.prepare('SELECT metadata FROM messages WHERE id = ?').get(aliceLine.id) as any)?.metadata ?? '');
+        assert(react.status === 200 && aliceMeta.includes('👍') && aliceMeta.includes(vera.pk), `it reacts to Alice's line in its DM (${show(react)})`);
+        const notHers = await call('POST', vera, '/api/messages/edit', { messageId: aliceLine.id, ciphertext: 'aGE=', nonce: 'bjY=' });
+        const notHersGone = await call('POST', vera, '/api/messages/delete', { messageId: aliceLine.id });
+        assert(notHers.status === 400 && notHers.body?.error === 'Only the author can edit a message'
+            && notHersGone.status === 403 && notHersGone.body?.error === 'Only the author can delete a message'
+            && (db.prepare('SELECT type FROM messages WHERE id = ?').get(aliceLine.id) as any)?.type === 'text',
+            `and only its own lines, as anyone in a DM (${show(notHers)}; ${show(notHersGone)})`);
+        const del = await call('POST', vera, '/api/messages/delete', { messageId: ownLine });
+        assert(del.status === 200 && (db.prepare('SELECT type FROM messages WHERE id = ?').get(ownLine) as any)?.type === 'removed',
+            `it deletes its own line in its DM, for both of them (${show(del)})`);
+        // Outside a DM it is in, a line is answered as for a key with no row, and nothing changes: its own lines in the group's chat
+        // and the event's chat, from before this rule.
+        for (const [where, lineId] of [["the group's chat", veraGroupLine], ["the event's chat", veraEventLine]] as const) {
+            for (const [what, path, body] of [
+                ['edit', '/api/messages/edit', { messageId: lineId, ciphertext: 'ZWRpdGVk', nonce: 'bjc=' }],
+                ['delete', '/api/messages/delete', { messageId: lineId }],
+                ['react to', '/api/messages/react', { messageId: lineId, emoji: '👍' }],
+            ] as const) {
+                const n = await call('POST', nobody, path, body);
+                const before = snapshot();
+                const v = await call('POST', vera, path, body);
+                const changed = changedTables(before, snapshot());
+                assert(same(v, n) && v.status >= 400 && changed.length === 0,
+                    `it can't ${what} its own line in ${where} from before this rule: answered as a key with no row is, and nothing changes (visitor ${show(v)}; no row ${show(n)}${changed.length ? `; changed: ${changed.join(', ')}` : ''})`);
+            }
         }
-        const kept = db.prepare('SELECT type, ciphertext, metadata FROM messages WHERE id = ?').get(ownLine) as any;
-        const aliceKept = db.prepare('SELECT metadata FROM messages WHERE id = ?').get(aliceLine.id) as any;
-        assert(kept?.type === 'text' && kept.ciphertext === 'dGhhbmtz' && !String(aliceKept?.metadata ?? '').includes('👍'), 'and its line and Alice\'s are as they were');
 
         const newDm = await call('POST', vera, '/api/messages/conversation', { type: 'dm', participants: [vera.pk, carol.pk], createdBy: vera.pk });
         const noRowDm = await call('POST', nobody, '/api/messages/conversation', { type: 'dm', participants: [nobody.pk, carol.pk], createdBy: nobody.pk });
@@ -429,8 +454,9 @@ async function main(): Promise<void> {
         const vic = keypair('VicVA');
         transfer('genesis', vic.pk, 10, 'welcome gift', 'direct', true);
         const vicSend = await call('POST', vic, '/api/ledger/transfer', { from: vic.pk, to: bob.pk, amount: 1 });
-        assert(isVisitorRow(vic.pk) && vicSend.status === 400 && /join this community/.test(vicSend.body?.error ?? '') && balanceOf(vic.pk) === 10,
-            `a visitor with no completed trade is refused by the send gate, told it can trade once it joins (${show(vicSend)})`);
+        assert(isVisitorRow(vic.pk) && vicSend.status === 400 && /receive Beans/.test(vicSend.body?.error ?? '')
+            && /pass them on once you join this community/.test(vicSend.body?.error ?? '') && balanceOf(vic.pk) === 10,
+            `a visitor with no completed trade is refused by the send gate, told it receives Beans and can pass them on once it joins (${show(vicSend)})`);
 
         const balance = await call('GET', vera, `/api/ledger/balance/${vera.pk}`);
         const txs = await call('GET', vera, `/api/ledger/transactions?publicKey=${vera.pk}`);
@@ -538,6 +564,33 @@ async function main(): Promise<void> {
         assert(same(vw, nw) && vw.status === 403 && !db.prepare('SELECT 1 FROM place_watches WHERE pubkey = ?').get(watcher.pk),
             `a visitor's place watch is refused as a key with no row's is, and none is kept (${show(vw)}; ${show(nw)})`);
         assert(ok(mw), `a member watches a place (${show(mw)})`);
+        // On a node that shows visitors the listings and not the people, a visitor still changes its own lines in its own DM, and a
+        // line anywhere else is answered as for a key with no row (403 members_only), with nothing changed.
+        const w = weekOld[1];
+        const wDm = createConversation('dm', [carol.pk, w.pk], carol.pk)!;
+        const carolLine = sendMessage(wDm.id, carol.pk, 'aGVsbG8=', 'bjg=')!;
+        const wReply = await call('POST', w, '/api/messages/send', { conversationId: wDm.id, authorPubkey: w.pk, ciphertext: 'aGk=', nonce: 'bjk=' });
+        const wLine = wReply.body?.message?.id;
+        const wEdit = await call('POST', w, '/api/messages/edit', { messageId: wLine, ciphertext: 'aGkh', nonce: 'bjEw' });
+        const wReact = await call('POST', w, '/api/messages/react', { messageId: carolLine.id, emoji: '👍' });
+        const wDelete = await call('POST', w, '/api/messages/delete', { messageId: wLine });
+        const wRead = await call('GET', w, `/api/messages/${wDm.id}`);
+        assert([wReply, wEdit, wReact, wDelete, wRead].every(r => r.status === 200)
+            && (db.prepare('SELECT type FROM messages WHERE id = ?').get(wLine) as any)?.type === 'removed'
+            && JSON.stringify(wRead.body).includes('👍'),
+            `a visitor replies, edits and deletes its own line and reacts, in its own DM, and reads it with the reaction (${[wReply, wEdit, wReact, wDelete, wRead].map(show).join('; ')})`);
+        for (const [what, path, body] of [
+            ['edit', '/api/messages/edit', { messageId: aliceLine.id, ciphertext: 'aGE=', nonce: 'bjEx' }],
+            ['delete', '/api/messages/delete', { messageId: aliceLine.id }],
+            ['react to', '/api/messages/react', { messageId: aliceLine.id, emoji: '👍' }],
+        ] as const) {
+            const n = await call('POST', nobody, path, body);
+            const before = snapshot();
+            const v = await call('POST', w, path, body);
+            const changed = changedTables(before, snapshot());
+            assert(same(v, n) && v.status === 403 && v.body?.code === 'members_only' && changed.length === 0,
+                `and can't ${what} a line of a DM it isn't in: answered as a key with no row is (visitor ${show(v)}; no row ${show(n)})`);
+        }
         delete process.env.NODE_PROFILE;
     }
 

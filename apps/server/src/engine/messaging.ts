@@ -65,17 +65,29 @@ function assertMemberActive(publicKey: string): void {
     if (isInvalidatedKey(db, publicKey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403);
 }
 
-/**
- * A visitor's row (isLiveVisitor) writes a line in a direct conversation it is already in, and does nothing else to a
- * chat: no edit, no deletion, no reaction. Refused as the act test refuses (403 not_a_member), in plain words, since the
- * app offers these on its own lines in its own conversation.
- */
-function refuseVisitorChatChange(publicKey: string): void {
-    if (isLiveVisitor(db, publicKey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403, NOT_A_MEMBER_CODE);
-}
-
 /** A visitor's line anywhere but a direct conversation it is in: refused in the words a key with no row is refused in. */
 const VISITOR_SEND_REFUSAL = 'Member not found';
+
+/**
+ * Whether `publicKey` is a visitor's row (isLiveVisitor) and `messageId` a line of a direct conversation it is in. There
+ * a visitor edits and deletes its own lines and reacts, as anyone in a DM does (the director, 2026-09-26: messaging is
+ * what Marty's answer gives a visitor, and one that can't take its own words back is worse off). Anywhere else a
+ * visitor's row changes no line, and is answered as a key with no row is.
+ */
+export function isVisitorsDirectLine(messageId: unknown, publicKey: string | undefined): boolean {
+    if (typeof messageId !== 'string' || !messageId || !publicKey || !isLiveVisitor(db, publicKey)) return false;
+    return !!db.prepare(`
+        SELECT 1 FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id AND c.type = 'dm'
+        JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.public_key = ?
+        WHERE m.id = ?
+    `).get(publicKey, messageId);
+}
+
+/** An edit or a deletion by a visitor's row, of a line outside its direct conversations: the words a key with no row gets. */
+function refuseVisitorOutsideItsDirectConversations(messageId: string, publicKey: string): void {
+    if (isLiveVisitor(db, publicKey) && !isVisitorsDirectLine(messageId, publicKey)) throw new MessagingError(VISITOR_SEND_REFUSAL);
+}
 
 /**
  * The old chat group ("👥 Group" in the web app's Talk screen) was removed on 2026-09-19 (groups decision 2):
@@ -326,12 +338,15 @@ export function toggleMessageReaction(
         try { assertCanWriteInGroupChat(row.conversation_id, authorPubkey); }
         catch (e: any) { throw toGroupChatMessagingError(e); }
     } else {
-        if (!participants.some((p: any) => p.public_key === authorPubkey)) {
+        // A visitor's row reacts in a direct conversation it is in (isVisitorsDirectLine). A participant row it holds in any
+        // other chat is from before visitors were refused one, and there it is answered as a key with no row is.
+        const visitorsDirectLine = isVisitorsDirectLine(messageId, authorPubkey);
+        if (!participants.some((p: any) => p.public_key === authorPubkey)
+            || (!visitorsDirectLine && isLiveVisitor(db, authorPubkey))) {
             return null;
         }
-        // A participant row outlasts a prune and a pending re-key; a reaction still reaches the other person. A visitor's
-        // row is a participant of its own direct conversations, and reacts in none (refuseVisitorChatChange).
-        if (!isNodeMember(db, authorPubkey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403, NOT_A_MEMBER_CODE);
+        // A participant row outlasts a prune and a pending re-key; a reaction still reaches the other person.
+        if (!visitorsDirectLine && !isNodeMember(db, authorPubkey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403, NOT_A_MEMBER_CODE);
         // An event chat carries text the host can remove and nothing else, and it is read-only once the event
         // ends — a reaction would be a write this route cannot rule on.
         if (convType?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_REACT_ERROR, 403);
@@ -420,7 +435,7 @@ export function editMessage(
     nonce: string
 ): Message {
     assertMemberActive(authorPubkey);
-    refuseVisitorChatChange(authorPubkey);
+    refuseVisitorOutsideItsDirectConversations(messageId, authorPubkey);
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
     if (!row) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR);
     // Enterprise discussion-thread messages are not editable. This route has no size bound
@@ -522,7 +537,7 @@ export function deleteOwnMessage(
     authorPubkey: string
 ): Message {
     assertMemberActive(authorPubkey);
-    refuseVisitorChatChange(authorPubkey);
+    refuseVisitorOutsideItsDirectConversations(messageId, authorPubkey);
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
     if (!row) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
     // Fails closed, as the edit does: a message whose conversation row is missing cannot be shown to be

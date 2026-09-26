@@ -199,14 +199,20 @@ export function unboundRefusal(now = clock()): SignatureRefusal | null {
     return unboundSignaturesAccepted(now) ? null : { ok: false, status: 426, error: APP_TOO_OLD_ERROR, code: APP_TOO_OLD_CODE };
 }
 
-/** Count an accepted signature for Settings: by the host it named, or as an old app's. */
+/**
+ * Count an accepted signature for Settings: by the host it named, or as an old app's. Only a member's app counts
+ * (isNodeMember): a key with no row here costs nothing to make, so strangers' keys could otherwise fill the list of
+ * addresses offered to the owner, or raise "N members are on an old app", the number an owner reads to decide whether
+ * to move the switch date (4113046943).
+ */
 export function countAcceptedSignature(signer: string, audience: string | null): void {
-    if (audience === null) return countSignature('old_app', '', signer);
-    if (audienceStanding(audience) === 'own') return countSignature('own', audience, signer);
-    // An address to offer the owner: only from a member's app, so a stranger's keys can't fill the list.
     try {
-        if (isNodeMember(db, signer)) countSignature('unconfirmed', audience, signer);
-    } catch { /* a count never refuses a request */ }
+        if (!isNodeMember(db, signer)) return;
+    } catch {
+        return; // a count never refuses a request
+    }
+    if (audience === null) return countSignature('old_app', '', signer);
+    countSignature(audienceStanding(audience) === 'own' ? 'own' : 'unconfirmed', audience, signer);
 }
 
 /** Verify a signed request (or `/ws` connect token) in either format, in the order above. */
@@ -282,10 +288,10 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
 // ─── Counting (Settings) ────────────────────────────────────────────────────────────────────
 
 /**
- * How many people's apps signed here, per day (UTC): for each of this community's addresses (`own`), for each address
- * a node with no configured names was reached at (`unconfirmed`, offered to the owner; members' apps only, so a
- * stranger can't fill that list), and in the old format (`old_app`, "N members are on an old app"). Counts only, no key
- * is stored: the day's distinct keys are held in memory as salted hashes. A request never writes to the database: the
+ * How many members' apps signed here, per day (UTC): for each of this community's addresses (`own`), for each address
+ * a node with no configured names was reached at (`unconfirmed`, offered to the owner), and in the old format
+ * (`old_app`, "N members are on an old app"). Members' keys only (countAcceptedSignature), so a stranger's keys move
+ * none of them. Counts only, no key is stored: the day's distinct keys are held in memory as salted hashes. A request never writes to the database: the
  * counts are written when Settings reads them and every 15 minutes (flushSignatureCounts), each as the most this
  * process has seen that day. After a restart a day's count starts again, so it can read low for that day, never high.
  */

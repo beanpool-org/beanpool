@@ -34,7 +34,8 @@
  *  9. Pairing and offline tickets made for A are refused at B; the old forms until the switch only.
  * 10. The self-hoster: any host accepted (and offered in Settings) until an owner confirms one; then only that one;
  *     after the switch, an unconfirmed host is refused.
- * 11. Settings: the address list with its sources and counts, and the old-app count. No key is stored.
+ * 11. Settings: the address list with its sources and counts, and the old-app count. No key is stored. Keys with no
+ *     row here move neither count.
  * 12. "Delete my account" signed for A, replayed at B → 421, B's row unchanged; re-signed for b.test it works there.
  * 13. A nonce is held for as long as its request is fresh: a timestamp from a clock running ahead is fresh past the
  *     window from its arrival, and the same request is still refused there as a replay.
@@ -693,6 +694,19 @@ async function main(): Promise<void> {
                 `the counts table holds counts and addresses, no key (${rows.length} rows)`);
             const moderatorless = await call(B, 'GET', '/api/local/admin/app-addresses');
             assert(moderatorless.status === 401, `and the list needs admin auth (${show(moderatorless)})`);
+            // Only members' apps are counted: a throwaway key costs nothing, and the old-app count is what an owner reads
+            // to decide whether to move the switch date.
+            const strangers = [1, 2, 3, 4, 5].map((i) => id(`Nobody${i}`));
+            const statuses: number[] = [];
+            for (const k of strangers) {
+                statuses.push((await sendTo(B, 'GET', unbound(k, 'GET', '/api/community/health'))).status);
+                statuses.push((await sendTo(B, 'GET', await bound(k, 'GET', 'https://b.test/api/community/health'))).status);
+            }
+            assert(statuses.every((s) => s === 200), `5 keys with no row at B each send an old-format and a format-2 read, and are answered (${statuses.join(',')})`);
+            const after = (await call(B, 'GET', '/api/local/admin/app-addresses', adminPw)).body || {};
+            const bTestAfter = after.addresses?.find((x: any) => x.address === 'b.test')?.today;
+            assert(after.oldApps?.today === b.oldApps?.today && bTestAfter === by('b.test')?.today,
+                `neither count moves: apps too old ${b.oldApps?.today} → ${after.oldApps?.today}, b.test ${by('b.test')?.today} → ${bTestAfter}`);
         });
 
         // ── 12. "Delete my account", replayed ──

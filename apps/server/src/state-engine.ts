@@ -1080,18 +1080,19 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 // completed trade on the activity feed). The recipients get the full event; every other member socket
 // (and an open-feed socket) gets only `{ type }`, so its client re-fetches what it may see. Clients use
 // nothing but the type of these events, so the doorbell refreshes them exactly as the payload did.
+//
+// Returns how many open sockets it was written to.
 export interface BroadcastOptions { othersGetDoorbell?: boolean }
-export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): void {
+export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
     // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
     // catch-up sync gets what it may see: the moderators the post, everyone else a removal.
     if ((event?.type === 'new_post' || event?.type === 'post_updated') && event.post?.hiddenByReportsAt) {
         const author = event.post.authorPublicKey;
-        if (typeof author === 'string' && (!recipients || recipients.includes(author))) deliverBroadcast(event, [author]);
-        deliverBroadcast({ type: 'post_updated', id: event.post.id }, recipients);
-        return;
+        const toAuthor = typeof author === 'string' && (!recipients || recipients.includes(author)) ? deliverBroadcast(event, [author]) : 0;
+        return toAuthor + deliverBroadcast({ type: 'post_updated', id: event.post.id }, recipients);
     }
-    deliverBroadcast(event, recipients, opts);
+    return deliverBroadcast(event, recipients, opts);
 }
 
 /**
@@ -1129,7 +1130,7 @@ function visitorMayReceive(event: any): boolean {
     return conv?.type === 'dm';
 }
 
-function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): void {
+function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
             case 'new_post':
@@ -1193,6 +1194,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     let joined: SocketStanding | undefined;
     // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
     let forVisitor: boolean | undefined;
+    let sent = 0;
     for (const ws of wsClients) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
@@ -1219,7 +1221,10 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         } else if (!ws._memberFeed && carriesVoters) {
             out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });
         }
-        try { ws.send(out); } catch { wsClients.delete(ws); }
+        try {
+            ws.send(out);
+            if (ws.readyState === 1) sent++; // OPEN
+        } catch { wsClients.delete(ws); }
     }
     // An open socket's key is asked again whenever that key's standing may have changed, so the socket gets from then on
     // what a fresh connect with that key would. A key that no longer makes a member (isNodeMember) stops being a member
@@ -1241,6 +1246,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             ws._memberFeed = standing.feed;
         }
     }
+    return sent;
 }
 
 // ===================== DB HELPERS =====================
@@ -7622,7 +7628,8 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 /**
  * Generic push notification dispatcher with category-based preference gating,
  * app icon badge counts, iOS threadId grouping, and Android channelId routing.
- * Fire-and-forget pattern.
+ * Fire-and-forget pattern. Returns how many notifications it handed to the push service
+ * (one per registered phone of each recipient who has this category on).
  */
 export function dispatchPushNotification(
     targetPubkeys: string[],
@@ -7631,10 +7638,10 @@ export function dispatchPushNotification(
     body: string,
     data: Record<string, any>,
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery'
-): void {
+): number {
     // Filter out the actor and SYSTEM from targets
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM');
-    if (recipients.length === 0) return;
+    if (recipients.length === 0) return 0;
 
     const prefKey = `notify_${categoryId}`;
     
@@ -7696,7 +7703,7 @@ export function dispatchPushNotification(
         }
     }
 
-    if (allMessages.length === 0) return;
+    if (allMessages.length === 0) return 0;
 
     // Batch send to Expo (max 100 per request)
     const batches: typeof allMessages[] = [];
@@ -7716,6 +7723,19 @@ export function dispatchPushNotification(
             console.warn('[Push] Failed to send push notification:', err.message);
         });
     }
+    return allMessages.length;
+}
+
+/**
+ * The members a push of this category would reach now, as dispatchPushNotification decides it: a phone of theirs has
+ * registered its token here, and they haven't switched the category off. Only `publicKey`, when given.
+ */
+export function pushableMembers(categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', publicKey?: string): Set<string> {
+    const off = `NOT EXISTS (SELECT 1 FROM member_preferences p WHERE p.public_key = t.public_key AND p.pref_key = ? AND p.pref_value = 'false')`;
+    const rows = (publicKey === undefined
+        ? db.prepare(`SELECT DISTINCT t.public_key AS pk FROM push_tokens t WHERE ${off}`).all(`notify_${categoryId}`)
+        : db.prepare(`SELECT DISTINCT t.public_key AS pk FROM push_tokens t WHERE t.public_key = ? AND ${off}`).all(publicKey, `notify_${categoryId}`)) as { pk: string }[];
+    return new Set(rows.map(r => r.pk));
 }
 
 /**

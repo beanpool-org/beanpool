@@ -618,6 +618,39 @@ describe("a redeem's 400 lets the kept key go only once the node says it is not 
 });
 
 /*
+ * #1218's deciding pass, 4112846555: the pre-flight cut an offline ticket's BP- off, and the node reads a code as a
+ * ticket only by it, so every ticket was "not recognised" and never redeemed.
+ */
+describe('an offline ticket gets past the pre-flight (4112846555)', () => {
+    const TICKET = `BP-${btoa(JSON.stringify({ p: '{"i":"ab","t":1}', s: 'c2lnbmF0dXJl' }))}`;
+    const codeOf = (call: Call) => new URL(call.path, 'https://node.example').searchParams.get('code');
+
+    it('the pre-flight asks about the ticket BP- and all, the node says yes, and the redeem sends the ticket alone', async () => {
+        const node = stubNode(LOCAL, {
+            // The node's check as it is (engine/members.ts checkInvite): a ticket only by its BP-, anything else is looked
+            // up as an invite code, and this node has made none.
+            '/api/invite/check': (_body, call) => json(200, codeOf(call)?.startsWith('BP-') ? { valid: true, inviterCallsign: 'Ana' } : { valid: false, reason: 'invalid' }),
+            '/api/invite/redeem-offline': () => json(200, { success: true, member: {} }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await screen.findByText(/Join with Invite Code/);
+        fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: TICKET } });
+        fireEvent.change(screen.getByLabelText('Your Callsign (Name)'), { target: { value: 'Rowan' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create Identity & Join →' }));
+
+        const checks = () => node.calls.filter((c) => c.path.startsWith('/api/invite/check'));
+        await waitFor(() => expect(checks()).toHaveLength(1));
+        expect(checks().map(codeOf)).toEqual([TICKET]);
+        await screen.findByText(/Choose your look/);
+        expect(checks()).toHaveLength(1);
+        const redeems = node.calls.filter((c) => c.path === '/api/invite/redeem-offline');
+        expect(redeems.map((c) => c.body.ticketB64)).toEqual([TICKET.slice(3)]);
+        expect(screen.queryByText(/wasn't recognised/)).toBeNull();
+        expect(await loadIdentity()).toMatchObject({ publicKey: redeems[0].body.publicKey, callsign: 'Rowan' });
+    });
+});
+
+/*
  * Confirmation round 1 of the fix, 4112075367: on the open door, a kept invite key is settled before the door's lobby
  * is offered, so a door join never saves a second key beside it.
  */

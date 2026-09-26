@@ -71,6 +71,7 @@ import { clientLimiterKey } from '../client-ip.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { requireAdminRole, type AdminRole } from '../admin-auth.js';
 import { avatarUrlFor } from '@beanpool/core';
+import { tellOwedWatcher } from '../services/directory-mirror.js';
 
 /**
  * Who may do what on the routes below. Every admin route takes checkAdminAuth (a key-signed session of an owner or
@@ -1410,6 +1411,15 @@ router.post('/api/push-tokens', async (ctx) => {
         return;
     }
     const success = registerPushToken(activeKey, token, platform || 'ios');
+    // A place-watch notice that reached nobody while this phone had no token here (after a take-over, the new main
+    // server has none) is told now (services/directory-mirror.ts). Never fails the registration.
+    if (success) {
+        try {
+            tellOwedWatcher(activeKey);
+        } catch (e: any) {
+            console.warn('[Place watches] Telling a watcher at their token registration failed:', e?.message || e);
+        }
+    }
     ctx.body = { success };
 });
 

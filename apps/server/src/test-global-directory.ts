@@ -18,6 +18,9 @@
  *      community that leaves the registry and comes back, none for a community first seen before the watch was set;
  *      no registry text in any notice; at most one notice a member a day; a flood of new rows tells nobody; a
  *      community that leaves is scrubbed to its key; a pruned member's watches go with them
+ *  6b. a notice counts only when it reached the member: with no phone registered and no socket open, nothing is sent or
+ *      stamped; an open socket (the web app, no push token) counts; a phone registering its token over the signed route
+ *      is told at once, and never again; a notice is owed for a week after the first sighting, then dropped
  *   7. GET /api/global/home in one request: the nearest communities, the nearby post count, the caller's own watches,
  *      the knock seam (null); unsigned gets no watches; with no point, the member's own area
  *   8. the publisher honours publishToDirectory: nothing is sent on the global profile (and its timer is not set), an
@@ -217,6 +220,11 @@ const BRUNSWICK = { node_id: 'peer-brunswick', community_name: 'Brunswick Swap',
 const FLOOD = Array.from({ length: 26 }, (_, i) => ({ node_id: `peer-flood-${i}`, community_name: `Flood ${i}`,
     service_radius: { lat: -1.29 + i * 0.01, lng: 36.82, radiusKm: 5 } }));
 const NAIROBI = { node_id: 'peer-nairobi', community_name: 'Nairobi Exchange', service_radius: { lat: -1.28, lng: 36.81, radiusKm: 10 } };
+// For the notices that reach nobody at first (6b), far from everything above, and off the registry again after.
+const VALPO = { node_id: 'peer-valpo', community_name: 'Valparaíso Trueque', service_radius: { lat: -33.05, lng: -71.62, radiusKm: 10 } };
+const MONTE = { node_id: 'peer-monte', community_name: 'Montevideo Canje', service_radius: { lat: -34.90, lng: -56.16, radiusKm: 10 } };
+const LIMA = { node_id: 'peer-lima', community_name: 'Lima Intercambio', service_radius: { lat: -12.05, lng: -77.04, radiusKm: 10 } };
+const CALLAO = { node_id: 'peer-callao', community_name: 'Callao Intercambio', service_radius: { lat: -12.06, lng: -77.12, radiusKm: 10 } };
 
 async function main(): Promise<void> {
     console.log('\n=== The communities directory on the global node (G5) ===\n');
@@ -481,8 +489,19 @@ async function main(): Promise<void> {
     const wesHeard = attempt(() => db.prepare('SELECT DISTINCT last_notified_at AS t FROM place_watches WHERE pubkey = ?').all(wes.pk) as any[]) ?? [];
     assert(wesHeard.length === 1 && typeof wesHeard[0]?.t === 'string', `every one of his watches carries when he last heard (${JSON.stringify(wesHeard)})`);
 
-    // A day later he hears again. Wanda is pruned meanwhile.
-    db.prepare('UPDATE place_watches SET last_notified_at = ? WHERE pubkey = ?').run(new Date(Date.now() - 25 * 3_600_000).toISOString(), wes.pk);
+    // A day later he hears again. Wanda is pruned meanwhile. What a member is owed is worked out from when each watch was
+    // set, when each community was first seen and when the member last heard (engine/place-watches.ts), so the day
+    // passes for all three: every watch, every first sighting so far and Wes's last notice move back a day and an hour.
+    // Suffolk stays first seen in his quiet day. Theo's notice, sent at the last run, stays today's.
+    const dayBack = (t: string) => new Date(Date.parse(t) - 25 * 3_600_000).toISOString();
+    const wesLast = (db.prepare('SELECT last_notified_at AS t FROM place_watches WHERE pubkey = ? LIMIT 1').get(wes.pk) as any)?.t as string;
+    db.prepare('UPDATE place_watches SET last_notified_at = ? WHERE pubkey = ?').run(dayBack(wesLast), wes.pk);
+    for (const w of db.prepare('SELECT id, created_at FROM place_watches').all() as any[]) {
+        db.prepare('UPDATE place_watches SET created_at = ? WHERE id = ?').run(dayBack(w.created_at), w.id);
+    }
+    for (const c of db.prepare('SELECT community_key, first_seen_at FROM directory_cache').all() as any[]) {
+        db.prepare('UPDATE directory_cache SET first_seen_at = ? WHERE community_key = ?').run(dayBack(c.first_seen_at), c.community_key);
+    }
     adminPruneUser(wanda.pk, owner.pk);
     const wandaLeft = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM place_watches WHERE pubkey = ?').get(wanda.pk) as any).n);
     pushed.length = 0;
@@ -510,6 +529,73 @@ async function main(): Promise<void> {
     await settle();
     assert(r10.added === 1 && pushesTo(fay).length === 1 && same(pushesTo(fay)[0]?.data?.communities, ['peer-nairobi']),
         `and the next single community near Fay is news: one push (${pushesTo(fay).length})`);
+
+    // ── 6b. a notice counts only when it reached the member ─────────────────────────────────────────────────────
+    console.log('\n── 6b. a notice that reached nobody is not spent: told once, when it can be, for up to a week ──');
+    const nell = member('Nell');   // watches Valparaíso; no phone registered here, no socket open
+    const pia = member('Pia');     // watches Montevideo; the web app open, which has no push token
+    const olga = member('Olga');   // watches Lima; no phone registered here for a while
+    const setN = await call('POST', nell, '/api/global/watches', { lat: -33.05, lng: -71.6 });
+    const setP = await call('POST', pia, '/api/global/watches', { lat: -34.9, lng: -56.2 });
+    const setO = await call('POST', olga, '/api/global/watches', { lat: -12.05, lng: -77.05 });
+    const heardAt = (id: Id) => attempt(() => (db.prepare('SELECT MAX(last_notified_at) AS t FROM place_watches WHERE pubkey = ?').get(id.pk) as any)?.t ?? null);
+    const sPia = await socket(pia);
+    const before6b = [...V2, SUFFOLK, MITTE, BRUNSWICK, ...FLOOD, NAIROBI];
+    pushed.length = 0;
+    serve([...before6b, VALPO, MONTE]);
+    const rA = await runMirror();
+    await settle();
+    assert(setN.status === 200 && setP.status === 200 && setO.status === 200 && rA.added === 2, `Valparaíso and Montevideo are new (${JSON.stringify(rA)})`);
+    assert(pushed.length === 0 && heardAt(nell) === null,
+        `Nell, with no phone registered here and no socket open, is told nothing and nothing is stamped: her notice is not spent (${heardAt(nell)})`);
+    assert(announcements(sPia).length === 1 && same(announcements(sPia)[0]?.communities, ['peer-monte']) && typeof heardAt(pia) === 'string' && rA.notified === 1,
+        `Pia, with the web app open and no phone, gets the live announcement, and that counts: stamped, one member told (${JSON.stringify(rA)})`);
+    const rB = await runMirror();
+    await settle();
+    assert(rB.notified === 0 && announcements(sPia).length === 1 && pushed.length === 0 && heardAt(nell) === null,
+        `the next run: Pia isn't told again, and Nell still can't be (${JSON.stringify(rB)})`);
+
+    // Nell's phone starts the app, which registers its token over the signed route: she is told then, not at the next run.
+    const nellToken = await call('POST', nell, '/api/push-tokens', { publicKey: nell.pk, token: pushToken(nell), platform: 'android' });
+    await settle();
+    assert(nellToken.status === 200 && pushed.length === 1 && pushesTo(nell).length === 1 && same(pushesTo(nell)[0]?.data?.communities, ['peer-valpo']),
+        `Nell's phone registers its token: she is told at once, about Valparaíso alone (${nellToken.status} ${JSON.stringify(pushed.map(m => m.data))})`);
+    assert(typeof heardAt(nell) === 'string', 'and that notice is stamped');
+    pushed.length = 0;
+    const nellAgain = await call('POST', nell, '/api/push-tokens', { publicKey: nell.pk, token: pushToken(nell), platform: 'android' });
+    const rC = await runMirror();
+    await settle();
+    assert(nellAgain.status === 200 && rC.notified === 0 && pushed.length === 0,
+        `her phone registering again, and the next run, tell her nothing more (${pushed.length})`);
+
+    // Lima and Callao start near Olga's watch while no phone of hers is registered here. Then time passes: her watch was
+    // set nine days ago, Lima first seen eight days ago, Callao six. A notice is owed for a week after the community's
+    // first sighting, then dropped.
+    serve([...before6b, VALPO, MONTE, LIMA, CALLAO]);
+    const rD = await runMirror();
+    await settle();
+    assert(rD.added === 2 && rD.notified === 0 && pushed.length === 0 && heardAt(olga) === null,
+        `Lima and Callao are new, and Olga can't be told: nothing stamped (${JSON.stringify(rD)})`);
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+    db.prepare('UPDATE place_watches SET created_at = ? WHERE pubkey = ?').run(daysAgo(9), olga.pk);
+    db.prepare("UPDATE directory_cache SET first_seen_at = ? WHERE community_key = 'peer-lima'").run(daysAgo(8));
+    db.prepare("UPDATE directory_cache SET first_seen_at = ? WHERE community_key = 'peer-callao'").run(daysAgo(6));
+    db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(olga.pk, pushToken(olga));
+    pushed.length = 0;
+    const rE = await runMirror();
+    await settle();
+    assert(rE.notified === 1 && pushesTo(olga).length === 1 && same(pushesTo(olga)[0]?.data?.communities, ['peer-callao']),
+        `with a phone of hers registered, the next run tells her about Callao (six days) and not Lima (eight): dropped, not told late (${JSON.stringify(pushesTo(olga).map(m => m.data))})`);
+    pushed.length = 0;
+    const rF = await runMirror();
+    await settle();
+    assert(rF.notified === 0 && pushed.length === 0, `and nobody hears about either again (${pushed.length})`);
+
+    // Off the registry again, so the landing card below counts what it did.
+    serve(before6b);
+    const rG = await runMirror();
+    sPia.ws.close();
+    assert(rG.ok === true && rG.removed === 4 && rG.notified === 0, `the four leave the registry (${JSON.stringify(rG)})`);
 
     // ── 7. GET /api/global/home ─────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 7. the landing card, one request ──');

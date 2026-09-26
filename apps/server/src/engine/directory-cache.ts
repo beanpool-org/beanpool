@@ -410,6 +410,28 @@ export function listedCommunityCount(): number {
     return listed().length;
 }
 
+/** A listed community with a place, and when this node first saw it. */
+export interface FirstSighting { key: string; lat: number; lng: number; radiusKm: number | null; firstSeenAt: string }
+
+/**
+ * The listed communities with a place first seen from `since` to `until`, for the place watches' notices
+ * (engine/place-watches.ts). A run stamps every community it sees for the first time with the same `first_seen_at`, so
+ * those first seen together are one run's: a run's worth with more than `batchMax` places is left out whole (a flood).
+ * A community of that run that has left the registry since still counts toward it (its place was scrubbed, not its
+ * sighting), so leaving never turns a flood into news.
+ */
+export function firstSightings(since: string, until: string, batchMax: number): FirstSighting[] {
+    const rows = db.prepare(`SELECT community_key, lat, lng, radius_km, first_seen_at FROM directory_cache
+        WHERE listed = 1 AND lat IS NOT NULL AND lng IS NOT NULL AND first_seen_at >= ? AND first_seen_at <= ?`)
+        .all(since, until) as Array<{ community_key: string; lat: number; lng: number; radius_km: number | null; first_seen_at: string }>;
+    if (rows.length === 0) return [];
+    const floods = new Set((db.prepare(`SELECT first_seen_at FROM directory_cache
+        WHERE first_seen_at >= ? AND first_seen_at <= ? AND (lat IS NOT NULL OR listed = 0)
+        GROUP BY first_seen_at HAVING COUNT(*) > ?`).all(since, until, batchMax) as { first_seen_at: string }[]).map(r => r.first_seen_at));
+    return rows.filter(r => !floods.has(r.first_seen_at))
+        .map(r => ({ key: r.community_key, lat: r.lat, lng: r.lng, radiusKm: r.radius_km, firstSeenAt: r.first_seen_at }));
+}
+
 // ── the mirror's status ──────────────────────────────────────────────────────────────────────────────────────────
 
 /** Kept in node_config (`directoryMirror`), so a restart still knows how fresh the cache is. */

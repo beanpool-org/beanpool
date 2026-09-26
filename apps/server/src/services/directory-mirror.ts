@@ -24,15 +24,19 @@
  *      other than 2xx, a body that is not a JSON array or is too big) changes nothing: the cache keeps what the last
  *      good fetch saw, and the status says what went wrong.
  *   2. Every row is checked (engine/directory-cache.ts normaliseRegistryRow); a row with no key is left out.
- *   3. One transaction writes the run (new, changed, gone), and the communities seen for the first time are handed to
- *      the place watches (engine/place-watches.ts): each watcher they reach hears once.
+ *   3. One transaction writes the run (new, changed, gone), then the place watches (engine/place-watches.ts) tell each
+ *      watcher what they are owed: the communities seen for the first time, and any an earlier run's notice could not
+ *      reach them with (no phone of theirs registered here then). Each watcher hears about a community once.
+ *
+ * A phone registering its push token (routes/community.ts) tells its member what they are owed at once
+ * (tellOwedWatcher), on the same conditions as a run: a main server with the switch on.
  */
 import { getNodeRole, broadcast, dispatchPushNotification, isNodeMember } from '../state-engine.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import {
     normaliseRegistryRow, writeDirectoryRows, writeMirrorStatus, MAX_DIRECTORY_ROWS, type DirectoryRow,
 } from '../engine/directory-cache.js';
-import { notifyPlaceWatchers } from '../engine/place-watches.js';
+import { notifyPlaceWatchers, notifyOwedPlaceWatcher } from '../engine/place-watches.js';
 
 export const DEFAULT_DIRECTORY_MIRROR_URL = 'https://dpemwoermzkaxoctafzg.supabase.co/rest/v1/directory_nodes?select=*';
 /** The website's publishable key (apps/website/main.js): public by design, read-only under the registry's row rules. */
@@ -162,7 +166,8 @@ export async function runDirectoryMirror(opts: { pageRows?: number } = {}): Prom
         try {
             notified = notifyPlaceWatchers({ broadcast, dispatchPushNotification, isMember: isNodeMember }, written.added, now);
         } catch (e: any) {
-            // The cache is written; the communities are on the card. A watcher who wasn't told this run won't be.
+            // The cache is written; the communities are on the card. Nothing was stamped for a watcher not told: the next
+            // run tells them.
             console.error('[Directory mirror] Telling watchers failed:', e?.message || e);
         }
         // Quiet when nothing changed: an unchanged directory is most hours.
@@ -186,10 +191,20 @@ export async function runDirectoryMirror(opts: { pageRows?: number } = {}): Prom
 let timer: ReturnType<typeof setInterval> | null = null;
 
 /**
- * At boot: once shortly after start, then hourly. Every node sets the timer and each run reads the role and the switch,
- * so a local node's or a standby's hourly tick does nothing and never contacts the registry, an operator's override
- * takes effect at the next tick, and a standby promoted by a take-over (services/takeover.ts sets the role without a
- * restart) starts mirroring within the hour.
+ * A member's phone registered its push token here: they are told now what they are owed (engine/place-watches.ts),
+ * rather than at the next run. After a take-over this is how most watchers hear: the new main server has no phone's
+ * token until the app starts again. Only where a run would tell them: a main server with the switch on.
+ */
+export function tellOwedWatcher(pubkey: string): boolean {
+    if (getNodeRole() !== 'primary' || !getProfileSwitches().directoryMirror) return false;
+    return notifyOwedPlaceWatcher({ broadcast, dispatchPushNotification, isMember: isNodeMember }, pubkey);
+}
+
+/**
+ * At boot: once shortly after start (FIRST_RUN_DELAY_MS), then hourly. Every node sets the timer and each run reads the
+ * role and the switch, so a local node's or a standby's hourly tick does nothing and never contacts the registry, and
+ * an operator's override takes effect at the next tick. A take-over restarts the server (services/takeover.ts), so a
+ * promoted standby's first run comes 10 s after it boots as the main server, before any phone has registered with it.
  */
 export function initDirectoryMirror(): void {
     if (timer) clearInterval(timer);

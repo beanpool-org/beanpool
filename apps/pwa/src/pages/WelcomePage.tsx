@@ -9,11 +9,12 @@
  * Sign-in:    There, an account comes back with the sign-in it joined with (components/WebRestore.tsx, G11-d)
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import {
-    checkIdentitySave, clearUnsentPendingJoin, createIdentityFromMnemonic, generateIdentity, identityFromMnemonic, importIdentity,
-    updateCallsign, getMnemonic, hasMnemonic, loadPendingJoin, loadPendingRestore, pendingJoinSent, seedViewedKey, IdentityHeldError,
-    SentJoinWaitingError, type BeanPoolIdentity, type JoinProvider, type SaveIdentityOptions,
+    checkIdentitySave, clearUnsentPendingJoin, completeInviteSent, createIdentityFromMnemonic, generateIdentity, identityFromMnemonic,
+    importIdentity, loadInviteSent, markInviteSent, releaseInviteSent, settleRefusedInviteSend, updateCallsign, getMnemonic, hasMnemonic,
+    loadPendingJoin, loadPendingRestore, pendingJoinSent, seedViewedKey, IdentityHeldError, InviteSentHeldError, SentJoinWaitingError,
+    type BeanPoolIdentity, type JoinProvider, type SaveIdentityOptions,
 } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
@@ -24,10 +25,12 @@ import {
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { WebRestore } from '../components/WebRestore';
-import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, providerLabel } from '../lib/web-join';
+import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, probeMembership, providerLabel } from '../lib/web-join';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
 const QRCodeSVGComponent: React.FC<any> = QRCodeSVG as any;
 
@@ -92,6 +95,11 @@ function normaliseInviteCode(raw: string): string {
     const body = withoutPrefix.slice(0, 8);
     if (body.length < 8) return extracted.trim().toUpperCase(); // partial — return as-is
     return `BP-${body.slice(0, 4)}-${body.slice(4)}`;
+}
+
+/** What an invite-sent record keeps of the code or ticket a key went with: its SHA-256, never the code itself. */
+function inviteHash(code: string): string {
+    return bytesToHex(sha256(utf8ToBytes(code)));
 }
 
 // ===================== FAQ DATA =====================
@@ -303,6 +311,8 @@ export function WelcomePage({ onComplete }: Props) {
     function handleSettled(cleared: { publicKey: string; sentAt: number } | null) {
         settledNotLanded.current = cleared;
         setSentJoin('none');
+        // A key an invite went with is asked about next (settleSentInvite): nothing is offered until it has been.
+        checkSentInviteAgain();
     }
 
     /*
@@ -310,6 +320,20 @@ export function WelcomePage({ onComplete }: Props) {
      * Another tab can save one while this page is open; then nothing here replaces it, and the page offers to open it.
      */
     const [heldIdentity, setHeldIdentity] = useState<BeanPoolIdentity | null>(null);
+    /*
+     * With it, a key an invite sent from this page when the node may have it as a member (4111871903): it is still in
+     * its slot on disk, and the held screen offers its 12 words, as WebJoin's 'taken' screen does. `joined`: the node
+     * said yes to it.
+     */
+    const [heldSentKey, setHeldSentKey] = useState<{ identity: BeanPoolIdentity; joined: boolean } | null>(null);
+    const [showHeldWords, setShowHeldWords] = useState(false);
+    const heldWordsId = useId();
+
+    function showHeld(held: BeanPoolIdentity, sent: { identity: BeanPoolIdentity; joined: boolean } | null) {
+        setHeldSentKey(sent);
+        setShowHeldWords(false);
+        setHeldIdentity(held);
+    }
 
     const [callsign, setCallsign] = useState('');
     const [inviteCode, setInviteCode] = useState(() => {
@@ -324,8 +348,119 @@ export function WelcomePage({ onComplete }: Props) {
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
 
     const [pendingIdentity, setPendingIdentity] = useState<BeanPoolIdentity | null>(null);
-    // An invite join's new key, until the node takes the invite: held here only, never saved (handleCreate).
+    // An invite join's new key, until the node takes the invite. It is never saved as the identity before then
+    // (handleCreate); once a redeem goes with it, it is also on disk in the invite-sent slot, which loadIdentity never reads.
     const inviteKey = useRef<BeanPoolIdentity | null>(null);
+
+    /*
+     * A key an invite was sent with, kept on disk from before its redeem went (identity.ts InviteSent, deciding pass
+     * 4111943146). The node may have taken it while the answer was lost, and the tab been reloaded or discarded since.
+     * Every load of this page asks the node about it, signed by that key, once any sent door join is settled:
+     *   - a member: saved through the guarded write, then the photo and its 12 words;
+     *   - not a member, with no send that can still land: let go, and the invite form starts afresh;
+     *   - not a member yet, while a send could still land: kept, and the form's next try sends that same key;
+     *   - no answer: "Finish joining" with Retry. Never the invite form, whose pre-flight would call the code used.
+     */
+    type SentInviteView = 'checking' | 'none' | { stuck: 'unreachable' | 'unsaved'; name: string; busy: boolean; again: boolean };
+    const [sentInvite, setSentInvite] = useState<SentInviteView>('checking');
+    const [sentInviteCheck, setSentInviteCheck] = useState(0);
+    useEffect(() => {
+        let cancelled = false;
+        // Read from the first render, beside the pending join, so a browser with none shows its page as soon as before.
+        void settleSentInvite(() => cancelled, sentJoin === 'none');
+        return () => { cancelled = true; };
+        // settleSentInvite reads refs and state setters only.
+    }, [sentJoin, sentInviteCheck]);
+
+    /** Ask about the kept key again. It shows "One moment…" in the same render, so the form never flashes up first. */
+    function checkSentInviteAgain() {
+        setSentInvite((v) => (typeof v === 'object' ? { ...v, busy: true } : 'checking'));
+        setSentInviteCheck((n) => n + 1);
+    }
+
+    function stuckOnSentInvite(stuck: 'unreachable' | 'unsaved', name: string) {
+        setSentInvite((v) => ({ stuck, name, busy: false, again: typeof v === 'object' && v.stuck === stuck }));
+    }
+
+    /** `mayAsk`: no sent door join waits to be settled first. Until then a record found is only waited on. */
+    async function settleSentInvite(cancelled: () => boolean, mayAsk: boolean) {
+        let record;
+        try {
+            record = await loadInviteSent();
+        } catch (e) {
+            // Unreadable: an invite's own write reads it again first, and fails the same way rather than going ahead.
+            console.warn('[Welcome] could not read a sent invite:', e);
+            if (!cancelled()) setSentInvite('none');
+            return;
+        }
+        if (cancelled()) return;
+        if (!record) {
+            setSentInvite('none');
+            return;
+        }
+        if (!mayAsk) return;
+        const kept = record.identity;
+        const probe = await probeMembership(kept);
+        if (cancelled()) return;
+        if (probe.kind === 'member') {
+            const member = { ...kept, callsign: probe.callsign || kept.callsign };
+            try {
+                await completeInviteSent(member, sentJoinGuard());
+            } catch (e) {
+                if (cancelled()) return;
+                setSentInvite('none');
+                if (e instanceof SentJoinWaitingError) {
+                    // A join that went out from this browser is settled first; this key stays on disk, and is asked
+                    // about again once it is.
+                    settleSentJoinFirst();
+                    return;
+                }
+                if (e instanceof IdentityHeldError) {
+                    showHeld(e.held, { identity: member, joined: true });
+                    return;
+                }
+                console.error('[Welcome] a member key from an invite could not be saved:', e);
+                stuckOnSentInvite('unsaved', member.callsign);
+                return;
+            }
+            if (cancelled()) return;
+            enterAsInvited(member);
+            setSentInvite('none');
+            return;
+        }
+        if (probe.kind === 'not_member') {
+            const released = await releaseInviteSent(probe.answer).catch((e) => {
+                console.warn('[Welcome] a sent invite key not let go:', e);
+                return false;
+            });
+            if (cancelled()) return;
+            if (!released) {
+                // A send with it could still land: the next try sends this same key, and a pre-flight that calls the
+                // code used doesn't stop it (handleCreate).
+                inviteKey.current = kept;
+                setCallsign((typed) => typed || kept.callsign);
+            }
+            setSentInvite('none');
+            return;
+        }
+        stuckOnSentInvite('unreachable', kept.callsign);
+    }
+
+    function retrySentInvite() {
+        if (typeof sentInvite !== 'object' || sentInvite.busy) return;
+        if (door === 'unreachable') setDoorCheck((n) => n + 1);
+        checkSentInviteAgain();
+    }
+
+    /** An invite's key the node has as a member, now saved here: on to the photo, then its 12 words. */
+    function enterAsInvited(member: BeanPoolIdentity) {
+        inviteKey.current = null;
+        setPendingIdentity(member);
+        // Redeemed already, so the final step has nothing left to redeem.
+        setInviteRedeemed(true);
+        setShowAvatarSetup(true);
+        setError(null);
+    }
 
     // The words for the backup step. Read through the accessor and held in state, because
     // that read becomes a vault read in Phase C and a render cannot await.
@@ -513,7 +648,19 @@ export function WelcomePage({ onComplete }: Props) {
         setLoading(true);
         setError(null);
 
+        // The node said yes to this page's key, so it is a member whatever happens next.
+        let taken = false;
         try {
+            // A key an invite went with from this browser, not this page's (another tab's, or one this page hasn't
+            // asked about): settled first, before a pre-flight could call the code it used "already used" (deciding
+            // pass 4111943146). markInviteSent below refuses the same case again, in its own transaction.
+            const kept = await loadInviteSent();
+            if (kept && kept.identity.publicKey !== inviteKey.current?.publicKey) {
+                setLoading(false);
+                checkSentInviteAgain();
+                return;
+            }
+
             // Pre-flight the invite BEFORE creating an identity — a dud code
             // should fail here, not after the seed ceremony. A null result
             // (older node) fails open; redeem stays the definitive check.
@@ -533,9 +680,9 @@ export function WelcomePage({ onComplete }: Props) {
                 return;
             }
 
-            // The key is made on the first try and held in memory, not saved, until the node takes the invite (review
-            // 4108355836): a code the node refuses, or an answer that never comes, leaves nothing here to open on a
-            // reload. A retry sends the same key, so an invite the node took while its answer was lost is answered
+            // The key is made on the first try and is not saved as the identity until the node takes the invite (review
+            // 4108355836): a code the node refuses, or an answer that never comes, leaves nothing here for the app to
+            // open. A retry sends the same key, so an invite the node took while its answer was lost is answered
             // "already a member", and the key is saved then.
             const identity = inviteKey.current
                 ? { ...inviteKey.current, callsign: trimmedCallsign }
@@ -544,6 +691,13 @@ export function WelcomePage({ onComplete }: Props) {
             // Nothing is spent on a key this browser couldn't keep: another account saved here, or a join that went out
             // from this browser and waits to be settled (asked about first). The save below decides it again.
             await checkIdentitySave(identity, sentJoinGuard());
+
+            // On disk before it goes, in a slot of its own that loadIdentity never reads (deciding pass 4111943146).
+            // The node may take this key while its answer is lost, and a reload or a discarded tab must not lose a
+            // member's only key: the next load asks the node about it (settleSentInvite). Refused when another key an
+            // invite went with is kept there, which is settled first.
+            const sentAt = Date.now();
+            await markInviteSent(identity, inviteHash(trimmedCode), sentAt);
 
             // Redeem invite immediately so user is registered on node right away. Signed with the key it names, which
             // is not this browser's identity yet.
@@ -561,6 +715,13 @@ export function WelcomePage({ onComplete }: Props) {
                 // before it looks at the code, so that one means another key used it, and this key is not a member.
                 if (!redeemErr?.message?.includes('already a member')) {
                     const status = redeemErr?.status;
+                    if (status === 400) {
+                        // The redeem routes' refusal, given before any member is written: this send made no member.
+                        // Unless an earlier send with this key is unsettled, it goes from disk. It stays in memory for
+                        // the next try either way.
+                        await settleRefusedInviteSend(identity.publicKey, sentAt)
+                            .catch((e) => console.warn('[Welcome] a refused invite key not let go:', e));
+                    }
                     setError(typeof status === 'number' && status < 500 && redeemErr.message
                         ? redeemErr.message
                         : "Can't reach the community right now. Try again in a minute.");
@@ -568,27 +729,33 @@ export function WelcomePage({ onComplete }: Props) {
                     return;
                 }
             }
-            // The node has this member: now the key is saved, through the guarded write.
-            await importIdentity(identity, sentJoinGuard());
-            inviteKey.current = null;
-            setPendingIdentity(identity);
+            taken = true;
+            // The node has this member: now the key is saved, through the guarded write, and its invite-sent record
+            // goes in the same transaction.
+            await completeInviteSent(identity, sentJoinGuard());
             setPendingInviteCode(trimmedCode);
-            // Redeemed here, so the final step has nothing left to redeem.
-            setInviteRedeemed(true);
-
-            setShowAvatarSetup(true);
+            enterAsInvited(identity);
             setLoading(false);
         } catch (err) {
             setLoading(false);
+            if (err instanceof InviteSentHeldError) {
+                // Another key an invite went with is kept on disk, unsettled (another tab's, or this browser's before a
+                // reload). Nothing was sent: that one is asked about first, and the next try sends it if it may land.
+                checkSentInviteAgain();
+                return;
+            }
             if (err instanceof SentJoinWaitingError) {
-                // A join that went out from this browser is asked about first. This page's key stays in memory for
-                // the next try, unsaved.
+                // A join that went out from this browser is asked about first. This page's key stays for the next try:
+                // in memory, and on disk if it was sent.
                 settleSentJoinFirst();
                 return;
             }
             if (err instanceof IdentityHeldError) {
-                // Another tab saved an account here meanwhile. The key made here was never saved.
-                setHeldIdentity(err.held);
+                // Another tab saved an account here meanwhile, and it stays. If this page's key was sent, it is still in
+                // its slot on disk and may be a member (4111871903): the held screen offers its 12 words.
+                const kept = await loadInviteSent().catch(() => null);
+                const mine = kept && kept.identity.publicKey === inviteKey.current?.publicKey ? kept.identity : null;
+                showHeld(err.held, mine ? { identity: mine, joined: taken } : null);
                 return;
             }
             setError('Failed to generate identity. Please try again.');
@@ -930,7 +1097,7 @@ export function WelcomePage({ onComplete }: Props) {
                     borderRadius: '16px',
                     padding: '2rem',
                 }}>
-                    {door === 'unreachable' && !hasMnemonic(pendingIdentity) && !heldIdentity && (
+                    {door === 'unreachable' && !hasMnemonic(pendingIdentity) && !heldIdentity && typeof sentInvite !== 'object' && (
                         <div role="alert" data-testid="door-unreachable" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                             Can't reach the community right now. Try again in a minute.{' '}
                             <button type="button" onClick={() => setDoorCheck((n) => n + 1)}
@@ -950,9 +1117,63 @@ export function WelcomePage({ onComplete }: Props) {
                                 {heldIdentity.callsign.trim() || 'An account'} was saved in this browser from another tab or window,
                                 so nothing here replaced it. A browser holds one account.
                             </p>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1.25rem', overflowWrap: 'anywhere' }}>
-                                To use a different account here, sign out of this one in Settings, then restore the other one.
-                            </p>
+                            {heldSentKey ? (() => {
+                                // The key this page's invite went with (4111871903): kept on disk, and its words one tap away.
+                                const heldName = heldIdentity.callsign.trim() || 'the account saved from the other tab';
+                                const mine = heldSentKey.identity.callsign.trim() || null;
+                                const it = mine ?? 'that account';
+                                const its = mine ? `${mine}'s` : 'its';
+                                const words = heldSentKey.identity.mnemonic?.length ? heldSentKey.identity.mnemonic : null;
+                                return (
+                                    <>
+                                        <p data-testid="welcome-held-sent" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>
+                                            {heldSentKey.joined
+                                                ? `The community took ${it} too, so you have two accounts there now.`
+                                                : `The invite from this page${mine ? `, as ${mine},` : ''} may have gone through too.`}
+                                            {` This browser keeps ${heldName} as its account. ${mine ? `${mine}'s` : 'Its'} key is kept on this device too:`}
+                                            {` write down ${its} 12 words to keep ${it}. To use ${it} here instead, sign out of ${heldName} in`}
+                                            {` Settings, then restore ${it} with those words.`}
+                                        </p>
+                                        {words && (
+                                            <>
+                                                {/* One button that shows and hides them, as on WebJoin's 'taken' screen: it
+                                                    stays where it is, so focus does too. */}
+                                                <button type="button" aria-expanded={showHeldWords} aria-controls={showHeldWords ? heldWordsId : undefined}
+                                                    onClick={() => setShowHeldWords((shown) => !shown)}
+                                                    style={{
+                                                        width: '100%', padding: '0.75rem 0.5rem', borderRadius: '10px', marginBottom: '0.75rem',
+                                                        border: '1px solid #2563eb', background: 'transparent', color: '#2563eb',
+                                                        fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
+                                                    }}>
+                                                    {`${showHeldWords ? 'Hide' : 'Show'} ${its} 12 words`}
+                                                </button>
+                                                {showHeldWords && (
+                                                    // As the Safety Backup step lays them out: as many columns as whole words
+                                                    // fit, and a word copied onto paper is never broken across lines.
+                                                    <ol id={heldWordsId} data-testid="welcome-held-words" aria-label={`${mine ? `${mine}'s` : 'Its'} 12 words`} style={{
+                                                        listStyle: 'none', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 6.5em), 1fr))',
+                                                        gap: '0.4rem', padding: 0, margin: '0 0 0.75rem', overflowWrap: 'normal',
+                                                    }}>
+                                                        {words.map((w, i) => (
+                                                            <li key={i} style={{
+                                                                background: 'var(--bg-secondary, #1e293b)', borderRadius: 8, padding: '0.5rem 0.4rem',
+                                                                fontSize: '0.8rem', fontFamily: 'monospace', textAlign: 'center', minWidth: 0,
+                                                            }}>
+                                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{i + 1}. </span>
+                                                                <strong>{w}</strong>
+                                                            </li>
+                                                        ))}
+                                                    </ol>
+                                                )}
+                                            </>
+                                        )}
+                                    </>
+                                );
+                            })() : (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1.25rem', overflowWrap: 'anywhere' }}>
+                                    To use a different account here, sign out of this one in Settings, then restore the other one.
+                                </p>
+                            )}
                             <button
                                 type="button"
                                 onClick={() => onComplete(heldIdentity)}
@@ -1801,7 +2022,37 @@ export function WelcomePage({ onComplete }: Props) {
                                 }}
                             />
                         </>
-                    ) : door === 'checking' || sentJoin === 'checking' ? (
+                    ) : typeof sentInvite === 'object' ? (
+                        /* ===== A KEY AN INVITE WENT WITH, NOT SETTLED YET (deciding pass 4111943146) ===== */
+                        <>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>Finish joining</h3>
+                            <p role="alert" data-testid="invite-sent-unreachable" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '0.75rem', overflowWrap: 'anywhere' }}>
+                                {sentInvite.stuck === 'unsaved'
+                                    ? `The community has you as ${sentInvite.name || 'a member'}, but this browser couldn't save the account.`
+                                    : `You asked to join as ${sentInvite.name || 'a new member'}, and the answer didn't reach this browser.`}
+                                {` It's keeping ${sentInvite.name ? `${sentInvite.name}'s` : 'your'} key until it can finish.`}
+                            </p>
+                            {sentInvite.stuck === 'unreachable' && (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>
+                                    Can't reach the community right now.
+                                </p>
+                            )}
+                            <p role="status" style={{ fontSize: '0.8rem', lineHeight: 1.5, marginBottom: sentInvite.again && !sentInvite.busy ? '1rem' : 0, overflowWrap: 'anywhere' }}>
+                                {sentInvite.again && !sentInvite.busy
+                                    ? (sentInvite.stuck === 'unsaved' ? "Still couldn't save it. Try again in a minute." : "Still can't reach the community. Try again in a minute.")
+                                    : ''}
+                            </p>
+                            {/* aria-disabled, not disabled, while it asks: a disabled button would drop the focus it has. */}
+                            <button type="button" aria-disabled={sentInvite.busy} onClick={retrySentInvite}
+                                style={{
+                                    width: '100%', padding: '0.85rem 0.5rem', borderRadius: '10px', border: 'none',
+                                    background: sentInvite.busy ? '#555' : '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700,
+                                    cursor: sentInvite.busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', overflowWrap: 'anywhere',
+                                }}>
+                                {sentInvite.busy ? 'Checking…' : 'Retry'}
+                            </button>
+                        </>
+                    ) : door === 'checking' || sentJoin === 'checking' || sentInvite === 'checking' ? (
                         <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>One moment…</p>
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */

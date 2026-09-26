@@ -4,9 +4,11 @@
  * settled first). The node is a stubbed fetch; nothing leaves the test.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { WelcomePage } from './WelcomePage';
-import { generateIdentity, loadIdentity, savePendingJoin, PENDING_JOIN_TTL_MS, type BeanPoolIdentity, type PendingJoin } from '../lib/identity';
+import {
+    generateIdentity, importIdentity, loadIdentity, markInviteSent, savePendingJoin, PENDING_JOIN_TTL_MS, type BeanPoolIdentity, type PendingJoin,
+} from '../lib/identity';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 
@@ -46,6 +48,8 @@ const tryAgain = () => fireEvent.click(screen.getByRole('button', { name: 'Creat
 
 let idb: MemoryIndexedDB;
 const peekPending = () => idb.peek('beanpool-identity', 'keys', 'pending-join') as PendingJoin | undefined;
+/** The invite-sent slot, as stored: a key sent with an invite, until the node has settled it. */
+const peekInviteSent = () => idb.peek('beanpool-identity', 'keys', 'invite-sent') as { identity: BeanPoolIdentity; sentAt: number } | undefined;
 
 beforeEach(() => {
     idb = memoryIndexedDB();
@@ -72,6 +76,7 @@ describe('an invite join saves its key only once the node has taken the invite (
         await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
         expect(await loadIdentity()).toBeNull();
         expect(peekPending()).toBeUndefined();
+        expect(peekInviteSent()).toBeUndefined();
         expect(screen.queryByText(/Choose your look/)).toBeNull();
 
         tryAgain();
@@ -82,6 +87,7 @@ describe('an invite join saves its key only once the node has taken the invite (
         expect(await loadIdentity()).toMatchObject({ publicKey: first.body.publicKey, callsign: 'Rowan', mnemonic: expect.any(Array) });
         expect((await loadIdentity())!.mnemonic).toHaveLength(12);
         expect(peekPending()).toBeUndefined();
+        expect(peekInviteSent()).toBeUndefined();
     });
 
     it("no answer from the node: nothing saved; the retry sends the same key, the node (which had taken it) says it's a member, and it is saved", async () => {
@@ -165,6 +171,8 @@ describe('an invite join saves its key only once the node has taken the invite (
         expect(await loadIdentity()).toBeNull();
         expect(peekPending()).toBeUndefined();
         expect(screen.queryByText(/Choose your look/)).toBeNull();
+        // The first send's answer never came, so the refusal of the second doesn't settle it: the key stays on disk.
+        await waitFor(() => expect(peekInviteSent()).toMatchObject({ identity: { publicKey: node.redeems()[0].body.publicKey } }));
     });
 
     it('a first try on a code already used: the pre-flight stops it, and nothing is made, sent or saved', async () => {
@@ -201,6 +209,7 @@ describe('an invite join saves its key only once the node has taken the invite (
         expect(redeem.headers['X-Signature']).toEqual(expect.any(String));
         expect(await loadIdentity()).toMatchObject({ publicKey: redeem.body.publicKey, callsign: 'Rowan' });
         expect(peekPending()).toBeUndefined();
+        expect(peekInviteSent()).toBeUndefined();
     });
 
     // Not a behaviour this change makes: what Back does is the open card invite-back-step. Pinned so a change to it is seen.
@@ -255,5 +264,212 @@ describe('a join sent from another tab while the invite is at the node (#1171 de
         // The other tab's key: only the node's word or the member lets it go.
         expect(peekPending()).toMatchObject({ identity: { publicKey: other.publicKey }, sentAt: t0 });
         expect(onComplete).not.toHaveBeenCalled();
+    });
+});
+
+/*
+ * A key sent with an invite survives a reload (deciding pass 4111943146). The node can take a redeem whose answer never
+ * reaches the page; the key is on disk, in a slot of its own, from before the redeem goes, and the next load of the
+ * page asks the node about it with that key.
+ */
+describe('a key sent with an invite survives a reload (deciding pass 4111943146)', () => {
+    /**
+     * The node as it is (engine/invites.ts): single-use codes, a key that is a member answered as one before the code is
+     * looked at, and a membership probe that reads the same members. `loseAnswer`: it takes the redeem and the answer is
+     * lost. `dropNext`: the next redeem never reaches it. `down`: the probe gets no answer.
+     */
+    function inviteNode(opts: { onTaken?: () => Promise<void> } = {}) {
+        const state = { members: new Map<string, string>(), usedBy: null as string | null, loseAnswer: false, dropNext: false, down: false };
+        const node = stubNode(LOCAL, {
+            '/api/invite/check': () => json(200, state.usedBy ? { valid: false, reason: 'used' } : { valid: true }),
+            '/api/invite/redeem': async (body) => {
+                if (state.dropNext) {
+                    state.dropNext = false;
+                    throw new TypeError('Failed to fetch');
+                }
+                if (state.members.has(body.publicKey)) return json(200, { success: true, alreadyMember: true });
+                if (state.usedBy) return json(400, { error: 'This invite has already been used' });
+                state.usedBy = body.publicKey;
+                state.members.set(body.publicKey, body.callsign);
+                await opts.onTaken?.();
+                if (state.loseAnswer) throw new TypeError('Failed to fetch');
+                return json(200, { success: true, member: {} });
+            },
+            '/api/community/membership/': (_body, call) => {
+                if (state.down) throw new TypeError('Failed to fetch');
+                const key = decodeURIComponent(call.path.split('/').pop()!);
+                return json(200, { isMember: state.members.has(key), callsign: state.members.get(key) ?? null });
+            },
+        });
+        const probes = () => node.calls.filter((c) => c.path.startsWith('/api/community/membership/')).map((c) => decodeURIComponent(c.path.split('/').pop()!));
+        return { ...node, state, probes };
+    }
+
+    async function sendAndLoseTheAnswer() {
+        await submitInvite();
+        expect(await screen.findByText(/Can't reach the community right now/)).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+    }
+
+    /** The tab is gone (a reload, a closed tab, old Android discarding it), and this browser opens the page again. */
+    function reopen() {
+        cleanup();
+        render(<WelcomePage onComplete={vi.fn()} />);
+    }
+
+    it('the node took the redeem and its answer was lost, then the tab was reloaded: the next load asks the node with the kept key, saves it, and shows its 12 words', async () => {
+        const node = inviteNode();
+        node.state.loseAnswer = true;
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await sendAndLoseTheAnswer();
+        const [redeem] = node.redeems();
+        expect(await loadIdentity()).toBeNull();
+        expect(peekInviteSent()?.identity.publicKey).toBe(redeem.body.publicKey);
+
+        reopen();
+        await screen.findByText(/Choose your look/);
+        expect(node.probes()).toEqual([redeem.body.publicKey]);
+        const saved = await loadIdentity();
+        expect(saved).toMatchObject({ publicKey: redeem.body.publicKey, callsign: 'Rowan' });
+        expect(saved!.mnemonic).toHaveLength(12);
+        expect(peekInviteSent()).toBeUndefined();
+        expect(node.redeems()).toHaveLength(1);
+        expect(screen.queryByText(/already been used/)).toBeNull();
+
+        // Its 12 words: the only copy of this member's key, shown before the tour.
+        fireEvent.click(screen.getByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        const words = await screen.findByTestId('backup-words');
+        // In order, as they are to be written down (a phrase can hold the same word twice).
+        expect(Array.from(words.children).map((c) => c.textContent)).toEqual(saved!.mnemonic!.map((w, i) => `${i + 1}. ${w}`));
+    });
+
+    it('a code the node refuses: nothing saved, the sent key let go from disk, and a reload shows the invite form, asking the node nothing', async () => {
+        const node = stubNode(LOCAL, {
+            '/api/invite/redeem': () => json(400, { error: 'Invalid invite code' }),
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitInvite();
+        expect(await screen.findByText('Invalid invite code')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        expect(await loadIdentity()).toBeNull();
+        expect(peekInviteSent()).toBeUndefined();
+
+        reopen();
+        await screen.findByText(/Join with Invite Code/);
+        expect(screen.queryByRole('heading', { name: 'Finish joining' })).toBeNull();
+        expect(node.calls.filter((c) => c.path.startsWith('/api/community/membership/'))).toHaveLength(0);
+        expect(await loadIdentity()).toBeNull();
+    });
+
+    it('the node unreachable at the reload: the key is kept and "Finish joining" is shown, never "already used"; a Retry once it answers completes', async () => {
+        const node = inviteNode();
+        node.state.loseAnswer = true;
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await sendAndLoseTheAnswer();
+        const key = node.redeems()[0].body.publicKey;
+
+        node.state.down = true;
+        reopen();
+        expect(await screen.findByRole('heading', { name: 'Finish joining' })).toBeInTheDocument();
+        expect(screen.getByTestId('invite-sent-unreachable')).toHaveTextContent('Rowan');
+        expect(screen.queryByText(/already been used/)).toBeNull();
+        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+        expect(await loadIdentity()).toBeNull();
+        expect(peekInviteSent()?.identity.publicKey).toBe(key);
+
+        // Still no answer: said so, and the key stays.
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(await screen.findByText(/Still can't reach the community/)).toBeInTheDocument();
+        expect(peekInviteSent()?.identity.publicKey).toBe(key);
+
+        node.state.down = false;
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await screen.findByText(/Choose your look/);
+        expect((await loadIdentity())?.publicKey).toBe(key);
+        expect(peekInviteSent()).toBeUndefined();
+        expect(node.redeems()).toHaveLength(1);
+    });
+
+    it("another tab saved an account while the invite was at the node: that account stays, and the held screen offers the sent key's 12 words", async () => {
+        const other = await generateIdentity('Bea');
+        const node = inviteNode({ onTaken: () => importIdentity(other) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitInvite();
+
+        expect(await screen.findByTestId('welcome-held')).toHaveTextContent('Bea');
+        const [redeem] = node.redeems();
+        const kept = peekInviteSent();
+        expect(kept?.identity.publicKey).toBe(redeem.body.publicKey);
+        expect((await loadIdentity())?.publicKey).toBe(other.publicKey);
+        const sent = screen.getByTestId('welcome-held-sent');
+        expect(sent).toHaveTextContent('The community took Rowan too');
+        expect(sent).toHaveTextContent('This browser keeps Bea');
+
+        const toggle = screen.getByRole('button', { name: "Show Rowan's 12 words" });
+        fireEvent.click(toggle);
+        const list = screen.getByRole('list', { name: "Rowan's 12 words" });
+        expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(kept!.identity.mnemonic!.map((w, i) => `${i + 1}. ${w}`));
+        fireEvent.click(screen.getByRole('button', { name: "Hide Rowan's 12 words" }));
+        expect(screen.queryByRole('list', { name: "Rowan's 12 words" })).toBeNull();
+        // Still there after this page is gone: nothing but the member's own sign-out takes it.
+        cleanup();
+        expect(peekInviteSent()?.identity.publicKey).toBe(redeem.body.publicKey);
+    });
+
+    it('not a member at the reload while the lost send could still land: the key is kept for the next try, which sends it and is saved', async () => {
+        const node = inviteNode();
+        node.state.dropNext = true;
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await sendAndLoseTheAnswer();
+        const key = node.redeems()[0].body.publicKey;
+
+        reopen();
+        await screen.findByText(/Join with Invite Code/);
+        expect(node.probes()).toEqual([key]);
+        expect(peekInviteSent()?.identity.publicKey).toBe(key);
+        expect(screen.getByLabelText('Your Callsign (Name)')).toHaveValue('Rowan');
+
+        fireEvent.change(screen.getByLabelText('Invite Code'), { target: { value: CODE } });
+        tryAgain();
+        await screen.findByText(/Choose your look/);
+        expect(node.redeems().map((r) => r.body.publicKey)).toEqual([key, key]);
+        expect((await loadIdentity())?.publicKey).toBe(key);
+        expect(peekInviteSent()).toBeUndefined();
+    });
+
+    it("another tab's invite key is on disk, unsettled: this page sends nothing with a key of its own, asks about that one, and finishes it", async () => {
+        const node = inviteNode();
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await screen.findByText(/Join with Invite Code/);
+        // The other tab sent its key, and the node took it; that tab is gone.
+        const theirs = await generateIdentity('Bea');
+        await markInviteSent(theirs, 'their-hash', Date.now());
+        node.state.members.set(theirs.publicKey, 'Bea');
+        node.state.usedBy = theirs.publicKey;
+
+        await submitInvite();
+        await screen.findByText(/Choose your look/);
+        expect(node.redeems()).toHaveLength(0);
+        expect(node.probes()).toEqual([theirs.publicKey]);
+        expect(await loadIdentity()).toMatchObject({ publicKey: theirs.publicKey, callsign: 'Bea' });
+        expect(peekInviteSent()).toBeUndefined();
+    });
+
+    it('not a member at a reload long after the send: nothing can land any more, so the kept key is let go and the form starts afresh', async () => {
+        const t0 = Date.now();
+        const node = inviteNode();
+        node.state.dropNext = true;
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await sendAndLoseTheAnswer();
+        const key = node.redeems()[0].body.publicKey;
+
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 60 * MIN);
+        reopen();
+        await screen.findByText(/Join with Invite Code/);
+        await waitFor(() => expect(peekInviteSent()).toBeUndefined());
+        expect(node.probes()).toEqual([key]);
+        expect(await loadIdentity()).toBeNull();
     });
 });

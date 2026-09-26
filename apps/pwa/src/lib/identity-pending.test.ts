@@ -19,6 +19,13 @@ import {
     IdentityHeldError,
     SentJoinWaitingError,
     PENDING_JOIN_TTL_MS,
+    completeInviteSent,
+    loadInviteSent,
+    markInviteSent,
+    releaseInviteSent,
+    settleRefusedInviteSend,
+    InviteSentHeldError,
+    INVITE_SEND_CAN_LAND_MS,
     type BeanPoolIdentity,
     type NodeRefusedJoin,
     type PendingJoin,
@@ -457,5 +464,112 @@ describe('a write that throws before it commits (review 4108355843)', () => {
         } finally {
             watch.stop();
         }
+    });
+});
+
+describe('a key an invite was sent with: its own slot, kept until the node has settled it (deciding pass 4111943146)', () => {
+    const OTHER: BeanPoolIdentity = { ...IDENTITY, publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(96), callsign: 'Bea' };
+    const peekSent = () => idb.peek('beanpool-identity', 'keys', 'invite-sent') as Record<string, unknown> | undefined;
+    const t0 = 1_800_000_000_000;
+
+    it('lives in a slot of its own: loadIdentity never reads it, and the pending join is left alone', async () => {
+        await savePendingJoin(pending({ identity: OTHER, sentAt: t0 }));
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        expect(await loadIdentity()).toBeNull();
+        expect(peekSent()).toEqual({ identity: IDENTITY, inviteHash: 'hash-1', sentAt: t0 });
+        expect((await loadPendingJoin())?.identity.publicKey).toBe(OTHER.publicKey);
+        expect((await loadInviteSent())?.identity).toEqual(IDENTITY);
+    });
+
+    it('the same key sent again keeps the unsettled send before it; another key is refused, and nothing changes', async () => {
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        await markInviteSent(IDENTITY, 'hash-2', t0 + 1000);
+        expect(peekSent()).toMatchObject({ inviteHash: 'hash-2', sentAt: t0 + 1000, earlierSentAt: t0 });
+        const before = peekSent();
+        await expect(markInviteSent(OTHER, 'hash-3', t0 + 2000)).rejects.toBeInstanceOf(InviteSentHeldError);
+        expect(peekSent()).toEqual(before);
+    });
+
+    it('a definite refusal of the only send lets it go; with an earlier send unsettled, it stays on that send; a stale refusal changes nothing', async () => {
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        expect(await settleRefusedInviteSend(IDENTITY.publicKey, t0)).toBeNull();
+        expect(peekSent()).toBeUndefined();
+
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        await markInviteSent(IDENTITY, 'hash-2', t0 + 1000);
+        // Another tab sent it again after the refused send went: the refusal is about an older one.
+        expect(await settleRefusedInviteSend(IDENTITY.publicKey, t0)).toMatchObject({ sentAt: t0 + 1000, earlierSentAt: t0 });
+        expect(await settleRefusedInviteSend(OTHER.publicKey, t0 + 1000)).toMatchObject({ sentAt: t0 + 1000 });
+        // The latest refused: kept for the earlier one, whose answer never came.
+        const kept = await settleRefusedInviteSend(IDENTITY.publicKey, t0 + 1000);
+        expect(kept).toMatchObject({ sentAt: t0 });
+        expect(kept).not.toHaveProperty('earlierSentAt');
+        expect(peekSent()).toMatchObject({ identity: { publicKey: IDENTITY.publicKey }, sentAt: t0 });
+    });
+
+    it('"not a member" lets it go only once no send can land; never for another key, nor when a time cannot be read', async () => {
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        await markInviteSent(IDENTITY, 'hash-2', t0 + 60_000);
+        expect(await releaseInviteSent({ publicKey: IDENTITY.publicKey, askedAt: t0 + INVITE_SEND_CAN_LAND_MS })).toBe(false);
+        expect(await releaseInviteSent({ publicKey: OTHER.publicKey, askedAt: t0 + 60_000 + INVITE_SEND_CAN_LAND_MS })).toBe(false);
+        expect(peekSent()).toBeTruthy();
+        expect(await releaseInviteSent({ publicKey: IDENTITY.publicKey, askedAt: t0 + 60_000 + INVITE_SEND_CAN_LAND_MS })).toBe(true);
+        expect(peekSent()).toBeUndefined();
+
+        await markInviteSent(IDENTITY, 'hash-1', Number.NaN);
+        expect(await releaseInviteSent({ publicKey: IDENTITY.publicKey, askedAt: Number.MAX_SAFE_INTEGER })).toBe(false);
+        expect(peekSent()).toBeTruthy();
+    });
+
+    it('completing saves the key as the identity and takes its record in one transaction; refused, nothing changes and the record stays', async () => {
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        await completeInviteSent(IDENTITY);
+        expect(await loadIdentity()).toEqual(IDENTITY);
+        expect(peekSent()).toBeUndefined();
+
+        await wipeIdentity();
+        await importIdentity(OTHER);
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        await expect(completeInviteSent(IDENTITY)).rejects.toBeInstanceOf(IdentityHeldError);
+        expect(await loadIdentity()).toEqual(OTHER);
+        expect(peekSent()).toMatchObject({ identity: { publicKey: IDENTITY.publicKey } });
+
+        await wipeIdentity();
+        await savePendingJoin(pending({ identity: OTHER, sentAt: t0 }));
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        await expect(completeInviteSent(IDENTITY, { refuseWhileSentJoinWaits: { except: null } })).rejects.toBeInstanceOf(SentJoinWaitingError);
+        expect(await loadIdentity()).toBeNull();
+        expect(peekSent()).toMatchObject({ identity: { publicKey: IDENTITY.publicKey } });
+    });
+
+    it('a full disk: completing rejects, and the record is still there', async () => {
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        idb.failNextCommit();
+        await expect(completeInviteSent(IDENTITY)).rejects.toBeTruthy();
+        expect(await loadIdentity()).toBeNull();
+        expect(peekSent()).toMatchObject({ identity: { publicKey: IDENTITY.publicKey } });
+    });
+
+    it('a record holding no key is dropped on sight; the member\'s own wipe takes a real one', async () => {
+        // Written as a raw put, as a damaged or foreign value would be.
+        await new Promise<void>((resolve, reject) => {
+            const open = indexedDB.open('beanpool-identity', 1);
+            open.onupgradeneeded = () => open.result.createObjectStore('keys');
+            open.onerror = () => reject(open.error);
+            open.onsuccess = () => {
+                const tx = open.result.transaction('keys', 'readwrite');
+                tx.objectStore('keys').put({ identity: { publicKey: IDENTITY.publicKey }, sentAt: t0 }, 'invite-sent');
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            };
+        });
+        expect(peekSent()).toBeTruthy();
+        expect(await loadInviteSent()).toBeNull();
+        expect(peekSent()).toBeUndefined();
+
+        await markInviteSent(IDENTITY, 'hash-1', t0);
+        await wipeIdentity();
+        expect(peekSent()).toBeUndefined();
+        expect(await loadInviteSent()).toBeNull();
     });
 });

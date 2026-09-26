@@ -15,6 +15,8 @@ const KEY_ID = 'sovereign-identity';
 const PENDING_JOIN_ID = 'pending-join';
 /** A restore with a sign-in that has left the page for the provider (savePendingRestore). Never read by loadIdentity. */
 const PENDING_RESTORE_ID = 'pending-restore';
+/** A key an invite was sent with, until the node has settled it (markInviteSent). Never read by loadIdentity. */
+const INVITE_SENT_ID = 'invite-sent';
 
 export interface BeanPoolIdentity {
     publicKey: string;    // Hex-encoded Ed25519 public key
@@ -41,12 +43,14 @@ function openDb(): Promise<IDBDatabase> {
     });
 }
 
-/** What the three slots hold, read inside the transaction that may write them. */
+/** What the four slots hold, read inside the transaction that may write them. */
 interface StoredSlots {
     identity: BeanPoolIdentity | undefined;
     pending: PendingJoin | undefined;
     /** Whatever is in the restore slot, unread: pendingRestoreAsStored decides whether it is one. */
     restore: unknown;
+    /** Whatever is in the invite-sent slot, unread: asInviteSent decides whether it is one. */
+    inviteSent: unknown;
 }
 
 /** What to write back: a slot left out is left as it is. */
@@ -54,6 +58,7 @@ interface SlotWrites<T> {
     identity?: BeanPoolIdentity;
     pending?: PendingJoin | 'delete';
     restore?: PendingRestore | 'delete';
+    inviteSent?: InviteSent | 'delete';
     result: T;
 }
 
@@ -72,18 +77,22 @@ async function withStoredSlots<T>(decide: (stored: StoredSlots) => SlotWrites<T>
         const identityReq = store.get(KEY_ID);
         const pendingReq = store.get(PENDING_JOIN_ID);
         const restoreReq = store.get(PENDING_RESTORE_ID);
-        restoreReq.onsuccess = () => {
+        const inviteSentReq = store.get(INVITE_SENT_ID);
+        inviteSentReq.onsuccess = () => {
             try {
                 const decision = decide({
                     identity: (identityReq.result ?? undefined) as BeanPoolIdentity | undefined,
                     pending: (pendingReq.result ?? undefined) as PendingJoin | undefined,
                     restore: restoreReq.result ?? undefined,
+                    inviteSent: inviteSentReq.result ?? undefined,
                 });
                 if (decision.identity) store.put(decision.identity, KEY_ID);
                 if (decision.pending === 'delete') store.delete(PENDING_JOIN_ID);
                 else if (decision.pending) store.put(decision.pending, PENDING_JOIN_ID);
                 if (decision.restore === 'delete') store.delete(PENDING_RESTORE_ID);
                 else if (decision.restore) store.put(decision.restore, PENDING_RESTORE_ID);
+                if (decision.inviteSent === 'delete') store.delete(INVITE_SENT_ID);
+                else if (decision.inviteSent) store.put(decision.inviteSent, INVITE_SENT_ID);
                 result = decision.result;
             } catch (err) {
                 // A `decide` that throws, or a value the store can't take (put's DataCloneError): the caller hears that
@@ -645,6 +654,140 @@ export async function clearPendingRestore(): Promise<void> {
     await withStoredSlots<void>(({ restore }) => ({ restore: restore === undefined ? undefined : 'delete', result: undefined }));
 }
 
+// ===================== THE INVITE SENT (deciding pass 4111943146) =====================
+
+/**
+ * How long after a redeem went out it can still land. The node answers a redeem as it handles it (engine/invites.ts
+ * redeemInvite), so one whose answer was lost has either landed already or lands later only if its request was still on
+ * the way, or waiting in a node that had stalled. The node sets no limit of its own on that, so the margin is wide:
+ * keeping a key longer costs nothing, because every try in the meantime sends that same key.
+ */
+export const INVITE_SEND_CAN_LAND_MS = 15 * 60 * 1000;
+
+/**
+ * A key an invite join sent to the node (WelcomePage handleCreate), written before the redeem goes. The node can take
+ * the redeem while its answer is lost on the way back (a dropped connection, a tunnel's 502 or 524, a 200 whose body
+ * never arrived). Until the page hears back, this is the only copy of what may now be a member's key and its 12 words,
+ * and a reload, a closed tab or old Android discarding the tab must not lose it. It has a slot of its own, beside the
+ * identity: loadIdentity never reads it, so it never opens the app to a key the node hasn't taken, and it can't clash
+ * with a door join's key in the pending-join slot.
+ *
+ * `inviteHash`: SHA-256 of the code or ticket it went with, never the code itself. `sentAt`: when the latest send with
+ * this key went. `earlierSentAt`: when the latest unsettled send before that went. Its answer never came, so it may land
+ * too.
+ *
+ * The record goes only once the node has settled the key: it is saved as this browser's identity (completeInviteSent);
+ * the node refused it with no earlier send left that may land (settleRefusedInviteSend); or the node said it is not a
+ * member once no send with it can land (releaseInviteSent). wipeIdentity, the member's own "delete everything", takes
+ * it too. Nothing else writes another key over it (InviteSentHeldError).
+ */
+export interface InviteSent {
+    identity: BeanPoolIdentity;
+    inviteHash: string;
+    sentAt: number;
+    earlierSentAt?: number;
+}
+
+/** An invite-sent record that holds a key: anything else in the slot has nothing in it to lose, and is dropped. */
+function asInviteSent(value: unknown): InviteSent | null {
+    const r = value as Partial<InviteSent> | null | undefined;
+    if (!r || typeof r !== 'object') return null;
+    const key = r.identity;
+    if (typeof key?.privateKey !== 'string' || !key.privateKey || typeof key.publicKey !== 'string' || !key.publicKey) return null;
+    return r as InviteSent;
+}
+
+/** When the latest unsettled send with this key went (NaN when a time can't be read, so it is never judged unable to land). */
+function lastInviteSentAt(r: InviteSent): number {
+    const sent = typeof r.sentAt === 'number' ? r.sentAt : Number.NaN;
+    if (r.earlierSentAt === undefined) return sent;
+    return Math.max(sent, typeof r.earlierSentAt === 'number' ? r.earlierSentAt : Number.NaN);
+}
+
+/** A key another invite was sent with is stored, not settled yet, and is kept: the page settles it first. Nothing changed. */
+export class InviteSentHeldError extends Error {
+    /** The record as stored. */
+    readonly held: InviteSent;
+    constructor(held: InviteSent) {
+        super('An invite was sent with another key, and it has not been settled; it is kept.');
+        this.name = 'InviteSentHeldError';
+        this.held = held;
+    }
+}
+
+/** The key an invite was sent with, or null. A record holding no key is dropped on sight. */
+export async function loadInviteSent(): Promise<InviteSent | null> {
+    return withStoredSlots<InviteSent | null>(({ inviteSent }) => {
+        if (inviteSent === undefined) return { result: null };
+        const stored = asInviteSent(inviteSent);
+        return stored ? { result: stored } : { inviteSent: 'delete', result: null };
+    });
+}
+
+/**
+ * Record `identity` as sent with the invite `inviteHash` names, at `at`, before its redeem goes. The same key sent again
+ * keeps the send before it as `earlierSentAt`: that one isn't settled, or its record would be gone. Refused, with nothing
+ * changed (InviteSentHeldError), when another key's record is stored, since that one may be a member's only copy.
+ * Returns what was stored.
+ */
+export async function markInviteSent(identity: BeanPoolIdentity, inviteHash: string, at: number = Date.now()): Promise<InviteSent> {
+    const out = await withStoredSlots<{ saved: InviteSent } | { held: InviteSent }>(({ inviteSent }) => {
+        const stored = asInviteSent(inviteSent);
+        if (stored && stored.identity.publicKey !== identity.publicKey) return { result: { held: stored } };
+        const next: InviteSent = { identity, inviteHash, sentAt: at };
+        if (stored) next.earlierSentAt = lastInviteSentAt(stored);
+        return { inviteSent: next, result: { saved: next } };
+    });
+    if ('held' in out) throw new InviteSentHeldError(out.held);
+    return out.saved;
+}
+
+/**
+ * The node definitely refused the send made at `sentAt` with this key: the redeem route's 400, which it gives before
+ * writing any member. If no earlier send with the key is unsettled, the node never took it, and the record goes. If one
+ * is, the record stays for that one, on its time. A record sent again since (another tab) is left as it is. Returns
+ * what is stored afterwards.
+ */
+export async function settleRefusedInviteSend(publicKey: string, sentAt: number): Promise<InviteSent | null> {
+    return withStoredSlots<InviteSent | null>(({ inviteSent }) => {
+        const stored = asInviteSent(inviteSent);
+        if (!stored || stored.identity.publicKey !== publicKey || stored.sentAt !== sentAt) return { result: stored };
+        if (stored.earlierSentAt === undefined) return { inviteSent: 'delete', result: null };
+        const next: InviteSent = { ...stored, sentAt: stored.earlierSentAt };
+        delete next.earlierSentAt;
+        return { inviteSent: next, result: next };
+    });
+}
+
+/**
+ * The node's membership probe, signed by the key, said it is not a member (web-join.ts probeMembership). The record goes
+ * only when no send with the key can land any more: the probe was asked INVITE_SEND_CAN_LAND_MS or more after the latest
+ * send. Otherwise it stays, and the page's next try sends that same key. True when it went.
+ */
+export async function releaseInviteSent(notMember: NodeSaidNotMember): Promise<boolean> {
+    return withStoredSlots<boolean>(({ inviteSent }) => {
+        const stored = asInviteSent(inviteSent);
+        if (!stored || stored.identity.publicKey !== notMember.publicKey) return { result: false };
+        if (!(notMember.askedAt >= lastInviteSentAt(stored) + INVITE_SEND_CAN_LAND_MS)) return { result: false };
+        return { inviteSent: 'delete', result: true };
+    });
+}
+
+/**
+ * The node has the key an invite was sent with as a member: it becomes this browser's identity, and the record holding
+ * it goes, in one transaction, so there is never a moment with both or neither. Refused as importIdentity is
+ * (IdentityHeldError, or as `options` says), and then nothing changes: the record stays, the key's only copy.
+ */
+export async function completeInviteSent(identity: BeanPoolIdentity, options: SaveIdentityOptions = {}): Promise<void> {
+    const refused = await withStoredSlots<SaveRefusal | null>((stored) => {
+        const verdict = saveVerdict(stored, identity, options);
+        if (!('write' in verdict)) return { result: verdict };
+        const holdsIt = asInviteSent(stored.inviteSent)?.identity.publicKey === identity.publicKey;
+        return { identity: verdict.write, inviteSent: holdsIt ? 'delete' : undefined, result: null };
+    });
+    if (refused) throw saveRefusedError(refused);
+}
+
 /**
  * Import a pre-existing identity (from another device) and store it in IndexedDB. Refused, with nothing changed, when
  * this browser holds another account (IdentityHeldError), or as `options` says.
@@ -671,7 +814,7 @@ export async function checkIdentitySave(identity: BeanPoolIdentity, options: Sav
  * Used by the "Wipe Identity" flow so the key cannot linger in the secure store
  * after the user asks for it to be destroyed. A pending join goes with it, sent or not: it holds a key and 12 words
  * too, and this is the member's own "delete everything on this device" (the one way past releaseSentPendingJoin). A
- * pending restore goes too.
+ * pending restore goes too, and so does a key an invite was sent with, for the same reason.
  */
 export async function wipeIdentity(): Promise<void> {
     const db = await openDb();
@@ -681,6 +824,7 @@ export async function wipeIdentity(): Promise<void> {
         store.delete(KEY_ID);
         store.delete(PENDING_JOIN_ID);
         store.delete(PENDING_RESTORE_ID);
+        store.delete(INVITE_SENT_ID);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));

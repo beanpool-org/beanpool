@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // db.ts pulls in device modules at import time; stub them at the boundary (same set as apply-delta.test.ts).
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn() }));
@@ -22,7 +22,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async () => ({})),
 }));
 
-import { redeemInvite } from '../db';
+import { redeemInvite, REDEEM_NO_ANSWER } from '../db';
 
 const fetchMock = vi.fn();
 
@@ -68,5 +68,51 @@ describe('redeemInvite only reports success the node confirmed', () => {
     it("still rejects a non-2xx with the node's error", async () => {
         fetchMock.mockResolvedValueOnce(reply(400, { error: 'Invalid invite code' }));
         await expect(redeemInvite('ABCD1234', 'Me')).rejects.toThrow('Invalid invite code');
+    });
+});
+
+/**
+ * The join wizard's Next closes its step's ways off while it waits (utils/invite-next.ts `runNext`), so its redeem is
+ * bounded: a node that never answers can't keep the member on that step.
+ */
+describe('redeemInvite with timeoutMs', () => {
+    /** A request that is never answered, and ends only when it is asked to stop, as fetch does. */
+    function silentNode() {
+        fetchMock.mockImplementationOnce((_url: string, init: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+            init.signal.addEventListener('abort', () => reject(new Error('Aborted')));
+        }));
+    }
+
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('stops a redeem with no answer by then, and says so', async () => {
+        vi.useFakeTimers();
+        silentNode();
+        const redeeming = redeemInvite('ABCD1234', 'Me', undefined, { timeoutMs: 30_000 });
+        const settled = expect(redeeming).rejects.toThrow(REDEEM_NO_ANSWER);
+        await vi.advanceTimersByTimeAsync(30_000);
+        await settled;
+        expect((fetchMock.mock.calls[0][1] as { signal: AbortSignal }).signal.aborted).toBe(true);
+    });
+
+    it('an answer in time is the answer, as before', async () => {
+        fetchMock.mockResolvedValueOnce(reply(200, { success: true, alreadyMember: true }));
+        await expect(redeemInvite('ABCD1234', 'Me', undefined, { timeoutMs: 30_000 }))
+            .resolves.toEqual({ success: true, alreadyMember: true, nodeHasPhoto: false });
+    });
+
+    it("a network failure is the network's own error, not the timeout's", async () => {
+        fetchMock.mockRejectedValueOnce(new Error('Network request failed'));
+        await expect(redeemInvite('ABCD1234', 'Me', undefined, { timeoutMs: 30_000 })).rejects.toThrow('Network request failed');
+    });
+
+    it('without it, nothing stops the request (every other caller, unchanged)', async () => {
+        vi.useFakeTimers();
+        silentNode();
+        let settled = false;
+        redeemInvite('ABCD1234', 'Me').then(() => { settled = true; }, () => { settled = true; });
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(settled).toBe(false);
+        expect((fetchMock.mock.calls[0][1] as { signal: AbortSignal }).signal.aborted).toBe(false);
     });
 });

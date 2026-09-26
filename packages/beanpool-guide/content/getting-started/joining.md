@@ -27,7 +27,7 @@ To join:
 - On the first screen, tap **Join with an invite**. If the invite is on your clipboard, you can tap **Paste** instead. In the web app, the button says **I'm New Here**.
 - Paste the invite link or code. If you only have a code, also type the community's name or address. The person who invited you can tell you.
 - Choose the name people will see. It needs at least 2 letters. Keep it short: when you join, names longer than 20 characters are cut short.
-- Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others.
+- Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others. Until it has finished, **← Back to Home** and **Restore Existing Identity** don't work.
 
 ## Joining the global community
 
@@ -54,6 +54,7 @@ If you close the app halfway, it carries on from the same step next time.
 - **Already used:** each invite works exactly once. Ask for a new one. If it was yours and you are already a member, use **Recover an existing account** instead.
 - **Expired:** invites last 30 days. Ask for a new one.
 - **Not recognised:** check you copied all of it, and that the community name or address is right.
+- **Failed to register identity** (after you tap **Next**): usually no connection, or no answer in time. Check your connection and tap **Next** again. If your first try got through, the app carries on to **Your Photo** and **Safety Backup** with the same account.
 
 ## If joining the global community does not work
 

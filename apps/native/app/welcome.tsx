@@ -52,6 +52,7 @@ import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
+import { NEXT_REQUEST_TIMEOUT_MS, afterSpentInvite, leaveUnlessNextIsOut, redeemRefusalMeansIn, runNext } from '../utils/invite-next';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
 // rejection rather than crash with an unhandled promise warning.
@@ -227,6 +228,8 @@ export default function WelcomeScreen() {
     useEffect(() => () => nameCheckRef.current?.abort(), []);
     /** From the key going onto the phone until the join's answer: the door's screen is not left mid-join. */
     const joinSendingRef = useRef(false);
+    /** From Next's tap on "Your Name" until it ends: that step is not left mid-join (utils/invite-next.ts `runNext`). */
+    const nextOutRef = useRef(false);
 
     // Whether home offers the door at all (utils/global-door-offer.ts): only once the node has said, this app start,
     // that it is the global community with its door open. Drawn from what is already known and asked after drawing,
@@ -658,6 +661,8 @@ export default function WelcomeScreen() {
     }, [mode, globalPhase]);
 
     async function handleCreate() {
+        // A second tap while Next is out starts nothing, not even its checks below.
+        if (nextOutRef.current) return;
         if (!inviteCode.trim()) {
             setError('An invite code is required to join the network.');
             return;
@@ -682,106 +687,120 @@ export default function WelcomeScreen() {
             return;
         }
 
-        setLoading(true);
-        setError(null);
-        try {
-            const parsedCode = normaliseInviteCode(rawInvite);
-            const { checkInvite, redeemInvite } = await import('../utils/db');
-            const storedIdentity = await loadIdentity();
-            // Whether the phone's key is one this join made (an earlier pass through this wizard, or the global door): read
-            // before adoptJoinKey below takes the door's mark off the record.
-            const joinRecord = storedIdentity ? await getPendingOnboarding() : null;
-
-            const check = await checkInvite(parsedCode, nodeUrl);
-            if (check && !check.valid) {
-                // If invite is already used, check if stored identity is ALREADY a member on this node
-                if (check.reason === 'used' && storedIdentity) {
-                    try {
-                        const res = await fetch(`${nodeUrl}/api/community/membership/${storedIdentity.publicKey}`);
-                        if (res.ok) {
-                            const data = await res.json();
-                            if (data && data.isMember) {
-                                await clearPendingOnboarding();
-                                await recheckNodeStatus().catch(() => {});
-                                setIdentity(storedIdentity);
-                                return;
-                            }
-                        }
-                    } catch {}
-                }
-                setError(inviteProblemMessage(check.reason));
-                return;
-            }
-            setInviterName(check?.inviterCallsign || null);
-            setInviteCommunityName(check?.communityName || null);
-
-            // Per-node callsign uniqueness: check against the target node BEFORE we
-            // create the identity or register, so a brand-new member picks a name
-            // that's actually free here instead of being silently renamed on the
-            // server. 'unknown' (node unreachable) falls through — the server still
-            // auto-uniquifies as a backstop. Checked against nodeUrl explicitly since
-            // it isn't the stored anchor yet.
-            const availability = await checkCallsignAvailable(callsign.trim(), undefined, nodeUrl);
-            if (availability === 'taken') {
-                const sugg = await suggestCallsigns(callsign.trim(), undefined, 3, nodeUrl);
-                setCallsignSuggestions(sugg);
-                setError(`"${callsign.trim()}" is already taken in this community. Pick one of the suggestions below, or choose another name.`);
-                setLoading(false);
-                return;
-            }
-            setCallsignSuggestions([]);
-
-            await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
-
-            const identity = storedIdentity
-                ? { ...storedIdentity, callsign: callsign.trim() }
-                : await createIdentity(callsign.trim());
-            // A key made here says so in the record now, before the redeem: a redeem that fails, or an app stopped before
-            // its answer, still knows at the next Next or after a restart that these are the member's own new words.
-            if (!storedIdentity) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);
-            // A key made here is the member's own new account; the phone's own key is an established account, whose words
-            // Safety Backup shows only once the phone's lock has passed.
-            const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey);
-            setPendingIdentity(identity);
-            setPendingNewKey(keyIsNew ? identity.publicKey : null);
-            setPendingInviteCode(parsedCode);
-
-            // The phone's key is about to go to this community: if the global door made it, the door must never
-            // take it off the phone again, even if this redeem lands and its answer is lost (global-join.ts).
-            if (storedIdentity) await adoptJoinKey(storedIdentity.publicKey);
-
-            // Redeem invite on node IMMEDIATELY so member is registered right away
+        // Every way off this step is closed until this ends, however it ends (utils/invite-next.ts `runNext`).
+        await runNext(nextOutRef, setLoading, async () => {
+            setError(null);
             try {
-                await redeemInvite(parsedCode, identity.callsign, identity);
-            } catch (redeemErr: any) {
-                // If already redeemed (e.g. retry), check if registered
-                if (!redeemErr?.message?.includes('already a member') && !redeemErr?.message?.includes('already been used')) {
-                    throw redeemErr;
+                const parsedCode = normaliseInviteCode(rawInvite);
+                const { checkInvite, redeemInvite } = await import('../utils/db');
+                const storedIdentity = await loadIdentity();
+                // Whether the phone's key is one this join made (an earlier pass through this wizard, or the global door): read
+                // before adoptJoinKey below takes the door's mark off the record.
+                const joinRecord = storedIdentity ? await getPendingOnboarding() : null;
+
+                const check = await checkInvite(parsedCode, nodeUrl);
+                // The node has this phone's key already: nothing is redeemed again (below).
+                let inAlready = false;
+                if (check && !check.valid) {
+                    // A spent invite may have been spent by this phone's key: a first redeem that landed with its answer lost,
+                    // or a member back at this step from a later one. The node says whether the key is in, and the record read
+                    // above whether this join made it (utils/invite-next.ts).
+                    const spent = check.reason === 'used' ? await afterSpentInvite(nodeUrl, storedIdentity, joinRecord) : 'spent';
+                    if (spent === 'enterApp' && storedIdentity) {
+                        // A key the phone already had, an established account already in this community: into the app, as
+                        // before. Its words stay behind Settings' lock.
+                        await clearPendingOnboarding();
+                        await recheckNodeStatus().catch(() => {});
+                        setIdentity(storedIdentity);
+                        return;
+                    }
+                    if (spent !== 'carryOn') {
+                        setError(inviteProblemMessage(check.reason));
+                        return;
+                    }
+                    // This join's own key, in already: the member has never been shown its words. On to the photo and
+                    // Safety Backup, as the redeem that landed would have gone.
+                    inAlready = true;
                 }
+                setInviterName(check?.inviterCallsign || null);
+                setInviteCommunityName(check?.communityName || null);
+
+                // Per-node callsign uniqueness: check against the target node BEFORE we
+                // create the identity or register, so a brand-new member picks a name
+                // that's actually free here instead of being silently renamed on the
+                // server. 'unknown' (node unreachable, or no answer in time) falls through — the
+                // server still auto-uniquifies as a backstop. Checked against nodeUrl explicitly
+                // since it isn't the stored anchor yet. A name the phone's own key already holds
+                // there is its own, not taken: a first redeem that landed keeps it.
+                const nameCheck = new AbortController();
+                const nameCheckTimer = setTimeout(() => nameCheck.abort(), NEXT_REQUEST_TIMEOUT_MS);
+                try {
+                    const availability = await checkCallsignAvailable(callsign.trim(), storedIdentity?.publicKey, nodeUrl, { signal: nameCheck.signal });
+                    if (availability === 'taken') {
+                        const sugg = await suggestCallsigns(callsign.trim(), storedIdentity?.publicKey, 3, nodeUrl, 32, { signal: nameCheck.signal });
+                        setCallsignSuggestions(sugg);
+                        setError(`"${callsign.trim()}" is already taken in this community. Pick one of the suggestions below, or choose another name.`);
+                        return;
+                    }
+                } finally {
+                    clearTimeout(nameCheckTimer);
+                }
+                setCallsignSuggestions([]);
+
+                await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
+
+                const identity = storedIdentity
+                    ? { ...storedIdentity, callsign: callsign.trim() }
+                    : await createIdentity(callsign.trim());
+                // A key made here says so in the record now, before the redeem: a redeem that fails, or an app stopped before
+                // its answer, still knows at the next Next or after a restart that these are the member's own new words.
+                if (!storedIdentity) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);
+                // A key made here is the member's own new account; the phone's own key is an established account, whose words
+                // Safety Backup shows only once the phone's lock has passed.
+                const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey);
+                setPendingIdentity(identity);
+                setPendingNewKey(keyIsNew ? identity.publicKey : null);
+                setPendingInviteCode(parsedCode);
+
+                // The phone's key is about to go to this community: if the global door made it, the door must never
+                // take it off the phone again, even if this redeem lands and its answer is lost (global-join.ts).
+                if (storedIdentity) await adoptJoinKey(storedIdentity.publicKey);
+
+                // Redeem invite on node IMMEDIATELY so member is registered right away. Not when the node
+                // has this key already (`inAlready`): the invite is spent, by this key.
+                if (!inAlready) {
+                    try {
+                        await redeemInvite(parsedCode, identity.callsign, identity, { timeoutMs: NEXT_REQUEST_TIMEOUT_MS });
+                    } catch (redeemErr: any) {
+                        // Refused because the node has this key already (e.g. retry): carry on. Refused because the code
+                        // is spent: only when the node says this key is in, never a join it didn't take (invite-next.ts).
+                        if (!(await redeemRefusalMeansIn(redeemErr?.message, nodeUrl, identity.publicKey))) {
+                            throw redeemErr;
+                        }
+                    }
+                }
+
+                // Redemption is done — it just succeeded, or the node has this member already.
+                // Either way the final step has nothing left to do.
+                setInviteRedeemed(true);
+
+                // Record wizard state so an interrupted setup (avatar/seed) resumes
+                await setPendingOnboarding({
+                    step: 'profileSetup',
+                    inviteCode: parsedCode,
+                    anchorUrl: nodeUrl,
+                    callsign: callsign.trim(),
+                    redeemed: true,
+                    ...(keyIsNew ? { newKey: identity.publicKey } : {}),
+                });
+
+                // Go to avatar selection (Step 2)
+                setMode('profileSetup');
+            } catch (err: any) {
+                setError(`Failed to register identity: ${err?.message || err}`);
+                console.error(err);
             }
-
-            // Redemption is done — either it just succeeded, or the node told us this
-            // member was already registered. Both mean the final step has nothing left to do.
-            setInviteRedeemed(true);
-
-            // Record wizard state so an interrupted setup (avatar/seed) resumes
-            await setPendingOnboarding({
-                step: 'profileSetup',
-                inviteCode: parsedCode,
-                anchorUrl: nodeUrl,
-                callsign: callsign.trim(),
-                redeemed: true,
-                ...(keyIsNew ? { newKey: identity.publicKey } : {}),
-            });
-
-            // Go to avatar selection (Step 2)
-            setMode('profileSetup');
-        } catch (err: any) {
-            setError(`Failed to register identity: ${err?.message || err}`);
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
+        });
     }
 
     async function handleConfirmSeed() {
@@ -2024,10 +2043,11 @@ export default function WelcomeScreen() {
                                 {(error.includes('already been used') || error.includes('already used')) && (
                                     <Pressable
                                         style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: palette.blue50 || '#eff6ff', borderRadius: 8, borderWidth: 1, borderColor: palette.blue200 || '#bfdbfe', alignItems: 'center' }}
-                                        onPress={() => {
+                                        onPress={() => leaveUnlessNextIsOut(nextOutRef, () => {
                                             setError(null);
                                             setMode('recover');
-                                        }}
+                                        })}
+                                        disabled={loading}
                                         accessibilityRole="button"
                                     >
                                         <Text style={{ color: palette.blue600 || '#2563eb', fontWeight: 'bold', fontSize: 13 }}>
@@ -2042,12 +2062,14 @@ export default function WelcomeScreen() {
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Next →</Text>}
                         </Pressable>
 
-                        {/* Restore Existing Identity CTA for returning members (#98) */}
+                        {/* Restore Existing Identity CTA for returning members (#98). This and Back to Home wait while
+                            Next is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
                         <View style={styles.restorePromptBox}>
                             <Text style={styles.restorePromptLabel}>Already have an account or switching phones?</Text>
                             <Pressable
-                                style={styles.restorePromptBtn}
-                                onPress={() => { setMode('member'); setError(null); }}
+                                style={[styles.restorePromptBtn, loading && styles.closedWhileNextIsOut]}
+                                onPress={() => leaveUnlessNextIsOut(nextOutRef, () => { setMode('member'); setError(null); })}
+                                disabled={loading}
                                 accessibilityRole="button"
                                 accessibilityLabel="Restore existing identity"
                             >
@@ -2055,7 +2077,13 @@ export default function WelcomeScreen() {
                             </Pressable>
                         </View>
 
-                        <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back to Home">
+                        <Pressable
+                            style={[styles.backBtn, loading && styles.closedWhileNextIsOut]}
+                            onPress={() => leaveUnlessNextIsOut(nextOutRef, goBack)}
+                            disabled={loading}
+                            accessibilityRole="button"
+                            accessibilityLabel="Back to Home"
+                        >
                             <Text style={styles.backBtnText}>← Back to Home</Text>
                         </Pressable>
 
@@ -3002,6 +3030,8 @@ const styles = StyleSheet.create({
     dangerBtn: { backgroundColor: colors.feedback.danger.solid, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     dangerBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
     backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
+    /** A way off "Your Name" while Next is out: drawn faded, as well as disabled. */
+    closedWhileNextIsOut: { opacity: 0.4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14 },
     error: { color: colors.feedback.danger.solid, fontSize: 14, marginBottom: 16, textAlign: 'center' },
     checkbox: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, padding: 12, backgroundColor: colors.surface.subtle, borderRadius: 8 },

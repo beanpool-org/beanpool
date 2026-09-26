@@ -865,6 +865,7 @@ export async function deleteNodePost(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {

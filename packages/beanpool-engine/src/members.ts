@@ -265,6 +265,13 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
             return { ok: false, reason: 'expired', error: 'This offline ticket has expired (maximum 30 days issuance)' };
         }
 
+        // The signature's 64 bytes. Base64 reads the same bytes from many spellings (without the `==`, with spaces, in
+        // the URL-safe alphabet), so the ticket is marked used by the one spelling of them (below), never by the string
+        // as sent: by the string, each re-spelling was a new unused ticket, and one ticket let any number of people in.
+        if (typeof signatureBase64 !== 'string') return { ok: false, reason: 'malformed', error: 'Malformed or broken offline ticket payload' };
+        const signature = Buffer.from(signatureBase64, 'base64');
+        if (signature.length !== 64) return { ok: false, reason: 'invalid', error: 'Invalid cryptographic signature structure' };
+
         const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
         const spki = Buffer.concat([spkiHeader, Buffer.from(inviterPubkey, 'hex')]);
         const publicKeyObject = crypto.createPublicKey({
@@ -277,7 +284,7 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
             undefined,
             signedBytes,
             publicKeyObject,
-            Buffer.from(signatureBase64, 'base64')
+            signature
         );
 
         if (!isValid) return { ok: false, reason: 'invalid', error: 'Invalid cryptographic signature structure' };
@@ -285,7 +292,9 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
         const refused = binding?.({ format: bound ? 2 : 1, audience, inviter: inviterPubkey });
         if (refused) return { ok: false, reason: refused.reason, error: refused.error };
 
-        const codeHash = crypto.createHash('sha256').update(signatureBase64).digest('hex').substring(0, 16);
+        // Standard padded base64, as the apps write it (native encodeBase64, core toBase64, the web app's btoa): for
+        // their tickets this is the string as sent, so a ticket used before this stays used.
+        const codeHash = crypto.createHash('sha256').update(signature.toString('base64')).digest('hex').substring(0, 16);
         return { ok: true, inviterPubkey, timestamp, intendedFor, codeHash };
     } catch (e) {
         return { ok: false, reason: 'malformed', error: 'Malformed or broken offline ticket payload' };

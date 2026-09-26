@@ -41,6 +41,8 @@
  *     window from its arrival, and the same request is still refused there as a replay.
  * 14. Settings' Remove takes off an owner-confirmed address stored in another spelling (as a take-over envelope may
  *     carry it), and a request signed for it is refused from then on.
+ * 15. An offline ticket joins once, however its signature is written: without its `==`, with spaces, in the URL-safe
+ *     alphabet (the same 64 bytes); a format-2 ticket and an old {i, t} one.
  *
  * The switch date is the nodes' own (unboundSignaturesCutoff: the constant, or ACCEPT_UNBOUND_SIGNATURES_UNTIL when it
  * is set for the run), and A, B, G and U run with the switch clock pinned just before it, except in the steps that move
@@ -766,6 +768,55 @@ async function main(): Promise<void> {
             assert(JSON.stringify(await A.send('storedOwnerAddresses')) === JSON.stringify(['kept.example.org']), 'and off what is stored; the other stays');
             const gone = await sendTo(A, 'GET', await bound(xan, 'GET', 'https://mixed.example.org/api/community/me'));
             assert(gone.status === 421, `a request signed for it is now refused at A (${show(gone)})`);
+        });
+
+        // ── 15. An offline ticket joins once, however its signature is written ──
+        console.log('\n— 15. an offline ticket joins once, however its signature is written —');
+        await section('15', async () => {
+            await A.send('resetLimits');
+            let n = 0;
+            const joiner = () => id(`JoOnce${++n}`);
+            const redeem = (ticket: string, j: Id) =>
+                call(A, 'POST', '/api/invite/redeem-offline', {}, JSON.stringify({ ticketB64: ticket, publicKey: j.pk, callsign: j.callsign }));
+            const sigOf = (ticket: string) => JSON.parse(Buffer.from(ticket, 'base64').toString('utf8')).s as string;
+            /** The ticket with its signature `s` written another way: the same 64 bytes. */
+            const respell = (ticket: string, f: (s: string) => string) => {
+                const t = JSON.parse(Buffer.from(ticket, 'base64').toString('utf8'));
+                return Buffer.from(JSON.stringify({ ...t, s: f(t.s) })).toString('base64');
+            };
+            const spellings: [string, (s: string) => string][] = [
+                ['its "==" dropped', (s) => s.replace(/=+$/, '')],
+                ['spaces in it', (s) => s.replace(/(.{11})/g, '$1 ').trim()],
+                ['the URL-safe alphabet', (s) => s.replace(/\+/g, '-').replace(/\//g, '_')],
+            ];
+            const oldTicket = (t: number) => {
+                const p = JSON.stringify({ i: xan.pk, t });
+                return Buffer.from(JSON.stringify({ p, s: Buffer.from(ed25519.sign(core.utf8Bytes(p), xan.seed)).toString('base64') })).toString('base64');
+            };
+            const kinds: [string, (t: number) => Promise<string> | string][] = [
+                ['a format-2 ticket', (t) => core.buildInviteTicket('https://a.test', xan.pk, xan.sign, { timestamp: t })],
+                ['an old {i, t} ticket', oldTicket],
+            ];
+            for (const [kind, make] of kinds) {
+                // One whose signature holds a + or a /, so its URL-safe spelling differs (a signature is fixed by what it
+                // signs, so the time is moved back a millisecond at a time).
+                let ticket = await make(Date.now());
+                for (let t = Date.now() - 1; !/[+/]/.test(sigOf(ticket)); t--) ticket = await make(t);
+                const first = joiner();
+                const joined = await redeem(ticket, first);
+                assert(joined.status === 200 && joined.body?.success && (await A.send('member', { pk: first.pk })) === 'active', `${kind} joins A once (${show(joined)})`);
+                const again = joiner();
+                const twice = await redeem(ticket, again);
+                assert(twice.status === 400 && (await A.send('member', { pk: again.pk })) === null, `the same ticket again is refused (${show(twice)})`);
+                const pre = await call(A, 'GET', `/api/invite/check?code=${encodeURIComponent(`BP-${respell(ticket, spellings[0][1])}`)}`);
+                assert(pre.body?.valid === false && pre.body?.reason === 'used', `the pre-flight says it is used, written without its "==" (${show(pre)})`);
+                for (const [how, f] of spellings) {
+                    const j = joiner();
+                    const r = await redeem(respell(ticket, f), j);
+                    assert(r.status === 400 && /already been redeemed/.test(r.body?.error) && (await A.send('member', { pk: j.pk })) === null,
+                        `with ${how}: refused as used, and nobody joins (${show(r)})`);
+                }
+            }
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

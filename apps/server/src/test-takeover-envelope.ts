@@ -20,6 +20,10 @@
  * 12. Re-key (engine/member-wizards.ts): starting one drops the old key from the lock, completing one re-seals to
  *     the owner's new key — both through their chokepoints, with the periodic check parked.
  * 13. A standby refuses to make a recovery code (409), since it seals nothing the code could open.
+ * 14. Recovery seal S2: the bundle carries data/recovery-seal.key byte for byte (2), never in what the token, the status
+ *     or the header route answers (8, 10, 14); the status says whether the envelope carries it; the envelope re-seals
+ *     without it when the file goes, and, through the periodic check alone, with it when the file appears; a file that
+ *     is not a 32-byte key is not carried.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-takeover-envelope.ts
@@ -149,6 +153,12 @@ async function main() {
     const bundle = JSON.parse(Buffer.from(payload2!).toString('utf-8'));
     assert(bundle.files.libp2p_key === fs.readFileSync(path.join(dataDir!, 'libp2p_key')).toString('base64'), '2. the bundle holds data/libp2p_key byte for byte');
     assert(bundle.files['community.key'] === fs.readFileSync(path.join(dataDir!, 'community.key')).toString('base64'), '2. …and community.key');
+    const sealKeyPath = path.join(dataDir!, 'recovery-seal.key');
+    const sealKeyBytes = fs.readFileSync(sealKeyPath);
+    assert(sealKeyBytes.length === 32 && bundle.files['recovery-seal.key'] === sealKeyBytes.toString('base64'),
+        "2. …and data/recovery-seal.key, byte for byte (S2: the key that opens members' sign-in recovery copies)");
+    assert(stored().carriesRecoverySealKey === true && !JSON.stringify(stored()).replace(stored().envelope, '').includes(sealKeyBytes.toString('base64')),
+        '2. the file on disk records that it carries it, and holds the key only inside the sealed bytes');
     assert(bundle.localConfig.adminHash === adminHash && bundle.localConfig.salt === salt, '2. …and the admin hash and salt');
     assert(bundle.nodeRoles.some((r: any) => r.member_pubkey === anna.pub && r.role === 'owner'), '2. …and the node_roles rows');
     assert(!('replicationTokenHash' in bundle.localConfig) && !JSON.stringify(bundle).includes(getLocalConfig().replicationTokenHash!), '2. …and not the replication token hash');
@@ -335,6 +345,8 @@ async function main() {
         ['libp2p_key (raw)', fs.readFileSync(path.join(dataDir!, 'libp2p_key')).toString('latin1')],
         ['community.key (raw)', fs.readFileSync(path.join(dataDir!, 'community.key')).toString('latin1')],
         ['a role row', `"member_pubkey":"${anna.pub}"`],
+        ['recovery-seal.key (base64)', sealKeyBytes.toString('base64')], ['recovery-seal.key (hex)', sealKeyBytes.toString('hex')],
+        ['recovery-seal.key (raw)', sealKeyBytes.toString('latin1')],
     ];
     for (const [name, v] of plaintextFields) assert(!servedText.includes(v), `8. the token's response does not contain the ${name}`);
     assert(plain.publicAddress?.tunnelToken === 'TUNNEL-SECRET-abc123', '8. (the tunnel token is inside, sealed — Anna sees it once opened)');
@@ -418,6 +430,7 @@ async function main() {
     assert(hAnna.json.header.sig && Array.isArray(hAnna.json.header.recipients), '10. …the public header: recipients and signature');
     const headerText = JSON.stringify(hAnna.json);
     assert(!headerText.includes(adminHash) && !headerText.includes('TUNNEL-SECRET') && !headerText.includes(plain.files.libp2p_key), '10. …and no plaintext field');
+    assert(!headerText.includes(sealKeyBytes.toString('base64')) && !headerText.includes(sealKeyBytes.toString('hex')), '10. …nor the recovery-seal key');
     const hMo = await signedGet(HP, mo);
     assert(hMo.status === 403, `10. signed by a member who is not an owner → 403 (got ${hMo.status})`);
     const hNone = await signedGet(HP);
@@ -459,6 +472,54 @@ async function main() {
     assert(/main server/.test(onStandby.body.error || ''), `13. …and says where to make it: "${onStandby.body.error}"`);
     assert(JSON.stringify((getLocalConfig() as any).recoveryCode) === recordBefore, '13. …and the stored record is unchanged');
     await svc.startTakeoverEnvelopeService({ checkIntervalMs: 3_600_000 });
+
+    // ── 14. Recovery seal S2: whether the envelope carries the key, and it follows the file ──
+    console.log('\n— 14. the recovery-seal key —');
+    const keyNeedles = [sealKeyBytes.toString('base64'), sealKeyBytes.toString('hex'), sealKeyBytes.toString('base64url')];
+    const noKeyIn = (text: string) => !keyNeedles.some((n) => text.includes(n));
+    const st14 = await call('POST', '/api/local/admin/takeover/status', { headers: admin });
+    assert(st14.status === 200 && st14.body.recoverySealKey?.carried === true
+        && st14.body.recoverySealKey.message === "The locked keys carry the key that opens members' sign-in recovery copies, so a server that takes over opens them.",
+        `14. the status says the envelope carries the key, in words (${JSON.stringify(st14.body.recoverySealKey)})`);
+    assert(noKeyIn(JSON.stringify(st14.body)), '14. …and never the key itself');
+    const withKey = stored().envelopeId;
+    const aside = path.join(fs.mkdtempSync(path.join(path.dirname(dataDir!), 'seal-key-aside-')), 'recovery-seal.key');
+    fs.renameSync(sealKeyPath, aside);
+    const gone = await svc.flushTakeoverChecks();
+    const openedGone = JSON.parse(Buffer.from((await opens(envelopeBytes(), { type: 'owner', privateKey: anna.seed }))!).toString('utf-8'));
+    assert(gone.state === 'sealed' && stored().envelopeId !== withKey && openedGone.files['recovery-seal.key'] === null && stored().carriesRecoverySealKey === false,
+        '14. the key file gone: the envelope is re-sealed without it');
+    const stGone = await call('POST', '/api/local/admin/takeover/status', { headers: admin });
+    assert(stGone.body.recoverySealKey?.carried === false && /do not carry the key .*this server.s data\/recovery-seal\.key is missing or is not a key\./.test(stGone.body.recoverySealKey.message)
+        && /12 words still work/.test(stGone.body.recoverySealKey.message),
+        `14. …and the status says so, and what it means (${stGone.body.recoverySealKey?.message})`);
+    // The file appears again, and no chokepoint says so: the periodic check alone re-seals with it.
+    const withoutKey = stored().envelopeId;
+    await svc.startTakeoverEnvelopeService({ checkIntervalMs: 100 });
+    await sleep(250);
+    assert(stored().envelopeId === withoutKey, '14. (control) with nothing changed, the periodic check keeps the envelope');
+    fs.copyFileSync(aside, sealKeyPath);
+    fs.chmodSync(sealKeyPath, 0o600);
+    await sleep(400);
+    await svc.startTakeoverEnvelopeService({ checkIntervalMs: 3_600_000 }); // park it again
+    const back = stored();
+    const openedBack = JSON.parse(Buffer.from((await opens(envelopeBytes(), { type: 'owner', privateKey: anna.seed }))!).toString('utf-8'));
+    assert(back.envelopeId !== withoutKey && /consistency check/.test(back.reason) && back.carriesRecoverySealKey === true
+        && openedBack.files['recovery-seal.key'] === sealKeyBytes.toString('base64'),
+        `14. the key file back: the periodic check re-seals with it, byte for byte ("${back.reason}")`);
+    // A file that is not a 32-byte key opens nothing, so it is not carried.
+    fs.writeFileSync(sealKeyPath, Buffer.from('not a key'), { mode: 0o600 });
+    await svc.flushTakeoverChecks();
+    const openedBad = JSON.parse(Buffer.from((await opens(envelopeBytes(), { type: 'owner', privateKey: anna.seed }))!).toString('utf-8'));
+    assert(openedBad.files['recovery-seal.key'] === null && stored().carriesRecoverySealKey === false, '14. a key file that is not a 32-byte key is not carried');
+    fs.copyFileSync(aside, sealKeyPath);
+    fs.chmodSync(sealKeyPath, 0o600);
+    await svc.flushTakeoverChecks();
+    fs.rmSync(path.dirname(aside), { recursive: true, force: true });
+    assert(stored().carriesRecoverySealKey === true, '14. (the real key back, carried again)');
+    const tok14 = await call('GET', '/api/local/admin/takeover-envelope', { headers: { 'x-replication-token': repToken } });
+    assert(tok14.status === 200 && noKeyIn(Buffer.from(tok14.body).toString('latin1')) && !Buffer.from(tok14.body).includes(sealKeyBytes),
+        "14. the token's envelope holds the key only sealed: none of its bytes, in any form");
 
     // ── 1 again: removing the last recipient removes the envelope ──
     console.log('\n— 1b. back to nobody —');

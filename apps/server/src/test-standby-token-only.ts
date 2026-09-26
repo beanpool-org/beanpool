@@ -23,6 +23,9 @@
  *  10. A swap whose config write fails is not reported as done, and nothing is wiped.
  *  11. Node Settings' Replication Access status line (static/settings.js, run against the real
  *      route) says nothing can copy when token-only is on with no token.
+ *  12. Recovery seal S2: the replication token gets data/recovery-seal.key on no route (every backup and take-over
+ *      route, called with the token, answers without its bytes in any form), while the sealed backup, opened with the
+ *      recovery code, carries it; and no log line holds it.
  *
  * Main server and standby share one process and one data dir, as in test-backup-topology: the
  * node signs its own snapshot and trusts itself as the `mirror`. The puller talks to the main
@@ -71,6 +74,7 @@ const { createBackupRoutes } = await import('./routes/backup.js');
 const { migrateStandbyPassword, requestResync, getBackupStatus } = await import('./services/backup-puller.js');
 const { db } = await import('./db/db.js');
 const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
+const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
 const { openEnvelope, readSealedHeader } = await import('@beanpool/core');
 
 let run = 0, passed = 0;
@@ -116,7 +120,7 @@ async function main() {
     addConnector(mirrorAddr, 'mirror', 'self-test-primary');
 
     // The main server's backup routes over real HTTP, parsed the way https-server.ts does.
-    const router = createBackupRoutes({
+    const routeDeps = {
         checkAdminAuth: async (ctx: any) => checkAdminAuth(ctx),
         rateLimit: () => true,
         clampLimit: (_v: unknown, def = 20) => def,
@@ -124,7 +128,10 @@ async function main() {
         activeConnections: new Map(),
         calculateAnalytics: () => ({}),
         enforceReadAuth: false,
-    } as any);
+    } as any;
+    const router = createBackupRoutes(routeDeps);
+    // The take-over envelope's routes too (the token fetches the envelope from one of them): section 12.
+    const takeoverRouter = createTakeoverEnvelopeRoutes(routeDeps);
     const app = new Koa();
     app.use(async (ctx, next) => {
         if (ctx.method === 'POST' && (ctx.get('content-type') || '').includes('application/json')) {
@@ -138,6 +145,7 @@ async function main() {
         await next();
     });
     app.use(router.routes());
+    app.use(takeoverRouter.routes());
     const server = http.createServer(app.callback());
     await new Promise<void>(r => server.listen(0, '127.0.0.1', () => r()));
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -388,6 +396,54 @@ async function main() {
         await settingsCtx.loadReplicationAccess();
         assert(els['rep-token-state'].textContent === 'not set · standbys copy with the admin password', '11. Settings, token-only off with no token: standbys copy with the admin password');
         assert(els['rep-token-only-notice'].style.display === 'block', '11. …with the token-only-off notice shown');
+
+        // ---------- 12. The recovery-seal key never reaches the token ----------
+        {
+            const sealKey = fs.readFileSync(path.join(DATA_DIR!, 'recovery-seal.key'));
+            const forms = [sealKey, Buffer.from(sealKey.toString('base64')), Buffer.from(sealKey.toString('hex')), Buffer.from(sealKey.toString('base64url'))];
+            const holdsKey = (b: Buffer) => forms.some((f) => b.includes(f));
+            clearReplicationToken();
+            setReplicationToken('token-for-the-seal-key-check');
+            updateLocalConfig({ replicationTokenOnly: true });
+            const answered: string[] = [];
+            const leaks: string[] = [];
+            for (const layer of [...(router.stack as any[]), ...(takeoverRouter.stack as any[])]) {
+                for (const method of (layer.methods as string[]).filter((m) => m === 'GET' || m === 'POST')) {
+                    const url = base + String(layer.path).replace(/:[A-Za-z]+/g, 'x');
+                    resetBrakes();
+                    const res = await fetch(url, {
+                        method,
+                        headers: { 'X-Replication-Token': 'token-for-the-seal-key-check', ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
+                        ...(method === 'POST' ? { body: JSON.stringify({ token: 'token-for-the-seal-key-check' }) } : {}),
+                    });
+                    const bytes = Buffer.from(await res.arrayBuffer());
+                    const headerText = Buffer.from(JSON.stringify([...res.headers.entries()]));
+                    if (res.status === 200) answered.push(`${method} ${layer.path}`);
+                    if (holdsKey(bytes) || holdsKey(headerText)) leaks.push(`${method} ${layer.path} (${res.status})`);
+                }
+            }
+            for (const expected of ['GET /api/local/admin/sync-snapshot', 'GET /api/local/admin/sync-delta', 'POST /api/local/admin/backup', 'GET /api/local/admin/takeover-envelope']) {
+                assert(answered.includes(expected), `12. (control) the token reaches ${expected}`);
+            }
+            assert(leaks.length === 0, `12. no route answers the token with the recovery-seal key, in any form (${answered.length} answered 200; leaks: ${leaks.join(', ') || 'none'})`);
+            // What the token downloads is the sealed backup; opened with the recovery code, its bundle carries the key.
+            resetBrakes();
+            const dl = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Replication-Token': 'token-for-the-seal-key-check' }, body: '{}' });
+            const sealedBytes = Buffer.from(await dl.arrayBuffer());
+            const tmp12 = fs.mkdtempSync(path.join(os.tmpdir(), 'standby-seal-key-'));
+            try {
+                const tarPath = path.join(tmp12, 'db.tar.gz');
+                fs.writeFileSync(tarPath, (await openEnvelope(new Uint8Array(sealedBytes), { type: 'code', code: recovery.code }, { kind: 'backup' })).payload);
+                const bundle = JSON.parse(execFileSync('tar', ['-xzOf', tarPath, './takeover-bundle.json'], { encoding: 'utf-8' }));
+                assert(bundle.files['recovery-seal.key'] === sealKey.toString('base64') && !holdsKey(sealedBytes),
+                    '12. (control) the key does travel, sealed: the backup the token downloads holds none of its bytes, and opened with the recovery code its bundle carries it');
+            } finally {
+                fs.rmSync(tmp12, { recursive: true, force: true });
+            }
+            const keyInLogs = printed.filter((l) => forms.slice(1).some((f) => l.includes(f.toString())));
+            assert(keyInLogs.length === 0, `12. no log line holds the recovery-seal key (${keyInLogs.length})`);
+            updateLocalConfig({ replicationTokenOnly: false });
+        }
 
         // ---------- Logs ----------
         const leaked = printed.filter(l => l.includes(ADMIN_PW));

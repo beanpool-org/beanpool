@@ -127,10 +127,14 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { checkAdminAuth } = await import('./admin-auth.js');
     const { identityReadOnlyGuard, startIdentityEpochWatch } = await import('./services/identity-epoch.js');
 
+    const { installRecoverySealAtBoot } = await import('./services/recovery-seal-key.js');
+
     await ensureGenesis();
     initAdminPassword();
     initStateEngine();
     const boot = resumeTakeoverAtBoot();
+    // index.ts step 2.65: the recovery seal for the role as it now stands (a take-over finished at this boot).
+    installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
     const node = await startP2P(0, 0);
     loadConnectors();
     await startTakeoverEnvelopeService({ standby: getNodeRole() === 'backup', checkIntervalMs: 3_600_000 });
@@ -197,6 +201,51 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
         epochCheck,
     });
 }
+
+/**
+ * Recovery seal S2: a member's sign-in recovery copy on a node, over its real HTTPS server and signature middleware
+ * (recovery-seal-test-http.ts), and the rows as they lie. Spread into a suite's commands. Run inside the node's process.
+ */
+export const recoverySealCommands: Record<string, (args: any) => Promise<unknown>> = {
+    'recovery-deposit': async (a: { seedHex: string; words: string[]; callsign: string; addMember: boolean }) => {
+        const { startRecoveryHttps } = await import('./recovery-seal-test-http.js');
+        return (await startRecoveryHttps()).deposit(a);
+    },
+    'recovery-recover': async (a: { callsign: string; sub?: string }) => {
+        const { startRecoveryHttps } = await import('./recovery-seal-test-http.js');
+        return (await startRecoveryHttps()).recover(a);
+    },
+    /** Every stored copy as it lies, and how many the live key alone (no retired key) does not open. */
+    'recovery-rows': async () => {
+        const { db } = await import('./db/db.js');
+        const { countUnopenable } = await import('./services/recovery-seal-key.js');
+        const rows = db.prepare(`SELECT owner_pubkey, holder_type, holder_ref, generation, encrypted_share, share_iv, share_tag, kdf_params
+            FROM recovery_shares ORDER BY owner_pubkey, holder_type, generation`).all() as any[];
+        let liveOnly: { wrapped: number; unopenable: number } | string;
+        try { liveOnly = countUnopenable(rows, { retired: false }); } catch (e: any) { liveOnly = e?.message || String(e); }
+        return { rows, liveOnly };
+    },
+    /**
+     * A standby that was once a main server: its own key file (`keyB64`), and a member's copy it took under that key, as
+     * its deposit code stored it (the sign-in already verified).
+     */
+    'plant-own-key-copy': async (a: { keyB64: string; seedHex: string; words: string[]; callsign: string; sub: string }) => {
+        const dataDir = process.env.BEANPOOL_DATA_DIR!;
+        const { db } = await import('./db/db.js');
+        const { sealSeedToSso } = await import('@beanpool/core');
+        const { storeVerifiedSsoKeeperGeneration } = await import('./engine/keeper-deposit.js');
+        const { ed25519 } = await import('@noble/curves/ed25519.js');
+        fs.writeFileSync(path.join(dataDir, 'recovery-seal.key'), Buffer.from(a.keyB64, 'base64'), { mode: 0o600 });
+        const pk = Buffer.from(ed25519.getPublicKey(Buffer.from(a.seedHex, 'hex'))).toString('hex');
+        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'recovery-seal-test', 'TEST')`).run(pk, a.callsign);
+        const sealed = await sealSeedToSso(new Uint8Array(Buffer.from(a.seedHex, 'hex')), 'google', a.sub, { words: a.words });
+        await storeVerifiedSsoKeeperGeneration({ provider: 'google', sub: a.sub } as any, pk,
+            [{ holderType: 'sso', holderRef: 'google', shareIndex: 1, ...(sealed as any) }]);
+        db.pragma('wal_checkpoint(TRUNCATE)');
+        return { pk, row: db.prepare('SELECT encrypted_share, kdf_params FROM recovery_shares WHERE owner_pubkey = ?').get(pk) };
+    },
+};
 
 /** What a test looks at on a node after a take-over. Runs inside the node's process. */
 export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Record<string, unknown>> {

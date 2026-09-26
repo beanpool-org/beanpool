@@ -2,7 +2,8 @@
  * Sealed backups (`.bpsealed`) — sealed-keys.md §6 (Fable, 2026-09-19), slice 3.
  *
  * A backup is the tar.gz it always was — `state.db`, `node_config.json` — plus the take-over bundle
- * (`takeover-bundle.json`: node key, community key, genesis, connectors, admin and 2FA fields, roles, the public
+ * (`takeover-bundle.json`: node key, community key, genesis, connectors, the recovery-seal key that opens members'
+ * sign-in recovery copies, admin and 2FA fields, roles, the public
  * address), streamed through a `bpseal/v1` envelope of kind `backup` locked to the same people as the take-over
  * envelope: every owner, plus the printed recovery code. One file restores a whole community, and nobody who
  * finds the file can read it.
@@ -47,7 +48,9 @@
  * - A lost object leaves a node with no backup at all.
  * - An I/O error is reported as a known shortfall.
  * - A snapshot's keys are resolved against the LIVE store: a snapshot ships the objects it captured.
- * - A readable backup carries the node keys. The take-over bundle goes only into a locked file.
+ * - A readable backup carries the node keys, or the recovery-seal key. The take-over bundle goes only into a locked
+ *   file, so a server restored from a readable one cannot open members' sign-in recovery copies, and
+ *   {@link NOT_LOCKED_MESSAGE} says so.
  * - A restore trusts the archive inside the envelope. Opening only proves the file was locked to a key someone
  *   here holds; the tar inside goes through exactly the hostile-archive checks a legacy upload does.
  * - A restore takes a file signed by someone else when this server knows who should have signed it (966
@@ -91,6 +94,7 @@ import {
     readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS,
     type TakeoverBundle,
 } from './takeover-envelope.js';
+import { installCarriedRecoverySealKey, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -108,8 +112,15 @@ export function isGzip(firstBytes: Uint8Array): boolean {
     return firstBytes.length >= 2 && firstBytes[0] === 0x1f && firstBytes[1] === 0x8b;
 }
 
+/**
+ * What a readable backup cannot do (recovery seal S2, design §4): it never carries data/recovery-seal.key, the key that
+ * opens members' sign-in recovery copies, which travels only inside the take-over bundle of a locked one.
+ */
+const PLAIN_BACKUP_LIMITS = "Until then a backup file can be read by anyone who has it, and a server restored from it cannot open members' "
+    + 'sign-in recovery copies.';
+
 /** What an operator reads when a backup leaves this server readable. The fix is in the operator manual. */
-export const NOT_LOCKED_MESSAGE = 'Backups are not locked yet: make a recovery code to lock them.';
+export const NOT_LOCKED_MESSAGE = `Backups are not locked yet: make a recovery code to lock them. ${PLAIN_BACKUP_LIMITS}`;
 
 export type BackupLock =
     | { locked: true; codeId: number; message: string }
@@ -125,7 +136,7 @@ export function backupLockState(): BackupLock {
     const inputs = readSealingInputs();
     if (!inputs.ok || !inputs.code) {
         const reason = inputs.ok ? 'no-recovery-code' : inputs.state === 'no-genesis' ? 'no-genesis' : 'no-identity';
-        return { locked: false, reason, message: `Backups are not locked yet: ${inputs.ok ? 'there is no recovery code' : inputs.message}.` };
+        return { locked: false, reason, message: `Backups are not locked yet: ${inputs.ok ? 'there is no recovery code' : inputs.message}. ${PLAIN_BACKUP_LIMITS}` };
     }
     return {
         locked: true, codeId: inputs.code.codeId,
@@ -895,11 +906,18 @@ export function applyBundle(bundle: TakeoverBundle): string[] {
     const dir = dataDir();
     const written: string[] = [];
     for (const f of BUNDLED_FILES) {
+        if (f === RECOVERY_SEAL_KEY_FILE) continue;
         const b64 = bundle.files[f];
         if (!b64) continue;
         writeAtomic(path.join(dir, f), Buffer.from(b64, 'base64'), f === 'genesis.json' || f === 'connectors.json' ? 0o644 : 0o600);
         written.push(f);
     }
+    // The key that opens members' sign-in recovery copies: installed, never written over a different key this server
+    // holds (that one is kept beside it, services/recovery-seal-key.ts). A backup sealed before it travelled has none;
+    // the restore says what that means for the copies in the database it brought.
+    const sealKey = installCarriedRecoverySealKey(bundle.files[RECOVERY_SEAL_KEY_FILE]);
+    if (sealKey.outcome === 'installed' || sealKey.outcome === 'same') written.push(RECOVERY_SEAL_KEY_FILE);
+    else if (sealKey.outcome === 'replaced') written.push(`${RECOVERY_SEAL_KEY_FILE} (this server's own kept as ${sealKey.retiredAs})`);
     // local-config.json: the community's admin and 2FA credentials, and its recovery code's public record, so this
     // server signs owners in with the community's password and keeps locking to the same paper. Everything else
     // in this server's config (its own replication token, callsign, gateway) stays.

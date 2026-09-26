@@ -114,7 +114,7 @@ async function runSuite() {
     const admin = makeKeypair();
 
     // ── 4. No recovery code: readable, as before, and flagged not locked ──
-    const NOT_LOCKED = 'Backups are not locked yet: make a recovery code to lock them.';
+    const NOT_LOCKED = "Backups are not locked yet: make a recovery code to lock them. Until then a backup file can be read by anyone who has it, and a server restored from it cannot open members' sign-in recovery copies.";
     const tarMembers = (buf: Buffer): string[] => {
         const f = path.join(dataDir!, `.t-${crypto.randomBytes(4).toString('hex')}.tar.gz`);
         fs.writeFileSync(f, buf);

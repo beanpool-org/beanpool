@@ -282,6 +282,18 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                             Last re-locked {formatWhen(status.sealedAt)}{status.sealReason ? ` (${status.sealReason})` : ''}.
                         </p>
                     )}
+                    {/* Whether a take-over from this lock opens members' sign-in recovery copies (recovery seal S2). */}
+                    {status.recoverySealKey && (
+                        <p
+                            data-testid="takeover-seal-key"
+                            className={status.recoverySealKey.carried
+                                ? 'text-xs text-nature-300 m-0'
+                                : 'text-xs m-0 p-3 rounded-xl border border-amber-800 bg-amber-950/50 text-amber-200'}
+                            style={{ overflowWrap: 'anywhere' }}
+                        >
+                            {status.recoverySealKey.carried ? '🔑 ' : '⚠️ '}{status.recoverySealKey.message}
+                        </p>
+                    )}
                 </div>
             )}
 

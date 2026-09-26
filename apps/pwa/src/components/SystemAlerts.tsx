@@ -183,50 +183,56 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                 style={{
                     background: 'var(--bg-primary)',
                     border: `2px solid ${colour}`,
-                    borderRadius: '12px', padding: '1.5rem',
-                    maxWidth: '400px', width: '100%', maxHeight: '100%', overflowY: 'auto', boxSizing: 'border-box',
+                    borderRadius: '12px',
+                    maxWidth: '400px', width: '100%', maxHeight: '100%', boxSizing: 'border-box',
+                    // The words scroll and the buttons stay: a long notice at 320px with large text still shows Acknowledge.
+                    display: 'flex', flexDirection: 'column', overflow: 'hidden',
                     boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
                     textAlign: 'center'
                 }}
             >
-                <h2 id="system-alert-title" style={{ margin: '0 0 1rem', fontSize: '1.5rem', color: colour, overflowWrap: 'anywhere' }}>
-                    {ICONS[head.severity] ?? 'ℹ️ '}
-                    {head.title}
-                </h2>
-                <p id="system-alert-body" style={{ margin: '0 0 1.5rem', lineHeight: 1.5, fontSize: '1.05rem', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
-                    {head.body}
-                </p>
-                {waiting > 1 && (
-                    <p data-testid="system-alert-count" style={{ margin: '0 0 0.75rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                        1 of {waiting}
+                <div data-testid="system-alert-text" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '1.5rem 1.25rem 0' }}>
+                    <h2 id="system-alert-title" style={{ margin: '0 0 1rem', fontSize: 'min(1.5rem, 7vw)', lineHeight: 1.25, color: colour, overflowWrap: 'anywhere' }}>
+                        {ICONS[head.severity] ?? 'ℹ️ '}
+                        {head.title}
+                    </h2>
+                    <p id="system-alert-body" style={{ margin: '0 0 1.25rem', lineHeight: 1.5, fontSize: '1.05rem', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
+                        {head.body}
                     </p>
-                )}
-                <button
-                    type="button"
-                    onClick={() => setQueue(q => q.slice(1))}
-                    style={{
-                        width: '100%', padding: '0.8rem',
-                        background: colour,
-                        color: '#fff', border: 'none', borderRadius: '8px',
-                        fontSize: '1.1rem', fontWeight: 600, cursor: 'pointer'
-                    }}
-                >
-                    Acknowledge
-                </button>
-                {waiting > 1 && (
+                </div>
+                <div style={{ flex: '0 0 auto', padding: '0.75rem 1.25rem 1.25rem' }}>
+                    {waiting > 1 && (
+                        <p data-testid="system-alert-count" style={{ margin: '0 0 0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                            1 of {waiting}
+                        </p>
+                    )}
                     <button
                         type="button"
-                        onClick={closeAll}
+                        onClick={() => setQueue(q => q.slice(1))}
                         style={{
-                            width: '100%', padding: '0.6rem', marginTop: '0.5rem',
-                            background: 'transparent', color: 'var(--text-secondary)',
-                            border: '1px solid var(--border-secondary)', borderRadius: '8px',
-                            fontSize: '0.95rem', cursor: 'pointer'
+                            width: '100%', padding: '0.8rem',
+                            background: colour,
+                            color: '#fff', border: 'none', borderRadius: '8px',
+                            fontSize: '1.1rem', fontWeight: 600, cursor: 'pointer'
                         }}
                     >
-                        Close all {waiting}
+                        Acknowledge
                     </button>
-                )}
+                    {waiting > 1 && (
+                        <button
+                            type="button"
+                            onClick={closeAll}
+                            style={{
+                                width: '100%', padding: '0.6rem', marginTop: '0.5rem',
+                                background: 'transparent', color: 'var(--text-secondary)',
+                                border: '1px solid var(--border-secondary)', borderRadius: '8px',
+                                fontSize: '0.95rem', cursor: 'pointer'
+                            }}
+                        >
+                            Close all {waiting}
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );

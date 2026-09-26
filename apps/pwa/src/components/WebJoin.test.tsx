@@ -10,6 +10,7 @@ import {
     generateIdentity,
     loadIdentity,
     loadPendingJoin,
+    markInviteSent,
     savePendingJoin,
     PENDING_JOIN_TTL_MS,
     type BeanPoolIdentity,
@@ -921,6 +922,26 @@ describe('one browser, one account: a join in a second tab never replaces the ac
         expect(node.joins()).toHaveLength(0);
         expect((await loadIdentity())?.publicKey).toBe(identity.publicKey);
         expect(peekPending()).toBeUndefined();
+    });
+});
+
+describe('a key an invite went with, kept here unsettled (4112075367): no door join goes beside it', () => {
+    it("another tab's invite key is on disk: the join is not sent, this key is not marked sent, and the page says why", async () => {
+        await seedPending();
+        // Another tab's invite went out with a key of its own, and the node hasn't settled it.
+        const theirs = await generateIdentity('Rowan');
+        await markInviteSent(theirs, 'their-hash', Date.now());
+        const node = stubNode({ '/api/join': () => json(200, { success: true, member: { callsign: 'Alice' } }) });
+        const { onJoined } = renderJoin({ authReturn: googleReturn() });
+
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent('An invite sent from this browser is still being checked');
+        expect(node.joins()).toHaveLength(0);
+        expect(onJoined).not.toHaveBeenCalled();
+        expect(await loadIdentity()).toBeNull();
+        const kept = await loadPendingJoin();
+        expect(kept?.identity.publicKey).toBe(identity.publicKey);
+        expect(kept?.sentAt).toBeUndefined();
+        expect(idb.peek('beanpool-identity', 'keys', 'invite-sent')).toMatchObject({ identity: { publicKey: theirs.publicKey } });
     });
 });
 

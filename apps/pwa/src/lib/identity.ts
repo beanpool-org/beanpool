@@ -466,22 +466,35 @@ export async function savePendingJoin(pending: PendingJoin): Promise<PendingJoin
     return out.saved;
 }
 
+export interface MarkJoinSentOptions {
+    /**
+     * Refuse (InviteSentHeldError) while a key an invite went with from this browser is stored unsettled, holding
+     * another key (markInviteSent): that key may be a member's, and a join going out beside it would make this browser
+     * two members' keys, with only one of them ever saved (4112075367). Decided in the transaction that marks the join.
+     * markInviteSent refuses the other way round, so the two never both go out.
+     */
+    refuseWhileInviteKept?: boolean;
+}
+
 /**
  * Mark `pending` sent at `at`, before its join goes. If a join with this key was already out and unsettled (in the
  * store, or in this copy), that one may still land, and is remembered as `earlierSentAt`. Refused like
- * savePendingJoin when another key's sent join holds the slot. Returns what was stored.
+ * savePendingJoin when another key's sent join holds the slot, or as `options` says. Returns what was stored.
  */
-export async function markPendingJoinSent(pending: PendingJoin, at: number = Date.now()): Promise<PendingJoin> {
-    const out = await withStoredPendingJoin<{ saved: PendingJoin } | { held: PendingJoin }>((current) => {
+export async function markPendingJoinSent(pending: PendingJoin, at: number = Date.now(), options: MarkJoinSentOptions = {}): Promise<PendingJoin> {
+    const out = await withStoredSlots<{ saved: PendingJoin } | { held: PendingJoin } | { invite: InviteSent }>(({ pending: current, inviteSent }) => {
         if (isSent(current) && current.identity.publicKey !== pending.identity.publicKey) return { result: { held: current } };
+        const invite = options.refuseWhileInviteKept ? asInviteSent(inviteSent) : null;
+        if (invite && invite.identity.publicKey !== pending.identity.publicKey) return { result: { invite } };
         const earlier = [current && isSent(current) ? lastSentAt(current) : null, pendingJoinSent(pending) ? lastSentAt(pending) : null]
             .filter((t): t is number => t !== null);
         const next: PendingJoin = { ...withoutSentMark(pending), sentAt: at };
         // NaN (a time that cannot be read) wins, so such a join is never judged unable to land.
         if (earlier.length) next.earlierSentAt = earlier.some(Number.isNaN) ? Number.NaN : Math.max(...earlier);
-        return { write: next, result: { saved: next } };
+        return { pending: next, result: { saved: next } };
     });
     if ('held' in out) throw new PendingJoinHeldError(out.held);
+    if ('invite' in out) throw new InviteSentHeldError(out.invite);
     return out.saved;
 }
 
@@ -728,17 +741,24 @@ export async function loadInviteSent(): Promise<InviteSent | null> {
 /**
  * Record `identity` as sent with the invite `inviteHash` names, at `at`, before its redeem goes. The same key sent again
  * keeps the send before it as `earlierSentAt`: that one isn't settled, or its record would be gone. Refused, with nothing
- * changed (InviteSentHeldError), when another key's record is stored, since that one may be a member's only copy.
- * Returns what was stored.
+ * changed (InviteSentHeldError), when another key's record is stored, since that one may be a member's only copy; and
+ * as `options` says (SentJoinWaitingError), decided on the pending join as stored, in this same transaction: a door
+ * join that went out and waits to be settled is settled first, and never has an invite's key go out beside it
+ * (4112075367; markPendingJoinSent's refuseWhileInviteKept is the other way round). Returns what was stored.
  */
-export async function markInviteSent(identity: BeanPoolIdentity, inviteHash: string, at: number = Date.now()): Promise<InviteSent> {
-    const out = await withStoredSlots<{ saved: InviteSent } | { held: InviteSent }>(({ inviteSent }) => {
+export async function markInviteSent(
+    identity: BeanPoolIdentity, inviteHash: string, at: number = Date.now(), options: SaveIdentityOptions = {},
+): Promise<InviteSent> {
+    const out = await withStoredSlots<{ saved: InviteSent } | { held: InviteSent } | { sentJoin: PendingJoin }>(({ inviteSent, pending }) => {
+        const sentJoin = sentJoinToWaitFor(pending, options);
+        if (sentJoin) return { result: { sentJoin } };
         const stored = asInviteSent(inviteSent);
         if (stored && stored.identity.publicKey !== identity.publicKey) return { result: { held: stored } };
         const next: InviteSent = { identity, inviteHash, sentAt: at };
         if (stored) next.earlierSentAt = lastInviteSentAt(stored);
         return { inviteSent: next, result: { saved: next } };
     });
+    if ('sentJoin' in out) throw new SentJoinWaitingError(out.sentJoin);
     if ('held' in out) throw new InviteSentHeldError(out.held);
     return out.saved;
 }

@@ -585,3 +585,44 @@ describe('a key an invite was sent with: its own slot, kept until the node has s
         expect(await loadInviteSent()).toBeNull();
     });
 });
+
+describe('a door join and an invite never both go out from this browser with different keys (4112075367)', () => {
+    const OTHER: BeanPoolIdentity = { ...IDENTITY, publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(96), callsign: 'Bea' };
+    const peekSent = () => idb.peek('beanpool-identity', 'keys', 'invite-sent') as Record<string, unknown> | undefined;
+    const peekPending = () => idb.peek('beanpool-identity', 'keys', 'pending-join') as PendingJoin | undefined;
+    const T = 1_800_000_000_000;
+
+    it('a door join is not marked sent while another key an invite went with is kept, and nothing changes; once that is settled, it is', async () => {
+        await markInviteSent(OTHER, 'hash-1', T);
+        await savePendingJoin(pending());
+        const refused = await markPendingJoinSent(pending(), T + 1000, { refuseWhileInviteKept: true }).then(() => null, (e: unknown) => e);
+        expect(refused).toBeInstanceOf(InviteSentHeldError);
+        expect((refused as InviteSentHeldError).held).toMatchObject({ identity: { publicKey: OTHER.publicKey }, sentAt: T });
+        expect(peekPending()).toMatchObject({ identity: { publicKey: IDENTITY.publicKey } });
+        expect(peekPending()?.sentAt).toBeUndefined();
+        expect(peekSent()).toMatchObject({ identity: { publicKey: OTHER.publicKey }, sentAt: T });
+
+        // Settled: the node let it go (refused, and said not a member), so the record is gone.
+        await settleRefusedInviteSend({ publicKey: OTHER.publicKey, askedAt: T + 1 }, T);
+        expect(await markPendingJoinSent(pending(), T + 2000, { refuseWhileInviteKept: true })).toMatchObject({ sentAt: T + 2000 });
+    });
+
+    it('without the rule (a member the nonce request found, marked so no clock drops it), the mark goes ahead as before', async () => {
+        await markInviteSent(OTHER, 'hash-1', T);
+        expect(await markPendingJoinSent(pending(), T + 1000)).toMatchObject({ sentAt: T + 1000 });
+        expect(peekSent()).toMatchObject({ identity: { publicKey: OTHER.publicKey }, sentAt: T });
+    });
+
+    it('an invite is not marked sent while a door join that went out waits, and nothing changes; past the one the node settled, it is', async () => {
+        await markPendingJoinSent(pending({ identity: OTHER }), T);
+        const refused = await markInviteSent(IDENTITY, 'hash-1', T + 1000, { refuseWhileSentJoinWaits: { except: null } })
+            .then(() => null, (e: unknown) => e);
+        expect(refused).toBeInstanceOf(SentJoinWaitingError);
+        expect((refused as SentJoinWaitingError).pending).toMatchObject({ identity: { publicKey: OTHER.publicKey }, sentAt: T });
+        expect(peekSent()).toBeUndefined();
+        expect(peekPending()).toMatchObject({ identity: { publicKey: OTHER.publicKey }, sentAt: T });
+
+        await markInviteSent(IDENTITY, 'hash-1', T + 1000, { refuseWhileSentJoinWaits: { except: { publicKey: OTHER.publicKey, sentAt: T } } });
+        expect(peekSent()).toMatchObject({ identity: { publicKey: IDENTITY.publicKey }, sentAt: T + 1000 });
+    });
+});

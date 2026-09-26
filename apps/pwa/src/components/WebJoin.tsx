@@ -21,6 +21,7 @@ import {
     releaseSentPendingJoin,
     savePendingJoin,
     IdentityHeldError,
+    InviteSentHeldError,
     PendingJoinHeldError,
     PENDING_JOIN_RATE_LIMITED_TTL_MS,
     PENDING_JOIN_TTL_MS,
@@ -470,17 +471,20 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             if (held) return showTaken(held, from, false);
             // Marked sent BEFORE it goes, and not sent if that cannot be written: once the node has the join, the answer
             // can be lost, and this record may be the only copy of a member's key. The nonce is on its way to the node;
-            // the page never offers it again.
+            // the page never offers it again. Nor sent while another key an invite went with from this browser is kept
+            // unsettled (another tab's): that one may be a member's, and is settled first (4112075367).
             let sent: PendingJoin;
             try {
-                sent = await markPendingJoinSent({ ...from, nonce: null });
+                sent = await markPendingJoinSent({ ...from, nonce: null }, Date.now(), { refuseWhileInviteKept: true });
             } catch (e) {
                 console.error('[WebJoin] the join could not be marked sent, so it was not sent:', e);
                 return toProviders(from, {
                     tone: 'error',
                     text: e instanceof PendingJoinHeldError
                         ? 'An earlier join from this browser is still being checked. Reload the page to finish it.'
-                        : "This browser couldn't save your account, so nothing was sent. Try again, or try another browser.",
+                        : e instanceof InviteSentHeldError
+                            ? 'An invite sent from this browser is still being checked, so nothing was sent. Reload the page to finish it.'
+                            : "This browser couldn't save your account, so nothing was sent. Try again, or try another browser.",
                 });
             }
             joinWent.current = true;

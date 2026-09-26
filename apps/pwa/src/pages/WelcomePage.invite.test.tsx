@@ -616,3 +616,65 @@ describe("a redeem's 400 lets the kept key go only once the node says it is not 
         expect(await loadIdentity()).toBeNull();
     });
 });
+
+/*
+ * Confirmation round 1 of the fix, 4112075367: on the open door, a kept invite key is settled before the door's lobby
+ * is offered, so a door join never saves a second key beside it.
+ */
+describe('the open door comes after a kept invite key (4112075367)', () => {
+    const GLOBAL_OPEN = { ...LOCAL, profile: 'global', features: { openJoin: true } };
+
+    it('the open door, with a kept invite key the node gives no answer about: "Finish joining", not the lobby, and no second key', async () => {
+        const kept = await generateIdentity('Rowan');
+        await markInviteSent(kept, 'hash', Date.now());
+        const node = stubNode(GLOBAL_OPEN, { '/api/community/membership/': () => { throw new TypeError('Failed to fetch'); } });
+        render(<WelcomePage onComplete={vi.fn()} />);
+
+        expect(await screen.findByRole('heading', { name: 'Finish joining' })).toBeInTheDocument();
+        expect(screen.getByTestId('invite-sent-unreachable')).toHaveTextContent('Rowan');
+        expect(screen.queryByTestId('join-screen-lobby')).toBeNull();
+        expect(screen.queryByTestId('join-start')).toBeNull();
+        expect(peekPending()).toBeUndefined();
+        expect(await loadIdentity()).toBeNull();
+        expect(peekInviteSent()?.identity.publicKey).toBe(kept.publicKey);
+        expect(node.calls.filter((c) => c.path.startsWith('/api/join'))).toHaveLength(0);
+    });
+
+    it('the open door, with a kept invite key the node says is not a member while its send could still land: "Finish joining" waits; once none can, Retry lets it go and the lobby follows', async () => {
+        const t0 = Date.now();
+        const kept = await generateIdentity('Rowan');
+        await markInviteSent(kept, 'hash', t0);
+        stubNode(GLOBAL_OPEN, { '/api/community/membership/': () => json(200, { isMember: false, callsign: null }) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+
+        expect(await screen.findByRole('heading', { name: 'Finish joining' })).toBeInTheDocument();
+        expect(screen.getByTestId('invite-sent-unreachable')).toHaveTextContent("doesn't have you yet");
+        expect(screen.queryByTestId('join-screen-lobby')).toBeNull();
+        expect(peekInviteSent()?.identity.publicKey).toBe(kept.publicKey);
+
+        // Still inside the window: said so, and the key stays.
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(await screen.findByText(/still doesn't have you/)).toBeInTheDocument();
+        expect(peekInviteSent()?.identity.publicKey).toBe(kept.publicKey);
+        expect(screen.queryByTestId('join-screen-lobby')).toBeNull();
+
+        vi.spyOn(Date, 'now').mockReturnValue(t0 + 16 * MIN);
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await screen.findByTestId('join-screen-lobby');
+        expect(peekInviteSent()).toBeUndefined();
+        expect(await loadIdentity()).toBeNull();
+    });
+
+    it('the open door, with a kept invite key the node has as a member: it is saved, and its photo and 12 words follow', async () => {
+        const kept = await generateIdentity('Rowan');
+        await markInviteSent(kept, 'hash', Date.now());
+        stubNode(GLOBAL_OPEN, { '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Rowan' }) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+
+        await screen.findByText(/Choose your look/);
+        expect(await loadIdentity()).toMatchObject({ publicKey: kept.publicKey, callsign: 'Rowan' });
+        expect(peekInviteSent()).toBeUndefined();
+        expect(peekPending()).toBeUndefined();
+        await expectWordsOf(kept);
+    });
+});

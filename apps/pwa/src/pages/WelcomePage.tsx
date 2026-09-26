@@ -14,7 +14,7 @@ import {
     checkIdentitySave, clearUnsentPendingJoin, completeInviteSent, createIdentityFromMnemonic, generateIdentity, identityFromMnemonic,
     importIdentity, loadInviteSent, markInviteSent, releaseInviteSent, settleRefusedInviteSend, updateCallsign, getMnemonic, hasMnemonic,
     loadPendingJoin, loadPendingRestore, pendingJoinSent, seedViewedKey, IdentityHeldError, InviteSentHeldError, SentJoinWaitingError,
-    type BeanPoolIdentity, type JoinProvider, type SaveIdentityOptions,
+    INVITE_SEND_CAN_LAND_MS, type BeanPoolIdentity, type JoinProvider, type SaveIdentityOptions,
 } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
@@ -358,10 +358,13 @@ export function WelcomePage({ onComplete }: Props) {
      * Every load of this page asks the node about it, signed by that key, once any sent door join is settled:
      *   - a member: saved through the guarded write, then the photo and its 12 words;
      *   - not a member, with no send that can still land: let go, and the invite form starts afresh;
-     *   - not a member yet, while a send could still land: kept, and the form's next try sends that same key;
+     *   - not a member yet, while a send could still land: kept ('waiting'), and the invite form's next try sends that
+     *     same key. On the open door there is no invite form: "Finish joining" waits for it with Retry, and the door's
+     *     lobby comes once the key is settled, so a door join never makes a second key beside it (4112075367);
      *   - no answer: "Finish joining" with Retry. Never the invite form, whose pre-flight would call the code used.
+     * The open door's lobby is shown only once this is 'none', whatever the door says.
      */
-    type SentInviteView = 'checking' | 'none' | { stuck: 'unreachable' | 'unsaved'; name: string; busy: boolean; again: boolean };
+    type SentInviteView = 'checking' | 'none' | { stuck: 'unreachable' | 'unsaved' | 'waiting'; name: string; busy: boolean; again: boolean };
     const [sentInvite, setSentInvite] = useState<SentInviteView>('checking');
     const [sentInviteCheck, setSentInviteCheck] = useState(0);
     useEffect(() => {
@@ -378,7 +381,7 @@ export function WelcomePage({ onComplete }: Props) {
         setSentInviteCheck((n) => n + 1);
     }
 
-    function stuckOnSentInvite(stuck: 'unreachable' | 'unsaved', name: string) {
+    function stuckOnSentInvite(stuck: 'unreachable' | 'unsaved' | 'waiting', name: string) {
         setSentInvite((v) => ({ stuck, name, busy: false, again: typeof v === 'object' && v.stuck === stuck }));
     }
 
@@ -436,9 +439,11 @@ export function WelcomePage({ onComplete }: Props) {
             if (cancelled()) return;
             if (!released) {
                 // A send with it could still land: the next try sends this same key, and a pre-flight that calls the
-                // code used doesn't stop it (handleCreate).
+                // code used doesn't stop it (handleCreate). Kept in sight: on the open door it is waited for.
                 inviteKey.current = kept;
                 setCallsign((typed) => typed || kept.callsign);
+                stuckOnSentInvite('waiting', kept.callsign);
+                return;
             }
             setSentInvite('none');
             return;
@@ -695,9 +700,10 @@ export function WelcomePage({ onComplete }: Props) {
             // On disk before it goes, in a slot of its own that loadIdentity never reads (deciding pass 4111943146).
             // The node may take this key while its answer is lost, and a reload or a discarded tab must not lose a
             // member's only key: the next load asks the node about it (settleSentInvite). Refused when another key an
-            // invite went with is kept there, which is settled first.
+            // invite went with is kept there, or a door join that went out waits, decided in the same transaction:
+            // either is settled first, so no two keys from here go out at once (4112075367).
             const sentAt = Date.now();
-            await markInviteSent(identity, inviteHash(trimmedCode), sentAt);
+            await markInviteSent(identity, inviteHash(trimmedCode), sentAt, sentJoinGuard());
 
             // Redeem invite immediately so user is registered on node right away. Signed with the key it names, which
             // is not this browser's identity yet.
@@ -726,8 +732,12 @@ export function WelcomePage({ onComplete }: Props) {
                         joined = { ...identity, callsign: probe.callsign || identity.callsign };
                     } else {
                         if (probe?.kind === 'not_member') {
-                            await settleRefusedInviteSend(probe.answer, sentAt)
-                                .catch((e) => console.warn('[Welcome] a refused invite key not let go:', e));
+                            const left = await settleRefusedInviteSend(probe.answer, sentAt)
+                                .catch((e) => {
+                                    console.warn('[Welcome] a refused invite key not let go:', e);
+                                    return undefined;
+                                });
+                            if (left === null) setSentInvite('none');
                         }
                         setError(typeof status === 'number' && status < 500 && redeemErr.message
                             ? redeemErr.message
@@ -741,6 +751,7 @@ export function WelcomePage({ onComplete }: Props) {
             // The node has this member: now the key is saved, through the guarded write, and its invite-sent record
             // goes in the same transaction.
             await completeInviteSent(joined, sentJoinGuard());
+            setSentInvite('none');
             setPendingInviteCode(trimmedCode);
             enterAsInvited(joined);
             setLoading(false);
@@ -1080,6 +1091,11 @@ export function WelcomePage({ onComplete }: Props) {
         marginBottom: '1rem',
     };
 
+    // "Finish joining" for a kept invite key (settleSentInvite). A key the node says is not a member yet goes back to the
+    // invite form, whose next try sends it; the open door has no such form, so it waits here instead (4112075367).
+    const finishJoining = typeof sentInvite === 'object' && (sentInvite.stuck !== 'waiting' || webJoinForDoor);
+    const waitMinutes = Math.round(INVITE_SEND_CAN_LAND_MS / 60_000);
+
     return (
         <div className="page-surface min-h-screen text-nature-950 dark:text-oat-50" style={{
             display: 'flex',
@@ -1105,7 +1121,7 @@ export function WelcomePage({ onComplete }: Props) {
                     borderRadius: '16px',
                     padding: '2rem',
                 }}>
-                    {door === 'unreachable' && !hasMnemonic(pendingIdentity) && !heldIdentity && typeof sentInvite !== 'object' && (
+                    {door === 'unreachable' && !hasMnemonic(pendingIdentity) && !heldIdentity && !finishJoining && (
                         <div role="alert" data-testid="door-unreachable" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                             Can't reach the community right now. Try again in a minute.{' '}
                             <button type="button" onClick={() => setDoorCheck((n) => n + 1)}
@@ -2000,10 +2016,12 @@ export function WelcomePage({ onComplete }: Props) {
                         />
                     ) : restoreReturn === 'checking' ? (
                         <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>One moment…</p>
-                    ) : webJoinForDoor || sentJoin === 'settle' ? (
+                    ) : (webJoinForDoor && sentInvite === 'none') || sentJoin === 'settle' ? (
                         /* A sign-in coming back is met at once, before the node has said what it is; on a node that
                            turns out to be invite-only it is dropped, and the invite page shows as always. A join that
-                           went out from this browser is settled here first, whatever the door says (review 4106962311). */
+                           went out from this browser is settled here first, whatever the door says (review 4106962311).
+                           A key an invite went with comes before the door's lobby: "One moment…" while it is read and
+                           asked about, then "Finish joining" until it is settled (4112075367). */
                         /* ===== THE OPEN DOOR: join with a sign-in, no invite (design G11) ===== */
                         <>
                             {error && (
@@ -2030,14 +2048,16 @@ export function WelcomePage({ onComplete }: Props) {
                                 }}
                             />
                         </>
-                    ) : typeof sentInvite === 'object' ? (
+                    ) : finishJoining && typeof sentInvite === 'object' ? (
                         /* ===== A KEY AN INVITE WENT WITH, NOT SETTLED YET (deciding pass 4111943146) ===== */
                         <>
                             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>Finish joining</h3>
                             <p role="alert" data-testid="invite-sent-unreachable" style={{ fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '0.75rem', overflowWrap: 'anywhere' }}>
                                 {sentInvite.stuck === 'unsaved'
                                     ? `The community has you as ${sentInvite.name || 'a member'}, but this browser couldn't save the account.`
-                                    : `You asked to join as ${sentInvite.name || 'a new member'}, and the answer didn't reach this browser.`}
+                                    : sentInvite.stuck === 'waiting'
+                                        ? `You asked to join as ${sentInvite.name || 'a new member'} with an invite, and the community doesn't have you yet.`
+                                        : `You asked to join as ${sentInvite.name || 'a new member'}, and the answer didn't reach this browser.`}
                                 {` It's keeping ${sentInvite.name ? `${sentInvite.name}'s` : 'your'} key until it can finish.`}
                             </p>
                             {sentInvite.stuck === 'unreachable' && (
@@ -2045,9 +2065,18 @@ export function WelcomePage({ onComplete }: Props) {
                                     Can't reach the community right now.
                                 </p>
                             )}
+                            {sentInvite.stuck === 'waiting' && (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, marginBottom: '1rem', overflowWrap: 'anywhere' }}>
+                                    {`An invite can still go through up to ${waitMinutes} minutes after it was sent. After that, Retry lets the key go, and you can join another way.`}
+                                </p>
+                            )}
                             <p role="status" style={{ fontSize: '0.8rem', lineHeight: 1.5, marginBottom: sentInvite.again && !sentInvite.busy ? '1rem' : 0, overflowWrap: 'anywhere' }}>
                                 {sentInvite.again && !sentInvite.busy
-                                    ? (sentInvite.stuck === 'unsaved' ? "Still couldn't save it. Try again in a minute." : "Still can't reach the community. Try again in a minute.")
+                                    ? (sentInvite.stuck === 'unsaved'
+                                        ? "Still couldn't save it. Try again in a minute."
+                                        : sentInvite.stuck === 'waiting'
+                                            ? "The community still doesn't have you. Try again in a few minutes."
+                                            : "Still can't reach the community. Try again in a minute.")
                                     : ''}
                             </p>
                             {/* aria-disabled, not disabled, while it asks: a disabled button would drop the focus it has. */}

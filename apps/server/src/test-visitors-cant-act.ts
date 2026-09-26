@@ -641,6 +641,12 @@ async function main(): Promise<void> {
         const acct = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(paid.pk) as any;
         assert(r3.status === 200 && isVisitorRow(paid.pk) && Math.abs(Number(acct?.balance) - 2) < 1e-6 && Math.abs(balanceOf(paid.pk) - 2) < 1e-6,
             `a send that goes through makes the recipient's visitor's row, holding the Beans (${show(r3)}, ${JSON.stringify(acct)})`);
+        // A key with no row here holds nothing to send: refused as this rule refuses a visitor's write, not a 500 (3b's note).
+        const before = snapshot();
+        const r4 = await call('POST', nobody, '/api/ledger/transfer', { from: nobody.pk, to: mia.pk, amount: 1 });
+        const changed = changedTables(before, snapshot());
+        assert(r4.status === 403 && r4.body?.code === 'not_a_member' && r4.body?.error === NOT_A_MEMBER && changed.length === 0 && !hasRow(nobody.pk),
+            `a key with no row sends nothing: 403 not_a_member, in plain words, and nothing is written (${show(r4)}${changed.length ? `; changed: ${changed.join(', ')}` : ''})`);
     }
 
     // ── 5. /ws ──────────────────────────────────────────────────────────────────────────────────

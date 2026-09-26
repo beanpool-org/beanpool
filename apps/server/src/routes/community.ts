@@ -34,7 +34,7 @@ import {
     contactVisibleTo, contactViewer, isNodeMember, readsAsMember, passesReadGate, isVisitorKey, publicMemberCard,
     isLiveVisitor, getActingMember,
 } from '../state-engine.js';
-import { NOT_A_MEMBER_CODE } from '../engine/members.js';
+import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
 import {
@@ -1315,6 +1315,13 @@ router.post('/api/ledger/transfer', async (ctx) => {
     if (bodyFrom !== undefined && bodyFrom !== from) {
         ctx.status = 403;
         ctx.body = { error: 'from must match the signing key' };
+        return;
+    }
+    // A key with no row here holds nothing to send: refused as a visitor's refused write is (403 not_a_member), where
+    // transfer()'s assertMemberActive would throw and answer 500. A visitor's row sends what it holds, below.
+    if (!getMember(from)) {
+        ctx.status = 403;
+        ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
         return;
     }
     const parsedAmount = Number(amount);

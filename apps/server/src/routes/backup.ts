@@ -282,13 +282,16 @@ function recoveryCopiesAfterRestore(dataDir: string, carried: boolean): { copies
     const { wrapped, unopenable } = counted;
     if (wrapped === 0) return null;
     const open = wrapped - unopenable;
+    const which = wrapped === 1 ? 'The sign-in recovery copy'
+        : unopenable === wrapped ? `None of the ${wrapped} sign-in recovery copies` : `${unopenable} of the ${wrapped} sign-in recovery copies`;
     let message: string;
     if (unopenable === 0) {
-        message = `The ${wrapped} sign-in recovery cop${wrapped === 1 ? 'y' : 'ies'} in this backup open on this server.`;
+        message = wrapped === 1 ? 'The sign-in recovery copy in this backup opens on this server.'
+            : `The ${wrapped} sign-in recovery copies in this backup open on this server.`;
         console.log(`[Restore] 🔐 ${message}`);
     } else {
-        message = `${carried ? '' : `${noCarriedKeyLine('backup')} `}${unopenable} of the ${wrapped} sign-in recovery cop${wrapped === 1 ? 'y' : 'ies'} `
-            + `in it will not open on this server${carried ? ": they were locked with a key this backup does not carry" : ''}.`;
+        message = `${carried ? '' : `${noCarriedKeyLine('backup')} `}${which} in it will ${unopenable === wrapped && wrapped > 1 ? '' : 'not '}open `
+            + `on this server${carried ? ': they were locked with a key this backup does not carry' : ''}.`;
         console.warn(`[Restore] ⚠️ ${message}`);
     }
     return { copies: wrapped, open, carriedKey: carried, message };

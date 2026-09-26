@@ -68,7 +68,7 @@ function assert(cond: boolean, msg: string): void {
     }
 }
 
-const NOT_LOCKED = 'Backups are not locked yet: make a recovery code to lock them.';
+const NOT_LOCKED = "Backups are not locked yet: make a recovery code to lock them. Until then a backup file can be read by anyone who has it, and a server restored from it cannot open members' sign-in recovery copies.";
 
 /** Every file under a folder, with a hash of its bytes: to prove nothing was touched. */
 function snapshotTree(dir: string, skip?: string): Record<string, string> {

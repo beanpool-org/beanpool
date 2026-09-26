@@ -428,7 +428,18 @@ async function main(): Promise<void> {
             assert(after.status === 426 && after.body?.code === 'app_too_old' && /too old/.test(after.body?.error) && (await A.send('balance', { pk: xan.pk })) === before,
                 `from the switch: old format → 426 app_too_old, nothing moves (${show(after)})`);
             const oldRead = await sendTo(A, 'GET', unbound(mia, 'GET', `/api/messages/conversations/${mia.pk}`));
-            assert(oldRead.status === 426, `an old-format read too (${show(oldRead)})`);
+            assert(oldRead.status === 426, `an old-format private read too (${show(oldRead)})`);
+            // Every old app signs its GETs to its node, and reads its "update BeanPool" banner's minimum version from
+            // /api/community/health: a public read signed the old way is answered as the same read unsigned.
+            const health = await sendTo(A, 'GET', unbound(mia, 'GET', '/api/community/health'));
+            assert(health.status === 200 && health.body && 'minAppVersion' in health.body,
+                `an old app still reads /api/community/health (its update banner's minimum version) (${show(health)})`);
+            const [signedInfo, plainInfo] = [await sendTo(A, 'GET', unbound(mia, 'GET', '/api/community/info')), await call(A, 'GET', '/api/community/info')];
+            const miasInfo = await sendTo(A, 'GET', await bound(mia, 'GET', 'https://a.test/api/community/info'));
+            assert(miasInfo.status === 200 && miasInfo.body?.transactionCount !== plainInfo.body?.transactionCount,
+                `(Mia's own figures, signed for a.test, differ from the node-wide ones: ${miasInfo.body?.transactionCount} vs ${plainInfo.body?.transactionCount})`);
+            assert(signedInfo.status === 200 && signedInfo.body?.transactionCount === plainInfo.body?.transactionCount,
+                `and /api/community/info, answered as unsigned: the node-wide figures, not Mia's (${signedInfo.body?.transactionCount} = ${plainInfo.body?.transactionCount})`);
             const newStill = await sendTo(A, 'POST', await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'new app after switch' }));
             assert(newStill.status === 200, `format 2 is unaffected (${show(newStill)})`);
             const oldSock = await socket(A, oldWsQuery(mia));

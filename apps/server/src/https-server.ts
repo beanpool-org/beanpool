@@ -1244,29 +1244,38 @@ export async function startHttpsServer(port: number): Promise<number> {
             return;
         }
 
+        // Request binding (engine/member-signature.ts): freshness, then the signature over the bytes the request's
+        // format names (format 2 when it carries X-Signed-For, the old bytes when not), then the community it was
+        // signed for (421 wrong_community for another's host; 426 app_too_old for the old format after the
+        // switch), and only then the nonce is spent: a forged request can't burn a real one, and a request refused
+        // for naming another community leaves its nonce unspent. Outside the try below, so the route that runs after
+        // an answer-as-unsigned is never inside it.
+        const signedForHeader = ctx.headers[SIGNED_FOR_HEADER.toLowerCase()];
+        const signedFor = typeof signedForHeader === 'string' ? signedForHeader : Array.isArray(signedForHeader) ? signedForHeader.join(',') : null;
+        const verdict = verifyMemberSignature({
+            pubKeyHex: signerKey,
+            signature: signatureBase64,
+            timestamp: timestampHeader,
+            nonce,
+            method: ctx.method,
+            path: ctx.path,
+            body: (ctx as any).rawBody ?? '',
+            signedFor,
+        }, { consumeNonce: true });
+        // An old app's signature on a PUBLIC read after the switch is answered as that read unsigned, which anyone
+        // may send: every app before binding signs its GETs to its node (native node-request-signing.ts), and it
+        // reads its "update BeanPool" banner's minimum version from /api/community/health. A 426 there would hide
+        // the one message that tells the member what to do. Its gated reads and writes are refused (426) below.
+        if (!verdict.ok && verdict.status === 426 && !isMutatingApi && !isGatedRead && !isOptionallySignedWrite) {
+            return await next();
+        }
+        if (!verdict.ok) {
+            ctx.status = verdict.status;
+            ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
+            return;
+        }
+
         try {
-            // Request binding (engine/member-signature.ts): freshness, then the signature over the bytes the request's
-            // format names (format 2 when it carries X-Signed-For, the old bytes when not), then the community it was
-            // signed for (421 wrong_community for another's host; 426 app_too_old for the old format after the
-            // switch), and only then the nonce is spent: a forged request can't burn a real one, and a request refused
-            // for naming another community leaves its nonce unspent.
-            const signedForHeader = ctx.headers[SIGNED_FOR_HEADER.toLowerCase()];
-            const signedFor = typeof signedForHeader === 'string' ? signedForHeader : Array.isArray(signedForHeader) ? signedForHeader.join(',') : null;
-            const verdict = verifyMemberSignature({
-                pubKeyHex: signerKey,
-                signature: signatureBase64,
-                timestamp: timestampHeader,
-                nonce,
-                method: ctx.method,
-                path: ctx.path,
-                body: (ctx as any).rawBody ?? '',
-                signedFor,
-            }, { consumeNonce: true });
-            if (!verdict.ok) {
-                ctx.status = verdict.status;
-                ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
-                return;
-            }
             const signedMessage = verdict.text;
 
             // A key a re-key replaced signs nothing here, write or read (REPLACED_KEY_REFUSAL). Only once the signature

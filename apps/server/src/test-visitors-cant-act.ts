@@ -12,12 +12,15 @@
  *  1. The table: each write a member may make that a key with no row can't (#1182 item 4 rows 4-12: vouching, rating,
  *     reporting, posting and poll votes, trades, groups, RSVPs and event chat, crowdfund pledges; and the rest the
  *     sweep found: the People list area, friends, the profile, holiday mode, enterprises and keeping one, projects,
- *     crowdfunds, Decisions, Pulse channels, recovery, re-registering, deleting the row, event reminders). A member
+ *     crowdfunds and a crowdfund pledged to through an enterprise's pledge route, Decisions, Pulse channels, recovery,
+ *     re-registering, deleting the row, event reminders). A member
  *     makes each one (so the body reaches the rule); the visitor and a key with no row are then refused it with the
  *     same status, code and words, and the visitor's attempt changes nothing, in any table (its activity stamp aside).
  *  2. The sweep: every registered write the middleware sees, signed by the visitor and by a key with no row with the
  *     same body, is answered the same, but for what the visitor may do (a line in its DM, marking it read, Beans) and
- *     the changes to its own DM's lines (edit, delete, a reaction), which a key with no row can never be asked for.
+ *     the changes to its own DM's lines (edit, delete, a reaction), which a key with no row can never be asked for. Then
+ *     every enterprise write again on a crowdfund, an enterprise with a goal, which takes another path through some of
+ *     them (a pledge goes to the crowdfund).
  *  3. What a visitor keeps: it replies in its DM (the app may ask for the DM again first), marks it read and mutes it;
  *     it sends Beans it holds to a member, under the send gate as anyone is, and a visitor that never traded is told in
  *     plain words why not; it reads its own messages and Beans. It edits, deletes and reacts to nothing (403
@@ -32,6 +35,7 @@
  *     nothing (three members of a week hide it); a place watch is refused as a key with no row is.
  *  8. Federation: a member of another community, relayed by a peer (federation-protocol.ts relay_message's own calls),
  *     still opens a DM with a member here and writes in it, as a visitor's row.
+ *  9. A Settings sign-in by phone: a visitor's signed "No" is refused as a key with no row's is, and ends nothing.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-visitors-cant-act.ts
  */
@@ -49,6 +53,7 @@ import {
     initStateEngine, transfer, createPost, acceptPost, completePostTransaction, createGroup, joinGroup, rsvpEvent,
     seedGenesisMember, createConversation, sendMessage, registerVisitor, getBalance, createTreasury,
 } from './state-engine.js';
+import { createPairing, declinePairing, describePairing, pairingMessage } from './settings-signin-pairing.js';
 import { createCrowdfundProject } from './db/db.js';
 import { createDecision } from './decisions-engine.js';
 import { startHttpsServer, getKoaApp } from './https-server.js';
@@ -264,6 +269,11 @@ async function main(): Promise<void> {
         { name: "write in an event's chat (row 10)", method: 'POST', path: () => `/api/marketplace/posts/${event.id}/chat/message`, body: () => ({ text: 'I can bring a ladder' }) },
         { name: 'set an event reminder (row 10)', method: 'PUT', path: () => `/api/events/${event.id}/reminder`, body: () => ({ offsets: [60] }) },
         { name: 'pledge to a crowdfund (row 11)', method: 'POST', path: () => `/api/crowdfund/projects/${project}/pledge`, body: a => ({ fromPubkey: a.pk, amount: 2 }) },
+        // The same crowdfund through an enterprise's pledge route: it pledges to the crowdfund when the enterprise has a goal, as
+        // every crowdfund has (pledgeDispatchHandler), and a note sends it there whatever the goal.
+        { name: "pledge to a crowdfund through an enterprise's pledge route", method: 'POST', path: () => `/api/enterprise/${project}/pledge`, body: () => ({ amount: 2 }) },
+        { name: "pledge to a crowdfund through a treasury's pledge route, with a note", method: 'POST', path: () => `/api/treasury/${project}/pledge`,
+            body: () => ({ amount: 2, memo: 'For the oven' }) },
         // The rest a visitor's row could write (the sweep in section 2 found them).
         { name: 'set an area on the People list', method: 'POST', path: () => '/api/community/me/area', body: () => ({ lat: -28.55, lng: 153.51 }) },
         { name: 'add a friend', method: 'POST', path: () => '/api/friends/add', body: a => ({ ownerPubkey: a.pk, friendPubkey: carol.pk }) },
@@ -321,10 +331,10 @@ async function main(): Promise<void> {
         // never be asked, a change to one of its own DM's lines: the act test's refusal, 403 not_a_member (section 3).
         const MAY = new Set(['POST /api/messages/send', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/ledger/transfer']);
         const OWN_DM_LINE = new Set(['POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react']);
-        const materialise = (p: string) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
+        const materialise = (p: string, treasury = enterpriseKey) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
             if (name === 'id') return p.startsWith('/api/groups/') ? group.id : p.startsWith('/api/marketplace/') ? event.id
                 : p.startsWith('/api/crowdfund/') ? project : p.startsWith('/api/commons/decisions/') ? decision.id : 'sweep';
-            return ({ pubkey: alice.pk, postId: event.id, messageId: aliceLine.id, treasury: enterpriseKey, provider: 'google' } as Record<string, string>)[name] ?? 'sweep';
+            return ({ pubkey: alice.pk, postId: event.id, messageId: aliceLine.id, treasury, provider: 'google' } as Record<string, string>)[name] ?? 'sweep';
         });
         const bodyFor = (a: Id) => ({
             publicKey: a.pk, authorPublicKey: a.pk, buyerPublicKey: a.pk, cancellerPublicKey: a.pk, confirmerPublicKey: a.pk, voterPublicKey: a.pk,
@@ -356,6 +366,18 @@ async function main(): Promise<void> {
         assert(swept.length > 150, `the sweep takes every registered write the middleware sees: ${swept.length}`);
         assert(differ.length === 0, `every one is answered to the visitor as to a key with no row${differ.length ? `; ${differ.length} were not:\n    ${differ.join('\n    ')}` : ''}`);
         assert(ownLine.length === 0, `a change to a line of its own DM is refused 403 not_a_member, in plain words${ownLine.length ? `: ${ownLine.join(' | ')}` : ''}`);
+        // Again for every enterprise route, on the crowdfund: an enterprise with a goal takes another path through some of them
+        // (a pledge goes to the crowdfund), and the enterprise above has none.
+        const onCrowdfund = swept.filter(r => r.includes(':treasury'));
+        const differOnCrowdfund: string[] = [];
+        for (const route of onCrowdfund) {
+            const [method, path] = route.split(' ');
+            const n = await call(method, nobody, materialise(path, project), bodyFor(nobody));
+            const v = await call(method, vera, materialise(path, project), bodyFor(vera));
+            if (!same(v, n)) differOnCrowdfund.push(`${route}\n      visitor ${show(v)}\n      no row  ${show(n)}`);
+        }
+        assert(onCrowdfund.length > 50 && differOnCrowdfund.length === 0,
+            `every enterprise write, on a crowdfund (${onCrowdfund.length}), is answered to the visitor as to a key with no row${differOnCrowdfund.length ? `; ${differOnCrowdfund.length} were not:\n    ${differOnCrowdfund.join('\n    ')}` : ''}`);
         assert(isVisitorRow(vera.pk) && !db.prepare("SELECT 1 FROM members WHERE public_key = ? AND status = 'pruned'").get(vera.pk),
             'and the visitor is still a live visitor');
     }
@@ -529,6 +551,23 @@ async function main(): Promise<void> {
         const line = conv ? sendMessage(conv.id, remote.pk, 'aGVsbG8gZnJvbSBhZmFy', 'bjU=', 'text') : null;
         assert(isVisitorRow(remote.pk) && !!conv && !!line && line.authorPubkey === remote.pk,
             'the relayed sender is a visitor\'s row, and its DM with a member here opens and takes its line');
+    }
+
+    // ── 9. A Settings sign-in by phone ──────────────────────────────────────────────────────────
+    console.log("\n── 9. A visitor's \"No\" ends nobody's Settings sign-in by phone");
+    {
+        const pairing = createPairing({ clientKey: 'visitors-cant-act' });
+        if (!pairing.ok) throw new Error(`no pairing: ${pairing.error}`);
+        const decline = (id: Id) => declinePairing({ pairingId: pairing.pairingId, memberPubkey: id.pk,
+            signature: crypto.sign(null, Buffer.from(pairingMessage('decline', pairing.pairingId, pairing.shortCode)), id.priv).toString('base64') });
+        const visitor = keypair('PairVisitorVA');
+        createConversation('dm', [carol.pk, visitor.pk], carol.pk);
+        const n = decline(nobody);
+        const v = decline(visitor);
+        assert(isVisitorRow(visitor.pk) && !v.ok && !n.ok && v.status === n.status && v.error === n.error && describePairing(pairing.pairingId).ok,
+            `a visitor's signed "No" is refused as a key with no row's is, and the sign-in still waits (visitor ${JSON.stringify(v)}; no row ${JSON.stringify(n)})`);
+        const m = decline(alice);
+        assert(m.ok && !describePairing(pairing.pairingId).ok, `a member's signed "No" ends it (control: ${JSON.stringify(m)})`);
     }
 
     console.log(`\n${passed}/${run} passed`);

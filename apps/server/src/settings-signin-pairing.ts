@@ -22,7 +22,7 @@
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
-import { getMember } from '@beanpool/engine';
+import { getMember, isNodeMember } from '@beanpool/engine';
 import type { MemberNodeRole } from './engine/node-roles.js';
 import {
     authorizeKeySigner,
@@ -261,7 +261,10 @@ export function approvePairing(params: {
     return { ok: true, role: signer.role };
 }
 
-/** "No" on the phone: any active member's signature over the decline message ends the pairing. */
+/**
+ * "No" on the phone: any active member's signature over the decline message ends the pairing. A visitor's row isn't a
+ * member's (isNodeMember, the act test) and is refused as a key with no row is.
+ */
 export function declinePairing(params: { pairingId: string; memberPubkey: string; signature: string; now?: number }):
     | { ok: true }
     | { ok: false; status: number; error: string } {
@@ -271,7 +274,7 @@ export function declinePairing(params: { pairingId: string; memberPubkey: string
     if (expired(p, now) || p.status !== 'waiting') return { ok: false, status: 409, error: 'That code is no longer waiting.' };
     const memberPubkey = String(params.memberPubkey || '').trim();
     const member = getMember(db, memberPubkey);
-    if (!member || member.status !== 'active' ||
+    if (!member || member.status !== 'active' || !isNodeMember(db, memberPubkey) ||
         !verifyEd25519Signature(pairingMessage('decline', p.id, p.shortCode), params.signature, memberPubkey)) {
         return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
     }

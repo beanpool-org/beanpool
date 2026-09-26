@@ -461,7 +461,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
             return;
         }
-        if (statusOf(actor) !== 'active') {
+        // A visitor's row pledges nothing, as a key with no row pledges nothing (getActingMember): pledgeToProject moves the
+        // Beans itself and asks nobody who the pledger is.
+        const memberStatus = getActingMember(actor) ? statusOf(actor) : undefined;
+        if (memberStatus !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'Only active community members can pledge.' };
             return;

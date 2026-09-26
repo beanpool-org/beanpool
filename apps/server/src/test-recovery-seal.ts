@@ -62,6 +62,15 @@
  *  25. copies its main server deleted before the seal (rows until a whole copy removes them) never make a standby forget
  *      or clear again across boots; a new epoch clears once, at the whole copy it asks for; one VACUUM per epoch, not
  *      per boot; a pull from a main server that names no epoch changes nothing.
+ *  26. (the deciding pass on 4eadf334) a member removes their copy while the rollback lasts, and the standby has spent its
+ *      one ask for a whole copy: it still clears at the pull that brings the re-sealed copies, under E2, leaving at most
+ *      that one live row in its files, and asks for one more whole copy, which removes it.
+ *  27. the same in the fleet order, where this code boots while its main server is still rolled back and spends its ask
+ *      there (beside a wrapped copy its main server no longer holds).
+ *  28. 26 with a main server that names no epoch: the rule from before the epoch, unchanged.
+ *  29. a standby promoted before it pulls the new epoch (order B, then its main server dies): its first boot as a main
+ *      server forgets the clear it recorded as a standby and clears once, under a new epoch; later boots run none; the
+ *      same when the take-over finishes within the boot.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-seal.ts
  *
@@ -300,8 +309,15 @@ async function child(mode: string): Promise<void> {
         try {
             const { initStateEngine } = await import('./state-engine.js');
             initStateEngine();
+            if (process.env.SEAL_THEN_MAIN) {
+                // A take-over step that finished at this boot (index.ts step 2.65): the role changes after initStateEngine.
+                const seal = await import('./services/recovery-seal-key.js');
+                seal.installRecoverySealAtBoot({ standby: false });
+            }
             out.booted = true;
         } catch (e) { out.booted = thrown(e); }
+        // The watched copies in its state.db, -wal and -shm as they are while it runs.
+        if (process.env.SEAL_WATCH) out.inFiles = copiesFoundIn(dataDir, JSON.parse(fs.readFileSync(process.env.SEAL_WATCH, 'utf-8')));
         const keyPath = path.join(dataDir, KEY_FILE);
         out.keyExists = fs.existsSync(keyPath);
         if (out.keyExists) {
@@ -437,6 +453,9 @@ async function child(mode: string): Promise<void> {
         initStateEngine();
         const { db } = await import('./db/db.js');
         out.cleared = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CLEARED_KEY) as any)?.value ?? null;
+        out.mainEpochKept = !!db.prepare("SELECT 1 FROM node_config WHERE key = 'recovery_seal_main_epoch'").get();
+        // The watched copies in its state.db, -wal and -shm as they are while it runs.
+        if (process.env.SEAL_WATCH) out.inFiles = copiesFoundIn(dataDir, JSON.parse(fs.readFileSync(process.env.SEAL_WATCH, 'utf-8')));
         const delta = await exportSyncState('main-server', process.env.SEAL_SINCE!);
         const full = await exportSyncState('main-server');
         out.delta = delta.recoveryShares ?? [];
@@ -1745,7 +1764,9 @@ async function main(): Promise<void> {
     const eWrapped = (copiesOf: Sealed[], generation: number, at: string, only?: number[]) => eOwners.map((o, i) => ({ o, i }))
         .filter(({ i }) => !only || only.includes(i))
         .map(({ o, i }) => exportRow(o, i, sealLib.sealRecoveryFields(copiesOf[i], sealLib.shareRowAad(o, 'sso')), generation, at));
-    const eClientForm = (copiesOf: Sealed[], generation: number, at: string) => eOwners.map((o, i) => exportRow(o, i, copiesOf[i], generation, at));
+    const eClientForm = (copiesOf: Sealed[], generation: number, at: string, only?: number[]) => eOwners.map((o, i) => ({ o, i }))
+        .filter(({ i }) => !only || only.includes(i))
+        .map(({ o, i }) => exportRow(o, i, copiesOf[i], generation, at));
     const E1 = crypto.randomBytes(8).toString('hex');
     const E2 = crypto.randomBytes(8).toString('hex');
     const epochOf = (cleared: unknown) => {
@@ -1777,6 +1798,8 @@ async function main(): Promise<void> {
     let seededRecord: string | null = null;
     // 23's standby after its older code imported the rollback's copies; 24 starts from a copy of it.
     let rolledBackUnderOlderCode = '';
+    // 22's standby after its older code pulled the re-sealed copies, before this code ran on it; 29 promotes a copy of it.
+    let orderBBeforeThisCode = '';
 
     // ── 21. the main server's seal epoch ───────────────────────────────────────────────────────────
     await section('21. a main server names a seal epoch when it records its clear, in every payload; a later boot keeps it, and the rollback command makes the next seal name a new one', async () => {
@@ -1826,6 +1849,7 @@ async function main(): Promise<void> {
         const olderInFiles = copiesFoundIn(dir, eWatch);
         check(older.cleared === seededRecord && older.rows === EN && older.unwrapped === 0 && olderInFiles > 0,
             `control: on the older code it imported the rollback's copies, the re-deposits and the re-sealed copies: every row is wrapped, its clear is still recorded under E1, and its files hold ${olderInFiles} of the ${eWatch.length} copies sent in the client's form`);
+        orderBBeforeThisCode = copyOfDir(dir, 'epoch-order-b-older');
 
         // This code on the standby. The main server has nothing new to send, and names E2.
         const r = await runStandby(dir, 'epoch-order-b-again', { resyncFirst: false, reconcileMinutes: 0, pulls: 1, watch: eWatch, steps: [[]], epochs: [E2] });
@@ -1912,6 +1936,159 @@ async function main(): Promise<void> {
         check(t3.atBoot?.cleared === t2.final?.cleared && t3.final?.cleared === t2.final?.cleared && vacuumsOf(o3) === 0
             && !/forgets that clear/.test(o3.stdout + o3.stderr) && (t3.pulls ?? []).length === 1,
             `a later boot, and a pull that names no epoch, change nothing: the clear under E2 stays, with no VACUUM (${briefE(t3.final)}; ${sealLines(o3)})`);
+    });
+
+    // ── 26–28: a copy a member removed while the rollback lasted (the deciding pass on 4eadf334) ──────
+    // No deletion of a copy reaches a standby, so that member's copy stays here in the client's form after its main server
+    // seals again, and only a whole copy removes it. A standby asks for one once a process, and may have spent that ask
+    // already. It still clears at the import that brings the wrapped copies (the rest of what the rollback sent would
+    // otherwise stay in its files until a restart), and asks for one more whole copy, which removes that member's.
+    const T8 = '2026-06-08T00:00:00.000Z', T9 = '2026-06-09T00:00:00.000Z', T10 = '2026-06-10T00:00:00.000Z';
+    const REMOVER = 3;
+    const allBut = (skip: number[]) => eOwners.map((_, i) => i).filter(i => !skip.includes(i));
+    const asksAgain = /still in the client's form after its main server sealed again\. This standby asks that server for one whole copy/;
+    const removedOne = /removed 1 sign-in recovery copy its main server deleted before the seal/;
+
+    /**
+     * 26 and 28: one process of this code throughout (the reviewer's S10 and S10n). The standby starts with its clear
+     * recorded beside 3 copies its main server deleted before the seal, so its boot spends its ask: the whole copy removes
+     * them. Then the rollback's copies, the re-deposits, and the re-sealed copies without the member who removed theirs.
+     */
+    const removedWhileRolledBack = async (label: string, epoch: string | null, next: string | null) => {
+        const deleted = [0, 1, 2];
+        const kept = allBut(deleted);
+        const keptNow = kept.filter(i => i !== REMOVER);
+        const eGen4 = eOwners.map(() => fakeCopy());
+        const watch = [...eGen2, ...eGen3, ...eGen4];
+        const dir = tempDir(label);
+        const h: History = { owners: eOwners, gen1: eGen2, gen2: eGen3, deleted, real: [] };
+        resultOf(await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: jsonFile(`${label}-history`, h), SEAL_SIDE: 'standby' }));
+        const sealed = eWrapped(eGen3, 2, T7, kept);
+        const o1 = await runStandby(dir, `${label}-seal`, {
+            resyncFirst: false, since: '2026-06-03T00:00:00.000Z', reconcileMinutes: 0, pulls: 1, watch: [], steps: [sealed],
+            ...(epoch ? { epochs: [epoch] } : {}),
+        });
+        const t1 = resultOf(o1);
+        check(epochOf(t1.final?.cleared) === (epoch ?? 'none') && t1.final?.unwrapped === deleted.length,
+            `control: its clear is recorded ${epoch ? 'under E1' : 'under no epoch'}, beside the ${deleted.length} copies its main server deleted before the seal (${briefE(t1.final)})`);
+
+        const r = await runStandby(dir, `${label}-rollback`, {
+            resyncFirst: false, reconcileMinutes: 0, pulls: 5, watch,
+            steps: [
+                sealed,                                           // the whole copy its boot asks for
+                eClientForm(eGen3, 2, T8, kept),                  // the rollback command unwraps and stamps every copy
+                eClientForm(eGen4, 3, T9, kept),                  // the older code stores the re-deposits as the app sealed them
+                eWrapped(eGen4, 3, T10, keptNow),                 // sealed again; member 3 removed theirs while it lasted
+                eWrapped(eGen4, 3, T10, keptNow),                 // what the next pull brings
+            ],
+            ...(epoch ? { epochs: [epoch, null, null, next] } : {}),
+        });
+        const s = resultOf(r);
+        const [afterWhole, afterRollback, afterRedeposits, afterReseal] = (s.pulls ?? []).slice(1).map((x: any) => x.before);
+        const routes = (s.pulls ?? []).map((p: any) => p.route);
+        check(routes[0] === 'snapshot' && /removed 3 sign-in recovery copies its main server deleted before the seal/.test(r.stdout)
+            && epochOf(afterWhole?.cleared) === (epoch ?? 'none') && afterWhole?.unwrapped === 0,
+            `control: its boot spends its ask: the first pull is the whole copy, which removes the ${deleted.length}, and its clear stays (${JSON.stringify(routes)}; ${briefE(afterWhole)})`);
+        check(afterRollback?.cleared === null && afterRollback.unwrapped === kept.length,
+            `control: the rollback's copies make it forget its clear (${briefE(afterRollback)})`);
+        check(afterRedeposits?.cleared === null && afterRedeposits.inFiles > 0,
+            `control: after the re-deposits it still waits, and its files hold ${afterRedeposits?.inFiles} of the ${watch.length} copies`);
+        check(typeof afterReseal?.cleared === 'string' && epochOf(afterReseal.cleared) === (next ?? 'none') && afterReseal.unwrapped === 1,
+            `the import that brings the re-sealed copies clears again, recorded ${next ? 'under E2' : 'under no epoch'}, though member ${REMOVER}'s copy is still here in the client's form (${briefE(afterReseal)})`);
+        check((afterReseal?.inFiles ?? 99) <= 1,
+            `...after which its running files hold at most that one live row of the ${watch.length} copies sent in the client's form (found ${afterReseal?.inFiles})`);
+        check(routes[4] === 'snapshot' && asksAgain.test(r.stdout) && removedOne.test(r.stdout),
+            `...and it asks for one more whole copy, which removes that row (${JSON.stringify(routes)}; ${sealLines(r)})`);
+        check(s.final?.unwrapped === 0 && s.final?.rows === keptNow.length && s.final?.inFiles === 0 && s.final?.cleared === afterReseal?.cleared,
+            `...after which none of the ${watch.length} is left in its files, and its clear stands (${briefE(s.final)})`);
+        check(vacuumsOf(r) === 1, `it cleared once (${vacuumsOf(r)})`);
+    };
+
+    // ── 26. one process, a main server that names its epoch ───────────────────────────────────────
+    await section('26. a member removes their copy while the rollback lasts, and the standby has spent its ask: it clears at the re-sealed pull under E2, and a whole copy removes that copy', async () => {
+        await removedWhileRolledBack('epoch-removed', E1, E2);
+    });
+
+    // ── 27. the fleet order, the ask spent on the rolled-back main server ─────────────────────────
+    await section('27. the standby boots this code while its main server is still rolled back and spends its ask there: it still clears at the re-sealed pull under E2, and a whole copy removes the removed copy', async () => {
+        // The standby seeded under E1 (22) also holds a wrapped copy its main server deleted after the seal (no deletion
+        // reaches a standby), so at its boot on this code its copies in the client's form are beside a wrapped one.
+        const dir = copyOfDir(seededUnderE1, 'epoch-fleet-removed');
+        const gone = crypto.randomBytes(32).toString('hex');
+        const goneRow = exportRow(gone, 99, sealLib.sealRecoveryFields(fakeCopy(), sealLib.shareRowAad(gone, 'sso')), 1, T2);
+        const older = resultOf(await olderImport(dir, 'epoch-fleet-removed-batches', [[goneRow], eClientForm(eGen2, 2, T5), eClientForm(eGen3, 3, T6)]));
+        check(older.cleared === seededRecord && older.rows === EN + 1 && older.unwrapped === EN,
+            `control: on the older code it imported the rollback's copies and the re-deposits beside one wrapped copy its main server no longer holds; its clear is still under E1 (${older.unwrapped} of ${older.rows} in the client's form)`);
+
+        const keptNow = allBut([REMOVER]);
+        const r = await runStandby(dir, 'epoch-fleet-removed-again', {
+            resyncFirst: false, reconcileMinutes: 0, pulls: 3, watch: eWatch,
+            steps: [
+                eClientForm(eGen3, 3, T6),                         // the whole copy it asks for, from its main server still rolled back
+                eWrapped(eGen3, 3, T7, keptNow),                   // sealed again; member 3 removed theirs while it lasted
+                eWrapped(eGen3, 3, T7, keptNow),                   // what the next pull brings
+            ],
+            epochs: [null, E2],
+        });
+        const s = resultOf(r);
+        const [afterWhole, afterReseal] = (s.pulls ?? []).slice(1).map((x: any) => x.before);
+        const routes = (s.pulls ?? []).map((p: any) => p.route);
+        check(s.atBoot?.cleared === null && s.atBoot?.unwrapped === EN && /that (was|were) not here when it cleared .* So it forgets that clear/.test(r.stdout + r.stderr),
+            `control: at its boot on this code it forgets its clear (${briefE(s.atBoot)})`);
+        check(routes[0] === 'snapshot' && afterWhole?.cleared === null && afterWhole.unwrapped === EN && afterWhole.rows === EN + 1,
+            `control: its first pull is the whole copy it asked for at boot, from its main server still rolled back, which removes nothing (${JSON.stringify(routes)}; ${briefE(afterWhole)})`);
+        check(epochOf(afterReseal?.cleared) === E2 && afterReseal?.unwrapped === 1,
+            `the pull that brings the re-sealed copies and E2 clears again, recorded under E2, though member ${REMOVER}'s copy is still here in the client's form (${briefE(afterReseal)})`);
+        check((afterReseal?.inFiles ?? 99) <= 1,
+            `...after which its running files hold at most that one live row of the ${eWatch.length} copies sent in the client's form (found ${afterReseal?.inFiles})`);
+        check(routes[2] === 'snapshot' && asksAgain.test(r.stdout) && removedOne.test(r.stdout)
+            && s.final?.unwrapped === 0 && s.final?.inFiles === 0 && s.final?.cleared === afterReseal?.cleared,
+            `...and the one more whole copy it asks for removes that row: none of the ${eWatch.length} is left in its files (${JSON.stringify(routes)}; ${briefE(s.final)})`);
+        check(vacuumsOf(r) === 1, `it cleared once (${vacuumsOf(r)})`);
+    });
+
+    // ── 28. one process, a main server that names no epoch ─────────────────────────────────────────
+    await section('28. the same with a main server that names no epoch: it clears at the re-sealed pull, as before the epoch, and a whole copy removes the removed copy', async () => {
+        await removedWhileRolledBack('epoch-removed-none', null, null);
+    });
+
+    // ── 29. a standby promoted before its first pull of the new epoch ──────────────────────────────
+    await section('29. a standby promoted before it pulls the new epoch (order B, then its main server dies): its first boot as a main server clears once, under a new epoch; later boots run none', async () => {
+        const watchFile = jsonFile('epoch-promoted-watch', eWatch);
+        const promote = (label: string) => {
+            // A take-over writes the main server's key here (S2) and makes this server the main one.
+            const dir = copyOfDir(orderBBeforeThisCode, label);
+            fs.copyFileSync(keyPath, path.join(dir, KEY_FILE));
+            fs.chmodSync(path.join(dir, KEY_FILE), 0o600);
+            return dir;
+        };
+        const dir = promote('epoch-promoted');
+        const before = copiesFoundIn(dir, eWatch);
+        check(before > 0, `control: before the take-over its files hold ${before} of the ${eWatch.length} copies sent in the client's form`);
+        const exportOf = async () => {
+            const r = await runChild([SCRIPT], dir, {
+                RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: '2026-06-03T00:00:00.000Z', SEAL_WATCH: watchFile,
+            });
+            return { r, o: resultOf(r) };
+        };
+        const a = await exportOf();
+        const record = (() => { try { return JSON.parse(a.o.cleared); } catch { return null; } })();
+        check(typeof a.o.epoch === 'string' && EPOCH_RE.test(a.o.epoch) && a.o.epoch !== E1 && epochOf(a.o.cleared) === a.o.epoch
+            && record?.standby === undefined && a.o.mainEpochKept === false && vacuumsOf(a.r) === 1,
+            `its first boot as a main server forgets the clear it recorded as a standby and clears once, under a new epoch of its own, which it names (${JSON.stringify({ epoch: a.o.epoch === E1 ? 'E1' : a.o.epoch, standby: record?.standby, mainEpochKept: a.o.mainEpochKept, vacuums: vacuumsOf(a.r) })})`);
+        check(/recorded its clear of state\.db while it was a standby/.test(a.r.stdout), `...and says why (${sealLines(a.r)})`);
+        check(a.o.inFiles === 0, `...after which its running files hold none of the ${eWatch.length} copies (found ${a.o.inFiles}; ${before} before)`);
+        const b = await exportOf();
+        check(b.o.epoch === a.o.epoch && b.o.cleared === a.o.cleared && vacuumsOf(b.r) === 0,
+            `a later boot keeps that epoch and runs no VACUUM (${b.o.epoch === a.o.epoch ? 'same' : `${a.o.epoch} → ${b.o.epoch}`}, ${vacuumsOf(b.r)})`);
+
+        // A take-over step that finishes at the boot itself (index.ts step 2.65): the server boots as a standby, and then
+        // as the main server, in one process.
+        const late = promote('epoch-promoted-late');
+        const l = await runChild([SCRIPT], late, { RECOVERY_SEAL_CHILD: 'boot', NODE_ROLE: 'backup', SEAL_THEN_MAIN: '1', SEAL_WATCH: watchFile });
+        const lo = resultOf(l);
+        check(lo.booted === true && typeof epochOf(lo.cleared) === 'string' && epochOf(lo.cleared) !== E1 && vacuumsOf(l) === 1 && lo.inFiles === 0,
+            `promoted within the boot, it clears once as the main server, under a new epoch, and its running files hold none of them (${JSON.stringify({ booted: lo.booted, epoch: epochOf(lo.cleared) === E1 ? 'E1' : epochOf(lo.cleared), vacuums: vacuumsOf(l), inFiles: lo.inFiles })})`);
     });
 
     console.log(`\n${passed}/${run} checks passed.`);

@@ -179,6 +179,21 @@ describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
         expect(text).not.toContain(SIGN_IN_COPY_WORDS_ONLY);
     });
 
+    // Android lists no Apple button, but a member who connected Apple on an iPhone still has a copy on the server.
+    it('covered by a sign-in this phone lists no button for (Apple on Android): still says who can open its copy', () => {
+        const appleOnly = protectionFrom({
+            enrolled: ['sso'], generation: 1, skipped: [], available: 1,
+            enrolledSso: ['apple'], threshold: 1, isSingleBlob: true,
+        });
+        expect(appleOnly.state).toBe('covered');
+        const withWords = textOf(panel(appleOnly, true));
+        expect(withWords).not.toContain('Apple Connected');
+        expect(withWords.split('\n')).toContain(`${SIGN_IN_COPY_OPENERS} ${SIGN_IN_COPY_WORDS_ONLY}`);
+        const withoutWords = textOf(panel(appleOnly, false));
+        expect(withoutWords.split('\n')).toContain(SIGN_IN_COPY_OPENERS);
+        expect(withoutWords).not.toContain(SIGN_IN_COPY_WORDS_ONLY);
+    });
+
     it('with no sign-in connected, nothing: there is no copy to talk about', () => {
         expect(textOf(panel(WORDS_ONLY, true))).not.toContain(SIGN_IN_COPY_OPENERS);
         expect(textOf(panel(WORDS_ONLY, false))).not.toContain(SIGN_IN_COPY_OPENERS);

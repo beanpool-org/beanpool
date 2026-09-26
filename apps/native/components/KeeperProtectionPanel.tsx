@@ -181,7 +181,9 @@ export function KeeperProtectionPanel({
                         />
                     );
                 })}
-                {allProviders.some(p => enrolledSso.includes(p)) && (
+                {/* Every enrolled sign-in, not just the ones this phone lists: Apple connected on an iPhone has no
+                    row on Android, and its copy is on the server all the same. */}
+                {enrolledSso.length > 0 && (
                     <Text style={styles.copyOpeners}>
                         {hasWords ? `${SIGN_IN_COPY_OPENERS} ${SIGN_IN_COPY_WORDS_ONLY}` : SIGN_IN_COPY_OPENERS}
                     </Text>

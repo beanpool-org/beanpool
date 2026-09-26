@@ -28,7 +28,7 @@ function stubNode(info: unknown, handlers: Record<string, Handler> = {}) {
         const call: Call = { path: String(input), body: init.body ? JSON.parse(String(init.body)) : undefined, headers: (init.headers ?? {}) as Record<string, string> };
         calls.push(call);
         if (call.path === '/api/community/info') return json(200, info);
-        if (call.path.startsWith('/api/invite/check')) return json(200, { valid: true });
+        if (call.path.startsWith('/api/invite/check') && !handlers['/api/invite/check']) return json(200, { valid: true });
         const key = Object.keys(handlers).find((k) => call.path === k || call.path.startsWith(k));
         return key ? handlers[key](call.body, call) : json(200, {});
     }));
@@ -104,6 +104,78 @@ describe('an invite join saves its key only once the node has taken the invite (
         const [first, second] = node.redeems();
         expect(second.body.publicKey).toBe(first.body.publicKey);
         expect((await loadIdentity())?.publicKey).toBe(first.body.publicKey);
+    });
+
+    // The node as it is (engine/members.ts checkInvite, engine/invites.ts redeemInvite): once a key has used the code,
+    // the pre-flight says "used", and the redeem answers that key as a member before it looks at the code as used.
+    function nodeTakingTheFirstRedeemAndLosingItsAnswer() {
+        let usedBy: string | null = null;
+        return stubNode(LOCAL, {
+            '/api/invite/check': () => json(200, usedBy ? { valid: false, reason: 'used' } : { valid: true }),
+            '/api/invite/redeem': (body) => {
+                if (usedBy === null) {
+                    usedBy = body.publicKey;
+                    throw new TypeError('Failed to fetch');
+                }
+                return usedBy === body.publicKey
+                    ? json(200, { success: true, alreadyMember: true })
+                    : json(400, { error: 'This invite has already been used' });
+            },
+        });
+    }
+
+    it('the node took the invite and its answer was lost: the retry\'s pre-flight says "used", the redeem answers the same key as a member, and it is saved (review 4111871900)', async () => {
+        const node = nodeTakingTheFirstRedeemAndLosingItsAnswer();
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitInvite();
+
+        expect(await screen.findByText("Can't reach the community right now. Try again in a minute.")).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+        expect(await loadIdentity()).toBeNull();
+
+        tryAgain();
+        await screen.findByText(/Choose your look/);
+        const checks = node.calls.filter((c) => c.path.startsWith('/api/invite/check'));
+        expect(checks).toHaveLength(2);
+        const [first, second] = node.redeems();
+        expect(node.redeems()).toHaveLength(2);
+        expect(second.body.publicKey).toBe(first.body.publicKey);
+        expect((await loadIdentity())?.publicKey).toBe(first.body.publicKey);
+        expect(peekPending()).toBeUndefined();
+    });
+
+    it('a retry after the code was used by another key: the redeem refuses it, the node\'s words are shown, and nothing is saved', async () => {
+        let checks = 0;
+        let n = 0;
+        const node = stubNode(LOCAL, {
+            '/api/invite/check': () => json(200, ++checks === 1 ? { valid: true } : { valid: false, reason: 'used' }),
+            '/api/invite/redeem': () => {
+                if (++n === 1) throw new TypeError('Failed to fetch');
+                return json(400, { error: 'This invite has already been used' });
+            },
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitInvite();
+        expect(await screen.findByText("Can't reach the community right now. Try again in a minute.")).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Create Identity & Join →' })).not.toBeDisabled());
+
+        tryAgain();
+        expect(await screen.findByText('This invite has already been used')).toBeInTheDocument();
+        expect(node.redeems()).toHaveLength(2);
+        expect(await loadIdentity()).toBeNull();
+        expect(peekPending()).toBeUndefined();
+        expect(screen.queryByText(/Choose your look/)).toBeNull();
+    });
+
+    it('a first try on a code already used: the pre-flight stops it, and nothing is made, sent or saved', async () => {
+        const node = stubNode(LOCAL, { '/api/invite/check': () => json(200, { valid: false, reason: 'used' }) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitInvite();
+
+        expect(await screen.findByText(/This invite has already been used — each one works exactly once/)).toBeInTheDocument();
+        expect(node.redeems()).toHaveLength(0);
+        expect(await loadIdentity()).toBeNull();
+        expect(peekPending()).toBeUndefined();
     });
 
     it('an invite that another key has used: "already been used" is not taken as joined, and nothing is saved', async () => {

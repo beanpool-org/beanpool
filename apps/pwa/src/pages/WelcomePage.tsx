@@ -519,7 +519,11 @@ export function WelcomePage({ onComplete }: Props) {
             // (older node) fails open; redeem stays the definitive check.
             const { checkInvite } = await import('../lib/api');
             const check = await checkInvite(trimmedCode);
-            if (check && !check.valid) {
+            // "Used" on a retry may mean used by the key an earlier try sent: the node took it and the answer was lost.
+            // The redeem answers a member's key before it looks at the code as used, so that retry goes on to it and
+            // the key is saved (review 4111871900). Used by another key, the redeem refuses it and nothing is saved.
+            const usedMaybeByThisKey = check?.reason === 'used' && inviteKey.current !== null;
+            if (check && !check.valid && !usedMaybeByThisKey) {
                 setError(check.reason === 'used'
                     ? 'This invite has already been used — each one works exactly once. Ask whoever invited you for a fresh one.'
                     : check.reason === 'expired'

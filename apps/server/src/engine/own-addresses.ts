@@ -12,9 +12,16 @@
  *   4. the registrar's name for this key while the stored registrar status still gives it (`publicAddress.name` as a
  *      beanpool.org host, when the status is live or pending). The registrar keeps no record of a former name today,
  *      so a renamed node keeps its old name only if an owner confirms it (3);
- *   5. loopback, always (localhost, 127.0.0.1, ::1): only an app on the same machine connects there;
- *   6. a private-range address, a `.local` name and the Android emulator's 10.0.2.2, ONLY on a node with none of 1–4
- *      (a LAN or development node).
+ *   5. loopback (localhost, 127.0.0.1, [::1]), a private-range address, a `.local` name and the Android emulator's
+ *      10.0.2.2, ONLY on a node with none of 1–4 (a developer's, LAN or development node).
+ *
+ * A node with any of 1–4 treats a signature for loopback as it treats any other host's: another community's (421).
+ * Loopback was once this community's on every node, so a signature for 127.0.0.1 was good at every community in the
+ * world, and anything that got a member's app to sign for it (a URL-parsing gap, an app on the phone listening on
+ * 127.0.0.1) could collect requests valid everywhere (#1224's deciding pass; director's call 2026-09-27). Nobody
+ * legitimate needs it there: members reach a named node by its names. An operator who opens a named node's web app at
+ * localhost (through an SSH tunnel) lists that name in BEANPOOL_ADDRESSES (2), never a silent default; it is then
+ * accepted, and still never published.
  *
  * Never learned from the Host header, X-Forwarded-Host or SNI: the node's ports are reachable directly
  * (docker-compose publishes 443 and 8443), so anyone can send any Host. Nor by probing itself: a hostile node in front
@@ -30,7 +37,7 @@ import { audienceOf } from '@beanpool/core';
 import { getNodeConfig, resolvePublicNodeUrl } from '../state-engine.js';
 import { logger } from '../logger.js';
 
-export type AddressSource = 'public-address' | 'env' | 'owner' | 'registrar' | 'loopback';
+export type AddressSource = 'public-address' | 'env' | 'owner' | 'registrar';
 
 export interface OwnAddress {
     address: string;
@@ -111,7 +118,7 @@ export function forgetOwnAddresses(): void {
     cache = null;
 }
 
-/** The configured names (1–4), each once, with where it came from. Loopback is not in this list; it is always accepted. */
+/** The configured names (1–4), each once, with where it came from. Loopback is here only when the operator listed it. */
 export function configuredAddresses(now = Date.now()): OwnAddress[] {
     if (cache && now - cache.at < CACHE_MS) return cache.list;
     const list: OwnAddress[] = [];
@@ -127,9 +134,17 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
     return list;
 }
 
-/** A host on this machine or the local network: private IPv4 ranges, IPv6 unique-local and link-local, `.local`. */
+/** A host on this machine: localhost, 127.0.0.0/8, [::1]. */
+export function isLoopbackHost(host: string): boolean {
+    return LOOPBACK.includes(host) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+}
+
+/**
+ * A host on this machine or the local network: loopback, private IPv4 ranges, IPv6 unique-local and link-local,
+ * `.local`. This community's (5) only on a node that knows none of its names.
+ */
 export function isLocalNetworkHost(host: string): boolean {
-    if (LOOPBACK.includes(host) || host.endsWith('.local')) return true;
+    if (isLoopbackHost(host) || host.endsWith('.local')) return true;
     const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
     if (v4) {
         const [a, b] = [Number(v4[1]), Number(v4[2])];
@@ -139,20 +154,24 @@ export function isLocalNetworkHost(host: string): boolean {
 }
 
 /**
- * Whether a request signed for `host` is for this community: `own` for one of its names, `unconfigured` for any other
- * host on a node that knows none of its names, `foreign` otherwise.
+ * Whether a request signed for `host` is for this community: `own` for one of its names, or on a node that knows none
+ * of them for a host on this machine or its network; `unconfigured` for any other host on such a node; `foreign`
+ * otherwise, loopback included on a node with a name.
  */
 export function audienceStanding(host: string): AudienceStanding {
     // Only a host in the one form apps sign (audienceOf: lower case, no port, no trailing dot) can be anyone's name.
     if (normalizeAddress(host) !== host) return 'foreign';
-    if (LOOPBACK.includes(host)) return 'own';
     const configured = configuredAddresses();
     if (configured.some((a) => a.address === host)) return 'own';
     if (configured.length > 0) return 'foreign';
     return isLocalNetworkHost(host) ? 'own' : 'unconfigured';
 }
 
-/** Every name a member's app may sign for here, for `/api/community/info` and Settings. Public by nature. */
+/**
+ * Every name a member's app may sign for here, for `/api/community/info`. Public by nature. A loopback name the operator
+ * listed (BEANPOOL_ADDRESSES=localhost, for an SSH tunnel) is accepted here but left out: it names no community, only
+ * whichever machine an app runs on. Settings' list shows it, with its source.
+ */
 export function publishedAddresses(): string[] {
-    return configuredAddresses().map((a) => a.address);
+    return configuredAddresses().map((a) => a.address).filter((a) => !isLoopbackHost(a));
 }

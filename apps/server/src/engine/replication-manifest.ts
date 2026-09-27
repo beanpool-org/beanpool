@@ -426,6 +426,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     replica_format: { kind: 'per-server', reason: "the importer format a standby's copy was made with (engine/sync.ts REPLICA_FORMAT)" },
     replica_main_ledger: { kind: 'per-server', reason: "a standby's record of its main server's ledger at its last copy, which a take-over's audit holds it to" },
     replica_ledger_mismatch: { kind: 'per-server', reason: "a standby's last whole copy whose ledger wasn't its main server's (services/backup-puller.ts)" },
+    replica_held_sum: { kind: 'per-server', reason: "the total a standby's next copy is held to after it cleared its ledger for a force-resync that isn't a seed (engine/sync.ts clearForResync)" },
     replicated_invalidated_keys_v1: { kind: 'per-server', reason: "a standby's own marker" },
     recovery_seal_cleared: { kind: 'per-server', reason: "this server's record of clearing its database after sealing" },
     recovery_seal_reopened: { kind: 'per-server', reason: "this server's record of reopening its seal" },

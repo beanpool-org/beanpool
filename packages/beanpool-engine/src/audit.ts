@@ -44,11 +44,21 @@ export interface ReplicaConsistency {
     /**
      * Every account against the copy's, not only their sum: a ledger with every balance at 0, or two balances swapped,
      * sums the same. `compared` accounts in either; `differing`, those whose balance differs or that only one side holds
-     * (the first few in `examples`, by key); `unreadable`, the copy's entries with no key or no number for a balance.
-     * Null when the copy carries no account set, or names no account.
+     * (the first few in `examples`, by key); `unreadable`, the copy's entries with no key, a key SQLite would store as
+     * another string (isWellFormedKey) or no number for a balance. Null when the copy carries no account set, or names
+     * no account.
      */
     ledger: { compared: number; differing: number; unreadable: number; examples: string[]; match: boolean } | null;
     ok: boolean;
+}
+
+/**
+ * True when SQLite gives this key back as the same string. A JS string holding half of a surrogate pair isn't
+ * well-formed UTF-16, and is stored as U+FFFD in its place: a row under another key. (String.prototype.isWellFormed,
+ * which this build's target predates: in a `u` pattern a pair is one code point, so only an unpaired half matches.)
+ */
+export function isWellFormedKey(key: string): boolean {
+    return !/\p{Surrogate}/u.test(key);
 }
 
 /** A ledger as a few figures and a fingerprint, to tell whether two servers hold the same one (summariseLedger). */
@@ -283,7 +293,9 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         const theirs = new Map<string, number | null>();
         let unreadable = 0;
         for (const a of payload.accounts) {
-            if (typeof a?.publicKey !== 'string' || !a.publicKey) { unreadable++; continue; }
+            // A key SQLite would store as another string is one the importer never writes: unreadable, like an entry
+            // with no key, so it asks for no force-resync (a force-resync would read it the same way).
+            if (typeof a?.publicKey !== 'string' || !a.publicKey || !isWellFormedKey(a.publicKey)) { unreadable++; continue; }
             const b = typeof a.balance === 'number' && Number.isFinite(a.balance) ? a.balance : null;
             if (b === null) unreadable++;
             theirs.set(a.publicKey, b);

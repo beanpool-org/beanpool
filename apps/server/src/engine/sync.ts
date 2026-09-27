@@ -24,6 +24,7 @@ import {
 } from './key-move.js';
 import {
     exportSyncState as exportSyncStateEngine,
+    isWellFormedKey,
     summariseLedger,
     type LedgerSummary,
     type SyncPayload,
@@ -63,14 +64,36 @@ export function noteReplicaFormat(): void {
 }
 
 /**
- * A force-resync's clear (services/backup-puller.ts), in one transaction with the copy's format record going: until a
- * copy lands, the next one is this standby's first (replicaFormatOfCopy), so a pull after an import that failed is a seed
- * too. `clear` is the clear itself (state-engine.ts clearReplicatedTables); a throw from it undoes that too.
+ * The total this standby's next copy is held to (ImportOptions.heldToSum): the ledger's sum before a clear it made for a
+ * force-resync that isn't a seed, kept as node_config `replica_held_sum` until a copy lands (importRemoteState removes it
+ * in the transaction that lands one). Null when there is none.
  */
-export function clearForResync(clear: () => void): void {
-    db.transaction(() => {
-        db.prepare(`DELETE FROM node_config WHERE key = 'replica_format'`).run();
+export function heldLedgerSum(): number | null {
+    const row = db.prepare(`SELECT value FROM node_config WHERE key = 'replica_held_sum'`).get() as { value: string } | undefined;
+    if (!row) return null;
+    const n = Number(row.value);
+    return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * A force-resync's clear (services/backup-puller.ts), in one transaction with what this standby records about it.
+ *  - A seed (the format re-seed, an operator's force-resync): the copy's format record goes, so until a copy lands the
+ *    next one is this standby's first (replicaFormatOfCopy), and a pull after an import that failed is a seed too.
+ *  - Not a seed (a whole copy that didn't match): the ledger's sum now, before the clear, is recorded, and returned, for
+ *    the copy to be held to (heldLedgerSum). One already recorded, from a clear whose copy never landed, stays.
+ * `clear` is the clear itself (state-engine.ts clearReplicatedTables); a throw from it undoes the record too.
+ */
+export function clearForResync(seed: boolean, clear: () => void): number | null {
+    return db.transaction(() => {
+        let held: number | null = null;
+        if (seed) {
+            db.prepare(`DELETE FROM node_config WHERE key IN ('replica_format', 'replica_held_sum')`).run();
+        } else {
+            held = heldLedgerSum() ?? (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replica_held_sum', ?)`).run(String(held));
+        }
         clear();
+        return held;
     })();
 }
 
@@ -696,16 +719,21 @@ function verifyTransactionAuthorship(tx: Transaction): boolean {
  */
 export interface ImportOptions {
     /**
-     * A seed, which the conservation guard lets in whatever it sums to: this standby's first copy (it holds none it
-     * landed: no `replica_format` record, replicaFormatOfCopy), and a force-resync (the format re-seed, REPLICA_FORMAT,
-     * this standby's own constant; an operator's; the one a whole copy that didn't match asks for). Every other copy is
-     * held to the ledger here.
+     * A seed, which the conservation guard lets in whatever it sums to. Only three: this standby's first copy (it holds
+     * none it landed: no `replica_format` record, replicaFormatOfCopy), the format re-seed (REPLICA_FORMAT, this
+     * standby's own constant) and an operator's force-resync. Every other copy is held to the ledger here.
      */
     seed?: boolean;
+    /**
+     * Not a seed, and the ledger here isn't what to hold the copy to: this standby cleared it for a force-resync of its
+     * own (a whole copy that didn't match), and this is the total it had before that clear (clearForResync).
+     */
+    heldToSum?: number | null;
 }
 
 export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, opts: ImportOptions = {}): Promise<ImportResult> {
     const seed = opts.seed === true;
+    const heldToSum = typeof opts.heldToSum === 'number' && Number.isFinite(opts.heldToSum) ? opts.heldToSum : null;
     const role = getNodeRole();
     if (role !== 'backup') {
         throw new Error(`[Sync] This node runs as '${role}', which imports no remote state (one-directional backup topology). Inbound state rejected.`);
@@ -1114,7 +1142,10 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 // What this copy moves the standby's total by, the conservation guard's measure.
                 let importedBalanceDelta = 0;
                 for (const acc of remote.accounts) {
-                    if (typeof acc?.publicKey !== 'string' || !acc.publicKey) {
+                    // A key SQLite would store as another string (an unpaired surrogate half comes back as U+FFFD) is never
+                    // written: the row would be an account the copy doesn't name. The whole-copy check counts it as
+                    // unreadable, which asks for no force-resync (engine audit.ts getReplicaConsistency).
+                    if (typeof acc?.publicKey !== 'string' || !acc.publicKey || !isWellFormedKey(acc.publicKey)) {
                         conflictsSkipped++;
                         continue;
                     }
@@ -1147,8 +1178,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 // unless the puller took it as a seed (ImportOptions.seed), which it decides from this standby's own
                 // records and never from the ledger here: a count of accounts let one copy that named none bring the
                 // ledger back to "empty", and the next went unchecked. With every account now the main server's, what
-                // it measures is the shift between the two ledgers, which is 0 whenever the main server conserves.
-                if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && !seed
+                // it measures is the shift between the two ledgers, which is 0 whenever the main server conserves. A
+                // copy held to a total (after this standby's own clear) is measured below, against that total.
+                if ((ENFORCE_LEDGER_AUTH || getNodeRole() === 'backup') && !seed && heldToSum === null
                     && Math.abs(importedBalanceDelta) > LEDGER_CONSERVATION_TOLERANCE) {
                     throw new Error(`[Sync] Conservation violation: import shifted total balance by ${importedBalanceDelta.toFixed(4)} (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
                 }
@@ -1176,9 +1208,24 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload, 
                 // with nothing, so nothing here claims to be newer than a main server's row.
                 const openAccount = db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES (?, 0, NULL, 0)`);
                 for (const rm of remote.members ?? []) {
-                    if (typeof rm?.publicKey === 'string' && rm.publicKey) openAccount.run(rm.publicKey);
+                    if (typeof rm?.publicKey === 'string' && rm.publicKey && isWellFormedKey(rm.publicKey)) openAccount.run(rm.publicKey);
                 }
             }
+
+            // After this standby cleared its own ledger for a force-resync that isn't a seed (a whole copy that didn't
+            // match, services/backup-puller.ts): the copy is held to the total the ledger had before that clear, the last
+            // accepted copy's, not to the rows the clear left. Only a copy's ledger puts back the one the clear took, so
+            // one that carries none is refused too. The record of that total goes when a copy lands, in this transaction.
+            if (heldToSum !== null && !seed) {
+                if (!Array.isArray(remote.accounts) || remote.accounts.length === 0) {
+                    throw new Error('[Sync] Conservation violation: this standby cleared its ledger for a force-resync, and the copy carries none to put back; rejecting it');
+                }
+                const total = (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;
+                if (Math.abs(total - heldToSum) > LEDGER_CONSERVATION_TOLERANCE) {
+                    throw new Error(`[Sync] Conservation violation: import shifted total balance by ${(total - heldToSum).toFixed(4)} from the ${heldToSum} this standby held before its own clear (> ${LEDGER_CONSERVATION_TOLERANCE}); rejecting value-creating payload`);
+                }
+            }
+            db.prepare(`DELETE FROM node_config WHERE key = 'replica_held_sum'`).run();
 
             if (remote.transactions) {
                 // Each trade as the main server holds it, its Commons fee and its project included (G0). A trade never

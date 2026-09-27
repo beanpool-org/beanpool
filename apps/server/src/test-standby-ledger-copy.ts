@@ -18,7 +18,9 @@
  *     its trades no longer naming it): a delta brings them (before, every later copy was refused once one of those moved).
  *  4. A whole copy: the same, and the whole-copy check compares every account.
  *  5. S restarts as a standby: it makes no BeanPool of its own and leaves M's as it is; the next pull lands.
- *  6. The whole-copy check fails on a copy whose sum is right and whose accounts are not; it records the mismatch and
+ *  6. A whole copy with a key SQLite stores as another string (half a surrogate pair): the key is never written, the
+ *     check counts it as unreadable, and it asks for no force-resync (before, the force-resync it asked for was a seed).
+ *     The whole-copy check fails on a copy whose sum is right and whose accounts are not; it records the mismatch and
  *     asks for one force-resync, and no second one within the hour after.
  *  7. The conservation guard still refuses a payload signed by M that makes Beans, drops an account holding them, or
  *     names one account twice to hide a shift. A copy that names only the Commons, holding the ledger's total, doesn't
@@ -34,6 +36,8 @@
  * 11. On a second pair whose ledger sums to 0: a copy M0 signs naming no account carries no ledger, and the copy after it,
  *     minting 1000 for a new key, is refused; the standby keeps M0's ledger and the next real copy lands (before, the
  *     first emptied the ledger and the second went in as a seed).
+ * 12. The force-resync a mismatch asks for is not a seed: a mint served to it is refused, and the next copies, across a
+ *     restart, are held to the ledger's total before its clear until M's real copy lands.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-ledger-copy.ts
@@ -118,6 +122,7 @@ async function child(): Promise<void> {
                 members: (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c,
                 format: cfg('replica_format'),
                 mismatch: cfg('replica_ledger_mismatch'),
+                held: cfg('replica_held_sum'),
             };
         },
         /** An old bug's drift, as a raw write, for the admin to accept as the audit baseline (the test node's -9.82 kind). */
@@ -132,9 +137,9 @@ async function child(): Promise<void> {
          * A payload M signs that does not conserve: one account given Beans from nowhere, or one holding Beans left out of
          * the account set. Signed with M's own key, so only the conservation guard stands between it and a standby. And
          * the copies that went before one in a review's probes: an account set that names nothing, or only the Commons
-         * holding the ledger's total (each moves no Beans).
+         * holding the ledger's total (each moves no Beans), and a key SQLite stores as another string.
          */
-        forge: async (a: { kind: 'mint' | 'drop' | 'twice' | 'throws-later' | 'empty' | 'commons-only' | 'commons-mint'; publicKey?: string }) => {
+        forge: async (a: { kind: 'mint' | 'drop' | 'twice' | 'throws-later' | 'empty' | 'commons-only' | 'commons-mint' | 'surrogate'; publicKey?: string }) => {
             const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
             const { getPrivateKey } = await import('./p2p.js');
             const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
@@ -153,6 +158,9 @@ async function child(): Promise<void> {
                 if (a.kind === 'commons-mint') {
                     payload.accounts.push({ publicKey: crypto.randomBytes(32).toString('hex'), balance: 1000, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
                 }
+            } else if (a.kind === 'surrogate') {
+                // Half of a surrogate pair: SQLite stores the key with U+FFFD in its place, another string.
+                payload.accounts.push({ publicKey: 'mallory\ud800', balance: 0, lastUpdatedAt: new Date().toISOString(), lastDemurrageEpoch: 0 });
             } else if (a.kind === 'throws-later') {
                 // The real ledger, and one trade for no listing: the import throws in the marketplace section, after the
                 // accounts section has written the ledger and before the copy commits (as a disk error there would).
@@ -281,7 +289,7 @@ function built(what: string, a: Answer): any {
 }
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
-type Ledger = { accounts: any[]; sum: number; transactions: any[]; beanpool: any[]; members: number; format: string | null; mismatch: string | null };
+type Ledger = { accounts: any[]; sum: number; transactions: any[]; beanpool: any[]; members: number; format: string | null; mismatch: string | null; held: string | null };
 
 /** Where two ledgers differ: accounts row for row and column for column, and the trades' ledger columns. */
 function ledgerDiff(m: Ledger, s: Ledger): string[] {
@@ -489,6 +497,24 @@ async function main(): Promise<void> {
             `its next pull lands and its ledger is M's (${afterRestart.ok ? 'imported' : afterRestart.error}; differences ${first(ledgerDiff(m5, s))})`);
 
         // ── 6. The whole-copy check can fail ──
+        console.log('\n— 6. a whole copy with a key SQLite stores as another string —');
+        // First, while no force-resync has been asked for in this process (one within six hours isn't): a whole copy M
+        // signs with one more account, under a key holding half of a surrogate pair. Stored, it came back as another string,
+        // so the check found two accounts differing on the copy just imported and asked for a force-resync, and that one
+        // was a seed the guard didn't hold. A main server can ask for a whole copy whenever it likes.
+        door.next({ status: 200, body: await main.send('forge', { kind: 'surrogate' }) });
+        const sur = await standby.send('pull', { whole: true });
+        const surNote = JSON.parse((await standby.send('ledger') as Ledger).mismatch ?? 'null');
+        s = await standby.send('ledger');
+        const m6s: Ledger = await main.send('ledger');
+        assert(sur.ok === true && sur.whole === true && sur.consistency?.ledger?.unreadable === 1 && sur.consistency?.ledger?.differing === 0,
+            `the check counts that key as unreadable, and no account as differing (${JSON.stringify({ ok: sur.ok, error: sur.error, ledger: sur.consistency?.ledger })})`);
+        assert(surNote && surNote.resync !== 'scheduled', `it asks for no force-resync (${JSON.stringify(surNote)})`);
+        assert(ledgerDiff(m6s, s).length === 0 && !s.accounts.some((a) => a.public_key.startsWith('mallory')),
+            `the key is never written: S's ledger is M's (differences ${first(ledgerDiff(m6s, s))})`);
+        const afterSur = await standby.send('pull', {});
+        assert(afterSur.ok === true && afterSur.mode === 'delta', `the next pull is a delta, not a force-resync (${JSON.stringify({ ok: afterSur.ok, mode: afterSur.mode, error: afterSur.error })})`);
+
         console.log('\n— 6. a copy whose sum is right and whose accounts are not —');
         await standby.send('plant-balance', { publicKey: ann.pk, add: 4 });
         await standby.send('plant-balance', { publicKey: bo.pk, add: -4 });
@@ -675,6 +701,47 @@ async function main(): Promise<void> {
         assert(real11.ok === true && ledgerDiff(z2, s0l).length === 0,
             `the next real copy lands, and S0's ledger is M0's (${JSON.stringify({ ok: real11.ok, mode: real11.mode, error: real11.error })}; differences ${first(ledgerDiff(z2, s0l))})`);
         refused.push(...(await standby0.send('fetches')).blocked, ...(await main0.send('fetches')).blocked);
+
+        // ── 12. The force-resync a mismatch asks for is held to the ledger before its clear ──
+        console.log('\n— 12. the force-resync after a copy that didn\'t match is not a seed —');
+        copyDir(dir('audit'), dir('held'));
+        let heldS = await spawnNode(SCRIPT, dir('held'), env(PW_STANDBY, 'backup'));
+        nodes.push(heldS);
+        // Its boot's escrow sweep deleted the empty escrow accounts M still holds: a pull puts them back first.
+        require_((await heldS.send('pull', {})).ok === true, 'the restarted copy of S pulls');
+        const m12: Ledger = await main.send('ledger');
+        await heldS.send('plant-balance', { publicKey: ann.pk, add: 4 });
+        await heldS.send('plant-balance', { publicKey: bo.pk, add: -4 });
+        const c12 = await heldS.send('check-copy');
+        const n12 = JSON.parse((await heldS.send('ledger') as Ledger).mismatch ?? 'null');
+        require_(c12.consistency?.ledger?.differing === 2 && n12?.resync === 'scheduled', `a whole copy that doesn't match asks for a force-resync (${JSON.stringify(n12)})`);
+        door.next({ status: 200, body: await main.send('forge', { kind: 'mint', publicKey: kip.pk }) });
+        const heldMint = await heldS.send('pull', {});
+        let h: Ledger = await heldS.send('ledger');
+        assert(heldMint.mode === 'resync' && heldMint.ok === false && /Conservation violation/.test(heldMint.error ?? ''),
+            `that force-resync, served a copy M signed that gives Kip 50 Beans from nowhere, refuses it (${JSON.stringify({ mode: heldMint.mode, ok: heldMint.ok, error: heldMint.error })})`);
+        assert(h.held !== null && Math.abs(Number(h.held) - m12.sum) < 1e-6,
+            `the total it holds copies to is the ledger's before its clear, kept until one lands (${h.held}; M ${m12.sum})`);
+        await heldS.send('persist'); // its own flush, into the cleared rows
+        await heldS.send('checkpoint');
+        refused.push(...(await heldS.send('fetches')).blocked);
+        await heldS.kill('SIGTERM');
+        heldS = await spawnNode(SCRIPT, dir('held'), env(PW_STANDBY, 'backup'));
+        nodes.push(heldS);
+        door.next({ status: 200, body: await main.send('forge', { kind: 'mint', publicKey: kip.pk }) });
+        const heldMint2 = await heldS.send('pull', {});
+        assert(heldMint2.ok === false && /Conservation violation/.test(heldMint2.error ?? ''),
+            `after a restart the next copy is still held: the same mint is refused (${JSON.stringify({ mode: heldMint2.mode, ok: heldMint2.ok, error: heldMint2.error })})`);
+        door.next({ status: 200, body: await main.send('forge', { kind: 'empty' }) });
+        const heldEmpty = await heldS.send('pull', {});
+        assert(heldEmpty.ok === false, `and so is a copy that names no account, which would keep the ledger the clear emptied (${heldEmpty.ok ? 'imported' : heldEmpty.error})`);
+        const heldReal = await heldS.send('pull', {});
+        h = await heldS.send('ledger');
+        const m12b: Ledger = await main.send('ledger');
+        assert(heldReal.ok === true && ledgerDiff(m12b, h).length === 0 && h.held === null,
+            `M's real copy lands, the ledger is M's, and nothing is held any more (${JSON.stringify({ ok: heldReal.ok, mode: heldReal.mode, error: heldReal.error, held: h.held })}; differences ${first(ledgerDiff(m12b, h))})`);
+        refused.push(...(await heldS.send('fetches')).blocked);
+        await heldS.kill('SIGTERM');
 
         assert(door.waiting() === 0 && door0.waiting() === 0, 'every copy a step served was asked for');
 

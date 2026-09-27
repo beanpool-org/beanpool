@@ -279,7 +279,12 @@ router.post('/api/local/admin/node/config', async (ctx) => {
     }
     console.log("Updating node config:", { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks });
     if (typeof acceptKnocks === 'boolean') setSwitchOverride('knocks', acceptKnocks);
-    ctx.body = withKnockSetting(updateNodeConfig({ publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours }));
+    // Only the fields sent. One left out and passed on as undefined would be dropped from the stored object, and each
+    // directory switch reads unset as "publish": a request that changed one switch published the contacts and member
+    // count the community had turned off. Settings sends every field (null clears the service area).
+    const sent = Object.fromEntries(Object.entries({ publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours })
+        .filter(([, v]) => v !== undefined));
+    ctx.body = withKnockSetting(updateNodeConfig(sent));
     
     // Re-initialize the publisher with the new interval
     if (directoryPushIntervalHours !== undefined) {

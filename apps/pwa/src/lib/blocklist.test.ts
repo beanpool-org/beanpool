@@ -14,6 +14,8 @@ const node = vi.hoisted(() => ({
     down: false,
     /** Every change is refused with this status and words, as the node answers one. */
     refuse: null as null | { status: number; error: string; code?: string },
+    /** Keys the node has no row for: a list of keys (the one-time move) skips them and counts them. */
+    unknown: [] as string[],
     calls: [] as string[],
 }));
 
@@ -33,11 +35,11 @@ vi.mock('./api', () => {
         addToBlockList: vi.fn(async (keys: string | string[]) => {
             node.calls.push(`add ${JSON.stringify(keys)}`);
             fail();
-            const ks = Array.isArray(keys) ? keys : [keys];
+            const ks = Array.isArray(keys) ? keys.filter(k => !node.unknown.includes(k)) : [keys];
             const fresh = ks.filter(k => !node.list.includes(k));
             if (node.list.length + fresh.length > node.max) throw Object.assign(new Error('You can block up to 500 people. Unblock someone to block another.'), { status: 409, code: 'block_limit' });
             node.list.push(...fresh);
-            return { ...answer(), added: fresh };
+            return { ...answer(), added: fresh, ...(Array.isArray(keys) ? { skipped: keys.length - ks.length } : {}) };
         }),
         removeFromBlockList: vi.fn(async (key: string) => {
             node.calls.push(`remove ${key}`);
@@ -91,6 +93,7 @@ describe('the block list the community keeps for the account', () => {
         node.max = 500;
         node.down = false;
         node.refuse = null;
+        node.unknown = [];
         node.calls = [];
         vi.clearAllMocks();
     });
@@ -120,6 +123,43 @@ describe('the block list the community keeps for the account', () => {
         ringBlocklistDoorbell();
         await vi.waitFor(() => expect(getBlockedUsers()).toEqual([K1, K2]));
         expect(node.calls.filter(c => c === 'read')).toHaveLength(2);
+    });
+
+    it('a read that changes nothing tells the screens nothing; one that changes the list, or ends a failed read, does', async () => {
+        node.list = [K1];
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(getBlockedUsers()).toEqual([K1]));
+        const told: string[][] = [];
+        const off = onBlocklistUpdated(l => told.push(l));
+        await loadBlocklist();
+        ringBlocklistDoorbell();
+        await vi.waitFor(() => expect(node.calls.filter(c => c === 'read')).toHaveLength(3));
+        await settle();
+        expect(told).toEqual([]);
+        node.list = [K1, K2];
+        await loadBlocklist();
+        expect(told).toEqual([[K1, K2]]);
+        node.down = true;
+        await expect(loadBlocklist()).rejects.toBeInstanceOf(BlocklistError);
+        node.down = false;
+        await loadBlocklist();
+        expect(told).toHaveLength(3);
+        expect(getBlocklistStatus()).toEqual({ loaded: true, error: null });
+        off();
+    });
+
+    it('the one-time move: keys the node has no row for are skipped and counted, and the local keys still go', async () => {
+        node.unknown = [K2];
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2, K3]));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY)).toBeNull());
+        expect(api.addToBlockList).toHaveBeenCalledWith([K1, K2, K3]);
+        expect(node.list).toEqual([K1, K3]);
+        expect(getBlockedUsers()).toEqual([K1, K3]);
+        expect(warn.mock.calls.some(c => String(c[0]).includes('1 of the 3'))).toBe(true);
+        expect(storedAboutBlocks()).toEqual([]);
+        warn.mockRestore();
     });
 
     it('a list an older build kept in this browser moves up to the signed-in account once, then the local keys are gone', async () => {

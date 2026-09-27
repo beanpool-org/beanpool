@@ -11,7 +11,8 @@
  * A list kept in this browser by a build from before (bp_blocked_users, and the older beanpool_blocked_users) belongs to
  * whoever is signed in when this build first reads the node's list, as #1225 decided for the phone. It is moved up to the
  * node once and the local keys deleted, only when the node has taken it; until then it still hides whom it names, and
- * the next read tries again. Past the node's limit, the newest it has room for go up.
+ * the next read tries again. Past the node's limit, the newest it has room for go up. The node takes only the keys it has
+ * a row for, and counts the rest (someone it never knew, or a member since removed): those are not kept.
  *
  * A report a block sends that can't reach the node waits in memory for the next try (retryPendingReports), not in the
  * browser; a queue an older build left in localStorage (bp_pending_abuse_reports) is taken into memory and deleted. Once
@@ -169,6 +170,7 @@ async function moveLocalListUp(res: BlockList): Promise<BlockList> {
     }
     try {
         const moved = await addToBlockList(moving);
+        if (moved.skipped) console.warn(`[blocklist] ${moved.skipped} of the ${moving.length} blocks this browser kept name no one your community knows, so they were not kept.`);
         forgetLocalList();
         return moved;
     } catch (e) {
@@ -192,8 +194,12 @@ export function loadBlocklist(): Promise<string[]> {
         try {
             const res = await moveLocalListUp(await getBlockList());
             if (owner !== forOwner) return current;
+            const shown = { list: current.join(), loaded, error: readError };
             takeNodeAnswer(res);
-            emit();
+            recompute();
+            // Only a read that changed something tells the screens: each time they are told, the open Messages page reads
+            // the member list and its conversations again.
+            if (current.join() !== shown.list || !shown.loaded || shown.error) emit();
             return current;
         } catch (e) {
             if (owner === forOwner) {

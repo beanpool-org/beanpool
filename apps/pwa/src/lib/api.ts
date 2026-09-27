@@ -1445,8 +1445,11 @@ export async function getBlockList(): Promise<BlockList> {
     return request('GET', '/api/blocks');
 }
 
-/** Blocks one key, or several (the one-time move of a list this browser kept); all of them or, refused, none. */
-export async function addToBlockList(keys: string | string[]): Promise<BlockList & { added: string[] }> {
+/**
+ * Blocks one key, or several (the one-time move of a list this browser kept); all of them or, refused, none. Of several,
+ * the node takes only the keys it has a row for, and counts the rest in `skipped`.
+ */
+export async function addToBlockList(keys: string | string[]): Promise<BlockList & { added: string[]; skipped?: number }> {
     return request('POST', '/api/blocks', Array.isArray(keys) ? { targetPubkeys: keys } : { targetPubkey: keys });
 }
 

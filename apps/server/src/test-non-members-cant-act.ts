@@ -48,10 +48,11 @@
  *     refused 403 account_closed before any handler runs, nothing changes and nobody is pushed; so are its signed reads,
  *     gated or public; unsigned, a read is answered as before. Invite redemption, outside the middleware, refuses the
  *     closed key itself and uses no code. A key with no member row still knocks, reads its knock, probes its
- *     membership and gets the door's own answer. The one exception (4109841495): asking again to delete the account
- *     (a retry after a lost reply, or a member an admin removed tapping Delete account) hears purgeMemberSelf's own
- *     "Account is already pruned" with a 200, from the middleware itself, and nothing changes, in any table: both
- *     apps wipe the phone only after a 2xx. A replaced key is still refused it (section 6).
+ *     membership and gets the door's own answer. The one exception: its own Delete account. A member an admin removed
+ *     erases the profile the removal kept (Marty's card removed-member-delete, 2026-09-27); asking again after that, or
+ *     after deleting their own account (4109841495, a retry after a lost reply), hears purgeMemberSelf's own
+ *     "Account is already pruned" with a 200 and nothing changes, in any table: both apps wipe the phone only after a
+ *     2xx. A replaced key is still refused it (section 6).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-non-members-cant-act.ts
  */
@@ -865,12 +866,23 @@ async function main(): Promise<void> {
             }
         }
 
-        // The one exception (4109841495): asking again to delete the account is answered as purgeMemberSelf answers a
-        // pruned row, with a 200, so the app wipes the phone; the middleware answers it itself and nothing changes.
+        // The one exception: its own Delete account. The removal kept the removed member's profile; their first Delete
+        // account erases it (Marty's card removed-member-delete, 2026-09-27; test-removed-member-delete measures what goes
+        // and that nothing brings the account back). Asking again (4109841495), as for an account its owner deleted, is
+        // answered as purgeMemberSelf answers it, with a 200, so the app wipes the phone, and nothing changes.
         const PURGE = 'POST /api/member/purge';
         const isPurgeAgain = (r: { status: number; body: any }) =>
             r.status === 200 && r.body?.ok === true && r.body?.message === 'Account is already pruned';
         assert(swept.includes(PURGE), `the sweep includes ${PURGE}`);
+        {
+            resetGatewayRateLimit();
+            const kept = accountOf(removed.m.pubKeyHex);
+            const first = await signedFetch('POST', '/api/member/purge', removed.m, { action: 'purge_account' });
+            const after = accountOf(removed.m.pubKeyHex);
+            assert(kept?.callsign === 'RemovedTwoNM' && first.status === 200 && first.body?.ok === true && first.body?.message !== 'Account is already pruned'
+                && after?.status === 'pruned' && after?.callsign === 'Deleted Member' && after?.avatar_url === null,
+                `removed by an admin: their first Delete account erases the profile the removal kept (got ${first.status} ${JSON.stringify(first.body)}, ${JSON.stringify(after)})`);
+        }
         for (const [how, s] of closed) {
             resetGatewayRateLimit();
             const before = snapshot();

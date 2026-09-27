@@ -1,7 +1,7 @@
 /**
  * Settings → "Manage this community from a computer": scan the QR on the node's /settings page in a browser, check the short code,
- * pass the phone's unlock, and that browser is signed in with your key. Owners and admins only (the entry is shown
- * only to them, and the node checks the live role again). utils/settings-signin.ts has the steps and the reasons.
+ * pass the phone's unlock, and that browser is signed in with your key. Owners, admins and moderators only (the entry is
+ * shown only to them, and the node checks the live role again). utils/settings-signin.ts has the steps and the reasons.
  */
 import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Linking, Alert, ScrollView, Keyboard } from 'react-native';

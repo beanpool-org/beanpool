@@ -418,6 +418,42 @@ function enterprisesKeptBy(db: Db, member: string): Set<string> {
     return new Set(rows.map(r => r.treasury_pubkey));
 }
 
+/**
+ * The listings a delta read sends this member whatever changed since the cursor: an off-board author's, which the
+ * phone can have been given as they are since its last sync, with no row on the node moving to carry them again. Each
+ * goes as paused (the output loop), so the next delta takes it off the phone's Market again.
+ * - Every upcoming event of an off-board host. The phone's event page reads the event by id outside a sync
+ *   (apps/native utils/db.ts fetchEventDetail) and writes its status into the cached row (persistEventView), and a
+ *   member reaches that page from a shared link, a reminder, "Your events" or the event's chat, whatever the Market
+ *   shows. A read writes nothing on the node. A host has at most five upcoming events (EVENT_UPCOMING_CAP).
+ * - Every open or taken listing of an off-board author this member has had a deal on. While the deal was open the
+ *   phone got the listing as it is (the output loop), and a request rejected or withdrawn writes no listing row.
+ * Every other way the phone writes a listing's status outside a sync moves posts.updated_at on the node, so the delta
+ * carries it anyway: a vote, an RSVP, an event edit, a deal accepted, completed or cancelled. Only enterprises are
+ * paused or wound up (pauseEnterprise, initiateWindUp), which keeps that half on idx_members_is_treasury. Nothing of
+ * the member's own, nor of an enterprise they keep: those always go as they are.
+ */
+function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, nowIso: string): string[] {
+    const authors = (db.prepare(`${ON_HOLIDAY_SQL}
+        UNION SELECT m.public_key FROM members m WHERE m.is_treasury = 1 AND NOT (${ENTERPRISE_ON_BOARD_SQL})`)
+        .all() as Array<{ public_key: string }>)
+        .map(r => r.public_key)
+        .filter(a => a !== viewer && !kept.has(a));
+    if (authors.length === 0) return [];
+    const rows = db.prepare(`
+        SELECT p.id FROM posts p
+        WHERE p.type = 'event' AND p.author_pubkey IN (SELECT value FROM json_each(@authors))
+          AND p.active = 1 AND p.status IN ('active', 'pending') AND (p.event_end_at IS NULL OR p.event_end_at > @now)
+        UNION
+        SELECT p.id FROM posts p
+        WHERE p.id IN (SELECT post_id FROM marketplace_transactions WHERE buyer_pubkey = @viewer
+                       UNION SELECT post_id FROM marketplace_transactions WHERE seller_pubkey = @viewer)
+          AND p.author_pubkey IN (SELECT value FROM json_each(@authors))
+          AND p.active = 1 AND (p.status IN ('active', 'pending') OR (p.type = 'poll' AND p.status = 'completed'))`)
+        .all({ authors: JSON.stringify(authors), now: nowIso, viewer }) as Array<{ id: string }>;
+    return rows.map(r => r.id);
+}
+
 export function hasListedOffer(db: Db, publicKey: string): boolean {
     const row = db.prepare("SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' LIMIT 1").get(publicKey);
     return !!row;
@@ -765,8 +801,17 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // (origin_node IS NULL), which is every author whose standing is kept here, and keeps this half on
         // idx_posts_author_created_local: with DELTA_ORDER both halves are then an index search (MULTI-INDEX OR).
         // Without it the planner reads every post (measured on 20,000 posts: 3 ms a read, against 0.02 ms).
-        where += " AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE updated_at >= ?)))";
+        // And, for a member, the listings a sync may no longer have the last word on (offBoardPostsToResend): the phone
+        // wrote them from a read outside a sync, or while a deal made them its own. A search of the primary key, so
+        // the OR stays a MULTI-INDEX OR.
+        where += " AND (p.updated_at >= ? OR (p.origin_node IS NULL AND p.author_pubkey IN (SELECT public_key FROM members WHERE updated_at >= ?))";
         params.push(filter.updatedAfter, filter.updatedAfter);
+        const resend = viewer ? offBoardPostsToResend(db, viewer, viewerKeeps(), new Date().toISOString()) : [];
+        if (resend.length > 0) {
+            where += " OR p.id IN (SELECT value FROM json_each(?))";
+            params.push(JSON.stringify(resend));
+        }
+        where += ")";
     }
 
     let rows: any[];

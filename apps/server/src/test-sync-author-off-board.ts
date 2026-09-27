@@ -19,8 +19,11 @@
  *   - a fresh install's first (full) sync while a member is on holiday leaves their listings off;
  *   - the delta after a holiday switch carries that member's listings and no one else's (it stays a delta);
  *   - reading a listing by id for the cache (utils/db.ts getPost, `?id=…&sync=true`) doesn't put it back;
+ *   - the event page's own read (fetchEventDetail, by id with no `sync`), which changes nothing on the node, writes the
+ *     event as the node has it over the held row; the next delta takes it off again (a member Going, and one who came
+ *     from a shared link with no RSVP). A poll vote does the same with the vote's answer, and the next delta too;
  *   - the author's own phone, a keeper's of the enterprise, and a member with an open deal on the listing keep it as it
- *     is;
+ *     is; the member withdraws the request, and the next delta takes it off their phone;
  *   - a deferred wage claim paid by processDeferredWageClaims, which completes a one-off listing, reaches the phone;
  *   - on 2,000 members and 20,000 posts, no statement of the delta read walks every post (EXPLAIN QUERY PLAN).
  *
@@ -105,6 +108,33 @@ class Phone {
         return page[0];
     }
 
+    /**
+     * The event page's own read (utils/db.ts fetchEventDetail): by id with no `sync`, written over the held row by
+     * persistEventView (`status = COALESCE(?, status)`, `updated_at` likewise, and the event's columns).
+     */
+    async openEventDetail(postId: string): Promise<any> {
+        const post = (await getJson(`/api/marketplace/posts?id=${encodeURIComponent(postId)}`, this.id))[0];
+        const held = this.rows.get(postId);
+        if (post?.type === 'event' && held) {
+            this.rows.set(postId, {
+                ...held, status: post.status ?? held.status, updatedAt: post.updatedAt ?? held.updatedAt,
+                eventStartAt: post.eventStartAt, eventEndAt: post.eventEndAt, eventState: post.eventState,
+            });
+        }
+        return post;
+    }
+
+    /** A vote as votePoll casts it: the route's answer is written over the held row (`status = ?`, `updated_at = ?`). */
+    async vote(postId: string, optionId: string): Promise<{ status: number; body: any }> {
+        const res = await postJson(`/api/marketplace/posts/${encodeURIComponent(postId)}/vote`,
+            { postId, optionId, voterPublicKey: this.id.pubKeyHex }, this.id);
+        const held = this.rows.get(postId);
+        if (res.body?.post && held) {
+            this.rows.set(postId, { ...held, pollOptions: res.body.post.pollOptions, status: res.body.post.status, updatedAt: res.body.post.updatedAt });
+        }
+        return res;
+    }
+
     market(): Set<string> {
         const now = Date.now();
         const on = [...this.rows.values()].filter(p => {
@@ -174,6 +204,8 @@ async function main() {
             } as any)!.id,
     ];
     const ollyPost = offer(olly.pubKeyHex, 'Firewood');
+    // Olly is Going to Hana's seed swap: "Your events" on his phone lists it, whatever the Market shows.
+    se.rsvpEvent(hanaPosts[3], olly.pubKeyHex, 'going');
     offer(bob.pubKeyHex, 'Bike repairs');
     offer(cass.pubKeyHex, 'Gardening');
 
@@ -229,6 +261,8 @@ async function main() {
     const start = await matchesBoard(phone, 'first sync');
     assert(hanaPosts.every(id => start.has(id)) && start.has(farmOffer) && millPosts.every(id => start.has(id)),
         'everyone\'s listings are on the phone to begin with');
+    const ollyPhone = new Phone(olly);
+    await ollyPhone.sync();
 
     console.log('\n── holiday ──');
     const on = await postJson('/api/members/holiday', { enabled: true }, hana);
@@ -245,6 +279,34 @@ async function main() {
     assert(!!opened && opened.id === hanaPosts[0] && opened.title === 'Lemons' && opened.status === 'paused',
         `the phone can still open Hana's listing by id, whole, and it reads as paused (status ${opened?.status})`);
     assert(!phone.market().has(hanaPosts[0]), 'opening it by id doesn\'t put it back on the phone\'s Market');
+
+    // The event page reads the event outside a sync and writes what it gets over the held row. Carol comes to Hana's
+    // seed swap from a link someone sent her (no RSVP); Olly from "Your events" (Going). Until the next delta the row
+    // is as the node has it; the next delta takes it off again, though neither the event nor Hana has changed since.
+    const seedSwap = hanaPosts[3];
+    await ollyPhone.sync();
+    // Time passes: Hana's switch is older than any cursor from here on (each phone asks from its last sync less
+    // five minutes), so no delta below carries her listings for her own row's sake.
+    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(new Date(Date.now() - 600_000).toISOString(), hana.pubKeyHex);
+    for (const [who, p] of [['Carol, from a shared link', phone], ['Olly, Going, from "Your events"', ollyPhone]] as const) {
+        const detail = await p.openEventDetail(seedSwap);
+        assert(detail?.status === 'active' && p.rows.get(seedSwap)?.status === 'active',
+            `${who}: the event page's read writes the event as the node has it (status ${p.rows.get(seedSwap)?.status})`);
+        const delta = await p.sync();
+        assert(delta.some(r => r.id === seedSwap && r.status === 'paused'), `${who}: the next delta carries the event again, as paused`);
+        const after = await matchesBoard(p, `${who}, opened the event page, next delta`);
+        assert(!after.has(seedSwap), `${who}: Hana's event is off the phone's Market again`);
+    }
+
+    // A vote in Hana's poll writes the vote route's answer over the held row the same way (votePoll). The vote moves the
+    // poll's updated_at, so the next delta carries it for that alone; it has to go as paused.
+    const poll = hanaPosts[2];
+    const voted = await phone.vote(poll, 'a');
+    assert(voted.status === 200 && phone.rows.get(poll)?.status === 'active',
+        `Carol votes in Hana's poll; the vote's answer writes it as the node has it (got ${voted.status}, status ${phone.rows.get(poll)?.status})`);
+    await phone.sync();
+    const afterVote = await matchesBoard(phone, 'Carol voted in Hana\'s poll, next delta');
+    assert(!afterVote.has(poll) && phone.rows.get(poll)?.status === 'paused', 'Hana\'s poll is off the phone\'s Market again');
 
     // A fresh install's first sync while she is away.
     const fresh = new Phone(carol);
@@ -285,10 +347,23 @@ async function main() {
     const patOpened = await patPhone.openListing(farmOffer);
     assert(patOpened?.status === 'active', `and opening the eggs by id gives them to him as they are (status ${patOpened?.status})`);
 
+    // Bob withdraws his request. That writes no listing row, and the farm's own row hasn't changed since before his
+    // cursor: his phone still holds the eggs as they were while his deal was open. His next delta takes them off.
+    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(new Date(Date.now() - 600_000).toISOString(), farm);
+    const withdrawn = se.cancelPostRequest(bobDeal.id, bob.pubKeyHex);
+    assert(withdrawn?.status === 'cancelled', `Bob withdraws his request for the eggs (status ${withdrawn?.status})`);
+    await bobPhone.sync();
+    const bobAfter = await matchesBoard(bobPhone, 'Bob withdrew his request, next delta');
+    assert(!bobAfter.has(farmOffer) && bobPhone.rows.get(farmOffer)?.status === 'paused',
+        `the farm's eggs are off Bob's Market (status ${bobPhone.rows.get(farmOffer)?.status})`);
+
     se.resumeEnterprise(farm, 'admin');
     await phone.sync();
     const resumed = await matchesBoard(phone, 'the farm resumed, next delta');
     assert(resumed.has(farmOffer) && resumed.has(farmNeed), 'the farm\'s listings are back on the phone\'s Market');
+    await bobPhone.sync();
+    const bobResumed = await matchesBoard(bobPhone, 'the farm resumed, Bob\'s next delta');
+    assert(bobResumed.has(farmOffer), 'the eggs are back on Bob\'s Market');
 
     console.log('\n── an enterprise winding up ──');
     se.initiateWindUp(mill, pat.pubKeyHex);
@@ -352,12 +427,14 @@ async function main() {
     assert(!!deltaRead, 'the phone\'s delta read ran');
     assert(bulkDelta.length < 100 && !bulkDelta.some(r => /^Bulk \d/.test(r.title)),
         `it is still a delta: none of the 20,000 unchanged offers and needs is in it (${bulkDelta.length} rows)`);
+    assert(!!deltaRead?.sql.includes('json_each') && bulkDelta.filter(r => r.title === 'Holiday event' && r.status === 'paused').length === 20,
+        'it sends again, as paused, the twenty upcoming events of hosts on holiday (the widest form of its condition)');
     const plans = ran.filter(r => /\bFROM posts p\b/.test(r.sql)).map(r => ({
         sql: r.sql.replace(/\s+/g, ' ').trim().slice(0, 70),
         plan: (db.prepare(`EXPLAIN QUERY PLAN ${r.sql}`).all(...r.params) as Array<{ detail: string }>).map(p => p.detail),
     }));
     const walks = plans.filter(p => p.plan.some(d => /^SCAN p\b/.test(d)));
-    assert(plans.length >= 1 && walks.length === 0,
+    assert(plans.length >= 2 && walks.length === 0,
         `no statement of the delta read walks every post (${walks.map(w => `${w.sql}…: ${w.plan.join('; ')}`).join(' | ') || `${plans.length} statements, none has SCAN p`})`);
 
     console.log(`\n${passed}/${run} checks passed.`);

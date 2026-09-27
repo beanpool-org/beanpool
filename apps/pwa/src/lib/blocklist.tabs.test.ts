@@ -20,6 +20,8 @@ const node = vi.hoisted(() => ({
     hop: 50,
     there: {} as Record<string, number>,
     back: {} as Record<string, number>,
+    /** Per kind, the next call's `back` wait pops from here first, before falling back to `back`/`hop`. */
+    backQueue: {} as Record<string, number[]>,
     /** The socket: the doorbell rings this long after each change the node takes; null while the socket is down. */
     ringAfter: 10 as number | null,
     /** How many of the next lists of keys (the one-time move) are lost on the way, as in a network blip. */
@@ -36,7 +38,8 @@ vi.mock('./api', async () => {
     async function request<T>(kind: string, act: () => T): Promise<T> {
         await wait(node.there[kind] ?? node.hop);
         const res = act();
-        await wait(node.back[kind] ?? node.hop);
+        const queued = node.backQueue[kind];
+        await wait(queued && queued.length > 0 ? queued.shift()! : (node.back[kind] ?? node.hop));
         return res;
     }
     return {
@@ -150,6 +153,7 @@ describe('two tabs, and a node that takes time to answer', () => {
         node.hop = 50;
         node.there = {};
         node.back = {};
+        node.backQueue = {};
         node.ringAfter = 10;
         node.dropListAdds = 0;
         storageAfter = 0;
@@ -325,5 +329,47 @@ describe('two tabs, and a node that takes time to answer', () => {
             expect(node.list).toEqual([]);
             expect(T.getBlockedUsers()).toEqual([]);
         });
+    });
+
+    it('a key this page last saw on the node joins leaving too, so it is never shown unblocked while the node holds it (review 4115106774)', async () => {
+        // The node holds K1, both tabs show it, the socket is down. C unblocks K1 without A hearing; A's read reaches
+        // the node right after (so its answer has no K1) but is slow to land. Meanwhile an older-build tab writes
+        // [K1] straight into storage, and C -- hearing that -- moves K1 back up and clears the browser's list before
+        // A's stale read lands. A must never show K1 unblocked while the node still holds it.
+        node.ringAfter = null;
+        node.list = [K1];
+        const A = await openTab();
+        const C = await openTab();
+        vi.useFakeTimers();
+        stops.push(browserTellsTabs());
+        stops.push(A.startBlocklist(ME));
+        stops.push(C.startBlocklist(ME));
+        await vi.advanceTimersByTimeAsync(100);
+        expect(A.getBlockedUsers()).toEqual([K1]);
+        expect(C.getBlockedUsers()).toEqual([K1]);
+
+        const unblocking = C.unblockUser(K1);
+        await vi.advanceTimersByTimeAsync(100);
+        await unblocking;
+        expect(node.list).toEqual([]);
+        expect(A.getBlockedUsers()).toEqual([K1]); // A hasn't heard yet
+
+        const w = watch(() => [K1]);
+        w.add('A', A);
+
+        // A's read: queued to reach the node at once (no K1) but take 200ms to land. C's storage-triggered read and
+        // its move are queued fast, well inside that 200ms.
+        node.there = { read: 0, move: 0 };
+        node.backQueue.read = [200, 10];
+        node.back = { move: 10 };
+        A.loadBlocklist().catch(() => { /* said through getBlocklistStatus */ });
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1]));
+
+        await w.run(1000);
+        w.stop();
+        expect(w.gaps).toEqual([]);
+        expect(node.list).toEqual([K1]);
+        expect(A.getBlockedUsers()).toEqual([K1]);
+        expect(C.getBlockedUsers()).toEqual([K1]);
     });
 });

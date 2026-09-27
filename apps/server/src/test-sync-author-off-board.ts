@@ -671,12 +671,14 @@ async function main() {
     }
 
     // A re-key moves the member's row to the new key, the stamp with it (engine/key-move.ts).
-    const hanaStanding = (db.prepare('SELECT board_standing_changed_at AS s FROM members WHERE public_key = ?').get(hana.pubKeyHex) as any)?.s;
+    // (Every column, so a node without it fails the check rather than the run.)
+    const standingOf = (key: string) => (db.prepare('SELECT * FROM members WHERE public_key = ?').get(key) as any)?.board_standing_changed_at;
+    const hanaStanding = standingOf(hana.pubKeyHex);
     const hanaAgain = keypair();
     moveMemberKeyRows(hana.pubKeyHex, hanaAgain.pubKeyHex, new Date().toISOString(), { keepStamps: false });
-    const moved = db.prepare('SELECT board_standing_changed_at AS s FROM members WHERE public_key = ?').get(hanaAgain.pubKeyHex) as any;
-    assert(!!hanaStanding && moved?.s === hanaStanding,
-        `a re-key moves Hana's standing with her to her new key (${hanaStanding} → ${moved?.s})`);
+    const moved = standingOf(hanaAgain.pubKeyHex);
+    assert(!!hanaStanding && moved === hanaStanding,
+        `a re-key moves Hana's standing with her to her new key (${hanaStanding} → ${moved})`);
 
     console.log('\n── the delta read searches its indexes, on a node\'s worth of posts ──');
     // 2,000 members, 20,000 posts and 5,000 ended deals that nothing has changed in a year, and twenty members on holiday

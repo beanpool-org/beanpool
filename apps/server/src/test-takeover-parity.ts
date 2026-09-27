@@ -17,15 +17,17 @@
  *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
  *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a message with empty
  *     metadata, a pending request, a rating with no comment, an empty bio and archetype, a group renamed) and a last
- *     delta.
+ *     delta, and the pricing guide's hourly cycle on M (the nodes' own timer for it is off: it fired or not by the
+ *     runner's speed).
  *  5. M is killed; T, a copy of M's data directory at S's last copy, starts on its own port.
  *  6. S takes over with the recovery code (the preview, the confirm, the restart).
  *  7. Database parity: every table the manifest (engine/replication-manifest.ts) says a standby copies, or should
  *     (a known gap), row by row in the columns it compares; and every community setting it names.
  *  8. Behaviour parity: the same signed calls against T and S, the answers compared after normalising times, new ids and
  *     ports: reads (the board as a guest, a member and a keeper; a phone's full sync and a delta; balances; the
- *     enterprise; each member's own view; the pricing guide; the directory; notices) and writes (accept a listing from
- *     before; a keeper posts for the enterprise; request a holiday member's listing; a vouch; a frozen member's poll;
+ *     enterprise; each member's own view; the pricing guide after each server's hourly cycle; the directory; notices)
+ *     and writes (accept a listing from before; a keeper posts for the enterprise; request a holiday member's listing; a
+ *     vouch; a frozen member's poll;
  *     approve a pending request; redeem the unused invite; the Decision sweep eight days on; a push of each category;
  *     the ledger audit a take-over runs).
  *  9. KNOWN_GAPS, strict: every difference is listed with its gap id, and every listed one still differs. A fix PR
@@ -160,6 +162,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:message_attachments (not copied)', gap: 'G4', why: 'every chat photo from before is gone' },
     { key: 'db:activity_feed (not copied)', gap: 'G4', why: 'the activity waterfall starts empty' },
     { key: 'db:pricing_guide_items (not copied)', gap: 'G4', why: 'each server seeds its own guide at its first boot' },
+    { key: 'http:the pricing guide', gap: 'G1, G4', why: "the standby's hourly cycle counts only local listings, and every listing there is another community's (G1); the guide main priced is not copied (G4)" },
     { key: 'http:a push of each category', gap: 'G4, G2b', why: 'no phone to push to (G4); behind it, a notification opt-out is forgotten (G2b)' },
 
     // G5: the community's own settings.
@@ -211,6 +214,21 @@ async function child(): Promise<void> {
     const fetches = guardFetch();
     await runNodeChild({
         ...serveCommands,
+        /**
+         * The real server, without the pricing guide's own timer (pricing-aggregator.ts: a first cycle 5 s after boot, then
+         * hourly). Whether it had fired by the read was the runner's speed; the scenario runs the cycle itself instead.
+         */
+        serve: async () => {
+            const port = await serveCommands.serve({});
+            const { stopPricingAggregatorWorker } = await import('./pricing-aggregator.js');
+            stopPricingAggregatorWorker();
+            return port;
+        },
+        /** One cycle of the pricing guide's hourly worker: it prices each item from the listings this server counts. */
+        'pricing-cycle': async () => {
+            const { runPricingAggregationCycle } = await import('./pricing-aggregator.js');
+            return runPricingAggregationCycle();
+        },
         'setup-primary': async (a: { replicationToken: string; genesis: string }) => {
             const { seedGenesisMember } = await import('./engine/members.js');
             const { setReplicationToken } = await import('./config/local-config.js');
@@ -586,6 +604,9 @@ async function main(): Promise<void> {
         built('Eve saves an empty bio and archetype', await S_(eve, '/api/profile/update', { bio: '', archetype: '' }));
         built('Ann renames Gardeners, which the whole copy copied', await api(m, 'PATCH', `/api/groups/${groupId}`, { as: ann, body: { name: 'Growers' } }));
         await pull('the last delta');
+        // A main server that has been up an hour has priced its guide from its community's listings.
+        const priced = await main.send('pricing-cycle');
+        require_(priced.updatedCount > 0, `M: the pricing guide's hourly cycle prices items from the community's listings (${JSON.stringify(priced)})`);
 
         // ── 6. M dies; its twin T starts from its data directory ──
         console.log('\n— 6. the main server is killed; its twin starts from a copy of its data —');
@@ -654,7 +675,11 @@ async function main(): Promise<void> {
         await both("the enterprise's page", get(kip, `/api/treasury/${probe.publicKey}`));
         await both("each member's own view (probation, standing)", async (base) => Object.fromEntries(await Promise.all(
             everyone.map(async (w) => [w.name, await api(base, 'GET', '/api/community/me', { as: w })]))));
-        await both('the pricing guide', get(ann, '/api/pricing-guide'));
+        // An hour on: each server's hourly cycle has run again over the listings it counts as its own.
+        await both('the pricing guide', async (base, node) => {
+            await node.send('pricing-cycle');
+            return get(ann, '/api/pricing-guide')(base);
+        });
         await both('the community, as the directory and apps see it', async (base) => ({
             local: await api(base, 'GET', '/api/local/community-info'),
             info: await api(base, 'GET', '/api/community/info', { as: ann }),

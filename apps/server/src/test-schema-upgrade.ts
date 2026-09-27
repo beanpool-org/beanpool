@@ -1053,6 +1053,100 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 19. When a member's board standing last changed (members.board_standing_changed_at) ─────────────────────────────
+    // The Market delta's author half reads it (engine posts.ts). Every node from before it has neither the column, its
+    // index, its trigger nor the one-time marker, and holds members on the board and off it. The upgrade adds all three,
+    // fills the rows it holds once (the upgrade's time for a member off the board, updated_at for the rest; db.ts
+    // backfillBoardStanding) without moving an updated_at, and never fills again. The trigger then stamps a change of
+    // `paused` or of a winding_up / completed status, and nothing else.
+    console.log('\n--- 19. Legacy node without members.board_standing_changed_at ---');
+    {
+        const dir = tmp('legacy-board-standing');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const fresh = { cols: columns(d, 'members'), idx: indexes(d, 'members') };
+        const hasTrigger = (db: Database.Database) =>
+            !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = 'members_touch_board_standing'").get();
+        assert(fresh.cols.includes('board_standing_changed_at') && fresh.idx.includes('idx_members_board_standing_changed_at') && hasTrigger(d),
+            'a fresh install has the column, its index and its trigger');
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TRIGGER members_touch_board_standing; DROP INDEX idx_members_board_standing_changed_at;
+                ALTER TABLE members DROP COLUMN board_standing_changed_at;
+                DELETE FROM node_config WHERE key = 'migration_board_standing_v1';`);
+        const OLD = '2025-01-01T00:00:00.000Z';
+        const key = (n: number) => n.toString(16).padStart(2, '0').repeat(32);
+        const seed = (n: number, cols: Record<string, unknown> = {}) => {
+            const all: Record<string, unknown> = { public_key: key(n), callsign: `Row${n}`, joined_at: OLD, updated_at: OLD, invited_by: 'genesis', invite_code: `INV-${n}`, ...cols };
+            const names = Object.keys(all);
+            d.prepare(`INSERT INTO members (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`).run(...names.map(k => all[k]));
+            return key(n);
+        };
+        const onBoard = seed(1);
+        const away = seed(2);
+        d.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', 'true')`).run(away);
+        const paused = seed(3, { is_treasury: 1, paused: 1 });
+        const winding = seed(4, { is_treasury: 1, status: 'winding_up' });
+        const woundUp = seed(5, { is_treasury: 1, status: 'completed' });
+        const suspended = seed(6, { status: 'suspended' });
+        assert(!columns(d, 'members').includes('board_standing_changed_at') && !hasTrigger(d), 'the fixture genuinely lacks the column and the trigger');
+        d.close();
+
+        const bootedAt = new Date().toISOString();
+        const result = bootInto(dir);
+        assert(result.ok, 'the node from before the column boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(columns(after, 'members')) === JSON.stringify(fresh.cols) && JSON.stringify(indexes(after, 'members')) === JSON.stringify(fresh.idx)
+            && hasTrigger(after), 'members: exactly the columns and indexes a fresh install has, and the trigger');
+        const r = (pk: string) => after.prepare('SELECT board_standing_changed_at AS s, updated_at AS u FROM members WHERE public_key = ?').get(pk) as { s: string | null; u: string };
+        for (const [label, pk] of [['on holiday', away], ['a paused enterprise', paused], ['an enterprise winding up', winding], ['a wound-up enterprise', woundUp]] as const) {
+            assert((r(pk).s ?? '') >= bootedAt && r(pk).u === OLD, `off the board, filled with the upgrade's time, updated_at left: ${label} (${r(pk).s})`);
+        }
+        for (const [label, pk] of [['a member on the board', onBoard], ['a suspended member, still on it', suspended]] as const) {
+            assert(r(pk).s === OLD && r(pk).u === OLD, `on the board, filled with its updated_at: ${label} (${r(pk).s})`);
+        }
+        assert(!!after.prepare("SELECT 1 FROM node_config WHERE key = 'migration_board_standing_v1'").get(), 'the one-time marker is written');
+        // A row with no standing yet (a member who joined since) stays so at every boot: the fill ran once.
+        after.pragma('foreign_keys = OFF');
+        after.prepare(`INSERT INTO members (public_key, callsign, joined_at, updated_at, invited_by, invite_code) VALUES (?, 'Joined', ?, ?, 'genesis', 'INV-J')`).run(key(7), OLD, OLD);
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        const again = new Database(path.join(dir, 'state.db'));
+        const s = (pk: string) => (again.prepare('SELECT board_standing_changed_at AS s FROM members WHERE public_key = ?').get(pk) as { s: string | null }).s;
+        assert(s(key(7)) === null, 'and fills nothing: a member who joined since has no standing yet');
+        // The trigger: a change of standing, whichever writer, and nothing else.
+        const stamped = (sql: string, pk: string): boolean => {
+            again.prepare('UPDATE members SET board_standing_changed_at = ? WHERE public_key = ?').run(OLD, pk);
+            again.prepare(sql).run(pk);
+            return s(pk) !== OLD;
+        };
+        const moves: Array<[string, string, string, boolean]> = [
+            ['a bio', 'UPDATE members SET bio = \'Hello\' WHERE public_key = ?', onBoard, false],
+            ['a mute', 'UPDATE members SET moderation_muted_until = \'9999-12-31T23:59:59.999Z\' WHERE public_key = ?', onBoard, false],
+            ['suspended', 'UPDATE members SET status = \'suspended\' WHERE public_key = ?', onBoard, false],
+            ['suspended to pruned', 'UPDATE members SET status = \'pruned\' WHERE public_key = ?', onBoard, false],
+            ['paused again (no change)', 'UPDATE members SET paused = 1 WHERE public_key = ?', paused, false],
+            ['resumed', 'UPDATE members SET paused = 0 WHERE public_key = ?', paused, true],
+            ['paused', 'UPDATE members SET paused = 1 WHERE public_key = ?', paused, true],
+            ['a wind-up cancelled', 'UPDATE members SET status = \'active\' WHERE public_key = ?', winding, true],
+            ['winding up', 'UPDATE members SET status = \'winding_up\' WHERE public_key = ?', winding, true],
+            ['finalised (still off the board, the keepers\' view ends)', 'UPDATE members SET status = \'completed\', paused = 0 WHERE public_key = ?', winding, true],
+        ];
+        for (const [what, sql, pk, expected] of moves) {
+            const moved = stamped(sql, pk);
+            assert(moved === expected, `${expected ? 'stamps' : 'leaves'} the standing: ${what}`);
+        }
+        // Setting either column itself fires neither trigger.
+        again.prepare('UPDATE members SET board_standing_changed_at = ?, updated_at = ? WHERE public_key = ?').run(OLD, OLD, paused);
+        again.prepare('UPDATE members SET paused = 0 WHERE public_key = ?').run(paused);
+        const moved = again.prepare('SELECT board_standing_changed_at AS s, updated_at AS u FROM members WHERE public_key = ?').get(paused) as { s: string; u: string };
+        assert(moved.s > OLD && moved.u > OLD, `a change of standing moves updated_at too, so delta sync takes it to a standby (${moved.s}, ${moved.u})`);
+        again.prepare('UPDATE members SET paused = 1, board_standing_changed_at = ? WHERE public_key = ?').run(OLD, paused);
+        assert(s(paused) === OLD, 'a write that sets the standing itself keeps it (a standby taking its main server\'s)');
+        again.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

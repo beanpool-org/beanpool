@@ -366,6 +366,7 @@ run_federation_suites() {
       test-open-join-failover
       test-standby-visitor-marks
       test-standby-owner-deleted
+      test-standby-board-standing
       test-place-watch-failover
       test-standby-rekey
       test-recovery-tombstones
@@ -432,6 +433,7 @@ run_federation_suites() {
       test-non-members-cant-act
       test-marketplace-auth
       test-sync-author-off-board
+      test-sync-board-standing-upgrade
       test-escrow-fail-closed
       test-escrow-floor
       test-escrow-write-off

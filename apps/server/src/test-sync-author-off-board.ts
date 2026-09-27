@@ -725,6 +725,24 @@ async function main() {
     const nellAfter = await matchesBoard(nellPhone, 'Nell unbound from the paused orchard, next delta');
     assert(shutPosts.every(id => !nellAfter.has(id)), 'the orchard\'s listings are off Nell\'s Market');
 
+    // The other ways a keeper comes or goes move it the same way (in process): the lead approves a request to keep it
+    // (at once while it has one keeper), and the community removes its lead by a Decision.
+    const { createDecision, executeDecision } = await import('./decisions-engine.js');
+    for (const [what, change] of [
+        ['Pat approves Kim\'s request to keep the paused orchard again', () =>
+            se.approveKeeperRequest(se.requestToJoinEnterprise(shut, kim.pubKeyHex, 0).id, pat.pubKeyHex).applied],
+        ['a Decision removes Pat as its lead', () => executeDecision(createDecision({
+            authorPubkey: ada.pubKeyHex, title: 'Remove the orchard\'s lead', description: 'exemptions', touches: 'member',
+            effect: 'remove_lead_keeper', subject: pat.pubKeyHex, params: { enterprisePubkey: shut, leadPubkey: pat.pubKeyHex },
+        }).id).success],
+    ] as const) {
+        const before = standing(shut);
+        await new Promise(r => setTimeout(r, 5));
+        const done = change();
+        const after = standing(shut);
+        assert(done === true && !!after && !!before && after > before, `${what}: the orchard's standing moves (${before} → ${after})`);
+    }
+
     // A keeper change on an enterprise on the board: everyone gets its listings as they are anyway, so no delta carries
     // them, and none tells anyone the keepers changed.
     await phone.sync();

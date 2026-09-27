@@ -1044,17 +1044,22 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             <button
                                 type="button"
                                 onClick={async () => {
-                                    if (isPeerBlocked) {
-                                        if (window.confirm(`Unblock ${getConversationTitle(activeConv)}?`)) {
-                                            unblockUser(peerPubkey);
-                                            await loadConversations();
+                                    // The community keeps the list (lib/blocklist): a change it didn't take is said, never shown as done.
+                                    try {
+                                        if (isPeerBlocked) {
+                                            if (window.confirm(`Unblock ${getConversationTitle(activeConv)}?`)) {
+                                                await unblockUser(peerPubkey);
+                                                await loadConversations();
+                                            }
+                                        } else {
+                                            const name = getConversationTitle(activeConv);
+                                            if (window.confirm(`Block ${name}?\n\nThis will hide their messages and posts, and notify moderation.`)) {
+                                                await blockUser(peerPubkey, identity.publicKey, 'Abusive user reported via Chat');
+                                                await loadConversations();
+                                            }
                                         }
-                                    } else {
-                                        const name = getConversationTitle(activeConv);
-                                        if (window.confirm(`Block ${name}?\n\nThis will hide their messages and posts, and notify moderation.`)) {
-                                            await blockUser(peerPubkey, identity.publicKey, 'Abusive user reported via Chat');
-                                            await loadConversations();
-                                        }
+                                    } catch (e: any) {
+                                        alert(e?.message || 'That did not go through. Please try again.');
                                     }
                                 }}
                                 aria-label={isPeerBlocked ? 'Unblock user' : 'Block user'}
@@ -1719,8 +1724,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             type="button"
                             onClick={async () => {
                                 if (window.confirm(`Unblock ${getConversationTitle(activeConv)}?`)) {
-                                    unblockUser(peerPubkey);
-                                    await loadConversations();
+                                    try {
+                                        await unblockUser(peerPubkey);
+                                        await loadConversations();
+                                    } catch (e: any) {
+                                        alert(e?.message || 'That did not go through. Please try again.');
+                                    }
                                 }
                             }}
                             className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 shrink-0"

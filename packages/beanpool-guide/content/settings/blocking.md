@@ -26,10 +26,14 @@ Confirm with **Block User**.
 - They can still see your posts.
 - In the phone app, the block is kept on this phone, for your account only. Another account on this phone does not get your blocks.
 - In the phone app, if you sign out, or replace this phone's account with another one, your blocks stay on the phone. Come back with the same account and they are still there.
-- In the web app, signing out clears your blocks. Block them again when you come back. See "Using BeanPool in a web browser".
-- If you reinstall the app or use another device, block them again.
+- In the phone app, if you reinstall the app or use another phone, block them again.
+- In the web app, your community keeps your blocks with your account. Sign in on any browser and they come back. Signing out leaves nothing about them on that computer. See "Using BeanPool in a web browser".
+- The people who run your community's server can see whom you blocked in the web app, as they can see reports.
+- The phone app and the web app keep separate lists. A block in one does not show in the other.
 
 ## Unblocking
 
 - Open **Settings**. Under **Legal & Privacy**, tap **Manage Blocked Users**.
 - Tap **Unblock** next to a name, or **Unblock All**.
+
+In the web app, blocking and unblocking need a connection to your community. Without one, the app says so and nothing changes. Try again when you are back online.

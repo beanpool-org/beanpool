@@ -453,6 +453,8 @@ run_federation_suites() {
       test-live-post-payloads
       test-moderation-notifications
       test-moderation-notices-kept
+      test-member-blocks
+      test-member-blocks-standby
       test-polls
       test-poll-voters-members-only
       test-suspended-and-visitor-reads

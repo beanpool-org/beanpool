@@ -46,6 +46,7 @@ import { movePlaceWatches } from './place-watches.js';
 import { moveRecoverySharesToNewKey } from './recovery-shares.js';
 import { moveKnocks } from './knocks.js';
 import { moveKeptNotices } from './kept-notices.js';
+import { moveBlocks } from './member-blocks.js';
 import { moveMemberKeyRows } from './key-move.js';
 
 // ===================== TYPES =====================
@@ -302,6 +303,8 @@ export function completeRekey(
     }
 
     const nowIso = new Date().toISOString();
+    /** The members whose block lists the re-key changed (moveBlocks), told after the commit. */
+    let blockListsMoved: string[] = [];
 
     // Atomic execution inside conservingTransaction
     conservingTransaction(() => {
@@ -334,6 +337,9 @@ export function completeRekey(
         // (p3) The moderation notices kept for them (engine/kept-notices.ts): what they have not seen yet is theirs on the
         // new key. Stamped, so the move replicates.
         moveKeptNotices(cleanOld, cleanNew);
+        // (p4) Block lists (engine/member-blocks.ts): the member's own list is theirs on the new key, and every member who
+        // blocked the old key has the new one blocked, so a re-key never unblocks anyone. Stamped, so the move replicates.
+        blockListsMoved = moveBlocks(cleanOld, cleanNew);
 
         // 3. Mark rekey request completed
         db.prepare("UPDATE rekey_requests SET status = 'completed', new_pubkey = ?, completed_at = ? WHERE id = ?").run(cleanNew, nowIso, req.id);
@@ -383,6 +389,9 @@ export function completeRekey(
 
     broadcast({ type: 'profile_updated', publicKey: cleanNew });
     broadcast({ type: 'member_rekeyed', oldPublicKey: cleanOld, newPublicKey: cleanNew });
+    // Each member whose block list changed hears it on their own sockets only, as a bare doorbell: their app reads its own list
+    // again (routes/blocks.ts). Nobody else is told anything about anyone's blocks.
+    for (const owner of blockListsMoved) broadcast({ type: 'blocklist_updated' }, [owner]);
     logger.info('AUTH', `[Rekey] Completed atomic transfer for ${member.callsign}: ${cleanOld} -> ${cleanNew}`);
 
     return {

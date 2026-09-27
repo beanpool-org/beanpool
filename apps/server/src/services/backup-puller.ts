@@ -48,6 +48,7 @@ import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedT
 import { logger } from '../logger.js';
 import { noteWholeCopyOfVisitorMarks, visitorMarksWantWholeCopy } from '../db/db.js';
 import { noteWholeCopyOfReplacedKeys, replacedKeysWantWholeCopy } from '../engine/key-move.js';
+import { noteWholeCopyOfMemberBlocks, memberBlocksWantWholeCopy } from '../engine/member-blocks.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull } from './recovery-seal-key.js';
@@ -269,6 +270,8 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         if (!isDelta && payload.visitorsMarked === true) noteWholeCopyOfVisitorMarks();
         // A whole copy that carries the main server's replaced keys: every one is here now (engine/key-move.ts).
         if (!isDelta && Array.isArray(payload.invalidatedKeys)) noteWholeCopyOfReplacedKeys();
+        // A whole copy that carries the main server's block lists: every one is here now (engine/member-blocks.ts).
+        if (!isDelta && Array.isArray(payload.memberBlocks)) noteWholeCopyOfMemberBlocks();
 
         if (payload.generatedAt) {
             const genMs = Date.parse(payload.generatedAt);
@@ -372,6 +375,7 @@ function getReconcileMs(): number {
 
 let visitorMarksAsked = false;
 let replacedKeysAsked = false;
+let memberBlocksAsked = false;
 
 function nextMode(): PullMode {
     if (!lastImportedCursor) return 'full'; // seed
@@ -403,6 +407,14 @@ function nextMode(): PullMode {
         replacedKeysAsked = true;
         lastImportedGeneratedAt = null; // a whole one, never a 304 "unchanged"
         logger.info('P2P', '[Backup] Replaced keys: taking one whole copy of the main server, so the keys it replaced before this version are refused here too');
+        return 'full';
+    }
+    // Once a process, the same for the members' block lists: the blocks made while this standby ran a version without them
+    // come only in a whole copy (engine/member-blocks.ts).
+    if (!memberBlocksAsked && memberBlocksWantWholeCopy()) {
+        memberBlocksAsked = true;
+        lastImportedGeneratedAt = null; // a whole one, never a 304 "unchanged"
+        logger.info('P2P', "[Backup] Block lists: taking one whole copy of the main server, so every member's blocks from before this version are here too");
         return 'full';
     }
     const reconcileMs = getReconcileMs();

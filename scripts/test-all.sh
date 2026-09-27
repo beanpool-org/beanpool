@@ -389,6 +389,7 @@ run_federation_suites() {
       test-request-binding
       test-loopback-audience
       test-address-offers
+      test-staff-seen-prune
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility

@@ -284,6 +284,23 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect(confirm.disabled).toBe(false);
     });
 
+    it("a guarded node's word decides this page's own address: a public IPv6 address or a name like 10.example.org is one tap", async () => {
+        // The panel's own offerable() refuses both shapes; a node with the guard counts them as this page's (4114876739).
+        for (const url of ['https://[2001:db8::1]', 'https://10.example.org']) {
+            const host = new URL(url).hostname;
+            vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+                unconfirmed: [{ address: host, today: 0, busiestDay: 0, ownerOrAdmin: false }],
+                heldBack: [],
+            }));
+            const { unmount } = render(<AppAddressesPanel activeNode={{ ...node, url }} />);
+            const offers = await screen.findAllByTestId('app-address-offer');
+            expect(offers).toHaveLength(1);
+            expect(offers[0].textContent).toContain(host);
+            expect(screen.queryByTestId('app-address-held')).toBeNull();
+            unmount();
+        }
+    });
+
     it("never offers this machine's or a LAN address", async () => {
         vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report());
         render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);

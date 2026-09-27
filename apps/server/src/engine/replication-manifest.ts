@@ -273,6 +273,16 @@ export const TABLES: Record<string, TableEntry> = {
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
 };
 
+/**
+ * Rows a server writes again at every boot of its own, stamped with its own clock: system-managed rows whose canonical
+ * values always win (engine/pulse-seed.ts seedPulseCurated). Two servers stamp them at their own boots, so the stamp is
+ * never compared; everything else in the row is.
+ */
+export const BOOT_STAMPED: { table: string; column: string; where: string; reason: string }[] = [
+    { table: 'creator_channels', column: 'updated_at', where: "id = 'chan_beanpool_learn'", reason: "the BeanPool learn channel, re-seeded at every boot" },
+    { table: 'pulse_items', column: 'updated_at', where: 'curated = 1', reason: 'the curated learn items, re-seeded at every boot' },
+];
+
 /** SQLite's own tables and a virtual table's shadow tables belong to no decision here. */
 export function isInternalTable(name: string, type: string): boolean {
     return name.startsWith('sqlite_') || type === 'shadow';
@@ -293,7 +303,7 @@ export const MEMBERS_NOT_TOUCHING: Record<string, ColumnException> = {
 
 export type SettingEntry =
     /** In every sync payload, signed (engine/sync.ts exportSyncState). */
-    | { kind: 'payload'; reason: string }
+    | { kind: 'payload'; reason: string; differsByDesign?: string }
     /** In the take-over bundle (services/takeover-envelope.ts). */
     | { kind: 'takeover-bundle'; reason: string; differsByDesign?: string }
     /** The community's, and lost on a take-over today. */
@@ -351,7 +361,10 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     nodeProfile: { kind: 'payload', reason: 'the node profile record (payload.nodeProfile)' },
     'nodeProfile.*': { kind: 'payload', reason: "the operator's switch overrides (payload.nodeProfile)" },
     openJoinSalt: { kind: 'payload', reason: "the key the open door's hashes are made with (payload.openJoinSalt)" },
-    migration_mark_visitors_v1: { kind: 'payload', reason: "whether visitors' rows are marked (payload.visitorsMarked)" },
+    migration_mark_visitors_v1: {
+        kind: 'payload', reason: "whether visitors' rows are marked (payload.visitorsMarked)",
+        differsByDesign: "a standby records 'copied': the marks in its copy are its main server's (db.ts noteVisitorsMarkedByMainServer)",
+    },
     recovery_seal_main_epoch: { kind: 'payload', reason: "the recovery seal's epoch (payload.sealEpoch)" },
     ledger_audit_baseline: { kind: 'community', gap: 'G5', reason: 'the accepted ledger audit baseline: the promotion audit uses the standby\'s own' },
     ledger_audit_rebaseline_note: { kind: 'community', gap: 'G5', reason: 'why the baseline was accepted' },
@@ -400,7 +413,8 @@ export function nodeConfigKeyEntry(key: string): SettingEntry | undefined {
 
 /** Whether a setting is one a promoted standby must hold as its main server did (compared by the twin suite). */
 export function settingMustMatch(entry: SettingEntry): boolean {
-    return entry.kind === 'community' || entry.kind === 'payload' || (entry.kind === 'takeover-bundle' && !entry.differsByDesign);
+    if (entry.kind === 'community') return true;
+    return (entry.kind === 'payload' || entry.kind === 'takeover-bundle') && !entry.differsByDesign;
 }
 
 /**

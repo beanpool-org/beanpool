@@ -13,7 +13,8 @@
  *   2. An emergency suspension with votes off: an admin suspends at once; the record it opens is a suspension, not a
  *      question, and nobody can vote on it; the member is still suspended on day 6; when the 7 days end the tick lifts
  *      it and gives back the node role it held aside. An admin can lift one sooner. One opened while votes were on,
- *      with enough yes votes to keep it, lifts all the same once the switch is off.
+ *      with enough yes votes to keep it, lifts all the same once the switch is off. One made while votes were off
+ *      stays a suspension nobody votes on after the switch goes back on, and lifts at its end whatever votes it holds.
  *   3. What a vote decided before the switch went off is not carried out: a passed Decision is blocked at the tick, an
  *      open one whose vote passed is blocked too, and a removal in its grace window is not completed (nor can an admin
  *      hurry it); the admin brake still halts it and gives the member back.
@@ -107,7 +108,7 @@ async function main() {
     };
     const olga = member('Olga'), alice = member('Alice'), bob = member('Bob'), carol = member('Carol'), dave = member('Dave');
     const erin = member('Erin'), frank = member('Frank'), gina = member('Gina'), hank = member('Hank'), ivan = member('Ivan');
-    const jack = member('Jack'), kate = member('Kate');
+    const jack = member('Jack'), kate = member('Kate'), lena = member('Lena');
     grantNodeRole(olga.pk, 'owner', 'owner:password');
     grantNodeRole(erin.pk, 'admin', 'owner:password');
     const voters = [alice, bob, carol, dave];
@@ -226,6 +227,39 @@ async function main() {
     de.tickDecisions(Date.parse(ginaRecord.closesAt) + 60_000);
     assert(statusOf(gina) === 'active' && decision(ginaRecord.id).status === 'unresolved' && VOTES_OFF.test(decision(ginaRecord.id).execution_reason),
         `switched off before it closed, it lifts all the same: no vote keeps a suspension here (${statusOf(gina)}, ${decision(ginaRecord.id).status})`);
+    clearOverride();
+
+    // Made while votes were off; the operator switches them on before it ends. It stays what it said it was, a
+    // suspension that ends: nobody can vote on it, members are not shown it as a vote, and it lifts at its end.
+    const lenaSuspended = await call('POST', `/api/local/admin/users/${lena.pk}/suspend`, { reason: 'Posting the same scam link in every group' }, null, ADMIN);
+    const lenaRecord = lenaSuspended.body?.decision;
+    assert(lenaSuspended.status === 200 && statusOf(lena) === 'disabled' && lenaRecord?.title === `Lena is suspended until ${lenaRecord?.closesAt?.slice(0, 10)}`,
+        `with votes off, an admin suspends Lena (${show(lenaSuspended)})`);
+    setOverride('true');
+    const lenaVotes = [];
+    for (const v of [...voters, olga]) lenaVotes.push(await call('POST', `/api/commons/decisions/${lenaRecord?.id}/vote`, { support: true }, v));
+    assert(lenaVotes.every(r => r.status === 400 && /Nobody votes on this suspension/.test(r.body?.error ?? ''))
+        && count('SELECT COUNT(*) AS c FROM decision_votes WHERE decision_id = ?', lenaRecord?.id) === 0,
+        `votes switched on, nobody can vote to keep it (${lenaVotes.map(show).join('; ')})`);
+    const lenaDirect = de.castDecisionVote(lenaRecord.id, bob.pk, true);
+    assert(!lenaDirect.success && /Nobody votes on this suspension/.test(lenaDirect.error ?? ''), `castDecisionVote refuses it underneath the route (${JSON.stringify(lenaDirect)})`);
+    const lenaOpen = await call('GET', '/api/commons/decisions?status=open', null, bob);
+    const lenaAll = await call('GET', '/api/commons/decisions', null, bob);
+    assert(lenaOpen.status === 200 && lenaAll.status === 200
+        && ![...(lenaOpen.body?.decisions ?? []), ...(lenaAll.body?.decisions ?? [])].some((d: any) => d.id === lenaRecord?.id),
+        `nor are members shown it as a vote (${show(lenaOpen)})`);
+    // However many yes votes it holds, they keep nothing.
+    for (const v of [...voters, olga]) {
+        db.prepare(`INSERT OR REPLACE INTO decision_votes (decision_id, voter_pubkey, support, weight, credits_used, created_at, updated_at)
+                    VALUES (?, ?, 1, 1, 1, ?, ?)`).run(lenaRecord.id, v.pk, lenaRecord.opensAt, lenaRecord.opensAt);
+    }
+    assert(de.tallyDecision(lenaRecord.id, Date.parse(lenaRecord.closesAt) + 60_000).passed, 'yes votes enough to keep it, were it a vote');
+    de.tickDecisions(Date.parse(lenaRecord.closesAt) + 60_000);
+    const lenaEnded = decision(lenaRecord.id);
+    assert(statusOf(lena) === 'active' && lenaEnded.status === 'unresolved'
+        && /were switched off on this node when this suspension was made/.test(lenaEnded.execution_reason ?? '')
+        && /The suspension has been lifted/.test(lenaEnded.execution_reason ?? ''),
+        `when its 7 days end it lifts, as it said it would (${statusOf(lena)}, ${lenaEnded.status}: ${lenaEnded.execution_reason})`);
     clearOverride();
 
     // ── 3. What a vote decided before the switch went off ──

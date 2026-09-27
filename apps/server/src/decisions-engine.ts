@@ -272,6 +272,19 @@ export const DECISIONS_OFF_NOT_CARRIED_OUT = 'Community votes are switched off o
 export const NO_VOTE_SUSPENSION_ENDED = 'Community votes are switched off on this node, so an emergency suspension lasts '
     + '7 days and nobody votes to keep it';
 
+/** Why an emergency suspension made with formal Decisions off ended, after they were switched back on. */
+export const NO_VOTE_SUSPENSION_MADE_ENDED = 'Community votes were switched off on this node when this suspension was made, '
+    + 'so it lasts 7 days and nobody votes to keep it';
+
+/**
+ * An emergency suspension made while formal Decisions were off (adminEmergencySuspend's `noVote`). It said it lasts 7
+ * days and nobody votes on it, and stays so if the switch goes back on before it ends: no vote is taken on it, members
+ * are not shown it as one, and it lifts at its end whatever votes it holds.
+ */
+export function madeWithoutVote(decision: Pick<Decision, 'effect' | 'params'>): boolean {
+    return decision.effect === 'keep_suspension' && decision.params?.noVote === true;
+}
+
 function assertEffectAllowedHere(effect: DecisionEffect): void {
     const off = switchOffFor(effect);
     if (off === 'beans') throw new BeansOffError('Beans are switched off on this node, so the Commons has nothing to grant or write off.');
@@ -732,6 +745,14 @@ export function castDecisionVote(
     if (!decisionsOn()) return { success: false, creditsUsed: 0, error: featureOffMessage('decisions'), code: FEATURE_OFF };
     const decision = getDecision(decisionId);
     if (!decision) return { success: false, creditsUsed: 0, error: 'Decision not found' };
+    if (madeWithoutVote(decision)) {
+        return {
+            success: false,
+            creditsUsed: 0,
+            error: 'Nobody votes on this suspension: community votes were switched off on this node when it was made, so it '
+                + `lifts by itself on ${decision.closesAt.slice(0, 10)}, or sooner if a moderator lifts it`,
+        };
+    }
     if (decision.status !== 'open') return { success: false, creditsUsed: 0, error: `Decision is ${decision.status}` };
     if (parseDbTime(decision.closesAt) <= Date.now()) {
         return { success: false, creditsUsed: 0, error: 'Voting window has closed' };
@@ -993,10 +1014,13 @@ export function executeDecision(decisionId: string): { success: boolean; status:
 
     const now = new Date().toISOString();
     // Keeping an emergency suspension is the one effect a block would turn into a sanction with no end: with formal
-    // Decisions off nothing keeps it, so it lifts, as a vote that did not pass would.
-    if (decision.effect === 'keep_suspension' && !decisionsOn() && (decision.status === 'open' || decision.status === 'passed')) {
-        closeUnkeptSuspension(decision, 'unresolved', NO_VOTE_SUSPENSION_ENDED, now);
-        return { success: false, status: 'unresolved', error: NO_VOTE_SUSPENSION_ENDED };
+    // Decisions off nothing keeps it, so it lifts, as a vote that did not pass would. So does one made while they were
+    // off, whatever the switch says now (madeWithoutVote).
+    if (decision.effect === 'keep_suspension' && (!decisionsOn() || madeWithoutVote(decision))
+        && (decision.status === 'open' || decision.status === 'passed')) {
+        const why = decisionsOn() ? NO_VOTE_SUSPENSION_MADE_ENDED : NO_VOTE_SUSPENSION_ENDED;
+        closeUnkeptSuspension(decision, 'unresolved', why, now);
+        return { success: false, status: 'unresolved', error: why };
     }
 
     const preflight = preflightAssert(decision);
@@ -1512,7 +1536,8 @@ export interface EmergencySuspendResult {
  * once and lasts 7 days, and nothing can keep it longer. The same row records it (its end, the reason, the node
  * role held aside), titled as a suspension rather than a question, and nobody can vote on it; it is not announced
  * as a new Decision. At its end the tick lifts it (executeDecision); an admin can lift it sooner as anywhere. A
- * moderator who wants the member kept out longer suspends them again, or removes the account.
+ * moderator who wants the member kept out longer suspends them again, or removes the account. Its params carry
+ * `noVote`, so it stays so if the switch goes back on before it ends (madeWithoutVote).
  */
 export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
     // Guards first, outside any transaction.
@@ -1540,8 +1565,8 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     const opensAt = now.toISOString();
     const closesAt = new Date(now.getTime() + EMERGENCY_SUSPENSION_DAYS * DAY_MS).toISOString();
     const memberName = member.callsign || subjectPubkey.slice(0, 8);
-    const params = { memberName, suspendedAt: opensAt, suspendedBy: adminActor, reason: cleanReason };
     const votes = decisionsOn();
+    const params = { memberName, suspendedAt: opensAt, suspendedBy: adminActor, reason: cleanReason, ...(votes ? {} : { noVote: true }) };
     const title = votes ? `Keep ${memberName}'s suspension?` : `${memberName} is suspended until ${closesAt.slice(0, 10)}`;
     const description = votes
         ? `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Keep the suspension? Reason given: ${cleanReason}`
@@ -1660,9 +1685,10 @@ export function tickDecisions(asOfTime?: number): {
             }
 
             // Formal Decisions off: an emergency suspension ends with its 7 days, whatever votes it held before the
-            // switch went off (executeDecision lifts it). Anything else that closes is not carried out: it passes to
+            // switch went off (executeDecision lifts it). So does one made while they were off, never tallied even if
+            // the switch is back on (madeWithoutVote). Anything else that closes is not carried out: it passes to
             // executeDecision below, which blocks it.
-            if (r.effect === 'keep_suspension' && !decisionsOn()) {
+            if (r.effect === 'keep_suspension' && (!decisionsOn() || madeWithoutVote(rowToDecision(r)))) {
                 executeDecision(r.id);
                 continue;
             }

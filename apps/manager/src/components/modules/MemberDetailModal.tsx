@@ -126,7 +126,10 @@ export function MemberDetailModal({
             setLocalStatus('disabled');
             setShowSuspend(false);
             setSuspendReason('');
-            setSuspendDone(`Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
+            // A node with formal Decisions off (global) opens no vote: the server marks the row noVote (#1243).
+            setSuspendDone(res.decision?.params?.noVote === true
+                ? `Suspended until ${closes}. It lifts by itself then, or sooner if you lift it.`
+                : `Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
             onSuspensionChanged?.();
         } catch (e: unknown) {
             setSuspendError(e instanceof Error ? e.message : 'Failed to suspend');

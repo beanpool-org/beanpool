@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { fetchAdminDecisions, haltDecision, type AdminDecisionItem } from '../../lib/node-client';
+import { fetchAdminDecisions, fetchNodeDecisionsOn, haltDecision, type AdminDecisionItem } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface DecisionsAdminPanelProps {
@@ -18,12 +18,28 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 /**
+ * An emergency suspension nobody votes on: one made while formal Decisions were off (`params.noVote`), or any one on a
+ * node where they are off now. Either way it lifts by itself at `closesAt`, whatever votes it holds, and halting it
+ * lifts it now (apps/server decisions-engine.ts, madeWithoutVote and executeDecision).
+ */
+function isNoVoteSuspension(d: AdminDecisionItem, decisionsOn: boolean): boolean {
+    return d.effect === 'keep_suspension' && (!decisionsOn || d.params?.noVote === true);
+}
+
+function suspendedName(d: AdminDecisionItem): string {
+    const memberName = d.params?.memberName;
+    return d.subjectName || (typeof memberName === 'string' && memberName) || 'A member';
+}
+
+/**
  * Community Decisions an admin can still act on — open votes and removals in their 7-day grace window —
  * with the admin brake: halt, with a written reason members will see. Totals only; the node never serves
- * who voted how.
+ * who voted how. An emergency suspension nobody votes on (the global node) shows as a suspension with its
+ * end date, and the brake as lifting it now.
  */
 export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPanelProps) {
     const [decisions, setDecisions] = useState<AdminDecisionItem[]>([]);
+    const [decisionsOn, setDecisionsOn] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [haltTarget, setHaltTarget] = useState<AdminDecisionItem | null>(null);
@@ -36,7 +52,12 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
         setLoading(true);
         setError(null);
         try {
-            setDecisions(await fetchAdminDecisions(activeNode.url, activeNode.adminPassword, tfaToken));
+            const [list, on] = await Promise.all([
+                fetchAdminDecisions(activeNode.url, activeNode.adminPassword, tfaToken),
+                fetchNodeDecisionsOn(activeNode.url),
+            ]);
+            setDecisions(list);
+            setDecisionsOn(on);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to load Decisions');
         } finally {
@@ -57,6 +78,9 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
 
     const trimmed = reason.trim();
     const reasonOk = trimmed.length >= MIN_HALT_REASON;
+    const haltIsLift = !!haltTarget && isNoVoteSuspension(haltTarget, decisionsOn);
+    // With formal Decisions off, a list of nothing but suspensions is headed as what it is.
+    const suspensionsOnly = !decisionsOn && decisions.every((d) => isNoVoteSuspension(d, decisionsOn));
 
     const confirmHalt = async () => {
         if (!haltTarget || !reasonOk) return;
@@ -68,7 +92,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
             setReason('');
             await load();
         } catch (err: unknown) {
-            setHaltError(err instanceof Error ? err.message : 'Failed to halt the Decision');
+            setHaltError(err instanceof Error ? err.message : haltIsLift ? 'Failed to lift the suspension' : 'Failed to halt the Decision');
         } finally {
             setHalting(false);
         }
@@ -78,9 +102,13 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
             <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0">
                 <div className="min-w-0">
-                    <h3 className="text-base font-bold text-white m-0">Community Decisions ({decisions.length})</h3>
+                    <h3 className="text-base font-bold text-white m-0">
+                        {suspensionsOnly ? `Suspensions (${decisions.length})` : `Community Decisions (${decisions.length})`}
+                    </h3>
                     <p className="text-xs text-nature-400 m-0 mt-0.5">
-                        Open votes and removals waiting out their 7 days. Halting stops one; your reason is shown to members.
+                        {suspensionsOnly
+                            ? 'Votes are off on this node, so a suspension lifts by itself after 7 days. Lifting one ends it now; your reason is shown to members.'
+                            : 'Open votes and removals waiting out their 7 days. Halting stops one; your reason is shown to members.'}
                     </p>
                 </div>
                 <button
@@ -102,11 +130,35 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
             )}
 
             {!error && decisions.length === 0 && !loading && (
-                <div className="py-6 text-center text-xs text-nature-400">No open Decisions.</div>
+                <div className="py-6 text-center text-xs text-nature-400">{suspensionsOnly ? 'No suspensions.' : 'No open Decisions.'}</div>
             )}
 
             <div className="space-y-3">
                 {decisions.map((d) => {
+                    if (isNoVoteSuspension(d, decisionsOn)) {
+                        return (
+                            <div key={d.id} className="p-4 rounded-xl bg-nature-950 border border-nature-800 space-y-2" data-testid="admin-decision-row">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-nature-800 text-nature-300">
+                                        Suspension
+                                    </span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-900/40 text-amber-300">
+                                        {`Suspended until ${formatDate(d.closesAt)}`}
+                                    </span>
+                                </div>
+                                <h4 className="text-sm font-bold text-white m-0 break-words">{suspendedName(d)} is suspended</h4>
+                                <p className="text-xs text-nature-300 m-0">No vote. It lifts by itself on that day, or sooner if you lift it.</p>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={() => { setHaltTarget(d); setReason(''); setHaltError(null); }}
+                                        className="px-3 py-2 rounded-lg bg-red-950/80 hover:bg-red-900 text-xs font-bold text-red-200 border border-red-800"
+                                    >
+                                        Lift suspension now
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    }
                     const isKeep = d.effect === 'keep_suspension';
                     const inGrace = d.status === 'execution_pending_grace';
                     return (
@@ -138,11 +190,15 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
             </div>
 
             {haltTarget && (
-                <ModalBackdrop onClose={closeModal} dismissable={!halting} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Halt Decision">
+                <ModalBackdrop onClose={closeModal} dismissable={!halting} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={haltIsLift ? 'Lift suspension' : 'Halt Decision'}>
                     <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-3">
-                        <h3 className="text-base font-bold text-white m-0">Halt “{haltTarget.title}”?</h3>
+                        <h3 className="text-base font-bold text-white m-0 break-words">
+                            {haltIsLift ? `Lift ${suspendedName(haltTarget)}'s suspension now?` : <>Halt “{haltTarget.title}”?</>}
+                        </h3>
                         <p className="text-xs text-nature-400 m-0">
-                            {haltTarget.effect === 'keep_suspension'
+                            {haltIsLift
+                                ? 'Lifting ends the suspension straight away, before its 7 days are up.'
+                                : haltTarget.effect === 'keep_suspension'
                                 ? 'Halting this vote lifts the suspension straight away.'
                                 : haltTarget.status === 'execution_pending_grace'
                                     ? 'Halting stops the removal and restores the member.'
@@ -157,7 +213,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                             onChange={(e) => setReason(e.target.value)}
                             rows={3}
                             className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2"
-                            placeholder="Why this vote is being stopped"
+                            placeholder={haltIsLift ? 'Why the suspension is being lifted' : 'Why this vote is being stopped'}
                         />
                         <p className={`text-[11px] m-0 ${reasonOk ? 'text-nature-500' : 'text-amber-400'}`}>
                             {reasonOk ? `${trimmed.length} characters` : `At least ${MIN_HALT_REASON} characters (${trimmed.length} so far)`}
@@ -172,7 +228,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                                 disabled={!reasonOk || halting}
                                 className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {halting ? 'Halting…' : 'Halt Decision'}
+                                {haltIsLift ? (halting ? 'Lifting…' : 'Lift suspension') : (halting ? 'Halting…' : 'Halt Decision')}
                             </button>
                         </div>
                     </div>

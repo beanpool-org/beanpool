@@ -2208,6 +2208,22 @@ export async function fetchAdminDecisions(nodeUrl: string, adminPassword?: strin
     return Array.isArray(data?.decisions) ? data.decisions : [];
 }
 
+/**
+ * Whether the node runs formal Decisions (`features.decisions` in its public `/api/community/info`). Off on the global
+ * node: there an emergency suspension opens no vote and lifts by itself after 7 days. Only a node that says outright
+ * it has none has none: every server before the switch allowed them, and one that can't be read is taken as on.
+ */
+export async function fetchNodeDecisionsOn(nodeUrl: string): Promise<boolean> {
+    try {
+        const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/community/info'));
+        if (!res.ok) return true;
+        const data = await res.json().catch(() => null);
+        return data?.features?.decisions !== false;
+    } catch {
+        return true;
+    }
+}
+
 /** The admin brake. The written reason (10+ characters) is public on the Decision. */
 export async function haltDecision(nodeUrl: string, decisionId: string, reason: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean }> {
     return postAdmin(nodeUrl, `/api/local/admin/decisions/${encodeURIComponent(decisionId)}/halt`, { reason }, adminPassword, tfaToken);

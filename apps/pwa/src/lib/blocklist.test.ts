@@ -271,6 +271,47 @@ describe('the block list the community keeps for the account', () => {
         expect(isUserBlocked(K3)).toBe(false);
     });
 
+    it('an unblock during bulk add is kept in explicitUnblocks so fallback per-key loop does not re-add it', async () => {
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]));
+        let unblocking: Promise<boolean> | null = null;
+        node.onAdd = keys => {
+            if (Array.isArray(keys) && !unblocking) {
+                unblocking = unblockUser(K1);
+                olderBuildWrites([K1, K2]);
+            }
+        };
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(getBlocklistStatus().loaded).toBe(true));
+        await unblocking;
+        await quiet();
+        expect(node.calls).not.toContain(`add ${JSON.stringify(K1)}`);
+        expect(node.list).toEqual([K2]);
+        expect(isUserBlocked(K1)).toBe(false);
+    });
+
+    it('if compensation removeFromBlockList fails during move, key is not treated as held or moved and read is retried', async () => {
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1, K2]));
+        let unblocking: Promise<boolean> | null = null;
+        node.onAdd = keys => {
+            if (Array.isArray(keys) && !unblocking) {
+                unblocking = unblockUser(K1);
+            }
+        };
+        vi.mocked(api.removeFromBlockList)
+            .mockImplementationOnce(async (key: string) => {
+                node.calls.push(`remove ${key}`);
+                return { blocked: node.list.map(k => ({ publicKey: k, blockedAt: '2026-09-27T00:00:00.000Z' })), max: node.max, removed: true };
+            })
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(getBlocklistStatus().loaded).toBe(true));
+        await unblocking;
+        await quiet();
+        const movedRaw = localStorage.getItem('bp_moved_blocks');
+        const movedList = movedRaw ? JSON.parse(movedRaw) : [];
+        expect(movedList).not.toContain(K1);
+    });
+
     // ── other tabs: the list kept in this browser is read again whenever it is changed, never rewritten from this page's copy ──
 
     it('a block a tab still on the build from before makes while the move is under way survives it, and goes up too', async () => {

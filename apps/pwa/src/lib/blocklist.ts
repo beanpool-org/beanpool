@@ -371,9 +371,10 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
                     try {
                         now = await removeFromBlockList(k);
                         leaving.delete(k);
-                        explicitUnblocks.delete(k);
                     } catch (e) {
                         console.warn('[blocklist] Could not send unblock to the community for key unblocked during move', e);
+                        now = { ...now, blocked: (now.blocked ?? []).filter(b => b.publicKey !== k) };
+                        readAgain = true;
                     }
                 }
             }
@@ -391,9 +392,10 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
                 try {
                     now = await removeFromBlockList(k);
                     leaving.delete(k);
-                    explicitUnblocks.delete(k);
                 } catch (e) {
                     console.warn('[blocklist] Could not send unblock to the community for key unblocked during move', e);
+                    now = { ...now, blocked: (now.blocked ?? []).filter(b => b.publicKey !== k) };
+                    readAgain = true;
                 }
             }
         }

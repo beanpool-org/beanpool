@@ -247,6 +247,22 @@ export const recoverySealCommands: Record<string, (args: any) => Promise<unknown
     },
 };
 
+/**
+ * The node's real HTTPS server (https-server.ts, every route and the signature middleware) on a free port, as
+ * test-member-blocks-standby.ts serves it. Spread into a suite's commands; `serve` answers the port. Run inside the node's
+ * process, once per start.
+ */
+export const serveCommands: Record<string, (args: any) => Promise<unknown>> = {
+    serve: async () => {
+        delete process.env.CF_RECORD_NAME;
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+        const { initTls } = await import('./services/tls.js');
+        const { startHttpsServer } = await import('./https-server.js');
+        await initTls();
+        return startHttpsServer(0);
+    },
+};
+
 /** What a test looks at on a node after a take-over. Runs inside the node's process. */
 export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Record<string, unknown>> {
     const dataDir = process.env.BEANPOOL_DATA_DIR!;

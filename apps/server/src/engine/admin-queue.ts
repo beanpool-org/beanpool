@@ -10,6 +10,7 @@
 
 import { db } from '../db/db.js';
 import { getShutdownStatus } from './shutdown-recovery.js';
+import { decisionsOn } from '../decisions-engine.js';
 
 /**
  * Where an item is handled in /settings. The manager maps each id to a tab (and sub-tab); the id is
@@ -70,7 +71,9 @@ export function getAdminQueue(opts: { forModerator?: boolean } = {}): AdminQueue
         {
             kind: 'suspensions',
             count: count("SELECT COUNT(*) AS c FROM decisions WHERE effect = 'keep_suspension' AND status = 'open'"),
-            label: 'Emergency suspensions the community is voting on',
+            // With formal Decisions off (the global profile) an emergency suspension opens no vote: it lifts by
+            // itself after 7 days unless an admin lifts it sooner.
+            label: decisionsOn() ? 'Emergency suspensions the community is voting on' : 'Emergency suspensions in their 7 days',
             section: 'decisions',
         },
         {

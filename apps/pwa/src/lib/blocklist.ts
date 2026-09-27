@@ -575,6 +575,7 @@ export async function clearBlocklist(): Promise<void> {
     takeNodeAnswer(res, asked);
     for (const k of shown) leaving.delete(k);
     clearMovedKeys();
+    clearedAll = false;
     emit();
 }
 

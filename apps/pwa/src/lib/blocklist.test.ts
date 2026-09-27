@@ -479,6 +479,23 @@ describe('the block list the community keeps for the account', () => {
         expect(storedAboutBlocks()).toEqual([]);
     });
 
+    it('Unblock All resets clearedAll flag so subsequent moves do not unexpectedly clear the community list', async () => {
+        node.list = [K1];
+        startBlocklist(ME);
+        await vi.waitFor(() => expect(getBlockedUsers()).toEqual([K1]));
+        await clearBlocklist();
+        expect(node.list).toEqual([]);
+
+        // New blocks appear in local storage from another tab/build
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K2]));
+        vi.clearAllMocks();
+        await loadBlocklist();
+
+        expect(api.clearBlockList).not.toHaveBeenCalled();
+        expect(api.addToBlockList).toHaveBeenCalledWith([K2]);
+        expect(node.list).toEqual([K2]);
+    });
+
     it('a block, an unblock and Unblock All show once the node has taken them, and keep nothing in the browser', async () => {
         startBlocklist(ME);
         await vi.waitFor(() => expect(getBlocklistStatus().loaded).toBe(true));

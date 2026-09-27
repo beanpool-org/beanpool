@@ -7812,7 +7812,12 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
         throw err;
     }
     const was = isOnHoliday(publicKey);
-    db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', ?)`).run(publicKey, enabled ? 'true' : 'false');
+    db.transaction(() => {
+        db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', ?)`).run(publicKey, enabled ? 'true' : 'false');
+        // Holiday is on no listing and no column of the member's row, so the switch moves the row's updated_at itself:
+        // a phone's delta sync takes their listings off its Market by it, and puts them back (engine posts.ts getPosts).
+        if (was !== enabled) db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
+    })();
     broadcast({ type: 'profile_updated', publicKey });
     // Their listings leave the board, or come back.
     if (was !== enabled) ringListingDoorbell(enabled ? 'post_removed' : 'post_updated');

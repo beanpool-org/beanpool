@@ -15,7 +15,7 @@
  *    promotion, each step written to data/takeover-journal.json before the next begins:
  *
  *      opened → undo-copy → identity-files → admin-settings → roles → public-address → profile → open-door
- *      → role → pull-config → restart → audit → announcement → reseal → tunnel → done
+ *      → community-settings → role → pull-config → restart → audit → announcement → reseal → tunnel → done
  *
  *    Every step is safe to run again, so a crash at any point resumes at the first step not recorded: at boot
  *    (`resumeTakeoverAtBoot`, before the node key is loaded and before anything reads the role) and after boot
@@ -76,6 +76,7 @@ import {
 } from '../config/node-profile.js';
 import { writeOpenJoinRecord } from '../engine/open-join.js';
 import { installCarriedRecoverySealKey, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
+import { installCommunitySettings, keptCommunitySettings } from '../config/community-settings.js';
 
 export const TAKEOVER_JOURNAL_FILE = 'takeover-journal.json';
 export const TAKEOVER_BUNDLE_FILE = 'takeover-bundle.json';
@@ -103,7 +104,8 @@ export const WHAT_WILL_BE_MISSING: readonly string[] = [
     'enterprise pledges and keeper changes',
     'invites',
     "members' notification settings",
-    "settings the main server keeps in its database other than its web address (for example what it lists in the directory)",
+    'Commons project proposals still waiting for a decision',
+    "the admin IP allowlist, if the community had one: it names addresses on the old server's network, so this server keeps its own",
     'anything that changed on the main server after this standby last copied it',
 ];
 
@@ -127,6 +129,7 @@ export const TAKEOVER_STEPS = [
     ['public-address', "Brought back the community's web address"],
     ['profile', "Kept the community's node profile and its switches"],
     ['open-door', 'Kept who joined through the open door'],
+    ['community-settings', "Installed the community's own settings: its name, place, contacts, thresholds and directory choices"],
     ['role', 'Made this server the main server'],
     ['pull-config', 'Stopped copying from the old main server'],
     ['restart', 'Restarted as the main server'],
@@ -137,7 +140,7 @@ export const TAKEOVER_STEPS = [
     ['done', 'Finished'],
 ] as const;
 export type TakeoverStep = (typeof TAKEOVER_STEPS)[number][0];
-const PRE_RESTART: TakeoverStep[] = ['undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'open-door', 'role', 'pull-config'];
+const PRE_RESTART: TakeoverStep[] = ['undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'open-door', 'community-settings', 'role', 'pull-config'];
 const AFTER_BOOT: TakeoverStep[] = ['announcement', 'reseal', 'tunnel', 'done'];
 
 /**
@@ -579,7 +582,7 @@ async function startSession(
                 ? 'The main server still answers. Take over only if it is really gone: two servers with one identity will compete, and the old one must never be started again.'
                 : null,
         },
-        missing: carriesSealKey(bundle) ? WHAT_WILL_BE_MISSING : [...WHAT_WILL_BE_MISSING, MISSING_SEAL_KEY],
+        missing: [...WHAT_WILL_BE_MISSING, ...(carriesSealKey(bundle) ? [] : [MISSING_SEAL_KEY]), ...(keptCommunitySettings() ? [] : [MISSING_SETTINGS])],
         afterwards: AFTER_A_TAKEOVER,
     };
 }
@@ -593,6 +596,10 @@ function carriesSealKey(bundle: TakeoverBundle): boolean {
 /** In the preview's list of what will be missing, when the keys carry no recovery-seal key. */
 const MISSING_SEAL_KEY = "members' sign-in recovery copies: these keys were locked before they carried the key that opens them, so "
     + 'members connect their sign-in again (their 12 words still work)';
+
+/** In the preview's list of what will be missing, when this standby holds no copy of the community's settings. */
+const MISSING_SETTINGS = "the community's own settings (its name, place, contacts, thresholds and directory choices): the main server never "
+    + 'sent them to this standby, so this server keeps its own';
 
 /** Does the main server answer? For the page an owner's phone reads before it unlocks (§5.2 step 3). */
 export async function mainServerStatus(): Promise<{ answers: boolean | null; lastCopyAt: number | null }> {
@@ -740,6 +747,16 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
                 + `${merged.written} brought from the keys, ${merged.kept} already copied`
                 + `${merged.skipped ? `, ${merged.skipped} for members this standby never copied (they can join again)` : ''}`
                 + `${merged.saltWritten ? '; the key for their hashes brought from the keys' : ''}`;
+        }
+        case 'community-settings': {
+            // The community's own settings, as this standby last copied them from the main server (config/community-
+            // settings.ts): its name, place and contacts in every app and the directory, its currency display, demurrage
+            // thresholds, directory choices (a community that hid its contacts or member count keeps them hidden),
+            // service area, audit baseline (the audit after the restart holds the ledger to the community's), pricing
+            // and snapshot schedule. Nothing of this server's own: the admin password came from the keys, and its
+            // replication settings go in `pull-config`. Before `role`, so the first boot as the main server runs on them.
+            const done = installCommunitySettings();
+            return done.installed ? done.detail : done.why;
         }
         case 'role': {
             // The split-brain guard (identity-epoch.ts): one more take-over than the keys were sealed at. Computed

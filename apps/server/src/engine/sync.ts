@@ -9,6 +9,7 @@ import { bodyOfSignedText, bytesOfSignedText } from '@beanpool/core';
 import { getImageStore, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
+import { readCommunitySettings } from '../config/community-settings.js';
 import { readOpenJoinSalt, writeOpenJoinRecord } from './open-join.js';
 import { recoverySealEpoch } from '../services/recovery-seal-key.js';
 import { deleteTombstonedCopies } from './recovery-shares.js';
@@ -405,6 +406,9 @@ export async function exportSyncState(
         const sealEpoch = recoverySealEpoch();
         if (sealEpoch) payload.sealEpoch = sealEpoch;
     }
+    // The community's own settings (config/community-settings.ts): a standby keeps them, applied to nothing, for a
+    // take-over or a hand promotion to install. In every payload, delta or whole: a settings change moves no row.
+    payload.communitySettings = readCommunitySettings();
     return signSyncPayload(cb, payload);
 }
 

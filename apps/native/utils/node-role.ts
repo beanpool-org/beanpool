@@ -26,6 +26,15 @@ export function manageSubtitle(role: ManageRole): string {
     return `${role === 'owner' ? "You're an owner" : "You're an admin"} · opens the node's settings, signed in as you`;
 }
 
+/**
+ * The row beside it (app/settings-signin.tsx): signs a computer's browser into the community's Settings page, and
+ * the key stays on the phone. Named for that, so it isn't mistaken for "Use your account on another device", which
+ * copies the member's own account. A moderator's Settings is Reports only, so theirs says Moderate, as above.
+ */
+export function computerSigninLabel(role: ManageRole): string {
+    return role === 'moderator' ? 'Moderate this community from a computer' : 'Manage this community from a computer';
+}
+
 /** One row of GET /api/node-admin/queue (apps/server/src/engine/admin-queue.ts). */
 export interface AdminQueueItem {
     kind: string;

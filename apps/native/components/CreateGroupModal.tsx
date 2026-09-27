@@ -23,6 +23,8 @@ import { hapticSuccess, hapticTick } from '../utils/haptics';
 import { submitCreateGroup } from '../utils/create-group-submit';
 import { GROUP_CATEGORY_OPTIONS, GROUP_JOIN_POLICY_OPTIONS, CREATE_GROUP_DEFAULTS, START_ENTERPRISE_BRIDGE } from '../utils/create-group-options';
 import { router } from 'expo-router';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { beansOn } from '../utils/node-profile';
 
 interface CreateGroupModalProps {
     isOpen: boolean;
@@ -45,6 +47,9 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
     const insets = useSafeAreaInsets();
     // Lifted by the keyboard's height, not a KeyboardAvoidingView: see components/useModalKeyboardLift.
     const lift = useModalKeyboardLift(insets.top + 8);
+    // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to it on a community with Beans off.
+    const nodeProfile = useNodeProfile();
+    const showsBeans = beansOn(nodeProfile?.features);
 
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
@@ -316,6 +321,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                         </View>
 
                         {/* Decision 14: the bridge to an enterprise, for people who are really running something. */}
+                        {showsBeans && (
                         <Pressable
                             style={styles.bridge}
                             accessibilityRole="link"
@@ -328,6 +334,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                         >
                             <Text style={styles.bridgeText}>{START_ENTERPRISE_BRIDGE.lead} <Text style={styles.bridgeLink}>{START_ENTERPRISE_BRIDGE.link}</Text></Text>
                         </Pressable>
+                        )}
 
                         <Text style={styles.fieldLabel}>Join Policy</Text>
                         <View style={styles.optionRow}>

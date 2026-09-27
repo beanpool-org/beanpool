@@ -21,6 +21,8 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import { beansOn } from '../../utils/node-profile';
 import { makeChatStyles } from '../../components/chat/styles';
 import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatMessageList';
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
@@ -128,6 +130,9 @@ function ChatScreen() {
     // True when this thread is a 2-party DM (the only threads we E2E-encrypt).
     const [isEncrypted, setIsEncrypted] = useState(false);
     const [postContext, setPostContext] = useState<any>(null);
+    // On a community with Beans off (the worldwide one) a post has no price: the header under it says none.
+    const nodeProfile = useNodeProfile();
+    const showsBeans = beansOn(nodeProfile?.features);
     const [pendingTx, setPendingTx] = useState<{ id: string; amount: number; isPayer: boolean } | null>(null);
     const [isDynamicContext, setIsDynamicContext] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
@@ -1185,7 +1190,7 @@ function ChatScreen() {
                         <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.dark} />
                         <View style={{ marginLeft: 12 }}>
                             <Text style={styles.stickyPostTitle} numberOfLines={1}>{postContext.title}</Text>
-                            <Text style={styles.stickyPostCredits}>{postContext.credits} Beans{postContext.priceType === 'hourly' ? ' / hr' : ''}</Text>
+                            {showsBeans && <Text style={styles.stickyPostCredits}>{postContext.credits} Beans{postContext.priceType === 'hourly' ? ' / hr' : ''}</Text>}
                         </View>
                     </View>
                     <View style={[styles.statusBadge,

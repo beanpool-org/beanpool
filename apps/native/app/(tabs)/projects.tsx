@@ -5,6 +5,8 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem, type GroupCategory } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import { beansOn } from '../../utils/node-profile';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
@@ -32,6 +34,10 @@ export default function ProjectsScreen() {
     const yourGroupsState = yourGroupsPaneState(yourGroupsLive.items, yourGroupsLive.error);
     const yourGroups = useMemo(() => yourGroupsLive.items || [], [yourGroupsLive.items]);
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
+    // A community with Beans off (the worldwide one) hides this tab, but a link still opens it (Talk's "Find groups",
+    // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
+    const nodeProfile = useNodeProfile();
+    const showsBeans = beansOn(nodeProfile?.features);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
@@ -537,7 +543,7 @@ export default function ProjectsScreen() {
                         <View style={styles.headerInfo}>
                             {/* The page's one large title, first thing in the list, so it scrolls away with it.
                                 The list pads the sides, hence inset 0. */}
-                            <PageTitle title="Commons" inset={0} testID="page-title-commons" right={
+                            <PageTitle title="Commons" inset={0} testID="page-title-commons" right={showsBeans ? (
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel="About the Commons Pool"
@@ -547,13 +553,14 @@ export default function ProjectsScreen() {
                                 >
                                     <MaterialCommunityIcons name="information-outline" size={22} color={colors.text.secondary} />
                                 </Pressable>
-                            } />
+                            ) : undefined} />
                             <Text style={styles.headerDesc}>
                                 Community decisions, pooled circulation, and shared enterprises. Propose binding actions and vote on what matters.
                             </Text>
                         </View>
 
                         {/* Commons Pool + My Governance Credits */}
+                        {showsBeans && (
                         <View style={styles.statCardRow}>
                             <View style={styles.statCard}>
                                 <Text style={styles.statCardLabel} numberOfLines={2}>Commons Pool</Text>
@@ -573,6 +580,7 @@ export default function ProjectsScreen() {
                                 </Text>
                             </View>
                         </View>
+                        )}
 
                         {/* Section Switcher: Decide vs Enterprises vs Groups */}
                         <View style={styles.sectionTabsRow}>

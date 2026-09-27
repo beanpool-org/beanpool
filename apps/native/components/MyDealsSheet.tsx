@@ -16,9 +16,12 @@ interface MyDealsSheetProps {
     onClose: () => void;
     /** Optional: which sub-tab to default open to */
     initialTab?: 'active' | 'pending' | 'history';
+    /** False on a community with Beans off (the Market's `showsBeans`): the cards draw no Beans amount. The sheet
+     *  still opens there from a link (`dealsTab`), and My Posts lists the member's posts. */
+    showsBeans?: boolean;
 }
 
-export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending' }: MyDealsSheetProps) {
+export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
@@ -420,12 +423,14 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                                     {new Date(item.createdAt).toLocaleDateString()}
                                 </Text>
                             </View>
+                            {showsBeans && (
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={[styles.creditAmount, { color: isBuyer ? palette.red600 : colors.brand.dark }]} numberOfLines={1}>
                                     {isBuyer ? '- ' : '+ '}{item.credits}
                                 </Text>
                                 <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>
+                            )}
                         </View>
                         <Text style={styles.dealTitle} numberOfLines={1}>{item.postTitle}</Text>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
@@ -516,12 +521,14 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                                     <View style={styles.pausedBadge}><Text style={styles.pausedBadgeText}>⏸ PAUSED</Text></View>
                                 )}
                             </View>
+                            {showsBeans && (
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={styles.creditAmount} numberOfLines={1}>
                                     {item.credits ?? '?'}
                                 </Text>
                                 <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>
+                            )}
                         </View>
                         <Text style={styles.dealTitle} numberOfLines={1}>{item.title}</Text>
                         <Text style={[styles.dateText, displayStatusText.includes('Action') && { color: palette.amber600, fontWeight: '800' }, { marginTop: 2 }]}>{displayStatusText}</Text>

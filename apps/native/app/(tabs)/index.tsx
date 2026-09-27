@@ -1717,6 +1717,7 @@ export default function MarketScreen() {
                 identity={identity}
                 onClose={() => setShowDealsSheet(false)}
                 initialTab={dealsInitialTab}
+                showsBeans={showsBeans}
             />
 
             {/* The one way to post: the same chooser the map's + opens (components/NewPostTypeSheet). */}

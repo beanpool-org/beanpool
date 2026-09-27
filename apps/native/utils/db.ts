@@ -2773,8 +2773,10 @@ async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: an
     let membersView = false;
     for (const p of posts) {
         if (p?.id) sent.add(String(p.id));
+        // Only a time that reads as one: an empty or malformed one (`''`, `'0'`) would sort before every row held.
         const at = p?.updatedAt || p?.updated_at || p?.createdAt || p?.created_at;
-        if (typeof at === 'string' && (oldest === null || at < oldest)) oldest = at;
+        const isTime = typeof at === 'string' && /^\d{4}-\d{2}-\d{2}/.test(at) && Number.isFinite(Date.parse(at));
+        if (isTime && (oldest === null || at < oldest)) oldest = at;
         // As writeSyncedPost reads the scope.
         if ((p?.audienceScope || p?.audience_scope || 'public') !== 'public') membersView = true;
     }

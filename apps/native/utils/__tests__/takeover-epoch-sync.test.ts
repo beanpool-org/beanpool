@@ -294,6 +294,22 @@ describe('applyDelta postsReplace: which cached listings the whole pull speaks f
         expect(titles()).toEqual(['mine-old:Mine, long ago', 'post-a:Spare lemons', 'post-b:Bike pump']);
     });
 
+    it('a listing sent with an empty or malformed time sets no bound: the rows past the page stay', async () => {
+        const OLD = listing('post-old', 'Ladder', '2026-03-01T00:00:00.000Z');
+        for (const bad of [{ updatedAt: ' ' }, { updatedAt: '0' }, { updatedAt: undefined, createdAt: undefined, created_at: '' }]) {
+            sql.exec('DELETE FROM posts');
+            await applyDelta({ posts: [A, B, OLD, T] });
+            await applyDelta({ posts: [B, A, listing('post-x', 'No time', '', bad)], postsReplace: true });
+            // The bound is A's time: T went, OLD may just be past the page.
+            expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-old:Ladder', 'post-x:No time']);
+        }
+        // An answer whose every time is malformed speaks for nothing it left out.
+        sql.exec('DELETE FROM posts');
+        await applyDelta({ posts: [A, B, T] });
+        await applyDelta({ posts: [listing('post-x', 'No time', '0')], postsReplace: true });
+        expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-t:Firewood, a trailer load', 'post-x:No time']);
+    });
+
     // A group's listing and one for a person, both changed after A, as a member's signed pull brings them.
     const G = listing('post-g', 'Choir: sheet music', '2026-09-26T01:00:00.000Z', { audienceScope: 'group', targetGroupId: 'choir' });
     const D = listing('post-d', 'For you: the drill', '2026-09-26T02:00:00.000Z', { audienceScope: 'direct', targetPubkey: 'me'.padEnd(64, '0') });

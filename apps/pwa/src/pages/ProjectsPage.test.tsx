@@ -19,6 +19,13 @@ vi.mock('../components/ReportModal', () => ({
     ReportModal: () => null,
 }));
 
+// The node's /api/community/info, read once per page load. By default it says nothing about Decisions, as every node
+// before the switch: every test above the votes-off block runs as it always has.
+vi.mock('../lib/visitor-lobby-gate', () => ({
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
+}));
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+
 const mockTreasuries: Treasury[] = [
     {
         publicKey: 'treasury-1',
@@ -576,5 +583,41 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
         expect(await within(dialog).findByText('That photo could not be read. Please choose another one.')).toBeInTheDocument();
         expect(within(dialog).queryByAltText('Preview')).toBeNull();
         expect(within(dialog).getByRole('button', { name: /Propose Enterprise/i })).toBeEnabled();
+    });
+});
+
+describe('ProjectsPage where the node has no formal Decisions (the global node)', () => {
+    const globalInfo = {
+        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const,
+        features: { beans: false, openJoin: true, guestListingsOnly: true, decisions: false },
+    };
+    const sectionTabs = () => within(screen.getByTestId('commons-section-tabs')).getAllByRole('button').map(b => b.textContent);
+
+    it('shows no Decide tab, and a page asked to open on Decide opens on Groups with no way to propose', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(globalInfo);
+        render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
+        await waitFor(() => expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false));
+        expect(sectionTabs()).toHaveLength(2);
+        expect(screen.getByText('Groups & Teams:')).toBeInTheDocument();
+        expect(screen.queryByText(/Propose Community Action/)).toBeNull();
+        expect(screen.queryByText(/Propose a Community Decision/)).toBeNull();
+        expect(screen.getByRole('button', { name: '+ Create Group' })).toBeInTheDocument();
+    });
+
+    it('where the node says it has them, or says nothing, Decide is there as before', async () => {
+        const withVotes = { ...globalInfo, features: { ...globalInfo.features, decisions: true } };
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(withVotes);
+        render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
+        expect(sectionTabs()).toHaveLength(3);
+        expect(sectionTabs()[0]).toContain('Decide');
+    });
+
+    it('an unanswered read keeps Decide: the node refuses a vote itself where it has none', async () => {
+        vi.mocked(communityInfoOnce).mockRejectedValueOnce(new Error('offline'));
+        render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
+        await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
+        expect(sectionTabs()).toHaveLength(3);
     });
 });

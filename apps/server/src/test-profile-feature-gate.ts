@@ -39,6 +39,7 @@ async function main() {
         directoryMirror: true,
         publishToDirectory: false,
         guestListingsOnly: true,
+        decisions: false,
     };
 
     assert(featureOffFor('/api/marketplace/posts/request', mockSwitchesOff) === 'escrow',
@@ -56,6 +57,21 @@ async function main() {
     const mockSwitchesOn = { ...mockSwitchesOff, beans: true, escrow: true, enterprises: true, treasuries: true, crowdfund: true };
     assert(featureOffFor('/api/treasury/info', mockSwitchesOn) === null,
         'gated path returns null when all required switches are true');
+
+    // Formal Decisions: only the writes are off; reads of existing Decisions still answer.
+    assert(featureOffFor('/api/commons/decisions', mockSwitchesOff, 'POST') === 'decisions'
+        && featureOffFor('/api/commons/decisions/d1/vote', mockSwitchesOff, 'POST') === 'decisions'
+        && featureOffFor('/api/local/admin/decisions/d1/accelerate', mockSwitchesOff, 'POST') === 'decisions',
+        'with decisions off, proposing, voting and accelerating a removal are off');
+    assert(featureOffFor('/api/commons/decisions', mockSwitchesOff, 'GET') === null
+        && featureOffFor('/api/commons/decisions/d1', mockSwitchesOff, 'GET') === null
+        && featureOffFor('/api/commons/decisions', mockSwitchesOff) === null,
+        'with decisions off, reading Decisions is not (a GET, or a caller that names no method)');
+    assert(featureOffFor('/api/local/admin/decisions', mockSwitchesOff, 'POST') === null
+        && featureOffFor('/api/local/admin/decisions/d1/halt', mockSwitchesOff, 'POST') === null,
+        "with decisions off, the admin's list and the brake (halt) still answer");
+    assert(featureOffFor('/api/commons/decisions/d1/vote', { ...mockSwitchesOff, decisions: true }, 'POST') === null,
+        'with decisions on, voting is served');
 
     console.log('\n── 2. Unit tests for respondProfileRefusal ──');
     const ctx1 = { status: 200, body: null as unknown };

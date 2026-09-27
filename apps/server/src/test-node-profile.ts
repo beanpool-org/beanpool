@@ -9,10 +9,11 @@
  *      a global node would switch Beans on for strangers) and the record stays global; started once with
  *      NODE_PROFILE_ALLOW_CHANGE_FROM=global it runs local, the record is rewritten, the boot log says so; a record
  *      changed at runtime changes nothing either
- *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the ten
- *      `features` exactly (open join on the global profile only, since G2; probation, auto-hide and auto-mute since
- *      G3; distance search on both since G4; knocks on a local community only since G6; the visitors' view of the
- *      listings on global only since G9a), and every field it had before
+ *   4. GET /api/community/info through the real HTTPS stack, unsigned and signed, on both profiles: `profile`, the
+ *      eleven `features` exactly (open join on the global profile only, since G2; probation, auto-hide and auto-mute
+ *      since G3; distance search on both since G4; knocks on a local community only since G6; the visitors' view of
+ *      the listings on global only since G9a; formal Decisions on a local community only), and every field it had
+ *      before
  *   5. node_config overrides change the configured switch (and the boot log reports them), an override of a built
  *      switch (openJoin, distanceSortDefault, directoryMirror, publishToDirectory, knocks) reaches the code, bad ones
  *      are ignored with a log line, and a switch this build doesn't have yet (ssoRequiredForJoin=false, a door without
@@ -71,10 +72,11 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
 // covers one that has). G3 built probation, auto-hide and auto-mute: on for global only (test-global-moderation).
 // G4 built distance search: every profile answers it (test-distance-search). G6 built knocks: on for a local
 // community (D4), off on the lobby (test-knock). G9a built the visitors' view of the listings: global only
-// (test-guest-view). The PR that builds one of these changes its line here, with the test that proves it.
+// (test-guest-view). Formal Decisions: on for a local community, off on the lobby (test-decisions-off). The PR that
+// builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, decisions: true },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, decisions: false },
 };
 
 async function main() {
@@ -125,6 +127,7 @@ async function main() {
     assert(global.probation && global.autoHideReports && global.autoMute, 'global: probation, auto-hide and auto-mute on');
     assert(local.ssoRequiredForJoin && global.ssoRequiredForJoin, 'the open door needs a sign-in (D1 = a)');
     assert(!local.guestListingsOnly && global.guestListingsOnly, 'a visitor sees the listings, not the people: global only (G9a)');
+    assert(local.decisions && !global.decisions, 'formal Decisions: on for a local community, off on the lobby (anyone may join it)');
     profileDefaults('local').openJoin = true;
     assert(profileDefaults('local').openJoin === false, 'profileDefaults hands out a copy: a caller cannot change the table');
 

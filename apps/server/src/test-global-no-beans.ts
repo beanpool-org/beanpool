@@ -9,7 +9,8 @@
  *      /api/community/info reports beans, escrow and enterprises off. A send is 403 profile_no_beans before any
  *      other check; a post with a Beans price is 403 and one without is stored at 0, as is an edit; every escrow,
  *      treasury/enterprise, crowdfund/Commons-project and federation purchase route is 404 feature_off, reads
- *      included; a pool-money Decision is refused (a member Decision is not); the settlement gate refuses; the
+ *      included; a pool-money Decision is refused (a member Decision is not), with formal Decisions switched back on
+ *      by an override (the global profile has them off: test-decisions-off); the settlement gate refuses; the
  *      offboarding wizard still works (a zero balance); members' own history and balance still answer. Underneath,
  *      every ledger primitive refuses on its own. The ledger audit is clean and nothing was written.
  *   3. That database, now recorded as global, refuses to boot as local; a standby of it doesn't refuse; started
@@ -222,7 +223,9 @@ async function main() {
         && settlementGateRefusal('peer', '12D3KooWpeer', SETTLE_RECEIPT, 'primary', true)?.code === 'profile_no_beans',
         'the inbound settlement gate refuses a purchase and a receipt from a trading peer, even with settlement enabled');
 
-    // Decisions
+    // Decisions: what Beans off does to them, on a global node whose operator has switched formal Decisions back on
+    // (the profile has them off, and then nothing is proposed at all: test-decisions-off).
+    setOverride('decisions', 'true');
     const noStanding = await call('POST', '/api/commons/decisions', {
         title: 'Help Dave', description: 'A hardship grant for Dave', touches: 'pool', effect: 'grant_hardship', subject: dave.pubKeyHex, params: { amount: 5 },
     }, alice);
@@ -240,6 +243,7 @@ async function main() {
     const { preflightAssert } = await import('./decisions-engine.js');
     const pre = preflightAssert({ effect: 'grant_hardship', touches: 'pool', subject: dave.pubKeyHex, params: { amount: 5 } } as any);
     assert(pre.status === 'blocked', `a pool Decision that reached execution would be blocked (${JSON.stringify(pre)})`);
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`);
 
     // Offboarding, and what still answers
     const offboard = await call('POST', `/api/local/admin/members/${dave.pubKeyHex}/offboard`, { resolution: 'prune_zero_balance' }, null, { 'x-admin-password': ADMIN_PW });

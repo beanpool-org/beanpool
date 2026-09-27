@@ -7,6 +7,7 @@ import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { beansOn } from '../../utils/node-profile';
+import { commonsSections, commonsSectionFor, commonsHeading, type CommonsSection } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
@@ -38,10 +39,18 @@ export default function ProjectsScreen() {
     // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
+    // Decide only where formal Decisions are on, Enterprises only where enterprises are (utils/commons-sections.ts).
+    // With Groups all that is left (the worldwide community, reached from Talk's "Find groups"), this is its groups list.
+    const sections = commonsSections(nodeProfile?.features);
+    const showsDecide = sections.includes('decide');
+    const heading = commonsHeading(sections);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
-    const [activeSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>('decide');
+    const [pickedSection, setActiveSection] = useState<CommonsSection>('decide');
+    // The one drawn: the section picked (or linked to), where this node shows it, else its first. So a section the
+    // node's profile takes away is never drawn, not even before the profile has arrived and been acted on.
+    const activeSection = commonsSectionFor(pickedSection, nodeProfile?.features);
     // The header's vote icon lands here with section=decide. Commons may already be open on another section,
     // so switch to Decide, on its Open list (the vote is there, not in History), and show it from the top, then
     // clear the param so a later visit keeps its place.
@@ -543,7 +552,7 @@ export default function ProjectsScreen() {
                         <View style={styles.headerInfo}>
                             {/* The page's one large title, first thing in the list, so it scrolls away with it.
                                 The list pads the sides, hence inset 0. */}
-                            <PageTitle title="Commons" inset={0} testID="page-title-commons" right={showsBeans ? (
+                            <PageTitle title={heading.title} inset={0} testID="page-title-commons" right={showsBeans ? (
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel="About the Commons Pool"
@@ -554,9 +563,7 @@ export default function ProjectsScreen() {
                                     <MaterialCommunityIcons name="information-outline" size={22} color={colors.text.secondary} />
                                 </Pressable>
                             ) : undefined} />
-                            <Text style={styles.headerDesc}>
-                                Community decisions, pooled circulation, and shared enterprises. Propose binding actions and vote on what matters.
-                            </Text>
+                            <Text style={styles.headerDesc}>{heading.description}</Text>
                         </View>
 
                         {/* Commons Pool + My Governance Credits */}
@@ -582,8 +589,10 @@ export default function ProjectsScreen() {
                         </View>
                         )}
 
-                        {/* Section Switcher: Decide vs Enterprises vs Groups */}
+                        {/* Section Switcher: Decide vs Enterprises vs Groups, those this node shows; none for Groups alone */}
+                        {sections.length > 1 && (
                         <View style={styles.sectionTabsRow}>
+                            {showsDecide && (
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel="Decide Section"
@@ -610,7 +619,9 @@ export default function ProjectsScreen() {
                                     </View>
                                 )}
                             </Pressable>
+                            )}
 
+                            {sections.includes('enterprises') && (
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel="Enterprises Section"
@@ -632,6 +643,7 @@ export default function ProjectsScreen() {
                                     Enterprises
                                 </Text>
                             </Pressable>
+                            )}
 
                             <Pressable
                                 accessibilityRole="button"
@@ -655,6 +667,7 @@ export default function ProjectsScreen() {
                                 </Text>
                             </Pressable>
                         </View>
+                        )}
 
                         {activeSection === 'decide' ? (
                             <DecideSection
@@ -897,15 +910,17 @@ export default function ProjectsScreen() {
                 commonsBalance={balanceState.commons || 0}
             />
 
-            <ProposeDecisionModal
-                isOpen={showProposeDecision}
-                onClose={() => setShowProposeDecision(false)}
-                onCreated={loadData}
-                identity={identity}
-                commonsBalance={balanceState.commons || 0}
-                treasuries={treasuries}
-                members={membersList}
-            />
+            {showsDecide && (
+                <ProposeDecisionModal
+                    isOpen={showProposeDecision}
+                    onClose={() => setShowProposeDecision(false)}
+                    onCreated={loadData}
+                    identity={identity}
+                    commonsBalance={balanceState.commons || 0}
+                    treasuries={treasuries}
+                    members={membersList}
+                />
+            )}
 
             {createGroup.modal}
 

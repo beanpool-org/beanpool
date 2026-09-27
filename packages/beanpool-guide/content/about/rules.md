@@ -10,6 +10,8 @@ related: decisions, proposing-a-decision, polls, keepers, groups, people
 - A **Poll** is a question in the feed, like "Market on Sunday?". It shows what people think. It never changes anything by itself.
 - A **Decision** is binding. If it passes, your community's server carries it out by itself. Nobody has to press a button, and nobody can quietly ignore it.
 
+The global community has Polls but no Decisions: anyone can join it with one sign-in, so one person with several accounts could swing a vote. Everything below about Decisions is about local communities.
+
 ## What a Decision can do
 
 About a member:
@@ -92,6 +94,8 @@ An admin can suspend a member at once, for example to stop harm. They must give 
 - It needs the usual turnout and 60% Yes.
 - If it does not pass, or too few people vote, the suspension lifts by itself.
 - An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.
+
+On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.
 
 ## What admins can and cannot do
 

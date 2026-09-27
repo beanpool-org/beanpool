@@ -14,6 +14,8 @@ import { DecideSection } from '../components/DecideSection';
 import { ProposeDecisionModal } from '../components/ProposeDecisionModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { GroupDetailModal } from '../components/GroupDetailModal';
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { decisionsOn } from '../lib/node-decisions';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -41,7 +43,20 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [error, setError] = useState<string | null>(null);
 
     // UI States
-    const [activeSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>(initialSection);
+    const [pickedSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>(initialSection);
+    // Formal Decisions, where the node has them (lib/node-decisions.ts: off on the global node, which refuses every
+    // proposal and vote). Until the node has said, on, as on every node before the switch. Where they are off there is
+    // no Decide tab, and a page asked to open on Decide opens on Groups.
+    const [votes, setVotes] = useState(true);
+    useEffect(() => {
+        let cancelled = false;
+        Promise.resolve()
+            .then(() => communityInfoOnce())
+            .then((info) => { if (!cancelled) setVotes(decisionsOn(info)); })
+            .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
+        return () => { cancelled = true; };
+    }, []);
+    const activeSection = !votes && pickedSection === 'decide' ? 'groups' : pickedSection;
     const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
     // The signer's voice credits for votes on community money — the number the node checks (answer H).
@@ -343,7 +358,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         { key: 'decide', emoji: '🗳️', label: 'Decide' },
                         { key: 'enterprises', emoji: '🏛️', label: 'Enterprises' },
                         { key: 'groups', emoji: '👥', label: 'Groups' },
-                    ] as const).map(tab => (
+                    ] as const).filter(tab => votes || tab.key !== 'decide').map(tab => (
                         <button
                             key={tab.key}
                             onClick={() => setActiveSection(tab.key)}
@@ -891,15 +906,17 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     </div>
                 </div>
             )}
-            <ProposeDecisionModal
-                isOpen={showProposeDecision}
-                onClose={() => setShowProposeDecision(false)}
-                onCreated={fetchEnterprises}
-                identity={identity}
-                commonsBalance={commonsBalance}
-                treasuries={treasuries}
-                members={allMembersList}
-            />
+            {votes && (
+                <ProposeDecisionModal
+                    isOpen={showProposeDecision}
+                    onClose={() => setShowProposeDecision(false)}
+                    onCreated={fetchEnterprises}
+                    identity={identity}
+                    commonsBalance={commonsBalance}
+                    treasuries={treasuries}
+                    members={allMembersList}
+                />
+            )}
 
             <CreateGroupModal
                 isOpen={showCreateGroupModal}

@@ -677,8 +677,9 @@ async function main() {
     const tenMinutesAgo = new Date(Date.now() - 600_000).toISOString();
     for (const key of [shut, open]) age(key, tenMinutesAgo);
     db.prepare('UPDATE posts SET updated_at = ? WHERE author_pubkey IN (?, ?)').run(tenMinutesAgo, shut, open);
-    const standing = (key: string) => (db.prepare('SELECT board_standing_changed_at AS s FROM members WHERE public_key = ?').get(key) as any)?.s ?? null;
-    const carries = (delta: any[], ids: string[]) => ids.filter(id => delta.some(r => r.id === id));
+    const standing = (key: string) =>
+        (db.prepare('SELECT board_standing_changed_at AS s FROM members WHERE public_key = ?').get(key) as { s: string | null } | undefined)?.s ?? null;
+    const carries = (delta: Array<{ id: string }>, ids: string[]) => ids.filter(id => delta.some(r => r.id === id));
     const deltaFrom = (since: string) => getUnsigned(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(since)}`);
 
     // Keepers. Kim keeps the paused orchard, so her phone holds its listings as they are; Nell's, as paused.
@@ -768,7 +769,7 @@ async function main() {
     // for an author off the board; declining isn't. The apiary's lead approves Ron's request for its one-off Jam (over
     // HTTP), which crowds Rita's out; then the apiary is paused, with Rita's request for its Honey still open.
     const approved = await postJson(`/api/treasury/${apiary}/approve`, { transactionId: ronJam.id }, pat);
-    const ritaJamNow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(ritaJam.id) as any;
+    const ritaJamNow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(ritaJam.id) as { status: string } | undefined;
     assert(approved.status === 200 && ritaJamNow?.status === 'rejected',
         `Pat approves Ron's request for the Jam over HTTP; Rita's is crowded out (got ${approved.status}, Rita's ${ritaJamNow?.status})`);
     se.pauseEnterprise(apiary, 'admin');

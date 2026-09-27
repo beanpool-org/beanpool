@@ -1008,6 +1008,51 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 18. A member's block list kept by the community (engine/member-blocks.ts) ──────────────────────────────────────
+    // Every node from before it has no member_blocks table. The fixture is a booted node with it dropped, holding a member;
+    // it must boot onto exactly a fresh install's table (columns and indexes), empty, with its key and owner checks in force.
+    console.log('\n--- 18. Legacy node without member_blocks ---');
+    {
+        const dir = tmp('legacy-member-blocks');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        const fresh = { cols: columns(d, 'member_blocks'), idx: indexes(d, 'member_blocks') };
+        assert(fresh.cols.join() === 'blocked_pubkey,created_at,owner_pubkey,updated_at'
+            && fresh.idx.includes('idx_member_blocks_updated_at') && fresh.idx.includes('idx_member_blocks_blocked'),
+            `a fresh install has the table, copied by updated_at and found by the key blocked (${fresh.cols.join(', ')}; ${fresh.idx.join(', ')})`);
+        d.exec('DROP TABLE IF EXISTS member_blocks;');
+        const owner = 'ab'.repeat(32);
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'Legacy', '2025-01-01T00:00:00.000Z')`).run(owner);
+        const gone = (d.prepare(`SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'member_blocks'`).get() as any).n;
+        assert(gone === 0, 'the fixture genuinely lacks it');
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the older node boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(JSON.stringify(columns(after, 'member_blocks')) === JSON.stringify(fresh.cols) && JSON.stringify(indexes(after, 'member_blocks')) === JSON.stringify(fresh.idx),
+            `member_blocks: exactly the columns and indexes a fresh install has (${columns(after, 'member_blocks').join(', ')})`);
+        assert((after.prepare('SELECT COUNT(*) AS n FROM member_blocks').get() as any).n === 0, 'and empty');
+        const ins = (o: string, b: string) => {
+            try {
+                after.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey) VALUES (?, ?)').run(o, b);
+                return true;
+            } catch { return false; }
+        };
+        assert(ins(owner, 'cd'.repeat(32)), 'a block is stored');
+        const twice = ins(owner, 'cd'.repeat(32));
+        const self = ins(owner, owner);
+        const upper = ins(owner, 'CD'.repeat(32));
+        const short = ins(owner, 'cd'.repeat(31));
+        const badOwner = ins('AB'.repeat(32), 'ef'.repeat(32));
+        assert(!twice && !self && !upper && !short && !badOwner,
+            `one row a pair, never the owner's own key, and only keys in the one spelling (${twice}, ${self}, ${upper}, ${short}, ${badOwner})`);
+        after.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

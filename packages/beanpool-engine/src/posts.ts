@@ -431,8 +431,8 @@ function enterprisesKeptBy(db: Db, member: string): Set<string> {
  * (persistEventView). The read writes nothing on the node, so no delta would carry the event again: for that member's
  * own deltas, the read counts as a change of the event (offBoardPostsToResend).
  * In memory, per database, so a restart forgets them: the event then stays on that phone's Market until it or its host
- * next changes. At most EVENT_READS_PER_MEMBER events for each of EVENT_READ_MEMBERS members; the least recently read
- * goes first.
+ * next changes. At most EVENT_READS_PER_MEMBER events for each of EVENT_READ_MEMBERS members, and only for a key with a
+ * member row; the least recently read goes first.
  */
 const eventReadsOutsideSync = new WeakMap<Db, Map<string, Map<string, number>>>();
 const EVENT_READS_PER_MEMBER = 20;
@@ -1010,9 +1010,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             }
             if (readerView && !r.active && !host && !going) continue;
             // An off-board host's event, read for this reader as it is: their phone writes it into its cache as it is,
-            // so their deltas send it again, as paused, for a while (noteEventReadOutsideSync).
+            // so their deltas send it again, as paused, for a while (noteEventReadOutsideSync). Only for a key with a
+            // member row here, so a key that merely signs can't fill what the node keeps.
             if (readerView && viewer && r.author_pubkey !== viewer && onBoardByStatus(post)
-                && authorsOffBoard(db, [r.author_pubkey]).has(r.author_pubkey) && !viewerKeeps().has(r.author_pubkey)) {
+                && authorsOffBoard(db, [r.author_pubkey]).has(r.author_pubkey) && !viewerKeeps().has(r.author_pubkey)
+                && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) {
                 noteEventReadOutsideSync(db, viewer, post.id, nowMs);
             }
             post.goingCount = rsvps.filter(v => v.status === 'going').length;

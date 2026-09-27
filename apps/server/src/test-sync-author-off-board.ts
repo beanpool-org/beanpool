@@ -446,6 +446,12 @@ async function main() {
         const status = await revalidated(path, id);
         assert(status === 304, `${what}, asked again with its ETag and nothing changed, is still a 304 (got ${status})`);
     }
+    // The node notes a read only for a key with a member row, so a key that merely signs can't fill what it keeps.
+    const stranger = keypair();
+    const strangerRead = (await getJson(`/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`, stranger))[0];
+    const strangerDelta = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(new Date(Date.now() - 300_000).toISOString())}`, stranger);
+    assert(strangerRead?.id === seedSwap && !strangerDelta.some(r => r.id === seedSwap),
+        'a key with no member row reads the event page too, and nothing is noted for it: its next delta doesn\'t carry the event');
 
     // A vote in Hana's poll writes the vote route's answer over the held row the same way (votePoll). The vote moves the
     // poll's updated_at, so the next delta carries it for that alone; it has to go as paused.

@@ -6,6 +6,7 @@
 // Stated in apps/server/src/engine/audit.ts to decouple routes and state-engine.ts.
 
 import { db } from '../db/db.js';
+import { getNodeRole } from '../config/node-role.js';
 import { COMMONS_BALANCE } from '@beanpool/core';
 import { ledger } from './ledger.js';
 import {
@@ -78,8 +79,16 @@ export function persistDecayEvents(): void {
  * So every caller that flushes the pair on its own goes through here instead. Callers that already hold a
  * `conservingTransaction` write both halves inside it and do NOT need this — there the surrounding
  * transaction is what makes them one commit, and this is a harmless savepoint if used anyway.
+ *
+ * A STANDBY WRITES NOTHING HERE. Its accounts and trades are its main server's rows, and its import is their only writer
+ * (design §4.1). A decay it flushed was a trade the main server never made: over another window than the main server's
+ * (a read here between two there), it was a second row for the same days, kept through every copy, because the import
+ * never deletes a trade a copy doesn't name. The decay stays in memory, where a read here still sees it, until the next
+ * copy that lands puts memory back to the rows (engine/sync.ts), and the promoted server's boot does the same. So the
+ * timer, the ledger audit and `conservingTransaction`'s pre-flush write nothing on a standby.
  */
 export function persistDecayAndCommons(): void {
+    if (getNodeRole() === 'backup') return;
     db.transaction(() => {
         persistDecayEvents();
         persistCommonsBalance();

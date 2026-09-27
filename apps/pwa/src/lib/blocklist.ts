@@ -27,6 +27,14 @@
  * the node's list this page holds is older). And a read that was on its way when the member blocked, unblocked or cleared
  * here drops its answer, which may be older than the node's answer to that change, and reads again.
  *
+ * An unblock or Unblock All the member makes in this page while the move is on its way stands, even when it reaches the
+ * node before the move's list does: the move sends no key the member is unblocking here, and once one of its adds has
+ * answered, it takes off again each key that add blocked after the member unblocked them here (director's call f8,
+ * 2026-09-28). Only what the member did in this page counts, kept in its memory: a key missing from the browser's list is
+ * never taken to mean they unblocked it, so this page never sends a remove or Unblock All they didn't ask for here. An
+ * unblock made in another tab while this page's move is on its way can be undone by it; that errs toward blocked, and the
+ * member sees the block and can lift it again.
+ *
  * A report a block sends that can't reach the node waits in memory for the next try (retryPendingReports), not in the
  * browser; a queue an older build left in localStorage (bp_pending_abuse_reports) is taken into memory and deleted. Once
  * the account is known, only its own reports are sent.
@@ -111,6 +119,56 @@ let current: string[] = [];
 
 let reading: Promise<string[]> | null = null;
 let readAgain = false;
+
+/** A block or an unblock the member asked for in this page: of one key, or of everyone shown (Unblock All). */
+interface Asked {
+    unblock: boolean;
+    keys: ReadonlySet<string>;
+    /** Settles true once the node has taken it, false when it didn't. */
+    taken: Promise<boolean>;
+}
+/**
+ * The unblocks and Unblock Alls the member sent from this page that the node hasn't answered yet. The move sends none of
+ * the keys they are about: a list of keys sent after them could reach the node after them.
+ */
+const unblocksOnTheirWay = new Set<ReadonlySet<string>>();
+/**
+ * What the member asked for in this page, in order, while one of the move's adds is on its way; null while none is (one
+ * read at a time, so one add at most). That add may reach the node after an unblock sent later, and block again whom the
+ * member just unblocked here.
+ */
+let askedDuringAdd: Asked[] | null = null;
+/**
+ * Keys a move's add blocked again after the member unblocked them in this page, each with the node's stamp on that block
+ * (blockedAt): this page takes each off again (sendOwed), and keeps it here until the node has answered that it did. One
+ * that doesn't go is sent again by the next read, unless by then the node no longer holds that block (it went, or the key
+ * was blocked again since, with a new stamp) or the member has blocked them again here. In this page's memory only, never
+ * in the browser: a reload forgets it, and the block the move made then stays, shown, for the member to lift again.
+ */
+const owed = new Map<string, string | undefined>();
+/** The removes of `owed` on their way: a block of the same key made here waits for its own, so it lands after it. */
+const owedOnTheirWay = new Map<string, Promise<unknown>>();
+
+/**
+ * Notes a block or an unblock the member asks for in this page, as it is sent: for the move's add on its way, if any, and
+ * (an unblock) so the move sends none of its keys until the node has answered. Returns the settle, told whether the node
+ * took it.
+ */
+function noteAsked(unblock: boolean, keys: ReadonlySet<string>): (taken: boolean) => void {
+    let settle: (taken: boolean) => void = () => {};
+    const taken = new Promise<boolean>(r => { settle = r; });
+    askedDuringAdd?.push({ unblock, keys, taken });
+    if (unblock) unblocksOnTheirWay.add(keys);
+    return took => {
+        unblocksOnTheirWay.delete(keys);
+        settle(took);
+    };
+}
+
+function isBeingUnblocked(k: string): boolean {
+    for (const keys of unblocksOnTheirWay) if (keys.has(k)) return true;
+    return false;
+}
 
 /** This page's copy of the list from before, read from the browser only when there is none yet. For showing. */
 function readLocalList(): string[] | null {
@@ -260,15 +318,19 @@ export function getBlocklistFullNote(): string | null {
  * too, once. At the end only the keys the node's last answer holds leave the browser's list (keepStoredList). What is left
  * (no room, the node unreachable) stays there, still hiding whom it names, and the next read (the node's doorbell, the
  * socket back, the next page) sends it the same way. `moved` is what left the browser's list, the node holding it.
+ *
+ * A key the member is unblocking in this page is not sent (the next read sends it if the node didn't take that unblock),
+ * and each add the move sends goes through sendMoveAdd, which takes off again what it blocked after an unblock made here.
  */
 async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved: string[] }> {
     if (readStoredList() === null) return { res, moved: [] };
+    const forOwner = owner;
     let now = res;
     /** The keys this move has sent, or found no room for: what another tab adds meanwhile is new to it. */
     const seen = new Set<string>();
     moving: for (;;) {
         const have = heldBy(now);
-        const fresh = (readStoredList() ?? []).filter(k => isWaiting(k) && !have.has(k) && !seen.has(k));
+        const fresh = (readStoredList() ?? []).filter(k => isWaiting(k) && !have.has(k) && !seen.has(k) && !isBeingUnblocked(k));
         if (fresh.length === 0) break;
         fresh.forEach(k => seen.add(k));
         const room = Math.max(0, (now.max ?? 0) - have.size);
@@ -278,16 +340,16 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
         }
         if (going.length === 0) break;
         try {
-            now = await addToBlockList(going);
+            now = await sendMoveAdd(going, forOwner);
         } catch (e) {
             console.warn('[blocklist] The community did not take the list this browser kept; it stays here and is tried again', e);
             break;
         }
         const taken = heldBy(now);
         for (const k of going) {
-            if (taken.has(k) || !readStoredList()?.includes(k)) continue;
+            if (taken.has(k) || !readStoredList()?.includes(k) || isBeingUnblocked(k)) continue;
             try {
-                now = await addToBlockList(k);
+                now = await sendMoveAdd(k, forOwner);
             } catch (e) {
                 console.warn('[blocklist] Some of the blocks this browser kept did not go up to the community; they stay here and are tried again', e);
                 break moving;
@@ -300,9 +362,80 @@ async function moveLocalListUp(res: BlockList): Promise<{ res: BlockList; moved:
 }
 
 /**
- * Reads the node's list for the signed-in account (moving up a list this browser kept before, once), and tells the
- * screens. One read at a time: a call during a read is answered by it, and one more read follows, so a change rung in the
- * meantime is not missed. Rejects with a BlocklistError when the node can't be read; the list then stays as it was.
+ * Sends one of the move's adds (a list of keys, or one key), and answers the node's list after it. Once it has answered,
+ * each key it blocked that the member unblocked in this page while it was on its way (their last word on that key here,
+ * as the node took it: a block made here after the unblock stands) is owed, and taken off again (sendOwed): the member's
+ * remove may have reached the node before this add did. Only a key this add itself blocked (its `added`): one it found
+ * blocked already was blocked by someone else, or the member's remove is yet to land. Nothing is owed once another
+ * account has signed in here, whose list any request now changes.
+ *
+ * Rejects as the add did, owing nothing: without its answer this page can't tell a block the add made from one made since
+ * elsewhere, so the add, if it did reach the node, may have blocked again whom the member unblocked here. That errs toward
+ * blocked, and the next read shows it.
+ */
+async function sendMoveAdd(keys: string | string[], forOwner: string | null): Promise<BlockList> {
+    const sent = new Set(Array.isArray(keys) ? keys : [keys]);
+    const asked: Asked[] = [];
+    askedDuringAdd = asked;
+    let res: BlockList & { added?: string[] };
+    try {
+        res = await addToBlockList(keys);
+    } finally {
+        askedDuringAdd = null;
+    }
+    const about = asked.filter(a => [...a.keys].some(k => sent.has(k)));
+    if (about.length === 0) return res;
+    const unblocked = new Set<string>();
+    for (const a of about) {
+        if (!(await a.taken)) continue;
+        for (const k of a.keys) {
+            if (!sent.has(k)) continue;
+            if (a.unblock) unblocked.add(k);
+            else unblocked.delete(k);
+        }
+    }
+    if (owner !== forOwner) return res;
+    const added = Array.isArray(res.added) ? new Set(res.added) : sent;
+    const stamps = new Map(Array.isArray(res.blocked) ? res.blocked.map(b => [b.publicKey, b.blockedAt] as const) : []);
+    for (const k of unblocked) if (added.has(k)) owed.set(k, stamps.get(k));
+    return owed.size > 0 ? sendOwed(res, forOwner) : res;
+}
+
+/**
+ * Sends the removes this page owes (`owed`), one at a time, given the node's list as `now` has it, and answers the node's
+ * list after them. One the node no longer needs, because it doesn't hold that block (it went, or holds a newer one of the
+ * same key), is let go unsent. The first that doesn't go stops the rest: they stay owed, and the next read sends them.
+ */
+async function sendOwed(now: BlockList, forOwner: string | null): Promise<BlockList> {
+    for (const [k, stamp] of [...owed]) {
+        if (owner !== forOwner) break;
+        // Blocked again here meanwhile: the member's last word.
+        if (!owed.has(k)) continue;
+        const held = Array.isArray(now?.blocked) ? now.blocked.find(b => b.publicKey === k) : undefined;
+        if (!held || (stamp !== undefined && held.blockedAt !== stamp)) {
+            owed.delete(k);
+            continue;
+        }
+        const going = removeFromBlockList(k);
+        owedOnTheirWay.set(k, going);
+        try {
+            now = await going;
+            owed.delete(k);
+        } catch (e) {
+            console.warn('[blocklist] Could not unblock again someone the move blocked after the member unblocked them here; the next read tries again', e);
+            break;
+        } finally {
+            if (owedOnTheirWay.get(k) === going) owedOnTheirWay.delete(k);
+        }
+    }
+    return now;
+}
+
+/**
+ * Reads the node's list for the signed-in account (sending first any remove this page still owes, then moving up a list
+ * this browser kept before, once), and tells the screens. One read at a time: a call during a read is answered by it, and
+ * one more read follows, so a change rung in the meantime is not missed. Rejects with a BlocklistError when the node
+ * can't be read; the list then stays as it was.
  *
  * A block, an unblock or Unblock All this page made while the read was on its way stands: the node's answer to it may be
  * newer than the read's, so the read drops its own and one more follows. So does a block another tab took off the
@@ -320,7 +453,8 @@ export function loadBlocklist(): Promise<string[]> {
     const answersBefore = answers;
     reading = (async () => {
         try {
-            const { res, moved } = await moveLocalListUp(await getBlockList());
+            const read = await getBlockList();
+            const { res, moved } = await moveLocalListUp(owed.size > 0 ? await sendOwed(read, forOwner) : read);
             if (owner !== forOwner) return current;
             const shown = { list: current.join(), loaded, error: readError };
             if (answers === answersBefore) {
@@ -366,6 +500,8 @@ export function startBlocklist(ownerPubkey: string): () => void {
         loaded = false;
         readError = null;
         leaving.clear();
+        // What the account before is owed is for its list, and every request now changes this one's.
+        owed.clear();
         emit();
     }
     const read = () => { loadBlocklist().catch(() => { /* told through getBlocklistStatus */ }); };
@@ -404,13 +540,21 @@ export async function blockUser(
     postId?: string
 ): Promise<boolean> {
     if (!targetPubkey) return false;
+    // The member's last word on them is this block: a remove this page still owes them is let go, and one on its way lands
+    // first.
+    owed.delete(targetPubkey);
+    const unblocking = owedOnTheirWay.get(targetPubkey);
+    if (unblocking) await unblocking.catch(() => { /* the block goes either way */ });
     const asked = ++ticks;
+    const settle = noteAsked(false, new Set([targetPubkey]));
     let res: BlockList & { added: string[] };
     try {
         res = await addToBlockList(targetPubkey);
     } catch (e) {
+        settle(false);
         throw toBlocklistError(e, 'block');
     }
+    settle(true);
     takeNodeAnswer(res, asked);
     emit();
     if (reporterPubkey && Array.isArray(res.added) && res.added.includes(targetPubkey)) {
@@ -428,12 +572,15 @@ export async function blockUser(
 export async function unblockUser(targetPubkey: string): Promise<boolean> {
     if (!targetPubkey) return false;
     const asked = ++ticks;
+    const settle = noteAsked(true, new Set([targetPubkey]));
     let res: BlockList & { removed: boolean };
     try {
         res = await removeFromBlockList(targetPubkey);
     } catch (e) {
+        settle(false);
         throw toBlocklistError(e, 'unblock');
     }
+    settle(true);
     // A block still waiting to move up from this browser goes too, or it would be moved up again; so do those the node now
     // holds. Whatever else is there stays, whoever wrote it.
     const held = heldBy(res);
@@ -450,12 +597,15 @@ export async function clearBlocklist(): Promise<void> {
     // is on its way stays, and goes up with the next read.
     const shown = new Set(getBlockedUsers());
     const asked = ++ticks;
+    const settle = noteAsked(true, shown);
     let res: BlockList;
     try {
         res = await clearBlockList();
     } catch (e) {
+        settle(false);
         throw toBlocklistError(e, 'clear');
     }
+    settle(true);
     const held = heldBy(res);
     keepStoredList(k => shown.has(k) || held.has(k));
     takeNodeAnswer(res, asked);
@@ -548,5 +698,9 @@ export function resetBlocklistForTests(): void {
     current = [];
     reading = null;
     readAgain = false;
+    unblocksOnTheirWay.clear();
+    askedDuringAdd = null;
+    owed.clear();
+    owedOnTheirWay.clear();
     pendingReports = [];
 }

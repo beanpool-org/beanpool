@@ -706,7 +706,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         // Notify active screens to re-render only when something actually changed —
         // an unconditional emit here made every mounted screen reload every cycle.
-        if (gatedDelta.posts?.length > 0 || gatedDelta.projects?.length > 0 || gatedDelta.accounts?.length > 0 || gatedDelta.transactions?.length > 0 || gatedDelta.marketplaceTransactions?.length > 0 || gatedDelta.members?.length > 0 || gatedDelta.friends?.length > 0) {
+        // A take-over's replace changes the listings even when the node answered none (it removed them all).
+        if (gatedDelta.postsReplace || gatedDelta.posts?.length > 0 ||gatedDelta.projects?.length > 0 || gatedDelta.accounts?.length > 0 || gatedDelta.transactions?.length > 0 || gatedDelta.marketplaceTransactions?.length > 0 || gatedDelta.members?.length > 0 || gatedDelta.friends?.length > 0) {
             try {
                 const { DeviceEventEmitter } = require('react-native');
                 DeviceEventEmitter.emit('sync_data_updated');

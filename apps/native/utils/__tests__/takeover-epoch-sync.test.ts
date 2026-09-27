@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import Module from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 
 // A phone that synced from the main server before a take-over (scratch/global-node/DESIGN-standby-takeover-gaps-opus.md
@@ -199,6 +200,27 @@ describe('a take-over: the epoch changes, the cursors go, and a whole sync repla
         adapter.withTransactionAsync.mockImplementationOnce(async () => { throw new Error('database is locked'); });
         await sync();
         expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-n:Seedlings']);
+        expect(store.get(EPOCH_KEY)).toBe('1');
+    });
+
+    it('when the batch write carries the replace of an empty answer, the screens are told to read the listings again', async () => {
+        await phoneThatSyncedTheTail();
+        // pillar-sync tells the screens through `require('react-native')`, which does not load under node: it is stood
+        // in for during this test only, so the test sees what the screens are told.
+        const told: string[] = [];
+        const nodeLoad = (Module as any)._load;
+        (Module as any)._load = function (request: string, ...rest: unknown[]) {
+            return request === 'react-native' ? { DeviceEventEmitter: { emit: (e: string) => { told.push(e); } } } : nodeLoad.call(this, request, ...rest);
+        };
+        try {
+            Object.assign(node, { epoch: '1', whole: [], delta: [] });
+            adapter.withTransactionAsync.mockImplementationOnce(async () => { throw new Error('database is locked'); });
+            await sync();
+        } finally {
+            (Module as any)._load = nodeLoad;
+        }
+        expect(titles()).toEqual([]);
+        expect(told).toContain('sync_data_updated');
         expect(store.get(EPOCH_KEY)).toBe('1');
     });
 

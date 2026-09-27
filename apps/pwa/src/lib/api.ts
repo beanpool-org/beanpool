@@ -250,8 +250,9 @@ export interface CommunityInfo {
     /**
      * `guestListingsOnly`: a visitor gets the listings and their rough area, not the people (G9a), so the web app shows
      * a key-less visitor the lobby (G9b). `beans`: false where there are no Beans (the global profile).
+     * `exampleListings`: a nearly empty Market shows a few example cards (lib/example-listings.ts).
      */
-    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean };
+    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean };
 }
 
 export interface Member {

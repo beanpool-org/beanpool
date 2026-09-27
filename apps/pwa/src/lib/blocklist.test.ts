@@ -643,6 +643,23 @@ describe('the block list the community keeps for the account', () => {
         expect(getBlockedUsers()).toEqual([K1, K2]);
     });
 
+    it('switching accounts resets localList and clears moved keys so accounts do not bleed state', async () => {
+        const OTHER = 'f6'.repeat(32);
+        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([K1]));
+        const stop1 = startBlocklist(ME);
+        await vi.waitFor(() => expect(node.list).toEqual([K1]));
+        expect(JSON.parse(localStorage.getItem('bp_moved_blocks')!)).toEqual([K1]);
+        stop1();
+
+        // Switch account to OTHER
+        node.list = [K2];
+        const stop2 = startBlocklist(OTHER);
+        expect(localStorage.getItem('bp_moved_blocks')).toBeNull();
+        await vi.waitFor(() => expect(getBlockedUsers()).toEqual([K2]));
+        expect(getBlockedUsers()).not.toContain(K1);
+        stop2();
+    });
+
     it('a block sends a report to the moderators; one that can\'t go waits in memory, never in the browser, and goes on the next try', async () => {
         startBlocklist(ME);
         await vi.waitFor(() => expect(getBlocklistStatus().loaded).toBe(true));

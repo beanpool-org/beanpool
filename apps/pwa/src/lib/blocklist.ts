@@ -475,7 +475,9 @@ export function startBlocklist(ownerPubkey: string): () => void {
         nodeMax = 0;
         loaded = false;
         readError = null;
+        localList = undefined;
         leaving.clear();
+        clearMovedKeys();
         explicitUnblocks.clear();
         clearedAll = false;
         emit();

@@ -1,6 +1,7 @@
 /**
  * The member's signed statements that aren't requests: the "Manage" button's Settings sign-in, approving a browser's
- * phone sign-in (pairing), and an offline invite ticket (request binding, @beanpool/core request-signing.ts).
+ * phone sign-in (pairing), an offline invite ticket, and a leaving account's push leave statement (request binding,
+ * @beanpool/core request-signing.ts).
  *
  * The app builds every text it signs from fields it checked itself, and never signs text a node sent. Before this
  * the Manage button signed whatever "challenge" string the node answered with, so a hostile community could have it
@@ -19,7 +20,7 @@
  */
 
 import {
-    audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, utf8Bytes, toBase64, type Signer,
+    audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, signPushLeave, utf8Bytes, toBase64, type Signer,
 } from '@beanpool/core';
 import { memberSigner } from './crypto';
 import { requestSigningFormatFor } from './request-signing-version';
@@ -115,6 +116,20 @@ export async function makeOfflineTicket(
     const payload = JSON.stringify({ i: inviter, t: timestamp, f: opts.intendedFor || undefined });
     const s = await oldFormSignature(payload, sign);
     return `BP-${toBase64(utf8Bytes(JSON.stringify({ p: toBase64(utf8Bytes(payload)), s })))}`;
+}
+
+/**
+ * The leave statement for this phone's push token at the community at `nodeUrl` (push-leave.ts), signed by the leaving
+ * account's key: "`publicKey` no longer wants `token` here", with the phone's stamp `leftAt`. Format 2 only, whatever the
+ * node's info says: a node older than leave statements has no route to take one, and the phone keeps it until it has.
+ */
+export async function signPushLeaveStatement(
+    nodeUrl: string, publicKey: string, token: string, leftAt: number, privateKeyHex: string,
+): Promise<Required<SignedStatement>> {
+    assertPlainNodeAddress(nodeUrl);
+    const host = audienceOf(nodeUrl);
+    if (!host) throw new Error('Cannot sign a leave statement: the node address names no host');
+    return { signature: await signPushLeave(nodeUrl, publicKey, token, leftAt, memberSigner(privateKeyHex)), signedFor: host };
 }
 
 /** The old forms are plain UTF-8, which never starts with the 0xFF every format-2 signature does. */

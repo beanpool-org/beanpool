@@ -15,6 +15,7 @@ import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
 import { retryPendingReports } from '../utils/blocklist';
+import { presentLeaveStatements } from '../utils/push-leave';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
@@ -786,10 +787,15 @@ export default function RootLayout() {
                 Alert.alert('DB Error', String(err));
             });
 
+        // An account that left this phone with no connection: its push alerts stop once each of its communities has
+        // its leave statement (utils/push-leave.ts). Now, on each return, and with the 5-minute sync below.
+        presentLeaveStatements();
+
         // Set up foreground polling fallback every 5 minutes (safety net)
         const intervalId = setInterval(() => {
             if (appState.current === 'active') {
                 requestSync();
+                presentLeaveStatements();
             }
         }, 300000);
 
@@ -798,6 +804,7 @@ export default function RootLayout() {
             if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
                 requestSync();
                 retryPendingReports();
+                presentLeaveStatements();
                 // Clear app icon badge when user opens the app (only in custom client / standalone builds)
                 if (Constants.executionEnvironment !== ExecutionEnvironment.StoreClient) {
                     try {

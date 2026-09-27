@@ -7,11 +7,18 @@
  * the token but whose answer never arrived is on it too. As the account leaves the phone, only the communities on the
  * record are asked to drop the token (account-leaves-phone.ts): one this phone never sent it to is never sent it
  * (#1184 review 4110460184). The record goes with the account (identity.ts `wipeIdentityScopedStorage`).
+ *
+ * Each registration carries the phone's push stamp ({@link nextPushStamp}), and so does each leave (push-leave.ts): a
+ * community removes a leaving account's registration only when it is not later than the leave, so the same account
+ * signing back in on this phone is never undone by an older leave. And once an account starts leaving this phone
+ * ({@link stopRegistering}), nothing registers for its key until that key is written to the phone again, and a
+ * registration already on its way is waited for, so it can't land after the leave.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAccountOnPhone } from './account-on-phone';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
-import { PUSH_REGISTERED_AT_STORE_KEY } from './storage-keys';
+import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_STAMP_STORE_KEY } from './storage-keys';
 
 const PUSH_TOKENS_PATH = '/api/push-tokens';
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
@@ -64,6 +71,68 @@ export async function forgetPushRegistrations(storage: Pick<Storage, 'removeItem
     }
 }
 
+// ── The push stamp ──────────────────────────────────────────────────────────────────────────────────────────────
+
+let lastStamp = 0;
+let stampQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * The next push stamp: later than every one this phone gave before, whatever its clock does since (the clock, else
+ * one past the last), and written down before it is returned, so no request carries a stamp the phone could hand out
+ * again after a restart. One at a time. Compared by a community only with this phone's other stamps, never with its
+ * own clock. A stamp that can't be written is logged and still used: this run keeps counting up from it.
+ */
+export function nextPushStamp(storage: Pick<Storage, 'getItem' | 'setItem'> = AsyncStorage): Promise<number> {
+    const next = stampQueue.then(async () => {
+        let stored = 0;
+        try {
+            const n = Number(await storage.getItem(PUSH_STAMP_STORE_KEY));
+            if (Number.isSafeInteger(n) && n > 0) stored = n;
+        } catch (e) {
+            console.warn('[Push] Could not read the last push stamp', e);
+        }
+        const stamp = Math.max(Date.now(), lastStamp + 1, stored + 1);
+        lastStamp = stamp;
+        try {
+            await storage.setItem(PUSH_STAMP_STORE_KEY, String(stamp));
+        } catch (e) {
+            console.warn('[Push] Could not write the push stamp down', e);
+        }
+        return stamp;
+    });
+    stampQueue = next.catch(() => {});
+    return next;
+}
+
+// ── An account leaving ──────────────────────────────────────────────────────────────────────────────────────────
+
+/** The keys leaving this phone; `gone` once the phone has announced another key, or none, since. */
+const leaving = new Map<string, { gone: boolean }>();
+/** Registrations on their way, and the key each is for. */
+const inFlight = new Map<Promise<unknown>, string>();
+
+// A leaving key registers again only once it is written to the phone again after another, or none: a sign-in, on purpose.
+// A name change during the leave announces the same key and changes nothing (account-on-phone.ts).
+onAccountOnPhone((publicKey) => {
+    const now = publicKey?.toLowerCase() ?? null;
+    for (const [key, state] of leaving) {
+        if (now !== key) state.gone = true;
+        else if (state.gone) leaving.delete(key);
+    }
+});
+
+/**
+ * An account starts leaving this phone (account-leaves-phone.ts): from now on no registration goes out for
+ * `publicKey`, until that key is written to the phone again after another or none. Resolves once each registration for
+ * it that had already gone out has finished (answered, refused or given up, within its own timeout), so the leave that
+ * follows reaches the community after it. Never throws.
+ */
+export async function stopRegistering(publicKey: string): Promise<void> {
+    const key = publicKey.toLowerCase();
+    leaving.set(key, { gone: false });
+    await Promise.allSettled([...inFlight].filter(([, k]) => k === key).map(([request]) => request));
+}
+
 async function recordPushRegistration(community: string, storage: Pick<Storage, 'getItem' | 'setItem'>): Promise<void> {
     // A read that fails throws here, so the record is never overwritten with this community alone.
     const recorded = parseRecord(await storage.getItem(PUSH_REGISTERED_AT_STORE_KEY));
@@ -73,8 +142,9 @@ async function recordPushRegistration(community: string, storage: Pick<Storage, 
 
 /**
  * Register this phone's push token for `account` with the community the phone is set to, signed by the account's key,
- * after putting that community on the record. False, with nothing sent, when the phone is set to no community. Throws
- * when the node can't be reached, refuses or doesn't answer within `timeoutMs`; the community stays on the record.
+ * after putting that community on the record, with a fresh push stamp. False, with nothing sent, when the phone is set
+ * to no community or the account is leaving the phone ({@link stopRegistering}). Throws when the node can't be reached,
+ * refuses or doesn't answer within `timeoutMs`; the community stays on the record.
  *
  * A record that can't be written is logged and the token still goes: the account's recovery alerts matter more than
  * this phone remembering to unregister there later.
@@ -86,24 +156,38 @@ export async function registerPushTokenWithCommunity(
     timeoutMs: number = REGISTER_TIMEOUT_MS,
     storage: Pick<Storage, 'getItem' | 'setItem'> = AsyncStorage,
 ): Promise<boolean> {
+    const key = account.publicKey.toLowerCase();
     const community = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
-    if (!community) return false;
+    if (!community || isLeaving(key)) return false;
     try {
         await recordPushRegistration(community, storage);
     } catch (e) {
         console.warn(`[Push] Could not record that this phone's token goes to ${community}`, e);
     }
 
-    const body = JSON.stringify({ publicKey: account.publicKey, token, platform });
+    const registeredAt = await nextPushStamp(storage);
+    const body = JSON.stringify({ publicKey: account.publicKey, token, platform, registeredAt });
     const url = `${community}${PUSH_TOKENS_PATH}`;
     const headers = await buildSignedHeaders('POST', url, body, account.privateKey, account.publicKey);
+    // The last look before the request goes out, with nothing awaited between it and the fetch: a leave that began
+    // meanwhile stops this one here, or finds it on its way and waits for it.
+    if (isLeaving(key)) return false;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const request = fetch(url, { method: 'POST', headers, body, signal: controller.signal });
+    inFlight.set(request, key);
     try {
-        const res = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
+        const res = await request;
         if (!res.ok) throw new Error(`${community} did not register this phone (${res.status})`);
     } finally {
+        inFlight.delete(request);
         clearTimeout(timer);
     }
+    return true;
+}
+
+function isLeaving(key: string): boolean {
+    if (!leaving.has(key)) return false;
+    console.log('[Push] This account is leaving the phone: its token is not registered');
     return true;
 }

@@ -53,3 +53,16 @@ export const PUSH_TOKEN_STORE_KEY = 'bp_push_token';
  * (utils/account-leaves-phone.ts). Sign Out wipes it with the account (utils/identity.ts wipeIdentityScopedStorage).
  */
 export const PUSH_REGISTERED_AT_STORE_KEY = 'beanpool_push_registered_at';
+
+/**
+ * This phone's last push stamp (utils/push-registrations.ts `nextPushStamp`): each registration and each leave statement
+ * takes a later one, whatever the clock does. Phone-wide, not the account's: Sign Out keeps it, so a statement the old
+ * account made can never outrank the registration of an account that signs in after it.
+ */
+export const PUSH_STAMP_STORE_KEY = 'beanpool_push_stamp';
+
+/**
+ * The leave statements not yet confirmed by their community (utils/push-leave.ts). Kept when the account leaves the
+ * phone, on purpose: they are how its push alerts stop there when the phone had no connection as it left.
+ */
+export const PUSH_LEAVE_STATEMENTS_STORE_KEY = 'beanpool_push_leave_statements';

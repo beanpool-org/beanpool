@@ -136,6 +136,9 @@ describe('the member key signs only through core\'s builders and the listed old-
             'utils/member-statements.ts signAdminChallenge',
             'utils/member-statements.ts signPairing',
             'utils/member-statements.ts makeOfflineTicket',
+            // The push leave statement: core's signPushLeave builds `0xFF ‖ beanpool-push-leave/2\nHOST\n…` from the
+            // key, the phone's own token and stamp, and the host of the address the phone sent the token to.
+            'utils/member-statements.ts signPushLeaveStatement',
         ]);
         expect(sites.filter(s => s.callee === 'memberSigner' && !allowed.has(key(s))).map(key)).toEqual([]);
     });

@@ -52,7 +52,9 @@ import { signInWithGoogle } from '../sso-signin';
 import { recoverAccountWithSso } from '../sso-recovery';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { ReplaceNotSaved } from '../restore-account';
-import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import {
+    KNOCKS_STORE_KEY, PUSH_LEAVE_STATEMENTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_STAMP_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY,
+} from '../storage-keys';
 import { mnemonicToKeypair } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
@@ -332,7 +334,8 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
             const h = init?.headers as Record<string, string>;
             const body = String(init?.body);
             expect(init?.method).toBe('DELETE');
-            expect(JSON.parse(body)).toEqual({ publicKey: phone.publicKey, token: PHONE_TOKEN });
+            // With the leave's stamp (push-leave.ts), the one the phone wrote down.
+            expect(JSON.parse(body)).toEqual({ publicKey: phone.publicKey, token: PHONE_TOKEN, leftAt: Number(mem.async.get(PUSH_STAMP_STORE_KEY)) });
             expect(h['X-Public-Key']).toBe(phone.publicKey);
             // Signed for the community it went to, as that node checks it (request binding).
             expect(boundSignatureValid({ url, method: 'DELETE', headers: h, body }, phone.publicKey)).toBe(true);
@@ -353,7 +356,13 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
 
         expect(fetch).toHaveBeenCalledTimes(2);
         expect(result.identity.publicKey).toBe(restoredPub);
-        expect(asyncStorage()).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+        const { [PUSH_LEAVE_STATEMENTS_STORE_KEY]: leaves, [PUSH_STAMP_STORE_KEY]: stamp, ...rest } = asyncStorage();
+        expect(rest).toEqual({ [ANCHOR]: NODE, ...PHONE_KEPT });
+        // Kept on purpose: the old account's leave statements for the communities it couldn't reach, presented later
+        // until each confirms (push-leave.ts), and the phone's push stamp.
+        const asked = vi.mocked(fetch).mock.calls.map(([url]) => new URL(String(url)).origin).sort();
+        expect(JSON.parse(leaves).map((l: any) => [l.community, l.publicKey, l.token, l.leftAt]).sort())
+            .toEqual(asked.map((c) => [c, phone.publicKey, PHONE_TOKEN, Number(stamp)]));
     });
 
     it('the same account: nothing is unregistered, and its saved communities stay', async () => {

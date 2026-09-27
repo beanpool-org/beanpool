@@ -5,7 +5,7 @@
  */
 
 import { db } from './db/db.js';
-import { createTreasury, createPost, getPosts, getNodeRole, bumpPostsVersion } from './state-engine.js';
+import { createTreasury, createPost, getPosts, getNodeRole, bumpPostsVersion, ringListingDoorbell } from './state-engine.js';
 import { getTodaysPulseEntry, type DailyPulseEntry } from './daily-pulse-entries.js';
 
 export const PULSE_CALLSIGN = 'Daily Pulse';
@@ -138,6 +138,8 @@ export function deactivatePulseMarketplacePost(): void {
         "UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey = ? AND active = 1 AND status = 'active'"
     ).run(pulsePubkey);
     bumpPostsVersion();
+    // No post event says so: a socket off the member feed is told its listing went.
+    ringListingDoorbell('post_removed');
 }
 
 /**
@@ -210,9 +212,11 @@ export function rotateDailyPulse(now: Date = new Date()): { post: any; entry: Da
         }
 
         // 3. Clean up any previous pulse offers that are NOT today's deterministic pulse ID
-        db.prepare(
+        const retired = db.prepare(
             "UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey = ? AND id != ? AND active = 1 AND status = 'active'"
         ).run(pulsePubkey, pulseId);
+        // Yesterday's goes with no post event: a socket off the member feed is told.
+        if (retired.changes > 0) ringListingDoorbell('post_removed');
 
         // 4. Check if today's pulse post already exists in the database
         const existingToday = db.prepare("SELECT * FROM posts WHERE id = ?").get(pulseId) as any;
@@ -221,6 +225,7 @@ export function rotateDailyPulse(now: Date = new Date()): { post: any; entry: Da
                 "UPDATE posts SET active = 1, status = 'active', author_pubkey = ?, title = ?, description = ?, category = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
             ).run(pulsePubkey, entry.headline, entry.body, entry.category || 'general', pulseId);
             bumpPostsVersion();
+            ringListingDoorbell('post_updated');
             const activePosts = getPosts({ id: pulseId });
             const post = activePosts[0] || existingToday;
             console.log(`[DailyPulse] Retained existing Daily Pulse for ${localDateStr}: "${entry.headline}" (ID: ${post.id})`);
@@ -291,6 +296,8 @@ export function ensurePulseMarketplacePost(now: Date = new Date()): void {
                 "UPDATE posts SET active = 1, status = 'active', author_pubkey = ?, title = ?, description = ?, category = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
             ).run(pulsePubkey, entry.headline, entry.body, entry.category || 'general', pulseId);
             bumpPostsVersion();
+            // Back up, with no post event: a socket off the member feed is told.
+            ringListingDoorbell('post_updated');
         }
     } else {
         rotateDailyPulse(now);

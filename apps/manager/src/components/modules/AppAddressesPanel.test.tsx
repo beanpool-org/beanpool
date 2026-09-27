@@ -60,6 +60,35 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
     });
 
+    it('a node whose only listed name is localhost (an SSH tunnel) still has no address: says so, lists localhost, and offers the rest', async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            addresses: [{ address: 'localhost', source: 'env', today: 1, busiestDay: 1 }],
+            named: false,
+            unconfirmed: [{ address: 'bp.example.net', today: 2, busiestDay: 4 }],
+        }));
+        render(<AppAddressesPanel activeNode={node} />);
+        expect((await screen.findByTestId('app-addresses-none')).textContent).toMatch(/accepts any address\. After that it refuses addresses it doesn't know/);
+        expect(screen.getByTestId('app-address').textContent).toMatch(/^localhost · set on the server \(BEANPOOL_ADDRESSES\)/);
+        const offers = screen.getAllByTestId('app-address-offer').map((o) => o.textContent);
+        expect(offers).toHaveLength(2);
+        expect(offers[0]).toMatch(/^BeanPool apps reached this community at bp\.example\.net /);
+        expect(offers[1]).toMatch(/^This page reached the community at community\.example\.org\./);
+    });
+
+    it('a named node with localhost listed too: no "no address" note and nothing offered', async () => {
+        vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
+            addresses: [
+                { address: 'tunnel.example.org', source: 'public-address', today: 3, busiestDay: 3 },
+                { address: 'localhost', source: 'env', today: 1, busiestDay: 1 },
+            ],
+            named: true,
+        }));
+        render(<AppAddressesPanel activeNode={{ ...node, url: 'https://elsewhere.example.org' }} />);
+        expect(await screen.findAllByTestId('app-address')).toHaveLength(2);
+        expect(screen.queryByTestId('app-addresses-none')).toBeNull();
+        expect(screen.queryByTestId('app-address-offer')).toBeNull();
+    });
+
     it("never offers this machine's or a LAN address", async () => {
         vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report());
         render(<AppAddressesPanel activeNode={{ ...node, url: 'https://192.168.1.20:8443' }} />);

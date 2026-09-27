@@ -5,9 +5,10 @@
  *
  *   GET  /api/local/admin/app-addresses          this community's addresses, where each comes from, and how many
  *                                                 people's apps signed for it today and on the busiest day of the last 7;
- *                                                 the addresses apps reached a node with none configured at (to
- *                                                 confirm); how many signed in the old format (apps too old to name a
- *                                                 community); and the switch date.
+ *                                                 whether any of them names the community (`named`: a loopback name
+ *                                                 listed for an SSH tunnel doesn't); the addresses apps reached a node
+ *                                                 that knows none of its names at (to confirm); how many signed in the
+ *                                                 old format (apps too old to name a community); and the switch date.
  *   POST /api/local/admin/app-addresses/confirm  { address }: "Yes, that's its address." Adds it to the owner-confirmed
  *                                                 list (node_config.ownerAddresses, carried in the take-over envelope).
  *   POST /api/local/admin/app-addresses/remove   { address }: takes an owner-confirmed address off the list again.
@@ -19,7 +20,7 @@
 import Router from '@koa/router';
 import { updateNodeConfig } from '../state-engine.js';
 import {
-    configuredAddresses, forgetOwnAddresses, normalizeAddress, ownerConfirmedAddresses,
+    configuredAddresses, forgetOwnAddresses, knowsItsNames, normalizeAddress, ownerConfirmedAddresses,
 } from '../engine/own-addresses.js';
 import { signatureUsage, unboundSignaturesAccepted, unboundSignaturesUntilDay } from '../engine/member-signature.js';
 import { logger } from '../logger.js';
@@ -44,6 +45,7 @@ export function appAddressesReport() {
     const old = count('old_app', '');
     return {
         addresses,
+        named: knowsItsNames(),
         unconfirmed,
         oldApps: { today: old?.today ?? 0, busiestDay: old?.busiestDay ?? 0 },
         unboundSignaturesUntil: unboundSignaturesUntilDay(),

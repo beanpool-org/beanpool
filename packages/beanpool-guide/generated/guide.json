@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 60,
-  "hash": "b35aae698975a83f68d209674127fd136eecd3f93fc30ca33e036125bd46ddf2",
+  "version": 63,
+  "hash": "e173b1ec24b744481b50aa93dea21a25ad46805753a03d06ba77524be1fa6cbf",
   "sections": [
     {
       "id": "about",
@@ -885,6 +885,7 @@
           "type": "ul",
           "items": [
             "**Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.",
+            "**← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others.",
             "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community, this step also shows your sign-in protecting your account.",
             "**How it Works:** a short tour. Tap **Let's Begin!** to start."
           ]
@@ -1823,6 +1824,7 @@
         {
           "type": "ul",
           "items": [
+            "**Joining with an invite:** the first step's button says **Create Identity & Join →**. If someone here already has the name you chose, you get it with a number added. **← Back** on **Your Photo** shows your name alone, with **Next →**: change it (up to 20 characters) or keep it, on the same account. If someone already has the new name, the page says so and suggests others.",
             "**Tabs:** the web app has **Market**, **Pulse**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.",
             "**Settings and your profile:** the two small buttons at the top right. On a wide screen they are at the bottom of the menu on the left.",
             "**Posting an Offer or a Need:** use **New Post** on the **Map** page.",
@@ -3492,6 +3494,29 @@
         },
         {
           "type": "h2",
+          "text": "How big a grant can be"
+        },
+        {
+          "type": "p",
+          "text": "A grant to an enterprise or a hardship grant can't be bigger than the Commons could pay. The most you can ask for is:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "what the Commons holds now,",
+            "plus every bean that came into it over the last 30 days: the market fee, the circulation fee, and any other beans paid in."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Beans paid out of the Commons in those 30 days are not taken off. If you ask for more, the app says no before anyone votes, and tells you the most you can ask for now. That amount goes up as beans come into the Commons."
+        },
+        {
+          "type": "p",
+          "text": "This keeps the queue free. If a grant passes when the Commons is short, it waits for the beans, and only one grant can wait at a time. See \"Rules and how decisions work\"."
+        },
+        {
+          "type": "h2",
           "text": "If the app says no"
         },
         {
@@ -3499,6 +3524,8 @@
           "items": [
             "**Complete a Trade First:** you cannot propose yet.",
             "**Limit Reached:** you already have an open Decision. Wait for it to close.",
+            "**This grant is bigger than the Commons could pay:** ask for no more than the amount it names, or wait for more beans to come in.",
+            "**A grant needs an amount in Beans above 0:** fill in how many beans.",
             "**Error:** check your description is at least 10 characters long."
           ]
         }

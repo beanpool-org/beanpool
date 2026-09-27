@@ -72,6 +72,7 @@ If you sign in with an account that isn't the one you joined with, the page says
 
 ## Different names and places
 
+- **Joining with an invite:** the first step's button says **Create Identity & Join →**. If someone here already has the name you chose, you get it with a number added. **← Back** on **Your Photo** shows your name alone, with **Next →**: change it (up to 20 characters) or keep it, on the same account. If someone already has the new name, the page says so and suggests others.
 - **Tabs:** the web app has **Market**, **Pulse**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.
 - **Settings and your profile:** the two small buttons at the top right. On a wide screen they are at the bottom of the menu on the left.
 - **Posting an Offer or a Need:** use **New Post** on the **Map** page.

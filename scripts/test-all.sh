@@ -387,6 +387,7 @@ run_federation_suites() {
       test-request-auth
       test-api-path-auth
       test-request-binding
+      test-loopback-audience
       test-read-auth-default
       test-activity-feed-members-only
       test-members-contact-visibility
@@ -446,6 +447,7 @@ run_federation_suites() {
       test-ws-pong-watchdog
       test-ws-http-port
       test-ws-auth-default
+      test-visitor-doorbells
       test-ws-feed-parties
       test-live-post-payloads
       test-moderation-notifications
@@ -471,6 +473,7 @@ run_federation_suites() {
       test-decisions-voting-answers
       test-decisions-tick-route-gone
       test-decisions-funding-queue
+      test-decisions-grant-cap
       test-rip-out-legacy-voting
       test-escrow-disputes
       test-process-handlers

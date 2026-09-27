@@ -2415,6 +2415,11 @@ export interface AppAddress {
 
 export interface AppAddressesReport {
     addresses: AppAddress[];
+    /**
+     * Whether any of `addresses` names this community. A loopback name listed on the server (for an SSH tunnel) names
+     * none, so a node with only that still accepts any address until the switch. Absent from a server before 2026-09-27.
+     */
+    named?: boolean;
     /** Addresses apps reached this node at while it knew none of its own: offered to confirm. */
     unconfirmed: { address: string; today: number; busiestDay: number }[];
     /** Apps that signed in the old format, bound to no community. */

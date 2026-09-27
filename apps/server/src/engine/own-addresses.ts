@@ -13,7 +13,9 @@
  *      beanpool.org host, when the status is live or pending). The registrar keeps no record of a former name today,
  *      so a renamed node keeps its old name only if an owner confirms it (3);
  *   5. loopback (localhost, 127.0.0.1, [::1]), a private-range address, a `.local` name and the Android emulator's
- *      10.0.2.2, ONLY on a node with none of 1–4 (a developer's, LAN or development node).
+ *      10.0.2.2, ONLY on a node with none of 1–4 (a developer's, LAN or development node). A loopback name the
+ *      operator listed in 2 doesn't count as one of 1–4 here: it names no community, only whichever machine an app
+ *      runs on.
  *
  * A node with any of 1–4 treats a signature for loopback as it treats any other host's: another community's (421).
  * Loopback was once this community's on every node, so a signature for 127.0.0.1 was good at every community in the
@@ -21,13 +23,15 @@
  * 127.0.0.1) could collect requests valid everywhere (#1224's deciding pass; director's call 2026-09-27). Nobody
  * legitimate needs it there: members reach a named node by its names. An operator who opens a named node's web app at
  * localhost (through an SSH tunnel) lists that name in BEANPOOL_ADDRESSES (2), never a silent default; it is then
- * accepted, and still never published.
+ * accepted, and still never published. Listing it never makes a node that knows none of its names a named one
+ * (4113741087): that node accepts loopback without it, and counting it as a name would refuse its members' apps at
+ * once, for the domain they use and for its home-network address, with nothing in Settings to confirm.
  *
  * Never learned from the Host header, X-Forwarded-Host or SNI: the node's ports are reachable directly
  * (docker-compose publishes 443 and 8443), so anyone can send any Host. Nor by probing itself: a hostile node in front
  * could pass only the probe through.
  *
- * A node with none of 1–4 (a self-hoster behind a proxy with no config) doesn't know its name. It is `unconfigured`:
+ * A node with none of 1–4 (a self-hoster behind a proxy with no config) doesn't know its names. It is `unconfigured`:
  * member-signature.ts accepts any host there until the switch, logs it and counts it, and Settings offers each one to
  * the owner to confirm with one tap (decision 3a, 2026-09-27).
  */
@@ -141,6 +145,17 @@ export function isLoopbackHost(host: string): boolean {
     return LOOPBACK.includes(host) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
 }
 
+/** A configured name that names this community: any but a loopback name the operator listed (5). */
+const namesThisCommunity = (a: OwnAddress) => !isLoopbackHost(a.address);
+
+/**
+ * Whether this node knows any of its names. A loopback name listed in BEANPOOL_ADDRESSES doesn't count (5): with only
+ * that, the node is still `unconfigured`, and Settings offers the addresses apps reached it at.
+ */
+export function knowsItsNames(): boolean {
+    return configuredAddresses().some(namesThisCommunity);
+}
+
 /**
  * A host on this machine or the local network: loopback, private IPv4 ranges, IPv6 unique-local and link-local,
  * `.local`. This community's (5) only on a node that knows none of its names.
@@ -165,7 +180,7 @@ export function audienceStanding(host: string): AudienceStanding {
     if (normalizeAddress(host) !== host) return 'foreign';
     const configured = configuredAddresses();
     if (configured.some((a) => a.address === host)) return 'own';
-    if (configured.length > 0) return 'foreign';
+    if (configured.some(namesThisCommunity)) return 'foreign';
     return isLocalNetworkHost(host) ? 'own' : 'unconfigured';
 }
 
@@ -175,5 +190,5 @@ export function audienceStanding(host: string): AudienceStanding {
  * whichever machine an app runs on. Settings' list shows it, with its source.
  */
 export function publishedAddresses(): string[] {
-    return configuredAddresses().map((a) => a.address).filter((a) => !isLoopbackHost(a));
+    return configuredAddresses().filter(namesThisCommunity).map((a) => a.address);
 }

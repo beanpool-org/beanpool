@@ -27,6 +27,14 @@
  *  5. L, named (optin.test) with BEANPOOL_ADDRESSES=localhost, 127.0.0.1, [::1], ::1: the explicit way in. Those three
  *     are accepted and 127.0.0.2 is not; Settings lists them as set on the server; /api/community/info still lists
  *     only optin.test; the log names the bare ::1 as left out and gives its bracketed form.
+ *  6. Z, with ONLY BEANPOOL_ADDRESSES=localhost (an owner who followed the SSH-tunnel advice on a node with no other
+ *     name): still a node that knows none of its names (4113741087). Before the switch it accepts its domain
+ *     (community.example.org) and a home-network address as it did with nothing set, and localhost and 127.0.0.1;
+ *     Settings says it has no name, offers the domain to confirm and lists localhost as set on the server;
+ *     /api/community/info lists nothing. After the switch the domain is refused, localhost and the home network not.
+ *  7. T, named (tunnel.test) with BEANPOOL_ADDRESSES=localhost: localhost and tunnel.test are accepted; the domain,
+ *     a home-network address and 127.0.0.1 (not listed) are refused with the nonce unspent. Settings says it has a
+ *     name and offers nothing.
  *
  * The nodes' switch clocks are pinned just before the switch (unboundSignaturesCutoff), except where a step moves one
  * past it, so the suite holds for any date.
@@ -303,15 +311,17 @@ async function main(): Promise<void> {
 
     try {
         console.log('Loopback is this community\'s name only on a node that knows none of its names\n');
-        const [N, E, O, R, U, L] = await Promise.all([
+        const [N, E, O, R, U, L, Z, T] = await Promise.all([
             startNode('n', { CF_RECORD_NAME: 'named.test', ENFORCE_WS_AUTH: 'true' }),
             startNode('e', { BEANPOOL_ADDRESSES: 'env.test' }),
             startNode('o', {}),
             startNode('r', {}),
             startNode('u', { ENFORCE_WS_AUTH: 'true' }),
             startNode('l', { CF_RECORD_NAME: 'optin.test', BEANPOOL_ADDRESSES: 'localhost, 127.0.0.1, [::1], ::1' }),
+            startNode('z', { BEANPOOL_ADDRESSES: 'localhost' }),
+            startNode('t', { CF_RECORD_NAME: 'tunnel.test', BEANPOOL_ADDRESSES: 'localhost' }),
         ]);
-        for (const n of [N, E, O, R, U, L]) {
+        for (const n of [N, E, O, R, U, L, Z, T]) {
             await n.send('seed', { owner: { pk: owner.pk, callsign: owner.callsign }, members: [mia, xan].map((m) => ({ pk: m.pk, callsign: m.callsign })), trader: mia.pk, partner: xan.pk });
         }
         await O.send('nodeConfig', { ownerAddresses: ['owner.test'] });
@@ -320,7 +330,7 @@ async function main(): Promise<void> {
         if (typeof cutoff !== 'number') throw new Error('N refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
         SWITCH = cutoff;
         console.log(`the switch: ${new Date(SWITCH).toISOString()}; the nodes' clocks are pinned just before it`);
-        for (const n of [N, E, O, R, U, L]) await beforeSwitch(n);
+        for (const n of [N, E, O, R, U, L, Z, T]) await beforeSwitch(n);
 
         // ── 1. A node named by CF_RECORD_NAME ──
         console.log('\n— 1. a node with a name: a request, a socket and a Manage sign-in signed for loopback —');
@@ -441,6 +451,52 @@ async function main(): Promise<void> {
             const dropped = L.output().split('\n').filter((line) => line.includes('BEANPOOL_ADDRESSES'));
             assert(dropped.length === 1 && dropped[0].includes('"::1" is not an address') && dropped[0].includes('[::1]'),
                 `the log names the bare ::1 as left out, once, and gives its bracketed form (${JSON.stringify(dropped.map((l) => l.slice(0, 300)))})`);
+        });
+
+        // ── 6. Only localhost listed, and no other name ──
+        console.log('\n— 6. BEANPOOL_ADDRESSES=localhost on a node with no other name: it still knows none of its names —');
+        await section('6', async () => {
+            await Z.send('resetLimits');
+            for (const host of ['community.example.org', '192.168.1.20', 'localhost', '127.0.0.1']) {
+                const r = await sendTo(Z, 'GET', await bound(mia, 'GET', `https://${host}/api/community/me`));
+                assert(r.status === 200 && r.body?.publicKey === mia.pk, `before the switch, a read signed for ${host} is accepted (${show(r)})`);
+            }
+            const listed = await call(Z, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const bySource = (listed.body?.addresses ?? []).map((a: any) => `${a.address}:${a.source}`);
+            const unconfirmed: string[] = (listed.body?.unconfirmed ?? []).map((a: any) => a.address);
+            assert(listed.status === 200 && listed.body?.named === false, `Settings says the community has no name set up (named: ${JSON.stringify(listed.body?.named)})`);
+            assert(JSON.stringify(bySource) === JSON.stringify(['localhost:env']), `Settings lists localhost as set on the server (${JSON.stringify(bySource)})`);
+            assert(JSON.stringify(unconfirmed) === JSON.stringify(['community.example.org']),
+                `Settings offers community.example.org to confirm, and neither the home-network address nor a loopback name (${JSON.stringify(unconfirmed)})`);
+            const info = await call(Z, 'GET', '/api/community/info');
+            assert(Array.isArray(info.body?.addresses) && info.body.addresses.length === 0, `/api/community/info lists no address (${JSON.stringify(info.body?.addresses)})`);
+
+            await Z.send('switchClock', { at: SWITCH + 1000 });
+            const late = await sendTo(Z, 'GET', await bound(mia, 'GET', 'https://community.example.org/api/community/me'));
+            assert(wrongCommunity(late), `after the switch, community.example.org (not confirmed) is refused (${show(late)})`);
+            for (const host of ['localhost', '127.0.0.1', '192.168.1.20']) {
+                const r = await sendTo(Z, 'GET', await bound(mia, 'GET', `https://${host}/api/community/me`));
+                assert(r.status === 200, `while a read signed for ${host} is still accepted (${show(r)})`);
+            }
+            await beforeSwitch(Z);
+        });
+
+        // ── 7. A name, and localhost listed ──
+        console.log('\n— 7. BEANPOOL_ADDRESSES=localhost on a named node: localhost and its name, nothing else —');
+        await section('7', async () => {
+            await T.send('resetLimits');
+            for (const host of ['localhost', 'tunnel.test']) {
+                const r = await sendTo(T, 'GET', await bound(mia, 'GET', `https://${host}/api/community/me`));
+                assert(r.status === 200 && r.body?.publicKey === mia.pk, `a read signed for ${host} is accepted (${show(r)})`);
+            }
+            for (const host of ['community.example.org', '192.168.1.20', '127.0.0.1']) await refusedThenOwn(T, host, 'tunnel.test');
+            const listed = await call(T, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const bySource = (listed.body?.addresses ?? []).map((a: any) => `${a.address}:${a.source}`);
+            assert(listed.status === 200 && listed.body?.named === true && listed.body?.unconfirmed?.length === 0
+                && JSON.stringify(bySource) === JSON.stringify(['tunnel.test:public-address', 'localhost:env']),
+                `Settings says it has a name, lists tunnel.test and localhost, and offers nothing (named: ${JSON.stringify(listed.body?.named)}, ${JSON.stringify(bySource)}, unconfirmed ${JSON.stringify(listed.body?.unconfirmed)})`);
+            const info = await call(T, 'GET', '/api/community/info');
+            assert(JSON.stringify(info.body?.addresses) === JSON.stringify(['tunnel.test']), `/api/community/info lists tunnel.test only (${JSON.stringify(info.body?.addresses)})`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

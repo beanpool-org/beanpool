@@ -469,6 +469,35 @@ describe('Kim signs back in on the same phone', () => {
         expect(await pendingLeaveStatements()).toEqual([]);
     });
 
+    it('taking hers back leaves another account\'s statements: Ben signed in and out in between, and his still goes out', async () => {
+        await kimRegisteredAtMullumAndByron();
+        nodes.answer = () => 'down';
+        await signOutOfThisPhone(kim);
+
+        // Ben signs in while set to Mullum and his registration lands (no statement goes out), then he signs out offline.
+        await importIdentity(ben);
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
+        mem.async.set(ANCHOR, MULLUM);
+        nodes.answer = (s) => (s.path.startsWith('/api/push-tokens/leave/') ? 'down' : 'up');
+        expect(await registerPushTokenWithCommunity(ben, PHONE_TOKEN, 'android')).toBe(true);
+        expect(nodes.has(MULLUM, ben.publicKey)).toBe(true);
+        nodes.answer = () => 'down';
+        await signOutOfThisPhone(ben);
+        expect(stored().map((s) => `${s.publicKey === kim.publicKey ? 'kim' : 'ben'} ${s.community}`).sort())
+            .toEqual([`ben ${MULLUM}`, `kim ${BYRON}`, `kim ${MULLUM}`]);
+
+        // Kim signs back in: only hers are taken back (#1258 review 4116787967).
+        await importIdentity(kim);
+        expect((await pendingLeaveStatements()).map((s) => [s.publicKey, s.community])).toEqual([[ben.publicKey, MULLUM]]);
+
+        nodes.answer = () => 'up';
+        await presentLeaveStatements();
+        // Ben's alerts stop reaching Kim's phone; hers stay.
+        expect(nodes.has(MULLUM, ben.publicKey)).toBe(false);
+        expect(nodes.has(MULLUM, kim.publicKey) && nodes.has(BYRON, kim.publicKey)).toBe(true);
+        expect(await pendingLeaveStatements()).toEqual([]);
+    });
+
     it('the app starting with her key back on the phone and her statements still written down (killed as she signed in): taken back, never presented', async () => {
         await kimRegisteredAtMullumAndByron();
         nodes.answer = () => 'down';

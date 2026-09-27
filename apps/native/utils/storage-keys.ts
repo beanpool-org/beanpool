@@ -10,10 +10,30 @@ export const KNOCKS_STORE_KEY = 'beanpool_knocks';
 export const CANONICAL_PROFILE_STORE_KEY = 'beanpool_canonical_profile';
 
 /**
- * Reports this key queued while offline, retried when the app returns (utils/blocklist.ts). Sign Out wipes it
+ * The one queue of offline reports the builds before per-account queues kept for the whole phone. When this build
+ * starts, blocklist.ts moves the account on the phone's own reports out of it into {@link pendingAbuseReportsStoreKey},
+ * stamped with the community the phone is set to then, and removes it; Sign Out and Replace wipe it too
  * (utils/identity.ts wipeIdentityScopedStorage): a node files a report as whoever signs it.
  */
 export const PENDING_ABUSE_REPORTS_STORE_KEY = 'beanpool_pending_abuse_reports';
+
+/**
+ * Reports one account queued while its node couldn't be reached, retried when the app returns (utils/blocklist.ts),
+ * each with the community it was made at: sent only there, and only while that account is on the phone, signed by its
+ * key. Kept when the account leaves the phone, with its block list.
+ */
+export function pendingAbuseReportsStoreKey(publicKey: string): string {
+    return `${PENDING_ABUSE_REPORTS_STORE_KEY}:${publicKey.toLowerCase()}`;
+}
+
+/**
+ * The people one account blocked on this phone: their public keys only (utils/blocklist.ts). Kept when the account
+ * leaves the phone (Sign Out, Replace, the node-mismatch delete), so the same account restored here has its blocks back
+ * (Marty, 2026-09-27: the list is the account's), and never read while another account is on the phone.
+ */
+export function blockedUsersStoreKey(publicKey: string): string {
+    return `beanpool_blocked_users:${publicKey.toLowerCase()}`;
+}
 
 /**
  * The communities this phone has been to, for the community switcher (utils/nodes.ts). Sign Out and "Replace this

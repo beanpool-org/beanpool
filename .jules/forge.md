@@ -129,3 +129,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `processQueuedGrants` (tickDecisions in `apps/server/src/decisions-engine.ts`) executed `JSON.parse(top.params || '{}')` without a try/catch block. Malformed JSON parameters stored on queued decisions threw unhandled exceptions during periodic decision evaluation ticks.
 **Learning:** Unhandled exceptions inside periodic tick loops interrupt background processing and abort execution of subsequent queued tasks.
 **Pattern:** Always enclose `JSON.parse` operations on database-driven or user-supplied string fields inside try/catch blocks with sensible fallback values.
+
+## 2026-09-27 - [Uncaught JSON.parse exception in exportLedgerAudit]
+**Issue:** `exportLedgerAudit` in `apps/server/src/engine/audit.ts` executed `JSON.parse(projectsRow.value)` without a try/catch block. Malformed JSON stored in `node_config` under `commons_projects` threw unhandled exceptions, crashing admin ledger export requests.
+**Learning:** Reading JSON blobs from database tables without enclosing `JSON.parse` in a try/catch block allows corrupted database strings to crash admin audit endpoints.
+**Pattern:** Always wrap `JSON.parse` operations on DB config rows in try/catch blocks with safe fallback values.

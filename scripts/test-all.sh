@@ -447,6 +447,7 @@ run_federation_suites() {
       test-escrow-write-off
       test-version-resolution
       test-avatar-endpoint
+      test-avatar-keys
       test-etag-short-circuit
       test-api-headers-and-feed-etag
       test-directory-publisher

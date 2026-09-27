@@ -11,9 +11,9 @@
  *  2. Its standby S takes its first copy: the loop's own first pull, refused on main today (G9), then the force-resync
  *     an operator runs.
  *  3. More of the community, over two deltas: new members, granted credit, a voucher and vouched members at 50 and 25, a
- *     trade in escrow, a resolved dispute, a recategorised listing and one that needs cash, holiday, a notification
+ *     group of one, a trade in escrow, a resolved dispute, a recategorised listing and one that needs cash, holiday, a notification
  *     opt-out, push tokens, a frozen member, a keeper with a pledge, a keeper's wage owed, the enterprise paused.
- *  4. More, then a whole copy: the vouch at 25 withdrawn, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
+ *  4. More, then a whole copy: the vouch at 25 withdrawn, the group of one left by its lead, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
  *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
  *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a pending request) and a
  *     last delta.
@@ -94,6 +94,7 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:marketplace_transactions.updated_at', gap: 'G1b', why: "the touch trigger stamps the standby's clock on every imported update" },
     { key: 'db:projects.migrated_at', gap: 'G1b', why: "each copy wipes it, so the standby's boot migrates the project again" },
     { key: 'db:projects.updated_at', gap: 'G1b', why: "restamped with the standby's clock" },
+    { key: 'db:groups.lead_pubkey', gap: 'G1b', why: "a group whose last convenor left keeps its old lead on the standby (the import keeps a lead over the main server's null)" },
 
     // G2a: the members row's other columns.
     { key: 'db:members.is_treasury', gap: 'G2a', why: 'every enterprise is a plain member' },
@@ -353,7 +354,7 @@ interface Answer { status: number; body: any }
  * A call to a node's real HTTPS server: signed by `as` (the format before request binding, which every node still takes;
  * the signature covers the path, never the query), with the admin password in `admin`, or neither.
  */
-async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+async function api(base: string, method: 'GET' | 'POST' | 'DELETE', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -486,6 +487,8 @@ async function main(): Promise<void> {
         for (const who of [eve, fay, hal, lou]) await join(who);
         await pull('the new members');
         for (const who of [cy, hal]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
+        const knitters = built('Hal starts a group on his own', await S_(hal, '/api/groups', { name: 'Knitters', description: 'Anyone who knits' }));
+        const knittersId = knitters.group?.id ?? knitters.id;
         built('the admin makes Bo a voucher', await A(`/api/local/admin/users/${bo.pk}/voucher`, { grant: true }));
         built('Bo vouches for Eve', await S_(bo, '/api/profile/vouch', { targetPubkey: eve.pk, level: 2 }));
         built('and for Lou', await S_(bo, '/api/profile/vouch', { targetPubkey: lou.pk, level: 1 }));
@@ -521,6 +524,7 @@ async function main(): Promise<void> {
         // ── 4. More, then a whole copy ──
         console.log('\n— 4. more, then a whole copy —');
         built('Bo withdraws his vouch for Lou, which the last pull copied', await S_(bo, '/api/profile/unvouch', { targetPubkey: lou.pk }));
+        built('Hal, its lead and only member, leaves Knitters: it has no lead now', await api(m, 'DELETE', `/api/groups/${knittersId}/members/${hal.pk}`, { as: hal }));
         built('Kip puts 2 Beans in the project pot', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount: 2 }));
         const wind = built('Dee starts an enterprise, Wind Co', await S_(dee, '/api/treasury', { name: 'Wind Co', purpose: 'Closing down soon' }));
         built('Dee starts winding it up', await S_(dee, `/api/treasury/${wind.publicKey}/wind-up/initiate`));

@@ -182,8 +182,11 @@ export const TABLES: Record<string, TableEntry> = {
         columns: cols('post_id member_pubkey status signature reminder_offsets updated_at'),
     },
     groups: {
-        kind: 'replicated', payload: 'groups', watermark: 'updated_at',
-        columns: cols('id name slug description avatar_url category created_by lead_pubkey join_policy created_at updated_at'),
+        kind: 'replicated-except', payload: 'groups', watermark: 'updated_at',
+        columns: cols('id name slug description avatar_url category created_by join_policy created_at updated_at'),
+        except: {
+            lead_pubkey: { reason: "the import keeps the lead it has over the main server's null (COALESCE): a group whose last convenor left has no lead there and keeps the old one on the standby (not in the design; found by this net)", gap: 'G1b' },
+        },
     },
     group_members: {
         kind: 'replicated', payload: 'groupMembers', watermark: 'updated_at',

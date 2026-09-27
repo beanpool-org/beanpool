@@ -50,7 +50,7 @@ import { type SsoProvider } from '../utils/sso-signin';
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
-import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName } from '../utils/node-url';
+import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 import { NEXT_REQUEST_TIMEOUT_MS, afterSpentInvite, leaveUnlessNextIsOut, redeemRefusalMeansIn, runNext } from '../utils/invite-next';
 
@@ -468,8 +468,18 @@ export default function WelcomeScreen() {
 
     const processFullUrl = useCallback(async (fullUrl: string) => {
         // extractNodeOrigin copes with the URL being buried in a shared message
-        // ("Join my BeanPool community node: https://…") — an anchored match doesn't.
-        const origin = extractNodeOrigin(fullUrl);
+        // ("Join my BeanPool community node: https://…") — an anchored match doesn't. It refuses an address that
+        // isn't plain host[:port] (utils/node-url.ts), and so does this: the invite isn't used.
+        let origin: string | null;
+        try {
+            origin = extractNodeOrigin(fullUrl);
+        } catch (e) {
+            if (e instanceof UnsafeNodeAddressError) {
+                Alert.alert('Invite not used', e.message);
+                return;
+            }
+            throw e;
+        }
         if (origin) {
             setCreateAnchorUrl(origin);
         }
@@ -672,7 +682,16 @@ export default function WelcomeScreen() {
             return;
         }
         const rawInvite = inviteCode.trim();
-        const extractedOrigin = extractNodeOrigin(rawInvite);
+        let extractedOrigin: string | null;
+        try {
+            extractedOrigin = extractNodeOrigin(rawInvite);
+        } catch (e) {
+            if (e instanceof UnsafeNodeAddressError) {
+                setError(e.message);
+                return;
+            }
+            throw e;
+        }
         const nodeUrl = normalizeNodeUrl(extractedOrigin || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
         if (!nodeUrl) {
             setError('Enter your community node address — you need it to connect to your community.');
@@ -842,7 +861,7 @@ export default function WelcomeScreen() {
                             callsign: pendingIdentity.callsign,
                         };
                         const bodyString = JSON.stringify(payloadObj);
-                        const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
+                        const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
                         const res = await fetch(`${url}/api/profile/update`, {
                             method: 'POST',
                             headers,
@@ -1466,7 +1485,7 @@ export default function WelcomeScreen() {
                         callsign: pendingIdentity.callsign,
                     };
                     const bodyString = JSON.stringify(payloadObj);
-                    const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
+                    const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
                     const res = await fetch(`${url}/api/profile/update`, {
                         method: 'POST',
                         headers,

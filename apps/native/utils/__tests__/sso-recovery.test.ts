@@ -64,6 +64,18 @@ describe('SSO Recovery Service', () => {
         })).rejects.toThrow(/node address/i);
     });
 
+    it('refuses an address that isn\'t plain host[:port] before any sign-in (#1224 review 4113495290)', async () => {
+        for (const anchorUrl of ['https://test.beanpool.org\\@evil.test', 'https://127.0.0.1\\@evil.test', 'https://kim@test.beanpool.org', 'https://test.beanpool.org:123456']) {
+            await expect(recoverAccountWithSso({
+                callsign: 'Monnunit',
+                anchorUrl,
+                provider: 'google', onDeviceCode: () => {},
+            }), anchorUrl).rejects.toThrow(/node address/i);
+        }
+        expect(signInWithGoogle).not.toHaveBeenCalled();
+        expect(AsyncStorage.setItem).not.toHaveBeenCalledWith('beanpool_anchor_url', expect.anything());
+    });
+
     it('completes the full Google recovery round-trip', async () => {
         // 1. Original account setup
         const originalSeed = new Uint8Array(32).fill(42);

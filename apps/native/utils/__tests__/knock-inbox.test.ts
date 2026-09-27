@@ -13,8 +13,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
 }));
 
-import { getPublicKey, verify } from '@noble/ed25519';
-import { bytesToHex, hexToBytes, decodeBase64, encodeUtf8 } from '../crypto';
+import { getPublicKey } from '@noble/ed25519';
+import { bytesToHex } from '../crypto';
+import { boundSignatureValid } from './server-signature-check';
 import {
     fetchJoinRequests, approveJoinRequest, declineJoinRequest, wantsToJoinTitle, joinRequestMeta,
 } from '../knock-inbox';
@@ -39,11 +40,9 @@ async function member(): Promise<BeanPoolIdentity> {
     return { publicKey: bytesToHex(await getPublicKey(seed)), privateKey: bytesToHex(seed), callsign: 'Kim' } as BeanPoolIdentity;
 }
 
+/** Signed over the path without the query, for the community it was sent to, as that node checks it (request binding). */
 async function signedOverPath(req: Sent, publicKey: string): Promise<boolean> {
-    const path = new URL(req.url).pathname;
-    const h = req.headers;
-    return h['X-Public-Key'] === publicKey
-        && verify(decodeBase64(h['X-Signature']), encodeUtf8(`${req.method}\n${path}\n${h['X-Timestamp']}\n${h['X-Nonce']}\n${req.body}`), hexToBytes(publicKey));
+    return boundSignatureValid(req, publicKey);
 }
 
 const knock = { id: 'k1', pubkey: 'ab'.repeat(32), callsign: 'Robin', message: 'I grow tomatoes.', avatar: null, fromNode: 'global.beanpool.org', createdAt: '2026-09-25T10:00:00.000Z' };

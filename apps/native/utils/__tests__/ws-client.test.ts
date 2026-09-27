@@ -45,7 +45,9 @@ vi.mock('../crypto', () => ({
     buildSignedWsParams: vi.fn().mockResolvedValue(''),
 }));
 
-vi.mock('../node-url', () => ({
+// The real address check (request binding): only the cleartext rule is stubbed.
+vi.mock('../node-url', async (orig) => ({
+    ...(await orig<typeof import('../node-url')>()),
     shouldBlockCleartextNodeUrl: vi.fn().mockReturnValue(false),
 }));
 
@@ -108,6 +110,28 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         await vi.advanceTimersByTimeAsync(10);
         return wsInstance;
     }
+
+    it('signs the connect over the URL the socket opens, so it is bound to this community (request binding)', async () => {
+        const { loadIdentity } = await import('../identity');
+        const { buildSignedWsParams } = await import('../crypto');
+        vi.mocked(loadIdentity).mockResolvedValueOnce({ publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any);
+        vi.mocked(buildSignedWsParams).mockResolvedValueOnce('pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
+        const socket = await startAndConnect();
+        expect(buildSignedWsParams).toHaveBeenCalledWith('wss://testnode.beanpool.org/ws', 'aa', ME);
+        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
+    });
+
+    it('opens no socket at all, signed or not, to an address that names one host and reaches another (#1224 review 4113495290)', async () => {
+        const { loadIdentity } = await import('../identity');
+        const { buildSignedWsParams } = await import('../crypto');
+        for (const anchor of ['https://127.0.0.1\\@evil.test', 'https://testnode.beanpool.org\\@evil.test']) {
+            vi.mocked(AsyncStorage.getItem).mockImplementation(async (key: string) => (key === 'beanpool_anchor_url' ? anchor : null));
+            vi.mocked(loadIdentity).mockResolvedValueOnce({ publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any);
+            expect(await startAndConnect(), anchor).toBeNull();
+            expect(buildSignedWsParams).not.toHaveBeenCalled();
+            client.stop();
+        }
+    });
 
     it('sends opt-in ping with { type: "ping", wantPong: true } on open and interval', async () => {
         const socket = await startAndConnect();

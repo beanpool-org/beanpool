@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
-import { normalizeNodeUrl, looksLikeNodeAddress } from '../utils/node-url';
+import { normalizeNodeUrl, looksLikeNodeAddress, assertPlainNodeAddress } from '../utils/node-url';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { hasMnemonic } from '../utils/identity';
@@ -71,6 +71,8 @@ export default function NodeMismatchScreen() {
         setLoading(true);
         setError(null);
         try {
+            // Only a plain host[:port] becomes the phone's community (utils/node-url.ts); refused before anything moves.
+            assertPlainNodeAddress(url);
             // Each node has its own local DB — swap it the same way Settings does.
             const { closeDB, initDB } = await import('../utils/db');
             await closeDB();

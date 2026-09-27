@@ -160,7 +160,7 @@ export default function ProfileSetupScreen() {
                         ...(publishAvatar ? { avatar: publishAvatar } : {}),
                         callsign: finalCallsign,
                     });
-                    const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
+                    const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
                     const res = await fetch(`${url}/api/profile/update`, { method: 'POST', headers, body: bodyString });
                     if (res.status === 409) {
                         setStep('name');

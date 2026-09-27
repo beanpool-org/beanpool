@@ -90,8 +90,9 @@ async function unregisterAt(community: string, body: string, account: LeavingAcc
     });
     const attempt = (async () => {
         try {
-            const headers = await buildSignedHeaders('DELETE', PUSH_TOKENS_PATH, body, account.privateKey, account.publicKey);
-            const res = await fetch(`${community}${PUSH_TOKENS_PATH}`, { method: 'DELETE', headers, body, signal: controller.signal });
+            const url = `${community}${PUSH_TOKENS_PATH}`;
+            const headers = await buildSignedHeaders('DELETE', url, body, account.privateKey, account.publicKey);
+            const res = await fetch(url, { method: 'DELETE', headers, body, signal: controller.signal });
             if (!res.ok) console.warn(`[Push] ${community} did not unregister this phone (${res.status})`);
         } catch (e) {
             console.warn(`[Push] Could not reach ${community} to unregister this phone:`, e instanceof Error ? e.message : e);

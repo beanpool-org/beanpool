@@ -19,7 +19,7 @@ vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: 
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
-    buildSignedHeaders: vi.fn(async (method: string, path: string) => ({ 'X-Signed': `${method} ${path}` })),
+    buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
 import { getDecisions } from '../db';
@@ -45,7 +45,8 @@ describe('getDecisions (native)', () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toBe('https://test.beanpool.org/api/commons/decisions');
-        expect(init.headers['X-Signed']).toBe('GET /api/commons/decisions');
+        // Signed over the exact URL it fetches (its host and path: request binding).
+        expect(init.headers['X-Signed']).toBe('GET https://test.beanpool.org/api/commons/decisions');
         expect(res.decisions[0].myVote).toEqual({ support: true, voteCount: 1 });
         expect(res.myPoolVoting).toEqual({ voiceCredits: 16, hasCompletedTrade: true });
     });

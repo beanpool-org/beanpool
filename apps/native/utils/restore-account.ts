@@ -26,6 +26,7 @@ import {
     importIdentity, loadIdentity, removeStoredIdentity, wipeIdentityScopedStorage, type BeanPoolIdentity,
 } from './identity';
 import { clearPendingOnboarding } from './onboarding-state';
+import { assertPlainNodeAddress } from './node-url';
 import { communitiesOnThisPhone, forgetCommunities, releaseAccountFromPhone } from './account-leaves-phone';
 
 /**
@@ -115,6 +116,8 @@ export async function clearToRestore(incoming: BeanPoolIdentity, confirmReplace?
  * Onto an empty phone, or over the same account, nothing is removed, and a failed write throws as it is.
  */
 export async function saveRestoredAccount({ identity, replacesAnother }: ClearedRestore, anchorUrl: string): Promise<void> {
+    // Only a plain host[:port] becomes the phone's community (node-url.ts). Refused before anything is removed.
+    assertPlainNodeAddress(anchorUrl);
     try {
         if (replacesAnother) {
             await releaseAccountFromPhone(await leavingAccount(identity));
@@ -169,13 +172,15 @@ async function removeUnsavedReplace(failure: unknown): Promise<ReplaceNotSaved> 
  *
  * The words ARE the identity. The name is profile data the node holds, so it is asked of the node (`nameOnNode`),
  * never typed, and only once the member has said to go ahead. A node that can't say leaves it empty, as before.
- * Then {@link saveRestoredAccount}.
+ * Then {@link saveRestoredAccount}. An address that isn't plain `host[:port]` (node-url.ts) is refused first, before
+ * anything is asked or removed.
  */
 export async function restoreFromWords(
     words: string[],
     anchorUrl: string,
     options: { confirmReplace?: ConfirmReplace; nameOnNode: (publicKey: string) => Promise<string | null> },
 ): Promise<BeanPoolIdentity> {
+    assertPlainNodeAddress(anchorUrl);
     const { publicKeyHex, privateKeyHex } = await mnemonicToKeypair(words);
     const incoming: BeanPoolIdentity = {
         publicKey: publicKeyHex,

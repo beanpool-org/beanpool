@@ -74,6 +74,20 @@ describe('checkInvite asks the node about the code the member has', () => {
         expect(codeAskedAbout()).toBe(`BP-${TICKET}`);
     });
 
+    it('a ticket this build makes (format 2, naming this community) also goes whole, BP- and all', async () => {
+        const { makeOfflineTicket } = await import('../member-statements');
+        const seed = new Uint8Array(32).fill(5);
+        const { ed25519 } = await import('@noble/curves/ed25519.js');
+        const pub = Buffer.from(ed25519.getPublicKey(seed)).toString('hex');
+        const code = await makeOfflineTicket(NODE, pub, Buffer.from(seed).toString('hex'), { intendedFor: 'Robin' });
+        expect(code.startsWith('BP-')).toBe(true);
+        expect(JSON.parse(Buffer.from(code.slice(3), 'base64').toString('utf8')).p).toMatch(/^beanpool-invite-ticket\/2\ntest\.beanpool\.org\n/);
+        fetchMock.mockResolvedValueOnce(reply(200, { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' }));
+
+        expect(await checkInvite(code, NODE)).toEqual({ valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' });
+        expect(codeAskedAbout()).toBe(code);
+    });
+
     it('an invite code goes as it is', async () => {
         fetchMock.mockResolvedValueOnce(reply(200, { valid: false, reason: 'used' }));
 

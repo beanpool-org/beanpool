@@ -75,8 +75,9 @@ export async function fetchJoinRequests(
     anchorUrl: string, identity: BeanPoolIdentity, offset: number = 0,
 ): Promise<InboxResult> {
     try {
-        const headers = await buildSignedHeaders('GET', KNOCKS_PATH, '', identity.privateKey, identity.publicKey);
-        const res = await fetch(`${anchorUrl.replace(/\/+$/, '')}${KNOCKS_PATH}?limit=${KNOCKS_PAGE}&offset=${Math.max(0, Math.floor(offset))}`, {
+        const url = `${anchorUrl.replace(/\/+$/, '')}${KNOCKS_PATH}?limit=${KNOCKS_PAGE}&offset=${Math.max(0, Math.floor(offset))}`;
+        const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
+        const res = await fetch(url, {
             method: 'GET', headers,
         });
         // 404: requests are off here (or the node predates them). 401/403: not a member who can answer.

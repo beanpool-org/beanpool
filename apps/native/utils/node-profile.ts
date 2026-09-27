@@ -13,6 +13,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { recordRequestSigning } from './nodes';
 
 /** The worldwide community's one address. `earth.beanpool.org` redirects here at Cloudflare. */
 export const GLOBAL_NODE_URL = 'https://global.beanpool.org';
@@ -130,8 +131,13 @@ export async function fetchNodeProfile(
             signal: controller.signal,
         });
         if (!res.ok) return null;
-        const profile = readNodeProfile(await res.json().catch(() => null));
-        if (profile) await remember(base, profile);
+        const body = await res.json().catch(() => null);
+        const profile = readNodeProfile(body);
+        if (profile) {
+            await remember(base, profile);
+            // The same answer says which request format the node reads (request binding, request-signing-version.ts).
+            await recordRequestSigning(base, body);
+        }
         return profile;
     } catch {
         return null;

@@ -95,11 +95,12 @@ export async function registerPushTokenWithCommunity(
     }
 
     const body = JSON.stringify({ publicKey: account.publicKey, token, platform });
-    const headers = await buildSignedHeaders('POST', PUSH_TOKENS_PATH, body, account.privateKey, account.publicKey);
+    const url = `${community}${PUSH_TOKENS_PATH}`;
+    const headers = await buildSignedHeaders('POST', url, body, account.privateKey, account.publicKey);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const res = await fetch(`${community}${PUSH_TOKENS_PATH}`, { method: 'POST', headers, body, signal: controller.signal });
+        const res = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
         if (!res.ok) throw new Error(`${community} did not register this phone (${res.status})`);
     } finally {
         clearTimeout(timer);

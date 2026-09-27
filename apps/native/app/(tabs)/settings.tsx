@@ -20,7 +20,8 @@ import { getCanonicalProfile } from '../../utils/canonical-profile';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../../utils/avatar-value';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
-import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
+import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
+import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from '../../utils/node-url';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -783,6 +784,7 @@ export default function SettingsScreen() {
                     const res = await fetch(`${cleanUrl}/api/community/info?_t=${Date.now()}`);
                      if (res.ok) {
                         const data = await res.json();
+                        await recordRequestSigning(cleanUrl, data);
                         let remoteTxCount = data.transactionCount || 0;
                         
                         if (identity?.publicKey) {
@@ -1043,7 +1045,7 @@ export default function SettingsScreen() {
                     }) : archetypeRaw;
                 }
                 const bodyString = JSON.stringify(payloadObj);
-                const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
+                const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
 
                 let res: Response | null = null;
                 try {
@@ -1120,6 +1122,11 @@ export default function SettingsScreen() {
 
     async function handleSwitchNode(targetUrl: string) {
         if (targetUrl === anchorUrl) return;
+        // Only a plain host[:port] becomes the phone's community (utils/node-url.ts).
+        if (!isPlainNodeAddress(targetUrl)) {
+            Alert.alert('Pivot Failed', UNSAFE_NODE_ADDRESS_MESSAGE);
+            return;
+        }
         setAdvancedLoading(true);
         try {
             const { closeDB, initDB } = await import('../../utils/db');
@@ -1316,6 +1323,8 @@ export default function SettingsScreen() {
                 const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(finalAnchorUrl) || finalAnchorUrl.startsWith('localhost');
                 finalAnchorUrl = (isIpOrLocal ? 'http://' : 'https://') + finalAnchorUrl;
             }
+            // Only a plain host[:port] becomes the phone's community (utils/node-url.ts); refused before anything moves.
+            if (!isPlainNodeAddress(finalAnchorUrl)) throw new Error(UNSAFE_NODE_ADDRESS_MESSAGE);
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
             // Inject alias to native node matrix
             const { addSavedNode, markGuestNode, clearGuestNode } = await import('../../utils/nodes');

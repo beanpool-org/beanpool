@@ -205,8 +205,9 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // take-over, that their post was hidden or removed or their posting paused.
         ['moderation_notices', payload.moderationNotices?.length ?? 0],
         // Each member's block list. A block the replica lost is someone shown again, after a take-over, to the member who
-        // blocked them.
-        ['member_blocks', payload.memberBlocks?.length ?? 0],
+        // blocked them. Only when the copy carries them: a main server that predates them sends none, and its standby
+        // keeps its own.
+        ...(Array.isArray(payload.memberBlocks) ? [['member_blocks', payload.memberBlocks.length] as [string, number]] : []),
         // The keys the main server replaced. A key the replica lost is a lost phone's key let back in after a take-over.
         // Only when the copy carries them: a main server that predates them sends none, and its standby keeps its own.
         ...(Array.isArray(payload.invalidatedKeys) ? [['invalidated_keys', payload.invalidatedKeys.length] as [string, number]] : []),

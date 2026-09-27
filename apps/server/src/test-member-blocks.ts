@@ -25,7 +25,8 @@
  *      inserts, keeps a newer row of its own, keeps deleted a pair it holds a newer tombstone for, applies the copy's
  *      tombstones, keeps a block made again after its tombstone in the same copy, leaves out a row for nobody here and a
  *      malformed one without failing the copy; the first copy asks for one whole copy; an unblock and a block again in
- *      one millisecond still order; the replica audit counts the table and a force-resync clears it
+ *      one millisecond still order; the replica audit counts the table (only when the copy carries it) and a
+ *      force-resync clears it
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-blocks.ts
  */
@@ -480,6 +481,11 @@ async function main(): Promise<void> {
     const audit = attempt(() => getReplicaConsistency(db, { memberBlocks: exported } as any, 0));
     const auditRow = audit?.tables.find((t: any) => t.name === 'member_blocks');
     assert(!!auditRow && auditRow.primary === exported.length, `the replica audit counts member_blocks (${JSON.stringify(auditRow)})`);
+    // A main server that predates block lists sends none, and this standby keeps its own: nothing to compare, so no drift.
+    const held = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM member_blocks').get() as any).n) ?? 0;
+    const olderAudit = attempt(() => getReplicaConsistency(db, {} as any, 0));
+    assert(held > 0 && !!olderAudit && !olderAudit.tables.some((t: any) => t.name === 'member_blocks'),
+        `a copy without block lists, from a main server that predates them, is not counted against the ${held} this standby holds (${JSON.stringify(olderAudit?.tables.find((t: any) => t.name === 'member_blocks') ?? null)})`);
     attempt(() => clearReplicatedTables());
     const cleared = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM member_blocks').get() as any).n);
     assert(cleared === 0, `a force-resync clears the table before the whole copy comes in (${cleared})`);

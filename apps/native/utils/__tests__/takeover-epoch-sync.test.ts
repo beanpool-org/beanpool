@@ -293,4 +293,23 @@ describe('applyDelta postsReplace: which cached listings the whole pull speaks f
         expect(row('mine-old')).toBeTruthy();
         expect(titles()).toEqual(['mine-old:Mine, long ago', 'post-a:Spare lemons', 'post-b:Bike pump']);
     });
+
+    // A group's listing and one for a person, both changed after A, as a member's signed pull brings them.
+    const G = listing('post-g', 'Choir: sheet music', '2026-09-26T01:00:00.000Z', { audienceScope: 'group', targetGroupId: 'choir' });
+    const D = listing('post-d', 'For you: the drill', '2026-09-26T02:00:00.000Z', { audienceScope: 'direct', targetPubkey: 'me'.padEnd(64, '0') });
+
+    it('an answer with no group\'s or person\'s listing (a pull the node answered as unsigned) judges only the public ones', async () => {
+        await applyDelta({ posts: [A, B, G, D, T] });
+        // The public listings alone, as the node answers a reader it cannot name.
+        await applyDelta({ posts: [B, A], postsReplace: true });
+        expect(row('post-t')).toBeUndefined();
+        expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-d:For you: the drill', 'post-g:Choir: sheet music']);
+    });
+
+    it('an answer that carries a group\'s listing is the member\'s view, and judges those too', async () => {
+        const G_TAIL = listing('post-g-tail', 'Choir: the tail', '2026-09-27T09:59:45.000Z', { audienceScope: 'group', targetGroupId: 'choir' });
+        await applyDelta({ posts: [A, B, G, G_TAIL, D, T] });
+        await applyDelta({ posts: [G, B, A], postsReplace: true });
+        expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-g:Choir: sheet music']);
+    });
 });

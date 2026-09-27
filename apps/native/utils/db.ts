@@ -2761,18 +2761,28 @@ async function syncedReachPeers(txn: SQLite.SQLiteDatabase, p: any, reach: strin
  * changed after that and missing from the answer goes. An older row may just be past the page, so it stays, as it
  * would on a fresh install that never had it. A row the phone wrote itself has no `updated_at` until a sync brings
  * one, so its `created_at` stands in.
+ *
+ * It speaks only for the scopes it could carry. The pull is signed on its way out, but only best-effort
+ * (node-request-signing.ts), and the node answers a reader it cannot name with the public listings alone (engine
+ * posts.ts), so a group's or a person's listing is judged only when the answer carries one: only a signed reader is
+ * sent those, and the one key this phone signs with is its own. Otherwise the public listings alone are judged.
  */
 async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: any[]): Promise<void> {
     const sent = new Set<string>();
     let oldest: string | null = null;
+    let membersView = false;
     for (const p of posts) {
         if (p?.id) sent.add(String(p.id));
         const at = p?.updatedAt || p?.updated_at || p?.createdAt || p?.created_at;
         if (typeof at === 'string' && (oldest === null || at < oldest)) oldest = at;
+        // As writeSyncedPost reads the scope.
+        if ((p?.audienceScope || p?.audience_scope || 'public') !== 'public') membersView = true;
     }
     // An answer with listings and no times speaks for nothing it left out.
     if (posts.length > 0 && oldest === null) return;
-    const held = await txn.getAllAsync<{ id: string; at: string | null }>('SELECT id, COALESCE(updated_at, created_at) AS at FROM posts');
+    const held = await txn.getAllAsync<{ id: string; at: string | null }>(
+        `SELECT id, COALESCE(updated_at, created_at) AS at FROM posts${membersView ? '' : " WHERE audience_scope IS NULL OR audience_scope = 'public'"}`,
+    );
     const gone = held
         .filter(r => !sent.has(r.id) && (oldest === null || (r.at !== null && r.at > oldest)))
         .map(r => r.id);
